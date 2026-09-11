@@ -1,0 +1,208 @@
+---
+headline: Opik Python SDK
+og:description: Learn to instrument your Python applications with the Opik Python
+  SDK to send trace data to Opik for better observability.
+og:site_name: Opik Documentation
+og:title: Instrument Your Python Apps with the Opik SDK - Opik
+subtitle: How to send data to Opik using the Opik Python SDK
+title: Opik Python SDK
+toc_max_heading_level: 4
+---
+
+# Using the Opik Python SDK
+
+This guide shows you how to directly instrument your Python applications with the Opik SDK to send trace data to Opik.
+
+Use this approach when you are tracing your own code rather than a supported framework or provider. If you are
+using one of the [supported integrations](/integrations/overview) — LangChain, OpenAI, LiteLLM, and many others —
+prefer that integration instead: it captures inputs, outputs, token usage and cost for you with a single line of
+setup.
+
+## Installation
+
+First, install the Opik package:
+
+```bash
+pip install opik
+```
+
+## Configuration
+
+Configure the SDK with your credentials, either by running `opik configure` once on the machine:
+
+```bash
+opik configure
+```
+
+Or by setting environment variables:
+
+<Tabs>
+  <Tab title="Opik Cloud">
+    ```bash
+    export OPIK_API_KEY="<YOUR_API_KEY>"
+    export OPIK_WORKSPACE="<YOUR_WORKSPACE>"
+    ```
+
+    You can find your API key and workspace name in the [Opik dashboard](https://www.comet.com/opik).
+  </Tab>
+  <Tab title="Self-hosted">
+    ```bash
+    export OPIK_URL_OVERRIDE="http://localhost:5173/api"
+    ```
+
+    Replace the URL with your Opik instance address if it differs from the default.
+  </Tab>
+</Tabs>
+
+Set `OPIK_PROJECT_NAME` to control which project traces are logged to; it defaults to `Default Project`. See
+[SDK configuration](/tracing/advanced/sdk_configuration) for the full list of options and precedence rules.
+
+## Full Example
+
+Here's a complete example that demonstrates how to instrument a chatbot application with the Opik SDK:
+
+```python
+# Dependencies: opik
+
+import time
+
+import opik
+from opik import opik_context
+
+
+@opik.track(type="llm")
+def llm_completion(user_request: str) -> str:
+    """Simulates a call to an LLM provider."""
+    llm_prompt = f"User question: {user_request}\n\nProvide a concise answer about the weather."
+
+    # Simulate LLM thinking time
+    time.sleep(0.5)
+
+    chatbot_response = "It's sunny with a high of 75°F in your area today!"
+
+    # Attach model, provider and token usage so Opik can compute cost
+    opik_context.update_current_span(
+        input={"prompt": llm_prompt},
+        model="gpt-4",
+        provider="openai",
+        usage={
+            "prompt_tokens": 10,
+            "completion_tokens": 25,
+            "total_tokens": 35,
+        },
+        metadata={"temperature": 0.7, "max_tokens": 100},
+    )
+
+    return chatbot_response
+
+
+@opik.track(project_name="opik-sdk-example")
+def chatbot_conversation(user_request: str) -> str:
+    """The entrypoint: creates the trace that every nested span is attached to."""
+    print(f"User request: {user_request}")
+
+    # Group related traces into a single conversational thread, and tag the trace
+    opik_context.update_current_trace(
+        thread_id="user_12345",
+        metadata={"conversation.id": "conv_12345", "conversation.type": "weather_inquiry"},
+        tags=["chatbot", "weather"],
+    )
+
+    # Simulate initial processing
+    time.sleep(0.2)
+
+    print("Generating LLM response...")
+    chatbot_response = llm_completion(user_request)
+    print("LLM generation completed")
+
+    print(f"Chatbot response: {chatbot_response}")
+    return chatbot_response
+
+
+if __name__ == "__main__":
+    chatbot_conversation("What's the weather like today?")
+
+    # Ensure all traces are flushed before the program exits
+    opik.flush_tracker()
+
+    print("\nTraces have been sent to Opik.")
+    print("You can view them in your Opik project.")
+```
+
+The `@opik.track` decorator creates a span for every decorated function it wraps. The outermost decorated call also
+creates the trace, and nested calls are attached to it automatically — so `llm_completion` appears as a child span of
+`chatbot_conversation` without any manual ID passing. Inputs and outputs are captured from the function's arguments
+and return value by default.
+
+Using `thread_id` allows you to group related traces into a single conversational thread.
+Created threads can be used to evaluate multi-turn conversations as described in the [Multi-turn conversations](/evaluation/evaluate_threads) guide.
+
+## Span types
+
+Set the `type` argument to tell Opik what kind of work a span represents. The supported values are `general` (the
+default), `llm`, `tool` and `guardrail`:
+
+```python
+@opik.track(type="tool")
+def search_weather(city: str) -> dict:
+    return {"city": city, "forecast": "sunny"}
+```
+
+Marking a span as `llm` is what makes it eligible for token and cost accounting, so use it for any function that
+calls a model provider.
+
+## Tracking cost
+
+Opik computes cost from the `model`, `provider` and `usage` fields on an `llm` span. Set them with
+`update_current_span` as in the example above, using the standard OpenAI token keys:
+
+```python
+@opik.track(type="llm")
+def llm_call(prompt: str) -> str:
+    opik_context.update_current_span(
+        model="gpt-4",
+        provider="openai",
+        usage={"prompt_tokens": 10, "completion_tokens": 25, "total_tokens": 35},
+    )
+    return "..."
+```
+
+For models Opik doesn't price automatically, you can set `total_cost` directly. See
+[Cost tracking](/tracing/advanced/cost_tracking) for the details.
+
+## Tracing code you can't decorate
+
+When the code you want to trace isn't a function you can decorate — a block inside a longer function, or a third-party
+call — use the `start_as_current_span` context manager instead. It creates the parent trace if one isn't already
+active:
+
+```python
+import opik
+
+with opik.start_as_current_span(name="retrieve_documents", type="tool") as span:
+    span.update(input={"query": "weather today"})
+    documents = my_retriever("weather today")
+    span.update(output={"documents": documents})
+```
+
+## Flushing before exit
+
+The SDK batches and sends data in the background, so a short-lived script can exit before everything is delivered.
+Call `opik.flush_tracker()` before the process ends, as in the example above, or pass `flush=True` to `@opik.track` on
+your entrypoint function:
+
+```python
+@opik.track(flush=True)
+def main():
+    ...
+```
+
+Long-running services don't need this — the background sender keeps up on its own.
+
+## Next steps
+
+- [Log traces](/tracing/advanced/log_traces) — the low-level `Opik` client, for cases where the decorator and context
+  manager don't fit
+- [SDK configuration](/tracing/advanced/sdk_configuration) — all configuration options and their precedence
+- [Log distributed traces](/tracing/advanced/log_distributed_traces) — tracing a request across multiple services
+- [Python SDK reference](https://www.comet.com/docs/opik/python-sdk-reference/index.html) — the full API reference

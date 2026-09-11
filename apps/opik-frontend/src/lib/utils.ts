@@ -5,12 +5,19 @@ import last from "lodash/last";
 import get from "lodash/get";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
+import isNumber from "lodash/isNumber";
+import isInteger from "lodash/isInteger";
 import times from "lodash/times";
 import sample from "lodash/sample";
 import mapKeys from "lodash/mapKeys";
 import snakeCase from "lodash/snakeCase";
 import isString from "lodash/isString";
+import isPlainObject from "lodash/isPlainObject";
+import mapValues from "lodash/mapValues";
+import pickBy from "lodash/pickBy";
 import { twMerge } from "tailwind-merge";
+import isEqual from "fast-deep-equal";
+import { v4 as uuidv4 } from "uuid";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { JsonNode } from "@/types/shared";
 
@@ -18,6 +25,29 @@ const BASE_DOCUMENTATION_URL = "https://www.comet.com/docs/opik";
 
 export const buildDocsUrl = (path: string = "", hash: string = "") => {
   return `${BASE_DOCUMENTATION_URL}${path}?from=llm${hash}`;
+};
+
+export const buildDocsMarkdownUrl = (path: string = "") => {
+  return `${BASE_DOCUMENTATION_URL}${path}.md`;
+};
+
+export const buildFullBaseUrl = () => {
+  return new URL(import.meta.env.VITE_BASE_URL, location.origin).toString();
+};
+
+export const isSameDomainUrl = (url: string) => {
+  try {
+    const resolvedUrl = new URL(url, window.location.href);
+    const originUrl = window.location;
+
+    return (
+      resolvedUrl.protocol === originUrl.protocol &&
+      resolvedUrl.hostname === originUrl.hostname &&
+      resolvedUrl.port === originUrl.port
+    );
+  } catch (e) {
+    return false;
+  }
 };
 
 export function cn(...inputs: ClassValue[]) {
@@ -29,9 +59,22 @@ export const isStringMarkdown = (string: unknown): boolean => {
     return false;
   }
 
-  // Return false for very short strings that are unlikely to be markdown
   if (string.length < 3) {
     return false;
+  }
+
+  // Check if it's JSON first - JSON should not be treated as markdown
+  try {
+    const trimmed = string.trim();
+    if (
+      (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+      (trimmed.startsWith("[") && trimmed.endsWith("]"))
+    ) {
+      JSON.parse(trimmed);
+      return false;
+    }
+  } catch {
+    // Not valid JSON, continue to markdown checks
   }
 
   // More comprehensive regex patterns for markdown detection
@@ -77,7 +120,6 @@ export const isStringMarkdown = (string: unknown): boolean => {
     /^\[\^.+?]:/m, // footnote definitions
   ];
 
-  // Check for markdown patterns
   return markdownPatterns.some((pattern) => pattern.test(string));
 };
 
@@ -105,6 +147,7 @@ export const getJSONPaths = (
   node: JsonNode,
   previousPath: string = "",
   results: string[] = [],
+  includeIntermediateNodes: boolean = false,
 ) => {
   if (isObject(node) || isArray(node)) {
     for (const key in node) {
@@ -116,9 +159,15 @@ export const getJSONPaths = (
         : key;
 
       if (isArray(value)) {
-        getJSONPaths(value, path, results);
+        if (includeIntermediateNodes) {
+          results.push(path);
+        }
+        getJSONPaths(value, path, results, includeIntermediateNodes);
       } else if (isObject(value)) {
-        getJSONPaths(value, path, results);
+        if (includeIntermediateNodes) {
+          results.push(path);
+        }
+        getJSONPaths(value, path, results, includeIntermediateNodes);
       } else {
         results.push(path);
       }
@@ -175,8 +224,57 @@ export const calculateWorkspaceName = (
 export const extractIdFromLocation = (location: string) =>
   last(location?.split("/"));
 
-export const formatNumericData = (value: number, precision = 3) =>
+export const formatNumericData = (value: number, precision = 2) =>
   String(round(value, precision));
+
+export const padDecimalsString = (
+  raw: string,
+  decimals: number,
+  integerOnly = false,
+): string => {
+  if (raw === "") return raw;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  return integerOnly ? String(Math.trunc(n)) : n.toFixed(Math.max(0, decimals));
+};
+
+export const truncateMiddle = (text: string, maxLength: number): string => {
+  if (text.length <= maxLength) return text;
+  const keep = maxLength - 1;
+  const left = Math.ceil(keep / 2);
+  const right = Math.floor(keep / 2);
+  return `${text.slice(0, left)}…${text.slice(-right)}`;
+};
+
+export const formatNumberInK = (value: number, precision = 1): string => {
+  const ranges = [
+    { threshold: 1000000000000, suffix: "T", divider: 1000000000000 },
+    { threshold: 1000000000, suffix: "B", divider: 1000000000 },
+    { threshold: 1000000, suffix: "M", divider: 1000000 },
+    { threshold: 1000, suffix: "K", divider: 1000 },
+  ];
+
+  const formatValue = (num: number): string =>
+    isInteger(num) ? num.toString() : num.toFixed(precision);
+
+  const range = ranges.find((r) => value >= r.threshold);
+
+  return range
+    ? `${formatValue(value / range.divider)}${range.suffix}`
+    : isNumber(value)
+      ? formatValue(value)
+      : String(value);
+};
+
+export const calculatePercentageChange = (
+  baseValue: number | null | undefined,
+  newValue: number | null | undefined,
+): number | undefined => {
+  if (!isNumber(baseValue) || !isNumber(newValue)) return undefined;
+  if (baseValue === 0 && newValue === 0) return 0;
+  if (baseValue === 0) return undefined;
+  return ((newValue - baseValue) / Math.abs(baseValue)) * 100;
+};
 
 export const updateTextAreaHeight = (
   textarea: HTMLTextAreaElement | null,
@@ -190,4 +288,74 @@ export const updateTextAreaHeight = (
   const scrollHeight = textarea.scrollHeight + BORDER_WIDTH * 2;
 
   textarea.style.height = scrollHeight + "px";
+};
+
+export const capitalizeFirstLetter = (str?: string | null) =>
+  str ? str.charAt(0).toUpperCase() + str.slice(1) : "";
+
+export const isMac =
+  typeof navigator !== "undefined" &&
+  navigator.platform.toUpperCase().includes("MAC");
+
+export const modifierKey = isMac ? "meta" : "ctrl";
+
+export const stripColumnPrefix = (column: string, prefix: string): string => {
+  const prefixWithDot = `${prefix}.`;
+  return column.startsWith(prefixWithDot)
+    ? column.slice(prefixWithDot.length)
+    : column;
+};
+
+export const removeUndefinedKeys = <T>(value: T): T => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (isArray(value)) {
+    return value.map((item) => removeUndefinedKeys(item)) as T;
+  }
+
+  if (isPlainObject(value)) {
+    return mapValues(
+      pickBy(value as Record<string, unknown>, (v) => v !== undefined),
+      (v) => removeUndefinedKeys(v),
+    ) as T;
+  }
+
+  return value;
+};
+
+export const isLooseEqual = <T>(a: T, b: T): boolean => {
+  return isEqual(removeUndefinedKeys(a), removeUndefinedKeys(b));
+};
+
+export const generateBatchGroupId = (): string => uuidv4();
+
+export const escapeJsString = (value: string): string => {
+  return value.replace(/["\\\n\r\t]/g, (ch) => {
+    switch (ch) {
+      case "\\":
+        return "\\\\";
+      case '"':
+        return '\\"';
+      case "\n":
+        return "\\n";
+      case "\r":
+        return "\\r";
+      case "\t":
+        return "\\t";
+      default:
+        return ch;
+    }
+  });
+};
+
+export const getSelectAllCheckedState = (
+  selectedCount: number,
+  totalCount: number,
+): boolean | "indeterminate" => {
+  if (totalCount === 0) return false;
+  if (selectedCount >= totalCount) return true;
+  if (selectedCount > 0) return "indeterminate";
+  return false;
 };

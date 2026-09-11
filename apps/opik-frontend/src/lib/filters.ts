@@ -1,7 +1,15 @@
 import uniqid from "uniqid";
 import flatten from "lodash/flatten";
-import { Filter } from "@/types/filters";
-import { COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
+import compact from "lodash/compact";
+import { Filter, Filters } from "@/types/filters";
+import { DatasetItemColumn } from "@/types/datasets";
+import {
+  COLUMN_DATA_ID,
+  COLUMN_EXPERIMENT_IDS,
+  COLUMN_TYPE,
+  DYNAMIC_COLUMN_TYPE,
+} from "@/types/shared";
+import { LOGS_SOURCE, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import {
   makeEndOfMinute,
   makeStartOfMinute,
@@ -9,15 +17,23 @@ import {
 } from "@/lib/date";
 
 export const isFilterValid = (filter: Filter) => {
-  return (
-    (filter.type === COLUMN_TYPE.dictionary ||
+  const hasValue =
+    filter.value !== "" ||
+    filter.operator === "is_empty" ||
+    filter.operator === "is_not_empty";
+
+  const hasKey =
+    filter.type === COLUMN_TYPE.dictionary ||
     filter.type === COLUMN_TYPE.numberDictionary
       ? filter.key !== ""
-      : true) && filter.value !== ""
-  );
+      : true;
+
+  const hasError = filter.error && filter.error.length > 0;
+
+  return hasValue && hasKey && !hasError;
 };
 
-export const createEmptyFilter = () => {
+export const createFilter = (filter?: Partial<Filter>) => {
   return {
     id: uniqid(),
     field: "",
@@ -25,22 +41,177 @@ export const createEmptyFilter = () => {
     operator: "",
     key: "",
     value: "",
+    ...filter,
   } as Filter;
 };
 
-export const generateSearchByIDFilters = (search?: string) => {
-  if (!search) return undefined;
+export const generateSearchByFieldFilters = (
+  field: string,
+  search?: string,
+) => {
+  if (!search) return [];
 
   return [
     {
       id: uniqid(),
-      field: "id",
+      field,
       type: COLUMN_TYPE.string,
       operator: "contains",
       key: "",
       value: search,
     },
   ] as Filter[];
+};
+
+export const generateSearchByIDFilters = (search?: string) => {
+  return generateSearchByFieldFilters("id", search);
+};
+
+export const generateVisibilityFilters = (
+  mode: TRACE_VISIBILITY_MODE = TRACE_VISIBILITY_MODE.default,
+) => {
+  // Entity-scoped views ask for every visibility: emit no filter so hidden and default traces both return.
+  if (mode === TRACE_VISIBILITY_MODE.all) {
+    return [] as Filter[];
+  }
+  return [
+    {
+      id: uniqid(),
+      field: "visibility_mode",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      key: "",
+      value: mode,
+    },
+  ] as Filter[];
+};
+
+export const generateLogsSourceFilter = (source: LOGS_SOURCE) => {
+  return [
+    {
+      id: "logs_source_filter",
+      field: "source",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      key: "",
+      value: source,
+    },
+  ] as Filter[];
+};
+
+export const ENVIRONMENT_UNTAGGED_VALUE = "__untagged__";
+
+export const generateEnvironmentFilter = (
+  environment?: string | null,
+): Filter[] => {
+  if (!environment) return [];
+
+  if (environment === ENVIRONMENT_UNTAGGED_VALUE) {
+    return [
+      {
+        id: "environment_filter",
+        field: "environment",
+        type: COLUMN_TYPE.string,
+        operator: "is_empty",
+        key: "",
+        value: "",
+      },
+    ];
+  }
+
+  return [
+    {
+      id: "environment_filter",
+      field: "environment",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      key: "",
+      value: environment,
+    },
+  ];
+};
+
+export const generatePromptFilters = (promptId?: string) => {
+  if (!promptId) return undefined;
+
+  return [
+    {
+      id: uniqid(),
+      field: "prompt_ids",
+      type: COLUMN_TYPE.string,
+      operator: "contains",
+      key: "",
+      value: promptId,
+    },
+  ] as Filter[];
+};
+
+export const generateProjectFilters = (projectId?: string) => {
+  if (!projectId) return undefined;
+
+  return [
+    {
+      id: uniqid(),
+      field: "project_id",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      key: "",
+      value: projectId,
+    },
+  ] as Filter[];
+};
+
+export const generateExperimentIdFilter = (experimentId?: string) => {
+  if (!experimentId) return [];
+
+  return [
+    createFilter({
+      field: "experiment_id",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      value: experimentId,
+    }),
+  ];
+};
+
+export const generateExperimentIdsFilter = (experimentIds: string[] = []) => {
+  const ids = compact(experimentIds);
+  if (!ids.length) return [];
+
+  return [
+    createFilter({
+      field: COLUMN_EXPERIMENT_IDS,
+      type: COLUMN_TYPE.string,
+      operator: "in",
+      value: ids.join(","),
+    }),
+  ];
+};
+
+export const generateDashboardTypeFilter = (
+  dashboardType: string,
+): Filter[] => [
+  createFilter({
+    id: `dashboard-type-filter-${dashboardType}`,
+    field: "type",
+    type: COLUMN_TYPE.string,
+    operator: "=",
+    value: dashboardType,
+  }),
+];
+
+export const generateAnnotationQueueIdFilter = (annotationQueueId?: string) => {
+  if (!annotationQueueId) return [];
+
+  return [
+    createFilter({
+      id: `annotation-queue-filter-${annotationQueueId}`,
+      field: "annotation_queue_ids",
+      type: COLUMN_TYPE.list,
+      operator: "contains",
+      value: annotationQueueId,
+    }),
+  ];
 };
 
 const processTimeFilter: (filter: Filter) => Filter | Filter[] = (filter) => {
@@ -84,7 +255,7 @@ const processDurationFilter: (filter: Filter) => Filter = (filter) => ({
   value: secondsToMilliseconds(Number(filter.value)).toString(),
 });
 
-const processFiltersArray = (filters: Filter[]) => {
+export const processFiltersArray = (filters: Filter[]) => {
   return flatten(
     filters.map((filter) => {
       switch (filter.type) {
@@ -119,19 +290,57 @@ export const processFilters = (
   }
 
   if (processedFilters.length > 0) {
-    retVal.filters = JSON.stringify(processedFilters);
+    // Only send fields that the backend expects: field, type, operator, value, and key (when present)
+    const backendFilters = processedFilters.map(
+      ({ field, operator, value, key, type }) => {
+        // Include key for dictionary types or when explicitly set (e.g., for MAP field filtering)
+        const isDictionary =
+          type === COLUMN_TYPE.dictionary ||
+          type === COLUMN_TYPE.numberDictionary;
+        const hasKey = key !== undefined && key !== "";
+        return isDictionary || hasKey
+          ? { field, type, operator, value, key }
+          : { field, type, operator, value };
+      },
+    );
+    retVal.filters = JSON.stringify(backendFilters);
   }
 
   return retVal;
 };
 
+export const EXPERIMENT_IDS_FILTER_FIELD = "experiment_ids";
+
+export const extractExperimentIdsFilter = (
+  filters: Filters,
+): { experimentIds: string[]; remainingFilters: Filters } => {
+  const experimentIdsFilter = filters.find(
+    (f) => f.field === EXPERIMENT_IDS_FILTER_FIELD,
+  );
+
+  const remainingFilters = filters.filter(
+    (f) => f.field !== EXPERIMENT_IDS_FILTER_FIELD,
+  );
+
+  const experimentIds = experimentIdsFilter?.value
+    ? String(experimentIdsFilter.value)
+        .split(",")
+        .filter((id) => id.length > 0)
+    : [];
+
+  return { experimentIds, remainingFilters };
+};
+
 export const mapDynamicColumnTypesToColumnType = (
   types: DYNAMIC_COLUMN_TYPE[] = [],
 ) => {
-  if (
-    types.includes(DYNAMIC_COLUMN_TYPE.object) ||
-    types.includes(DYNAMIC_COLUMN_TYPE.array)
-  ) {
+  // Handle array first - map to LIST for simple element filtering (no key required)
+  if (types.includes(DYNAMIC_COLUMN_TYPE.array)) {
+    return COLUMN_TYPE.list;
+  }
+
+  // Only objects require dictionary type (with key input)
+  if (types.includes(DYNAMIC_COLUMN_TYPE.object)) {
     return COLUMN_TYPE.dictionary;
   }
 
@@ -148,4 +357,45 @@ export const mapDynamicColumnTypesToColumnType = (
   }
 
   return COLUMN_TYPE.string;
+};
+
+/**
+ * Build filter column definitions from dataset columns.
+ * Maps each column to a filter with "data." prefix and appends a tags filter.
+ */
+export const buildDatasetFilterColumns = (
+  datasetColumns: DatasetItemColumn[],
+  includeId = false,
+) => {
+  const dataFilterColumns = datasetColumns.map((c) => ({
+    id: `${COLUMN_DATA_ID}.${c.name}`,
+    label: c.name,
+    type: mapDynamicColumnTypesToColumnType(c.types),
+  }));
+  return [
+    ...(includeId ? [{ id: "id", label: "ID", type: COLUMN_TYPE.string }] : []),
+    ...dataFilterColumns,
+    {
+      id: "tags",
+      label: "Tags",
+      type: COLUMN_TYPE.list,
+      iconType: "tags" as const,
+    },
+  ];
+};
+
+/**
+ * Transform data column filters from "data.columnName" format to backend format.
+ * Converts field="data.columnName" to field="data" with key="columnName".
+ * Used for dataset item filtering in the playground.
+ */
+export const transformDataColumnFilters = (filters: Filter[]): Filter[] => {
+  const dataFieldPrefix = `${COLUMN_DATA_ID}.`;
+  return filters.map((filter) => {
+    if (filter.field.startsWith(dataFieldPrefix)) {
+      const columnKey = filter.field.slice(dataFieldPrefix.length);
+      return { ...filter, field: COLUMN_DATA_ID, key: columnKey };
+    }
+    return filter;
+  });
 };

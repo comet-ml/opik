@@ -1,0 +1,13 @@
+{
+  "name": "known-failing-suite",
+  "description": "Fixed evaluation suite for the Ollie /improve loop. The expected answers carry units where applicable; the baseline agent prompt omits units, so those cases fail until /improve makes the prompt require them. The unit-free cases pass regardless, so the baseline lands at a partial pass rate that /improve should raise. Assert the direction of the pass rate, never an exact value.",
+  "items": [
+    { "data": { "question": "distance earth to moon" }, "expected": "384400 km" },
+    { "data": { "question": "boiling point of water" }, "expected": "100 C" },
+    { "data": { "question": "speed of light" }, "expected": "299792458 m/s" },
+    { "data": { "question": "freezing point of water" }, "expected": "0 C" },
+    { "data": { "question": "number of continents" }, "expected": "7" },
+    { "data": { "question": "days in a week" }, "expected": "7" }
+  ],
+  "assertion": "The response must equal the expected value exactly, including any unit suffix."
+}

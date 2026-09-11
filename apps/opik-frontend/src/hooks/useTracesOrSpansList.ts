@@ -9,35 +9,45 @@ import isBoolean from "lodash/isBoolean";
 
 import useTracesList from "@/api/traces/useTracesList";
 import useSpansList from "@/api/traces/useSpansList";
-import { Span, SPAN_TYPE, Trace } from "@/types/traces";
+import { Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import { Filters } from "@/types/filters";
+import { Sorting } from "@/types/sorting";
+import { TRACE_DATA_TYPE } from "@/constants/traces";
 
-export enum TRACE_DATA_TYPE {
-  traces = "traces",
-  llm = "llm",
-}
+export { TRACE_DATA_TYPE };
 
 type UseTracesOrSpansListParams = {
   projectId: string;
   type: TRACE_DATA_TYPE;
   filters?: Filters;
+  sorting?: Sorting;
   search?: string;
   page: number;
   size: number;
   truncate?: boolean;
+  stripAttachments?: boolean;
+  fromTime?: string;
+  toTime?: string;
+  exclude?: string[];
+  logsSource?: LOGS_SOURCE;
+};
+
+export type TracesOrSpansListData = {
+  content: Array<Trace | Span>;
+  sortable_by: string[];
+  total: number;
 };
 
 type UseTracesOrSpansListResponse = {
-  data: {
-    content: Array<Trace | Span>;
-    total: number;
-  };
+  data: TracesOrSpansListData | undefined;
   isPending: boolean;
   isLoading: boolean;
   isError: boolean;
+  isPlaceholderData: boolean;
+  isFetching: boolean;
   refetch: (
     options?: RefetchOptions,
-  ) => Promise<QueryObserverResult<unknown, unknown>>;
+  ) => Promise<QueryObserverResult<TracesOrSpansListData, unknown>>;
 };
 
 export default function useTracesOrSpansList(
@@ -52,6 +62,8 @@ export default function useTracesOrSpansList(
     isError: isTracesError,
     isPending: isTracesPending,
     isLoading: isTracesLoading,
+    isPlaceholderData: isTracesPlaceholderData,
+    isFetching: isTracesFetching,
     refetch: refetchTrace,
   } = useTracesList(params, {
     ...config,
@@ -64,11 +76,13 @@ export default function useTracesOrSpansList(
     isError: isSpansError,
     isPending: isSpansPending,
     isLoading: isSpansLoading,
+    isPlaceholderData: isSpansPlaceholderData,
+    isFetching: isSpansFetching,
     refetch: refetchSpan,
   } = useSpansList(
     {
       ...params,
-      type: SPAN_TYPE.llm,
+      type: undefined,
     },
     {
       ...config,
@@ -81,6 +95,10 @@ export default function useTracesOrSpansList(
   const isError = !isTracesData ? isSpansError : isTracesError;
   const isPending = !isTracesData ? isSpansPending : isTracesPending;
   const isLoading = !isTracesData ? isSpansLoading : isTracesLoading;
+  const isPlaceholderData = !isTracesData
+    ? isSpansPlaceholderData
+    : isTracesPlaceholderData;
+  const isFetching = !isTracesData ? isSpansFetching : isTracesFetching;
   const refetch = !isTracesData ? refetchSpan : refetchTrace;
 
   return {
@@ -89,5 +107,7 @@ export default function useTracesOrSpansList(
     isError,
     isPending,
     isLoading,
+    isPlaceholderData,
+    isFetching,
   } as UseTracesOrSpansListResponse;
 }

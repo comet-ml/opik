@@ -14,6 +14,7 @@ type UseProjectsListParams = {
   sorting?: Sorting;
   page: number;
   size: number;
+  queryKey?: string;
 };
 
 type UseProjectsListResponse = {
@@ -44,7 +45,7 @@ export default function useProjectsList(
   options?: QueryConfig<UseProjectsListResponse>,
 ) {
   return useQuery({
-    queryKey: [PROJECTS_KEY, params],
+    queryKey: [params.queryKey ?? PROJECTS_KEY, params],
     queryFn: (context) => getProjectsList(context, params),
     ...options,
   });

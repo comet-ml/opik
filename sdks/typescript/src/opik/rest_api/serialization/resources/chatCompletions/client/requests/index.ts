@@ -1,1 +1,1 @@
-export { ChatCompletionRequest } from "./ChatCompletionRequest";
+export { ChatCompletionRequest } from "./ChatCompletionRequest.js";

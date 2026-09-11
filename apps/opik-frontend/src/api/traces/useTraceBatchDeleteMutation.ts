@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import api, {
   COMPARE_EXPERIMENTS_KEY,
   SPANS_KEY,
@@ -18,9 +18,13 @@ const useTracesBatchDeleteMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ ids }: UseTraceBatchDeleteMutationParams) => {
+    mutationFn: async ({
+      ids,
+      projectId,
+    }: UseTraceBatchDeleteMutationParams) => {
       const { data } = await api.post(`${TRACES_REST_ENDPOINT}delete`, {
         ids: ids,
+        project_id: projectId,
       });
       return data;
     },
@@ -50,6 +54,9 @@ const useTracesBatchDeleteMutation = () => {
           },
         ],
       });
+      queryClient.invalidateQueries({ queryKey: ["traces-statistic"] });
+      queryClient.invalidateQueries({ queryKey: ["spans-statistic"] });
+      queryClient.invalidateQueries({ queryKey: ["project-kpi-cards"] });
     },
   });
 };

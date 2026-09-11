@@ -3,8 +3,8 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackDefinition;
-import com.comet.opik.api.FeedbackDefinitionCriteria;
 import com.comet.opik.api.Page;
+import com.comet.opik.domain.FeedbackDefinitionCriteria;
 import com.comet.opik.domain.FeedbackDefinitionService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -64,7 +64,7 @@ public class FeedbackDefinitionResource {
     public Response find(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter feedback definitions by name (partial match, case insensitive)") String name,
             @QueryParam("type") FeedbackType type) {
 
         var criteria = FeedbackDefinitionCriteria.builder()

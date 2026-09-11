@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { keepPreviousData, UseQueryOptions } from "@tanstack/react-query";
 import { Sorting } from "@/types/sorting";
+import { LOGS_SOURCE } from "@/types/traces";
 import { ProjectStatistic, ProjectWithStatistic } from "@/types/projects";
 import useProjectsList from "@/api/projects/useProjectsList";
 import useProjectStatisticsList from "@/api/projects/useProjectStatisticList";
@@ -11,6 +12,8 @@ type UseProjectWithStatisticsParams = {
   sorting?: Sorting;
   page: number;
   size: number;
+  logsSource?: LOGS_SOURCE;
+  windowDays?: number;
 };
 
 type UseProjectWithStatisticsResponse = {
@@ -19,20 +22,30 @@ type UseProjectWithStatisticsResponse = {
     total: number;
   };
   isPending: boolean;
+  isPlaceholderData: boolean;
+  isFetching: boolean;
 };
 
 export default function useProjectWithStatisticsList(
   params: UseProjectWithStatisticsParams,
   config: Omit<UseQueryOptions, "queryKey" | "queryFn">,
 ) {
-  const { data: projectsData, isPending } = useProjectsList(params, {
+  const { windowDays, ...projectsParams } = params;
+
+  const {
+    data: projectsData,
+    isPending,
+    isPlaceholderData,
+    isFetching,
+  } = useProjectsList(projectsParams, {
     ...config,
     placeholderData: keepPreviousData,
   } as never);
 
   const { data: projectsStatisticData } = useProjectStatisticsList(
     {
-      ...params,
+      ...projectsParams,
+      windowDays,
     },
     {
       ...config,
@@ -55,14 +68,15 @@ export default function useProjectWithStatisticsList(
 
       return {
         ...projectsData,
-        content: projectsData.content.map((project) => {
-          return statisticMap
-            ? {
-                ...project,
-                ...statisticMap[project.id],
-              }
-            : project;
-        }),
+        content:
+          projectsData.content?.map((project) => {
+            return statisticMap
+              ? {
+                  ...project,
+                  ...statisticMap[project.id],
+                }
+              : project;
+          }) || [],
       };
     }
 
@@ -72,5 +86,7 @@ export default function useProjectWithStatisticsList(
   return {
     data,
     isPending,
+    isPlaceholderData,
+    isFetching,
   } as UseProjectWithStatisticsResponse;
 }

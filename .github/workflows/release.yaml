@@ -3,37 +3,84 @@ name: "Release"
 run-name: "Release from ${{github.ref_name}} by @${{ github.actor }}"
 
 on:
+  # NOTE: a direct dispatch of this workflow cannot publish the npm packages —
+  # npm's trusted publisher is registered against the *entry-point* workflow,
+  # which for releases is release-wrapper-release-n-deploy.yml. A direct run
+  # still tags and builds, so the npm jobs will fail the OIDC identity check
+  # after the tag has been pushed. Release through the wrapper.
   workflow_dispatch:
+    inputs:
+      reuse_existing_tag:
+        type: boolean
+        required: false
+        default: false
+        description: "Reuse an existing git tag for this version instead of creating + pushing a new one. Use to replay a release whose tag was already created (e.g. by a prior failed run)."
+  workflow_call: #  in order to make this action been called from outside
+    inputs:
+      reuse_existing_tag:
+        type: boolean
+        required: false
+        default: false
+        description: "Reuse an existing git tag for this version instead of creating + pushing a new one."
+    outputs:
+      version:
+        description: 'The release version'
+        value: ${{ jobs.set-version.outputs.version }}
 
 jobs:
   set-version:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v7
 
       - name: Set version
         id: version
         run: |
-          echo "version=$(cat version.txt)" | tee -a $GITHUB_OUTPUT
+          echo "version=$(cat version.txt)" | tee -a "$GITHUB_OUTPUT"
 
   create-git-tag:
     needs:
       - set-version
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v7
 
       - name: Create git tag
+        env:
+          RELEASE_VERSION: ${{ needs.set-version.outputs.version }}
+          REUSE_EXISTING_TAG: ${{ inputs.reuse_existing_tag }}
         run: |
           set -x
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "github-actions"
-          git tag ${{needs.set-version.outputs.version}}
-          git push --no-verify origin ${{needs.set-version.outputs.version}}
+
+          if [ "${REUSE_EXISTING_TAG}" = "true" ]; then
+            # Resolve the SHA the remote tag points to and surface it in the
+            # warning. `reuse_existing_tag=true` is an operator trust statement
+            # ("I trust this tag"). Printing the SHA lets the operator sanity-
+            # check from the Actions log that the tag points to the commit they
+            # expect — and cancel the run if it doesn't — without us having to
+            # take a stance on what 'correct' means here (e.g., an ancestor
+            # check would falsely reject legitimate replays after a main
+            # rebase). See PR #7124 review thread for the threat-model
+            # discussion.
+            TAG_SHA=$(git ls-remote --tags origin "${RELEASE_VERSION}" | awk '{print $1}')
+            if [ -n "${TAG_SHA}" ]; then
+              echo "::warning title=create-git-tag::reuse_existing_tag=true and origin already has tag ${RELEASE_VERSION} (commit ${TAG_SHA}); skipping create+push. Build will pin to this commit — verify it's the source you intend to release."
+              exit 0
+            fi
+            echo "::error title=create-git-tag::reuse_existing_tag=true but origin does not have tag ${RELEASE_VERSION}. Refusing to silently create a new one."
+            exit 1
+          fi
+
+          git tag "${RELEASE_VERSION}"
+          git push --no-verify origin "${RELEASE_VERSION}"
 
   release-apps:
     needs:
@@ -43,6 +90,10 @@ jobs:
     secrets: inherit
     with:
       version: ${{needs.set-version.outputs.version}}
+      is_release: true
+      # Caller-passes ref: build_apps.yml already exposes a ref input (defaults to inputs.ref || github.ref).
+      # TS SDK workflows in OPIK-6627 used callee-derives because they lacked one. See OPIK-6633.
+      ref: refs/tags/${{needs.set-version.outputs.version}}
 
   release-sdk:
     needs:
@@ -58,11 +109,34 @@ jobs:
     needs:
       - set-version
       - create-git-tag
+    # `id-token: write` is required here, not just in the called workflow — and
+    # also on whatever dispatches THIS workflow, since permissions only ever
+    # narrow down the call chain. The entry point in practice is
+    # `release-wrapper-release-n-deploy.yml`, which is what npm has registered as
+    # the trusted publisher. See DND-1565.
+    permissions:
+      contents: write
+      id-token: write
     uses: ./.github/workflows/typescript_sdk_publish.yml
     secrets: inherit
     with:
       version: ${{needs.set-version.outputs.version}}
       is_release: true
+      skip_commit_push: true
+
+  release-typescript-sdk-integrations:
+    needs:
+      - set-version
+      - create-git-tag
+    permissions:
+      contents: write
+      id-token: write
+    uses: ./.github/workflows/typescript_sdk_integration_publish.yml
+    secrets: inherit
+    with:
+      version: ${{needs.set-version.outputs.version}}
+      is_release: true
+      skip_commit_push: true
 
   publish-helm-chart:
     needs:
@@ -73,24 +147,93 @@ jobs:
     with:
       version: ${{needs.set-version.outputs.version}}
 
-  update_version_txt:
+  create-github-release:
     needs:
       - set-version
       - create-git-tag
       - release-apps
       - release-sdk
+      - release-typescript-sdk
+      - release-typescript-sdk-integrations
       - publish-helm-chart
     runs-on: ubuntu-latest
+    steps:
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{needs.set-version.outputs.version}}
+          generate_release_notes: true
 
+      - name: Delete Release Draft
+        uses: hugo19941994/delete-draft-releases@v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  commit-all-version-changes:
+    needs:
+      - set-version
+      - release-typescript-sdk
+      - release-typescript-sdk-integrations
+      - publish-helm-chart
+      - create-github-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
           token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
-      - name: Bump version on main branch
+      - name: Setup Node.js for TypeScript version update
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Update TypeScript SDK version
+        shell: bash
+        working-directory: sdks/typescript
+        run: |
+          npm version ${{ needs.set-version.outputs.version }} --no-git-tag-version
+
+      - name: Update TypeScript SDK Integrations versions
+        shell: bash
+        run: |
+          for integration in opik-openai opik-gemini opik-langchain opik-vercel opik-otel; do
+            if [ -d "sdks/typescript/src/opik/integrations/$integration" ]; then
+              echo "Updating version for $integration"
+              cd "sdks/typescript/src/opik/integrations/$integration"
+              npm version ${{ needs.set-version.outputs.version }} --no-git-tag-version
+              cd - > /dev/null
+            fi
+          done
+
+      - name: Update Chart.yaml with release version
+        shell: bash
+        run: |
+          set -x
+          cd deployment/helm_chart/opik
+          sed -i "s/^version:.*/version: ${{ needs.set-version.outputs.version }}/" Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: ${{ needs.set-version.outputs.version }}/" Chart.yaml
+          echo "Updated Chart.yaml version and appVersion to: ${{ needs.set-version.outputs.version }}"
+          grep -E "^version:|^appVersion:" Chart.yaml
+          cd -
+
+      # The chart README badges are derived from Chart.yaml by helm-docs, so
+      # regenerate here (git-push: false) to fold the update into the version
+      # commit below. Without this the README lags one release and the next
+      # chart-touching PR trips the helm-docs / update_helm_readme.yaml gate.
+      # Same action + inputs as update_helm_readme.yaml, keeping CI and the
+      # local pre-commit hook in agreement.
+      - name: Regenerate Helm chart README
+        uses: losisin/helm-docs-github-action@v2
+        with:
+          chart-search-root: deployment/helm_chart/opik
+          git-push: false
+
+      - name: Bump version.txt for next release
         id: update_version
         shell: bash
         run: |
@@ -99,44 +242,34 @@ jobs:
           IFS='.' read -r -a version_parts <<< "$BASE_VERSION"
           # Ensure all version parts are set
           for i in {0..2}; do
-            version_parts[$i]=${version_parts[$i]:-0}
+            version_parts[i]=${version_parts[i]:-0}
           done
-          ((version_parts[2]++))
+          # Convert to decimal before incrementing to avoid octal interpretation issues
+          version_parts[2]=$((10#${version_parts[2]} + 1))
           new_version="${version_parts[0]}.${version_parts[1]}.${version_parts[2]}"
 
           # Update version file with the new version
           echo "$new_version" > version.txt
-          echo "new_version=${new_version}" >> $GITHUB_OUTPUT
+          echo "new_version=${new_version}" >> "$GITHUB_OUTPUT"
 
-      - name: Commit updated version file
-        shell: bash
+      - name: Commit all version changes
         run: |
-
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "github-actions"
-          git commit -a -m "Update base version to ${{steps.update_version.outputs.new_version}}"
-          echo "Version updated to ${{steps.update_version.outputs.new_version}} on main" >> $GITHUB_STEP_SUMMARY
-
-      - name: Push changes
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
-          branch: ${{ github.ref }}
-          force_with_lease: true
-
-  create-github-release:
-    needs:
-      - set-version
-      - create-git-tag
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{needs.set-version.outputs.version}}
-          generate_release_notes: true
-
-      - name: Delete Release Draft
-        uses: hugo19941994/delete-draft-releases@v1.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+          # Add all modified version files
+          git add sdks/typescript/package.json sdks/typescript/package-lock.json
+          git add sdks/typescript/src/opik/integrations/*/package.json sdks/typescript/src/opik/integrations/*/package-lock.json
+          git add deployment/helm_chart/opik/Chart.yaml
+          git add deployment/helm_chart/opik/README.md
+          git add version.txt
+          
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update versions to ${{ needs.set-version.outputs.version }} and bump base version to ${{ steps.update_version.outputs.new_version }}"
+            git push origin main
+          fi
+          
+          echo "Version updated to ${{ steps.update_version.outputs.new_version }} on main" >> "$GITHUB_STEP_SUMMARY"

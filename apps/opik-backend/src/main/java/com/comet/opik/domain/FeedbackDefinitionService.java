@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.FeedbackDefinition;
-import com.comet.opik.api.FeedbackDefinitionCriteria;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -75,6 +74,8 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
                             FeedbackDefinitionMapper.INSTANCE.map(numerical);
                         case CategoricalFeedbackDefinitionDefinitionModel categorical ->
                             FeedbackDefinitionMapper.INSTANCE.map(categorical);
+                        case BooleanFeedbackDefinitionDefinitionModel booleanDef ->
+                            FeedbackDefinitionMapper.INSTANCE.map(booleanDef);
                     })
                     .toList();
 
@@ -93,11 +94,13 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
             var repository = handle.attach(FeedbackDefinitionDAO.class);
 
             return repository.findById(id, workspaceId)
-                    .map(feedback -> switch (feedback) {
+                    .map(feedback -> (FeedbackDefinition<?>) switch (feedback) {
                         case NumericalFeedbackDefinitionDefinitionModel numerical ->
                             FeedbackDefinitionMapper.INSTANCE.map(numerical);
                         case CategoricalFeedbackDefinitionDefinitionModel categorical ->
                             FeedbackDefinitionMapper.INSTANCE.map(categorical);
+                        case BooleanFeedbackDefinitionDefinitionModel booleanDef ->
+                            FeedbackDefinitionMapper.INSTANCE.map(booleanDef);
                     })
                     .orElseThrow(this::createNotFoundError);
         });
@@ -129,6 +132,16 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
 
                     case FeedbackDefinition.CategoricalFeedbackDefinition categorical -> {
                         var definition = categorical.toBuilder()
+                                .id(id)
+                                .createdBy(userName)
+                                .lastUpdatedBy(userName)
+                                .build();
+
+                        yield FeedbackDefinitionMapper.INSTANCE.map(definition);
+                    }
+
+                    case FeedbackDefinition.BooleanFeedbackDefinition booleanDef -> {
+                        var definition = booleanDef.toBuilder()
                                 .id(id)
                                 .createdBy(userName)
                                 .lastUpdatedBy(userName)
@@ -172,6 +185,10 @@ class FeedbackDefinitionServiceImpl implements FeedbackDefinitionService {
                                 .build());
                     case FeedbackDefinition.CategoricalFeedbackDefinition categorical ->
                         FeedbackDefinitionMapper.INSTANCE.map(categorical.toBuilder()
+                                .lastUpdatedBy(userName)
+                                .build());
+                    case FeedbackDefinition.BooleanFeedbackDefinition booleanDef ->
+                        FeedbackDefinitionMapper.INSTANCE.map(booleanDef.toBuilder()
                                 .lastUpdatedBy(userName)
                                 .build());
                 };

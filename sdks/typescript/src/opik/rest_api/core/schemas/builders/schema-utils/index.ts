@@ -1,4 +1,4 @@
-export { getSchemaUtils, optional, transform } from "./getSchemaUtils";
-export type { SchemaUtils } from "./getSchemaUtils";
-export { JsonError } from "./JsonError";
-export { ParseError } from "./ParseError";
+export type { SchemaUtils } from "./getSchemaUtils.js";
+export { getSchemaUtils, optional, transform } from "./getSchemaUtils.js";
+export { JsonError } from "./JsonError.js";
+export { ParseError } from "./ParseError.js";

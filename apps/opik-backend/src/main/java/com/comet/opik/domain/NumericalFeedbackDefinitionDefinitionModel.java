@@ -11,6 +11,7 @@ import java.util.UUID;
 public record NumericalFeedbackDefinitionDefinitionModel(
         UUID id,
         String name,
+        String description,
         @Json NumericalFeedbackDetail details,
         Instant createdAt,
         String createdBy,

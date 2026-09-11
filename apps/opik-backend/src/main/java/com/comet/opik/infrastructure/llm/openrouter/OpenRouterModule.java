@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.llm.openrouter;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.comet.opik.utils.JsonUtils;
 import com.google.inject.AbstractModule;
@@ -20,9 +21,9 @@ public class OpenRouterModule extends AbstractModule {
     @Named("openrouterGenerator")
     public OpenAIClientGenerator clientGenerator(
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) throws IOException {
-        LlmProviderClientConfig customConfig = JsonUtils.MAPPER.readValue(
-                JsonUtils.MAPPER.writeValueAsBytes(config), LlmProviderClientConfig.class);
-        customConfig.setOpenAiClient(new LlmProviderClientConfig.OpenAiClientConfig(config.getOpenRouterUrl()));
+        LlmProviderClientConfig customConfig = JsonUtils.readValue(
+                JsonUtils.writeValueAsBytes(config), LlmProviderClientConfig.class);
+        customConfig.setOpenAiClient(new OpenAiClientConfig(config.getOpenRouterUrl()));
         return new OpenAIClientGenerator(customConfig);
     }
 

@@ -1,0 +1,704 @@
+import React, { useCallback, useEffect, useMemo } from "react";
+import get from "lodash/get";
+import sortBy from "lodash/sortBy";
+import uniq from "lodash/uniq";
+import {
+  JsonParam,
+  NumberParam,
+  StringParam,
+  useQueryParam,
+} from "use-query-params";
+import { keepPreviousData } from "@tanstack/react-query";
+import { ColumnPinningState, createColumnHelper } from "@tanstack/react-table";
+import useLocalStorageState from "use-local-storage-state";
+
+import {
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_ID_ID,
+  COLUMN_SELECT_ID,
+  COLUMN_TYPE,
+  ColumnData,
+  DynamicColumn,
+  ROW_HEIGHT,
+} from "@/types/shared";
+import { EXPERIMENT_ITEM_OUTPUT_PREFIX } from "@/constants/experiments";
+import DataTable from "@/shared/DataTable/DataTable";
+import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
+import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
+import IdCell from "@/shared/DataTableCells/IdCell";
+import AutodetectCell from "@/shared/DataTableCells/AutodetectCell";
+import TrialPassedCell from "./TrialPassedCell";
+import TrialScoreCell from "./TrialScoreCell";
+import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
+import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
+import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
+import { ChipDefinition, chipOptionsValue } from "@/shared/filter-chips/types";
+import { FEEDBACK_SCORE_OPERATORS } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
+import { DEFAULT_OPERATOR_MAP, OPERATORS_MAP } from "@/constants/filters";
+import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
+import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
+import useAppStore from "@/store/AppStore";
+import {
+  Experiment,
+  ExperimentItem,
+  ExecutionPolicy,
+  ExperimentsCompare,
+} from "@/types/datasets";
+import { useTruncationEnabled } from "@/contexts/server-sync-provider";
+import { convertColumnDataToColumn, hasAnyVisibleColumns } from "@/lib/table";
+import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
+import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
+import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
+import { calculateHeightStyle } from "@/shared/DataTable/utils";
+import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
+import { generateDistinctColorMap } from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
+type FlattenedTrialItem = {
+  id: string;
+  dataset_item_id: string;
+  data: object;
+  experimentId: string;
+  experimentItem: ExperimentItem;
+  allRuns: ExperimentItem[];
+  executionPolicy?: ExecutionPolicy;
+  runSummary?: { passed_runs: number; total_runs: number; status: string };
+};
+
+const getRowId = (d: FlattenedTrialItem) => d.id;
+
+const columnHelper = createColumnHelper<FlattenedTrialItem>();
+
+const REFETCH_INTERVAL = 30000;
+
+const SELECTED_COLUMNS_KEY = "compare-trials-selected-columns-v5";
+const COLUMNS_WIDTH_KEY = "compare-trials-columns-width";
+const COLUMNS_ORDER_KEY = "compare-trials-columns-order";
+const DYNAMIC_COLUMNS_KEY = "compare-trials-dynamic-columns-v2";
+const COLUMNS_SCORES_ORDER_KEY = "compare-trials-scores-columns-order";
+const COLUMNS_OUTPUT_ORDER_KEY = "compare-trials-output-columns-order";
+const PAGINATION_SIZE_KEY = "compare-trials-pagination-size";
+const ROW_HEIGHT_KEY = "compare-trials-row-height";
+
+export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_SELECT_ID],
+  right: [],
+};
+
+export const DEFAULT_SELECTED_COLUMNS: string[] = [];
+
+const DEFAULT_COLUMNS: ColumnData<FlattenedTrialItem>[] = [
+  {
+    id: COLUMN_ID_ID,
+    label: "Test suite item ID",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.dataset_item_id,
+    cell: IdCell as never,
+    size: 165,
+  },
+];
+
+export type TrialItemsTabProps = {
+  objectiveName?: string;
+  datasetId: string;
+  experimentsIds: string[];
+  experiments?: Experiment[];
+  isTestSuite?: boolean;
+};
+
+const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
+  objectiveName,
+  datasetId,
+  experimentsIds = [],
+  experiments,
+  isTestSuite = false,
+}) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [spanId = "", setSpanId] = useQueryParam("span", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [page = 1, setPage] = useQueryParam("itemsPage", NumberParam, {
+    updateType: "replaceIn",
+  });
+
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: PAGINATION_SIZE_KEY,
+    queryKey: "size",
+    defaultValue: 100,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
+  });
+
+  const [height, setHeight] = useQueryParamAndLocalStorageState<
+    string | null | undefined
+  >({
+    localStorageKey: ROW_HEIGHT_KEY,
+    queryKey: "height",
+    defaultValue: ROW_HEIGHT.small,
+    queryParamConfig: StringParam,
+    syncQueryWithLocalStorageOnInit: true,
+  });
+
+  // The chip bar (useFilterChips below) owns writes to the "filters" URL param;
+  // the list query reads it raw so a deep-linked filter on a not-yet-loaded
+  // dynamic dataset column is never dropped before its chip definition exists.
+  const [filters = []] = useQueryParam("filters", JsonParam, {
+    updateType: "replaceIn",
+  });
+
+  const [columnsWidth, setColumnsWidth] = useLocalStorageState<
+    Record<string, number>
+  >(COLUMNS_WIDTH_KEY, {
+    defaultValue: {},
+  });
+
+  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
+    SELECTED_COLUMNS_KEY,
+    {
+      defaultValue: DEFAULT_SELECTED_COLUMNS,
+    },
+  );
+
+  const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
+    COLUMNS_ORDER_KEY,
+    {
+      defaultValue: [],
+    },
+  );
+
+  const [scoresColumnsOrder, setScoresColumnsOrder] = useLocalStorageState<
+    string[]
+  >(COLUMNS_SCORES_ORDER_KEY, {
+    defaultValue: [],
+  });
+
+  const [outputColumnsOrder, setOutputColumnsOrder] = useLocalStorageState<
+    string[]
+  >(COLUMNS_OUTPUT_ORDER_KEY, {
+    defaultValue: [],
+  });
+
+  const truncationEnabled = useTruncationEnabled();
+
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useCompareExperimentsList(
+      {
+        workspaceName,
+        datasetId,
+        experimentsIds,
+        filters,
+        truncate: truncationEnabled,
+        page: page as number,
+        size: size as number,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
+
+  const { data: experimentsOutputData, isPending: isExperimentsOutputPending } =
+    useCompareExperimentsColumns(
+      {
+        datasetId,
+        experimentsIds,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
+
+  const apiTotal = data?.total ?? 0;
+  const noDataText = "There is no data for the selected trials";
+
+  const rows = useMemo(() => {
+    const apiRows: ExperimentsCompare[] = data?.content ?? [];
+    const flat: FlattenedTrialItem[] = [];
+
+    for (const row of apiRows) {
+      const itemsByExperiment = new Map<string, ExperimentItem[]>();
+      for (const item of row.experiment_items ?? []) {
+        const existing = itemsByExperiment.get(item.experiment_id) ?? [];
+        existing.push(item);
+        itemsByExperiment.set(item.experiment_id, existing);
+      }
+
+      for (const [experimentId, runs] of itemsByExperiment) {
+        flat.push({
+          id: `${row.id}_${experimentId}`,
+          dataset_item_id: row.id,
+          data: row.data,
+          experimentId,
+          experimentItem: runs[0],
+          allRuns: runs,
+          executionPolicy: row.execution_policy,
+          runSummary: row.run_summaries_by_experiment?.[experimentId],
+        });
+      }
+    }
+
+    return flat;
+  }, [data?.content]);
+
+  const dynamicDatasetColumns = useMemo(() => {
+    return (data?.columns ?? [])
+      .slice()
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: c.name,
+        label: c.name,
+        columnType: mapDynamicColumnTypesToColumnType(c.types),
+      }));
+  }, [data]);
+
+  const dynamicOutputColumns = useMemo(() => {
+    return (experimentsOutputData?.columns ?? [])
+      .slice()
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: `${EXPERIMENT_ITEM_OUTPUT_PREFIX}.${c.name}`,
+        label: c.name,
+        columnType: mapDynamicColumnTypesToColumnType(c.types),
+      }));
+  }, [experimentsOutputData]);
+
+  const dynamicColumnsIds = useMemo(
+    () => [
+      ...dynamicDatasetColumns.map((c) => c.id),
+      ...dynamicOutputColumns.map((c) => c.id),
+    ],
+    [dynamicDatasetColumns, dynamicOutputColumns],
+  );
+
+  useDynamicColumnsCache({
+    dynamicColumnsKey: DYNAMIC_COLUMNS_KEY,
+    dynamicColumnsIds,
+    setSelectedColumns,
+  });
+
+  const { data: feedbackScoresNamesData, isPending: isScoreNamesPending } =
+    useExperimentsFeedbackScoresNames(
+      { experimentsIds },
+      { placeholderData: keepPreviousData },
+    );
+
+  const scoreNameOptions = useMemo(
+    () => ({
+      // Dedupe: the same score name is reported once per experiment.
+      items: sortBy(
+        uniq((feedbackScoresNamesData?.scores ?? []).map((s) => s.name)),
+        (name) => name.toLowerCase(),
+      ),
+      isLoading: isScoreNamesPending,
+    }),
+    [feedbackScoresNamesData?.scores, isScoreNamesPending],
+  );
+
+  // New filter-chips definitions: one query-builder chip per dynamic test-suite
+  // column, plus the evaluation output and the optimization feedback scores.
+  const chipDefinitions = useMemo<ChipDefinition[]>(() => {
+    const definitions: ChipDefinition[] = sortBy(
+      dynamicDatasetColumns,
+      "label",
+    ).map(
+      ({ id, label, columnType }): ChipDefinition => ({
+        id,
+        field: id,
+        label: `${label} (Test suite)`,
+        kind: "query-builder",
+        columnType,
+        operators: OPERATORS_MAP[columnType].map((o) => o.value),
+        defaultOperator: DEFAULT_OPERATOR_MAP[columnType],
+      }),
+    );
+
+    definitions.push({
+      id: "output",
+      field: "output",
+      label: "Evaluation task",
+      kind: "query-builder",
+      columnType: COLUMN_TYPE.string,
+      operators: OPERATORS_MAP[COLUMN_TYPE.string].map((o) => o.value),
+      defaultOperator: DEFAULT_OPERATOR_MAP[COLUMN_TYPE.string],
+    });
+
+    definitions.push({
+      id: COLUMN_FEEDBACK_SCORES_ID,
+      field: COLUMN_FEEDBACK_SCORES_ID,
+      label: "Optimizations scores",
+      kind: "query-builder",
+      columnType: COLUMN_TYPE.numberDictionary,
+      operators: FEEDBACK_SCORE_OPERATORS,
+      defaultOperator: ">=",
+      key: {
+        placeholder: "Select score",
+        options: chipOptionsValue(scoreNameOptions),
+      },
+      value: { type: "numeric", decimals: 2, placeholder: "0" },
+    });
+
+    return definitions;
+  }, [dynamicDatasetColumns, scoreNameOptions]);
+
+  const {
+    chipsPinned,
+    chipsUnpinned,
+    values: chipValues,
+    applyValue: applyChipValue,
+    clearValue: clearChipValue,
+    clearAll: clearAllChips,
+    pinChip,
+    unpinChip,
+    managerOpen: chipManagerOpen,
+    setManagerOpen: setChipManagerOpen,
+    openChipId,
+    setOpenChipId,
+  } = useFilterChips({
+    tableId: "compare-trials",
+    urlKey: "filters",
+    definitions: chipDefinitions,
+    defaultPinned: [COLUMN_FEEDBACK_SCORES_ID],
+    onChange: () => setPage(1),
+  });
+
+  const datasetColumnsData = useMemo(() => {
+    return [
+      ...dynamicDatasetColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            accessorFn: (row: FlattenedTrialItem) =>
+              get(row, ["data", label], ""),
+            cell: AutodetectCell as never,
+            ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
+          }) as ColumnData<FlattenedTrialItem>,
+      ),
+    ];
+  }, [dynamicDatasetColumns]);
+
+  const outputColumnsData = useMemo(() => {
+    return [
+      ...dynamicOutputColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            accessorFn: (row: FlattenedTrialItem) =>
+              get(row.experimentItem.output, label, ""),
+            cell: AutodetectCell as never,
+            ...(columnType === COLUMN_TYPE.dictionary && { size: 400 }),
+          }) as ColumnData<FlattenedTrialItem>,
+      ),
+    ];
+  }, [dynamicOutputColumns]);
+
+  const scoresColumnsData = useMemo(() => {
+    if (isTestSuite) {
+      return [
+        {
+          id: "score_passed",
+          label: "passed",
+          type: COLUMN_TYPE.string,
+          cell: TrialPassedCell as never,
+          customMeta: {
+            experimentsIds,
+          },
+        },
+      ] as ColumnData<FlattenedTrialItem>[];
+    }
+
+    const feedbackScoreNames = new Set<string>();
+
+    experiments?.forEach((experiment) => {
+      experiment.feedback_scores?.forEach((score) => {
+        feedbackScoreNames.add(score.name);
+      });
+      experiment.experiment_scores?.forEach((score) => {
+        feedbackScoreNames.add(score.name);
+      });
+    });
+
+    const sortedScoreNames = Array.from(feedbackScoreNames).sort((a, b) => {
+      if (a === objectiveName) return -1;
+      if (b === objectiveName) return 1;
+      return a.localeCompare(b, undefined, { sensitivity: "base" });
+    });
+
+    const colorMap =
+      objectiveName && sortedScoreNames.length > 0
+        ? generateDistinctColorMap(
+            objectiveName,
+            sortedScoreNames.filter((name) => name !== objectiveName),
+          )
+        : undefined;
+
+    return sortedScoreNames.map((scoreName) => ({
+      id: `score_${scoreName}`,
+      label: scoreName,
+      type: COLUMN_TYPE.number,
+      header: FeedbackScoreHeader as never,
+      cell: TrialScoreCell as never,
+      accessorFn: (row: FlattenedTrialItem) => {
+        return row.experimentItem.feedback_scores?.find(
+          (s) => s.name === scoreName,
+        );
+      },
+      customMeta: {
+        scoreName,
+        colorMap,
+      },
+    })) as ColumnData<FlattenedTrialItem>[];
+  }, [experiments, experimentsIds, objectiveName, isTestSuite]);
+
+  useEffect(() => {
+    const scoreColumnIds = scoresColumnsData.map((col) => col.id);
+    const missingScoreColumns = scoreColumnIds.filter(
+      (id) => !selectedColumns.includes(id),
+    );
+
+    if (missingScoreColumns.length > 0) {
+      setSelectedColumns((prev) => [...prev, ...missingScoreColumns]);
+    }
+  }, [scoresColumnsData, selectedColumns, setSelectedColumns]);
+
+  const activeDefaultColumns = DEFAULT_COLUMNS;
+
+  const columns = useMemo(() => {
+    const retVal = [
+      ...convertColumnDataToColumn<FlattenedTrialItem, FlattenedTrialItem>(
+        activeDefaultColumns,
+        {
+          selectedColumns,
+          columnsOrder,
+        },
+      ),
+    ];
+
+    if (hasAnyVisibleColumns(datasetColumnsData, selectedColumns)) {
+      retVal.push(
+        columnHelper.group({
+          id: "dataset",
+          meta: {
+            header: "Test suite",
+          },
+          header: SectionHeader,
+          columns: convertColumnDataToColumn<
+            FlattenedTrialItem,
+            FlattenedTrialItem
+          >(datasetColumnsData, {
+            selectedColumns,
+            columnsOrder,
+          }),
+        }),
+      );
+    }
+
+    if (hasAnyVisibleColumns(outputColumnsData, selectedColumns)) {
+      retVal.push(
+        columnHelper.group({
+          id: "evaluation",
+          meta: {
+            header: "Evaluation task",
+          },
+          header: SectionHeader,
+          columns: convertColumnDataToColumn<
+            FlattenedTrialItem,
+            FlattenedTrialItem
+          >(outputColumnsData, {
+            selectedColumns,
+            columnsOrder: outputColumnsOrder,
+          }),
+        }),
+      );
+    }
+
+    if (hasAnyVisibleColumns(scoresColumnsData, selectedColumns)) {
+      retVal.push(
+        columnHelper.group({
+          id: "scores",
+          meta: {
+            header: "Optimizations scores",
+          },
+          header: SectionHeader,
+          columns: convertColumnDataToColumn<
+            FlattenedTrialItem,
+            FlattenedTrialItem
+          >(scoresColumnsData, {
+            selectedColumns,
+            columnsOrder: scoresColumnsOrder,
+          }),
+        }),
+      );
+    }
+
+    return retVal;
+  }, [
+    activeDefaultColumns,
+    datasetColumnsData,
+    selectedColumns,
+    outputColumnsData,
+    scoresColumnsData,
+    columnsOrder,
+    outputColumnsOrder,
+    scoresColumnsOrder,
+  ]);
+
+  const resizeConfig = useMemo(
+    () => ({
+      enabled: true,
+      columnSizing: columnsWidth,
+      onColumnResize: setColumnsWidth,
+    }),
+    [columnsWidth, setColumnsWidth],
+  );
+
+  const getRowHeightStyle = useCallback(
+    (height: ROW_HEIGHT) => calculateHeightStyle(height),
+    [],
+  );
+
+  const columnSections = useMemo(() => {
+    return [
+      {
+        title: "Evaluation task",
+        columns: outputColumnsData,
+        order: outputColumnsOrder,
+        onOrderChange: setOutputColumnsOrder,
+      },
+      {
+        title: "Optimizations scores",
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+    ];
+  }, [
+    outputColumnsData,
+    outputColumnsOrder,
+    setOutputColumnsOrder,
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+  ]);
+
+  const isTableLoading =
+    isPending ||
+    isExperimentsOutputPending ||
+    (isPlaceholderData && rows.length === 0);
+
+  return (
+    <>
+      {/* Top row: section heading + table controls. The filter chips sit on
+          their own row below (see next container) so a long filter set never
+          crowds the controls. */}
+      <PageBodyStickyContainer
+        className="mb-3 flex items-center justify-between gap-x-8 gap-y-2"
+        direction="bidirectional"
+        limitWidth
+      >
+        <h2 className="comet-title-xs shrink-0">
+          {isTestSuite ? "Test items" : "Evaluation results"}
+        </h2>
+        <div className="flex shrink-0 items-center gap-2">
+          <DataTableRowHeightSelector
+            type={height as ROW_HEIGHT}
+            setType={setHeight}
+            layout="labeled"
+            size="2xs"
+          />
+          <ColumnsButton
+            columns={[...activeDefaultColumns, ...datasetColumnsData]}
+            selectedColumns={selectedColumns}
+            onSelectionChange={setSelectedColumns}
+            order={columnsOrder}
+            onOrderChange={setColumnsOrder}
+            sections={columnSections}
+            layout="labeled"
+            size="2xs"
+          ></ColumnsButton>
+        </div>
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="mb-3"
+        direction="horizontal"
+        limitWidth
+      >
+        <FilterChipBar
+          chipsPinned={chipsPinned}
+          chipsUnpinned={chipsUnpinned}
+          values={chipValues}
+          managerOpen={chipManagerOpen}
+          onManagerOpenChange={setChipManagerOpen}
+          onApplyValue={applyChipValue}
+          onClearValue={clearChipValue}
+          onPinChip={pinChip}
+          onUnpinChip={unpinChip}
+          onClearAll={clearAllChips}
+          openChipId={openChipId}
+          onOpenChipIdChange={setOpenChipId}
+        />
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        direction="horizontal"
+        limitWidth
+        className="mb-3"
+      >
+        <DataTable
+          columns={columns}
+          data={rows}
+          resizeConfig={resizeConfig}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          getRowHeightStyle={getRowHeightStyle}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          showSkeleton={isTableLoading}
+          showLoadingOverlay={
+            !isTableLoading && isPlaceholderData && isFetching
+          }
+        />
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="pb-4"
+        direction="horizontal"
+        limitWidth
+      >
+        <DataTablePagination
+          page={page as number}
+          pageChange={setPage}
+          size={size as number}
+          sizeChange={setSize}
+          total={Math.max(apiTotal, rows.length)}
+          supportsTruncation
+          truncationEnabled={truncationEnabled}
+        />
+      </PageBodyStickyContainer>
+      <TraceDetailsPanel
+        traceId={traceId!}
+        spanId={spanId!}
+        setSpanId={setSpanId}
+        open={Boolean(traceId)}
+        onClose={() => {
+          setTraceId("");
+          setSpanId("");
+        }}
+      />
+    </>
+  );
+};
+
+export default TrialItemsTab;

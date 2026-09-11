@@ -11,50 +11,104 @@ on:
 
   workflow_dispatch:
     inputs:
-      version:
+      is_release:
+        type: boolean
+        required: true
+        description: Is release build
+        default: false
+      is_adhoc:
+        type: boolean
+        required: false
+        description: Is adhoc build
+        default: false
+      build_guardrails:
+        type: boolean
+        required: true
+        description: Build guardrails backend
+        default: true
+      build_arm64:
+        type: boolean
+        required: false
+        description: Build multiarch images
+        default: true
+      ai_spend_plugin_ref:
         type: string
         required: false
-        description: Version (optional)
-        default: ""
-      push_latest:
-        type: boolean
-        description: Push latest tag (optional)
-        default: false
+        description: ai-spend plugin ref
+        default: "main"
   workflow_call:
     inputs:
       version:
         type: string
         required: true
         description: Version
-        default: ""
-      push_latest:
+      is_release:
         type: boolean
-        description: Push latest tag 
+        required: true
+        description: Is release build
+      is_adhoc:
+        type: boolean
+        required: false
+        description: Is adhoc build
+        default: false
+      ref:
+        type: string
+        required: false
+        description: Git ref to build from (branch, tag, or commit SHA)
+        default: ""
+      build_guardrails:
+        type: boolean
+        required: false
+        description: Build guardrails backend
         default: true
+      build_arm64:
+        type: boolean
+        required: false
+        description: Build multiarch images
+        default: true
+      ai_spend_plugin_ref:
+        type: string
+        required: false
+        description: ai-spend plugin ref
+        default: "main"
+
+    outputs:
+      version:
+        description: "The version that was built"
+        value: ${{ jobs.set-version.outputs.version }}
 
 jobs:
 
   set-version:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
         version: ${{ steps.version.outputs.version }}
         build_from: ${{ steps.version.outputs.build_from }}
-        push_latest: ${{ steps.version.outputs.push_latest }}
     steps:
         - name: Checkout
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v7
+          with:
+            ref: ${{ inputs.ref || github.ref }}
 
         - name: Set version
           id: version
+          env:
+            INPUT_VERSION: ${{ inputs.version }}
+            INPUT_REF: ${{ inputs.ref }}
+            REF_NAME: ${{ github.ref_name }}
+            RUN_NUMBER: ${{ github.run_number }}
           run: |
-            if [[ "${{inputs.version}}" != "" ]]; then
-              VERSION=${{inputs.version}}
+            if [[ "${INPUT_VERSION}" != "" ]]; then
+              VERSION="${INPUT_VERSION}"
             else
               BASE_VERSION=$(cat version.txt)
-              BRANCH_NAME="${{ github.ref_name }}"
-              if [[ "${BRANCH_NAME}" == "main" ]]
-              then
-                VERSION=${BASE_VERSION}-${{ github.run_number }}
+              BRANCH_NAME="${REF_NAME}"
+              if [[ "${BRANCH_NAME}" == "main" ]]; then
+                VERSION="${BASE_VERSION}-${RUN_NUMBER}"
+              elif [[ "${BRANCH_NAME}" =~ ^hotfix/.* ]]; then
+                # Special handling for hotfix branches
+                VERSION="${BASE_VERSION}-hotfix.${RUN_NUMBER}"
               else
                 # Normalize branch name
                 fixedBranchName=$(echo "${BRANCH_NAME}" | sed 's/origin\///; s/\//-/g; s/_/-/g; s/.*/\L&/')
@@ -65,28 +119,24 @@ jobs:
                     fixedBranchName="${fixedBranchName%?}"
                   done
                 fi
-                VERSION="${BASE_VERSION}.${fixedBranchName}-${{ github.run_number }}"
-                
+                VERSION="${BASE_VERSION}-${fixedBranchName}-${RUN_NUMBER}"
               fi
             fi
-            echo "version=${VERSION}" | tee -a $GITHUB_OUTPUT
-            echo "Version is ${VERSION}" >> $GITHUB_STEP_SUMMARY
+            echo "version=${VERSION}" | tee -a "$GITHUB_OUTPUT"
+            echo "Version is ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
-            if [[ "${{inputs.version}}" == ""  ]]; then
-              echo "build_from=${{github.ref_name}}" | tee -a $GITHUB_OUTPUT
+            if [ "${INPUT_REF}" != "" ]; then
+              echo "build_from=${INPUT_REF}" | tee -a "$GITHUB_OUTPUT"
+            elif [[ "${INPUT_VERSION}" == "" ]]; then
+              echo "build_from=${REF_NAME}" | tee -a "$GITHUB_OUTPUT"
             else
-              echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${INPUT_VERSION}" | tee -a "$GITHUB_OUTPUT"
             fi
-            if [[ ("${{inputs.version}}" != "" && "${{inputs.push_latest}}" == "true") || "${{ github.ref_name }}" == "main" ]]; then
-              echo "push_latest=true" | tee -a $GITHUB_OUTPUT
-            else
-              echo "push_latest=false" | tee -a $GITHUB_OUTPUT
-            fi
-
             
   build-backend:
     needs:
       - set-version
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-backend"
@@ -94,11 +144,16 @@ jobs:
       build_from: ${{needs.set-version.outputs.build_from}}
       build_comet_image: false
       comet_build_args: ""
-      push_latest: ${{needs.set-version.outputs.push_latest}}
+      is_release: ${{ inputs.is_release || false }}
+      is_adhoc: ${{ inputs.is_adhoc || false }}
+      # push events have no `inputs` context, so force multi-arch there; otherwise honor the input (workflow_dispatch / workflow_call use the declared default: true)
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
 
   build-sandbox-executor-python:
+    if: ${{ !inputs.is_adhoc }}
     needs:
       - set-version
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-sandbox-executor-python"
@@ -106,12 +161,16 @@ jobs:
       build_from: ${{needs.set-version.outputs.build_from}}
       build_comet_image: false
       comet_build_args: ""
-      push_latest: ${{needs.set-version.outputs.push_latest}}
+      is_release: ${{ inputs.is_release || false }}
+      is_adhoc: ${{ inputs.is_adhoc || false }}
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
 
   build-python-backend:
+    if: always() && needs.set-version.result == 'success'
     needs:
       - set-version
       - build-sandbox-executor-python
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-python-backend"
@@ -119,30 +178,59 @@ jobs:
       build_from: ${{needs.set-version.outputs.build_from}}
       build_comet_image: false
       comet_build_args: ""
-      push_latest: ${{needs.set-version.outputs.push_latest}}
+      is_release: ${{ inputs.is_release || false }}
+      is_adhoc: ${{ inputs.is_adhoc || false }}
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
+
+  # build-guardrails-backend:
+  #   if: inputs.build_guardrails != false 
+  #   needs:
+  #     - set-version
+  #   secrets: inherit
+  #   uses: ./.github/workflows/build_and_push_docker.yaml
+  #   with:
+  #     image: "opik-guardrails-backend"
+  #     version: ${{needs.set-version.outputs.version}}
+  #     build_from: ${{needs.set-version.outputs.build_from}}
+  #     build_comet_image: false
+  #     comet_build_args: ""
+  #     is_release: ${{ inputs.is_release || false }}
 
   build-frontend:
     needs:
       - set-version
+    secrets: inherit
     uses: ./.github/workflows/build_and_push_docker.yaml
     with:
       image: "opik-frontend"
       version: ${{needs.set-version.outputs.version}}
       build_from: ${{needs.set-version.outputs.build_from}}
-      build_comet_image: true
-      comet_build_args: "BUILD_MODE=comet"
-      push_latest: ${{needs.set-version.outputs.push_latest}}
-      
+      build_comet_image: ${{ !inputs.is_adhoc }}
+      comet_build_args: ${{ !inputs.is_adhoc && 'BUILD_MODE=comet' || '' }}
+      is_release: ${{ inputs.is_release || false }}
+      is_adhoc: ${{ inputs.is_adhoc || false }}
+      build_arm64: ${{ github.event_name == 'push' || inputs.build_arm64 }}
+      ai_spend_plugin_ref: ${{ inputs.ai_spend_plugin_ref || 'main' }}
+
   create-git-tag:
+    if: |
+      always() &&
+      !inputs.is_release &&
+      needs.set-version.result == 'success' &&
+      needs.build-backend.result == 'success' &&
+      needs.build-frontend.result == 'success' &&
+      needs.build-python-backend.result == 'success'
     needs:
       - set-version
       - build-backend
       - build-frontend
       - build-python-backend
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Create git tag
         run: |

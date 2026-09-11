@@ -1,10 +1,11 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
-import dev.ai4j.openai4j.chat.ChatCompletionResponse;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
@@ -38,7 +39,7 @@ public class ChatCompletionsClient {
 
     public ChatCompletionsClient(ClientSupport clientSupport) {
         this.clientSupport = clientSupport;
-        this.baseURI = "http://localhost:%d".formatted(clientSupport.getPort());
+        this.baseURI = TestUtils.getBaseUrl(clientSupport);
     }
 
     public ChatCompletionResponse create(String apiKey, String workspaceName, ChatCompletionRequest request) {
@@ -132,7 +133,12 @@ public class ChatCompletionsClient {
         try (var inputStream = response.readEntity(CHUNKED_INPUT_STRING_GENERIC_TYPE)) {
             String chunk;
             while ((chunk = inputStream.read()) != null) {
-                entities.add(JsonUtils.readValue(chunk, CHAT_COMPLETION_RESPONSE_TYPE_REFERENCE));
+                // Strip "data: " prefix if present (SSE format)
+                String jsonChunk = chunk.startsWith("data: ") ? chunk.substring(6) : chunk;
+                // Skip [DONE] marker
+                if (!"[DONE]".equals(jsonChunk)) {
+                    entities.add(JsonUtils.readValue(jsonChunk, CHAT_COMPLETION_RESPONSE_TYPE_REFERENCE));
+                }
             }
         }
         return entities;
@@ -143,7 +149,12 @@ public class ChatCompletionsClient {
         try (var inputStream = response.readEntity(CHUNKED_INPUT_STRING_GENERIC_TYPE)) {
             String chunk;
             while ((chunk = inputStream.read()) != null) {
-                errorMessages.add(JsonUtils.readValue(chunk, ERROR_MESSAGE_TYPE_REFERENCE));
+                // Strip "data: " prefix if present (SSE format)
+                String jsonChunk = chunk.startsWith("data: ") ? chunk.substring(6) : chunk;
+                // Skip [DONE] marker
+                if (!"[DONE]".equals(jsonChunk)) {
+                    errorMessages.add(JsonUtils.readValue(jsonChunk, ERROR_MESSAGE_TYPE_REFERENCE));
+                }
             }
         }
         return errorMessages;

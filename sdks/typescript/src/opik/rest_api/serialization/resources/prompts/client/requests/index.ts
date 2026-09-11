@@ -1,4 +1,8 @@
-export { PromptWrite } from "./PromptWrite";
-export { CreatePromptVersionDetail } from "./CreatePromptVersionDetail";
-export { PromptUpdatable } from "./PromptUpdatable";
-export { PromptVersionRetrieveDetail } from "./PromptVersionRetrieveDetail";
+export { CreatePromptVersionDetail } from "./CreatePromptVersionDetail.js";
+export { PromptUpdatable } from "./PromptUpdatable.js";
+export { PromptVersionBatchUpdate } from "./PromptVersionBatchUpdate.js";
+export { PromptVersionCommitsRequestPublic } from "./PromptVersionCommitsRequestPublic.js";
+export { PromptVersionEnvironmentUpdate } from "./PromptVersionEnvironmentUpdate.js";
+export { PromptVersionIdsRequestDetail } from "./PromptVersionIdsRequestDetail.js";
+export { PromptVersionRetrieveDetail } from "./PromptVersionRetrieveDetail.js";
+export { PromptWrite } from "./PromptWrite.js";

@@ -1,6 +1,6 @@
 from typing import Any, Dict
-from langchain.load import serializable
-from opik import jsonable_encoder
+from langchain_core.load import serializable
+import opik.jsonable_encoder as jsonable_encoder
 
 
 def register() -> None:

@@ -10,11 +10,14 @@ import java.util.Arrays;
 import java.util.UUID;
 
 public sealed interface FeedbackDefinitionModel<T>
-        permits NumericalFeedbackDefinitionDefinitionModel, CategoricalFeedbackDefinitionDefinitionModel {
+        permits NumericalFeedbackDefinitionDefinitionModel, CategoricalFeedbackDefinitionDefinitionModel,
+        BooleanFeedbackDefinitionDefinitionModel {
 
     UUID id();
 
     String name();
+
+    String description();
 
     @Json
     T details();
@@ -25,7 +28,8 @@ public sealed interface FeedbackDefinitionModel<T>
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
     enum FeedbackType {
         NUMERICAL("numerical"),
-        CATEGORICAL("categorical");
+        CATEGORICAL("categorical"),
+        BOOLEAN("boolean");
 
         @JsonValue
         private final String type;

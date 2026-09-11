@@ -1,9 +1,9 @@
-import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Experiment } from "@/types/datasets";
 
 export const getExperimentById = async (
-  { signal }: QueryFunctionContext,
+  { signal }: { signal?: AbortSignal },
   { experimentId }: UseExperimentByIdParams,
 ) => {
   const { data } = await api.get(EXPERIMENTS_REST_ENDPOINT + experimentId, {

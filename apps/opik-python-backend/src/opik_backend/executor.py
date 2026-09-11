@@ -1,0 +1,122 @@
+"""Base class for code execution strategies."""
+import json
+import logging
+import math
+import os
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# Default configuration values for Docker executor containers
+# CPU shares: higher value = higher priority. Docker default is 1024.
+# Value of 512 gives containers moderate priority relative to other processes.
+DEFAULT_CPU_SHARES = 512
+# Memory limit for executor containers
+# Uses Docker SDK format: number followed by single letter unit (b/k/m/g)
+DEFAULT_MEM_LIMIT = "256m"
+# CPU hard limit for executor containers (in fractional CPUs, e.g. "0.5" = half a CPU core)
+# None means no hard limit (only cpu_shares soft priority applies)
+DEFAULT_CPU_LIMIT = None
+
+# Human-readable bodies returned with HTTP 503. Callers should branch on
+# the HTTP status code, not on these strings.
+SATURATED_ERROR = "Code executor is saturated, please retry"
+SHUTDOWN_ERROR = "Service is shutting down"
+
+# Body returned with HTTP 504 when a single execution exceeds exec_timeout.
+EXEC_TIMEOUT_ERROR = "Server processing exceeded timeout limit."
+
+# Tunable acquire wait for the in-memory pool before responding HTTP 503.
+POOL_ACQUIRE_TIMEOUT_ENV_VAR = "PYTHON_CODE_EXECUTOR_POOL_ACQUIRE_TIMEOUT_IN_SECS"
+POOL_ACQUIRE_TIMEOUT_DEFAULT = 0.0
+
+@dataclass
+class ExecutionResult:
+    """Result of code execution."""
+    exit_code: int
+    output: bytes
+
+class CodeExecutorBase(ABC):
+    """Base class for code execution strategies."""
+
+    def __init__(self):
+        # Shared configuration
+        self.max_parallel = int(os.getenv("PYTHON_CODE_EXECUTOR_PARALLEL_NUM", 5))
+        self.exec_timeout = int(os.getenv("PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS", 3))
+        # Maximum wait for a free executor before responding with HTTP 503.
+        # Defaults to 0 (fail fast): once the pool is empty, the next slot
+        # only opens after a fresh container/worker is created — too long to
+        # absorb on the server side without re-pinning request threads, which
+        # is the failure mode this knob exists to prevent. The HTTP layer's
+        # retry-with-backoff is the right place to soak up bursts. Operators
+        # can raise this if their traffic shape benefits from a short wait.
+        self.pool_acquire_timeout = self._parse_pool_acquire_timeout()
+
+    @staticmethod
+    def _parse_pool_acquire_timeout():
+        """Parse the pool-acquire timeout env var as a non-negative float."""
+        raw = os.getenv(POOL_ACQUIRE_TIMEOUT_ENV_VAR)
+        if raw is None:
+            return POOL_ACQUIRE_TIMEOUT_DEFAULT
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            logger.warning(
+                f"{POOL_ACQUIRE_TIMEOUT_ENV_VAR} must be a number, "
+                f"got '{raw}'; falling back to {POOL_ACQUIRE_TIMEOUT_DEFAULT}"
+            )
+            return POOL_ACQUIRE_TIMEOUT_DEFAULT
+        if not math.isfinite(value) or value < 0:
+            # Reject nan/inf alongside negatives: an infinite timeout would
+            # re-introduce the unbounded blocking acquire this knob exists
+            # to bound.
+            logger.warning(
+                f"{POOL_ACQUIRE_TIMEOUT_ENV_VAR} must be a finite non-negative "
+                f"number, got '{raw}'; falling back to {POOL_ACQUIRE_TIMEOUT_DEFAULT}"
+            )
+            return POOL_ACQUIRE_TIMEOUT_DEFAULT
+        return value
+
+    def parse_execution_result(self, result: ExecutionResult) -> dict:
+        """Parse execution result into API response format."""
+        if result.exit_code == 0:
+            lines = result.output.decode("utf-8").strip().splitlines()
+            if not lines:
+                # Exit code 0 with no output at all: the client's metric ran to completion without
+                # printing its result line. Indexing [-1] here raised IndexError, which
+                # run_scoring's catch-all reported as an opaque "An unexpected error occurred" 500 —
+                # retried by the caller and counted against us. The executed code is the client's,
+                # so this is a 400 like every other way their metric can be wrong.
+                logger.warning("Execution returned exit code 0 with no output")
+                return {"code": 400, "error": "Execution failed: the metric produced no output"}
+            try:
+                parsed = json.loads(lines[-1])
+            except json.JSONDecodeError as e:
+                # Same reasoning: exit code 0 whose last line is not the result JSON means the
+                # client's metric printed something else last, not that the server misbehaved.
+                logger.warning(f"Failed to parse execution result as JSON: {e}")
+                return {"code": 400, "error": "Execution failed: the metric returned an unparseable result"}
+            if not isinstance(parsed, dict):
+                # Valid JSON that is not an object (`null`, `42`, `"done"`, `[1, 2]`) would reach
+                # the HTTP layer and blow up there instead — `"error" in response` raises TypeError
+                # for the non-iterables and `response.get` raises AttributeError for the rest, both
+                # surfacing as a 500. Reject it here, where the contract of this function (-> dict)
+                # is stated.
+                logger.warning(f"Execution result is not a JSON object: {type(parsed).__name__}")
+                return {"code": 400, "error": "Execution failed: the metric did not return a JSON object"}
+            return parsed
+        else:
+            logger.warning(f"Execution failed (Code: {result.exit_code}):\n{result.output.decode('utf-8')}")
+            try:
+                last_line = result.output.decode("utf-8").strip().splitlines()[-1]
+                return {"code": 400, "error": json.loads(last_line).get("error")}
+            except Exception as e:
+                logger.info(f"Exception parsing execution logs: {e}")
+                return {"code": 400, "error": "Execution failed: Python code contains an invalid metric"}
+
+    @abstractmethod
+    def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
+        """Execute code with data and return results."""
+        pass

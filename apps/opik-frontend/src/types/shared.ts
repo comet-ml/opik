@@ -1,4 +1,8 @@
-import { Cell, Header } from "@tanstack/react-table";
+import {
+  CellContext,
+  ColumnDefTemplate,
+  HeaderContext,
+} from "@tanstack/react-table";
 
 export type Updater<T> = T | ((old: T) => T);
 export type OnChangeFn<T> = (updaterOrValue: Updater<T>) => void;
@@ -9,6 +13,10 @@ export type DropdownOption<TDataType> = {
   description?: string;
   tooltip?: string;
   disabled?: boolean;
+  group?: string;
+  action?: {
+    href?: string;
+  };
 };
 
 export const COLUMN_ID_ID = "id";
@@ -17,8 +25,29 @@ export const COLUMN_NAME_ID = "name";
 export const COLUMN_ACTIONS_ID = "actions";
 export const COLUMN_METADATA_ID = "metadata";
 export const COLUMN_FEEDBACK_SCORES_ID = "feedback_scores";
+export const COLUMN_EXPERIMENT_SCORES_ID = "experiment_scores";
+export const COLUMN_SPAN_FEEDBACK_SCORES_ID = "span_feedback_scores";
+export const COLUMN_USAGE_ID = "usage";
+
+// Score type constants
+export const SCORE_TYPE_FEEDBACK = "feedback_scores" as const;
+export const SCORE_TYPE_EXPERIMENT = "experiment_scores" as const;
+export type ScoreType =
+  | typeof SCORE_TYPE_FEEDBACK
+  | typeof SCORE_TYPE_EXPERIMENT;
 export const COLUMN_COMMENTS_ID = "comments";
+export const COLUMN_GUARDRAILS_ID = "guardrails";
 export const COLUMN_CREATED_AT_ID = "created_at";
+export const COLUMN_DATASET_ID = "dataset_id";
+export const COLUMN_PROJECT_ID = "project_id";
+export const COLUMN_DURATION_ID = "duration";
+export const COLUMN_CUSTOM_ID = "custom";
+export const COLUMN_EXPERIMENT_ID = "experiment_id";
+export const COLUMN_EXPERIMENT_IDS = "experiment_ids";
+export const COLUMN_ENVIRONMENT_ID = "environment";
+
+export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
+export const COLUMN_DATA_ID = "data";
 
 export enum COLUMN_TYPE {
   string = "string",
@@ -29,6 +58,8 @@ export enum COLUMN_TYPE {
   dictionary = "dictionary",
   numberDictionary = "feedback_scores_number",
   cost = "cost",
+  category = "category",
+  errors = "errors",
 }
 
 export enum DYNAMIC_COLUMN_TYPE {
@@ -40,28 +71,58 @@ export enum DYNAMIC_COLUMN_TYPE {
   null = "null",
 }
 
+type explainerType = "info" | "help";
+
+export type Explainer = {
+  id: string;
+  title?: string;
+  type?: explainerType;
+  description: string;
+  docLink?: string;
+};
+
+export type HeaderIconType =
+  | COLUMN_TYPE
+  | "guardrails"
+  | "tags"
+  | "version"
+  | "assertions"
+  | "execution_policy"
+  | "pass_rate"
+  | "result";
+
 export type ColumnData<T> = {
   id: string;
   label: string;
   disabled?: boolean;
-  accessorFn?: (row: T) => string | number | object | undefined;
+  accessorFn?: (row: T) => string | number | object | boolean | undefined;
   size?: number;
+  minSize?: number;
   type?: COLUMN_TYPE;
+  scoreType?: ScoreType;
   customMeta?: object;
-  iconType?: COLUMN_TYPE;
-  header?: Header<T, unknown>;
-  cell?: Cell<T, unknown>;
+  iconType?: HeaderIconType;
+  header?: ColumnDefTemplate<HeaderContext<T, unknown>>;
+  headerCheckbox?: boolean;
+  explainer?: Explainer;
+  cell?: ColumnDefTemplate<CellContext<T, unknown>>;
+  aggregatedCell?: ColumnDefTemplate<CellContext<T, unknown>>;
   verticalAlignment?: CELL_VERTICAL_ALIGNMENT;
+  horizontalAlignment?: CELL_HORIZONTAL_ALIGNMENT;
   overrideRowHeight?: ROW_HEIGHT;
   statisticKey?: string;
   statisticDataFormater?: (value: number) => string;
+  statisticTooltipFormater?: (value: number) => string;
+  supportsPercentiles?: boolean;
   sortable?: boolean;
+  disposable?: boolean;
 };
 
 export type DynamicColumn = {
   id: string;
   label: string;
   columnType: COLUMN_TYPE;
+  type?: ScoreType;
 };
 
 export enum ROW_HEIGHT {
@@ -76,8 +137,14 @@ export enum CELL_VERTICAL_ALIGNMENT {
   end = "end",
 }
 
+export enum CELL_HORIZONTAL_ALIGNMENT {
+  start = "start",
+  end = "end",
+}
+
 export interface FeedbackScoreName {
   name: string;
+  type?: ScoreType;
 }
 
 export enum STATISTIC_AGGREGATION_TYPE {
@@ -130,7 +197,35 @@ export interface UsageData {
   total_tokens: number;
 }
 
-export interface AverageFeedbackScore {
+export interface AggregatedFeedbackScore {
   name: string;
   value: number;
+}
+
+export type FeedbackScoreDisplay = AggregatedFeedbackScore & {
+  colorKey?: string;
+};
+
+export interface AggregatedDuration {
+  p50: number;
+  p90: number;
+  p99: number;
+}
+
+export type ConfigurationType = Record<string, unknown>;
+
+export type GoogleColabCardCoreProps = {
+  link: string;
+};
+
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonObject
+  | JsonValue[];
+
+export interface JsonObject {
+  [key: string]: JsonValue;
 }

@@ -1,0 +1,7 @@
+out/
+out-test/
+node_modules/
+.vscode/
+
+*.vsix
+opik-chat-history-*.vsix

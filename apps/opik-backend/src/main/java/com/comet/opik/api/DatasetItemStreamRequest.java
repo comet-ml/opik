@@ -1,12 +1,12 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.ws.rs.DefaultValue;
 import lombok.Builder;
 
 import java.util.UUID;
@@ -17,10 +17,19 @@ import java.util.UUID;
 public record DatasetItemStreamRequest(
         @NotBlank String datasetName,
         UUID lastRetrievedId,
-        @Min(1) @Max(2000) @DefaultValue("500") Integer steamLimit) {
+        @Min(1) @Max(2000) Integer steamLimit,
+        String datasetVersion,
+        String projectName,
+        @JsonIgnore UUID projectId,
+        String filters) {
 
+    private static final int DEFAULT_STREAM_LIMIT = 2000;
+
+    /**
+     * Returns the steam limit, using 2000 as default if not provided by the client.
+     */
     @Override
     public Integer steamLimit() {
-        return steamLimit == null ? 500 : steamLimit;
+        return steamLimit == null ? DEFAULT_STREAM_LIMIT : steamLimit;
     }
 }

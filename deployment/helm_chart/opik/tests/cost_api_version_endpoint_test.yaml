@@ -1,0 +1,97 @@
+suite: cost-api version endpoint (frontend nginx)
+
+# Exercises the Cost Intelligence version endpoint rendered into the frontend
+# nginx ConfigMap (templates/configmap-frontend-nginx.yaml).
+#
+# The endpoint lets release tooling read the deployed cost-api version the same
+# way it reads opik's own from <rootPath>/api/is-alive/ver. It is gated by the
+# existing component.frontend.aiSpendBackend.enabled flag, and is deliberately
+# scoped to an EXACT-match location so none of cost-api's other routes become
+# reachable through it.
+templates:
+  - templates/configmap-frontend-nginx.yaml
+
+documentSelector: &nginx
+  path: metadata.name
+  value: opik-frontend-nginx
+
+tests:
+  - it: exposes nothing when aiSpendBackend is disabled (the default)
+    documentSelector: *nginx
+    asserts:
+      - notMatchRegex:
+          path: data["default.conf.template"]
+          pattern: "cost-api"
+      - notMatchRegex:
+          path: data["default.conf.template"]
+          pattern: "ai_spend"
+
+  - it: exposes the version endpoint under the rootPath when opik is not standalone
+    set:
+      standalone: false
+      component.frontend.aiSpendBackend.enabled: true
+    documentSelector: *nginx
+    asserts:
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: 'location = /opik/cost-api/ver \{'
+      # The rootPath is stripped so the upstream sees its own /cost-api/ver.
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: 'rewrite \^/opik/cost-api/ver\$ /cost-api/ver break;'
+
+  - it: exposes the version endpoint at the root when opik is standalone
+    set:
+      standalone: true
+      component.frontend.aiSpendBackend.enabled: true
+    documentSelector: *nginx
+    asserts:
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: 'location = /cost-api/ver \{'
+      - notMatchRegex:
+          path: data["default.conf.template"]
+          pattern: "location = /opik/cost-api/ver"
+
+  - it: keeps proxy_pass free of a URI part, which nginx rejects in a named location
+    # Regression guard: nginx refuses to load a config where proxy_pass carries a
+    # URI inside `location @name` ("proxy_pass" cannot have URI part in ... named
+    # location), so the target URI must be carried by the rewrite instead. Getting
+    # this wrong takes down the whole frontend nginx, not just this endpoint.
+    set:
+      standalone: false
+      component.frontend.aiSpendBackend.enabled: true
+    documentSelector: *nginx
+    asserts:
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: "proxy_pass http://ai-cost-backend;"
+      - notMatchRegex:
+          path: data["default.conf.template"]
+          pattern: "proxy_pass http://ai-cost-backend/"
+
+  - it: does not expose cost-api as a prefix, so only the version endpoint is reachable
+    set:
+      standalone: false
+      component.frontend.aiSpendBackend.enabled: true
+    documentSelector: *nginx
+    asserts:
+      # A bare `location /opik/cost-api` or `location ^~ /opik/cost-api` would
+      # match every cost-api route; only the `=` exact match is allowed.
+      - notMatchRegex:
+          path: data["default.conf.template"]
+          pattern: 'location (\^~ )?/opik/cost-api'
+
+  - it: honours a custom costApiRootPath
+    set:
+      standalone: false
+      component.frontend.aiSpendBackend.enabled: true
+      component.frontend.aiSpendBackend.costApiRootPath: /ci
+    documentSelector: *nginx
+    asserts:
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: 'location = /opik/ci/ver \{'
+      - matchRegex:
+          path: data["default.conf.template"]
+          pattern: 'rewrite \^/opik/ci/ver\$ /ci/ver break;'

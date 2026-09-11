@@ -1,7 +1,10 @@
 # Runner for the suite of library integration tests
 #
+#          echo "result=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
 name: SDK Library Integration Tests Runner
 run-name: "SDK Library Integration Tests Runner ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 on:
   workflow_dispatch:
     inputs:
@@ -13,16 +16,35 @@ on:
           - all
           - openai
           - langchain
+          - langchain_legacy
           - llama_index
           - anthropic
+          # - mistral  # disabled: Mistral API rejects the test traffic with 429
+          - groq
+          - cerebras
           - aisuite
           - haystack
-          - guardrails
+          # - guardrails  # disabled: guardrails-ai is on PyPI quarantine
           - dspy
-          - crewai
+          - crewai_v0
+          - crewai_v1
           - genai
+          - adk
+          - adk_legacy_1_3_0
+          - metrics
+          - bedrock
+          - litellm
+          - harbor
+      run_expensive_tests:
+        description: "Run expensive tests (e.g., video generation). Enabled by default on weekly scheduled runs."
+        required: false
+        type: boolean
+        default: false
   schedule:
-    - cron: "0 0 */1 * *"
+    # Daily run at midnight UTC Monday-Saturday (without expensive tests)
+    - cron: "0 0 * * 1-6"
+    # Weekly run on Sunday at midnight UTC (with expensive tests)
+    - cron: "0 0 * * 0"
   pull_request:
     paths:
     - 'sdks/python/**'
@@ -32,15 +54,44 @@ on:
     paths:
       - 'sdks/python/**'
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
-  SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
 
 jobs:
+  has_needed_secrets:
+    name: Check Secrets
+    runs-on: ubuntu-latest
+    outputs:
+      has_secrets: ${{ steps.init.outputs.has_secrets }}
+    steps:
+      - name: Print has secrets into output
+        id: init
+        run: |
+          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> "$GITHUB_OUTPUT"
+
+  missed_api_key_warning:
+    name: Missed OpenAI API Key Warning
+    needs: [has_needed_secrets]
+    runs-on: ubuntu-latest
+    if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'false' }}
+    steps:
+      - name: Print disabled message
+        run: |
+          echo "::warning::SDK Library Integration Tests are disabled because OPENAI_API_KEY is not set"
+
   init_environment:
     name: Build
+    needs: [has_needed_secrets]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'true' }}
     outputs:
       LIBS: ${{ steps.init.outputs.LIBS }}
 
@@ -48,18 +99,27 @@ jobs:
       - name: Make LIBS variable global (workaround for cron)
         id: init
         run: |
-          echo "LIBS=${{ env.LIBS }}" >> $GITHUB_OUTPUT
+          echo "LIBS=${{ env.LIBS }}" >> "$GITHUB_OUTPUT"
 
   openai_tests:
     needs: [init_environment]
     if: contains(fromJSON('["openai", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-openai-tests.yml
+    with:
+      # Run expensive tests on weekly schedule (Sunday) or when manually requested
+      run_expensive_tests: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 0 * * 0') || github.event.inputs.run_expensive_tests == 'true' }}
     secrets: inherit
-  
+
   langchain_tests:
     needs: [init_environment]
     if: contains(fromJSON('["langchain", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-langchain-tests.yml
+    secrets: inherit
+  
+  langchain_legacy_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["langchain_legacy", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-langchain-legacy-tests.yml
     secrets: inherit
   
   llama_index_tests:
@@ -74,6 +134,27 @@ jobs:
     uses: ./.github/workflows/lib-anthropic-tests.yml
     secrets: inherit
 
+  # The Mistral API answers the test traffic with 429 "Rate limit exceeded", so
+  # nearly every test fails regardless of the change under test. Re-enable once
+  # the account's rate limit is raised.
+  # mistral_tests:
+  #   needs: [init_environment]
+  #   if: contains(fromJSON('["mistral", "all"]'), needs.init_environment.outputs.LIBS)
+  #   uses: ./.github/workflows/lib-mistral-tests.yml
+  #   secrets: inherit
+
+  groq_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["groq", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-groq-tests.yml
+    secrets: inherit
+
+  cerebras_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["cerebras", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-cerebras-tests.yml
+    secrets: inherit
+
   aisuite_tests:
     needs: [init_environment]
     if: contains(fromJSON('["aisuite", "all"]'), needs.init_environment.outputs.LIBS)
@@ -86,11 +167,13 @@ jobs:
     uses: ./.github/workflows/lib-haystack-tests.yml
     secrets: inherit
 
-  guardrails_tests:
-    needs: [init_environment]
-    if: contains(fromJSON('["guardrails", "all"]'), needs.init_environment.outputs.LIBS)
-    uses: ./.github/workflows/lib-guardrails-tests.yml
-    secrets: inherit
+  # guardrails-ai is on PyPI quarantine, so the install step fails before
+  # pytest runs. Re-enable once the package is back on PyPI.
+  # guardrails_tests:
+  #   needs: [init_environment]
+  #   if: contains(fromJSON('["guardrails", "all"]'), needs.init_environment.outputs.LIBS)
+  #   uses: ./.github/workflows/lib-guardrails-tests.yml
+  #   secrets: inherit
 
   dspy_tests:
     needs: [init_environment]
@@ -98,15 +181,138 @@ jobs:
     uses: ./.github/workflows/lib-dspy-tests.yml
     secrets: inherit
 
-  crewai_tests:
+  crewai_v0_tests:
     needs: [init_environment]
-    if: contains(fromJSON('["crewai", "all"]'), needs.init_environment.outputs.LIBS)
-    uses: ./.github/workflows/lib-crewai-tests.yml
+    if: contains(fromJSON('["crewai_v0", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-crewai-v0-tests.yml
+    secrets: inherit
+
+  crewai_v1_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["crewai_v1", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-crewai-v1-tests.yml
     secrets: inherit
   
   genai_tests:
     needs: [init_environment]
     if: contains(fromJSON('["genai", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-genai-tests.yml
+    with:
+      # Run expensive tests on weekly schedule (Sunday) or when manually requested
+      run_expensive_tests: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 0 * * 0') || github.event.inputs.run_expensive_tests == 'true' }}
     secrets: inherit
 
+  adk_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["adk", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-adk-tests.yml
+    secrets: inherit
+
+  adk_legacy_1_3_0_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["adk_legacy_1_3_0", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-adk-legacy-1-3-0-tests.yml
+    secrets: inherit
+
+  evaluation_metrics_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["metrics", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-metrics-with-llm-judge-tests.yml
+    secrets: inherit
+
+  bedrock_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["bedrock", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-bedrock-tests.yml
+    secrets: inherit
+
+  litellm_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["litellm", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-litellm-tests.yml
+    secrets: inherit
+
+  harbor_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["harbor", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-harbor-tests.yml
+    secrets: inherit
+
+  # ========================================
+  # Slack Notification (manual and scheduled runs only)
+  # ========================================
+  notify-slack:
+    name: "Slack Notification"
+    runs-on: ubuntu-latest
+    needs:
+      - openai_tests
+      - langchain_tests
+      - langchain_legacy_tests
+      - llama_index_tests
+      - anthropic_tests
+      # - mistral_tests  # disabled: Mistral API rejects the test traffic with 429
+      - groq_tests
+      - cerebras_tests
+      - aisuite_tests
+      - haystack_tests
+      # - guardrails_tests  # disabled: guardrails-ai is on PyPI quarantine
+      - dspy_tests
+      - crewai_v0_tests
+      - crewai_v1_tests
+      - genai_tests
+      - adk_tests
+      - adk_legacy_1_3_0_tests
+      - evaluation_metrics_tests
+      - bedrock_tests
+      - litellm_tests
+      - harbor_tests
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Determine trigger type
+        id: trigger
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          if [ "${EVENT_NAME}" == "schedule" ]; then
+            TYPE=$([[ "${EVENT_SCHEDULE}" == "0 0 * * 0" ]] && echo "Weekly Schedule" || echo "Daily Schedule")
+          else
+            TYPE="Manual Dispatch"
+          fi
+          echo "type=$TYPE" >> "$GITHUB_OUTPUT"
+
+      - name: Send Slack notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_USER_ID: ${{ secrets.SLACK_SDK_TESTS_NOTIFY_USER_ID }}
+          TRIGGER_TYPE: ${{ steps.trigger.outputs.type }}
+          SUITE_RESULTS: >-
+            {
+              "OpenAI": "${{ needs.openai_tests.result }}",
+              "LangChain": "${{ needs.langchain_tests.result }}",
+              "LangChain Legacy": "${{ needs.langchain_legacy_tests.result }}",
+              "LlamaIndex": "${{ needs.llama_index_tests.result }}",
+              "Anthropic": "${{ needs.anthropic_tests.result }}",
+              "Groq": "${{ needs.groq_tests.result }}",
+              "Cerebras": "${{ needs.cerebras_tests.result }}",
+              "AISuite": "${{ needs.aisuite_tests.result }}",
+              "Haystack": "${{ needs.haystack_tests.result }}",
+              "DSPy": "${{ needs.dspy_tests.result }}",
+              "CrewAI v0": "${{ needs.crewai_v0_tests.result }}",
+              "CrewAI v1": "${{ needs.crewai_v1_tests.result }}",
+              "GenAI": "${{ needs.genai_tests.result }}",
+              "ADK": "${{ needs.adk_tests.result }}",
+              "ADK Legacy 1.3.0": "${{ needs.adk_legacy_1_3_0_tests.result }}",
+              "Evaluation Metrics": "${{ needs.evaluation_metrics_tests.result }}",
+              "Bedrock": "${{ needs.bedrock_tests.result }}",
+              "LiteLLM": "${{ needs.litellm_tests.result }}",
+              "Harbor": "${{ needs.harbor_tests.result }}"
+            }
+        run: .github/scripts/notify-slack-lib-integration.sh

@@ -6,9 +6,10 @@ import json
 from opik.api_objects import opik_client
 from opik.api_objects.experiment import experiment_item
 from opik.api_objects.dataset import dataset_item
-from opik import id_helpers
+import opik.id_helpers as id_helpers
 
-from opik import datetime_helpers, dict_utils
+import opik.datetime_helpers as datetime_helpers
+import opik.dict_utils as dict_utils
 from . import test_runs_storage, test_run_content
 
 
@@ -40,7 +41,7 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
     except Exception:
         dataset = client.create_dataset("tests")
 
-    dataset_items = dataset.__internal_api__get_items_as_dataclasses__()
+    dataset_items = list(dataset.__internal_api__stream_items_as_dataclasses__())
     dataset_item_id_finder = get_dataset_item_id_finder(
         existing_dataset_items=dataset_items
     )
@@ -52,9 +53,11 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
 
     for test_item in test_items:
         test_run_content = test_runs_storage.TEST_RUNS_CONTENTS[test_item.nodeid]
-        test_run_trace_id = test_runs_storage.TEST_RUNS_TO_TRACE_DATA[
+        test_run_trace_data = test_runs_storage.TEST_RUNS_TO_TRACE_DATA[
             test_item.nodeid
-        ].id
+        ]
+        test_run_trace_id = test_run_trace_data.id
+        test_run_project_name = test_run_trace_data.project_name
 
         dataset_item_id = dataset_item_id_finder(test_run_content)
 
@@ -73,6 +76,7 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
             experiment_item.ExperimentItemReferences(
                 dataset_item_id=dataset_item_id,
                 trace_id=test_run_trace_id,
+                project_name=test_run_project_name,
             )
         )
 

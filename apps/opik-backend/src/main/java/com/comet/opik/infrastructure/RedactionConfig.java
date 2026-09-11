@@ -1,0 +1,105 @@
+package com.comet.opik.infrastructure;
+
+import com.comet.opik.infrastructure.redaction.RedactionRule;
+import com.comet.opik.infrastructure.redaction.RedactionRules;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.type.TypeReference;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.List;
+
+/**
+ * Read-time redaction of trace and span content.
+ * <p>
+ * Rules are deployment-level rather than per workspace: the installations that need this run dedicated and
+ * single-tenant, and keeping them here means they compile once at startup instead of being read and cached per
+ * request. Per-workspace rules can be layered on later without changing the mechanism.
+ * <p>
+ * They are carried as a JSON array in a single scalar so the whole set can come from one environment variable,
+ * which a YAML list cannot: {@code [{"regex":"...","replace":"[EMAIL]"}]}. With {@code enabled} false nothing
+ * is registered and every response is written exactly as it is stored.
+ */
+@Data
+public class RedactionConfig {
+
+    private static final TypeReference<List<Rule>> RULES_TYPE = new TypeReference<>() {
+    };
+
+    @JsonProperty
+    private boolean enabled;
+
+    @JsonProperty
+    @NotNull private String rules = "[]";
+
+    @Data
+    public static class Rule {
+        // No bean-validation annotation here: these are produced by JsonUtils.readValue inside compile(), never
+        // by Dropwizard's config binding, so any constraint on this class would silently never run. Validated in
+        // compile() instead.
+        @JsonProperty
+        private String regex;
+
+        /** Empty is meaningful: it removes the match instead of replacing it. */
+        @JsonProperty
+        private String replace = "";
+    }
+
+    /**
+     * Parses and compiles the rule set. Called once at startup so a malformed regex or malformed JSON stops
+     * the deployment rather than silently disabling redaction at request time.
+     */
+    /**
+     * Enabled with nothing to apply would leave every response exactly as stored while the deployment believes
+     * its content is protected. Nothing about that is visible from outside: no error, no failed request. It is
+     * the same reasoning that makes a malformed regex fail startup rather than silently disabling redaction, and
+     * an empty rule set is the case that reasoning missed.
+     */
+    @JsonIgnore
+    @AssertTrue(message = "redaction.rules must not be empty when redaction.enabled=true") public boolean isConfiguredWhenEnabled() {
+        if (!enabled) {
+            return true;
+        }
+
+        if (StringUtils.isBlank(rules)) {
+            return false;
+        }
+
+        try {
+            return !compile().isEmpty();
+        } catch (RuntimeException malformed) {
+            // Not this constraint's business, and reporting it here makes it worse: a validator that throws
+            // surfaces as "HV000090: Unable to access isConfiguredWhenEnabled" with the cause discarded.
+            // Malformed JSON, a blank regex and an uncompilable pattern each surface at startup from
+            // RedactionService's constructor with their own message - JsonMappingException with the position,
+            // "redaction.rules[0].regex must not be blank", PatternSyntaxException with the index.
+            return true;
+        }
+    }
+
+    public RedactionRules compile() {
+        if (StringUtils.isBlank(rules)) {
+            return RedactionRules.empty();
+        }
+
+        var parsed = JsonUtils.readValue(rules, RULES_TYPE);
+
+        for (int index = 0; index < parsed.size(); index++) {
+            // A blank pattern is the dangerous case, not merely an invalid one: it matches at every position, so
+            // every string in every response would be replaced. A missing one would otherwise surface as a bare
+            // Lombok NPE from RedactionRule.of, naming neither the field nor which entry was wrong.
+            if (StringUtils.isBlank(parsed.get(index).getRegex())) {
+                throw new IllegalArgumentException(
+                        "redaction.rules[%d].regex must not be blank".formatted(index));
+            }
+        }
+
+        return new RedactionRules(parsed.stream()
+                .map(rule -> RedactionRule.of(rule.getRegex(), rule.getReplace()))
+                .toList());
+    }
+}

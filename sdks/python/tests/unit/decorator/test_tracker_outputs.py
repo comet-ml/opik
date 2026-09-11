@@ -1,12 +1,13 @@
 import asyncio
+import functools
 import threading
 from typing import Dict
 
-import mock
+from unittest import mock
 import pytest
 
-from opik import context_storage, opik_context
-from opik.api_objects import opik_client, trace
+from opik import context_storage, opik_context, rest_api, PromptType
+from opik.api_objects import opik_client, trace, prompt
 from opik.decorator import tracker
 from ...testlib import (
     ANY_BUT_NONE,
@@ -38,6 +39,7 @@ def test_track__one_nested_function__happyflow(fake_backend):
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -55,10 +57,13 @@ def test_track__one_nested_function__happyflow(fake_backend):
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -83,6 +88,7 @@ def test_track__one_function_without_nesting__inputs_and_outputs_not_captured__i
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -92,8 +98,10 @@ def test_track__one_function_without_nesting__inputs_and_outputs_not_captured__i
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -118,6 +126,7 @@ def test_track__one_function_without_nesting__output_is_dict__output_is_wrapped_
         output={"some-key": "the-output-value"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -127,8 +136,10 @@ def test_track__one_function_without_nesting__output_is_dict__output_is_wrapped_
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -161,6 +172,7 @@ def test_track__two_nested_functions__happyflow(fake_backend):
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -186,12 +198,16 @@ def test_track__two_nested_functions__happyflow(fake_backend):
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 spans=[],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -226,6 +242,7 @@ def test_track__outer_function_has_two_separate_nested_function__happyflow(
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -243,6 +260,7 @@ def test_track__outer_function_has_two_separate_nested_function__happyflow(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -252,10 +270,13 @@ def test_track__outer_function_has_two_separate_nested_function__happyflow(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -285,6 +306,7 @@ def test_track__two_traces__happyflow(fake_backend):
             output={"output": "f1-output"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -294,8 +316,10 @@ def test_track__two_traces__happyflow(fake_backend):
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -304,6 +328,7 @@ def test_track__two_traces__happyflow(fake_backend):
             output={"output": "f2-output"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -313,8 +338,10 @@ def test_track__two_traces__happyflow(fake_backend):
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
     ]
 
@@ -343,10 +370,11 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": "Exception",
             "message": "error message",
-            "traceback": ANY_STRING(),
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -359,11 +387,13 @@ def test_track__one_function__error_raised__trace_and_span_finished_correctly__o
                 error_info={
                     "exception_type": "Exception",
                     "message": "error message",
-                    "traceback": ANY_STRING(),
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -396,6 +426,7 @@ def test_track__nested_function__error_raised_in_inner_span_but_caught_in_outer_
         output={"output": "the-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -415,13 +446,16 @@ def test_track__nested_function__error_raised_in_inner_span_but_caught_in_outer_
                         error_info={
                             "exception_type": "Exception",
                             "message": "error message",
-                            "traceback": ANY_STRING(),
+                            "traceback": ANY_STRING,
                         },
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -449,10 +483,11 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": "Exception",
             "message": "error message",
-            "traceback": ANY_STRING(),
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -465,11 +500,13 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
                 error_info={
                     "exception_type": "Exception",
                     "message": "error message",
-                    "traceback": ANY_STRING(),
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -515,6 +552,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
             output={"output": "outer-output"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ID_STORAGE["f_outer-span-id"],
@@ -524,8 +562,10 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
         TraceModel(
             id=ID_STORAGE["f_inner-trace-id-thread-1"],
@@ -534,6 +574,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
             output={"output": "inner-output-from-thread-1"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ID_STORAGE["f_inner-span-id-thread-1"],
@@ -543,8 +584,10 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
         TraceModel(
             id=ID_STORAGE["f_inner-trace-id-thread-2"],
@@ -553,6 +596,7 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
             output={"output": "inner-output-from-thread-2"},
             start_time=ANY_BUT_NONE,
             end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
             spans=[
                 SpanModel(
                     id=ID_STORAGE["f_inner-span-id-thread-2"],
@@ -562,8 +606,10 @@ def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backen
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
     ]
 
@@ -614,6 +660,7 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
         output={"output": "yielded-1 yielded-2 yielded-3"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -623,8 +670,10 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -655,10 +704,11 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": "Exception",
             "message": "error message",
-            "traceback": ANY_STRING(),
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -671,11 +721,13 @@ def test_track__single_generator_function_tracked__error_raised_during_the_gener
                 error_info={
                     "exception_type": "Exception",
                     "message": "error message",
-                    "traceback": ANY_STRING(),
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -715,6 +767,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -740,12 +793,16 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 spans=[],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -790,6 +847,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -825,14 +883,19 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
                                         start_time=ANY_BUT_NONE,
                                         end_time=ANY_BUT_NONE,
                                         spans=[],
+                                        source="sdk",
                                     ),
                                 ],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -859,6 +922,7 @@ def test_track__single_async_function_tracked__happyflow(
         output={"output": "the-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -868,8 +932,10 @@ def test_track__single_async_function_tracked__happyflow(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -901,6 +967,7 @@ def test_track__nested_async_function_tracked__happyflow(
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -918,10 +985,13 @@ def test_track__nested_async_function_tracked__happyflow(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -955,6 +1025,7 @@ def test_track__top_level_single_async_generator_function_tracked__generator_exh
         output={"output": "yielded-1 yielded-2 yielded-3"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -964,8 +1035,10 @@ def test_track__top_level_single_async_generator_function_tracked__generator_exh
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1003,6 +1076,7 @@ def test_track__top_level_async_generator_function_tracked__generator_has_anothe
         output={"output": "yielded-1 yielded-2 yielded-3"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1019,10 +1093,13 @@ def test_track__top_level_async_generator_function_tracked__generator_has_anothe
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1058,6 +1135,7 @@ def test_track__async_generator_inside_another_tracked_function__happyflow(
         output={"output": "generator-user-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1075,10 +1153,13 @@ def test_track__async_generator_inside_another_tracked_function__happyflow(
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1118,6 +1199,7 @@ def test_track__async_generator_inside_another_tracked_function__another_tracked
         output={"output": "generator-user-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1143,12 +1225,16 @@ def test_track__async_generator_inside_another_tracked_function__another_tracked
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 spans=[],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1189,6 +1275,7 @@ def test_track__distributed_tracing_with_headers__tracing_is_performed_in_2_thre
         output={"output": "outer-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1206,10 +1293,13 @@ def test_track__distributed_tracing_with_headers__tracing_is_performed_in_2_thre
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1224,7 +1314,7 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
     def f(x):
         return "f-output"
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     trace_data = trace.TraceData(
         id="manually-created-trace-id",
         name="manually-created-trace",
@@ -1253,6 +1343,7 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
         output={"output": "output-of-manually-created-trace"},
         start_time=mock.ANY,  # not ANY_BUT_NONE because we created span manually in the test
         end_time=mock.ANY,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1261,8 +1352,10 @@ def test_track__trace_already_created_not_by_decorator__decorator_just_attaches_
                 output={"output": "f-output"},
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1279,6 +1372,11 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
             total_cost=0.42,
             model="gpt-3.5-turbo",
             provider="openai",
+            error_info={
+                "exception_type": "CustomError",
+                "message": "custom error message",
+                "traceback": "custom traceback",
+            },
         )
         opik_context.update_current_trace(
             name="trace-name",
@@ -1300,6 +1398,7 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         thread_id="some-thread-id",
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1313,8 +1412,15 @@ def test_track__span_and_trace_updated_via_opik_context(fake_backend):
                 spans=[],
                 model="gpt-3.5-turbo",
                 provider="openai",
+                error_info={
+                    "exception_type": "CustomError",
+                    "message": "custom error message",
+                    "traceback": "custom traceback",
+                },
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1346,6 +1452,7 @@ def test_track__span_and_trace_input_output_updated_via_opik_context(fake_backen
         output={"output": "f-output", "trace-output-key": "trace-output-value"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1355,8 +1462,10 @@ def test_track__span_and_trace_input_output_updated_via_opik_context(fake_backen
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1390,6 +1499,7 @@ def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__fe
         output={"output": "f-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         feedback_scores=[
             FeedbackScoreModel(id=ANY_BUT_NONE, name="trace-score-name", value=0.75)
         ],
@@ -1407,8 +1517,68 @@ def test_track__span_and_trace_updated_via_opik_context_with_feedback_scores__fe
                         id=ANY_BUT_NONE, name="span-score-name", value=0.5
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__update_current_span_with_error_info_then_exception_raised__exception_error_info_overrides_update_error_info(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(
+            error_info={
+                "exception_type": "ManualError",
+                "message": "manually set error",
+                "traceback": "manual traceback",
+            }
+        )
+        # After setting error_info manually, raise an exception
+        raise ValueError("actual exception message")
+
+    with pytest.raises(ValueError):
+        f("the-input")
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "the-input"},
+        output=None,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        error_info={
+            "exception_type": "ValueError",
+            "message": "actual exception message",
+            "traceback": ANY_STRING,
+        },
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "the-input"},
+                output=None,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                error_info={
+                    "exception_type": "ValueError",
+                    "message": "actual exception message",
+                    "traceback": ANY_STRING,
+                },
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1431,6 +1601,7 @@ def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_bac
         output={"some-key": "the-output-value"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1440,8 +1611,10 @@ def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_bac
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1465,6 +1638,7 @@ def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__
         output={"some-key": "the-output-value"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1474,8 +1648,10 @@ def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1497,31 +1673,34 @@ def test_track__function_called_with_wrong_arguments__trace_is_still_created_wit
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="f",
-        input={"args": tuple(), "kwargs": {"y": 5}},
+        input={"args": list(), "kwargs": {"y": 5}},
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         error_info={
             "exception_type": "TypeError",
-            "traceback": ANY_STRING(),
-            "message": ANY_STRING(),
+            "traceback": ANY_STRING,
+            "message": ANY_STRING,
         },
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
                 name="f",
-                input={"args": tuple(), "kwargs": {"y": 5}},
+                input={"args": list(), "kwargs": {"y": 5}},
                 output=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 error_info={
                     "exception_type": "TypeError",
-                    "traceback": ANY_STRING(),
-                    "message": ANY_STRING(),
+                    "traceback": ANY_STRING,
+                    "message": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1553,6 +1732,7 @@ def test_track__span_usage_updated__openai_format(fake_backend):
         output={"output": "f-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1571,17 +1751,487 @@ def test_track__span_usage_updated__openai_format(fake_backend):
                     "original_usage.prompt_tokens": 20,
                     "original_usage.total_tokens": 30,
                 },
-                metadata={
-                    "usage": {
-                        "completion_tokens": 10,
-                        "prompt_tokens": 20,
-                        "total_tokens": 30,
-                    }
-                },
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
 
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__span_updated_with_prompts__happy_flow(fake_backend):
+    prompts = [
+        prompt.Prompt.from_fern_prompt_version(
+            name="system_prompt",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="""You are a helpful assistant that helps with research of the specific topic.""",
+                commit="asdb123",
+                type=PromptType.MUSTACHE,
+            ),
+        ),
+        prompt.Prompt.from_fern_prompt_version(
+            name="user_prompt",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="""Research more details about the topic.""",
+                type=PromptType.MUSTACHE,
+            ),
+        ),
+    ]
+
+    @tracker.track
+    def f(x):
+        opik_context.update_current_span(prompts=prompts)
+
+        return "f-output"
+
+    f("f-input")
+    tracker.flush_tracker()
+
+    expected_prompts = [p.__internal_api__to_info_dict__() for p in prompts]
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "f-input"},
+        output={"output": "f-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "f-input"},
+                output={"output": "f-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                metadata={"opik_prompts": expected_prompts},
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__trace_updated_with_prompts__happy_flow(fake_backend):
+    prompts = [
+        prompt.Prompt.from_fern_prompt_version(
+            name="system_prompt",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="""You are a helpful assistant that helps with research of the specific topic.""",
+                commit="asdb123",
+                type=PromptType.MUSTACHE,
+            ),
+        ),
+        prompt.Prompt.from_fern_prompt_version(
+            name="user_prompt",
+            prompt_version=rest_api.PromptVersionDetail(
+                template="""Research more details about the topic.""",
+                type=PromptType.MUSTACHE,
+            ),
+        ),
+    ]
+
+    @tracker.track
+    def f(x):
+        opik_context.update_current_trace(prompts=prompts)
+
+        return "f-output"
+
+    f("f-input")
+    tracker.flush_tracker()
+
+    expected_prompts = [p.__internal_api__to_info_dict__() for p in prompts]
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "f-input"},
+        output={"output": "f-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        metadata={"opik_prompts": expected_prompts},
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "f-input"},
+                output={"output": "f-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__function_called_with_mutable_input_which_changed_afterward__check_span_and_trace_inputs_are_not_affected(
+    fake_backend,
+):
+    @tracker.track
+    def f(x):
+        return "the-output"
+
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello"},
+    ]
+    f(messages)
+
+    # mutate input data to see if it affects the trace and spans input's created
+    messages.append(
+        {
+            "unrelated": "unrelated",
+        }
+    )
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={
+            "x": [
+                {"content": "You are a helpful assistant.", "role": "system"},
+                {"content": "Hello", "role": "user"},
+            ]
+        },
+        output={"output": "the-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={
+                    "x": [
+                        {"content": "You are a helpful assistant.", "role": "system"},
+                        {"content": "Hello", "role": "user"},
+                    ]
+                },
+                output={"output": "the-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+def test_track__using_distributed_headers__spans_are_created_correctly(fake_backend):
+    @tracker.track
+    def inner_function_in_thread(x):
+        return "inner_function_in_thread-output"
+
+    @tracker.track
+    def top_function_in_thread(x):
+        inner_function_in_thread(x)
+        return "top_function_in_thread-output"
+
+    @tracker.track
+    def do_distributed_trace(x):
+        headers = opik_context.get_distributed_trace_headers()
+
+        t = threading.Thread(
+            target=top_function_in_thread,
+            kwargs={
+                "x": "inner_function_in_thread-input",
+                "opik_distributed_trace_headers": headers,
+            },
+        )
+        t.start()
+        t.join()
+
+        return "do_distributed_trace-output"
+
+    do_distributed_trace("do_distributed_trace-input")
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="do_distributed_trace",
+        input={"x": "do_distributed_trace-input"},
+        output={"output": "do_distributed_trace-output"},
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="do_distributed_trace",
+                input={"x": "do_distributed_trace-input"},
+                output={"output": "do_distributed_trace-output"},
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        name="top_function_in_thread",
+                        input={"x": "inner_function_in_thread-input"},
+                        output={"output": "top_function_in_thread-output"},
+                        end_time=ANY_BUT_NONE,
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="inner_function_in_thread",
+                                input={"x": "inner_function_in_thread-input"},
+                                output={"output": "inner_function_in_thread-output"},
+                                end_time=ANY_BUT_NONE,
+                                source="sdk",
+                            )
+                        ],
+                        source="sdk",
+                    )
+                ],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+def test_track__using_distributed_headers__through_node__spans_are_created_correctly(
+    fake_backend,
+):
+    @tracker.track
+    def inner_function_in_thread(x):
+        return "inner_function_in_thread-output"
+
+    def node(x, opik_headers):
+        inner_function_in_thread(x, opik_distributed_trace_headers=opik_headers)
+        return "node-output"
+
+    @tracker.track
+    def do_distributed_trace(x):
+        headers = opik_context.get_distributed_trace_headers()
+
+        t = threading.Thread(
+            target=node,
+            kwargs={
+                "x": "inner_function_in_thread-input",
+                "opik_headers": headers,
+            },
+        )
+        t.start()
+        t.join()
+
+        return "do_distributed_trace-output"
+
+    do_distributed_trace("do_distributed_trace-input")
+
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="do_distributed_trace",
+        input={"x": "do_distributed_trace-input"},
+        output={"output": "do_distributed_trace-output"},
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="do_distributed_trace",
+                input={"x": "do_distributed_trace-input"},
+                output={"output": "do_distributed_trace-output"},
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        name="inner_function_in_thread",
+                        input={"x": "inner_function_in_thread-input"},
+                        output={"output": "inner_function_in_thread-output"},
+                        end_time=ANY_BUT_NONE,
+                        source="sdk",
+                    )
+                ],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    trace_tree = fake_backend.trace_trees[0]
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+def test_track__functools_partial_function__function_name_extracted_correctly(
+    fake_backend,
+):
+    """Test that functools.partial functions are tracked with the correct function name"""
+
+    def base_task(conversation_id, project_name, extra_param="default"):
+        return f"Processing {conversation_id} in {project_name} with {extra_param}"
+
+    # Create a partial function (similar to the user's use case that was crashing)
+    partial_task = functools.partial(base_task, project_name="test-project")
+
+    # Decorate the partial function
+    tracked_partial_task = tracker.track(partial_task)
+
+    # Execute the partial function
+    tracked_partial_task("test-conversation", extra_param="test-extra")
+
+    tracker.flush_tracker()
+
+    # Verify the function name is correctly extracted from the underlying function
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="base_task",  # Should be the name of the underlying function, not "partial"
+        input={
+            "conversation_id": "test-conversation",
+            "project_name": "test-project",  # Partial args are included in the input
+            "extra_param": "test-extra",
+        },
+        output={
+            "output": "Processing test-conversation in test-project with test-extra"
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="base_task",  # Should be the name of the underlying function
+                input={
+                    "conversation_id": "test-conversation",
+                    "project_name": "test-project",  # Partial args are included in the input
+                    "extra_param": "test-extra",
+                },
+                output={
+                    "output": "Processing test-conversation in test-project with test-extra"
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__environment_parameter__propagated_to_trace_and_root_span(fake_backend):
+    @tracker.track(environment="production")
+    def f(x):
+        return "output"
+
+    f("input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f",
+        input={"x": "input"},
+        output={"output": "output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        environment="production",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f",
+                input={"x": "input"},
+                output={"output": "output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                environment="production",
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__environment_parameter__nested_spans_inherit_environment(fake_backend):
+    @tracker.track
+    def f_inner(x):
+        return "inner-output"
+
+    @tracker.track(environment="staging")
+    def f_outer(x):
+        f_inner("inner-input")
+        return "outer-output"
+
+    f_outer("outer-input")
+    tracker.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f_outer",
+        input={"x": "outer-input"},
+        output={"output": "outer-output"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        environment="staging",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="f_outer",
+                input={"x": "outer-input"},
+                output={"output": "outer-output"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                environment="staging",
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="f_inner",
+                        input={"x": "inner-input"},
+                        output={"output": "inner-output"},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[],
+                        environment="staging",
+                        source="sdk",
+                    )
+                ],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

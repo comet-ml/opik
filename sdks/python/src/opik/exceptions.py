@@ -1,4 +1,7 @@
-from typing import Set
+from typing import Set, List, TYPE_CHECKING, Dict, Any, Optional, Sequence
+
+if TYPE_CHECKING:
+    from opik.guardrails import schemas
 
 
 class OpikException(Exception):
@@ -13,16 +16,57 @@ class ContextExtractorNotSet(OpikException):
     pass
 
 
+class LocalRecordingAlreadyActive(OpikException):
+    """Raised when record_traces_locally() is entered while a recording is
+    already active on the same connection (nested/overlapping recording)."""
+
+    pass
+
+
 class ConfigurationError(OpikException):
     pass
 
 
 class ScoreMethodMissingArguments(OpikException):
+    def __init__(
+        self,
+        score_name: str,
+        missing_required_arguments: Sequence[str],
+        available_keys: Sequence[str],
+        unused_mapping_arguments: Optional[Sequence[str]] = None,
+    ):
+        self.score_name = score_name
+        self.missing_required_arguments = missing_required_arguments
+        self.available_keys = available_keys
+        self.unused_mapping_arguments = unused_mapping_arguments
+        super().__init__(self._get_error_message())
+
+    def _get_error_message(self) -> str:
+        message = (
+            f"The scoring method {self.score_name} is missing arguments: {self.missing_required_arguments}. "
+            f"These keys were not present in either the dataset item or the dictionary returned by the evaluation task. "
+            f"You can either update the dataset or evaluation task to return this key or use the `scoring_key_mapping` to map existing items to the expected arguments. "
+            f"The available keys found in the dataset item and evaluation task output are: {self.available_keys}. "
+        )
+        if self.unused_mapping_arguments:
+            message += f" Some keys in `scoring_key_mapping` didn't match anything: {self.unused_mapping_arguments}"
+        return message
+
+
+class MetricComputationError(OpikException):
+    """Exception raised when a metric cannot be computed."""
+
     pass
 
 
-class MetricComputationError(Exception):
-    """Exception raised when a metric cannot be computed."""
+class EvaluationError(OpikException):
+    """Exception raised when an evaluation fails."""
+
+    pass
+
+
+class JSONParsingError(OpikException):
+    """Exception raised when we fail to parse an LLM response to a dictionary"""
 
     pass
 
@@ -44,9 +88,209 @@ class PromptPlaceholdersDontMatchFormatArguments(OpikException):
         )
 
 
+class PromptTemplateStructureMismatch(OpikException):
+    """Exception raised when attempting to create a prompt version with a different template structure than the existing prompt."""
+
+    def __init__(
+        self, prompt_name: str, existing_structure: str, attempted_structure: str
+    ):
+        self.prompt_name = prompt_name
+        self.existing_structure = existing_structure
+        self.attempted_structure = attempted_structure
+
+    def __str__(self) -> str:
+        return (
+            f"Prompt with name '{self.prompt_name}' already exists and has immutable "
+            f"'{self.existing_structure}' template structure, not '{self.attempted_structure}'. "
+        )
+
+
 class ExperimentNotFound(OpikException):
     pass
 
 
+class EmptyExperiment(OpikException):
+    """Exception raised when an experiment requires test cases for evaluation and has none"""
+
+    pass
+
+
+class ExperimentNotResumable(OpikException):
+    """Raised when an experiment cannot be safely resumed via ``evaluate_resume``."""
+
+
+class LocalCheckpointMissing(ExperimentNotResumable):
+    """
+    Raised when an experiment was created with a non-deterministic iteration
+    config (custom sampler or explicit ``dataset_item_ids``) and the local
+    checkpoint file with the resolved item ids cannot be found.
+
+    The checkpoint is written next to the calling machine's opik state
+    (``~/.opik/resume/<experiment_id>.json``) at evaluation time, so resume
+    is a same-machine operation by default. Users hitting this from a
+    different machine should re-supply the original ``dataset_item_ids``
+    explicitly.
+    """
+
+
 class DatasetNotFound(OpikException):
     pass
+
+
+class DashboardValidationError(OpikException):
+    """Raised when a dashboard configuration violates a structural or semantic invariant."""
+
+    pass
+
+
+class DatasetVersionNotFound(OpikException):
+    """Exception raised when a dataset version is not found."""
+
+    pass
+
+
+class GuardrailValidationFailed(OpikException):
+    """Exception raised when a guardrail validation fails."""
+
+    def __init__(
+        self,
+        message: str,
+        validation_results: List["schemas.ValidationResult"],
+        failed_validations: List["schemas.ValidationResult"],
+    ):
+        self.message = message
+        self.validation_results = validation_results
+        self.failed_validations = failed_validations
+        super().__init__(message)
+
+    def __str__(self) -> str:
+        return f"{self.message}. Failed validations: {self.failed_validations}\n"
+
+
+class GuardrailValidationError(GuardrailValidationFailed):
+    """Raised when a guardrail cannot be evaluated, for example when the guardrails
+    backend is unreachable, times out, or the LLM judge provider call fails.
+
+    Opik guardrails fail closed: if a check cannot be completed, validation is treated
+    as failed so the protected code path does not proceed. This subclasses
+    ``GuardrailValidationFailed`` so existing ``except GuardrailValidationFailed``
+    handlers also block on evaluation errors.
+    """
+
+    def __init__(self, message: str):
+        super().__init__(message, validation_results=[], failed_validations=[])
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class GuardrailPolicyError(OpikException):
+    """Raised when a guardrail policy stored in the workspace cannot be turned into a
+    runtime guard, for example when it holds a guard type this SDK version does not know."""
+
+
+class GuardrailTrainingError(OpikException):
+    """Raised when training a custom guardrail fails or does not complete in time."""
+
+
+class OpikCloudRequestsRateLimited(OpikException):
+    """Exception raised when the Opik Cloud limits the request rate."""
+
+    def __init__(self, headers: Dict[str, Any], retry_after: float):
+        self.headers = headers
+        self.retry_after = retry_after
+
+    def __str__(self) -> str:
+        return f"Requests rate limited. Response headers: {self.headers}, retry after: {self.retry_after} seconds"
+
+
+class ValidationError(OpikException):
+    """Exception raised when a validation fails."""
+
+    def __init__(self, prefix: str, failure_reasons: List[str]):
+        self._prefix = prefix
+        self._failure_reasons = failure_reasons
+
+    def __str__(self) -> str:
+        return f"Validation failed in {self._prefix}(): {self._failure_reasons}"
+
+    def __repr__(self) -> str:
+        return f"ValidationError(prefix={self._prefix}, failure_reasons={self._failure_reasons})"
+
+
+class BaseLLMError(OpikException):
+    """Base class for all LLM errors during evaluation."""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+    def __str__(self) -> str:
+        return f"LLM infrastructure error: {self.message}"
+
+
+class EmptyLLMResponseError(BaseLLMError):
+    """The provider returned no content and no tool calls.
+
+    Transient: retrying the same request usually succeeds.
+    """
+
+
+class SearchTimeoutError(OpikException):
+    """Exception raised when a search times out."""
+
+    pass
+
+
+class ConfigNotFound(OpikException):
+    """Exception raised when no config is found for the requested env/version."""
+
+    pass
+
+
+class ConfigMismatch(OpikException):
+    """Exception raised when the backend config blueprint schema does not match the expected config class.
+
+    This typically occurs when the backend blueprint is missing one or more fields
+    declared in the requested ``Config`` subclass.
+    """
+
+    pass
+
+
+class EnvironmentAlreadyExists(OpikException):
+    """Raised when creating an environment whose name is already taken in the workspace."""
+
+    pass
+
+
+class EnvironmentConfigurationError(OpikException):
+    """Raised when an environment configuration operation is not permitted."""
+
+    pass
+
+
+class PromptNotFoundError(OpikException):
+    """Raised when no prompt with the given name (or commit) exists in the project."""
+
+    pass
+
+
+class EnvironmentNotFoundError(OpikException):
+    """Raised when referencing an environment that is not registered in the workspace."""
+
+    pass
+
+
+class LLMJudgeParseError(OpikException):
+    """Raised when LLMJudge output fails validation.
+
+    Carries the partial ``ScoreResult`` list so callers can inspect what was
+    parsed before the error was raised.
+    """
+
+    def __init__(self, results: list, message: str) -> None:
+        self.results = results
+        self.message = message
+
+    def __str__(self) -> str:
+        return self.message

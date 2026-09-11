@@ -2,12 +2,25 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.CreatePromptVersion;
+import com.comet.opik.api.Environment;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.PromptVersionBatchUpdate;
+import com.comet.opik.api.PromptVersionCommitsRequest;
+import com.comet.opik.api.PromptVersionEnvironmentUpdate;
+import com.comet.opik.api.PromptVersionIdsRequest;
 import com.comet.opik.api.PromptVersionRetrieve;
+import com.comet.opik.api.PromptVersionType;
+import com.comet.opik.api.PromptVersionUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.PromptField;
+import com.comet.opik.api.filter.PromptFilter;
+import com.comet.opik.api.filter.PromptVersionField;
+import com.comet.opik.api.filter.PromptVersionFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -17,10 +30,20 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.EnvironmentsResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
+import com.comet.opik.api.resources.utils.resources.PromptVersionResourceClient;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortableFields;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.DemoData;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
@@ -31,12 +54,15 @@ import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.function.TriFunction;
 import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
-import org.jdbi.v3.core.Jdbi;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,28 +77,46 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.sql.SQLException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.FAKE_API_KEY_MESSAGE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
+import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.resources.PromptTestAssertions.PROMPT_IGNORED_FIELDS;
+import static com.comet.opik.api.sorting.SortableFields.CREATED_AT;
+import static com.comet.opik.api.sorting.SortableFields.CREATED_BY;
+import static com.comet.opik.api.sorting.SortableFields.DESCRIPTION;
+import static com.comet.opik.api.sorting.SortableFields.ID;
+import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
+import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
+import static com.comet.opik.api.sorting.SortableFields.NAME;
+import static com.comet.opik.api.sorting.SortableFields.TAGS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -80,6 +124,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -90,17 +135,17 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 class PromptResourceTest {
 
     private static final String RESOURCE_PATH = "%s/v1/private/prompts";
-    private final String[] IGNORED_FIELDS = {"latestVersion", "template", "metadata", "changeDescription",
-            "type"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private static final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils.newClickHouseContainer();
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -108,34 +153,50 @@ class PromptResourceTest {
     private final WireMockUtils.WireMockRuntime wireMock;
 
     {
-        Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL).join();
+        Startables.deepStart(REDIS, CLICKHOUSE_CONTAINER, MYSQL, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
+
+        wireMock.server().stubFor(post(urlPathEqualTo("/v1/notify/event"))
+                .willReturn(okJson("{\"message\":\"Event added successfully\",\"success\":\"true\"}")));
+
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .usageReportEnabled(true)
+                        .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
+                        .customConfigs(List.of(
+                                new TestDropwizardAppExtensionUtils.CustomConfig("analytics.enabled", "true")))
+                        .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
     private ClientSupport client;
+    private PromptResourceClient promptResourceClient;
+    private PromptVersionResourceClient promptVersionResourceClient;
+    private ProjectResourceClient projectResourceClient;
+    private EnvironmentsResourceClient environmentsResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws SQLException {
+    void setUpAll(ClientSupport client) {
 
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICKHOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
+        this.promptResourceClient = new PromptResourceClient(client, baseURI, factory);
+        this.promptVersionResourceClient = new PromptVersionResourceClient(client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
+        this.environmentsResourceClient = new EnvironmentsResourceClient(client, baseURI);
 
         ClientSupportUtils.config(client);
 
@@ -143,12 +204,61 @@ class PromptResourceTest {
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, USER);
+    }
+
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId, String user) {
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, user);
     }
 
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Delete prompt by id passes required permissions to auth endpoint")
+        void deletePromptByIdPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompt = buildPrompt().build();
+            var id = createPrompt(prompt, apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            promptResourceClient.deletePrompt(id, apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.PROMPT_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Delete prompts batch passes required permissions to auth endpoint")
+        void deletePromptsBatchPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompt = buildPrompt().build();
+            var id = createPrompt(prompt, apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            promptResourceClient.deletePromptBatch(Set.of(id), apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.PROMPT_DELETE.getValue()))));
+        }
     }
 
     @Nested
@@ -185,7 +295,7 @@ class PromptResourceTest {
         void createPrompt__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
 
-            var prompt = factory.manufacturePojo(Prompt.class);
+            var prompt = buildPrompt().build();
 
             String workspaceName = UUID.randomUUID().toString();
 
@@ -248,11 +358,12 @@ class PromptResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, okApikey, workspaceName);
@@ -285,11 +396,12 @@ class PromptResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, okApikey, workspaceName);
@@ -322,11 +434,12 @@ class PromptResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, okApikey, workspaceName);
@@ -359,14 +472,20 @@ class PromptResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var promptVersion = factory.manufacturePojo(CreatePromptVersion.class);
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .build();
+            var request = CreatePromptVersion.builder()
+                    .name(factory.manufacturePojo(String.class))
+                    .version(version)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
 
             try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions")
                     .request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .header(HttpHeaders.AUTHORIZATION, apiKey)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(promptVersion))) {
+                    .post(Entity.json(request))) {
 
                 if (success) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
@@ -389,11 +508,12 @@ class PromptResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, okApikey, workspaceName);
@@ -427,11 +547,12 @@ class PromptResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, okApikey, workspaceName);
@@ -440,7 +561,8 @@ class PromptResourceTest {
                     .promptId(promptId)
                     .build();
 
-            CreatePromptVersion request = new CreatePromptVersion(prompt.name(), promptVersion);
+            CreatePromptVersion request = createPromptVersionRequest(prompt.name(), promptVersion,
+                    prompt.templateStructure());
 
             promptVersion = createPromptVersion(request, okApikey, workspaceName);
 
@@ -477,11 +599,15 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .build();
 
-            var request = new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion);
+            var request = createPromptVersionRequest(UUID.randomUUID().toString(), promptVersion,
+                    TemplateStructure.TEXT);
 
             promptVersion = createPromptVersion(request, okApikey, workspaceName);
 
-            var promptVersionRetrieve = new PromptVersionRetrieve(request.name(), promptVersion.commit());
+            var promptVersionRetrieve = PromptVersionRetrieve.builder()
+                    .name(request.name())
+                    .commit(promptVersion.commit())
+                    .build();
 
             try (var actualResponse = client
                     .target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
@@ -541,7 +667,7 @@ class PromptResourceTest {
         @DisplayName("create prompt: when session token is present, then return proper response")
         void createPrompt__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
                 String workspaceName) {
-            var prompt = factory.manufacturePojo(Prompt.class);
+            var prompt = buildPrompt().build();
 
             try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI)).request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -590,11 +716,12 @@ class PromptResourceTest {
         @DisplayName("update prompt: when session token is present, then return proper response")
         void updatePrompt__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
                 String workspaceName) {
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -624,11 +751,12 @@ class PromptResourceTest {
         void deletePrompt__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
                 String workspaceName) {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -658,11 +786,12 @@ class PromptResourceTest {
         void getPromptById__whenSessionTokenIsPresent__thenReturnProperResponse(String sessionToken, boolean success,
                 String workspaceName) {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -693,14 +822,20 @@ class PromptResourceTest {
                 boolean success,
                 String workspaceName) {
 
-            var promptVersion = factory.manufacturePojo(CreatePromptVersion.class);
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .build();
+            var request = CreatePromptVersion.builder()
+                    .name(factory.manufacturePojo(String.class))
+                    .version(version)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
 
             try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions")
                     .request()
                     .accept(MediaType.APPLICATION_JSON_TYPE)
                     .cookie(SESSION_COOKIE, sessionToken)
                     .header(WORKSPACE_HEADER, workspaceName)
-                    .post(Entity.json(promptVersion))) {
+                    .post(Entity.json(request))) {
 
                 if (success) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
@@ -721,11 +856,12 @@ class PromptResourceTest {
                 boolean success,
                 String workspaceName) {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -757,11 +893,12 @@ class PromptResourceTest {
                 boolean success,
                 String workspaceName) {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -770,7 +907,8 @@ class PromptResourceTest {
                     .promptId(promptId)
                     .build();
 
-            CreatePromptVersion request = new CreatePromptVersion(prompt.name(), promptVersion);
+            CreatePromptVersion request = createPromptVersionRequest(prompt.name(), promptVersion,
+                    prompt.templateStructure());
 
             promptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -807,11 +945,15 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .build();
 
-            var request = new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion);
+            var request = createPromptVersionRequest(UUID.randomUUID().toString(), promptVersion,
+                    TemplateStructure.TEXT);
 
             promptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
-            var promptVersionRetrieve = new PromptVersionRetrieve(request.name(), promptVersion.commit());
+            var promptVersionRetrieve = PromptVersionRetrieve.builder()
+                    .name(request.name())
+                    .commit(promptVersion.commit())
+                    .build();
 
             try (var actualResponse = client
                     .target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
@@ -834,6 +976,10 @@ class PromptResourceTest {
         }
     }
 
+    static Stream<String> demoPromptNames() {
+        return DemoData.PROMPTS.stream();
+    }
+
     private UUID createPrompt(Prompt prompt, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
@@ -847,6 +993,34 @@ class PromptResourceTest {
         }
     }
 
+    private void assertPromptVersionCreatedEvent(UUID promptId, UUID promptVersionId, String workspaceId,
+            String userName) {
+        var event = AnalyticsService.EVENT_PREFIX + "prompt_version_created";
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(
+                () -> {
+                    var requestBody = matchingJsonPath("$.event_type", equalTo(event))
+                            .and(matchingJsonPath("$.event_properties.prompt_id", equalTo(promptId.toString())))
+                            .and(matchingJsonPath("$.event_properties.workspace_id", equalTo(workspaceId)))
+                            .and(matchingJsonPath("$.event_properties.user_name", equalTo(userName)))
+                            .and(matchingJsonPath("$.event_properties.version_type", equalTo("prompt_version")));
+                    if (promptVersionId != null) {
+                        requestBody = requestBody.and(matchingJsonPath("$.event_properties.prompt_version_id",
+                                equalTo(promptVersionId.toString())));
+                    }
+                    wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(requestBody));
+                });
+    }
+
+    private CreatePromptVersion createPromptVersionRequest(String name, PromptVersion version,
+            TemplateStructure templateStructure) {
+        return CreatePromptVersion.builder()
+                .name(name)
+                .version(version)
+                .templateStructure(templateStructure)
+                .build();
+    }
+
     @Nested
     @DisplayName("Create Prompt")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -858,7 +1032,7 @@ class PromptResourceTest {
         @DisplayName("Success: should create prompt")
         void shouldCreatePrompt(PromptType type) {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .type(type)
@@ -873,14 +1047,18 @@ class PromptResourceTest {
         @DisplayName("when prompt contains first version template, then return created prompt")
         void when__promptContainsFirstVersionTemplate__thenReturnCreatedPrompt() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .build();
 
+            wireMock.server().resetRequests();
+
             var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
             assertThat(promptId).isNotNull();
+
+            assertPromptVersionCreatedEvent(promptId, null, WORKSPACE_ID, USER);
         }
 
         @ParameterizedTest
@@ -904,17 +1082,19 @@ class PromptResourceTest {
         }
 
         Stream<Arguments> when__promptIsInvalid__thenReturnError() {
-            Prompt prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            Prompt prompt = buildPrompt()
                     .id(UUID.randomUUID())
+                    .projectId(null)
                     .build();
 
-            Prompt duplicatedPrompt = factory.manufacturePojo(Prompt.class);
+            Prompt duplicatedPrompt = buildPrompt().projectName(factory.manufacturePojo(String.class)).build();
             createPrompt(duplicatedPrompt, API_KEY, TEST_WORKSPACE);
 
             return Stream.of(
                     Arguments.of(prompt, HttpStatus.SC_BAD_REQUEST,
-                            new ErrorMessage(List.of("prompt id must be a version 7 UUID")),
-                            ErrorMessage.class),
+                            new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                                    "Invalid UUID for id", "prompt id must be a version 7 UUID"),
+                            io.dropwizard.jersey.errors.ErrorMessage.class),
                     Arguments.of(duplicatedPrompt.toBuilder().name(UUID.randomUUID().toString()).build(),
                             HttpStatus.SC_CONFLICT,
                             new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_CONFLICT,
@@ -925,13 +1105,41 @@ class PromptResourceTest {
                             new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_CONFLICT,
                                     "Prompt id or name already exists"),
                             io.dropwizard.jersey.errors.ErrorMessage.class),
-                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("").build(),
+                    Arguments.of(buildPrompt().description("").build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("description must not be blank")),
                             ErrorMessage.class),
-                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name("").build(),
+                    Arguments.of(buildPrompt().description("a".repeat(256)).build(),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            new ErrorMessage(List.of("description cannot exceed 255 characters")),
+                            ErrorMessage.class),
+                    Arguments.of(buildPrompt().name("").build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("name must not be blank")), ErrorMessage.class));
+        }
+
+        @Test
+        @DisplayName("when creating prompts with the same name in different projects, then both succeed")
+        void when__creatingPromptsWithSameNameInDifferentProjects__thenBothSucceed() {
+            String sharedName = UUID.randomUUID().toString();
+
+            var projectId1 = projectResourceClient.createProject(factory.manufacturePojo(String.class), API_KEY,
+                    TEST_WORKSPACE);
+            var projectId2 = projectResourceClient.createProject(factory.manufacturePojo(String.class), API_KEY,
+                    TEST_WORKSPACE);
+
+            var prompt1 = buildPrompt().name(sharedName).lastUpdatedBy(USER).createdBy(USER).versionCount(1L)
+                    .projectId(projectId1).build();
+            var prompt2 = buildPrompt().name(sharedName).lastUpdatedBy(USER).createdBy(USER).versionCount(1L)
+                    .projectId(projectId2).build();
+
+            var id1 = createPrompt(prompt1, API_KEY, TEST_WORKSPACE);
+            var id2 = createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
+
+            assertThat(id1).isNotEqualTo(id2);
+
+            getPromptAndAssert(id1, prompt1, API_KEY, TEST_WORKSPACE, Set.of());
+            getPromptAndAssert(id2, prompt2, API_KEY, TEST_WORKSPACE, Set.of());
         }
     }
 
@@ -945,11 +1153,12 @@ class PromptResourceTest {
         @DisplayName("Success: prompt update is valid, then return success")
         void when__promptUpdateIsValid__thenReturnSuccess(Function<Prompt, Prompt> promptUpdate) {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -968,11 +1177,18 @@ class PromptResourceTest {
 
             var actualPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
 
+            var expectedTags = updatedPrompt.tags() == null
+                    ? prompt.tags() // if null, keep previous tags
+                    : (updatedPrompt.tags().isEmpty() ? null : updatedPrompt.tags()); // if empty, clears tags
+            updatedPrompt = updatedPrompt.toBuilder()
+                    .tags(expectedTags)
+                    .build();
+
             assertThat(actualPrompt)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields(IGNORED_FIELDS)
-                                    .withComparatorForType(PromptResourceTest.this::comparatorForCreateAtAndUpdatedAt,
+                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
+                                    .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
                                             Instant.class)
                                     .build())
                     .isEqualTo(updatedPrompt);
@@ -982,14 +1198,18 @@ class PromptResourceTest {
         @DisplayName("when updating prompt name to an existing one, then return conflict")
         void when__updatingPromptNameToAnExistingOne__thenReturnConflict() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            String projectName = factory.manufacturePojo(String.class);
+
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .projectName(projectName)
                     .build();
 
-            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt2 = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
+                    .projectName(projectName)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1021,8 +1241,14 @@ class PromptResourceTest {
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().name(UUID.randomUUID().toString())
                             .build()),
                     arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
-                            .description(UUID.randomUUID().toString()).build()),
-                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().description(null).build()));
+                            .description(UUID.randomUUID().toString())
+                            .tags(null)
+                            .build()),
+                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder().description(null).build()),
+                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
+                            .tags(Set.of()).build()),
+                    arguments((Function<Prompt, Prompt>) prompt -> prompt.toBuilder()
+                            .tags(PodamFactoryUtils.manufacturePojoSet(factory, String.class)).build()));
         }
 
         @ParameterizedTest
@@ -1046,23 +1272,25 @@ class PromptResourceTest {
         }
 
         Stream<Arguments> when__promptIsInvalid__thenReturnError() {
-
             return Stream.of(
-
-                    Arguments.of(factory.manufacturePojo(Prompt.class), HttpStatus.SC_NOT_FOUND,
+                    Arguments.of(buildPrompt().build(), HttpStatus.SC_NOT_FOUND,
                             new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND, "Prompt not found"),
                             io.dropwizard.jersey.errors.ErrorMessage.class),
-                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name(null).build(),
+                    Arguments.of(buildPrompt().name(null).build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
-                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().name("").build(),
+                    Arguments.of(buildPrompt().name("").build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
-                    Arguments.of(factory.manufacturePojo(Prompt.class).toBuilder().description("").build(),
+                    Arguments.of(buildPrompt().description("").build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("description must not be blank")),
+                            ErrorMessage.class),
+                    Arguments.of(buildPrompt().description("a".repeat(256)).build(),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            new ErrorMessage(List.of("description cannot exceed 255 characters")),
                             ErrorMessage.class));
         }
     }
@@ -1100,7 +1328,7 @@ class PromptResourceTest {
         @DisplayName("Success: should delete prompt")
         void shouldDeletePrompt() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .build();
@@ -1121,7 +1349,7 @@ class PromptResourceTest {
         }
 
         @Test
-        @DisplayName("when prompt does not exist, then return no content")
+        @DisplayName("when prompt does not exist, then return not found")
         void when__promptDoesNotExist__thenReturnNotFound() {
 
             UUID promptId = UUID.randomUUID();
@@ -1134,8 +1362,11 @@ class PromptResourceTest {
                     .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
                     .delete()) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-                assertThat(response.hasEntity()).isFalse();
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.hasEntity()).isTrue();
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND,
+                                "Prompt not found"));
             }
 
             getPromptAndAssertNotFound(promptId, API_KEY, TEST_WORKSPACE);
@@ -1149,8 +1380,7 @@ class PromptResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var ids = PodamFactoryUtils.manufacturePojoList(factory,
-                    Prompt.class).stream()
+            var ids = PromptResourceClient.buildPromptList(factory).stream()
                     .map(prompt -> createPrompt(prompt.toBuilder()
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
@@ -1204,7 +1434,7 @@ class PromptResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .versionCount(1L)
@@ -1214,7 +1444,8 @@ class PromptResourceTest {
 
             List<Prompt> expectedPrompts = List.of(prompt);
 
-            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null);
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null, null,
+                    null);
         }
 
         @Test
@@ -1227,7 +1458,7 @@ class PromptResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .versionCount(1L)
@@ -1237,7 +1468,8 @@ class PromptResourceTest {
 
             List<Prompt> expectedPrompts = List.of(prompt);
 
-            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, prompt.name());
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, prompt.name(),
+                    null, null);
         }
 
         @Test
@@ -1254,7 +1486,7 @@ class PromptResourceTest {
 
             String partialSearch = name.substring(0, 5) + "@" + RandomStringUtils.randomAlphanumeric(2);
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .name(name)
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
@@ -1265,7 +1497,8 @@ class PromptResourceTest {
 
             List<Prompt> expectedPrompts = List.of();
 
-            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, partialSearch);
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, partialSearch,
+                    null, null);
         }
 
         @ParameterizedTest
@@ -1280,7 +1513,7 @@ class PromptResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             IntStream.range(0, 4).forEach(i -> {
-                var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                var prompt = buildPrompt()
                         .lastUpdatedBy(USER)
                         .createdBy(USER)
                         .versionCount(0L)
@@ -1295,7 +1528,7 @@ class PromptResourceTest {
 
             });
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .name(promptName)
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
@@ -1305,7 +1538,8 @@ class PromptResourceTest {
             createPrompt(prompt, apiKey, workspaceName);
 
             List<Prompt> expectedPrompts = List.of(prompt);
-            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, partialSearch);
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, partialSearch,
+                    null, null);
         }
 
         Stream<Arguments> when__searchByPartialName__thenReturnPromptMatchingName() {
@@ -1325,7 +1559,7 @@ class PromptResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var prompts = PodamFactoryUtils.manufacturePojoList(factory, Prompt.class).stream()
+            var prompts = PromptResourceClient.buildPromptList(factory).stream()
                     .map(prompt -> prompt.toBuilder()
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
@@ -1338,7 +1572,8 @@ class PromptResourceTest {
 
             List<Prompt> expectedPrompts = prompts.reversed();
 
-            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null);
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null, null,
+                    null);
         }
 
         @Test
@@ -1352,7 +1587,7 @@ class PromptResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var prompts = IntStream.range(0, 20)
-                    .mapToObj(i -> factory.manufacturePojo(Prompt.class).toBuilder()
+                    .mapToObj(i -> buildPrompt()
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
                             .versionCount(1L)
@@ -1364,10 +1599,341 @@ class PromptResourceTest {
             List<Prompt> promptPage1 = prompts.reversed().subList(0, 10);
             List<Prompt> promptPage2 = prompts.reversed().subList(10, 20);
 
-            findPromptsAndAssertPage(promptPage1, apiKey, workspaceName, prompts.size(), 1, null);
-            findPromptsAndAssertPage(promptPage2, apiKey, workspaceName, prompts.size(), 2, null);
+            findPromptsAndAssertPage(promptPage1, apiKey, workspaceName, prompts.size(), 1, null, null, null);
+            findPromptsAndAssertPage(promptPage2, apiKey, workspaceName, prompts.size(), 2, null, null, null);
         }
 
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when sorting prompts by valid fields, then return sorted prompts")
+        void getPrompts__whenSortingByValidFields__thenReturnTracePromptsSorted(Comparator<Prompt> comparator,
+                SortingField sorting) {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var random = new Random();
+
+            var prompts = PromptResourceClient.buildPromptList(factory).stream()
+                    .map(prompt -> prompt.toBuilder()
+                            // Only alphanumeric to avoid flakiness with special characters when sorting by name
+                            .name(RandomStringUtils.secure().nextAlphanumeric(10))
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .versionCount(random.nextLong(5))
+                            .template(null)
+                            .templateStructure(TemplateStructure.TEXT)
+                            .build())
+                    .toList();
+
+            prompts.forEach(prompt -> {
+                createPrompt(prompt, apiKey, workspaceName);
+                for (int i = 0; i < prompt.versionCount(); i++) {
+                    var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build();
+                    var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure());
+                    createPromptVersion(request, apiKey, workspaceName);
+                }
+            });
+
+            List<Prompt> expectedPrompts = prompts.stream().sorted(comparator).toList();
+
+            findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedPrompts.size(), 1, null,
+                    List.of(sorting), null);
+        }
+
+        private Stream<Arguments> getPrompts__whenSortingByValidFields__thenReturnTracePromptsSorted() {
+            // Comparators for all sortable fields
+            Comparator<Prompt> idComparator = Comparator.comparing(Prompt::id);
+            Comparator<Prompt> nameComparator = Comparator.comparing(Prompt::name, String.CASE_INSENSITIVE_ORDER);
+            Comparator<Prompt> descriptionComparator = Comparator.comparing(
+                    prompt -> prompt.description() != null ? prompt.description().toLowerCase() : "",
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Prompt> createdAtComparator = Comparator.comparing(Prompt::createdAt);
+            Comparator<Prompt> lastUpdatedAtComparator = Comparator.comparing(Prompt::lastUpdatedAt);
+            Comparator<Prompt> createdByComparator = Comparator.comparing(Prompt::createdBy,
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Prompt> lastUpdatedByComparator = Comparator.comparing(Prompt::lastUpdatedBy,
+                    String.CASE_INSENSITIVE_ORDER);
+            Comparator<Prompt> tagsComparator = Comparator.comparing(prompt -> prompt.tags().toString().toLowerCase());
+            Comparator<Prompt> versionCountComparator = Comparator.comparing(Prompt::versionCount);
+
+            Comparator<Prompt> idComparatorReversed = Comparator.comparing(Prompt::id).reversed();
+
+            return Stream.of(
+                    // ID field sorting
+                    Arguments.of(
+                            idComparator,
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            idComparator.reversed(),
+                            SortingField.builder().field(SortableFields.ID).direction(Direction.DESC).build()),
+
+                    // NAME field sorting
+                    Arguments.of(
+                            nameComparator,
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            nameComparator.reversed(),
+                            SortingField.builder().field(SortableFields.NAME).direction(Direction.DESC).build()),
+
+                    // DESCRIPTION field sorting
+                    Arguments.of(
+                            descriptionComparator,
+                            SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            descriptionComparator.reversed(),
+                            SortingField.builder().field(SortableFields.DESCRIPTION).direction(Direction.DESC).build()),
+
+                    // CREATED_AT field sorting
+                    Arguments.of(
+                            createdAtComparator,
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            createdAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC).build()),
+
+                    // LAST_UPDATED_AT field sorting
+                    Arguments.of(
+                            lastUpdatedAtComparator,
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            lastUpdatedAtComparator.reversed(),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_AT).direction(Direction.DESC)
+                                    .build()),
+
+                    // CREATED_BY field sorting
+                    Arguments.of(
+                            createdByComparator.thenComparing(Prompt::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            createdByComparator.reversed().thenComparing(Prompt::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC).build()),
+
+                    // LAST_UPDATED_BY field sorting
+                    Arguments.of(
+                            lastUpdatedByComparator.thenComparing(Prompt::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            lastUpdatedByComparator.reversed().thenComparing(Prompt::lastUpdatedAt).reversed(),
+                            SortingField.builder().field(SortableFields.LAST_UPDATED_BY).direction(Direction.DESC)
+                                    .build()),
+
+                    // VERSION_COUNT field sorting
+                    Arguments.of(
+                            versionCountComparator.thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.VERSION_COUNT).direction(Direction.ASC)
+                                    .build()),
+                    Arguments.of(
+                            versionCountComparator.reversed().thenComparing(idComparatorReversed),
+                            SortingField.builder().field(SortableFields.VERSION_COUNT).direction(Direction.DESC)
+                                    .build()),
+
+                    // TAGS field sorting
+                    Arguments.of(
+                            tagsComparator,
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            tagsComparator.reversed(),
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()));
+        }
+
+        @ParameterizedTest
+        @MethodSource("getValidFilters")
+        @DisplayName("when filter prompts by valid fields, then return filtered prompts")
+        void whenFilterPrompts__thenReturnPromptsFiltered(Function<List<Prompt>, PromptFilter> getFilter,
+                Function<List<Prompt>, List<Prompt>> getExpectedPrompts) {
+
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var random = new Random();
+
+            var prompts = PromptResourceClient.buildPromptList(factory).stream()
+                    .map(prompt -> prompt.toBuilder()
+                            .lastUpdatedBy(USER)
+                            .createdBy(USER)
+                            .versionCount(random.nextLong(5))
+                            .template(null)
+                            .templateStructure(TemplateStructure.TEXT)
+                            .build())
+                    .toList();
+
+            prompts.forEach(prompt -> {
+                createPrompt(prompt, apiKey, workspaceName);
+                for (int i = 0; i < prompt.versionCount(); i++) {
+                    var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build();
+                    var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure());
+                    createPromptVersion(request, apiKey, workspaceName);
+                }
+            });
+
+            List<Prompt> expectedPrompts = getExpectedPrompts.apply(prompts);
+            PromptFilter filter = getFilter.apply(prompts);
+
+            findPromptsAndAssertPage(expectedPrompts.reversed(), apiKey, workspaceName, expectedPrompts.size(), 1, null,
+                    null, List.of(filter));
+        }
+
+        private Stream<Arguments> getValidFilters() {
+            Integer random = new Random().nextInt(5);
+            return Stream.of(
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.TAGS)
+                                    .operator(Operator.CONTAINS)
+                                    .value(prompts.getFirst().tags().iterator().next())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.TAGS)
+                                    .operator(Operator.NOT_CONTAINS)
+                                    .value(prompts.getFirst().tags().iterator().next())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.subList(1, prompts.size())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(prompts.getFirst().id().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.ID)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(prompts.getFirst().id().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.subList(1, prompts.size())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.NAME)
+                                    .operator(Operator.STARTS_WITH)
+                                    .value(prompts.getFirst().name().substring(0, 3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.NAME)
+                                    .operator(Operator.ENDS_WITH)
+                                    .value(prompts.getFirst().name().substring(3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.VERSION_COUNT)
+                                    .operator(Operator.GREATER_THAN_EQUAL)
+                                    .value(String.valueOf(random))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.stream()
+                                    .filter(prompt -> prompt.versionCount() >= random)
+                                    .toList()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.VERSION_COUNT)
+                                    .operator(Operator.LESS_THAN_EQUAL)
+                                    .value(String.valueOf(random))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.stream()
+                                    .filter(prompt -> prompt.versionCount() <= random)
+                                    .toList()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_BY)
+                                    .operator(Operator.STARTS_WITH)
+                                    .value(USER.substring(0, 3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_BY)
+                                    .operator(Operator.EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_BY)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(USER)
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_BY)
+                                    .operator(Operator.CONTAINS)
+                                    .value(USER.substring(0, 3))
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.DESCRIPTION)
+                                    .operator(Operator.EQUAL)
+                                    .value(prompts.getFirst().description())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of(prompts.getFirst())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.DESCRIPTION)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(prompts.getFirst().description())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts.subList(1, prompts.size())),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_AT)
+                                    .operator(Operator.EQUAL)
+                                    .value(prompts.getFirst().createdAt().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_AT)
+                                    .operator(Operator.NOT_EQUAL)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.CREATED_AT)
+                                    .operator(Operator.GREATER_THAN)
+                                    .value(Instant.now().minus(5, ChronoUnit.SECONDS).toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_AT)
+                                    .operator(Operator.GREATER_THAN_EQUAL)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_AT)
+                                    .operator(Operator.LESS_THAN)
+                                    .value(Instant.now().toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> prompts),
+                    Arguments.of(
+                            (Function<List<Prompt>, PromptFilter>) prompts -> PromptFilter.builder()
+                                    .field(PromptField.LAST_UPDATED_AT)
+                                    .operator(Operator.LESS_THAN_EQUAL)
+                                    .value(Instant.now().minus(5, ChronoUnit.SECONDS).toString())
+                                    .build(),
+                            (Function<List<Prompt>, List<Prompt>>) prompts -> List.of()));
+        }
     }
 
     @Nested
@@ -1381,7 +1947,7 @@ class PromptResourceTest {
         @DisplayName("Success: should get prompt by id")
         void shouldGetPromptById(PromptType type) {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .versionCount(1L)
@@ -1397,10 +1963,11 @@ class PromptResourceTest {
         @DisplayName("when prompt has multiple versions, then return prompt with latest version")
         void when__promptHasMultipleVersions__thenReturnPromptWithLatestVersion() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .versionCount(1L)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1410,7 +1977,8 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .build();
 
-            promptVersion = createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion), API_KEY,
+            promptVersion = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure()), API_KEY,
                     TEST_WORKSPACE);
 
             Prompt expectedPrompt = prompt.toBuilder()
@@ -1460,9 +2028,9 @@ class PromptResourceTest {
             assertThat(actualPrompt)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields(IGNORED_FIELDS)
+                                    .withIgnoredFields(PROMPT_IGNORED_FIELDS)
                                     .withComparatorForType(
-                                            PromptResourceTest.this::comparatorForCreateAtAndUpdatedAt,
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
                                             Instant.class)
                                     .build())
                     .isEqualTo(expectedPrompt);
@@ -1496,7 +2064,7 @@ class PromptResourceTest {
         @DisplayName("Success: should create prompt version")
         void shouldCreatePromptVersion() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
@@ -1508,23 +2076,83 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .commit(null)
                     .id(null)
+                    .versionType(PromptVersionType.PROMPT_VERSION)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), expectedPromptVersion);
+            var request = createPromptVersionRequest(prompt.name(), expectedPromptVersion, prompt.templateStructure());
+
+            wireMock.server().resetRequests();
 
             PromptVersion actualPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
             assertPromptVersion(actualPromptVersion, expectedPromptVersion, promptId);
+
+            assertPromptVersionCreatedEvent(promptId, actualPromptVersion.id(), WORKSPACE_ID, USER);
+        }
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.PromptResourceTest#demoPromptNames")
+        @DisplayName("Success: demo prompt does not emit prompt_version_created event")
+        void shouldCreatePromptVersion__whenDemoPrompt__thenDoesNotEmitEvent(String demoPromptName) {
+
+            var demoPrompt = buildPrompt()
+                    .name(demoPromptName)
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            UUID demoPromptId = createPrompt(demoPrompt, API_KEY, TEST_WORKSPACE);
+
+            var demoVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .commit(null)
+                    .id(null)
+                    .versionType(PromptVersionType.PROMPT_VERSION)
+                    .build();
+
+            wireMock.server().resetRequests();
+
+            createPromptVersion(createPromptVersionRequest(demoPrompt.name(), demoVersion,
+                    demoPrompt.templateStructure()), API_KEY, TEST_WORKSPACE);
+
+            // Sentinel: a regular prompt version is created after the demo one and goes through the same async
+            // pipeline. Once its event arrives, the demo event would also have arrived if it were ever emitted.
+            var sentinelPrompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .build();
+
+            UUID sentinelPromptId = createPrompt(sentinelPrompt, API_KEY, TEST_WORKSPACE);
+
+            var sentinelVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .commit(null)
+                    .id(null)
+                    .versionType(PromptVersionType.PROMPT_VERSION)
+                    .build();
+
+            PromptVersion createdSentinel = createPromptVersion(createPromptVersionRequest(sentinelPrompt.name(),
+                    sentinelVersion, sentinelPrompt.templateStructure()), API_KEY, TEST_WORKSPACE);
+
+            assertPromptVersionCreatedEvent(sentinelPromptId, createdSentinel.id(), WORKSPACE_ID, USER);
+
+            wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                    .withRequestBody(matchingJsonPath("$.event_type",
+                            equalTo(AnalyticsService.EVENT_PREFIX + "prompt_version_created"))
+                            .and(matchingJsonPath("$.event_properties.prompt_id", equalTo(demoPromptId.toString())))));
         }
 
         @Test
         @DisplayName("when prompt version contains commit, then return created prompt version")
         void when__promptVersionContainsCommit__thenReturnCreatedPromptVersion() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1537,7 +2165,7 @@ class PromptResourceTest {
                     .id(versionId)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), expectedPromptVersion);
+            var request = createPromptVersionRequest(prompt.name(), expectedPromptVersion, prompt.templateStructure());
 
             PromptVersion actualPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1564,7 +2192,7 @@ class PromptResourceTest {
                     .id(versionId)
                     .build();
 
-            var request = new CreatePromptVersion(promptName, expectedPromptVersion);
+            var request = createPromptVersionRequest(promptName, expectedPromptVersion, TemplateStructure.TEXT);
 
             PromptVersion actualPromptVersion = createPromptVersion(request, apiKey, workspaceName);
 
@@ -1577,10 +2205,11 @@ class PromptResourceTest {
         @DisplayName("when prompt version id already exists, then return error")
         void when__promptVersionIdAlreadyExists__thenReturnError() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             var versionId = factory.manufacturePojo(UUID.class);
@@ -1590,7 +2219,7 @@ class PromptResourceTest {
                     .id(versionId)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure());
 
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1600,7 +2229,7 @@ class PromptResourceTest {
                     .build();
 
             assertPromptVersionConflict(
-                    new CreatePromptVersion(UUID.randomUUID().toString(), promptVersion2),
+                    createPromptVersionRequest(UUID.randomUUID().toString(), promptVersion2, TemplateStructure.TEXT),
                     API_KEY, TEST_WORKSPACE, "Prompt version already exists");
         }
 
@@ -1608,17 +2237,18 @@ class PromptResourceTest {
         @DisplayName("when prompt version commit already exists, then return error")
         void when__promptVersionCommitAlreadyExists__thenReturnError() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure());
 
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1628,7 +2258,7 @@ class PromptResourceTest {
                     .build();
 
             assertPromptVersionConflict(
-                    new CreatePromptVersion(prompt.name(), promptVersion2),
+                    createPromptVersionRequest(prompt.name(), promptVersion2, prompt.templateStructure()),
                     API_KEY, TEST_WORKSPACE, "Prompt version already exists");
         }
 
@@ -1654,57 +2284,156 @@ class PromptResourceTest {
 
         Stream<Arguments> when__promptVersionIsInvalid__thenReturnError() {
             return Stream.of(
-                    arguments(new CreatePromptVersion(null, factory.manufacturePojo(PromptVersion.class)),
+                    arguments(CreatePromptVersion.builder()
+                            .name(null)
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .build())
+                            .templateStructure(null)
+                            .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY, new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
-                    arguments(new CreatePromptVersion("", factory.manufacturePojo(PromptVersion.class)),
+                    arguments(CreatePromptVersion.builder()
+                            .name("")
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .build())
+                            .templateStructure(null)
+                            .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY, new ErrorMessage(List.of("name must not be blank")),
                             ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().commit("").build()),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .commit("")
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
                             ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().commit("1234567").build()),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .commit("1234567")
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
                             ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().commit("1234-567").build()),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .commit("1234-567")
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of(
                                     "version.commit if present, the commit message must be 8 alphanumeric characters long")),
                             ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().id(UUID.randomUUID()).build()),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .id(UUID.randomUUID())
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_BAD_REQUEST,
-                            new ErrorMessage(List.of("prompt version id must be a version 7 UUID")),
-                            ErrorMessage.class),
+                            new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_BAD_REQUEST,
+                                    "Invalid UUID for id", "prompt version id must be a version 7 UUID"),
+                            io.dropwizard.jersey.errors.ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().template("").build()),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .template("")
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("version.template must not be blank")),
                             ErrorMessage.class),
                     arguments(
-                            new CreatePromptVersion(UUID.randomUUID().toString(),
-                                    factory.manufacturePojo(PromptVersion.class)
-                                            .toBuilder().template(null).build()),
+                            CreatePromptVersion.builder()
+                                    .name(UUID.randomUUID().toString())
+                                    .version(factory.manufacturePojo(PromptVersion.class)
+                                            .toBuilder()
+                                            .template(null)
+                                            .build())
+                                    .templateStructure(null)
+                                    .build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             new ErrorMessage(List.of("version.template must not be blank")),
                             ErrorMessage.class));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when templateStructure is null, then handle correctly for both new and existing prompts")
+        void when__templateStructureIsNull__thenHandleCorrectly(boolean promptExists) {
+            // This test verifies backwards compatibility for clients that don't send templateStructure
+            // (e.g., TypeScript SDK which doesn't support ChatPrompt yet)
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var promptName = UUID.randomUUID().toString();
+            UUID existingPromptId = null;
+
+            if (promptExists) {
+                // Create a prompt first with a specific templateStructure
+                var prompt = buildPrompt()
+                        .name(promptName)
+                        .lastUpdatedBy(USER)
+                        .createdBy(USER)
+                        .template(null)
+                        .templateStructure(TemplateStructure.TEXT)
+                        .build();
+                existingPromptId = createPrompt(prompt, apiKey, workspaceName);
+            }
+
+            // Create a new version with null templateStructure (simulating SDK behavior)
+            var expectedPromptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .commit(null)
+                    .id(null)
+                    .build();
+
+            // Pass null for templateStructure - this previously caused NPE for existing prompts
+            // and should default to TEXT for new prompts
+            var request = createPromptVersionRequest(promptName, expectedPromptVersion, null);
+
+            PromptVersion actualPromptVersion = createPromptVersion(request, apiKey, workspaceName);
+
+            // Verify the prompt exists and has correct templateStructure
+            List<Prompt> prompts = getPrompts(promptName, apiKey, workspaceName);
+            assertThat(prompts).hasSize(1);
+
+            Prompt createdPrompt = prompts.getFirst();
+            assertThat(createdPrompt.templateStructure()).isEqualTo(TemplateStructure.TEXT);
+
+            UUID expectedPromptId = promptExists ? existingPromptId : createdPrompt.id();
+            assertPromptVersion(actualPromptVersion, expectedPromptVersion, expectedPromptId);
+        }
+
+        Stream<Arguments> when__templateStructureIsNull__thenHandleCorrectly() {
+            return Stream.of(
+                    arguments(true), // prompt exists - tests NPE fix
+                    arguments(false) // prompt doesn't exist - tests default to TEXT
+            );
         }
     }
 
@@ -1717,18 +2446,20 @@ class PromptResourceTest {
         @DisplayName("Success: should get prompt versions by prompt id")
         void shouldGetPromptVersionsByPromptId() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt2 = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
@@ -1737,7 +2468,7 @@ class PromptResourceTest {
                     .createdBy(USER)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure());
 
             createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1751,18 +2482,20 @@ class PromptResourceTest {
         @DisplayName("when prompt version has multiple versions, then return prompt versions sorted by creation time")
         void when__promptVersionHasMultipleVersions__thenReturnPromptVersionsSortedByCreationTime() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
 
-            var prompt2 = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt2 = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
@@ -1774,7 +2507,8 @@ class PromptResourceTest {
                     .toList();
 
             promptVersions
-                    .forEach(promptVersion -> createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion),
+                    .forEach(promptVersion -> createPromptVersion(
+                            createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure()),
                             API_KEY, TEST_WORKSPACE));
 
             List<PromptVersion> expectedPromptVersionPage1 = promptVersions.reversed().subList(0, 10);
@@ -1790,10 +2524,11 @@ class PromptResourceTest {
         @DisplayName("when fetch prompt versions using pagination, then return prompt versions paginated")
         void when__fetchPromptVersionsUsingPagination__thenReturnPromptVersionsPaginated() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1805,7 +2540,8 @@ class PromptResourceTest {
                     .toList();
 
             promptVersions
-                    .forEach(promptVersion -> createPromptVersion(new CreatePromptVersion(prompt.name(), promptVersion),
+                    .forEach(promptVersion -> createPromptVersion(
+                            createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure()),
                             API_KEY, TEST_WORKSPACE));
 
             List<PromptVersion> promptVersionPage1 = promptVersions.reversed().subList(0, 2);
@@ -1830,7 +2566,7 @@ class PromptResourceTest {
         @DisplayName("when prompt has not versions, then return empty page")
         void when__promptHasNotVersions__thenReturnEmptyPage() {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
@@ -1856,10 +2592,11 @@ class PromptResourceTest {
         @DisplayName("Success: should get prompt version by id")
         void shouldGetPromptVersionById(PromptType type) {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1870,7 +2607,7 @@ class PromptResourceTest {
                     .type(type)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure());
 
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -1910,11 +2647,12 @@ class PromptResourceTest {
                 TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve> retrievePrompt,
                 BiFunction<PromptVersion, PromptVersion, PromptVersion> getPromptVersion) {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1924,14 +2662,14 @@ class PromptResourceTest {
                     .promptId(promptId)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure());
 
             var promptVersion2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .createdBy(USER)
                     .promptId(promptId)
                     .build();
 
-            var request2 = new CreatePromptVersion(prompt.name(), promptVersion2);
+            var request2 = createPromptVersionRequest(prompt.name(), promptVersion2, prompt.templateStructure());
 
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
             var createdPromptVersion2 = createPromptVersion(request2, API_KEY, TEST_WORKSPACE);
@@ -1947,21 +2685,24 @@ class PromptResourceTest {
                     // Retrieve by prompt name and commit null
                     arguments(
                             (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
-                                    promptVersion2, promptName) -> new PromptVersionRetrieve(promptName, null),
+                                    promptVersion2,
+                                    promptName) -> PromptVersionRetrieve.builder().name(promptName).build(),
                             (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
                                     promptVersion2) -> promptVersion2),
                     // Retrieve by prompt name and first commit
                     arguments(
                             (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
                                     promptVersion2,
-                                    promptName) -> new PromptVersionRetrieve(promptName, promptVersion.commit()),
+                                    promptName) -> PromptVersionRetrieve.builder().name(promptName)
+                                            .commit(promptVersion.commit()).build(),
                             (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
                                     promptVersion2) -> promptVersion),
                     // Retrieve by prompt name and last commit
                     arguments(
                             (TriFunction<PromptVersion, PromptVersion, String, PromptVersionRetrieve>) (promptVersion,
                                     promptVersion2,
-                                    promptName) -> new PromptVersionRetrieve(promptName, promptVersion2.commit()),
+                                    promptName) -> PromptVersionRetrieve.builder().name(promptName)
+                                            .commit(promptVersion2.commit()).build(),
                             (BiFunction<PromptVersion, PromptVersion, PromptVersion>) (promptVersion,
                                     promptVersion2) -> promptVersion2));
         }
@@ -1972,11 +2713,12 @@ class PromptResourceTest {
         void when__promptVersionDoesNotExist__thenReturnNotFound(
                 BiFunction<PromptVersion, Prompt, PromptVersionRetrieve> retrievePrompt, String message) {
 
-            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+            var prompt = buildPrompt()
                     .lastUpdatedBy(USER)
                     .createdBy(USER)
                     .template(null)
                     .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
                     .build();
 
             UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
@@ -1986,7 +2728,7 @@ class PromptResourceTest {
                     .promptId(promptId)
                     .build();
 
-            var request = new CreatePromptVersion(prompt.name(), promptVersion);
+            var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure());
 
             var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
 
@@ -2010,18 +2752,19 @@ class PromptResourceTest {
             return Stream.of(
                     arguments(
                             (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
-                                    prompt) -> new PromptVersionRetrieve(prompt.name(),
-                                            RandomStringUtils.randomAlphanumeric(8)),
+                                    prompt) -> PromptVersionRetrieve.builder().name(prompt.name())
+                                            .commit(RandomStringUtils.randomAlphanumeric(8)).build(),
                             "Prompt version not found"),
                     arguments(
                             (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
-                                    prompt) -> new PromptVersionRetrieve(RandomStringUtils.randomAlphanumeric(10),
-                                            promptVersion.commit()),
+                                    prompt) -> PromptVersionRetrieve.builder()
+                                            .name(RandomStringUtils.randomAlphanumeric(10))
+                                            .commit(promptVersion.commit()).build(),
                             "Prompt not found"),
                     arguments(
                             (BiFunction<PromptVersion, Prompt, PromptVersionRetrieve>) (promptVersion,
-                                    prompt) -> new PromptVersionRetrieve(RandomStringUtils.randomAlphanumeric(10),
-                                            null),
+                                    prompt) -> PromptVersionRetrieve.builder()
+                                            .name(RandomStringUtils.randomAlphanumeric(10)).build(),
                             "Prompt not found"));
         }
 
@@ -2047,15 +2790,444 @@ class PromptResourceTest {
         public Stream<Arguments> when__promptVersionRetrieveRequestIsInvalid__thenReturnError() {
             return Stream.of(
                     arguments(
-                            new PromptVersionRetrieve(null, null),
+                            PromptVersionRetrieve.builder().build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             ErrorMessage.class,
                             new ErrorMessage(List.of("name must not be blank"))),
                     arguments(
-                            new PromptVersionRetrieve("", null),
+                            PromptVersionRetrieve.builder().name("").build(),
                             HttpStatus.SC_UNPROCESSABLE_ENTITY,
                             ErrorMessage.class,
-                            new ErrorMessage(List.of("name must not be blank"))));
+                            new ErrorMessage(List.of("name must not be blank"))),
+                    arguments(
+                            PromptVersionRetrieve.builder().name("valid-name").projectName("").build(),
+                            HttpStatus.SC_UNPROCESSABLE_ENTITY,
+                            ErrorMessage.class,
+                            new ErrorMessage(List.of("projectName must not be blank"))));
+        }
+
+        @Test
+        @DisplayName("Success: should retrieve string prompt")
+        void shouldRetrieveStringPrompt() {
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .promptId(promptId)
+                    .template("Hello {{name}}")
+                    .build();
+
+            var request = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(promptVersion)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+            var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            var retrieveRequest = PromptVersionRetrieve.builder().name(prompt.name()).build();
+
+            retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("Success: should retrieve chat prompt")
+        void shouldRetrieveChatPrompt() {
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.CHAT)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            // Valid JSON array template
+            String chatTemplate = "[{\"role\": \"system\", \"content\": \"You are a helpful assistant.\"}, {\"role\": \"user\", \"content\": \"Hello {{name}}!\"}]";
+
+            var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .promptId(promptId)
+                    .template(chatTemplate)
+                    .build();
+
+            var request = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(promptVersion)
+                    .templateStructure(TemplateStructure.CHAT)
+                    .build();
+            var createdPromptVersion = createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            var retrieveRequest = PromptVersionRetrieve.builder().name(prompt.name()).build();
+
+            retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("Success: should retrieve prompt version scoped by project_name")
+        void shouldRetrievePromptVersionScopedByProjectName() {
+            var projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .projectId(projectId)
+                    .build();
+
+            var createdPromptVersion = createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when project_name does not match the prompt's project, then return not found")
+        void whenProjectNameDoesNotMatchPromptProject__thenReturnNotFound() {
+            var projectName = "project-" + UUID.randomUUID();
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var otherProjectName = "project-" + UUID.randomUUID();
+            var otherProjectId = projectResourceClient.createProject(otherProjectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            // Create the prompt version under otherProject
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .projectId(otherProjectId)
+                    .build();
+
+            createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            // The prompt belongs to otherProject, so a lookup scoped to a different project must not reach it:
+            // the fallback resolves only legacy prompts with no project at all.
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("when prompt has no project and project_name is provided, then fall back to workspace-level and return it")
+        void whenPromptHasNoProjectAndProjectNameProvided__thenFallBackToWorkspaceAndReturnIt() {
+            var projectName = "project-" + UUID.randomUUID();
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            // Create prompt version with no project (workspace-level)
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .build();
+
+            var createdPromptVersion = createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            // Retrieve with a project name: project-level lookup misses, falls back to workspace-wide and finds it
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            retrievePromptVersionAndAssert(retrieveRequest, createdPromptVersion, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("when the prompt has no project, fall back to the legacy prompt and return X-Opik-Deprecation header")
+        void whenProjectNameDoesNotMatch__thenReturnDeprecationHeader() {
+            var projectName = "project-" + UUID.randomUUID();
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            // No project on the create request: this is a legacy project-less prompt, the only kind the
+            // deprecated workspace fallback is meant to resolve.
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .build();
+
+            createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Prompt",
+                                prompt.name()));
+            }
+        }
+
+        @Test
+        @DisplayName("when project_name matches prompt's project, then no X-Opik-Deprecation header")
+        void whenProjectNameMatchesPromptProject__thenNoDeprecationHeader() {
+            var projectName = "project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            var createRequest = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .createdBy(USER)
+                            .build())
+                    .projectId(projectId)
+                    .build();
+
+            createPromptVersion(createRequest, API_KEY, TEST_WORKSPACE);
+
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .projectName(projectName)
+                    .build();
+
+            try (var response = promptResourceClient.callRetrievePromptVersion(retrieveRequest, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER)).isNull();
+            }
+        }
+
+        @Test
+        @DisplayName("when project_name does not exist, fall back to workspace-wide, prompt not found, then return not found")
+        void whenProjectNameDoesNotExist__thenReturnNotFound() {
+            var nonExistentProjectName = "project-" + UUID.randomUUID();
+
+            var retrieveRequest = PromptVersionRetrieve.builder()
+                    .name("any-prompt-name-" + UUID.randomUUID())
+                    .projectName(nonExistentProjectName)
+                    .build();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/versions/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(retrieveRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+    }
+
+    @Nested
+    @DisplayName("Restore Prompt Version")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RestorePromptVersionTests {
+
+        @Test
+        @DisplayName("Success: should restore a prompt version and create a new version from it")
+        void shouldRestorePromptVersion() {
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            // Create first version to restore from
+            var promptVersion1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .id(null)
+                    .promptId(promptId)
+                    .commit(null)
+                    .createdBy(USER)
+                    .variables(null)
+                    .template("Original template content")
+                    .changeDescription("First version")
+                    .build();
+
+            var createdV1 = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), promptVersion1, prompt.templateStructure()), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Create second version
+            var promptVersion2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .commit(null)
+                    .createdBy(USER)
+                    .template("Modified template content")
+                    .changeDescription("Second version")
+                    .build();
+
+            var createdV2 = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), promptVersion2, prompt.templateStructure()), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Now restore the first version
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions/%s/restore"
+                    .formatted(promptId, createdV1.id()))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(""))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+                var restoredVersion = actualResponse.readEntity(PromptVersion.class);
+
+                // Use helper to validate restored content matches original content where applicable
+                var expectedFromV1 = createdV1.toBuilder()
+                        .id(null)
+                        .commit(null)
+                        .tags(null) // Restored version should not copy tags
+                        .createdAt(createdV1.createdAt())
+                        .build();
+
+                assertPromptVersion(restoredVersion, expectedFromV1, promptId);
+
+                // Additional checks specific to restore semantics
+                assertThat(restoredVersion.changeDescription())
+                        .isEqualTo("Restored from version " + createdV1.versionNumber());
+                assertThat(restoredVersion.id()).isNotEqualTo(createdV1.id());
+                assertThat(restoredVersion.id()).isNotEqualTo(createdV2.id());
+                assertThat(restoredVersion.commit()).isNotEqualTo(createdV1.commit());
+                assertThat(restoredVersion.commit()).isNotEqualTo(createdV2.commit());
+            }
+        }
+
+        @Test
+        @DisplayName("when trying to restore prompt version from a different prompt, then return not found")
+        void when__tryingToRestorePromptVersionFromDifferentPrompt__thenReturnNotFound() {
+            var prompt1 = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            UUID promptId1 = createPrompt(prompt1, API_KEY, TEST_WORKSPACE);
+
+            var prompt2 = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .latestVersion(null)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            UUID promptId2 = createPrompt(prompt2, API_KEY, TEST_WORKSPACE);
+
+            // Create first version to restore from
+            var promptVersion1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .id(null)
+                    .promptId(promptId1)
+                    .commit(null)
+                    .createdBy(USER)
+                    .variables(null)
+                    .template("Original template content")
+                    .changeDescription("First version")
+                    .build();
+
+            createPromptVersion(createPromptVersionRequest(prompt1.name(), promptVersion1, prompt1.templateStructure()),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Create second version
+            var promptVersion2 = promptVersion1.toBuilder()
+                    .promptId(promptId2)
+                    .build();
+
+            var newpPromptVersion1 = promptVersion1.toBuilder()
+                    .commit(null)
+                    .createdBy(USER)
+                    .template("Modified template content")
+                    .changeDescription("Second version")
+                    .build();
+
+            var prompt2V1 = createPromptVersion(
+                    createPromptVersionRequest(prompt2.name(), promptVersion2, prompt2.templateStructure()), API_KEY,
+                    TEST_WORKSPACE);
+
+            createPromptVersion(
+                    createPromptVersionRequest(prompt1.name(), newpPromptVersion1, prompt1.templateStructure()),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Now restore the first version
+            try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI) + "/%s/versions/%s/restore"
+                    .formatted(promptId1, prompt2V1.id()))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(RequestContext.WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(""))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(404,
+                                "Prompt version not found for the specified prompt"));
+            }
         }
     }
 
@@ -2074,7 +3246,8 @@ class PromptResourceTest {
             assertThat(actualPromptVersion)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
+                                    .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
                                     .build())
                     .isEqualTo(expectedPromptVersion);
         }
@@ -2095,7 +3268,8 @@ class PromptResourceTest {
             assertThat(actualPromptVersion)
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
+                                    .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
                                     .build())
                     .isEqualTo(createdPromptVersion);
         }
@@ -2131,10 +3305,16 @@ class PromptResourceTest {
             assertThat(promptVersionPage.content())
                     .usingRecursiveComparison(
                             RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields("variables", "promptId")
-                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
+                                    .withIgnoredFields("variables", "promptId", "templateStructure", "versionNumber")
+                                    .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
                                     .build())
                     .isEqualTo(expectedPromptVersions);
+
+            assertThat(promptVersionPage.content())
+                    .allSatisfy(v -> assertThat(v.versionNumber()).matches("^v\\d+$"));
+            assertThat(promptVersionPage.content().stream().map(PromptVersion::versionNumber).toList())
+                    .doesNotHaveDuplicates();
 
             assertThat(promptVersionPage.content().stream().map(PromptVersion::promptId).toList())
                     .allMatch(id -> id.equals(promptId));
@@ -2203,6 +3383,12 @@ class PromptResourceTest {
         assertThat(createdPromptVersion.template()).isEqualTo(promptVersion.template());
         assertThat(createdPromptVersion.variables())
                 .isEqualTo(TemplateParseUtils.extractVariables(promptVersion.template(), promptVersion.type()));
+        if (promptVersion.tags() != null) {
+            assertThat(createdPromptVersion.tags()).containsExactlyInAnyOrderElementsOf(promptVersion.tags());
+        } else {
+            // When expected tags are null, the actual tags should also be null
+            assertThat(createdPromptVersion.tags()).isNull();
+        }
         assertThat(createdPromptVersion.createdAt()).isBetween(promptVersion.createdAt(), Instant.now());
         assertThat(createdPromptVersion.createdBy()).isEqualTo(USER);
     }
@@ -2221,7 +3407,15 @@ class PromptResourceTest {
     }
 
     private void findPromptsAndAssertPage(List<Prompt> expectedPrompts, String apiKey, String workspaceName,
-            int expectedTotal, int page, String nameSearch) {
+            int expectedTotal, int page, String nameSearch, List<SortingField> sortingFields,
+            List<PromptFilter> filters) {
+        findPromptsAndAssertPage(expectedPrompts, apiKey, workspaceName, expectedTotal, page, nameSearch, sortingFields,
+                filters, null);
+    }
+
+    private void findPromptsAndAssertPage(List<Prompt> expectedPrompts, String apiKey, String workspaceName,
+            int expectedTotal, int page, String nameSearch, List<SortingField> sortingFields,
+            List<PromptFilter> filters, UUID projectId) {
 
         WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI));
 
@@ -2233,6 +3427,19 @@ class PromptResourceTest {
             target = target.queryParam("page", page);
         }
 
+        if (projectId != null) {
+            target = target.queryParam("project_id", projectId);
+        }
+
+        if (CollectionUtils.isNotEmpty(sortingFields)) {
+            target = target.queryParam("sorting",
+                    URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8));
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            target = target.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
         try (var response = target
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -2242,23 +3449,50 @@ class PromptResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
             var promptPage = response.readEntity(Prompt.PromptPage.class);
-
-            assertThat(promptPage.total()).isEqualTo(expectedTotal);
-            assertThat(promptPage.content()).hasSize(expectedPrompts.size());
-            assertThat(promptPage.page()).isEqualTo(page);
-            assertThat(promptPage.size()).isEqualTo(expectedPrompts.size());
-
-            assertThat(promptPage.content())
-                    .usingRecursiveComparison(
-                            RecursiveComparisonConfiguration.builder()
-                                    .withIgnoredFields(IGNORED_FIELDS)
-                                    .withComparatorForType(this::comparatorForCreateAtAndUpdatedAt, Instant.class)
-                                    .build())
-                    .isEqualTo(expectedPrompts);
+            assertPromptsPage(promptPage, expectedPrompts, expectedTotal, page);
         }
     }
 
-    private int comparatorForCreateAtAndUpdatedAt(Instant actual, Instant expected) {
+    private void findProjectPromptsAndAssertPage(List<Prompt> expectedPrompts, String apiKey, String workspaceName,
+            int expectedTotal, int page, String nameSearch, List<SortingField> sortingFields,
+            List<PromptFilter> filters, UUID projectId) {
+        var promptPage = promptResourceClient.getProjectPrompts(projectId, page, nameSearch, sortingFields, filters,
+                apiKey, workspaceName);
+        assertPromptsPage(promptPage, expectedPrompts, expectedTotal, page);
+    }
+
+    private void assertPromptsPage(Prompt.PromptPage promptPage, List<Prompt> expectedPrompts, int expectedTotal,
+            int page) {
+        assertThat(promptPage.total()).isEqualTo(expectedTotal);
+        assertThat(promptPage.content()).hasSize(expectedPrompts.size());
+        assertThat(promptPage.page()).isEqualTo(page);
+        assertThat(promptPage.size()).isEqualTo(expectedPrompts.size());
+
+        assertSortableFields(promptPage);
+
+        assertThat(promptPage.content())
+                .usingRecursiveComparison(
+                        RecursiveComparisonConfiguration.builder()
+                                .withIgnoredFields(PROMPT_IGNORED_FIELDS)
+                                .withComparatorForType(PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                        Instant.class)
+                                .build())
+                .isEqualTo(expectedPrompts);
+    }
+
+    private static void assertSortableFields(Prompt.PromptPage promptPage) {
+        assertThat(promptPage.sortableBy()).contains(
+                ID,
+                NAME,
+                DESCRIPTION,
+                CREATED_AT,
+                LAST_UPDATED_AT,
+                CREATED_BY,
+                LAST_UPDATED_BY,
+                TAGS);
+    }
+
+    public static int comparatorForCreateAtAndUpdatedAt(Instant actual, Instant expected) {
         var now = Instant.now();
 
         if (actual.isAfter(now) || actual.equals(now))
@@ -2269,4 +3503,2266 @@ class PromptResourceTest {
         Assertions.assertThat(actual).isBetween(expected, now);
         return 0;
     }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptVersionSearchTest {
+
+        Stream<Arguments> searchPromptVersions() {
+            return Stream.of(
+                    arguments(
+                            "contains case insensitive in template",
+                            1,
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1.template()
+                                    .substring(5, v1.template().length() - 5)
+                                    .toLowerCase(),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.id().equals(v1.id())),
+                    arguments(
+                            "contains case insensitive in change description",
+                            1,
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v2.changeDescription()
+                                    .substring(5, v2.changeDescription().length() - 5)
+                                    .toUpperCase(),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.id().equals(v2.id())),
+                    arguments(
+                            "contains case insensitive in both template OR change description",
+                            2,
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1.template()
+                                    .substring(5, v1.template().length() - 5),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.id().equals(v1.id()) || v.id().equals(v2.id())));
+        }
+
+        @ParameterizedTest(name = "Success: {0}")
+        @MethodSource
+        @DisplayName("Success: search prompt versions by template or change description")
+        void searchPromptVersions(
+                String description,
+                int expectedSize,
+                BiFunction<PromptVersion, PromptVersion, String> getSearch,
+                BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>> assertion) {
+            var prompt = buildPrompt().template(null).build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var versions = PodamFactoryUtils.manufacturePojoList(factory, PromptVersion.class).stream()
+                    .map(v -> v.toBuilder()
+                            .promptId(promptId)
+                            .template(RandomStringUtils.secure().nextAlphanumeric(15))
+                            .changeDescription(RandomStringUtils.secure().nextAlphanumeric(15))
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            // Create 2 versions with random data
+            var version1Pojo = versions.getFirst();
+            var version2Pojo = versions.getLast();
+
+            // For OR test (expectedSize == 2): inject v1's template substring into v2's changeDescription
+            if (expectedSize == 2) {
+                version2Pojo = version2Pojo.toBuilder()
+                        .changeDescription(RandomStringUtils.secure().nextAlphanumeric(5) +
+                                version1Pojo.template().substring(5, version1Pojo.template().length() - 5).toUpperCase()
+                                +
+                                RandomStringUtils.secure().nextAlphanumeric(5))
+                        .build();
+                versions.set(versions.size() - 1, version2Pojo);
+            }
+
+            var createdVersions = versions.stream()
+                    .map(promptVersion -> promptVersionResourceClient.createPromptVersion(
+                            CreatePromptVersion.builder().name(prompt.name()).version(promptVersion).build(),
+                            API_KEY, TEST_WORKSPACE))
+                    .toList();
+
+            var createdV1 = createdVersions.getFirst();
+            var createdV2 = createdVersions.getLast();
+            var search = getSearch.apply(createdV1, createdV2);
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, search, null, null);
+
+            var predicate = assertion.apply(createdV1, createdV2);
+            assertThat(page.size()).isEqualTo(expectedSize);
+            assertThat(page.total()).isEqualTo(expectedSize);
+            assertThat(page.content()).hasSize(expectedSize);
+            page.content().forEach(version -> assertThat(predicate.apply(version)).isTrue());
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptVersionFilteringTest {
+
+        Stream<Arguments> filterPromptVersionsByTags() {
+            return Stream.of(
+                    // CONTAINS operator
+                    arguments(
+                            Operator.CONTAINS,
+                            "contains specific tag",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1.tags().stream().sorted()
+                                    .findFirst().map(t -> t.substring(2, t.length() - 2)).orElse(null),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (v1,
+                                    v2) -> v -> v1.tags().containsAll(v.tags())));
+        }
+
+        @ParameterizedTest(name = "Success: filter by tags - {1}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by tags with various operators")
+        void filterPromptVersionsByTags(
+                Operator operator,
+                String description,
+                BiFunction<PromptVersion, PromptVersion, String> getFilterValue,
+                BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>> getAssertion) {
+            var prompt = buildPrompt().build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var tag1 = RandomStringUtils.secure().nextAlphanumeric(10);
+            var tag2 = RandomStringUtils.secure().nextAlphanumeric(10);
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of(tag1))
+                    .build();
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of(tag2))
+                    .build();
+            var createdV1 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            var createdV2 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), API_KEY,
+                    TEST_WORKSPACE);
+
+            var filterValue = getFilterValue.apply(createdV1, createdV2);
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.TAGS)
+                    .operator(operator)
+                    .value(filterValue)
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            var assertion = getAssertion.apply(createdV1, createdV2);
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst())).isTrue();
+        }
+
+        Stream<Arguments> filterPromptVersionsByMetadata() {
+            // Generate random metadata keys for each test case
+            var keyEqual = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyNotEqual = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyContains = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyNotContains = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyStartsWith = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyEndsWith = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyGreaterThan = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyLessThan = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyGreaterThanEqual = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyLessThanEqual = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Generate random values for string fields
+            var value1 = RandomStringUtils.secure().nextAlphanumeric(20);
+            var value2 = RandomStringUtils.secure().nextAlphanumeric(20);
+            var randomInt1 = RandomUtils.secure().randomInt(1000, 2000);
+            var randomInt2 = RandomUtils.secure().randomInt(3000, 4000);
+            var randomDouble1 = RandomUtils.secure().randomDouble(1.0, 2.0);
+            var randomDouble2 = RandomUtils.secure().randomDouble(3.0, 4.0);
+
+            return Stream.of(
+                    // EQUAL operator
+                    arguments(
+                            keyEqual,
+                            value1,
+                            value2,
+                            Operator.EQUAL,
+                            value1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyEqual).asText()
+                                    .equals(value1)),
+                    // NOT_EQUAL operator
+                    arguments(
+                            keyNotEqual,
+                            value1,
+                            value2,
+                            Operator.NOT_EQUAL,
+                            value2,
+                            (Function<PromptVersion, Boolean>) v -> !v.metadata().get(keyNotEqual).asText()
+                                    .equals(value2)),
+                    // CONTAINS operator
+                    arguments(
+                            keyContains,
+                            value1,
+                            value2,
+                            Operator.CONTAINS,
+                            value1.substring(5, 15),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyContains).asText()
+                                    .contains(value1.substring(5, 15))),
+                    // NOT_CONTAINS operator
+                    arguments(
+                            keyNotContains,
+                            value1,
+                            value2,
+                            Operator.NOT_CONTAINS,
+                            value2.substring(5, 15),
+                            (Function<PromptVersion, Boolean>) v -> !v.metadata().get(keyNotContains).asText()
+                                    .contains(value2.substring(5, 15))),
+                    // STARTS_WITH operator
+                    arguments(
+                            keyStartsWith,
+                            value1,
+                            value2,
+                            Operator.STARTS_WITH,
+                            value1.substring(0, 10),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyStartsWith).asText()
+                                    .startsWith(value1.substring(0, 10))),
+                    // ENDS_WITH operator
+                    arguments(
+                            keyEndsWith,
+                            value1,
+                            value2,
+                            Operator.ENDS_WITH,
+                            value1.substring(10),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyEndsWith).asText()
+                                    .endsWith(value1.substring(10))),
+                    // GREATER_THAN operator (numeric)
+                    arguments(
+                            keyGreaterThan,
+                            randomInt1,
+                            randomInt2,
+                            Operator.GREATER_THAN,
+                            String.valueOf((randomInt1 + randomInt2) / 2),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyGreaterThan)
+                                    .asInt() > (randomInt1 + randomInt2) / 2),
+                    // LESS_THAN operator (numeric)
+                    arguments(
+                            keyLessThan,
+                            randomDouble1,
+                            randomDouble2,
+                            Operator.LESS_THAN,
+                            String.valueOf((randomDouble1 + randomDouble2) / 2),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyLessThan)
+                                    .asDouble() < (randomDouble1 + randomDouble2) / 2),
+                    // GREATER_THAN_EQUAL operator (numeric)
+                    arguments(
+                            keyGreaterThanEqual,
+                            randomInt1,
+                            randomInt2,
+                            Operator.GREATER_THAN_EQUAL,
+                            String.valueOf((randomInt1 + randomInt2) / 2),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyGreaterThanEqual)
+                                    .asInt() >= (randomInt1 + randomInt2) / 2),
+                    // LESS_THAN_EQUAL operator (numeric)
+                    arguments(
+                            keyLessThanEqual,
+                            randomInt2,
+                            randomInt1,
+                            Operator.LESS_THAN_EQUAL,
+                            String.valueOf((randomInt1 + randomInt2) / 2),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyLessThanEqual)
+                                    .asInt() <= (randomInt1 + randomInt2) / 2));
+        }
+
+        @ParameterizedTest(name = "Success: filter by metadata.{0} - {3}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by metadata fields with various operators")
+        void filterPromptVersionsByMetadata(
+                String metadataKey,
+                Object metadataValue1,
+                Object metadataValue2,
+                Operator operator,
+                String filterValue,
+                Function<PromptVersion, Boolean> assertion) {
+            var prompt = buildPrompt().build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(metadataKey, metadataValue1)))
+                    .build();
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(metadataKey, metadataValue2)))
+                    .build();
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), API_KEY,
+                    TEST_WORKSPACE);
+
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.METADATA)
+                    .operator(operator)
+                    .key(metadataKey)
+                    .value(filterValue)
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst())).isTrue();
+        }
+
+        @Test
+        @DisplayName("Success: filter by metadata keys with spaces and special characters")
+        void filterPromptVersionsByMetadataKeysWithSpaces() {
+            var prompt = buildPrompt().build();;
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var uniqueValue1 = RandomStringUtils.secure().nextAlphanumeric(12);
+            var uniqueValue2 = RandomStringUtils.secure().nextAlphanumeric(12);
+            var uniqueModelPrefix = RandomStringUtils.secure().nextAlphabetic(8);
+            var randomTokens = RandomUtils.secure().randomInt(1000, 2000);
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(
+                            "prompt metadata", uniqueValue1,
+                            "model name", uniqueModelPrefix + "-turbo",
+                            "max tokens", randomTokens)))
+                    .build();
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(
+                            "prompt metadata", uniqueValue2,
+                            "model name", "other-" + RandomStringUtils.secure().nextAlphabetic(8))))
+                    .build();
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Filter by metadata key with spaces using EQUAL operator
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("prompt metadata")
+                    .value(uniqueValue1)
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(page.content().getFirst().metadata().get("prompt metadata").asText()).isEqualTo(uniqueValue1);
+
+            // Filter by another key with spaces using CONTAINS operator
+            var filters2 = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.METADATA)
+                    .operator(Operator.CONTAINS)
+                    .key("model name")
+                    .value(uniqueModelPrefix.substring(0, 6))
+                    .build());
+            var page2 = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters2, null);
+
+            assertThat(page2.total()).isEqualTo(1);
+            assertThat(page2.content().getFirst().metadata().get("model name").asText())
+                    .isEqualTo(uniqueModelPrefix + "-turbo");
+
+            // Filter by numeric metadata key with spaces using GREATER_THAN operator
+            var filters3 = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.METADATA)
+                    .operator(Operator.GREATER_THAN)
+                    .key("max tokens")
+                    .value(String.valueOf(randomTokens - 1))
+                    .build());
+            var page3 = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters3, null);
+
+            assertThat(page3.total()).isEqualTo(1);
+            assertThat(page3.content().getFirst().metadata().get("max tokens").asInt())
+                    .isEqualTo(randomTokens);
+        }
+
+        @Test
+        @DisplayName("Success: filter prompt versions by multiple metadata fields")
+        void filterPromptVersionsByMultipleMetadataFields() {
+            var prompt = buildPrompt().build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var key1 = RandomStringUtils.secure().nextAlphanumeric(10);
+            var key2 = RandomStringUtils.secure().nextAlphanumeric(10);
+            var value1a = RandomStringUtils.secure().nextAlphanumeric(15);
+            var value1b = RandomStringUtils.secure().nextAlphanumeric(15);
+            var value2a = RandomStringUtils.secure().nextAlphanumeric(15);
+            var value2b = RandomStringUtils.secure().nextAlphanumeric(15);
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(key1, value1a, key2, value2a)))
+                    .build();
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(key1, value1a, key2, value2b)))
+                    .build();
+            var version3 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(key1, value1b, key2, value2a)))
+                    .build();
+
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), API_KEY,
+                    TEST_WORKSPACE);
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version3).build(), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Filter by key1 = "value1a" AND key2 = "value2a"
+            var filters = List.of(
+                    PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.EQUAL)
+                            .key(key1)
+                            .value(value1a)
+                            .build(),
+                    PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.EQUAL)
+                            .key(key2)
+                            .value(value2a)
+                            .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(page.content().getFirst().metadata().get(key1).asText()).isEqualTo(value1a);
+            assertThat(page.content().getFirst().metadata().get(key2).asText()).isEqualTo(value2a);
+        }
+
+        Stream<Arguments> filterPromptVersionsByCommit() {
+            return Stream.of(
+                    // EQUAL operator
+                    arguments(
+                            Operator.EQUAL,
+                            "exact commit match",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1
+                                    .commit(),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.commit().equals(v1.commit())),
+                    // NOT_EQUAL operator
+                    arguments(
+                            Operator.NOT_EQUAL,
+                            "not equal to commit",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1
+                                    .commit(),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> !v.commit().equals(v1.commit())),
+                    // CONTAINS operator
+                    arguments(
+                            Operator.CONTAINS,
+                            "contains substring",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1
+                                    .commit().substring(1, 7),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.commit().contains(v1.commit().substring(1, 7))),
+                    // NOT_CONTAINS operator
+                    arguments(
+                            Operator.NOT_CONTAINS,
+                            "does not contain substring",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1
+                                    .commit().substring(1, 7),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> !v.commit().contains(v1.commit().substring(1, 7))),
+                    // STARTS_WITH operator
+                    arguments(
+                            Operator.STARTS_WITH,
+                            "starts with prefix",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1.commit().substring(0, 6),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.commit().startsWith(v1.commit().substring(0, 6))),
+                    // ENDS_WITH operator
+                    arguments(
+                            Operator.ENDS_WITH,
+                            "ends with suffix",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1.commit().substring(2),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.commit().endsWith(v1.commit().substring(2))));
+        }
+
+        @ParameterizedTest(name = "Success: filter by commit - {1}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by commit field")
+        void filterPromptVersionsByCommit(
+                Operator operator,
+                String description,
+                BiFunction<PromptVersion, PromptVersion, String> getFilterValue,
+                BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>> getAssertion) {
+            // Create prompt without template to avoid auto-creating initial version
+            var prompt = buildPrompt()
+                    .template(null)
+                    .build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var versions = IntStream.range(0, 2)
+                    .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .promptId(promptId)
+                            .build())
+                    .map(version -> promptVersionResourceClient.createPromptVersion(
+                            CreatePromptVersion.builder().name(prompt.name()).version(version).build(),
+                            API_KEY,
+                            TEST_WORKSPACE))
+                    .toList();
+
+            var version1 = versions.get(0);
+            var version2 = versions.get(1);
+            var filterValue = getFilterValue.apply(version1, version2);
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.COMMIT)
+                    .operator(operator)
+                    .value(filterValue)
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            var assertion = getAssertion.apply(version1, version2);
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst())).isTrue();
+        }
+
+        Stream<Arguments> filterPromptVersionsByStringFields() {
+            return Stream.of(
+                    // CONTAINS - ID
+                    arguments(
+                            PromptVersionField.ID,
+                            Operator.CONTAINS,
+                            "ID contains substring",
+                            (Function<PromptVersion, String>) v -> v.id().toString(),
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field.substring(10, 20),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.id().toString()
+                                    .contains(filterValue)),
+                    // NOT_CONTAINS - TEMPLATE
+                    arguments(
+                            PromptVersionField.TEMPLATE,
+                            Operator.NOT_CONTAINS,
+                            "template not contains random string",
+                            (Function<PromptVersion, String>) PromptVersion::template,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field.substring(10, 20),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> !v.template()
+                                    .contains(filterValue)),
+                    // STARTS_WITH - CHANGE_DESCRIPTION
+                    arguments(
+                            PromptVersionField.CHANGE_DESCRIPTION,
+                            Operator.STARTS_WITH,
+                            "change description starts with prefix",
+                            (Function<PromptVersion, String>) PromptVersion::changeDescription,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field.substring(0, 6),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.changeDescription()
+                                    .startsWith(filterValue)),
+                    // ENDS_WITH - CREATED_BY
+                    arguments(
+                            PromptVersionField.CREATED_BY,
+                            Operator.ENDS_WITH,
+                            "created_by ends with suffix",
+                            (Function<PromptVersion, String>) PromptVersion::createdBy,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field
+                                    .substring(field.length() - 8),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.createdBy()
+                                    .endsWith(filterValue)),
+                    // EQUAL - ID
+                    arguments(
+                            PromptVersionField.ID,
+                            Operator.EQUAL,
+                            "exact ID match",
+                            (Function<PromptVersion, String>) v -> v.id().toString(),
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.id().toString()
+                                    .equals(filterValue)),
+                    // NOT_EQUAL - TEMPLATE
+                    arguments(
+                            PromptVersionField.TEMPLATE,
+                            Operator.NOT_EQUAL,
+                            "not equal to template",
+                            (Function<PromptVersion, String>) PromptVersion::template,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> !v.template()
+                                    .equals(filterValue)),
+                    // EQUAL - VERSION_NUMBER
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.EQUAL,
+                            "exact version_number match",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.versionNumber()
+                                    .equals(filterValue)),
+                    // NOT_EQUAL - VERSION_NUMBER
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.NOT_EQUAL,
+                            "not equal to version_number",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> !v.versionNumber()
+                                    .equals(filterValue)),
+                    // ENDS_WITH - VERSION_NUMBER (matches the numeric suffix of v1's version_number)
+                    arguments(
+                            PromptVersionField.VERSION_NUMBER,
+                            Operator.ENDS_WITH,
+                            "version_number ends with suffix",
+                            (Function<PromptVersion, String>) PromptVersion::versionNumber,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field
+                                    .substring(field.length() - 1),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.versionNumber()
+                                    .endsWith(filterValue)));
+        }
+
+        @ParameterizedTest(name = "Success: filter by {0} - {1}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by string fields")
+        void filterPromptVersionsByStringFields(
+                PromptVersionField field,
+                Operator operator,
+                String description,
+                Function<PromptVersion, String> getFieldValue,
+                BiFunction<PromptVersion, String, String> getFilterValue,
+                BiFunction<PromptVersion, String, Boolean> assertion) {
+            var prompt = buildPrompt()
+                    .template(null)
+                    .build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            // Create second API key with different user for version2
+            var apiKey2 = UUID.randomUUID().toString();
+            var user2 = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey2, TEST_WORKSPACE, WORKSPACE_ID, user2);
+
+            var template1 = RandomStringUtils.secure().nextAlphanumeric(30);
+            var template2 = RandomStringUtils.secure().nextAlphanumeric(30);
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .template(template1)
+                    .build();
+            var createdV1 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .template(template2)
+                    .build();
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), apiKey2,
+                    TEST_WORKSPACE);
+
+            var fieldValue = getFieldValue.apply(createdV1);
+            var filterValue = getFilterValue.apply(createdV1, fieldValue);
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(field)
+                    .operator(operator)
+                    .value(filterValue)
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst(), filterValue)).isTrue();
+        }
+
+        Stream<Arguments> filterPromptVersionsByCreatedAt() {
+            return Stream.of(
+                    // CREATED_AT - GREATER_THAN
+                    arguments(
+                            Operator.GREATER_THAN,
+                            "created after timestamp",
+                            (Function<Instant, Instant>) now -> now.minus(1, ChronoUnit.HOURS),
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v, filterValue) -> v.createdAt()
+                                    .isAfter(filterValue)),
+                    // CREATED_AT - LESS_THAN
+                    arguments(
+                            Operator.LESS_THAN,
+                            "created before timestamp",
+                            (Function<Instant, Instant>) now -> now.plus(1, ChronoUnit.HOURS),
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v, filterValue) -> v.createdAt()
+                                    .isBefore(filterValue)),
+                    // CREATED_AT - GREATER_THAN_EQUAL
+                    arguments(
+                            Operator.GREATER_THAN_EQUAL,
+                            "created at or after timestamp",
+                            (Function<Instant, Instant>) now -> now.minus(1, ChronoUnit.HOURS),
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v,
+                                    filterValue) -> v.createdAt().isAfter(filterValue)),
+                    // CREATED_AT - LESS_THAN_EQUAL
+                    arguments(
+                            Operator.LESS_THAN_EQUAL,
+                            "created at or before timestamp",
+                            (Function<Instant, Instant>) now -> now.plus(1, ChronoUnit.HOURS),
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v,
+                                    filterValue) -> v.createdAt().isBefore(filterValue)),
+                    // CREATED_AT - EQUAL
+                    arguments(
+                            Operator.EQUAL,
+                            "exact created_at match",
+                            (Function<Instant, Instant>) now -> now,
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v, filterValue) -> v.createdAt()
+                                    .equals(filterValue)),
+                    // CREATED_AT - NOT_EQUAL
+                    arguments(
+                            Operator.NOT_EQUAL,
+                            "not equal to created_at",
+                            (Function<Instant, Instant>) now -> now.plus(1, ChronoUnit.HOURS),
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v, filterValue) -> !v.createdAt()
+                                    .equals(filterValue)));
+        }
+
+        @ParameterizedTest(name = "Success: filter by CREATED_AT - {1}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by CREATED_AT field")
+        void filterPromptVersionsByCreatedAt(
+                Operator operator,
+                String description,
+                Function<Instant, Instant> getFilterValue,
+                BiFunction<PromptVersion, Instant, Boolean> assertion) {
+            var prompt = buildPrompt()
+                    .template(null)
+                    .build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .build();
+            var createdVersion = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // For EQUAL operator, use the actual createdAt timestamp
+            var referenceTime = operator == Operator.EQUAL ? createdVersion.createdAt() : Instant.now();
+            var filterValue = getFilterValue.apply(referenceTime);
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.CREATED_AT)
+                    .operator(operator)
+                    .value(filterValue.toString())
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst(), filterValue)).isTrue();
+        }
+
+        Stream<Arguments> filterPromptVersionsByType() {
+            return Stream.of(
+                    // EQUAL operator
+                    arguments(
+                            Operator.EQUAL,
+                            PromptType.MUSTACHE,
+                            (Function<PromptVersion, Boolean>) v -> v.type() == PromptType.MUSTACHE),
+                    // NOT_EQUAL operator
+                    arguments(
+                            Operator.NOT_EQUAL,
+                            PromptType.MUSTACHE,
+                            (Function<PromptVersion, Boolean>) v -> v.type() != PromptType.MUSTACHE));
+        }
+
+        @ParameterizedTest(name = "Success: filter by TYPE - {0}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by TYPE field (ENUM)")
+        void filterPromptVersionsByType(
+                Operator operator,
+                PromptType filterType,
+                Function<PromptVersion, Boolean> assertion) {
+            // Create prompt without template to avoid auto-creating initial version
+            var prompt = buildPrompt().template(null).build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .type(PromptType.MUSTACHE)
+                    .build();
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .type(PromptType.JINJA2)
+                    .build();
+
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), API_KEY,
+                    TEST_WORKSPACE);
+
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.TYPE)
+                    .operator(operator)
+                    .value(filterType.getValue())
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst())).isTrue();
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptVersionSortingTest {
+        Stream<Arguments> sortPromptVersions() {
+            var idComparator = Comparator.comparing(PromptVersion::id);
+            var commitComparator = Comparator.comparing(
+                    PromptVersion::commit, String.CASE_INSENSITIVE_ORDER)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var templateComparator = Comparator.comparing(
+                    PromptVersion::template, String.CASE_INSENSITIVE_ORDER)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var changeDescriptionComparator = Comparator.comparing(
+                    PromptVersion::changeDescription, String.CASE_INSENSITIVE_ORDER)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var typeComparator = Comparator
+                    .comparing((PromptVersion v) -> v.type().ordinal())
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var typeComparatorReversed = Comparator
+                    .comparing((PromptVersion v) -> v.type().ordinal(), Comparator.reverseOrder())
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var tagsComparator = Comparator
+                    .comparing((PromptVersion v) -> v.tags().toString(), String.CASE_INSENSITIVE_ORDER)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var createdAtComparator = Comparator.comparing(PromptVersion::createdAt)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var createdByComparator = Comparator
+                    .comparing(PromptVersion::createdBy, String.CASE_INSENSITIVE_ORDER)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            return Stream.of(
+                    arguments(
+                            idComparator,
+                            "sort by ID ASC",
+                            List.of(SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build())),
+                    arguments(
+                            idComparator.reversed(),
+                            "sort by ID DESC",
+                            List.of(SortingField.builder().field(SortableFields.ID).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            commitComparator,
+                            "sort by COMMIT ASC",
+                            List.of(SortingField.builder().field(SortableFields.COMMIT).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            commitComparator.reversed(),
+                            "sort by COMMIT DESC",
+                            List.of(SortingField.builder().field(SortableFields.COMMIT).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            templateComparator,
+                            "sort by TEMPLATE ASC",
+                            List.of(SortingField.builder().field(SortableFields.TEMPLATE).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            templateComparator.reversed(),
+                            "sort by TEMPLATE DESC",
+                            List.of(SortingField.builder().field(SortableFields.TEMPLATE).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            changeDescriptionComparator,
+                            "sort by CHANGE_DESCRIPTION ASC",
+                            List.of(SortingField.builder().field(SortableFields.CHANGE_DESCRIPTION)
+                                    .direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            changeDescriptionComparator.reversed(),
+                            "sort by CHANGE_DESCRIPTION DESC",
+                            List.of(SortingField.builder().field(SortableFields.CHANGE_DESCRIPTION)
+                                    .direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            typeComparator,
+                            "sort by TYPE ASC",
+                            List.of(SortingField.builder().field(SortableFields.TYPE).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            typeComparatorReversed,
+                            "sort by TYPE DESC",
+                            List.of(SortingField.builder().field(SortableFields.TYPE).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            tagsComparator,
+                            "sort by TAGS ASC",
+                            List.of(SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            tagsComparator.reversed(),
+                            "sort by TAGS DESC",
+                            List.of(SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            createdAtComparator,
+                            "sort by CREATED_AT ASC",
+                            List.of(SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            createdAtComparator.reversed(),
+                            "sort by CREATED_AT DESC",
+                            List.of(SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            createdByComparator,
+                            "sort by CREATED_BY ASC",
+                            List.of(SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            createdByComparator.reversed(),
+                            "sort by CREATED_BY DESC",
+                            List.of(SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC)
+                                    .build())),
+                    // Multi-field sorting
+                    arguments(
+                            Comparator.comparing((PromptVersion v) -> v.type().ordinal())
+                                    .thenComparing(PromptVersion::createdAt, Comparator.reverseOrder())
+                                    .thenComparing(PromptVersion::id, Comparator.reverseOrder()),
+                            "sort by TYPE ASC, then CREATED_AT DESC",
+                            List.of(
+                                    SortingField.builder().field(SortableFields.TYPE).direction(Direction.ASC).build(),
+                                    SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC)
+                                            .build())));
+        }
+
+        @ParameterizedTest(name = "{1}")
+        @MethodSource
+        @DisplayName("Success: sort prompt versions by all sortable fields")
+        void sortPromptVersions(
+                Comparator<PromptVersion> comparator, String description, List<SortingField> sortingFields) {
+            var prompt = buildPrompt().template(null).build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var expectedVersions = PodamFactoryUtils.manufacturePojoList(factory, PromptVersion.class).stream()
+                    .map(promptVersion -> promptVersion.toBuilder()
+                            .promptId(promptId)
+                            // Let server generate these fields
+                            .id(null)
+                            .commit(null)
+                            // Only alphanumeric to avoid flakiness with special characters when sorting
+                            .template(RandomStringUtils.secure().nextAlphanumeric(10))
+                            .changeDescription(RandomStringUtils.secure().nextAlphanumeric(10))
+                            .build())
+                    .map(promptVersion -> {
+                        // With unique users to test sort by created_by
+                        var apiKey = "apiKey-" + UUID.randomUUID();
+                        var user = RandomStringUtils.secure().nextAlphanumeric(10);
+                        mockTargetWorkspace(apiKey, TEST_WORKSPACE, WORKSPACE_ID, user);
+                        return promptVersionResourceClient.createPromptVersion(
+                                CreatePromptVersion.builder().name(prompt.name()).version(promptVersion).build(),
+                                apiKey, TEST_WORKSPACE);
+                    })
+                    .toList();
+
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, null, sortingFields);
+
+            // Verify sort order by comparing IDs in the expected order
+            var actualIds = page.content().stream().map(PromptVersion::id).toList();
+            var expectedIds = expectedVersions.stream().sorted(comparator).map(PromptVersion::id).toList();
+
+            assertThat(page.content()).hasSize(5);
+            assertThat(actualIds).containsExactlyElementsOf(expectedIds);
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UpdatePromptVersionsTest {
+
+        Stream<Arguments> batchUpdatePromptVersionTags() {
+            BiFunction<Set<String>, Set<String>, Set<String>> expectedReplace = (initial, update) -> update;
+            BiFunction<Set<String>, Set<String>, Set<String>> expectedPreserve = (initial, update) -> initial;
+            return Stream.of(
+                    arguments("replace",
+                            PodamFactoryUtils.manufacturePojoSet(factory, String.class),
+                            false,
+                            expectedReplace),
+                    arguments("replace is the default",
+                            PodamFactoryUtils.manufacturePojoSet(factory, String.class),
+                            null,
+                            expectedReplace),
+                    arguments("replace empty clears",
+                            Set.of(),
+                            false,
+                            (BiFunction<Set<String>, Set<String>, Set<String>>) (initial, update) -> null),
+                    arguments("replace null preserves",
+                            null,
+                            false,
+                            expectedPreserve),
+                    arguments("merge",
+                            PodamFactoryUtils.manufacturePojoSet(factory, String.class),
+                            true,
+                            (BiFunction<Set<String>, Set<String>, Set<String>>) SetUtils::union),
+                    arguments("merge empty has no effect",
+                            Set.of(),
+                            true,
+                            expectedPreserve),
+                    arguments("merge null has no effect",
+                            null,
+                            true,
+                            expectedPreserve));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        @DisplayName("Success: batch update prompt version tags")
+        void batchUpdatePromptVersionTags(
+                String testCase,
+                Set<String> updateTags,
+                Boolean mergeTags,
+                BiFunction<Set<String>, Set<String>, Set<String>> expectedTagsFunction) {
+            var prompt = buildPrompt().template(null).build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var createdVersions = PodamFactoryUtils.manufacturePojoList(factory, PromptVersion.class).stream()
+                    .map(promptVersion -> promptVersion.toBuilder()
+                            .promptId(promptId)
+                            .build())
+                    .map(promptVersion -> promptVersionResourceClient.createPromptVersion(
+                            CreatePromptVersion.builder().name(prompt.name()).version(promptVersion).build(),
+                            API_KEY, TEST_WORKSPACE))
+                    .toList();
+            var initialTagsMap = createdVersions.stream()
+                    .collect(Collectors.toMap(PromptVersion::id, PromptVersion::tags));
+
+            // Batch update tags
+            var update = PromptVersionUpdate.builder().tags(updateTags).build();
+            var batchUpdate = PromptVersionBatchUpdate.builder()
+                    .ids(initialTagsMap.keySet())
+                    .update(update)
+                    .mergeTags(mergeTags)
+                    .build();
+            promptVersionResourceClient.updatePromptVersions(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Retrieve all versions after update
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, null, null);
+
+            assertThat(page.content()).hasSize(5);
+            page.content().forEach(actualVersion -> {
+                var initialTags = initialTagsMap.get(actualVersion.id());
+                var expectedTags = expectedTagsFunction.apply(initialTags, updateTags);
+                assertThat(actualVersion.tags()).isEqualTo(expectedTags);
+            });
+        }
+    }
+
+    @Nested
+    @DisplayName("Prompt Last Updated At")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptLastUpdatedAt {
+
+        @Test
+        @DisplayName("when creating a new prompt version, then prompt lastUpdatedAt is updated")
+        void createPromptVersion__thenPromptLastUpdatedAtIsUpdated() throws InterruptedException {
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER)
+                    .createdBy(USER)
+                    .template(null)
+                    .versionCount(0L)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            Prompt createdPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
+            Instant initialLastUpdatedAt = createdPrompt.lastUpdatedAt();
+
+            Thread.sleep(10);
+
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .createdBy(USER)
+                    .build();
+            var request = CreatePromptVersion.builder()
+                    .name(prompt.name())
+                    .version(version)
+                    .templateStructure(TemplateStructure.TEXT)
+                    .build();
+
+            promptVersionResourceClient.createPromptVersion(request, API_KEY, TEST_WORKSPACE);
+
+            Prompt updatedPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
+
+            assertThat(updatedPrompt.lastUpdatedAt()).isAfter(initialLastUpdatedAt);
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Prompts By Commits")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetPromptsByCommits {
+
+        @Test
+        @DisplayName("Success: should return prompts for given commits")
+        void getPromptsByCommits() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create two prompts, each with a version
+            var prompt1 = buildPrompt()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            var prompt2 = buildPrompt()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId1 = createPrompt(prompt1, apiKey, workspaceName);
+            UUID promptId2 = createPrompt(prompt2, apiKey, workspaceName);
+
+            var version1 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt1.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId1).build())
+                            .build(),
+                    apiKey, workspaceName);
+            var version2 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt2.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId2).build())
+                            .build(),
+                    apiKey, workspaceName);
+
+            // Call the endpoint
+            var result = promptResourceClient.getPromptsByCommits(
+                    List.of(version1.commit(), version2.commit()), apiKey, workspaceName);
+
+            assertThat(result).hasSize(2);
+
+            assertThat(result.get(0).promptVersionId()).isEqualTo(version1.id());
+            assertThat(result.get(0).commit()).isEqualTo(version1.commit());
+            assertThat(result.get(0).promptId()).isEqualTo(promptId1);
+            assertThat(result.get(0).promptName()).isEqualTo(prompt1.name());
+
+            assertThat(result.get(1).promptVersionId()).isEqualTo(version2.id());
+            assertThat(result.get(1).commit()).isEqualTo(version2.commit());
+            assertThat(result.get(1).promptId()).isEqualTo(promptId2);
+            assertThat(result.get(1).promptName()).isEqualTo(prompt2.name());
+        }
+
+        @Test
+        @DisplayName("Success: should preserve input order")
+        void getPromptsByCommitsPreservesInputOrder() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, apiKey, workspaceName);
+
+            var version1 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId).build())
+                            .build(),
+                    apiKey, workspaceName);
+            var version2 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId).build())
+                            .build(),
+                    apiKey, workspaceName);
+
+            // Request in reverse order
+            var result = promptResourceClient.getPromptsByCommits(
+                    List.of(version2.commit(), version1.commit()), apiKey, workspaceName);
+
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).promptVersionId()).isEqualTo(version2.id());
+            assertThat(result.get(0).commit()).isEqualTo(version2.commit());
+            assertThat(result.get(1).promptVersionId()).isEqualTo(version1.id());
+            assertThat(result.get(1).commit()).isEqualTo(version1.commit());
+            // Both should point to the same prompt
+            assertThat(result.get(0).promptId()).isEqualTo(promptId);
+            assertThat(result.get(1).promptId()).isEqualTo(promptId);
+        }
+
+        @Test
+        @DisplayName("when commits not found, then return null prompt and version id")
+        void getPromptsByCommitsWhenCommitsNotFoundReturnsNullPromptAndVersionId() {
+            var unknownCommit1 = UUID.randomUUID().toString();
+            var unknownCommit2 = UUID.randomUUID().toString();
+
+            var result = promptResourceClient.getPromptsByCommits(
+                    List.of(unknownCommit1, unknownCommit2), API_KEY, TEST_WORKSPACE);
+
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).commit()).isEqualTo(unknownCommit1);
+            assertThat(result.get(0).promptVersionId()).isNull();
+            assertThat(result.get(0).promptId()).isNull();
+            assertThat(result.get(0).promptName()).isNull();
+            assertThat(result.get(1).commit()).isEqualTo(unknownCommit2);
+            assertThat(result.get(1).promptVersionId()).isNull();
+            assertThat(result.get(1).promptId()).isNull();
+            assertThat(result.get(1).promptName()).isNull();
+        }
+
+        @Test
+        @DisplayName("when mix of known and unknown commits, then return correct results")
+        void getPromptsByCommitsWhenMixOfKnownAndUnknownReturnsCorrectResults() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, apiKey, workspaceName);
+
+            var version = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId).build())
+                            .build(),
+                    apiKey, workspaceName);
+
+            var unknownCommit = UUID.randomUUID().toString();
+
+            var result = promptResourceClient.getPromptsByCommits(
+                    List.of(unknownCommit, version.commit()), apiKey, workspaceName);
+
+            assertThat(result).hasSize(2);
+
+            // First entry: unknown commit - null prompt fields
+            assertThat(result.get(0).commit()).isEqualTo(unknownCommit);
+            assertThat(result.get(0).promptVersionId()).isNull();
+            assertThat(result.get(0).promptId()).isNull();
+            assertThat(result.get(0).promptName()).isNull();
+
+            // Second entry: known commit - has prompt fields
+            assertThat(result.get(1).promptVersionId()).isEqualTo(version.id());
+            assertThat(result.get(1).commit()).isEqualTo(version.commit());
+            assertThat(result.get(1).promptId()).isEqualTo(promptId);
+        }
+
+        @Test
+        @DisplayName("when empty list, then return 422 validation error")
+        void getPromptsByCommitsWhenEmptyListReturnsValidationError() {
+            var request = PromptVersionCommitsRequest.builder()
+                    .commits(List.of())
+                    .build();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                    .path("retrieve-by-commits")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(request))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Prompt By Commit")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetPromptByCommit {
+
+        @Test
+        @DisplayName("Success: should return prompt version and prompt for given commit")
+        void getPromptByCommit() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var prompt = buildPrompt()
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, apiKey, workspaceName);
+
+            var version = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(promptId).build())
+                            .build(),
+                    apiKey, workspaceName);
+
+            Prompt result = promptResourceClient.getPromptByCommit(
+                    version.commit(), apiKey, workspaceName);
+
+            // promptId is not exposed by Prompt.View.Detail on PromptVersion;
+            // templateStructure is not included in the by-commit JSON payload
+            var expectedVersion = version.toBuilder().promptId(null).templateStructure(null).build();
+            // fetch the prompt via its own endpoint (same view: Prompt.View.Detail), then
+            // strip latestVersion since by-commit intentionally omits it
+            var expectedPrompt = promptResourceClient.getPrompt(promptId, apiKey, workspaceName)
+                    .toBuilder().latestVersion(null).requestedVersion(expectedVersion).build();
+
+            assertThat(result)
+                    .usingRecursiveComparison(
+                            RecursiveComparisonConfiguration.builder()
+                                    .withComparatorForType(
+                                            PromptResourceTest::comparatorForCreateAtAndUpdatedAt,
+                                            Instant.class)
+                                    .build())
+                    .isEqualTo(expectedPrompt);
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        @DisplayName("when request is invalid or unresolvable, then return error")
+        void getPromptByCommitErrorCases(String label, String commit, String requestApiKey, String requestWorkspace,
+                int expectedStatus) {
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                    .path("by-commit")
+                    .path(commit)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, requestApiKey)
+                    .header(WORKSPACE_HEADER, requestWorkspace)
+                    .get()) {
+
+                assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            }
+        }
+
+        Stream<Arguments> getPromptByCommitErrorCases() {
+            // case 1: malformed commit fails pattern validation → 400
+            var malformed = arguments(
+                    "when commit is malformed, then return 400",
+                    "not-valid!!", API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST);
+
+            // case 2: valid format but non-existent commit → 404
+            var unknownCommit = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+            var notFound = arguments(
+                    "when commit not found, then return 404",
+                    unknownCommit, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+
+            // case 3: commit exists in a different workspace → 404
+            var otherApiKey = UUID.randomUUID().toString();
+            var otherWorkspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(otherApiKey, otherWorkspaceName, UUID.randomUUID().toString());
+            var otherPrompt = buildPrompt()
+                    .projectId(null)
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID otherPromptId = createPrompt(otherPrompt, otherApiKey, otherWorkspaceName);
+            var otherVersion = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(otherPrompt.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(otherPromptId).build())
+                            .build(),
+                    otherApiKey, otherWorkspaceName);
+            var wrongWorkspace = arguments(
+                    "when commit belongs to another workspace, then return 404",
+                    otherVersion.commit(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NOT_FOUND);
+
+            // case 4: same commit across multiple prompts in one workspace → 409
+            var dupApiKey = UUID.randomUUID().toString();
+            var dupWorkspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(dupApiKey, dupWorkspaceName, UUID.randomUUID().toString());
+            var sharedCommit = "a1b2c3d4";
+            var dupPrompt1 = buildPrompt()
+                    .projectId(null)
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            var dupPrompt2 = buildPrompt()
+                    .projectId(null)
+                    .lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(dupPrompt1.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(createPrompt(dupPrompt1, dupApiKey, dupWorkspaceName))
+                                    .commit(sharedCommit).build())
+                            .build(),
+                    dupApiKey, dupWorkspaceName);
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(dupPrompt2.name())
+                            .version(factory.manufacturePojo(PromptVersion.class).toBuilder()
+                                    .promptId(createPrompt(dupPrompt2, dupApiKey, dupWorkspaceName))
+                                    .commit(sharedCommit).build())
+                            .build(),
+                    dupApiKey, dupWorkspaceName);
+            var conflict = arguments(
+                    "when same commit exists across multiple prompts in workspace, then return 409",
+                    sharedCommit, dupApiKey, dupWorkspaceName, HttpStatus.SC_CONFLICT);
+
+            return Stream.of(malformed, notFound, wrongWorkspace, conflict);
+        }
+    }
+
+    @Nested
+    @DisplayName("Prompt Masks")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptMasks {
+
+        @Test
+        @DisplayName("Success: create mask via POST /prompts/versions with version_type=mask")
+        void shouldCreateMask() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .versionType(PromptVersionType.MASK)
+                    .environments(null)
+                    .build();
+
+            PromptVersion created = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(created.versionType()).isEqualTo(PromptVersionType.MASK);
+            assertThat(created.promptId()).isEqualTo(promptId);
+        }
+
+        @Test
+        @DisplayName("Masks are excluded from latestVersion and versionCount on GET /prompts/{id}")
+        void masksAreExcludedFromLatestVersionAndVersionCount() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var realVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).build();
+            var savedReal = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), realVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).environments(null).build();
+            createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            Prompt fetched = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
+            assertThat(fetched.versionCount()).isEqualTo(1L);
+            assertThat(fetched.latestVersion()).isNotNull();
+            assertThat(fetched.latestVersion().id()).isEqualTo(savedReal.id());
+            assertThat(fetched.latestVersion().versionType()).isEqualTo(PromptVersionType.PROMPT_VERSION);
+        }
+
+        @Test
+        @DisplayName("Masks are excluded from GET /prompts/{id}/versions list")
+        void masksAreExcludedFromVersionsList() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var realVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).build();
+            var savedReal = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), realVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).environments(null).build();
+            createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, null, null);
+
+            assertThat(page.total()).isEqualTo(1L);
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.content().getFirst().id()).isEqualTo(savedReal.id());
+            assertThat(page.content().getFirst().versionType()).isEqualTo(PromptVersionType.PROMPT_VERSION);
+        }
+
+        @Test
+        @DisplayName("Masks are excluded from GET /prompts/by-commit/{commit}")
+        void masksAreExcludedFromByCommit() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).environments(null).build();
+            var savedMask = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            try (var response = promptResourceClient.callGetPromptByCommit(
+                    savedMask.commit(), API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Masks are excluded from POST /prompts/retrieve-by-commits")
+        void masksAreExcludedFromRetrieveByCommits() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).environments(null).build();
+            var savedMask = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var result = promptResourceClient.getPromptsByCommits(
+                    List.of(savedMask.commit()), API_KEY, TEST_WORKSPACE);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.getFirst().commit()).isEqualTo(savedMask.commit());
+            assertThat(result.getFirst().promptId()).isNull();
+            assertThat(result.getFirst().promptVersionId()).isNull();
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}?mask_id=... populates requestedVersion with the mask and keeps latestVersion")
+        void getPromptByIdWithMaskId() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var realVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).build();
+            var savedReal = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), realVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).environments(null).build();
+            var savedMask = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            Prompt fetched = promptResourceClient.getPrompt(promptId, savedMask.id(), API_KEY, TEST_WORKSPACE);
+            assertThat(fetched.id()).isEqualTo(promptId);
+            assertThat(fetched.requestedVersion()).isNotNull();
+            assertThat(fetched.requestedVersion().id()).isEqualTo(savedMask.id());
+            assertThat(fetched.requestedVersion().versionType()).isEqualTo(PromptVersionType.MASK);
+            assertThat(fetched.latestVersion()).isNotNull();
+            assertThat(fetched.latestVersion().id()).isEqualTo(savedReal.id());
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}?mask_id=missing returns 404")
+        void getPromptByIdWithMissingMaskIdReturnsNotFound() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            UUID unknownMaskId = factory.manufacturePojo(UUID.class);
+
+            try (var response = promptResourceClient.callGetPrompt(
+                    promptId, unknownMaskId, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND,
+                                "Prompt version not found"));
+            }
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}?mask_id belonging to another prompt returns 404")
+        void getPromptByIdWithMaskFromAnotherPromptReturnsNotFound() {
+            var promptA = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptAId = createPrompt(promptA, API_KEY, TEST_WORKSPACE);
+
+            var promptB = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(promptB, API_KEY, TEST_WORKSPACE);
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).environments(null).build();
+            var maskOfB = createPromptVersion(
+                    createPromptVersionRequest(promptB.name(), maskVersion, promptB.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            try (var response = promptResourceClient.callGetPrompt(
+                    promptAId, maskOfB.id(), API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}?mask_id pointing to a non-mask version returns 404")
+        void getPromptByIdWithNonMaskVersionIdReturnsNotFound() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var realVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).build();
+            var savedReal = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), realVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            try (var response = promptResourceClient.callGetPrompt(
+                    promptId, savedReal.id(), API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND,
+                                "Prompt version not found"));
+            }
+        }
+
+        @Test
+        @DisplayName("POST /prompts/versions/retrieve-by-ids returns the requested versions by id")
+        void retrieveVersionsByIds() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var maskA = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).environments(null).build();
+            var savedA = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskA, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var maskB = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).environments(null).build();
+            var savedB = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskB, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var request = PromptVersionIdsRequest.builder()
+                    .ids(List.of(savedA.id(), savedB.id())).build();
+
+            try (var response = promptResourceClient.callRetrieveVersionsByIds(
+                    request, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                List<PromptVersion> versions = response
+                        .readEntity(new jakarta.ws.rs.core.GenericType<List<PromptVersion>>() {
+                        });
+                assertThat(versions).hasSize(2);
+                assertThat(versions).extracting(PromptVersion::id)
+                        .containsExactlyInAnyOrder(savedA.id(), savedB.id());
+                assertThat(versions).extracting(PromptVersion::versionType)
+                        .containsOnly(PromptVersionType.MASK);
+            }
+        }
+
+        @Test
+        @DisplayName("POST /prompts/versions/retrieve-by-ids with empty ids returns 422")
+        void retrieveVersionsByIdsEmptyReturnsValidationError() {
+            var request = PromptVersionIdsRequest.builder().ids(List.of()).build();
+
+            try (var response = promptResourceClient.callRetrieveVersionsByIds(
+                    request, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        @Test
+        @DisplayName("Creating a mask does not bump prompt lastUpdatedAt")
+        void creatingMaskDoesNotBumpLastUpdatedAt() throws InterruptedException {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            Instant initial = getPrompt(promptId, API_KEY, TEST_WORKSPACE).lastUpdatedAt();
+            Thread.sleep(10);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).environments(null).build();
+            createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            Instant afterMask = getPrompt(promptId, API_KEY, TEST_WORKSPACE).lastUpdatedAt();
+            assertThat(afterMask).isEqualTo(initial);
+        }
+    }
+
+    @Nested
+    @DisplayName("Prompt Environments")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptEnvironments {
+
+        @BeforeEach
+        void clearWorkspaceEnvironments() {
+            // The env-per-workspace cap is small in tests; wipe between tests so auto-create has slots.
+            try (var listResponse = environmentsResourceClient.callFind(API_KEY, TEST_WORKSPACE)) {
+                var page = listResponse.readEntity(Environment.EnvironmentPage.class);
+                Set<UUID> ids = page.content().stream().map(Environment::id).collect(Collectors.toSet());
+                if (!ids.isEmpty()) {
+                    try (var deleteResponse = environmentsResourceClient.callBatchDelete(ids, API_KEY,
+                            TEST_WORKSPACE)) {
+                        assertThat(deleteResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+                    }
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("Create version with environment: env is set on the version and auto-created in the workspace registry")
+        void shouldCreateVersionWithEnvironmentAndAutoCreateInRegistry() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env = uniqueEnvName("prod");
+            var saved = createVersionWithEnvironments(prompt, Set.of(env));
+
+            getPromptVersionAndAssert(saved.id(), saved, API_KEY, TEST_WORKSPACE);
+            assertWorkspaceContainsEnvironment(env);
+        }
+
+        @Test
+        @DisplayName("Creating two versions with same env on same prompt: second returns 409 Conflict")
+        void duplicateEnvironmentOnSamePromptReturnsConflict() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env = uniqueEnvName("dup");
+            createVersionWithEnvironments(prompt, Set.of(env));
+
+            var second = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION).environments(Set.of(env)).build();
+            try (var response = postVersionRaw(prompt.name(), second, prompt.templateStructure())) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+            }
+        }
+
+        @Test
+        @DisplayName("Same env name is allowed on versions of different prompts")
+        void sameEnvironmentOnDifferentPromptsBothSucceed() {
+            var promptA = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(promptA, API_KEY, TEST_WORKSPACE);
+            var promptB = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(promptB, API_KEY, TEST_WORKSPACE);
+
+            String env = uniqueEnvName("shared");
+            var savedA = createVersionWithEnvironments(promptA, Set.of(env));
+            var savedB = createVersionWithEnvironments(promptB, Set.of(env));
+
+            getPromptVersionAndAssert(savedA.id(), savedA, API_KEY, TEST_WORKSPACE);
+            getPromptVersionAndAssert(savedB.id(), savedB, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("Creating a mask version with environments returns 422 Unprocessable Content")
+        void creatingMaskWithEnvironmentReturnsUnprocessable() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var mask = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK)
+                    .environments(Set.of(uniqueEnvName("mask"))).build();
+            try (var response = postVersionRaw(prompt.name(), mask, prompt.templateStructure())) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}?environment populates requestedVersion with the env-mapped version")
+        void getPromptByIdResolvesByEnvironment() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            createVersionWithoutEnvironments(prompt);
+
+            String env = uniqueEnvName("resolve");
+            var savedV2 = createVersionWithEnvironments(prompt, Set.of(env));
+            var savedV3 = createVersionWithoutEnvironments(prompt);
+
+            try (var response = promptResourceClient.callGetPrompt(promptId, null, env, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                Prompt fetched = response.readEntity(Prompt.class);
+                assertThat(fetched.requestedVersion()).isNotNull();
+                assertThat(fetched.requestedVersion().id()).isEqualTo(savedV2.id());
+                assertThat(fetched.requestedVersion().environments()).contains(env);
+                assertThat(fetched.latestVersion()).isNotNull();
+                assertThat(fetched.latestVersion().id()).isEqualTo(savedV3.id());
+            }
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}?environment=unknown returns 404 Not Found")
+        void getPromptByIdWithUnknownEnvironmentReturnsNotFound() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            try (var response = promptResourceClient.callGetPrompt(promptId, null, uniqueEnvName("missing"),
+                    API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id} with both mask_id and environment returns 400 Bad Request")
+        void getPromptByIdWithBothEnvAndMaskReturnsBadRequest() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            try (var response = promptResourceClient.callGetPrompt(promptId, UUID.randomUUID(),
+                    uniqueEnvName("conflict"), API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        @DisplayName("Create version with multiple environments: all envs are set and auto-created in registry")
+        void shouldCreateVersionWithMultipleEnvironments() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env1 = uniqueEnvName("create-a");
+            String env2 = uniqueEnvName("create-b");
+            var saved = createVersionWithEnvironments(prompt, Set.of(env1, env2));
+
+            getPromptVersionAndAssert(saved.id(), saved, API_KEY, TEST_WORKSPACE);
+            assertWorkspaceContainsEnvironment(env1);
+            assertWorkspaceContainsEnvironment(env2);
+        }
+
+        @Test
+        @DisplayName("Creating version with multiple envs where one is already taken returns 409 Conflict")
+        void creatingVersionWithMultipleEnvsWhereOneIsTakenReturnsConflict() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String takenEnv = uniqueEnvName("taken");
+            createVersionWithEnvironments(prompt, Set.of(takenEnv));
+
+            String freeEnv = uniqueEnvName("free");
+            var second = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION)
+                    .environments(Set.of(takenEnv, freeEnv)).build();
+            try (var response = postVersionRaw(prompt.name(), second, prompt.templateStructure())) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+            }
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}?environment resolves to same version when it has multiple environments")
+        void getPromptByIdResolvesEachEnvToSameMultiEnvVersion() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env1 = uniqueEnvName("multi-a");
+            String env2 = uniqueEnvName("multi-b");
+            var saved = createVersionWithEnvironments(prompt, Set.of(env1, env2));
+
+            for (String env : List.of(env1, env2)) {
+                try (var response = promptResourceClient.callGetPrompt(promptId, null, env, API_KEY, TEST_WORKSPACE)) {
+                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                    Prompt fetched = response.readEntity(Prompt.class);
+                    assertThat(fetched.requestedVersion()).isNotNull();
+                    assertThat(fetched.requestedVersion().id()).isEqualTo(saved.id());
+                    assertThat(fetched.requestedVersion().environments()).containsExactlyInAnyOrder(env1, env2);
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("PATCH replaces all envs: version had two envs, PATCH with different env replaces both")
+        void patchReplacesAllEnvironments() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env1 = uniqueEnvName("old1");
+            String env2 = uniqueEnvName("old2");
+            var saved = createVersionWithEnvironments(prompt, Set.of(env1, env2));
+
+            String env3 = uniqueEnvName("new");
+            environmentsResourceClient.createEnvironment(
+                    Environment.builder().name(env3).build(), API_KEY, TEST_WORKSPACE);
+
+            patchVersionEnvironments(saved.id(), Set.of(env3), HttpStatus.SC_NO_CONTENT);
+
+            getPromptVersionAndAssert(saved.id(), saved.toBuilder().environments(Set.of(env3)).build(), API_KEY,
+                    TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("POST /versions/retrieve resolves by each env when version has multiple environments")
+        void retrieveVersionByEachEnvWhenVersionHasMultipleEnvironments() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env1 = uniqueEnvName("ret-a");
+            String env2 = uniqueEnvName("ret-b");
+            var saved = createVersionWithEnvironments(prompt, Set.of(env1, env2));
+
+            for (String env : List.of(env1, env2)) {
+                var request = PromptVersionRetrieve.builder().name(prompt.name()).environment(env).build();
+                try (var response = promptResourceClient.callRetrievePromptVersion(request, API_KEY, TEST_WORKSPACE)) {
+                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                    PromptVersion retrieved = response.readEntity(PromptVersion.class);
+                    assertThat(retrieved.id()).isEqualTo(saved.id());
+                    assertThat(retrieved.environments()).containsExactlyInAnyOrder(env1, env2);
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("PATCH /versions/{id} sets the environment on a version when the env exists in the workspace")
+        void patchSetsEnvironmentOnVersion() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var saved = createVersionWithoutEnvironments(prompt);
+
+            String env = uniqueEnvName("patch");
+            environmentsResourceClient.createEnvironment(
+                    Environment.builder().name(env).build(), API_KEY, TEST_WORKSPACE);
+
+            patchVersionEnvironments(saved.id(), Set.of(env), HttpStatus.SC_NO_CONTENT);
+
+            getPromptVersionAndAssert(saved.id(), saved.toBuilder().environments(Set.of(env)).build(), API_KEY,
+                    TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("PATCH /versions/{id} assigns multiple environments to the same version")
+        void patchAssignsMultipleEnvironmentsToSameVersion() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var saved = createVersionWithoutEnvironments(prompt);
+
+            String env1 = uniqueEnvName("multi1");
+            String env2 = uniqueEnvName("multi2");
+            environmentsResourceClient.createEnvironment(
+                    Environment.builder().name(env1).build(), API_KEY, TEST_WORKSPACE);
+            environmentsResourceClient.createEnvironment(
+                    Environment.builder().name(env2).build(), API_KEY, TEST_WORKSPACE);
+
+            patchVersionEnvironments(saved.id(), Set.of(env1, env2), HttpStatus.SC_NO_CONTENT);
+
+            getPromptVersionAndAssert(saved.id(), saved.toBuilder().environments(Set.of(env1, env2)).build(), API_KEY,
+                    TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("PATCH /versions/{id} incrementally adds environment without removing existing ones")
+        void patchIncrementallyAddsEnvironmentToVersionWithExistingOnes() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env1 = uniqueEnvName("keep");
+            var saved = createVersionWithEnvironments(prompt, Set.of(env1));
+
+            String env2 = uniqueEnvName("add");
+            environmentsResourceClient.createEnvironment(
+                    Environment.builder().name(env2).build(), API_KEY, TEST_WORKSPACE);
+
+            patchVersionEnvironments(saved.id(), Set.of(env1, env2), HttpStatus.SC_NO_CONTENT);
+
+            getPromptVersionAndAssert(saved.id(), saved.toBuilder().environments(Set.of(env1, env2)).build(), API_KEY,
+                    TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("PATCH /versions/{id} with an unknown environment returns 409 Conflict")
+        void patchOnUnknownEnvironmentReturnsConflict() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var saved = createVersionWithoutEnvironments(prompt);
+
+            patchVersionEnvironments(saved.id(), Set.of(uniqueEnvName("ghost")), HttpStatus.SC_CONFLICT);
+        }
+
+        @Test
+        @DisplayName("PATCH /versions/{id} with empty environments clears all envs on the version")
+        void patchClearsEnvironmentsOnVersion() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env = uniqueEnvName("clear");
+            var saved = createVersionWithEnvironments(prompt, Set.of(env));
+
+            patchVersionEnvironments(saved.id(), Set.of(), HttpStatus.SC_NO_CONTENT);
+
+            getPromptVersionAndAssert(saved.id(), saved.toBuilder().environments(null).build(), API_KEY,
+                    TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("PATCH /versions/{id} moves environment ownership: prev owner is cleared atomically")
+        void patchMovesEnvironmentBetweenVersionsOfSamePrompt() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env = uniqueEnvName("move");
+            var savedOwner = createVersionWithEnvironments(prompt, Set.of(env));
+            var savedNext = createVersionWithoutEnvironments(prompt);
+
+            patchVersionEnvironments(savedNext.id(), Set.of(env), HttpStatus.SC_NO_CONTENT);
+
+            getPromptVersionAndAssert(savedOwner.id(), savedOwner.toBuilder().environments(null).build(), API_KEY,
+                    TEST_WORKSPACE);
+            getPromptVersionAndAssert(savedNext.id(), savedNext.toBuilder().environments(Set.of(env)).build(), API_KEY,
+                    TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("PATCH /versions/{id} on an unknown version returns 404 Not Found")
+        void patchOnUnknownVersionReturnsNotFound() {
+            patchVersionEnvironments(UUID.randomUUID(), Set.of(uniqueEnvName("ghost")), HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("PATCH /versions/{id} on a mask version returns 400 Bad Request")
+        void patchOnMaskVersionReturnsBadRequest() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var mask = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).environments(null).build();
+            var savedMask = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), mask, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            patchVersionEnvironments(savedMask.id(), Set.of(uniqueEnvName("masked")), HttpStatus.SC_BAD_REQUEST);
+        }
+
+        @Test
+        @DisplayName("POST /versions/retrieve resolves by environment when provided")
+        void retrieveVersionByEnvironment() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env = uniqueEnvName("ret");
+            var saved = createVersionWithEnvironments(prompt, Set.of(env));
+
+            var request = PromptVersionRetrieve.builder().name(prompt.name()).environment(env).build();
+            retrievePromptVersionAndAssert(request, saved, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("POST /versions/retrieve with both environment and commit returns 400 Bad Request")
+        void retrieveVersionWithBothEnvAndCommitReturnsBadRequest() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var request = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .environment(uniqueEnvName("both"))
+                    .commit("abcd1234")
+                    .build();
+
+            try (var response = promptResourceClient.callRetrievePromptVersion(request, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+            }
+        }
+
+        @Test
+        @DisplayName("Restored version is created without the source version's environments")
+        void restoredVersionDoesNotCarryEnvironment() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            String env = uniqueEnvName("restore");
+            var savedOriginal = createVersionWithEnvironments(prompt, Set.of(env));
+            createVersionWithoutEnvironments(prompt);
+
+            try (var response = promptResourceClient.callRestorePromptVersion(promptId, savedOriginal.id(),
+                    API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                PromptVersion restored = response.readEntity(PromptVersion.class);
+                assertThat(restored.id()).isNotEqualTo(savedOriginal.id());
+                assertThat(restored.environments()).isNullOrEmpty();
+            }
+
+            getPromptVersionAndAssert(savedOriginal.id(), savedOriginal, API_KEY, TEST_WORKSPACE);
+        }
+
+        private PromptVersion createVersionWithEnvironments(Prompt prompt, Set<String> environments) {
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION)
+                    .environments(environments).build();
+            return createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+        }
+
+        private PromptVersion createVersionWithoutEnvironments(Prompt prompt) {
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.PROMPT_VERSION)
+                    .environments(null).build();
+            return createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+        }
+
+        private String uniqueEnvName(String prefix) {
+            return prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        }
+
+        private void patchVersionEnvironments(UUID versionId, Set<String> environments, int expectedStatus) {
+            var update = PromptVersionEnvironmentUpdate.builder().environments(environments).build();
+            try (var response = promptResourceClient.callSetPromptVersionEnvironment(versionId, update, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            }
+        }
+
+        private Response postVersionRaw(String name, PromptVersion version, TemplateStructure templateStructure) {
+            return promptResourceClient.callCreatePromptVersion(
+                    createPromptVersionRequest(name, version, templateStructure), API_KEY, TEST_WORKSPACE);
+        }
+
+        private void assertWorkspaceContainsEnvironment(String env) {
+            try (var response = environmentsResourceClient.callFind(API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                Environment.EnvironmentPage page = response.readEntity(Environment.EnvironmentPage.class);
+                assertThat(page.content()).extracting(Environment::name).contains(env);
+            }
+        }
+    }
+
+    private Prompt.PromptBuilder buildPrompt() {
+        return PromptResourceClient.buildPrompt(factory).toBuilder();
+    }
+
+    @Nested
+    @DisplayName("Prompt Version Numbers")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptVersionNumbers {
+
+        @Test
+        @DisplayName("Sequential version_number is assigned v1, v2, v3 across successive versions")
+        void sequentialVersionNumbersAreAssigned() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var v1 = createRegularVersion(prompt);
+            var v2 = createRegularVersion(prompt);
+            var v3 = createRegularVersion(prompt);
+
+            assertThat(v1.versionNumber()).isEqualTo("v1");
+            assertThat(v2.versionNumber()).isEqualTo("v2");
+            assertThat(v3.versionNumber()).isEqualTo("v3");
+        }
+
+        @Test
+        @DisplayName("Mask versions have a null version_number and do not advance the counter")
+        void masksDoNotAdvanceVersionNumber() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var v1 = createRegularVersion(prompt);
+            var mask1 = createMaskVersion(prompt);
+            var v2 = createRegularVersion(prompt);
+            var mask2 = createMaskVersion(prompt);
+            var v3 = createRegularVersion(prompt);
+
+            assertThat(v1.versionNumber()).isEqualTo("v1");
+            assertThat(v2.versionNumber()).isEqualTo("v2");
+            assertThat(v3.versionNumber()).isEqualTo("v3");
+            assertThat(mask1.versionNumber()).isNull();
+            assertThat(mask2.versionNumber()).isNull();
+        }
+
+        @Test
+        @DisplayName("getPromptById returns version_number on latestVersion")
+        void getPromptByIdExposesVersionNumberOnLatest() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            createRegularVersion(prompt);
+            createRegularVersion(prompt);
+
+            var fetched = promptResourceClient.getPrompt(promptId, API_KEY, TEST_WORKSPACE);
+            assertThat(fetched.latestVersion()).isNotNull();
+            assertThat(fetched.latestVersion().versionNumber()).isEqualTo("v2");
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}/versions/by-number/{versionNumber} returns the matching version")
+        void getByNumberReturnsMatchingVersion() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            createRegularVersion(prompt);
+            var v2 = createRegularVersion(prompt);
+            createRegularVersion(prompt);
+
+            try (var response = promptResourceClient.callGetPromptVersionByNumber(promptId, "v2", API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                PromptVersion fetched = response.readEntity(PromptVersion.class);
+                assertThat(fetched.id()).isEqualTo(v2.id());
+                assertThat(fetched.versionNumber()).isEqualTo("v2");
+            }
+        }
+
+        @Test
+        @DisplayName("GET /by-number/{versionNumber} returns 404 when no such version exists")
+        void getByNumberReturnsNotFoundForUnknownNumber() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            createRegularVersion(prompt);
+
+            try (var response = promptResourceClient.callGetPromptVersionByNumber(promptId, "v99", API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("GET /by-number/{versionNumber} returns 400 when the value does not match v<N>")
+        void getByNumberRejectsInvalidFormat() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            try (var response = promptResourceClient.callGetPromptVersionByNumber(promptId, "not-a-number", API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        @DisplayName("POST /versions/retrieve resolves by version_number")
+        void retrieveResolvesByVersionNumber() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var v1 = createRegularVersion(prompt);
+            createRegularVersion(prompt);
+
+            var request = PromptVersionRetrieve.builder()
+                    .name(prompt.name())
+                    .versionNumber("v1")
+                    .build();
+            try (var response = promptResourceClient.callRetrievePromptVersion(request, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                PromptVersion fetched = response.readEntity(PromptVersion.class);
+                assertThat(fetched.id()).isEqualTo(v1.id());
+                assertThat(fetched.versionNumber()).isEqualTo("v1");
+            }
+        }
+
+        @Test
+        @DisplayName("POST /versions/retrieve returns 422 when version_number is combined with commit or environment")
+        void retrieveRejectsMutuallyExclusiveResolutionFields() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var versionAndCommit = PromptVersionRetrieve.builder()
+                    .name(prompt.name()).versionNumber("v1").commit("abcdef12").build();
+            try (var response = promptResourceClient.callRetrievePromptVersion(versionAndCommit, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+
+            var versionAndEnv = PromptVersionRetrieve.builder()
+                    .name(prompt.name()).versionNumber("v1").environment("production").build();
+            try (var response = promptResourceClient.callRetrievePromptVersion(versionAndEnv, API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        @Test
+        @DisplayName("Restoring a version creates a new version with the next sequential number")
+        void restoreAssignsNextSequentialNumber() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var v1 = createRegularVersion(prompt);
+            createRegularVersion(prompt);
+            createRegularVersion(prompt);
+
+            try (var response = promptResourceClient.callRestorePromptVersion(promptId, v1.id(), API_KEY,
+                    TEST_WORKSPACE)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                PromptVersion restored = response.readEntity(PromptVersion.class);
+                assertThat(restored.id()).isNotEqualTo(v1.id());
+                assertThat(restored.versionNumber()).isEqualTo("v4");
+            }
+        }
+
+        private PromptVersion createRegularVersion(Prompt prompt) {
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .versionType(PromptVersionType.PROMPT_VERSION)
+                    .environments(null)
+                    .build();
+            return createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), version, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+        }
+
+        private PromptVersion createMaskVersion(Prompt prompt) {
+            var mask = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .versionType(PromptVersionType.MASK)
+                    .environments(null)
+                    .build();
+            return createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), mask, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+        }
+    }
+
 }

@@ -1,7 +1,17 @@
 export const DEFAULT_CHART_TICK = {
-  stroke: "#373D4D",
+  stroke: "var(--chart-tick-stroke)",
   fontWeight: 200,
   letterSpacing: "0.05rem",
   fontSize: "10px",
-  lineHeight: "12px",
+  lineheight: "12px",
 };
+
+export const DEFAULT_CHART_GRID_PROPS = {
+  stroke: "var(--chart-grid-stroke)",
+};
+
+export enum CHART_TYPE {
+  line = "line",
+  bar = "bar",
+  radar = "radar",
+}

@@ -16,6 +16,7 @@ import java.util.UUID;
 public record Comment(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @NotBlank String text,
+        UUID sourceQueueId,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,

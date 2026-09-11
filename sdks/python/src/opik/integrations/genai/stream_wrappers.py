@@ -38,7 +38,7 @@ def wrap_sync_iterator(
             yield item
     except Exception as exception:
         LOGGER.debug(
-            "Exception raised in genai response stream.",
+            "Exception raised in genai response stream: %s",
             str(exception),
             exc_info=True,
         )
@@ -75,7 +75,7 @@ async def wrap_async_iterator(
             yield item
     except Exception as exception:
         LOGGER.debug(
-            "Exception raised in genai response stream.",
+            "Exception raised in genai response stream: %s",
             str(exception),
             exc_info=True,
         )

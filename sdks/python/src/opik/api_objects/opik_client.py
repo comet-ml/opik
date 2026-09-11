@@ -1,45 +1,108 @@
-import atexit
+import contextvars
+import copy
 import datetime
 import functools
+import json
 import logging
-from typing import Any, Dict, List, Optional, Union
+import threading
+import weakref
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+    Literal,
+    cast,
+    overload,
+)
 
-import httpx
-
+from . import (
+    connection_resources,
+    constants,
+    dashboard,
+    dataset,
+    experiment,
+    optimization,
+    helpers,
+    opik_query_language,
+    rest_helpers,
+    rest_stream_parser,
+    search_helpers,
+    span as span_module,
+    trace as trace_module,
+)
+from .dashboard import rest_operations as dashboard_rest_operations
+from .dashboard import types as dashboard_types
+from .dashboard import validation as dashboard_validation
+from .annotation_queue import (
+    TracesAnnotationQueue,
+    ThreadsAnnotationQueue,
+)
+from .annotation_queue import rest_operations as annotation_queue_rest_operations
+from .attachment import Attachment
+from .attachment import client as attachment_client
+from .attachment import converters as attachment_converters
+from .dataset import test_suite
+from .dataset import execution_policy as dataset_execution_policy
+from .dataset import rest_operations as dataset_rest_operations
+from .experiment import experiments_client
+from .experiment import helpers as experiment_helpers
+from .experiment import rest_operations as experiment_rest_operations
+from . import prompt as prompt_module
+from .prompt import client as prompt_client
+from .prompt import prompt_cache
+from .prompt.text import prompt as text_prompt_module
+from .prompt.chat import chat_prompt as chat_prompt_module
+from ..validation.chat_prompt_messages import ChatPromptMessagesValidator
+from .agent_config.base import Config
+from .agent_config.config import ConfigManager
+from .threads import threads_client
+from .trace import migration as trace_migration, trace_client
+from .. import config as opik_config
 from .. import (
-    config,
     datetime_helpers,
     exceptions,
     httpx_client,
     id_helpers,
     llm_usage,
-    rest_client_configurator,
     url_helpers,
 )
-from ..message_processing import messages, streamer_constructors
+from ..message_processing import (
+    data_loss,
+    messages,
+)
 from ..message_processing.batching import sequence_splitter
 from ..rest_api import client as rest_api_client
+from ..rest_api import errors as rest_api_errors
 from ..rest_api.core.api_error import ApiError
-from ..rest_api.types import dataset_public, project_public, span_public, trace_public
-from ..types import ErrorInfoDict, FeedbackScoreDict, LLMProvider, SpanType
-from . import (
-    constants,
-    dataset,
-    experiment,
-    helpers,
-    opik_query_language,
-    span,
-    trace,
-    validation_helpers,
+from ..rest_api.types import (
+    environment_public,
+    project_public,
+    span_public,
+    trace_public,
+    trace_thread,
+    span_filter_public,
+    trace_filter_public,
 )
-from .dataset import rest_operations as dataset_rest_operations
-from .experiment import helpers as experiment_helpers
-from .experiment import rest_operations as experiment_rest_operations
-from .prompt import Prompt
-from .prompt.client import PromptClient
-from .trace import migration as trace_migration
+from ..types import (
+    BatchAssertionResultDict,
+    BatchFeedbackScoreDict,
+    ErrorInfoDict,
+    FeedbackScoreDict,
+    LLMProvider,
+    SpanType,
+    TraceSource,
+)
+from .. import analytics, context_storage
 
 LOGGER = logging.getLogger(__name__)
+
+T = TypeVar("T")
+_ConfigT = TypeVar("_ConfigT", bound=Config)
+QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
 
 
 class Opik:
@@ -49,6 +112,7 @@ class Opik:
         workspace: Optional[str] = None,
         host: Optional[str] = None,
         api_key: Optional[str] = None,
+        batching: bool = True,
         _use_batching: bool = False,
         _show_misconfiguration_message: bool = True,
     ) -> None:
@@ -56,19 +120,24 @@ class Opik:
         Initialize an Opik object that can be used to log traces and spans manually to Opik server.
 
         Args:
-            project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`.
+            project_name: The name of the project. If not provided, falls back to the active project context
+                (from @track or opik.project_context), then to the `Default Project`.
             workspace: The name of the workspace. If not provided, `default` will be used.
             host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
             api_key: The API key for Opik. This parameter is ignored for local installations.
-            _use_batching: intended for internal usage in specific conditions only.
-                Enabling it is unsafe and can lead to data loss.
+            batching: If True (default), enables request batching for higher throughput.
+                When enabled, update operations (``update_span``, ``update_trace``,
+                ``Span.update``, ``Trace.update``) may cause data loss if the update
+                arrives at the server before the batched create request is flushed.
+            _use_batching: Deprecated. Use ``batching`` instead.
             _show_misconfiguration_message: intended for internal usage in specific conditions only.
                 Print a warning message if the Opik server is not configured properly.
         Returns:
             None
         """
+        analytics.track_event("client", "init")
 
-        config_ = config.get_from_user_inputs(
+        config_ = opik_config.get_from_user_inputs(
             project_name=project_name,
             workspace=workspace,
             url_override=host,
@@ -84,51 +153,74 @@ class Opik:
         self._project_name: str = config_.project_name
         self._flush_timeout: Optional[int] = config_.default_flush_timeout
         self._project_name_most_recent_trace: Optional[str] = None
-        self._use_batching = _use_batching
+        self._use_batching = batching or _use_batching
 
-        self._initialize_streamer(
-            base_url=config_.url_override,
-            workers=config_.background_workers,
-            api_key=config_.api_key,
-            check_tls_certificate=config_.check_tls_certificate,
-            use_batching=_use_batching,
-        )
-        atexit.register(self.end, timeout=self._flush_timeout)
+        self._acquire_shared_resources()
 
     @property
-    def config(self) -> config.OpikConfig:
+    def config(self) -> opik_config.OpikConfig:
         """
         Returns:
-            config.OpikConfig: Read-only copy of the configuration of the Opik client.
+            OpikConfig: Read-only copy of the configuration of the Opik client.
         """
         return self._config.model_copy()
 
-    def _initialize_streamer(
-        self,
-        base_url: str,
-        workers: int,
-        api_key: Optional[str],
-        check_tls_certificate: bool,
-        use_batching: bool,
-    ) -> None:
-        httpx_client_ = httpx_client.get(
-            workspace=self._workspace,
-            api_key=api_key,
-            check_tls_certificate=check_tls_certificate,
+    @property
+    def rest_client(self) -> rest_api_client.OpikApi:
+        """
+        Provides direct access to the underlying REST API client.
+
+        WARNING: This client is not guaranteed to be backward compatible with future SDK versions.
+        While it provides a convenient way to use the current REST API of Opik.
+        However, it's not considered safe to heavily rely on its API as Opik's REST API contracts may change.
+
+        Returns:
+            OpikApi: The REST client used by the Opik client.
+        """
+        return self._rest_client
+
+    @property
+    def project_name(self) -> str:
+        """
+        This property retrieves the name of the project associated with the instance.
+        It is a read-only property.
+
+        Returns:
+            str: The name of the project.
+        """
+        return self._project_name
+
+    def _acquire_shared_resources(self) -> None:
+        self._lease = connection_resources.MANAGER.acquire(
+            self._config,
+            use_batching=self._use_batching,
         )
-        self._rest_client = rest_api_client.OpikApi(
-            base_url=base_url,
-            httpx_client=httpx_client_,
+        self._resources = self._lease.resources
+        self._bind_resources()
+
+        # ``self._lease.release`` is a bound method of the lease, so the finalizer
+        # captures the lease (and through it the manager), never ``self``. A
+        # dropped handle therefore releases its reference on GC without the
+        # atexit strong-ref pin that caused OPIK-7127.
+        #
+        # ``close_on_zero=False``: a finalizer must do nothing risky, so the GC
+        # path only decrements the bundle's refcount. It never closes (thread
+        # joins, network flush) — that is left to an explicit ``end()`` or to the
+        # atexit ``close_all``.
+        self._finalizer = weakref.finalize(
+            self, self._lease.release, self._flush_timeout, close_on_zero=False
         )
-        self._rest_client._client_wrapper._timeout = (
-            httpx.USE_CLIENT_DEFAULT
-        )  # See https://github.com/fern-api/fern/issues/5321
-        rest_client_configurator.configure(self._rest_client)
-        self._streamer = streamer_constructors.construct_online_streamer(
-            n_consumers=workers,
-            rest_client=self._rest_client,
-            use_batching=use_batching,
-        )
+
+    def _bind_resources(self) -> None:
+        # Expose the bundle's objects as attributes so the rest of the client
+        # (and external callers of ``__internal_api__message_processor__``)
+        # delegate to the shared connection resources unchanged.
+        self._httpx_client = self._resources.httpx_client
+        self._rest_client = self._resources.rest_client
+        self.__internal_api__message_processor__ = self._resources.message_processor
+        self._streamer = self._resources.streamer
+        self._flush_reporter = self._resources.flush_reporter
+        self._last_flush_result: Optional[data_loss.FlushResult] = None
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
         project_url = url_helpers.get_project_url_by_trace_id(
@@ -144,17 +236,42 @@ class Opik:
             )
             self._project_name_most_recent_trace = project_name
 
-    def _display_created_dataset_url(self, dataset_name: str, dataset_id: str) -> None:
-        dataset_url = url_helpers.get_dataset_url_by_id(
-            dataset_id, self._config.url_override
-        )
+    def _log_created_resource_url(
+        self,
+        *,
+        kind: str,
+        name: str,
+        project_name: str,
+        build_url: Callable[[str, str], str],
+    ) -> None:
+        """Log the direct, project-scoped URL of a just-created resource.
 
-        LOGGER.info(f'Created a "{dataset_name}" dataset at {dataset_url}.')
+        Best-effort: the resource is already persisted by the time this runs,
+        so a failure to resolve the project or workspace must not turn a
+        successful creation into an error. ``build_url`` receives the resolved
+        ``(workspace, project_id)``.
+        """
+        try:
+            project_id = rest_helpers.resolve_project_id_by_name(
+                self._rest_client, project_name
+            )
+            url = build_url(self._dereferenced_workspace(), project_id)
+        except Exception:
+            LOGGER.debug(
+                "Could not resolve the URL for the created %s %r",
+                kind,
+                name,
+                exc_info=True,
+            )
+            return
+
+        LOGGER.info(f'Created a "{name}" {kind} at {url}.')
 
     def auth_check(self) -> None:
         """
         Checks if current API key user has an access to the configured workspace and its content.
         """
+        analytics.track_event("client", "auth_check")
         self._rest_client.check.access(
             request={}  # empty body for future backward compatibility
         )
@@ -173,13 +290,15 @@ class Opik:
         project_name: Optional[str] = None,
         error_info: Optional[ErrorInfoDict] = None,
         thread_id: Optional[str] = None,
+        attachments: Optional[List[Attachment]] = None,
+        environment: Optional[str] = None,
         **ignored_kwargs: Any,
-    ) -> trace.Trace:
+    ) -> trace_module.Trace:
         """
         Create and log a new trace.
 
         Args:
-            id: The unique identifier for the trace, if not provided a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
+            id: The unique identifier for the trace, if not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
             name: The name of the trace.
             start_time: The start time of the trace. If not provided, the current local time will be used.
             end_time: The end time of the trace.
@@ -188,22 +307,62 @@ class Opik:
             metadata: Additional metadata for the trace. This can be any valid JSON serializable object.
             tags: Tags associated with the trace.
             feedback_scores: The list of feedback score dicts associated with the trace. Dicts don't require to have an `id` value.
-            project_name: The name of the project. If not set, the project name which was configured when Opik instance
-                was created will be used.
+            project_name: The name of the project. If not provided, falls back to the active project context
+                (from @track or opik.project_context), then to the client's default.
             error_info: The dictionary with error information (typically used when the trace function has failed).
             thread_id: Used to group multiple traces into a thread.
                 The identifier is user-defined and has to be unique per project.
+            attachments: The list of attachments to be uploaded to the trace.
 
         Returns:
             trace.Trace: The created trace object.
         """
+        return self.__internal_api__trace__(
+            id=id,
+            name=name,
+            start_time=start_time,
+            end_time=end_time,
+            input=input,
+            output=output,
+            metadata=metadata,
+            tags=tags,
+            feedback_scores=feedback_scores,
+            project_name=project_name,
+            error_info=error_info,
+            thread_id=thread_id,
+            attachments=attachments,
+            source="sdk",
+            environment=environment,
+        )
+
+    def __internal_api__trace__(
+        self,
+        id: Optional[str] = None,
+        name: Optional[str] = None,
+        start_time: Optional[datetime.datetime] = None,
+        end_time: Optional[datetime.datetime] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
+        project_name: Optional[str] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        thread_id: Optional[str] = None,
+        attachments: Optional[List[Attachment]] = None,
+        source: TraceSource = "sdk",
+        environment: Optional[str] = None,
+        **ignored_kwargs: Any,
+    ) -> trace_module.Trace:
         id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
+        last_updated_at = datetime_helpers.local_timestamp()
 
-        if project_name is None:
-            project_name = self._project_name
+        project_name = self._resolve_project_name(project_name)
+        if environment is None:
+            environment = self._config.environment
 
         create_trace_message = messages.CreateTraceMessage(
             trace_id=id,
@@ -217,6 +376,9 @@ class Opik:
             tags=tags,
             error_info=error_info,
             thread_id=thread_id,
+            last_updated_at=last_updated_at,
+            source=source,
+            environment=environment,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(trace_id=id, project_name=project_name)
@@ -225,12 +387,30 @@ class Opik:
             for feedback_score in feedback_scores:
                 feedback_score["id"] = id
 
-            self.log_traces_feedback_scores(feedback_scores, project_name)
+            self.log_traces_feedback_scores(
+                cast(List[BatchFeedbackScoreDict], feedback_scores), project_name
+            )
 
-        return trace.Trace(
+        if attachments is not None:
+            for attachment_data in attachments:
+                self._streamer.put(
+                    attachment_converters.attachment_to_message(
+                        attachment_data=attachment_data,
+                        entity_type="trace",
+                        entity_id=id,
+                        project_name=project_name,
+                        url_override=self._config.url_override,
+                    )
+                )
+
+        return trace_module.Trace(
             id=id,
             message_streamer=self._streamer,
             project_name=project_name,
+            url_override=self._config.url_override,
+            source=source,
+            config=self._config,
+            environment=environment,
         )
 
     def copy_traces(
@@ -248,7 +428,7 @@ class Opik:
 
         Note: This method is not optimized for large projects, if you run into any issues please raise
         an issue on GitHub. In addition, be aware that deleting traces that are linked to experiments
-        will lead to inconsistancies in the UI.
+        will lead to inconsistencies in the UI.
 
         Args:
             project_name: The name of the project to copy traces from.
@@ -258,23 +438,24 @@ class Opik:
         Returns:
             None
         """
+        analytics.track_event("client", "copy_traces")
 
         if not self._use_batching:
             raise exceptions.OpikException(
-                "In order to use this method, you must enable batching using opik.Opik(_use_batching=True)."
+                "In order to use this method, you must enable batching using opik.Opik(batching=True)."
             )
 
         traces_public = self.search_traces(project_name=project_name)
         spans_public = self.search_spans(project_name=project_name)
 
         trace_data = [
-            trace.trace_public_to_trace_data(
+            trace_module.trace_public_to_trace_data(
                 project_name=project_name, trace_public=trace_public_
             )
             for trace_public_ in traces_public
         ]
         span_data = [
-            span.span_public_to_span_data(
+            span_module.span_public_to_span_data(
                 project_name=project_name, span_public_=span_public_
             )
             for span_public_ in spans_public
@@ -287,10 +468,10 @@ class Opik:
         )
 
         for trace_data_ in new_trace_data:
-            self.trace(**trace_data_.__dict__)
+            self.__internal_api__trace__(**trace_data_.as_parameters)
 
         for span_data_ in new_span_data:
-            self.span(**span_data_.__dict__)
+            self.__internal_api__span__(**span_data_.as_parameters)
 
         if delete_original_project:
             trace_ids = [trace_.id for trace_ in trace_data]
@@ -320,13 +501,14 @@ class Opik:
         provider: Optional[Union[str, LLMProvider]] = None,
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
-    ) -> span.Span:
+        attachments: Optional[List[Attachment]] = None,
+    ) -> span_module.Span:
         """
         Create and log a new span.
 
         Args:
             trace_id: The unique identifier for the trace. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
-            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid.ramsey.dev/en/stable/rfc4122/version8.html) ID.
+            id: The unique identifier for the span. If not provided, a new ID will be generated. Must be a valid [UUIDv7](https://uuid7.com/) ID.
             parent_span_id: The unique identifier for the parent span.
             name: The name of the span.
             type: The type of the span. Default is "general".
@@ -336,39 +518,79 @@ class Opik:
             input: The input data for the span. This can be any valid JSON serializable object.
             output: The output data for the span. This can be any valid JSON serializable object.
             tags: Tags associated with the span.
-            feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require to have an `id` value.
-            project_name: The name of the project. If not set, the project name which was configured when Opik instance
-                was created will be used.
-            usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
-                the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+            feedback_scores: The list of feedback score dicts associated with the span. Dicts don't require having an `id` value.
+            project_name: The name of the project. If not provided, falls back to the active project context
+                (from @track or opik.project_context), then to the client's default.
+            usage: Usage data for the span. In order for input, output, and total tokens to be visible in the UI,
+                the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens, and total_tokens.
                 If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
                 format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
             model: The name of LLM (in this case `type` parameter should be == `llm`)
             provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
-                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
-                If your provider not in the list, you can still specify it but the cost tracking will not be available
+                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our GitHub - https://github.com/comet-ml/opik.
+                If your provider is not in the list, you can still specify it, but the cost tracking will not be available
             error_info: The dictionary with error information (typically used when the span function has failed).
             total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
+            attachments: The list of attachments to be uploaded to the span.
 
         Returns:
             span.Span: The created span object.
         """
+        return self.__internal_api__span__(
+            trace_id=trace_id,
+            id=id,
+            parent_span_id=parent_span_id,
+            name=name,
+            type=type,
+            start_time=start_time,
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            usage=usage,
+            feedback_scores=feedback_scores,
+            project_name=project_name,
+            model=model,
+            provider=provider,
+            error_info=error_info,
+            total_cost=total_cost,
+            attachments=attachments,
+            source="sdk",
+        )
+
+    def __internal_api__span__(
+        self,
+        trace_id: Optional[str] = None,
+        id: Optional[str] = None,
+        parent_span_id: Optional[str] = None,
+        name: Optional[str] = None,
+        type: SpanType = "general",
+        start_time: Optional[datetime.datetime] = None,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
+        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
+        project_name: Optional[str] = None,
+        model: Optional[str] = None,
+        provider: Optional[Union[str, LLMProvider]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
+        attachments: Optional[List[Attachment]] = None,
+        source: TraceSource = "sdk",
+        environment: Optional[str] = None,
+    ) -> span_module.Span:
         id = id if id is not None else id_helpers.generate_id()
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
         )
 
-        backend_compatible_usage = validation_helpers.validate_and_parse_usage(
-            usage=usage,
-            logger=LOGGER,
-            provider=provider,
-        )
-
-        if backend_compatible_usage is not None:
-            metadata = helpers.add_usage_to_metadata(usage=usage, metadata=metadata)
-
-        if project_name is None:
-            project_name = self._project_name
+        project_name = self._resolve_project_name(project_name)
+        if environment is None:
+            environment = self._config.environment
 
         if trace_id is None:
             trace_id = id_helpers.generate_id()
@@ -386,13 +608,26 @@ class Opik:
                 tags=tags,
                 error_info=error_info,
                 thread_id=None,
+                last_updated_at=datetime_helpers.local_timestamp(),
+                source=source,
+                environment=environment,
             )
             self._streamer.put(create_trace_message)
 
-        create_span_message = messages.CreateSpanMessage(
-            span_id=id,
+        if feedback_scores is not None:
+            for feedback_score in feedback_scores:
+                feedback_score["id"] = id
+
+            self.log_spans_feedback_scores(
+                cast(List[BatchFeedbackScoreDict], feedback_scores), project_name
+            )
+
+        return span_module.span_client.create_span(
             trace_id=trace_id,
             project_name=project_name,
+            url_override=self._config.url_override,
+            message_streamer=self._streamer,
+            span_id=id,
             parent_span_id=parent_span_id,
             name=name,
             type=type,
@@ -402,64 +637,218 @@ class Opik:
             output=output,
             metadata=metadata,
             tags=tags,
-            usage=backend_compatible_usage,
+            usage=usage,
             model=model,
             provider=provider,
             error_info=error_info,
             total_cost=total_cost,
+            attachments=attachments,
+            source=source,
+            config=self._config,
+            environment=environment,
         )
-        self._streamer.put(create_span_message)
 
-        if feedback_scores is not None:
-            for feedback_score in feedback_scores:
-                feedback_score["id"] = id
+    def update_span(
+        self,
+        id: str,
+        trace_id: str,
+        parent_span_id: Optional[str],
+        project_name: str,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
+        model: Optional[str] = None,
+        provider: Optional[Union[LLMProvider, str]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        total_cost: Optional[float] = None,
+        attachments: Optional[List[Attachment]] = None,
+    ) -> None:
+        """
+        Update the attributes of an existing span.
 
-            self.log_spans_feedback_scores(feedback_scores, project_name)
+        This method should only be used after the span has been fully created and stored.
+        If called before or immediately after span creation, the update may silently fail or result in incorrect data.
 
-        return span.Span(
+        This method uses four parameters to identify the span:
+            - `id`
+            - `trace_id`
+            - `parent_span_id`
+            - `project_name`
+
+        These parameters **must match exactly** the values used when the span was created.
+        If any of them are incorrect, the update may not apply and no error will be raised.
+
+        All other parameters are optional and will update the corresponding fields in the span.
+        If a parameter is not provided, the existing value will remain unchanged.
+
+        Args:
+            id: The unique identifier for the span to update.
+            trace_id: The unique identifier for the trace to which the span belongs.
+            parent_span_id: The unique identifier for the parent span.
+            project_name: The project name to which the span belongs.
+            end_time: The new end time of the span.
+            metadata: The new metadata to be associated with the span.
+            input: The new input data for the span.
+            output: The new output data for the span.
+            tags: A new list of tags to be associated with the span.
+            usage: The new usage data for the span. In order for input, output and total tokens to be visible in the UI,
+                the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+                If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
+                format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
+            model: The new name of LLM.
+            provider: The new provider of LLM. You can find providers officially supported by Opik for cost tracking
+                in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
+                If your provider not in the list, you can still specify it but the cost tracking will not be available
+            error_info: The new dictionary with error information (typically used when the span function has failed).
+            total_cost: The new cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
+            attachments: The new list of attachments to be uploaded to the span.
+
+        Returns:
+            None
+        """
+        analytics.track_event("client", "update_span")
+        helpers.warn_if_batching_update(
+            use_batching=self._use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Opik.update_span()",
+        )
+
+        span_module.span_client.update_span(
             id=id,
+            trace_id=trace_id,
             parent_span_id=parent_span_id,
+            url_override=self._config.url_override,
+            message_streamer=self._streamer,
+            project_name=project_name,
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            usage=usage,
+            model=model,
+            provider=provider,
+            error_info=error_info,
+            total_cost=total_cost,
+            attachments=attachments,
+            source="sdk",
+        )
+
+    def update_trace(
+        self,
+        trace_id: str,
+        project_name: str,
+        end_time: Optional[datetime.datetime] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        input: Optional[Dict[str, Any]] = None,
+        output: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[Any]] = None,
+        error_info: Optional[ErrorInfoDict] = None,
+        thread_id: Optional[str] = None,
+    ) -> None:
+        """
+        Update the trace attributes.
+
+        This method should only be used after the trace has been fully created and stored.
+        If called before or immediately after trace creation, the update may silently fail or result in incorrect data.
+
+        This method uses two parameters to identify the trace:
+            - `trace_id`
+            - `project_name`
+
+        These parameters **must match exactly** the values used when the trace was created.
+        If any of them are incorrect, the update may not apply and no error will be raised.
+
+        All other parameters are optional and will update the corresponding fields in the trace.
+        If a parameter is not provided, the existing value will remain unchanged.
+
+        Args:
+            trace_id: The unique identifier for the trace.
+            project_name: The project name to which the trace belongs.
+            end_time: The end time of the trace.
+            metadata: Additional metadata to be associated with the trace.
+            input: The input data for the trace.
+            output: The output data for the trace.
+            tags: A list of tags to be associated with the trace.
+            error_info: The dictionary with error information (typically used when the trace function has failed).
+            thread_id: Used to group multiple traces into a thread.
+                The identifier is user-defined and has to be unique per project.
+
+        Returns:
+            None
+        """
+        analytics.track_event("client", "update_trace")
+        helpers.warn_if_batching_update(
+            use_batching=self._use_batching,
+            suppress_warning=self._config.suppress_batching_update_warning,
+            method_name="Opik.update_trace()",
+        )
+
+        if not trace_id or not project_name:
+            raise ValueError(
+                "trace_id and project_name must be provided and can not be None or empty, "
+                f"trace_id: {trace_id}, project_name: {project_name}"
+            )
+
+        trace_client.update_trace(
             trace_id=trace_id,
             project_name=project_name,
             message_streamer=self._streamer,
+            end_time=end_time,
+            metadata=metadata,
+            input=input,
+            output=output,
+            tags=tags,
+            error_info=error_info,
+            thread_id=thread_id,
+            source="sdk",
         )
 
     def log_spans_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Log feedback scores for spans.
 
         Args:
-            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a span id via `id` key for each score is mandatory.
-            project_name: The name of the project in which the spans are logged. If not set, the project name
-                which was configured when Opik instance was created will be used.
+            project_name: The name of the project in which the spans are logged. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
             None
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> # Batch logging across multiple projects
+            >>> scores = [
+            >>>     {"id": span1_id, "name": "accuracy", "value": 0.95, "project_name": "project-A"},
+            >>>     {"id": span2_id, "name": "accuracy", "value": 0.88, "project_name": "project-B"},
+            >>> ]
+            >>> client.log_spans_feedback_scores(scores=scores)
         """
-        valid_scores = [
-            score
-            for score in scores
-            if validation_helpers.validate_feedback_score(score, LOGGER) is not None
-        ]
-
-        if len(valid_scores) == 0:
-            return None
-
-        score_messages = [
-            messages.FeedbackScoreMessage(
-                source=constants.FEEDBACK_SCORE_SOURCE_SDK,
-                project_name=project_name or self._project_name,
-                **score_dict,
+        analytics.track_event("client", "log_spans_feedback_scores")
+        score_messages = helpers.parse_feedback_score_messages(
+            scores=scores,
+            project_name=self._resolve_project_name(project_name),
+            parsed_item_class=messages.FeedbackScoreMessage,
+            logger=LOGGER,
+        )
+        if score_messages is None:
+            LOGGER.error(
+                f"No valid spans feedback scores to log from provided ones: {scores}"
             )
-            for score_dict in valid_scores
-        ]
+            return
 
         for batch in sequence_splitter.split_into_batches(
             score_messages,
-            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_payload_size_MB=opik_config.MAX_BATCH_SIZE_MB,
             max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
             add_span_feedback_scores_batch_message = (
@@ -469,47 +858,202 @@ class Opik:
             self._streamer.put(add_span_feedback_scores_batch_message)
 
     def log_traces_feedback_scores(
-        self, scores: List[FeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
     ) -> None:
         """
         Log feedback scores for traces.
 
         Args:
-            scores (List[FeedbackScoreDict]): A list of feedback score dictionaries.
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
                 Specifying a trace id via `id` key for each score is mandatory.
-            project_name: The name of the project in which the traces are logged. If not set, the project name
-                which was configured when Opik instance was created will be used.
+            project_name: The name of the project in which the traces are logged. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
 
         Returns:
             None
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> # Batch logging across multiple projects
+            >>> scores = [
+            >>>     {"id": trace1_id, "name": "accuracy", "value": 0.95, "project_name": "project-A"},
+            >>>     {"id": trace2_id, "name": "accuracy", "value": 0.88, "project_name": "project-B"},
+            >>> ]
+            >>> client.log_traces_feedback_scores(scores=scores)
         """
-        valid_scores = [
-            score
-            for score in scores
-            if validation_helpers.validate_feedback_score(score, LOGGER) is not None
-        ]
+        analytics.track_event("client", "log_traces_feedback_scores")
+        score_messages = helpers.parse_feedback_score_messages(
+            scores=scores,
+            project_name=self._resolve_project_name(project_name),
+            parsed_item_class=messages.FeedbackScoreMessage,
+            logger=LOGGER,
+        )
 
-        if len(valid_scores) == 0:
-            return None
-
-        score_messages = [
-            messages.FeedbackScoreMessage(
-                source=constants.FEEDBACK_SCORE_SOURCE_SDK,
-                project_name=project_name or self._project_name,
-                **score_dict,
+        if score_messages is None:
+            LOGGER.error(
+                f"No valid traces feedback scores to log from provided ones: {scores}"
             )
-            for score_dict in valid_scores
-        ]
+            return
+
         for batch in sequence_splitter.split_into_batches(
             score_messages,
-            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_payload_size_MB=opik_config.MAX_BATCH_SIZE_MB,
             max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
         ):
-            add_span_feedback_scores_batch_message = (
+            add_trace_feedback_scores_batch_message = (
                 messages.AddTraceFeedbackScoresBatchMessage(batch=batch)
             )
 
-            self._streamer.put(add_span_feedback_scores_batch_message)
+            self._streamer.put(add_trace_feedback_scores_batch_message)
+
+    def log_assertion_results(
+        self,
+        assertion_results: List[BatchAssertionResultDict],
+        project_name: Optional[str] = None,
+    ) -> None:
+        """
+        Log assertion results for traces via the dedicated assertion-results
+        ingestion endpoint.
+
+        Args:
+            assertion_results: A list of assertion result dictionaries. Each entry
+                requires `id` (trace id), `name`, and `status` ("passed" or "failed").
+            project_name: The project the traces belong to. If not provided, falls
+                back to the active project context, then to the client's default.
+        """
+        analytics.track_event("client", "log_assertion_results")
+        resolved_project_name = self._resolve_project_name(project_name)
+
+        valid_items = []
+        for item in assertion_results:
+            if not (item.get("id") and item.get("name")):
+                continue
+            if item.get("status") not in ("passed", "failed"):
+                LOGGER.error(
+                    "Skipping assertion result with invalid status %r — "
+                    "must be 'passed' or 'failed': %s",
+                    item.get("status"),
+                    item,
+                )
+                continue
+            valid_items.append(item)
+
+        if len(valid_items) == 0:
+            LOGGER.error(
+                f"No valid assertion results to log from provided ones: {assertion_results}"
+            )
+            return
+
+        assertion_messages = [
+            messages.AssertionResultMessage(
+                entity_id=item["id"],
+                project_name=item.get("project_name") or resolved_project_name,
+                name=item["name"],
+                status=item["status"],
+                reason=item.get("reason"),
+                source="sdk",
+            )
+            for item in valid_items
+        ]
+
+        for batch in sequence_splitter.split_into_batches(
+            assertion_messages,
+            max_payload_size_MB=opik_config.MAX_BATCH_SIZE_MB,
+            max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
+        ):
+            self._streamer.put(messages.AddAssertionResultsBatchMessage(batch=batch))
+
+    def log_threads_feedback_scores(
+        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
+    ) -> None:
+        """
+        Log feedback scores for threads.
+
+        Args:
+            scores (List[BatchFeedbackScoreDict]): A list of feedback score dictionaries.
+                Specifying a thread id via `id` key for each score is mandatory.
+            project_name: The name of the project in which the threads are logged. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
+                Deprecated: use `project_name` in the feedback score dictionary that's listed in the `scores` parameter.
+
+        Returns:
+            None
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> # Batch logging across multiple projects
+            >>> scores = [
+            >>>     {"id": "thread_123", "name": "user_satisfaction", "value": 0.85, "project_name": "project-A"},
+            >>>     {"id": "thread_456", "name": "user_satisfaction", "value": 0.92, "project_name": "project-B"},
+            >>> ]
+            >>> client.log_threads_feedback_scores(scores=scores)
+        """
+        analytics.track_event("client", "log_threads_feedback_scores")
+        self.get_threads_client().log_threads_feedback_scores(
+            scores=scores, project_name=project_name
+        )
+
+    def search_threads(
+        self,
+        project_name: Optional[str] = None,
+        filter_string: Optional[str] = None,
+        max_results: int = 1000,
+        truncate: bool = True,
+    ) -> List[trace_thread.TraceThread]:
+        """Search for threads in a given project based on specific criteria.
+
+        Args:
+            project_name: The name of the project to search the threads for. If not provided, falls back to the
+                active project context (from @track or opik.project_context), then to the client's default.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: `"<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"`
+
+                Supported columns:
+                - `id`: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
+                - `first_message`, `last_message`: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
+                - `environment`: Enum for lifecycle stage (=, !=, in, not_in)
+                - `status`: Enum (=, !=)
+                - `start_time`, `end_time`, `created_at`, `last_updated_at`: DateTime (=, !=, >, >=, <, <=)
+                - `feedback_scores`: Numeric with dot notation (=, !=, >, >=, <, <=, is_empty, is_not_empty)
+                - `tags`, `annotation_queue_ids`: List (=, !=, contains, not_contains, is_empty, is_not_empty)
+                - `duration`, `number_of_messages`: Numeric (=, !=, >, >=, <, <=)
+
+                Examples:
+                - `status = "active"` - Filter by thread status
+                - `id = "thread_123"` - Filter by specific thread ID
+                - `number_of_messages >= 5` - Filter by message count
+                - `first_message contains "hello"` - Filter by first message content
+                - `feedback_scores.user_frustration > 0.5` - Filter by feedback score
+                - `tags contains "important"` - Filter by tag
+                - `environment = "production"` - Filter by environment
+                - `environment in ("production", "staging")` - Filter by multiple environments
+
+                If not provided, all threads in the project will be returned up to the limit.
+            max_results: The maximum number of threads to retrieve. The default value is 1000.
+            truncate: Whether to truncate image data stored in input, output, or metadata.
+
+        Returns:
+            A list of TraceThread objects that match the search criteria.
+
+        Example:
+            >>> from opik import Opik
+            >>> client = Opik()
+            >>> threads = client.search_threads(
+            >>>     project_name="Demo Project",
+            >>>     filter_string='id = "thread_123"',
+            >>>     max_results=10,
+            >>> )
+        """
+        analytics.track_event("client", "search_threads")
+        return self.get_threads_client().search_threads(
+            project_name=project_name,
+            filter_string=filter_string,
+            max_results=max_results,
+            truncate=truncate,
+        )
 
     def delete_trace_feedback_score(self, trace_id: str, name: str) -> None:
         """
@@ -524,6 +1068,7 @@ class Opik:
         Returns:
             None
         """
+        analytics.track_event("client", "delete_trace_feedback_score")
         self._rest_client.traces.delete_trace_feedback_score(
             id=trace_id,
             name=name,
@@ -542,52 +1087,149 @@ class Opik:
         Returns:
             None
         """
+        analytics.track_event("client", "delete_span_feedback_score")
         self._rest_client.spans.delete_span_feedback_score(
             id=span_id,
             name=name,
         )
 
-    def get_dataset(self, name: str) -> dataset.Dataset:
+    def create_environment(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        color: Optional[str] = None,
+    ) -> environment_public.EnvironmentPublic:
+        """Create a new environment in the current workspace.
+
+        Args:
+            name: Human-readable environment name (e.g. ``production``).
+            description: Optional description.
+            color: Optional color hex code used for UI display.
+
+        Returns:
+            The created environment.
+        """
+        analytics.track_event("client", "create_environment")
+        new_id = id_helpers.generate_id()
+        try:
+            self._rest_client.environments.create_environment(
+                id=new_id,
+                name=name,
+                description=description,
+                color=color,
+            )
+        except rest_api_errors.ConflictError:
+            raise exceptions.EnvironmentAlreadyExists(
+                f"Environment {name!r} already exists in this workspace."
+            )
+        return self._rest_client.environments.get_environment_by_id(new_id)
+
+    def get_environments(self) -> List[environment_public.EnvironmentPublic]:
+        """List environments in the current workspace.
+
+        The backend caps the response at the workspace limit (default 20).
+        """
+        analytics.track_event("client", "get_environments")
+        page = self._rest_client.environments.find_environments()
+        return list(page.content or [])
+
+    _BUILTIN_ENVIRONMENT_NAMES = frozenset({"production", "staging", "development"})
+
+    def update_environment(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        color: Optional[str] = None,
+    ) -> environment_public.EnvironmentPublic:
+        """Update the description and/or color of an environment, identified by name.
+
+        Returns the updated environment.
+        """
+        analytics.track_event("client", "update_environment")
+        if color is not None and name in self._BUILTIN_ENVIRONMENT_NAMES:
+            raise exceptions.EnvironmentConfigurationError(
+                f"Cannot change the colour of the built-in environment {name!r}. "
+                "Colour updates are not allowed for 'production', 'staging', or 'development'."
+            )
+        existing = self._find_environment_by_name(name)
+        if existing is None:
+            raise exceptions.OpikException(f"No environment found with name {name!r}.")
+        self._rest_client.environments.update_environment(
+            existing.id,
+            description=description,
+            color=color,
+        )
+        return self._rest_client.environments.get_environment_by_id(existing.id)
+
+    def delete_environment(self, name: str) -> None:
+        """Delete an environment by name. No-op if no matching environment exists."""
+        analytics.track_event("client", "delete_environment")
+        existing = self._find_environment_by_name(name)
+        if existing is None:
+            return
+        self._rest_client.environments.delete_environments_batch(ids=[existing.id])
+
+    def _find_environment_by_name(
+        self, name: str
+    ) -> Optional[environment_public.EnvironmentPublic]:
+        for env in self.get_environments():
+            if env.name == name:
+                return env
+        return None
+
+    def get_dataset(
+        self, name: str, project_name: Optional[str] = None
+    ) -> dataset.Dataset:
         """
         Get dataset by name
 
         Args:
             name: The name of the dataset
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             dataset.Dataset: dataset object associated with the name passed.
         """
-        dataset_fern: dataset_public.DatasetPublic = (
-            self._rest_client.datasets.get_dataset_by_identifier(dataset_name=name)
+        analytics.track_event("client", "get_dataset")
+        project_name = self._resolve_project_name(project_name)
+        dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=name, project_name=project_name
         )
 
-        dataset_ = dataset.Dataset(
-            name=name,
-            description=dataset_fern.description,
+        return dataset.Dataset.from_public(
+            dataset_fern=dataset_fern,
+            project_name=project_name,
             rest_client=self._rest_client,
+            client=self,
         )
-
-        dataset_.__internal_api__sync_hashes__()
-
-        return dataset_
 
     def get_datasets(
         self,
         max_results: int = 100,
-        sync_items: bool = True,
+        sync_items: bool = False,
+        project_name: Optional[str] = None,
     ) -> List[dataset.Dataset]:
         """
         Returns all datasets up to the specified limit.
 
         Args:
+            project_name: The name of the project to which the datasets belong. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             max_results: The maximum number of datasets to return.
-            sync_items: Whether to sync the hashes of the dataset items. This is used to deduplicate items when fetching the dataset but it can be an expensive operation.
+            sync_items: If True, eagerly preload item hashes for every returned
+                dataset — one REST roundtrip per dataset. Defaults to False: the
+                hashes are loaded lazily on the first ``dataset.insert(...)``
+                call, so callers that only inspect metadata pay nothing and
+                callers that insert still get content-hash dedup correctly.
 
         Returns:
             List[dataset.Dataset]: A list of dataset objects that match the filter string.
         """
+        analytics.track_event("client", "get_datasets")
         datasets = dataset_rest_operations.get_datasets(
-            self._rest_client, max_results, sync_items
+            project_name=self._resolve_project_name(project_name),
+            rest_client=self._rest_client,
+            max_results=max_results,
+            sync_items=sync_items,
         )
 
         return datasets
@@ -596,6 +1238,7 @@ class Opik:
         self,
         dataset_name: str,
         max_results: int = 100,
+        project_name: Optional[str] = None,
     ) -> List[experiment.Experiment]:
         """
         Returns all experiments up to the specified limit.
@@ -603,31 +1246,47 @@ class Opik:
         Args:
             dataset_name: The name of the dataset
             max_results: The maximum number of experiments to return.
+            project_name: The name of the project to which the datasets belong. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             List[experiment.Experiment]: A list of experiment objects.
         """
+        analytics.track_event("client", "get_dataset_experiments")
+        project_name = self._resolve_project_name(project_name)
         dataset_id = dataset_rest_operations.get_dataset_id(
-            self._rest_client, dataset_name
+            self._rest_client, dataset_name=dataset_name, project_name=project_name
         )
 
+        experiments_client = self.get_experiments_client()
         experiments = dataset_rest_operations.get_dataset_experiments(
-            self._rest_client, dataset_id, max_results
+            rest_client=self._rest_client,
+            dataset_id=dataset_id,
+            max_results=max_results,
+            streamer=self._streamer,
+            experiments_client=experiments_client,
         )
 
         return experiments
 
-    def delete_dataset(self, name: str) -> None:
+    def delete_dataset(self, name: str, project_name: Optional[str] = None) -> None:
         """
         Delete dataset by name
 
         Args:
             name: The name of the dataset
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
         """
-        self._rest_client.datasets.delete_dataset_by_name(dataset_name=name)
+        analytics.track_event("client", "delete_dataset")
+        project_name = self._resolve_project_name(project_name)
+        self._rest_client.datasets.delete_dataset_by_name(
+            dataset_name=name, project_name=project_name
+        )
 
     def create_dataset(
-        self, name: str, description: Optional[str] = None
+        self,
+        name: str,
+        description: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> dataset.Dataset:
         """
         Create a new dataset.
@@ -635,24 +1294,47 @@ class Opik:
         Args:
             name: The name of the dataset.
             description: An optional description of the dataset.
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             dataset.Dataset: The created dataset object.
         """
-        self._rest_client.datasets.create_dataset(name=name, description=description)
+        analytics.track_event("client", "create_dataset")
+        project_name = self._resolve_project_name(project_name)
+        self._rest_client.datasets.create_dataset(
+            name=name,
+            description=description,
+            project_name=project_name,
+        )
 
         result = dataset.Dataset(
             name=name,
             description=description,
+            project_name=project_name,
             rest_client=self._rest_client,
+            dataset_items_count=0,
+            client=self,
         )
 
-        self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)
+        self._log_created_resource_url(
+            kind="dataset",
+            name=name,
+            project_name=project_name,
+            build_url=lambda workspace, project_id: url_helpers.get_dataset_url_by_id(
+                base_url=self._config.url_override,
+                workspace=workspace,
+                project_id=project_id,
+                dataset_id=result.id,
+            ),
+        )
 
         return result
 
     def get_or_create_dataset(
-        self, name: str, description: Optional[str] = None
+        self,
+        name: str,
+        description: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> dataset.Dataset:
         """
         Get an existing dataset by name or create a new one if it does not exist.
@@ -660,24 +1342,426 @@ class Opik:
         Args:
             name: The name of the dataset.
             description: An optional description of the dataset.
+            project_name: The name of the project to which the dataset belongs. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             dataset.Dataset: The dataset object.
         """
+        analytics.track_event("client", "get_or_create_dataset")
         try:
-            return self.get_dataset(name)
+            return self.get_dataset(name, project_name=project_name)
         except ApiError as e:
             if e.status_code == 404:
-                return self.create_dataset(name, description)
+                return self.create_dataset(
+                    name, description=description, project_name=project_name
+                )
             raise
+
+    def create_dashboard(
+        self,
+        name: str,
+        type: Optional[Union[dashboard_types.DashboardType, str]] = None,
+        description: Optional[str] = None,
+        project_name: Optional[str] = None,
+        project_id: Optional[str] = None,
+        sections: Optional[
+            List[Union[dashboard_types.DashboardSection, Dict[str, Any]]]
+        ] = None,
+    ) -> dashboard.Dashboard:
+        """
+        Create a new dashboard.
+
+        Args:
+            name: The name of the dashboard.
+            type: The dashboard type, either ``"multi_project"`` or ``"experiments"``.
+                Determines which widget types are allowed.
+            description: An optional description of the dashboard.
+            project_name: For a project-scoped dashboard, the project name. If it does
+                not exist it will be created. Ignored when ``project_id`` is provided.
+            project_id: For a project-scoped dashboard, the project id. Takes precedence
+                over ``project_name``. If neither is provided, a workspace-level
+                dashboard is created.
+            sections: Optional initial sections (``DashboardSection`` objects or dicts).
+                If omitted, the dashboard starts with a single empty "Overview" section.
+
+        Returns:
+            dashboard.Dashboard: The created dashboard object.
+        """
+        analytics.track_event("client", "create_dashboard")
+        if sections is None:
+            section_dicts: List[Dict[str, Any]] = [
+                dashboard_types.DashboardSection(title="Overview").to_jsonable()
+            ]
+        else:
+            section_dicts = copy.deepcopy(
+                dashboard_validation.as_section_dicts(sections)
+            )
+
+        dashboard_type = getattr(type, "value", type)
+        for section in section_dicts:
+            for widget in section.get("widgets", []):
+                dashboard_validation.validate_widget_for_dashboard(
+                    widget, dashboard_type
+                )
+                if project_id is not None:
+                    dashboard_validation.inject_project_id(widget, project_id)
+                elif project_name is None:
+                    # No project at all — delegate the error to inject_project_id
+                    dashboard_validation.inject_project_id(widget, None)
+
+        config = {
+            "version": dashboard_types.DASHBOARD_VERSION,
+            "sections": section_dicts,
+            "lastModified": dashboard_types.now_ms(),
+        }
+        dashboard_validation.validate_structure(config)
+
+        response = self._rest_client.dashboards.create_dashboard(
+            name=name,
+            config=config,
+            type=dashboard_type,
+            description=description,
+            project_id=project_id,
+            project_name=project_name,
+        )
+
+        return dashboard.Dashboard.from_public(
+            dashboard_public=response,
+            rest_client=self._rest_client,
+            client=self,
+        )
+
+    def get_dashboard(self, dashboard_id: str) -> dashboard.Dashboard:
+        """
+        Get a dashboard by id.
+
+        Args:
+            dashboard_id: The id of the dashboard.
+
+        Returns:
+            dashboard.Dashboard: The dashboard object.
+        """
+        analytics.track_event("client", "get_dashboard")
+        response = self._rest_client.dashboards.get_dashboard_by_id(dashboard_id)
+        return dashboard.Dashboard.from_public(
+            dashboard_public=response,
+            rest_client=self._rest_client,
+            client=self,
+        )
+
+    def get_dashboards(
+        self,
+        name: Optional[str] = None,
+        project_id: Optional[str] = None,
+        max_results: int = 100,
+        sorting: Optional[str] = None,
+        filters: Optional[str] = None,
+    ) -> List[dashboard.Dashboard]:
+        """
+        Get dashboards in the workspace.
+
+        Args:
+            name: Optional name to filter dashboards by.
+            project_id: Optional project id to filter dashboards by.
+            max_results: The maximum number of dashboards to return.
+            sorting: Optional serialized sorting specification.
+            filters: Optional serialized filter specification.
+
+        Returns:
+            List[dashboard.Dashboard]: The matching dashboards.
+        """
+        analytics.track_event("client", "get_dashboards")
+        return dashboard_rest_operations.find_dashboards(
+            rest_client=self._rest_client,
+            client=self,
+            name=name,
+            project_id=project_id,
+            max_results=max_results,
+            sorting=sorting,
+            filters=filters,
+        )
+
+    def delete_dashboard(self, dashboard_id: str) -> None:
+        """
+        Delete a dashboard by id.
+
+        Args:
+            dashboard_id: The id of the dashboard.
+        """
+        analytics.track_event("client", "delete_dashboard")
+        self._rest_client.dashboards.delete_dashboard(dashboard_id)
+
+    def create_test_suite(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        global_assertions: Optional[List[str]] = None,
+        global_execution_policy: Optional[
+            dataset_execution_policy.ExecutionPolicy
+        ] = None,
+        tags: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
+    ) -> test_suite.TestSuite:
+        """
+        Create a new test suite for regression testing.
+
+        Test suites are pre-configured test suites that let you validate
+        that prompt changes, model updates, or code modifications don't break
+        existing functionality.
+
+        Args:
+            name: The name of the test suite.
+            description: Optional description of what this suite tests.
+            global_assertions: Suite-level assertions applied to all items.
+                Each string describes an expected behavior that will be
+                checked by an LLM.
+            global_execution_policy: Suite-level execution policy.
+                Example: {"runs_per_item": 3, "pass_threshold": 2}
+            tags: Optional list of tags for the suite.
+            project_name: Optional name of the project to associate the suite with.
+
+        Returns:
+            TestSuite: The created test suite object.
+
+        Example:
+            >>> suite = client.create_test_suite(
+            ...     name="Refund Policy Tests",
+            ...     description="Regression tests for refund scenarios",
+            ...     project_name="custom-project",
+            ...     global_assertions=[
+            ...         "No hallucinated information",
+            ...         "Response is helpful",
+            ...     ],
+            ... )
+            >>>
+            >>> suite.insert([
+            ...     {"data": {"user_input": "How do I get a refund?", "user_tier": "premium"}},
+            ... ])
+            >>>
+            >>> results = suite.run(task=my_llm_function)
+        """
+        analytics.track_event("client", "create_test_suite")
+        from .dataset import validators, rest_operations
+
+        if global_execution_policy is not None:
+            validators.validate_execution_policy(global_execution_policy)
+
+        evaluators = validators.resolve_evaluators(
+            global_assertions, None, "suite-level assertions"
+        )
+
+        project_name = self._resolve_project_name(project_name)
+        suite_id = rest_operations.create_test_suite_dataset(
+            rest_client=self._rest_client,
+            dataset_name=name,
+            project_name=project_name,
+            description=description,
+            evaluators=evaluators,
+            exec_policy=global_execution_policy,
+            tags=tags,
+        )
+        suite_dataset = dataset.Dataset(
+            name=name,
+            description=description,
+            project_name=project_name,
+            rest_client=self._rest_client,
+            dataset_items_count=0,
+            client=self,
+        )
+
+        self._log_created_resource_url(
+            kind="test suite",
+            name=name,
+            project_name=project_name,
+            build_url=lambda workspace, project_id: (
+                url_helpers.get_test_suite_url_by_id(
+                    base_url=self._config.url_override,
+                    workspace=workspace,
+                    project_id=project_id,
+                    test_suite_id=suite_id,
+                )
+            ),
+        )
+
+        return test_suite.TestSuite(
+            name=name,
+            dataset_=suite_dataset,
+            client=self,
+        )
+
+    def get_test_suite(
+        self, name: str, project_name: Optional[str] = None
+    ) -> test_suite.TestSuite:
+        """
+        Get an existing test suite by name.
+
+        Retrieves the dataset and its version-level assertions and execution
+        policy from the backend, returning a fully configured TestSuite.
+
+        Args:
+            name: The name of the test suite.
+            project_name: Optional name of the project the suite is associated with.
+
+        Returns:
+            TestSuite: The test suite object.
+
+        Raises:
+            ApiError: If no dataset with the given name exists (404).
+        """
+        analytics.track_event("client", "get_test_suite")
+        project_name = self._resolve_project_name(project_name)
+        dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=name,
+            project_name=project_name,
+        )
+
+        suite_dataset = dataset.Dataset.from_public(
+            dataset_fern=dataset_fern,
+            project_name=project_name,
+            rest_client=self._rest_client,
+            client=self,
+        )
+
+        return test_suite.TestSuite(
+            name=name,
+            dataset_=suite_dataset,
+            client=self,
+        )
+
+    def get_or_create_test_suite(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        global_assertions: Optional[List[str]] = None,
+        global_execution_policy: Optional[
+            dataset_execution_policy.ExecutionPolicy
+        ] = None,
+        tags: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
+    ) -> test_suite.TestSuite:
+        """
+        Get an existing test suite by name or create a new one if it does not exist.
+
+        If the suite already exists it is returned as-is — the
+        ``global_assertions``, ``global_execution_policy``, ``description``,
+        and ``tags`` parameters are only used when creating a new suite.
+        To modify an existing suite, use :meth:`TestSuite.update` instead.
+
+        Args:
+            name: The name of the test suite.
+            description: Optional description (used only when creating).
+            global_assertions: Suite-level assertions (used only when creating).
+            global_execution_policy: Execution policy (used only when creating).
+            tags: Optional list of tags (used only when creating).
+            project_name: Optional name of the project the suite is associated with.
+
+        Returns:
+            TestSuite: The test suite object.
+        """
+        analytics.track_event("client", "get_or_create_test_suite")
+        try:
+            return self.get_test_suite(name, project_name=project_name)
+        except ApiError as e:
+            if e.status_code == 404:
+                return self.create_test_suite(
+                    name=name,
+                    description=description,
+                    global_execution_policy=global_execution_policy,
+                    global_assertions=global_assertions,
+                    tags=tags,
+                    project_name=project_name,
+                )
+            raise
+
+    def delete_test_suite(self, name: str, project_name: Optional[str] = None) -> None:
+        """
+        Delete a test suite by name.
+
+        Args:
+            name: The name of the test suite.
+            project_name: The name of the project the suite belongs to.
+        """
+        analytics.track_event("client", "delete_test_suite")
+        project_name = self._resolve_project_name(project_name)
+        self._rest_client.datasets.delete_dataset_by_name(
+            dataset_name=name, project_name=project_name
+        )
+
+    def get_test_suites(
+        self,
+        max_results: int = 100,
+        project_name: Optional[str] = None,
+    ) -> List[test_suite.TestSuite]:
+        """
+        Returns all test suites up to the specified limit.
+
+        Only returns test suites, not regular datasets.
+
+        Args:
+            max_results: The maximum number of test suites to return.
+            project_name: The name of the project the suites belong to.
+
+        Returns:
+            List[TestSuite]: A list of test suite objects.
+        """
+        analytics.track_event("client", "get_test_suites")
+        from .dataset import rest_operations
+
+        return rest_operations.get_test_suites(
+            project_name=self._resolve_project_name(project_name),
+            rest_client=self._rest_client,
+            max_results=max_results,
+            client=self,
+        )
+
+    def get_test_suite_experiments(
+        self,
+        name: str,
+        max_results: int = 100,
+        project_name: Optional[str] = None,
+    ) -> List[experiment.Experiment]:
+        """
+        Returns all experiments for a test suite.
+
+        Args:
+            name: The name of the test suite.
+            max_results: The maximum number of experiments to return.
+            project_name: The name of the project the suite belongs to.
+
+        Returns:
+            List[Experiment]: A list of experiment objects.
+        """
+        analytics.track_event("client", "get_test_suite_experiments")
+        from .dataset import rest_operations as dataset_rest_operations
+
+        project_name = self._resolve_project_name(project_name)
+        dataset_id = dataset_rest_operations.get_dataset_id(
+            self._rest_client, dataset_name=name, project_name=project_name
+        )
+
+        experiments_client = self.get_experiments_client()
+        return dataset_rest_operations.get_dataset_experiments(
+            rest_client=self._rest_client,
+            dataset_id=dataset_id,
+            max_results=max_results,
+            streamer=self._streamer,
+            experiments_client=experiments_client,
+        )
 
     def create_experiment(
         self,
         dataset_name: str,
         name: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
-        prompt: Optional[Prompt] = None,
-        prompts: Optional[List[Prompt]] = None,
+        prompt: Optional[prompt_module.base_prompt.BasePrompt] = None,
+        prompts: Optional[List[prompt_module.base_prompt.BasePrompt]] = None,
+        type: Literal["regular", "trial", "mini-batch"] = "regular",
+        evaluation_method: Literal["dataset", "evaluation_suite"] = "dataset",
+        optimization_id: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        dataset_version_id: Optional[str] = None,
+        project_name: Optional[str] = None,
+        experiment_id: Optional[str] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
@@ -688,11 +1772,21 @@ class Opik:
             experiment_config: Optional experiment configuration parameters. Must be a dictionary if provided.
             prompt: Prompt object to associate with the experiment. Deprecated, use `prompts` argument instead.
             prompts: List of Prompt objects to associate with the experiment.
+            type: The type of the experiment. Can be "regular", "trial", or "mini-batch".
+                Defaults to "regular". "trial" and "mini-batch" are only relevant for prompt optimization experiments.
+            optimization_id: Optional ID of the optimization associated with the experiment.
+            tags: Optional list of tags to associate with the experiment.
+            dataset_version_id: Optional ID of the dataset version to associate with the experiment.
+            project_name: Optional name of the project to associate the experiment with.
+            experiment_id: Optional explicit id for the experiment. When None a fresh id is
+                generated. Callers that must know the id before creation (e.g. the migrate
+                cascade, which records it for crash-safe cleanup) can supply their own.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
         """
-        id = id_helpers.generate_id()
+        analytics.track_event("client", "create_experiment")
+        id = experiment_id or id_helpers.generate_id()
 
         checked_prompts = experiment_helpers.handle_prompt_args(
             prompt=prompt,
@@ -704,12 +1798,20 @@ class Opik:
             prompts=checked_prompts,
         )
 
+        project_name = self._resolve_project_name(project_name)
+
         self._rest_client.experiments.create_experiment(
             name=name,
             dataset_name=dataset_name,
             id=id,
             metadata=metadata,
             prompt_versions=prompt_versions,
+            type=type,
+            evaluation_method=evaluation_method,
+            optimization_id=optimization_id,
+            tags=tags,
+            dataset_version_id=dataset_version_id,
+            project_name=project_name,
         )
 
         experiment_ = experiment.Experiment(
@@ -717,57 +1819,116 @@ class Opik:
             name=name,
             dataset_name=dataset_name,
             rest_client=self._rest_client,
+            streamer=self._streamer,
+            experiments_client=self.get_experiments_client(),
             prompts=checked_prompts,
+            tags=tags,
+            project_name=project_name,
         )
 
         return experiment_
 
-    def get_experiment_by_name(self, name: str) -> experiment.Experiment:
+    def update_experiment(
+        self,
+        id: str,
+        name: Optional[str] = None,
+        experiment_config: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Update an experiment's name and/or configuration.
+
+        Args:
+            id: The experiment ID.
+            name: The new name for the experiment. If None, the name will not be updated.
+            experiment_config: The new configuration for the experiment. If None, the configuration will not be updated.
+
+        Raises:
+            ValueError: if id is None or empty, or if both name and experiment_config are None
+        """
+        analytics.track_event("client", "update_experiment")
+        if not id:
+            raise ValueError(
+                f"id must be provided and can not be None or empty, id: {id}"
+            )
+
+        if name is None and experiment_config is None:
+            raise ValueError(
+                "At least one of 'name' or 'experiment_config' must be provided"
+            )
+
+        # Only include parameters that are provided to avoid clearing fields
+        request_params: Dict[str, Any] = {}
+        if name is not None:
+            request_params["name"] = name
+        if experiment_config is not None:
+            request_params["metadata"] = experiment_config
+
+        self._rest_client.experiments.update_experiment(id, **request_params)
+
+    def get_experiment_by_name(
+        self, name: str, project_name: Optional[str] = None
+    ) -> experiment.Experiment:
         """
         Returns an existing experiment by its name.
 
         Args:
             name: The name of the experiment.
+            project_name: The name of the project the experiment belongs to. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             experiment.Experiment: the API object for an existing experiment.
         """
+        analytics.track_event("client", "get_experiment_by_name")
         LOGGER.warning(
             "Deprecated, use `get_experiments_by_name` or `get_experiment_by_id` instead."
         )
+        project_name = self._resolve_project_name(project_name)
         experiment_public = experiment_rest_operations.get_experiment_data_by_name(
-            rest_client=self._rest_client, name=name
+            rest_client=self._rest_client, name=name, project_name=project_name
         )
 
         return experiment.Experiment(
             id=experiment_public.id,
-            name=name,
+            name=experiment_public.name,
             dataset_name=experiment_public.dataset_name,
             rest_client=self._rest_client,
-            # TODO: add prompt if exists
+            streamer=self._streamer,
+            experiments_client=self.get_experiments_client(),
+            tags=experiment_public.tags,
+            project_name=experiment_public.project_name,
         )
 
-    def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
+    def get_experiments_by_name(
+        self, name: str, project_name: Optional[str] = None
+    ) -> List[experiment.Experiment]:
         """
-        Returns an existing experiments by its name.
+        Returns a list of existing experiments containing the given string in their name.
+        Search is case-insensitive.
 
         Args:
-            name: The name of the experiment(s).
+            name: The string to search for in the experiment names.
+            project_name: The project name to search within. If None, uses the default project.
 
         Returns:
             List[experiment.Experiment]: List of existing experiments.
         """
+        analytics.track_event("client", "get_experiments_by_name")
+        project_name = self._resolve_project_name(project_name)
         experiments_public = experiment_rest_operations.get_experiments_data_by_name(
-            rest_client=self._rest_client, name=name
+            rest_client=self._rest_client, name=name, project_name=project_name
         )
         result = []
 
         for public_experiment in experiments_public:
             experiment_ = experiment.Experiment(
                 id=public_experiment.id,
+                name=public_experiment.name,
                 dataset_name=public_experiment.dataset_name,
-                name=name,
                 rest_client=self._rest_client,
+                streamer=self._streamer,
+                experiments_client=self.get_experiments_client(),
+                tags=public_experiment.tags,
+                project_name=public_experiment.project_name,
             )
             result.append(experiment_)
 
@@ -783,6 +1944,7 @@ class Opik:
         Returns:
             experiment.Experiment: the API object for an existing experiment.
         """
+        analytics.track_event("client", "get_experiment_by_id")
         try:
             experiment_public = self._rest_client.experiments.get_experiment_by_id(
                 id=id
@@ -799,34 +1961,164 @@ class Opik:
             name=experiment_public.name,
             dataset_name=experiment_public.dataset_name,
             rest_client=self._rest_client,
-            # TODO: add prompt if exists
+            streamer=self._streamer,
+            experiments_client=self.get_experiments_client(),
+            tags=experiment_public.tags,
+            project_name=experiment_public.project_name,
         )
 
-    def end(self, timeout: Optional[int] = None) -> None:
+    def end(
+        self, timeout: Optional[int] = None, *, flush: bool = True
+    ) -> Optional[data_loss.FlushResult]:
         """
-        End the Opik session and submit all pending messages.
+        End the Opik session, releasing this client's connection reference. When
+        ``flush`` is True (the default), all pending messages are submitted
+        first; when ``flush`` is False, anything still queued is dropped.
+
+        Connection resources are shared and ref-counted across clients with a
+        matching configuration: this releases the current client's reference.
+        The underlying streamer/threads are torn down only when the last client
+        sharing them is ended (or garbage-collected). When ``flush`` is True the
+        flush drains the *shared* queue, so pending data from other clients on
+        the same connection is delivered too.
 
         Args:
-            timeout (Optional[int]): The timeout for closing the streamer. Once the timeout is reached, the streamer will be closed regardless of whether all messages have been sent. If no timeout is set, the default value from the Opik configuration will be used.
+            timeout (Optional[int]): The timeout for closing the streamer. Once
+                the timeout is reached, the streamer will be closed regardless
+                of whether all messages have been sent. If no timeout is set,
+                the default value from the Opik configuration will be used.
+                Ignored when ``flush`` is False.
+            flush (bool): If True (default), wait for queued messages and file
+                uploads to reach the backend before closing — the safe choice
+                for production and atexit shutdown. If False, return as soon
+                as the stop signals have been sent, dropping anything still in
+                flight — useful in per-test teardown where assertions have
+                already polled the backend during the test body.
+
+        After ``end()`` the client must not be used again. Calling ``trace()``,
+        ``span()``, ``flush()``, etc. on an ended client is unsupported and its
+        behavior is undefined: it may silently no-op, or — because the transport
+        is shared — it may still succeed by riding another live client's
+        resources. Do not rely on either outcome; create a new client instead.
+
+        The outcome is also available afterwards via :attr:`last_flush_result`.
 
         Returns:
-            None
+            The flush outcome (including any data-loss detail) when ``flush`` is
+            True; ``None`` when ``flush`` is False (nothing was flushed).
         """
+        analytics.track_event("client", "end")
         timeout = timeout if timeout is not None else self._flush_timeout
-        self._streamer.close(timeout)
+        marker = self._flush_reporter.marker()
+        # Explicit teardown on a user thread, so close on the last reference
+        # (close_on_zero=True). Releasing is idempotent, so the detached GC
+        # finalizer cannot double-decrement. release() returns the authoritative
+        # flush outcome computed inside the drain (streamer.flush) — the same
+        # source flush() uses — rather than the weaker queue_size()==0 proxy,
+        # which can read empty on the pop-vs-processed race and while file
+        # uploads are still in flight.
+        flushed = self._lease.release(timeout, flush=flush, close_on_zero=True)
+        self._finalizer.detach()
+        if not flush:
+            return None
+        if flushed is None:
+            # No drain ran on this call — e.g. a repeated end() after the client
+            # was already released. Keep the outcome from the release that did
+            # the work rather than overwriting it with a spurious not-flushed
+            # result, so end() is idempotent.
+            return self._last_flush_result
+        self._last_flush_result = self._flush_reporter.build_result(
+            marker, flushed=flushed
+        )
+        return self._last_flush_result
 
-    def flush(self, timeout: Optional[int] = None) -> None:
+    def flush(self, timeout: Optional[int] = None) -> bool:
         """
         Flush the streamer to ensure all messages are sent.
+
+        Attachment/file upload *failures* are not counted in the data-loss
+        detail (``dropped_*`` / ``failures``), but an incomplete upload still
+        makes the flush report as not fully flushed — so ``flushed`` (and hence
+        the returned bool) does reflect uploads. Never raises and never blocks
+        beyond ``timeout``: an observability SDK must not disrupt the app it
+        instruments. Detailed outcome — including any data that was dropped — is
+        available via :attr:`last_flush_result`.
 
         Args:
             timeout (Optional[int]): The timeout for flushing the streamer. Once the timeout is reached, the flush method will return regardless of whether all messages have been sent.
 
         Returns:
-            None
+            True if all messages were delivered within the timeout with no data
+            loss; False if the timeout was hit or any message was dropped.
         """
+        analytics.track_event("client", "flush")
         timeout = timeout if timeout is not None else self._flush_timeout
-        self._streamer.flush(timeout)
+        try:
+            marker = self._flush_reporter.marker()
+            flushed = self._streamer.flush(timeout)
+            self._last_flush_result = self._flush_reporter.build_result(
+                marker, flushed=flushed
+            )
+            return self._last_flush_result.success
+        except Exception:
+            # An observability SDK must not disrupt the app it instruments: a
+            # failure inside flush is reported as "not flushed", never raised.
+            # Record a failed outcome so last_flush_result reflects this attempt
+            # rather than keeping a stale prior success. Built directly (not via
+            # build_result, which may itself be what raised) so it cannot re-raise.
+            LOGGER.error("Opik flush failed unexpectedly", exc_info=True)
+            self._last_flush_result = data_loss.FlushResult(
+                flushed=False,
+                remaining_queue_size=0,
+                dropped_messages=0,
+                dropped_items=0,
+                failures=(),
+            )
+            return False
+
+    @property
+    def last_flush_result(self) -> Optional[data_loss.FlushResult]:
+        """Outcome of the most recent ``flush()``/``end()`` on this client.
+
+        ``None`` until the first flush.
+        """
+        return self._last_flush_result
+
+    def get_errors_report(self) -> data_loss.ErrorsReport:
+        """Report of messages the background sender terminally dropped.
+
+        Unlike :attr:`last_flush_result`, which is scoped to a single flush, this
+        reports the sender's retained data-loss history — including drops that
+        happened before or between flushes.
+
+        The report is **capped**: the total counts are exact, but the per-drop
+        ``failures`` list keeps only the most recent entries (bounded, drop-oldest)
+        so it never grows without bound — see :class:`~opik.ErrorsReport`.
+
+        The sender is shared across clients with a matching configuration, so
+        the report may include drops from sibling clients on the same connection.
+        """
+        analytics.track_event("client", "get_errors_report")
+        return self._flush_reporter.build_errors_report()
+
+    def __internal_api__drain_to_processors__(
+        self, timeout: Optional[float] = None
+    ) -> bool:
+        """Drain pending messages so in-process chained processors
+        (notably the local emulator) have applied every message
+        submitted so far.
+
+        Lighter than `flush(...)`: skips file-upload and replay flushes
+        because the caller only cares about local processor state, not
+        backend delivery. Used by the evaluation engine before invoking
+        the agentic LLM judge — see
+        `EvaluationEngine._build_trace_tool_context` for the rationale.
+        """
+        return self._streamer.drain_to_processors(timeout)
+
+    def __internal_api__failed_uploads__(self, timeout: Optional[float] = None) -> int:
+        """Returns the number of failed file uploads after flush. Blocking - waits for all uploads to complete."""
+        return self._streamer.__internal_api__failed_uploads__(timeout=timeout)
 
     def search_traces(
         self,
@@ -834,39 +2126,109 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        exclude: Optional[List[str]] = None,
+        wait_for_at_least: Optional[int] = None,
+        wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
+        max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
     ) -> List[trace_public.TracePublic]:
         """
-        Search for traces in the given project.
+        Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
+        to be found before returning within the specified timeout. If wait_for_at_least number of traces are not found
+        within the specified timeout, an exception will be raised.
 
         Args:
-            project_name: The name of the project to search traces in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
-            filter_string: A filter string to narrow down the search. If not provided, all traces in the project will be returned up to the limit.
+            project_name: The name of the project to search traces in. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: String fields with full operator support
+                - `environment`: Enum field for lifecycle stage (=, !=, in, not_in)
+                - `status`: String field (=, contains, not_contains only)
+                - `start_time`, `end_time`: DateTime fields (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+                - `input`, `output`: String fields for content (=, contains, not_contains only)
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.model")
+                - `feedback_scores`: Numeric field (use dot notation, e.g., "feedback_scores.accuracy")
+                - `tags`: List field (use "contains" operator only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`: Numeric usage fields
+                - `duration`, `number_of_messages`, `total_estimated_cost`: Numeric fields
+
+                Supported operators by column:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `environment`: =, !=, in, not_in
+                - `status`: =, contains, not_contains
+                - `start_time`, `end_time`: =, >, <, >=, <=
+                - `input`, `output`: =, contains, not_contains
+                - `metadata`: =, contains, >, <
+                - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
+                - `tags`: contains (only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
+
+                Examples:
+                - `start_time >= "2024-01-01T00:00:00Z"` - Filter by start date
+                - `start_time > "2024-01-01T00:00:00Z" AND start_time < "2024-02-01T00:00:00Z"` - Date range
+                - `input contains "question"` - Filter by input content
+                - `usage.total_tokens > 1000` - Filter by token usage
+                - `feedback_scores.accuracy > 0.8` - Filter by feedback score
+                - `feedback_scores.my_metric is_empty` - Filter traces with empty feedback score
+                - `feedback_scores.my_metric is_not_empty` - Filter traces with non-empty feedback score
+                - `tags contains "production"` - Filter by tag
+                - `metadata.model = "gpt-4"` - Filter by metadata field
+                - `thread_id = "thread_123"` - Filter by thread ID
+                - `environment = "production"` - Filter by environment
+                - `environment in ("production", "staging")` - Filter by multiple environments
+
+                If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
-            truncate: Whether to truncate image data stored in input, output or metadata
+            truncate: Whether to truncate image data stored in input, output, or metadata
+            exclude: Fields to exclude from the response. For example, ["feedback_scores"]
+            wait_for_at_least: The minimum number of traces to wait for before returning.
+            wait_for_timeout: The timeout for waiting for traces.
+            max_batch_size: The maximum number of traces requested per page from the backend
+                (default 2000). The backend buffers a page in memory before streaming it, so a
+                large page of heavy traces (e.g. with inline attachments) can spike server memory;
+                lower this to bound per-request memory. On a connection/timeout error the page size
+                is automatically halved and the page retried.
+
+        Raises:
+            exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
         """
+        analytics.track_event("client", "search_traces")
+        filters_ = helpers.parse_filter_expressions(
+            filter_string,
+            parsed_item_class=trace_filter_public.TraceFilterPublic,
+            entity_type="traces",
+        )
 
-        page_size = 100
-        traces: List[trace_public.TracePublic] = []
+        project_name = self._resolve_project_name(project_name)
 
-        filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
+        search_functor = functools.partial(
+            search_helpers.search_traces_with_filters,
+            rest_client=self._rest_client,
+            project_name=project_name,
+            filters=filters_,
+            max_results=max_results,
+            truncate=truncate,
+            exclude=exclude,
+            max_batch_size=max_batch_size,
+        )
 
-        page = 1
-        while len(traces) < max_results:
-            page_traces = self._rest_client.traces.get_traces_by_project(
-                project_name=project_name or self._project_name,
-                filters=filters,
-                page=page,
-                size=page_size,
-                truncate=truncate,
+        if wait_for_at_least is None:
+            return search_functor()
+
+        # do synchronization with backend if wait_for_at_least is provided until a specific number of traces are found
+        result = search_helpers.search_and_wait_for_done(
+            search_functor=search_functor,
+            wait_for_at_least=wait_for_at_least,
+            wait_for_timeout=wait_for_timeout,
+            sleep_time=5,
+        )
+        if len(result) < wait_for_at_least:
+            raise exceptions.SearchTimeoutError(
+                f"Timeout after {wait_for_timeout} seconds: expected {wait_for_at_least} traces, but only {len(result)} were found."
             )
 
-            if len(page_traces.content) == 0:
-                break
-
-            traces.extend(page_traces.content)
-            page += 1
-
-        return traces[:max_results]
+        return result
 
     def search_spans(
         self,
@@ -875,41 +2237,111 @@ class Opik:
         filter_string: Optional[str] = None,
         max_results: int = 1000,
         truncate: bool = True,
+        exclude: Optional[List[str]] = None,
+        wait_for_at_least: Optional[int] = None,
+        wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
+        max_batch_size: int = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE,
     ) -> List[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
-        metadata, tags, etc or based on the trace ID.
+        metadata, tags, etc. or based on the trace ID. Also, you can wait for at least a certain number of spans
+        to be found before returning within the specified timeout. If wait_for_at_least number of spans are not found
+        within the specified timeout, an exception will be raised.
 
         Args:
-            project_name: The name of the project to search spans in. If not provided, will search across the project name configured when the Client was created which defaults to the `Default Project`.
+            project_name: The name of the project to search spans in. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             trace_id: The ID of the trace to search spans in. If provided, the search will be limited to the spans in the given trace.
-            filter_string: A filter string to narrow down the search.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: String fields with full operator support
+                - `environment`: Enum field for lifecycle stage (=, !=, in, not_in)
+                - `status`: String field (=, contains, not_contains only)
+                - `start_time`, `end_time`: DateTime fields (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+                - `input`, `output`: String fields for content (=, contains, not_contains only)
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.model")
+                - `feedback_scores`: Numeric field (use dot notation, e.g., "feedback_scores.accuracy")
+                - `tags`: List field (use "contains" operator only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`: Numeric usage fields
+                - `duration`, `number_of_messages`, `total_estimated_cost`: Numeric fields
+
+                Supported operators by column:
+                - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `environment`: =, !=, in, not_in
+                - `status`: =, contains, not_contains
+                - `start_time`, `end_time`: =, >, <, >=, <=
+                - `input`, `output`: =, contains, not_contains
+                - `metadata`: =, contains, >, <
+                - `feedback_scores`: =, >, <, >=, <=, is_empty, is_not_empty
+                - `tags`: contains (only)
+                - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`, `duration`, `number_of_messages`, `total_estimated_cost`: =, !=, >, <, >=, <=
+
+                Examples:
+                - `start_time >= "2024-01-01T00:00:00Z"` - Filter by start date
+                - `start_time > "2024-01-01T00:00:00Z" AND start_time < "2024-02-01T00:00:00Z"` - Date range
+                - `input contains "question"` - Filter by input content
+                - `usage.total_tokens > 1000` - Filter by token usage
+                - `feedback_scores.accuracy > 0.8` - Filter by feedback score
+                - `feedback_scores.my_metric is_empty` - Filter spans with empty feedback score
+                - `feedback_scores.my_metric is_not_empty` - Filter spans with non-empty feedback score
+                - `tags contains "production"` - Filter by tag
+                - `metadata.model = "gpt-4"` - Filter by metadata field
+                - `thread_id = "thread_123"` - Filter by thread ID
+                - `environment = "production"` - Filter by environment
+                - `environment in ("production", "staging")` - Filter by multiple environments
+
+                If not provided, all spans in the project/trace will be returned up to the limit.
             max_results: The maximum number of spans to return.
-            truncate: Whether to truncate image data stored in input, output or metadata
+            truncate: Whether to truncate image data stored in input, output, or metadata
+            exclude: List of fields to exclude from the response (e.g., ["feedback_scores", "input", "output"])
+            wait_for_at_least: The minimum number of spans to wait for before returning.
+            wait_for_timeout: The timeout for waiting for spans.
+            max_batch_size: The maximum number of spans requested per page from the backend
+                (default 2000). The backend buffers a page in memory before streaming it, so a
+                large page of heavy spans (e.g. with inline attachments) can spike server memory;
+                lower this to bound per-request memory. On a connection/timeout error the page size
+                is automatically halved and the page retried.
+
+        Raises:
+            exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
         """
-        page_size = 100
-        spans: List[span_public.SpanPublic] = []
+        analytics.track_event("client", "search_spans")
+        filters = helpers.parse_filter_expressions(
+            filter_string,
+            parsed_item_class=span_filter_public.SpanFilterPublic,
+            entity_type="spans",
+        )
 
-        filters = opik_query_language.OpikQueryLanguage(filter_string).parsed_filters
+        project_name = self._resolve_project_name(project_name)
+        search_functor = functools.partial(
+            search_helpers.search_spans_with_filters,
+            rest_client=self._rest_client,
+            project_name=project_name,
+            trace_id=trace_id,
+            filters=filters,
+            max_results=max_results,
+            truncate=truncate,
+            exclude=exclude,
+            max_batch_size=max_batch_size,
+        )
 
-        page = 1
-        while len(spans) < max_results:
-            page_spans = self._rest_client.spans.get_spans_by_project(
-                project_name=project_name or self._project_name,
-                trace_id=trace_id,
-                filters=filters,
-                page=page,
-                size=page_size,
-                truncate=truncate,
+        if wait_for_at_least is None:
+            return search_functor()
+
+        # do synchronization with backend if wait_for_at_least is provided until a specific number of spans are found
+        result = search_helpers.search_and_wait_for_done(
+            search_functor=search_functor,
+            wait_for_at_least=wait_for_at_least,
+            wait_for_timeout=wait_for_timeout,
+            sleep_time=5,
+        )
+        if len(result) < wait_for_at_least:
+            raise exceptions.SearchTimeoutError(
+                f"Timeout after {wait_for_timeout} seconds: expected {wait_for_at_least} spans, but only {len(result)} were found."
             )
 
-            if len(page_spans.content) == 0:
-                break
-
-            spans.extend(page_spans.content)
-            page += 1
-
-        return spans[:max_results]
+        return result
 
     def get_trace_content(self, id: str) -> trace_public.TracePublic:
         """
@@ -919,6 +2351,7 @@ class Opik:
             trace_public.TracePublic: pydantic model object with all the data associated with the trace found.
             Raises an error if trace was not found.
         """
+        analytics.track_event("client", "get_trace_content")
         return self._rest_client.traces.get_trace_by_id(id)
 
     def get_span_content(self, id: str) -> span_public.SpanPublic:
@@ -929,6 +2362,7 @@ class Opik:
             span_public.SpanPublic: pydantic model object with all the data associated with the span found.
             Raises an error if span was not found.
         """
+        analytics.track_event("client", "get_span_content")
         return self._rest_client.spans.get_span_by_id(id)
 
     def get_project(self, id: str) -> project_public.ProjectPublic:
@@ -936,12 +2370,13 @@ class Opik:
         Fetches a project by its unique identifier.
 
         Parameters:
-            id (str): project if (uuid).
+            id (str): project id (uuid).
 
         Returns:
             project_public.ProjectPublic: pydantic model object with all the data associated with the project found.
             Raises an error if project was not found
         """
+        analytics.track_event("client", "get_project")
         return self._rest_client.projects.get_project_by_id(id)
 
     def get_project_url(self, project_name: Optional[str] = None) -> str:
@@ -957,10 +2392,92 @@ class Opik:
         Returns:
             str: URL
         """
+        analytics.track_event("client", "get_project_url")
 
-        project_name = project_name or self._project_name
+        project_name = self._resolve_project_name(project_name)
+
         return url_helpers.get_project_url_by_workspace(
-            workspace=self._workspace, project_name=project_name
+            workspace=self._dereferenced_workspace(), project_name=project_name
+        )
+
+    def _dereferenced_workspace(self) -> str:
+        """Resolve the configured workspace to the concrete workspace name.
+
+        The self-hosted default ``"default"`` placeholder is looked up against
+        the backend so URLs point at the actual workspace.
+        """
+        if self._workspace == opik_config.OPIK_WORKSPACE_DEFAULT_NAME:
+            return self._rest_client.check.get_workspace_name().workspace_name
+
+        return self._workspace
+
+    def get_threads_client(self) -> threads_client.ThreadsClient:
+        """
+        Creates and provides an instance of the ``ThreadsClient`` tied to the current context.
+
+        The ``ThreadsClient`` can be used to interact with the threads API to manage and interact with conversational threads.
+
+        Returns:
+            ThreadsClient: An instance of ``threads_client.ThreadsClient`` initialized
+            with the current context.
+        """
+        return threads_client.ThreadsClient(self)
+
+    def get_attachment_client(self) -> attachment_client.AttachmentClient:
+        """
+        Creates and provides an instance of the ``AttachmentClient`` tied to the current context.
+
+        The ``AttachmentClient`` can be used to interact with the attachments API to retrieve
+        attachment lists, download attachments, and upload attachments for traces and spans.
+
+        Returns:
+            AttachmentClient: An instance of ``attachment.client.AttachmentClient``
+        """
+        return attachment_client.AttachmentClient(
+            rest_client=self._rest_client,
+            url_override=self._config.url_override,
+            workspace_name=self._workspace,
+            rest_httpx_client=self._httpx_client,
+        )
+
+    def queue_attachment_upload(
+        self,
+        entity_type: Literal["trace", "span"],
+        entity_id: str,
+        project_name: str,
+        file_path: str,
+        file_name: Optional[str] = None,
+        mime_type: Optional[str] = None,
+    ) -> None:
+        """Queue a local file for background upload as an attachment via the streamer.
+
+        This method is non-blocking: the upload is handled by the background streamer
+        which provides parallelization, automatic retries, and monitoring. Call
+        :meth:`flush` to wait for all queued uploads to complete.
+
+        Parameters:
+            entity_type: The type of entity to attach the file to (``"trace"`` or ``"span"``).
+            entity_id: The ID of the trace or span to attach the file to.
+            project_name: The name of the project containing the entity.
+            file_path: Path to the local file to upload.
+            file_name: Name to assign the attachment. Defaults to the file's basename.
+            mime_type: MIME type of the file. Auto-detected from the file name if not provided.
+        """
+        analytics.track_event("client", "queue_attachment_upload")
+        attachment_data = Attachment(
+            data=file_path,
+            file_name=file_name,
+            content_type=mime_type,
+            create_temp_copy=False,
+        )
+        self._streamer.put(
+            attachment_converters.attachment_to_message(
+                attachment_data=attachment_data,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                project_name=project_name,
+                url_override=self._config.url_override,
+            )
         )
 
     def create_prompt(
@@ -968,59 +2485,1114 @@ class Opik:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> Prompt:
+        type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+        id: Optional[str] = None,
+        description: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
+    ) -> prompt_module.Prompt:
         """
-        Creates a new prompt with the given name and template.
-        If a prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
+        Creates a new text prompt with the given name and template.
+        If a text prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
 
         Parameters:
             name: The name of the prompt.
             prompt: The template content of the prompt.
             metadata: Optional metadata to be included in the prompt.
+            type: The template type (MUSTACHE or JINJA2).
+            id: Optional unique identifier (UUID) for the prompt.
+            description: Optional description of the prompt (up to 255 characters).
+            change_description: Optional description of changes in this version.
+            tags: Optional list of tags to associate with the prompt.
+            project_name: Optional project name to associate with the prompt. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
 
         Raises:
-            ApiError: If there is an error during the creation of the prompt and the status code is not 409.
+            PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
+            ApiError: If there is an error during the creation of the prompt.
         """
-        prompt_client = PromptClient(self._rest_client)
-        return prompt_client.create_prompt(name=name, prompt=prompt, metadata=metadata)
+        analytics.track_event("client", "create_prompt")
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        project_name = self._resolve_project_name(project_name)
+        prompt_version = prompt_client_.create_prompt(
+            name=name,
+            prompt=prompt,
+            metadata=metadata,
+            type=type,
+            id=id,
+            description=description,
+            change_description=change_description,
+            tags=tags,
+            project_name=project_name,
+        )
+        return prompt_module.Prompt.from_fern_prompt_version(
+            name, prompt_version, project_name=project_name
+        )
+
+    def create_chat_prompt(
+        self,
+        name: str,
+        messages: List[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]] = None,
+        type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+        id: Optional[str] = None,
+        description: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
+    ) -> prompt_module.ChatPrompt:
+        """
+        Creates a new chat prompt with the given name and message templates.
+        If a chat prompt with the same name already exists, it will create a new version if the messages differ.
+
+        Parameters:
+            name: The name of the chat prompt.
+            messages: List of message dictionaries with 'role' and 'content' fields.
+            metadata: Optional metadata to be included in the prompt.
+            type: The template type (MUSTACHE or JINJA2).
+            id: Optional unique identifier (UUID) for the prompt.
+            description: Optional description of the prompt (up to 255 characters).
+            change_description: Optional description of changes in this version.
+            tags: Optional list of tags to associate with the prompt.
+            project_name: Optional project name for the prompt.
+
+        Returns:
+            A ChatPrompt object containing details of the created or retrieved chat prompt.
+
+        Raises:
+            PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
+            ApiError: If there is an error during the creation of the prompt.
+        """
+        analytics.track_event("client", "create_chat_prompt")
+        validator = ChatPromptMessagesValidator(messages)
+        validator.validate()
+        validator.raise_if_validation_failed()
+
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        project_name = self._resolve_project_name(project_name)
+        messages_str = json.dumps(messages)
+        prompt_version = prompt_client_.create_prompt(
+            name=name,
+            prompt=messages_str,
+            metadata=metadata,
+            type=type,
+            template_structure="chat",
+            id=id,
+            description=description,
+            change_description=change_description,
+            tags=tags,
+            project_name=project_name,
+        )
+        return prompt_module.ChatPrompt.from_fern_prompt_version(
+            name, prompt_version, project_name=project_name
+        )
 
     def get_prompt(
         self,
         name: str,
         commit: Optional[str] = None,
-    ) -> Optional[Prompt]:
+        project_name: Optional[str] = None,
+        no_cache: bool = False,
+        version: Optional[str] = None,
+        environment: Optional[str] = None,
+    ) -> Optional[prompt_module.Prompt]:
         """
-        Retrieve the prompt detail for a given prompt name and commit version.
+        Retrieve a text prompt by name, optionally targeting a specific ``version``.
+
+        This method only returns text prompts. Results are cached client-side
+        (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS, default 300 s).
+        When called inside an @track context the prompt reference is injected
+        into the active trace/span metadata.
 
         Parameters:
             name: The name of the prompt.
-            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+            commit: DEPRECATED in favour of ``version``. Mutually exclusive with ``version``.
+            project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest version is retrieved.
+            environment: Optional environment name. When provided, returns the version that the given environment
+                currently points to. Mutually exclusive with ``version``.
 
         Returns:
-            Prompt: The details of the specified prompt.
-        """
-        prompt_client = PromptClient(self._rest_client)
-        return prompt_client.get_prompt(name=name, commit=commit)
+            Prompt: The details of the specified text prompt, or None if not found.
 
-    def get_all_prompts(self, name: str) -> List[Prompt]:
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
+            ValueError: If both ``version`` and ``environment`` are provided.
         """
-        Retrieve all the prompt versions for a given prompt name.
+        analytics.track_event("client", "get_prompt")
+        return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
+            name=name,
+            commit=commit,
+            project_name=self._resolve_project_name(project_name),
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            no_cache=no_cache,
+            version=version,
+            environment=environment,
+        )
+
+    def get_chat_prompt(
+        self,
+        name: str,
+        commit: Optional[str] = None,
+        project_name: Optional[str] = None,
+        no_cache: bool = False,
+        version: Optional[str] = None,
+        environment: Optional[str] = None,
+    ) -> Optional[prompt_module.ChatPrompt]:
+        """
+        Retrieve a chat prompt by name, optionally targeting a specific ``version``.
+
+        This method only returns chat prompts. Results are cached client-side
+        (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS, default 300 s).
+        When called inside an @track context the prompt reference is injected
+        into the active trace/span metadata.
 
         Parameters:
             name: The name of the prompt.
+            commit: DEPRECATED in favour of ``version``. Mutually exclusive with ``version``.
+            project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). If not provided, the latest version is retrieved.
+            environment: Optional environment name. When provided, returns the version that the given environment
+                currently points to. Mutually exclusive with ``version``.
 
         Returns:
-            List[Prompt]: A list of prompts for the given name.
+            ChatPrompt: The details of the specified chat prompt, or None if not found.
+
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
+            ValueError: If both ``version`` and ``environment`` are provided.
         """
-        prompt_client = PromptClient(self._rest_client)
-        return prompt_client.get_all_prompts(name=name)
+        analytics.track_event("client", "get_chat_prompt")
+        return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
+            name=name,
+            commit=commit,
+            project_name=self._resolve_project_name(project_name),
+            template_structure="chat",
+            prompt_cls=chat_prompt_module.ChatPrompt,
+            no_cache=no_cache,
+            version=version,
+            environment=environment,
+        )
+
+    def set_prompt_environments(
+        self,
+        prompt_name: str,
+        environments: List[str],
+        *,
+        version: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ) -> None:
+        """Replace the full set of environments owned by a prompt version.
+
+        The provided list becomes the resolved version's complete set of environments.
+        Pass an empty list to clear all environments from the version. Ownership of any
+        environment in the list moves to this version: any other version of the same
+        prompt that previously owned one of them is cleared. Existing ``Prompt`` objects
+        already in memory are not mutated — re-fetch with ``client.get_prompt(...)`` to
+        see the change.
+
+        Parameters:
+            prompt_name: The name of the prompt.
+            environments: Environments to assign. Each must already be registered in the
+                workspace. Pass ``[]`` to clear.
+            version: Optional sequential version selector in the wire format
+                ``"v<N>"`` (e.g. ``"v3"``). Defaults to the latest version.
+            project_name: Project the prompt belongs to. Defaults to the active project
+                context, then to the client's default.
+
+        Raises:
+            PromptNotFoundError: The prompt name (or the supplied ``version``) does not exist
+                in the resolved project.
+            EnvironmentNotFoundError: One of ``environments`` is not registered in the
+                workspace.
+        """
+        analytics.track_event("client", "set_prompt_environments")
+        resolved_project_name = self._resolve_project_name(project_name)
+        try:
+            resolved_version = self._rest_client.prompts.retrieve_prompt_version(
+                name=prompt_name,
+                version_number=version,
+                project_name=resolved_project_name,
+            )
+        except ApiError as e:
+            if e.status_code == 404:
+                if version is not None:
+                    raise exceptions.PromptNotFoundError(
+                        f"No version {version!r} found for prompt {prompt_name!r}."
+                    ) from e
+                raise exceptions.PromptNotFoundError(
+                    f"No prompt found with name {prompt_name!r}."
+                ) from e
+            raise
+
+        target = list(dict.fromkeys(environments))
+        try:
+            self._rest_client.prompts.set_prompt_version_environment(
+                version_id=resolved_version.id,
+                environments=target,
+            )
+        except ApiError as e:
+            # The backend reports unknown environments as 404 (not found) or 409
+            # (conflict, when the name collides with the workspace registry check).
+            if e.status_code in (404, 409):
+                raise exceptions.EnvironmentNotFoundError(
+                    f"One or more environments in {target!r} are not registered in this workspace."
+                ) from e
+            raise
+
+        prompt_cache.invalidate_for_prompt(
+            name=prompt_name, project_name=resolved_project_name
+        )
+
+    def get_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        filter_string: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ) -> List[prompt_module.Prompt]:
+        """
+        Retrieve all text prompt versions history for a given prompt name.
+
+        Parameters:
+            name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "customer"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
+
+        Returns:
+            List[Prompt]: A list of text Prompt instances for the given name, or an empty list if not found.
+
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
+
+        Example:
+            .. code-block:: python
+
+                # Get all versions of a prompt
+                versions = client.get_prompt_history(name="my-prompt", project_name="my-project")
+
+                # Filter by tags (versions containing "production" tag)
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    filter_string='tags contains "production"'
+                )
+
+                # Search for specific text in template or change description fields
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    search="customer"
+                )
+
+                # Combine search and filtering
+                versions = client.get_prompt_history(
+                    name="my-prompt",
+                    project_name="my-project",
+                    search="customer",
+                    filter_string='tags contains "production"'
+                )
+        """
+        analytics.track_event("client", "get_prompt_history")
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        project_name = self._resolve_project_name(project_name)
+
+        # First, validate that this is a text prompt by trying to get the latest version
+        # Let PromptTemplateStructureMismatch exception propagate - this is a hard error
+        latest_version = prompt_client_.get_prompt(
+            name=name, raise_if_not_template_structure="text", project_name=project_name
+        )
+
+        if latest_version is None:
+            return []
+
+        # Now get all versions (we know it's a text prompt)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name,
+            search=search,
+            filter_string=filter_string,
+            project_name=project_name,
+        )
+
+        result = [
+            prompt_module.Prompt.from_fern_prompt_version(
+                name, version, project_name=project_name
+            )
+            for version in fern_prompt_versions
+        ]
+        return result
+
+    def get_chat_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        filter_string: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ) -> List[prompt_module.ChatPrompt]:
+        """
+        Retrieve all chat prompt versions history for a given prompt name.
+
+        Parameters:
+            name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "helpful assistant"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
+
+        Returns:
+            List[ChatPrompt]: A list of ChatPrompt instances for the given name, or an empty list if not found.
+
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
+
+        Example:
+            .. code-block:: python
+
+                # Get all versions of a chat prompt
+                versions = client.get_chat_prompt_history(name="my-chat-prompt", project_name="my-project")
+
+                # Filter by tags (versions containing "production" tag)
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    filter_string='tags contains "production"'
+                )
+
+                # Search for specific text in template or change description fields
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    search="helpful assistant"
+                )
+
+                # Combine search and filtering
+                versions = client.get_chat_prompt_history(
+                    name="my-chat-prompt",
+                    project_name="my-project",
+                    search="helpful assistant",
+                    filter_string='tags contains "production"'
+                )
+        """
+        analytics.track_event("client", "get_chat_prompt_history")
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        project_name = self._resolve_project_name(project_name)
+
+        # First, validate that this is a chat prompt by trying to get the latest version
+        # Let PromptTemplateStructureMismatch exception propagate - this is a hard error
+        latest_version = prompt_client_.get_prompt(
+            name=name, raise_if_not_template_structure="chat", project_name=project_name
+        )
+
+        if latest_version is None:
+            return []
+
+        # Now get all versions (we know it's a chat prompt)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name,
+            search=search,
+            filter_string=filter_string,
+            project_name=project_name,
+        )
+
+        result = [
+            prompt_module.ChatPrompt.from_fern_prompt_version(
+                name, version, project_name=project_name
+            )
+            for version in fern_prompt_versions
+        ]
+        return result
+
+    def get_all_prompts(
+        self, name: str, project_name: Optional[str] = None
+    ) -> List[prompt_module.Prompt]:
+        """
+        DEPRECATED: Please use Opik.get_prompt_history() instead.
+        Retrieve all the prompt versions history for a given prompt name.
+
+        Parameters:
+            name: The name of the prompt.
+            project_name: The name of the project to retrieve the prompt history from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+
+        Returns:
+            List[prompt_module.Prompt]: A list of Prompt instances for the given name.
+        """
+        analytics.track_event("client", "get_all_prompts")
+        LOGGER.warning(
+            "Opik.get_all_prompts() is deprecated. Please use Opik.get_prompt_history() instead."
+        )
+        return self.get_prompt_history(name, project_name=project_name)
+
+    def search_prompts(
+        self, filter_string: Optional[str] = None, project_name: Optional[str] = None
+    ) -> List[Union[prompt_module.Prompt, prompt_module.ChatPrompt]]:
+        """
+        Retrieve the latest prompt versions (both string and chat prompts) for the given search parameters.
+
+        Parameters:
+            project_name: The name of the project to search in. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `name`: String fields
+                - `tags`: List field (use "contains" operator only)
+                - `created_by`: String field
+                - `template_structure`: String field ("string" or "chat")
+
+                Supported operators by column:
+                - `id`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `name`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `created_by`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `template_structure`: =, !=
+                - `tags`: contains (only)
+
+                Examples:
+                - `tags contains "alpha"` - Filter by tag
+                - `tags contains "alpha" AND tags contains "beta"` - Filter by multiple tags
+                - `name contains "summary"` - Filter by name substring
+                - `created_by = "user@example.com"` - Filter by creator
+                - `id starts_with "prompt_"` - Filter by ID prefix
+                - `template_structure = "text"` - Only text prompts
+                - `template_structure = "chat"` - Only chat prompts
+
+                If not provided, all prompts (both text and chat) will be returned.
+
+        Returns:
+            List[Union[Prompt, ChatPrompt]]: A list of Prompt and/or ChatPrompt instances found.
+        """
+        analytics.track_event("client", "search_prompts")
+        oql = opik_query_language.OpikQueryLanguage.for_traces(filter_string or "")
+        parsed_filters = oql.get_filter_expressions()
+
+        project_name = self._resolve_project_name(project_name)
+
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        search_results = prompt_client_.search_prompts(
+            parsed_filters=parsed_filters, project_name=project_name
+        )
+
+        # Convert to Prompt or ChatPrompt objects based on template_structure
+        prompts: List[Union[prompt_module.Prompt, prompt_module.ChatPrompt]] = []
+        for result in search_results:
+            if result.template_structure == "chat":
+                prompts.append(
+                    prompt_module.ChatPrompt.from_fern_prompt_version(
+                        result.name,
+                        result.prompt_version_detail,
+                        project_name=project_name,
+                    )
+                )
+            else:
+                prompts.append(
+                    prompt_module.Prompt.from_fern_prompt_version(
+                        result.name,
+                        result.prompt_version_detail,
+                        project_name=project_name,
+                    )
+                )
+
+        return prompts
+
+    def create_optimization(
+        self,
+        dataset_name: str,
+        objective_name: str,
+        name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        optimization_id: Optional[str] = None,
+        project_name: Optional[str] = None,
+    ) -> optimization.Optimization:
+        analytics.track_event("client", "create_optimization")
+        id = optimization_id or id_helpers.generate_id()
+
+        project_name = self._resolve_project_name(project_name)
+
+        self._rest_client.optimizations.create_optimization(
+            id=id,
+            name=name,
+            dataset_name=dataset_name,
+            objective_name=objective_name,
+            status="running",
+            metadata=metadata,
+            project_name=project_name,
+        )
+
+        optimization_client = optimization.Optimization(
+            id=id, rest_client=self._rest_client, project_name=project_name
+        )
+        return optimization_client
+
+    def delete_optimizations(self, ids: List[str]) -> None:
+        analytics.track_event("client", "delete_optimizations")
+        self._rest_client.optimizations.delete_optimizations_by_id(ids=ids)
+
+    def get_optimization_by_id(self, id: str) -> optimization.Optimization:
+        analytics.track_event("client", "get_optimization_by_id")
+        result = self._rest_client.optimizations.get_optimization_by_id(id)
+        try:
+            project = self.get_project(result.project_id)
+            return optimization.Optimization(
+                id=result.id,
+                rest_client=self._rest_client,
+                project_name=project.name,
+            )
+        except Exception as e:
+            LOGGER.warning(
+                f"Failed to get project for optimization with ID: {id}, reason: {e}"
+            )
+
+        return optimization.Optimization(id=id, rest_client=self._rest_client)
+
+    def get_experiments_client(self) -> experiments_client.ExperimentsClient:
+        """
+        Retrieves an instance of `ExperimentsClient`.
+
+        Returns:
+            An instance of the ExperimentsClient initialized with a cached REST client.
+        """
+        return experiments_client.ExperimentsClient(self._rest_client)
+
+    def get_prompts_client(self) -> prompt_client.PromptClient:
+        """
+        Retrieves an instance of `PromptClient` for bulk prompt operations.
+
+        Use this client for operations like updating prompt version tags in batch.
+
+        Returns:
+            An instance of the PromptClient initialized with a cached REST client.
+
+        Example:
+            .. code-block:: python
+
+                prompts_client = client.get_prompts_client()
+                prompts_client.batch_update_prompt_version_tags(
+                    version_ids=["version-id-1", "version-id-2"],
+                    tags=["production", "v2"]
+                )
+        """
+        return prompt_client.PromptClient(self._rest_client)
+
+    def _create_annotation_queue(
+        self,
+        name: str,
+        queue_class: type[QueueT],
+        project_name: Optional[str],
+        description: Optional[str],
+        instructions: Optional[str],
+        comments_enabled: Optional[bool],
+        feedback_definition_names: Optional[List[str]],
+    ) -> QueueT:
+        """Helper method to create an annotation queue with the specified scope."""
+        project_name = self._resolve_project_name(project_name)
+
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, project_name
+        )
+        queue_id = id_helpers.generate_id()
+
+        self._rest_client.annotation_queues.create_annotation_queue(
+            id=queue_id,
+            project_id=project_id,
+            name=name,
+            scope=queue_class.SCOPE,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+        )
+
+        common_kwargs = {
+            "id": queue_id,
+            "name": name,
+            "project_id": project_id,
+            "rest_client": self._rest_client,
+            "description": description,
+            "instructions": instructions,
+            "comments_enabled": comments_enabled,
+            "feedback_definition_names": list(feedback_definition_names)
+            if feedback_definition_names
+            else None,
+            "items_count": 0,
+        }
+
+        return queue_class(**common_kwargs)
+
+    def create_traces_annotation_queue(
+        self,
+        name: str,
+        project_name: Optional[str] = None,
+        description: Optional[str] = None,
+        instructions: Optional[str] = None,
+        comments_enabled: Optional[bool] = None,
+        feedback_definition_names: Optional[List[str]] = None,
+    ) -> TracesAnnotationQueue:
+        """
+        Create a new annotation queue for traces.
+
+        Args:
+            name: The name of the annotation queue.
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            description: An optional description of the queue.
+            instructions: Optional instructions for reviewers.
+            comments_enabled: Whether to enable comments on items.
+            feedback_definition_names: Optional list of feedback definition names.
+
+        Returns:
+            TracesAnnotationQueue: The created traces annotation queue object.
+        """
+        analytics.track_event("client", "create_traces_annotation_queue")
+        return self._create_annotation_queue(
+            name=name,
+            queue_class=TracesAnnotationQueue,
+            project_name=project_name,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+        )
+
+    def create_threads_annotation_queue(
+        self,
+        name: str,
+        project_name: Optional[str] = None,
+        description: Optional[str] = None,
+        instructions: Optional[str] = None,
+        comments_enabled: Optional[bool] = None,
+        feedback_definition_names: Optional[List[str]] = None,
+    ) -> ThreadsAnnotationQueue:
+        """
+        Create a new annotation queue for threads.
+
+        Args:
+            name: The name of the annotation queue.
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            description: An optional description of the queue.
+            instructions: Optional instructions for reviewers.
+            comments_enabled: Whether to enable comments on items.
+            feedback_definition_names: Optional list of feedback definition names.
+
+        Returns:
+            ThreadsAnnotationQueue: The created threads annotation queue object.
+        """
+        analytics.track_event("client", "create_threads_annotation_queue")
+        return self._create_annotation_queue(
+            name=name,
+            queue_class=ThreadsAnnotationQueue,
+            project_name=project_name,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+        )
+
+    def get_traces_annotation_queue(self, queue_id: str) -> TracesAnnotationQueue:
+        """
+        Get a traces annotation queue by its ID.
+
+        Args:
+            queue_id: The ID of the annotation queue.
+
+        Returns:
+            TracesAnnotationQueue: The traces annotation queue object.
+
+        Raises:
+            OpikException: If the queue is not found or is not a traces queue.
+        """
+        analytics.track_event("client", "get_traces_annotation_queue")
+        return annotation_queue_rest_operations.get_traces_annotation_queue_by_id(
+            rest_client=self._rest_client,
+            queue_id=queue_id,
+        )
+
+    def get_threads_annotation_queue(self, queue_id: str) -> ThreadsAnnotationQueue:
+        """
+        Get a threads annotation queue by its ID.
+
+        Args:
+            queue_id: The ID of the annotation queue.
+
+        Returns:
+            ThreadsAnnotationQueue: The threads annotation queue object.
+
+        Raises:
+            OpikException: If the queue is not found or is not a threads queue.
+        """
+        analytics.track_event("client", "get_threads_annotation_queue")
+        return annotation_queue_rest_operations.get_threads_annotation_queue_by_id(
+            rest_client=self._rest_client,
+            queue_id=queue_id,
+        )
+
+    def get_traces_annotation_queues(
+        self,
+        project_name: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[TracesAnnotationQueue]:
+        """
+        Get all traces annotation queues for a project.
+
+        Args:
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            max_results: Maximum number of queues to return. Defaults to 1000.
+
+        Returns:
+            List[TracesAnnotationQueue]: A list of traces annotation queue objects.
+        """
+        analytics.track_event("client", "get_traces_annotation_queues")
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, self._resolve_project_name(project_name)
+        )
+
+        return annotation_queue_rest_operations.get_traces_annotation_queues(
+            rest_client=self._rest_client,
+            project_id=project_id,
+            max_results=max_results,
+        )
+
+    def get_threads_annotation_queues(
+        self,
+        project_name: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[ThreadsAnnotationQueue]:
+        """
+        Get all threads annotation queues for a project.
+
+        Args:
+            project_name: The name of the project. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            max_results: Maximum number of queues to return. Defaults to 1000.
+
+        Returns:
+            List[ThreadsAnnotationQueue]: A list of threads annotation queue objects.
+        """
+        analytics.track_event("client", "get_threads_annotation_queues")
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, self._resolve_project_name(project_name)
+        )
+
+        return annotation_queue_rest_operations.get_threads_annotation_queues(
+            rest_client=self._rest_client,
+            project_id=project_id,
+            max_results=max_results,
+        )
+
+    def delete_annotation_queue(self, queue_id: str) -> None:
+        """
+        Delete an annotation queue by its ID.
+
+        Args:
+            queue_id: The ID of the annotation queue to delete.
+        """
+        analytics.track_event("client", "delete_annotation_queue")
+        self._rest_client.annotation_queues.delete_annotation_queue_batch(
+            ids=[queue_id]
+        )
+
+    @overload
+    def get_or_create_config(
+        self,
+        *,
+        fallback: _ConfigT,
+        project_name: Optional[str] = ...,
+        env: Optional[str] = ...,
+        version: Optional[str] = ...,
+        timeout_in_seconds: Optional[int] = ...,
+    ) -> _ConfigT: ...
+
+    @overload
+    def get_or_create_config(
+        self,
+        *,
+        fallback: None = ...,
+        project_name: Optional[str] = ...,
+        env: Optional[str] = ...,
+        version: Optional[str] = ...,
+        timeout_in_seconds: Optional[int] = ...,
+    ) -> Config: ...
+
+    def get_or_create_config(
+        self,
+        *,
+        fallback: Optional[Config] = None,
+        project_name: Optional[str] = None,
+        env: Optional[str] = None,
+        version: Optional[str] = None,
+        timeout_in_seconds: Optional[int] = 5,
+    ) -> Config:
+        """Fetch a config from the backend, optionally auto-creating from a fallback.
+
+        Must be called from inside a function decorated with ``@opik.track``.
+
+        At most one of ``env`` or ``version`` may be provided.
+
+        * ``env`` — fetch the version deployed to an environment (e.g. ``"staging"``).
+        * ``version`` — fetch a specific version by name. The special value
+          ``"latest"`` fetches the latest version in the project; when no config
+          exists at all and ``fallback`` is provided, auto-creates one from it.
+        * Neither — equivalent to ``env="prod"``. If no config exists at all in
+          the project and ``fallback`` is provided, auto-creates one from it
+          (the backend tags the first version as ``"prod"``).
+
+        Failure modes depend on whether ``fallback`` is provided:
+
+        * **With fallback**: Backend errors (timeouts, network failures) return
+          the fallback instance with ``is_fallback=True``. If an explicit
+          ``env``/``version`` is requested but missing, raises
+          :class:`~opik.exceptions.ConfigNotFound`. If no config exists at all,
+          auto-creates from the fallback. The return value is an instance of
+          ``type(fallback)``.
+        * **Without fallback**: Backend errors are re-raised. If no config
+          exists at all, raises :class:`~opik.exceptions.ConfigNotFound`
+          instead of auto-creating. The return value is a generic ``Config``
+          instance — typed field access is only available when a fallback
+          supplies the subclass.
+
+        If the backend blueprint is missing any field declared on the
+        fallback's class, raises :class:`~opik.exceptions.ConfigMismatch`.
+
+        Args:
+            fallback: An instance of a user-defined ``Config`` subclass. When
+                provided, used as the return value if the backend is
+                unreachable and as the initial values when auto-creating.
+            project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            env: Environment tag to fetch (e.g. ``"prod"``, ``"staging"``).
+            version: Fetch a specific version by its name. Use ``"latest"`` to
+                fetch the latest version.
+            timeout_in_seconds: Maximum seconds to wait for the backend
+                response. With a fallback, a timeout returns the fallback and
+                the cache continues refreshing in the background; without one,
+                the timeout is raised. Pass ``None`` to wait indefinitely.
+        """
+        analytics.track_event("client", "get_or_create_config")
+        if fallback is not None and (
+            not isinstance(fallback, Config) or type(fallback) is Config
+        ):
+            raise TypeError(
+                "fallback must be an instance of a Config subclass, "
+                f"got {type(fallback).__name__}"
+            )
+
+        if env is not None and version is not None:
+            raise ValueError(
+                "Specify at most one of 'env' (fetch by environment tag) "
+                "or 'version' (fetch by version name)."
+            )
+
+        # Resolve selectors:
+        # - version="latest" → fetch latest blueprint; auto-create if empty.
+        # - explicit env or named version → fetch by selector; no auto-create.
+        # - neither → fetch env="prod"; auto-create if no config exists at all.
+        if version == "latest":
+            env = None
+            version = None
+            auto_create_if_empty = True
+        elif env is None and version is None:
+            env = "prod"
+            auto_create_if_empty = True
+        else:
+            auto_create_if_empty = False
+
+        resolved_project = self._resolve_project_name(project_name)
+        manager = ConfigManager(
+            project_name=resolved_project,
+            rest_client_=self._rest_client,
+        )
+        resolved_cls = type(fallback) if fallback is not None else Config
+        return resolved_cls._get_or_create_from_backend(
+            manager,
+            resolved_project,
+            fallback=fallback,
+            env=env,
+            version=version,
+            auto_create_if_empty=auto_create_if_empty,
+            timeout_in_seconds=timeout_in_seconds,
+        )
+
+    def create_config(
+        self,
+        config: Config,
+        project_name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> str:
+        """Write a config version to the backend unconditionally.
+
+        Unlike :meth:`get_or_create_config`, this does not require a
+        ``@opik.track`` context and always performs a write — the new version's
+        values overwrite the latest blueprint's values.
+
+        Args:
+            config: An instance of a user-defined ``Config`` subclass.
+            project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            description: Optional description stored with the version.
+
+        Returns:
+            The version name of the newly written blueprint.
+        """
+        analytics.track_event("client", "create_config")
+        if not isinstance(config, Config) or type(config) is Config:
+            raise TypeError(
+                "config must be an instance of a Config subclass, "
+                f"got {type(config).__name__}"
+            )
+
+        manager = ConfigManager(
+            project_name=self._resolve_project_name(project_name),
+            rest_client_=self._rest_client,
+        )
+        return config._create_from_instance(manager, description)
+
+    def set_config_env(
+        self,
+        *,
+        project_name: Optional[str] = None,
+        version: str,
+        env: str,
+    ) -> None:
+        """Tag a specific config version with an environment name.
+
+        After tagging, ``get_or_create_config(env=env)`` for the project will
+        return this version.
+
+        Args:
+            project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            version: Version name of the blueprint to tag.
+            env: Environment name (e.g. ``"prod"``, ``"staging"``).
+        """
+        analytics.track_event("client", "set_config_env")
+        resolved_project = self._resolve_project_name(project_name)
+        manager = ConfigManager(
+            project_name=resolved_project,
+            rest_client_=self._rest_client,
+        )
+        manager.set_env(version=version, env=env)
+
+    def _resolve_project_name(self, explicitly_passed_value: Optional[str]) -> str:
+        return helpers.resolve_project_name(
+            explicitly_passed_value=explicitly_passed_value,
+            value_from_config=self._project_name,
+            value_from_context=context_storage.get_context_project_name(),
+        )
 
 
-@functools.lru_cache()
+_context_client_var: contextvars.ContextVar[Optional[Opik]] = contextvars.ContextVar(
+    "_context_client_var", default=None
+)
+_global_singleton: Optional[Opik] = None
+# Serializes lazy creation of the global singleton so concurrent cold-start
+# callers share one client instead of racing to build several.
+_global_singleton_lock = threading.Lock()
+
+
+def get_current_client_raw() -> Optional[Opik]:
+    """Return the active Opik client without auto-creating one.
+
+    Resolution order:
+    1. Context-local client (set via ``set_global_client(client, context_wise=True)``)
+    2. Global singleton (set via ``set_global_client(client)``)
+    3. ``None`` if no client has been set
+    """
+    client = _context_client_var.get()
+    if client is not None:
+        return client
+
+    return _global_singleton
+
+
+@analytics.internal
+def get_global_client() -> Opik:
+    """Get the active Opik client, creating one if needed.
+
+    Resolution order:
+    1. Context-local client (set via ``set_global_client(client, context_wise=True)``)
+    2. Global singleton (set via ``set_global_client(client)``)
+    3. Auto-created default client (created on first call)
+    """
+    client = get_current_client_raw()
+    if client is not None:
+        return client
+
+    global _global_singleton
+    # Re-check under the lock: without it, concurrent cold-start callers (e.g. one
+    # tracer shared by parallel pipelines) each build a client and its full
+    # transport stack, and all but one are immediately discarded — wasteful, and
+    # it races the shared connection-resource manager's build path.
+    with _global_singleton_lock:
+        client = get_current_client_raw()
+        if client is not None:
+            return client
+        _global_singleton = Opik()
+        return _global_singleton
+
+
+def set_global_client(client: Opik, context_wise: bool = False) -> None:
+    """Set the active Opik client.
+
+    Args:
+        client: The Opik client instance to use.
+        context_wise: If True, sets the client for the current context only
+            (thread-safe, async-safe). If False, replaces the global singleton.
+    """
+    if context_wise:
+        _context_client_var.set(client)
+    else:
+        global _global_singleton
+        _global_singleton = client
+
+
+def reset_global_client(end_client: bool = True) -> None:
+    """Clear the active Opik client.
+
+    Args:
+        end_client: If True (default), calls ``.end()`` on the global singleton
+            before clearing it. Set to False when the caller manages the client
+            lifecycle independently.
+    """
+    global _global_singleton
+    if _global_singleton is not None:
+        if end_client:
+            _global_singleton.end()
+        _global_singleton = None
+    _context_client_var.set(None)
+
+
 def get_client_cached() -> Opik:
-    client = Opik(_use_batching=True)
-
-    return client
+    return get_global_client()

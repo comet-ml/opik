@@ -5,11 +5,13 @@ import pick from "lodash/pick";
 import {
   LogExperiment,
   LogExperimentItem,
+  LogExperimentPromptVersion,
   LogSpan,
   LogTrace,
+  PromptLibraryMetadata,
 } from "@/types/playground";
 
-import { SPAN_TYPE } from "@/types/traces";
+import { LOGS_SOURCE, SPAN_TYPE } from "@/types/traces";
 import api, {
   EXPERIMENTS_REST_ENDPOINT,
   SPANS_REST_ENDPOINT,
@@ -19,31 +21,73 @@ import { snakeCaseObj } from "@/lib/utils";
 import { createBatchProcessor } from "@/lib/batches";
 import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
 import {
+  COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
+import { parseCompletionOutput } from "@/lib/playground";
+import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 
 export interface LogQueueParams extends RunStreamingReturn {
   promptId: string;
   datasetItemId?: string;
   datasetName: string | null;
+  datasetVersionId?: string;
   model: PROVIDER_MODEL_TYPE | "";
-  provider: PROVIDER_TYPE | "";
+  provider: COMPOSED_PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
+  promptLibraryVersions?: LogExperimentPromptVersion[];
+  promptLibraryMetadata?: PromptLibraryMetadata;
   configs: LLMPromptConfigsType;
+  selectedRuleIds: string[] | null;
+  datasetItemData?: object;
+}
+
+export interface TraceMapping {
+  traceId: string;
+  promptId: string;
+  datasetItemId?: string;
 }
 
 export interface LogProcessorArgs {
-  onAddExperimentRegistry: (loggedExperiments: LogExperiment[]) => void;
+  onAddExperimentRegistry: (
+    loggedExperiments: LogExperiment[],
+    experimentPromptMap: Record<string, string>,
+  ) => void;
   onError: (error: Error) => void;
-  onCreateTraces: (traces: LogTrace[]) => void;
+  onCreateTraces: (traces: LogTrace[], mappings: TraceMapping[]) => void;
+  onExperimentItemsComplete?: (experimentIds: string[]) => void;
+  projectName?: string;
 }
 
 export interface LogProcessor {
   log: (run: LogQueueParams) => void;
+  finishLogging: () => void;
 }
+
+export const NOOP_LOG_PROCESSOR: LogProcessor = {
+  log: () => {},
+  finishLogging: () => {},
+};
+
+export const buildLogProcessor = ({
+  datasetName,
+  canLogTraceSpanThread,
+  canCreateExperiments,
+  args,
+}: {
+  datasetName: string | null;
+  canLogTraceSpanThread: boolean;
+  canCreateExperiments: boolean;
+  args: LogProcessorArgs;
+}): LogProcessor => {
+  const shouldLog = datasetName
+    ? canLogTraceSpanThread && canCreateExperiments
+    : canLogTraceSpanThread;
+  return shouldLog ? createLogPlaygroundProcessor(args) : NOOP_LOG_PROCESSOR;
+};
 
 const createBatchTraces = async (traces: LogTrace[]) => {
   return api.post(`${TRACES_REST_ENDPOINT}batch`, {
@@ -69,7 +113,16 @@ const createBatchExperimentItems = async (
   });
 };
 
-const PLAYGROUND_PROJECT_NAME = "playground";
+const finishExperiments = async (experimentIds: string[]) => {
+  if (experimentIds.length === 0) {
+    return;
+  }
+
+  await api.post(`${EXPERIMENTS_REST_ENDPOINT}finish`, {
+    ids: experimentIds,
+  });
+};
+
 const PLAYGROUND_TRACE_SPAN_NAME = "chat_completion_create";
 const USAGE_FIELDS_TO_SEND = [
   "completion_tokens",
@@ -77,47 +130,128 @@ const USAGE_FIELDS_TO_SEND = [
   "total_tokens",
 ];
 
-const getTraceFromRun = (run: LogQueueParams): LogTrace => {
-  return {
+const getTraceFromRun = (
+  run: LogQueueParams,
+  projectName: string,
+  source: LOGS_SOURCE,
+): LogTrace => {
+  const trace: LogTrace = {
     id: v7(),
-    projectName: PLAYGROUND_PROJECT_NAME,
+    projectName,
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
-    input: { messages: run.providerMessages },
-    output: { output: run.result || run.providerError },
+    input: {
+      messages: run.providerMessages,
+    },
+    output: { output: parseCompletionOutput(run) },
+    metadata: {
+      created_from: "playground",
+    },
+    source,
   };
+
+  // Add selected_rule_ids to trace metadata if provided
+  if (run.selectedRuleIds && run.selectedRuleIds.length > 0) {
+    trace.metadata = {
+      ...trace.metadata,
+      selected_rule_ids: run.selectedRuleIds,
+    };
+  }
+
+  // Add dataset_item_data to trace metadata if provided
+  if (run.datasetItemData) {
+    trace.metadata = {
+      ...trace.metadata,
+      dataset_item_data: run.datasetItemData,
+    };
+  }
+
+  // Add opik_prompts to trace metadata if prompt is from library and unchanged
+  // This follows the Python SDK format for associating prompts with traces
+  if (run.promptLibraryMetadata) {
+    trace.metadata = {
+      ...trace.metadata,
+      opik_prompts: [run.promptLibraryMetadata],
+    };
+  }
+
+  return trace;
 };
 
-const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
+const hasChoicesContent = (run: LogQueueParams): boolean => {
+  return !!run?.choices?.some((choice) => choice.delta.content);
+};
+
+const getSpanFromRun = (
+  run: LogQueueParams,
+  traceId: string,
+  projectName: string,
+  source: LOGS_SOURCE,
+): LogSpan => {
+  const spanOutput =
+    run.choices && hasChoicesContent(run)
+      ? { choices: run.choices }
+      : { output: run.result };
+
+  // Use the actual model and provider from the response headers if available
+  // This is important for the default provider which uses a virtual model name and provider which is transformed at inference time
+  const spanModel = run.actualModel || run.model;
+  const spanProvider = run.actualProvider || run.provider;
+
   return {
     id: v7(),
     traceId,
-    projectName: PLAYGROUND_PROJECT_NAME,
+    projectName,
     type: SPAN_TYPE.llm,
     name: PLAYGROUND_TRACE_SPAN_NAME,
     startTime: run.startTime,
     endTime: run.endTime,
-    input: { messages: run.providerMessages },
-    output: { choices: run.choices ? run.choices : [] },
+    input: {
+      messages: run.providerMessages,
+    },
+    output: spanOutput,
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
+    model: spanModel,
+    provider: spanProvider,
+    source,
     metadata: {
-      created_from: run.provider,
+      created_from: spanProvider,
       usage: run.usage,
-      model: run.model,
+      model: spanModel,
       parameters: run.configs,
+      ...(run.provider === PROVIDER_TYPE.OPIK_FREE && {
+        opik_free_model: true,
+      }),
     },
   };
 };
 
 const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
+  // Use the actual model from the response headers if available
+  const experimentModel = run.actualModel || run.model;
+
+  const experimentMetadata: Record<string, unknown> = {
+    model: experimentModel,
+    messages: JSON.stringify(run.providerMessages),
+    model_config: run.configs,
+  };
+
+  // Add selected_rule_ids to experiment metadata if provided
+  if (run.selectedRuleIds && run.selectedRuleIds.length > 0) {
+    experimentMetadata.selected_rule_ids = run.selectedRuleIds;
+  }
+
   return {
     id: v7(),
     datasetName: run.datasetName!,
-    metadata: {
-      model: run.model,
-      messages: JSON.stringify(run.providerMessages),
-    },
+    ...(run.datasetVersionId && {
+      datasetVersionId: run.datasetVersionId,
+    }),
+    metadata: experimentMetadata,
+    ...(run.promptLibraryVersions?.length && {
+      prompt_versions: run.promptLibraryVersions,
+    }),
   };
 };
 
@@ -140,9 +274,14 @@ const createLogPlaygroundProcessor = ({
   onAddExperimentRegistry,
   onError,
   onCreateTraces,
+  onExperimentItemsComplete,
+  projectName = PLAYGROUND_PROJECT_NAME,
 }: LogProcessorArgs): LogProcessor => {
   const experimentPromptMap: Record<string, string> = {};
   const experimentRegistry: LogExperiment[] = [];
+  const traceMappings: TraceMapping[] = [];
+  let areExperimentsCreated = false;
+  let isLoggingFinished = false;
 
   const spanBatch = createBatchProcessor<LogSpan>(async (spans) => {
     try {
@@ -155,7 +294,7 @@ const createLogPlaygroundProcessor = ({
   const traceBatch = createBatchProcessor<LogTrace>(async (traces) => {
     try {
       await createBatchTraces(traces);
-      onCreateTraces(traces);
+      onCreateTraces(traces, traceMappings);
     } catch {
       onError(new Error("There has been an error with logging traces"));
     }
@@ -183,17 +322,50 @@ const createLogPlaygroundProcessor = ({
   }, CREATE_EXPERIMENT_CONCURRENCY_RATE);
 
   experimentsQueue.drain(() => {
-    onAddExperimentRegistry(experimentRegistry);
+    onAddExperimentRegistry(experimentRegistry, experimentPromptMap);
+    areExperimentsCreated = true;
+    tryFinishExperiments();
   });
+
+  const tryFinishExperiments = async () => {
+    // Only finish when both conditions are met:
+    // 1. All experiments have been created (queue drained)
+    // 2. finishLogging was called (all batches flushed and no more items will be added)
+    if (
+      areExperimentsCreated &&
+      isLoggingFinished &&
+      experimentRegistry.length > 0
+    ) {
+      try {
+        const experimentIds = experimentRegistry.map((e) => e.id);
+        await finishExperiments(experimentIds);
+        onExperimentItemsComplete?.(experimentIds);
+      } catch {
+        onError(
+          new Error("There has been an error with finishing experiments"),
+        );
+      }
+    }
+  };
 
   return {
     log: (run: LogQueueParams) => {
-      const { promptId, datasetName } = run;
+      const { promptId, datasetName, datasetItemId } = run;
 
       const isWithExperiments = !!datasetName;
+      const source = isWithExperiments
+        ? LOGS_SOURCE.experiment
+        : LOGS_SOURCE.playground;
 
-      const trace = getTraceFromRun(run);
-      const span = getSpanFromRun(run, trace.id);
+      const trace = getTraceFromRun(run, projectName, source);
+      const span = getSpanFromRun(run, trace.id, projectName, source);
+
+      // Store the trace mapping
+      traceMappings.push({
+        traceId: trace.id,
+        promptId,
+        datasetItemId,
+      });
 
       traceBatch.addItem(trace);
       spanBatch.addItem(span);
@@ -217,6 +389,18 @@ const createLogPlaygroundProcessor = ({
       );
 
       experimentItemsBatch.addItem(experimentItem);
+    },
+    finishLogging: () => {
+      // Flush all batches (triggers async API calls)
+      spanBatch.flush();
+      traceBatch.flush();
+      experimentItemsBatch.flush();
+
+      // Mark that logging is finished - no more items will be added
+      isLoggingFinished = true;
+
+      // Try to finish experiments if queue has also drained
+      tryFinishExperiments();
     },
   };
 };

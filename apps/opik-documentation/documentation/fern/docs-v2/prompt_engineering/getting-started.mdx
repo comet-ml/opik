@@ -1,0 +1,236 @@
+---
+headline: Prompt Library
+og:description: Learn how to push, fetch, and version prompts using Opik's Prompt
+  Library
+og:site_name: Opik Documentation
+og:title: Getting Started with the Prompt Library — Opik
+title: Getting started with the Prompt Library
+---
+
+Your agent depends on prompts that change frequently. The Prompt Library lets you manage them
+outside your codebase, version each change automatically, and link the exact version that ran
+to its trace.
+
+<Frame>
+  <img src="/img/v2/prompt-library/prompt-library-example.png" alt="Prompt Library page showing versioned prompts" />
+</Frame>
+
+## Adding the Prompt Library to your code
+
+<Tabs>
+  <Tab title="AI Integration">
+    You can use the Opik skills to wire your existing agent up to the Prompt Library:
+
+    <Steps>
+      <Step title="Install the Opik skill">
+        ```bash
+        npx skills add comet-ml/opik-skills
+        ```
+
+        This skill is compatible with all coding agents including Claude Code, Codex, Cursor, OpenCode and more.
+      </Step>
+      <Step title="Run the integration">
+        Once the skill is installed, you can integrate with Opik using the following prompt:
+        ```
+        Version my prompts in Opik using the /opik-instrument command.
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Manual integration">
+    There are two parts: you **create** a prompt, and then you **fetch** it at runtime from
+    inside your agent.
+
+    ### Step 1 — Define and push your first prompt
+
+    Push the prompt to Opik. You only do this once (or whenever you want to create a new version
+    from code).
+
+    <CodeBlocks>
+
+    ```python title="Python"
+    import opik
+
+    client = opik.Opik()
+
+    client.create_prompt(
+        name="system_prompt",
+        prompt="You are a helpful assistant specializing in {{domain}}.",
+        project_name="my-agent",
+    )
+    ```
+
+    ```ts title="TypeScript"
+    import { Opik } from "opik";
+
+    const client = new Opik();
+
+    await client.createPrompt({
+      name: "system_prompt",
+      prompt: "You are a helpful assistant specializing in {{domain}}.",
+      projectName: "my-agent",
+    });
+    ```
+    </CodeBlocks>
+
+    <Tip>
+      Prompts are **project-scoped**. Always pass a `project_name` / `projectName` so two agents can use the same prompt names independently.
+    </Tip>
+
+    ### Step 2 — Fetch your prompt at runtime
+
+    Use `get_prompt` / `getPrompt` inside your agent to pull the version you want and render it
+    with your runtime values.
+
+    <CodeBlocks>
+      ```python title="Python"
+      import opik
+
+      client = opik.Opik()
+
+      @opik.track(project_name="my-agent")
+      def run_agent(user_input: str):
+          prompt = client.get_prompt(
+              name="system_prompt",
+              project_name="my-agent",
+          )
+
+          system_prompt = prompt.format(domain="customer support")
+
+          response = call_llm(
+              model="gpt-4o-mini",
+              system_prompt=system_prompt,
+              user_input=user_input,
+          )
+          return response
+      ```
+
+      ```ts title="TypeScript"
+      import { Opik, track } from "opik";
+
+      const client = new Opik();
+
+      const runAgent = track(
+        { name: "run_agent", projectName: "my-agent" },
+        async (userInput: string) => {
+          const prompt = await client.getPrompt({
+            name: "system_prompt",
+            projectName: "my-agent",
+          });
+
+          const systemPrompt = prompt?.format({ domain: "customer support" });
+
+          const response = await callLlm({
+            model: "gpt-4o-mini",
+            systemPrompt,
+            userInput,
+          });
+          return response;
+        },
+      );
+      ```
+    </CodeBlocks>
+
+    <Tip>
+      Calling `get_prompt` / `getPrompt` inside a tracked function (`@opik.track` in Python,
+      `track()` in TypeScript) lets Opik link the prompt version to the trace automatically.
+    </Tip>
+
+  </Tab>
+</Tabs>
+
+## Choosing a version
+
+Pass the `version` parameter to control which version is returned:
+
+- **Omit `version`** (default) — The most recently created version. Useful when you want the agent to pick up new prompt edits automatically.
+- **`"v3"`** (or any `v<N>` name) — A specific version. Useful when you want the prompt to stay fixed regardless of newer edits — for example, when reproducing a past run or comparing versions.
+
+<CodeBlocks>
+  ```python title="Python"
+  # Fetch a specific version
+  v3 = client.get_prompt(name="system_prompt", version="v3", project_name="my-agent")
+
+  # Fetch the most recent version (omit `version`)
+  latest = client.get_prompt(name="system_prompt", project_name="my-agent")
+  ```
+
+  ```ts title="TypeScript"
+  // Fetch a specific version
+  const v3 = await client.getPrompt({
+    name: "system_prompt",
+    version: "v3",
+    projectName: "my-agent",
+  });
+
+  // Fetch the most recent version (omit `version`)
+  const latest = await client.getPrompt({
+    name: "system_prompt",
+    projectName: "my-agent",
+  });
+  ```
+</CodeBlocks>
+
+## Chat prompts
+
+For multi-turn agents with system, user, and assistant roles, use `create_chat_prompt` /
+`createChatPrompt` and the matching `get_chat_prompt` / `getChatPrompt`. See
+[Text and chat prompts](/development/prompt-library/prompt-types) for a deeper comparison,
+multimodal content, and template engines.
+
+<CodeBlocks>
+  ```python title="Python"
+  client.create_chat_prompt(
+      name="support_assistant",
+      messages=[
+          {"role": "system", "content": "You are a helpful support agent for {{company}}."},
+          {"role": "user", "content": "{{user_query}}"},
+      ],
+      project_name="my-agent",
+  )
+
+  chat_prompt = client.get_chat_prompt(
+      name="support_assistant",
+      version="v3",
+      project_name="my-agent",
+  )
+
+  messages = chat_prompt.format(
+      variables={"company": "Acme", "user_query": "How do I reset my password?"},
+  )
+  ```
+
+  ```ts title="TypeScript"
+  await client.createChatPrompt({
+    name: "support_assistant",
+    messages: [
+      { role: "system", content: "You are a helpful support agent for {{company}}." },
+      { role: "user", content: "{{user_query}}" },
+    ],
+    projectName: "my-agent",
+  });
+
+  const chatPrompt = await client.getChatPrompt({
+    name: "support_assistant",
+    version: "v3",
+    projectName: "my-agent",
+  });
+
+  const messages = chatPrompt?.format({
+    company: "Acme",
+    user_query: "How do I reset my password?",
+  });
+  ```
+</CodeBlocks>
+
+<Tip>
+  **Recommended if you build with an AI coding assistant.** One command — `opik configure` —
+  installs both the [MCP server](/mcp-server) and the Opik skills, and your assistant can then
+  version prompts here as it edits them, and measure whether a change actually helped instead of
+  you judging by eye.
+
+  An example prompt:
+
+  *"Rewrite this system prompt to cut hallucinations, save each attempt to the Opik prompt library,
+  and evaluate every version against my dataset so we can see which one wins."*
+</Tip>

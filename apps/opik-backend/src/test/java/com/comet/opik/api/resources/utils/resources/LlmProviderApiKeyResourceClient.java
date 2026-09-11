@@ -5,6 +5,7 @@ import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
+import com.comet.opik.api.ProviderAuthCheck;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
@@ -28,7 +29,7 @@ public class LlmProviderApiKeyResourceClient {
 
     public LlmProviderApiKeyResourceClient(ClientSupport client) {
         this.client = client;
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
     }
 
     public ProviderApiKey createProviderApiKey(
@@ -49,6 +50,46 @@ public class LlmProviderApiKeyResourceClient {
 
             return null;
         }
+    }
+
+    public Response callCreateProviderApiKey(ProviderApiKey providerApiKey, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(providerApiKey));
+    }
+
+    public Response callUpdateProviderApiKey(UUID id, ProviderApiKeyUpdate providerApiKeyUpdate, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(id.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(providerApiKeyUpdate));
+    }
+
+    public Response callTestAuthConfig(ProviderAuthCheck providerAuthTest, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("auth-config")
+                .path("test")
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(providerAuthTest));
+    }
+
+    public Response callDeleteProviderApiKeys(Set<UUID> ids, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new BatchDelete(ids)));
     }
 
     public Response createProviderApiKey(

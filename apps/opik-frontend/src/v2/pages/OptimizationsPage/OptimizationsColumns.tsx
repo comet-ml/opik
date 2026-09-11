@@ -1,0 +1,179 @@
+import TimeCell from "@/shared/DataTableCells/TimeCell";
+import IdCell from "@/shared/DataTableCells/IdCell";
+import { COLUMN_DATASET_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { Optimization } from "@/types/optimizations";
+import { getFeedbackScore } from "@/lib/feedback-scores";
+import {
+  getOptimizerLabel,
+  getOptimizationOptimizerType,
+  getMetricLabel,
+} from "@/lib/optimizations";
+import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
+import ItemSourceCell, {
+  ITEM_SOURCE_LABEL,
+} from "@/v2/pages-shared/experiments/ItemSourceCell";
+import OptimizationStatusCell from "@/v2/pages/OptimizationsPage/OptimizationStatusCell";
+import {
+  OptimizationObjectiveScoreCell,
+  OptimizationLatencyCell,
+  OptimizationCostCell,
+  OptimizationTotalCostCell,
+} from "@/v2/pages/OptimizationsPage/OptimizationMetricCells";
+
+// selected-columns bumped to v3 to roll out the default-visible Item source
+// column to existing users; width/order keys stay at v2 so those customizations
+// survive (matches how other tables bump only the selected-columns key).
+export const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v4";
+export const COLUMNS_WIDTH_KEY = "optimizations-columns-width-v2";
+export const COLUMNS_ORDER_KEY = "optimizations-columns-order-v2";
+
+const DEFAULT_METRIC_COLUMN_WIDTH = 120;
+
+export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
+  {
+    id: "name",
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.name,
+    size: 191,
+  },
+  {
+    id: "id",
+    label: "Run ID",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.id,
+    cell: IdCell as never,
+    size: 160,
+  },
+  {
+    id: "dataset_name",
+    label: ITEM_SOURCE_LABEL,
+    type: COLUMN_TYPE.string,
+    cell: ItemSourceCell as never,
+    customMeta: {
+      nameKey: "dataset_name",
+      idKey: "dataset_id",
+      resource: RESOURCE_TYPE.testSuite,
+    },
+    size: 200,
+  },
+  {
+    id: "algorithm",
+    label: "Algorithm",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) => {
+      const optimizerType = getOptimizationOptimizerType(row);
+      return optimizerType ? getOptimizerLabel(optimizerType) : "-";
+    },
+    size: 180,
+  },
+  {
+    id: "metric",
+    label: "Metric",
+    type: COLUMN_TYPE.string,
+    accessorFn: (row) =>
+      row.objective_name ? getMetricLabel(row.objective_name) : "-",
+    size: 160,
+  },
+  {
+    id: "created_at",
+    label: "Start time",
+    type: COLUMN_TYPE.time,
+    cell: TimeCell as never,
+    size: 145,
+  },
+  {
+    id: "status",
+    label: "Status",
+    type: COLUMN_TYPE.string,
+    cell: OptimizationStatusCell as never,
+    size: 120,
+  },
+  {
+    // Merged objective-score column (was the separate "Pass rate" + "Accuracy"
+    // pair, each of which rendered "-" for the run type it did not handle). The
+    // id stays "accuracy" deliberately: it is already present in existing users'
+    // saved selected-columns/order state, so the merged column stays visible and
+    // keeps its position without bumping SELECTED_COLUMNS_KEY and resetting
+    // everyone's column customizations. The now-unused "pass_rate" id simply
+    // no longer matches a column and is ignored.
+    id: "accuracy",
+    label: "Best score",
+    type: COLUMN_TYPE.numberDictionary,
+    size: DEFAULT_METRIC_COLUMN_WIDTH,
+    accessorFn: (row) =>
+      (row.experiment_scores?.length ?? 0) > 0
+        ? row.best_objective_score
+        : getFeedbackScore(row.feedback_scores ?? [], row.objective_name),
+    cell: OptimizationObjectiveScoreCell as never,
+  },
+  {
+    id: "latency",
+    label: "Latency",
+    type: COLUMN_TYPE.duration,
+    size: DEFAULT_METRIC_COLUMN_WIDTH,
+    accessorFn: (row) => row.best_duration,
+    cell: OptimizationLatencyCell as never,
+  },
+  {
+    id: "cost",
+    label: "Cost",
+    type: COLUMN_TYPE.cost,
+    size: DEFAULT_METRIC_COLUMN_WIDTH,
+    accessorFn: (row) => row.best_cost,
+    cell: OptimizationCostCell as never,
+  },
+  {
+    // The id stays "opt_cost" so saved column selection, order and width
+    // survive the rename.
+    id: "opt_cost",
+    // Named for what it measures — a whole run's one-time spend — and matching
+    // the run page's overview card. The former "Opt. cost" was an abbreviation
+    // that also read as the run page's per-case column, so one header stood for
+    // two different quantities a screen apart (OPIK-8060). Wider than its metric
+    // siblings because the unabbreviated label needs the room.
+    label: "Optimization cost",
+    type: COLUMN_TYPE.cost,
+    size: 160,
+    accessorFn: (row) => row.total_optimization_cost,
+    cell: OptimizationTotalCostCell as never,
+  },
+];
+
+export const FILTER_COLUMNS: ColumnData<Optimization>[] = [
+  {
+    id: COLUMN_DATASET_ID,
+    label: "Test suite",
+    type: COLUMN_TYPE.string,
+    disposable: true,
+  },
+];
+
+// Default-visible columns; Run ID ships hidden and is enabled from the Columns
+// picker. Algorithm and Metric are shown by default (design QA round 2).
+export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "name",
+  "dataset_name",
+  "algorithm",
+  "metric",
+  "created_at",
+  "status",
+  "accuracy",
+  "latency",
+  "cost",
+  "opt_cost",
+];
+
+export const DEFAULT_COLUMNS_ORDER: string[] = [
+  "name",
+  "id",
+  "dataset_name",
+  "algorithm",
+  "metric",
+  "created_at",
+  "status",
+  "accuracy",
+  "latency",
+  "cost",
+  "opt_cost",
+];

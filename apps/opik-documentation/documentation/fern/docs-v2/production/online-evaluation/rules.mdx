@@ -1,0 +1,286 @@
+---
+headline: Online Evaluation rules
+og:description: Evaluate production LLM performance with Opik's automated metrics
+  to efficiently score traces and identify issues.
+og:site_name: Opik Documentation
+og:title: Online Evaluation Rules - Opik
+subtitle: Describes how to define scoring rules for production traces
+title: Online Evaluation rules
+---
+
+<Tip>
+  Online evaluation metrics allow you to score all your production traces and easily identify any issues with your
+  production LLM application.
+</Tip>
+
+When working with LLMs in production, the sheer number of traces means that it isn't possible to manually review each trace. Opik allows you to define LLM as a Judge metrics that will automatically score the LLM calls logged to the platform.
+
+![Opik LLM as a Judge](/img/production/online_evaluation.gif)
+
+By defining LLM as a Judge metrics that run on all your production traces, you will be able to
+automate the monitoring of your LLM calls for hallucinations, answer relevance or any other task
+specific metric.
+
+## Defining scoring rules
+
+Scoring rules can be defined through both the UI and the [REST API](/reference/rest-api/overview).
+
+To create a new scoring metric in the UI, first navigate to the project you would like to monitor. Once you have navigated to the `rules` tab, you will be able to create a new rule.
+
+<Frame>
+  <img src="/img/production/online_evaluation_rule_modal.png" />
+</Frame>
+
+When creating a new rule, you will be presented with the following options:
+
+1. **Name:** The name of the rule
+2. **Sampling rate:** The percentage of production traces to score. When set to `100%`, all production traces will be scored. For trace rules the rate applies to production (SDK-logged) traces only: traces from experiments ignore it and are always scored when the rule matches, and traces from the playground or an optimization run ignore it too but are only evaluated when you explicitly select the rule for that run. Thread and span rules only ever run on production (SDK-logged) data — threads and spans from experiments, the playground and optimization runs are excluded from online evaluation entirely.
+3. **Model:** The model to use to run the LLM as a Judge metric. For evaluating traces with images, make sure to select a model that supports vision capabilities.
+4. **Prompt:** The LLM as a Judge prompt to use. Opik provides a set of base prompts (Hallucination, Moderation, Answer Relevance) that you can use or you can define your own. Variables in the prompt should be in `{{variable_name}}` format.
+5. **Variable mapping:** Where each prompt variable reads from in the trace. Not needed when you use Agent as a Judge — see [Writing your own LLM as a Judge metric](#writing-your-own-llm-as-a-judge-metric).
+6. **Score definition:** This is the format of the output of the LLM as a Judge metric. By adding more than one score, you can define LLM as a Judge metrics that score an LLM output along different dimensions.
+
+### Opik's built-in LLM as a Judge metrics
+
+Opik comes pre-configured with 3 different LLM as a Judge metrics:
+
+1. Hallucination: This metric checks if the LLM output contains any hallucinated information.
+2. Moderation: This metric checks if the LLM output contains any offensive content.
+3. Answer Relevance: This metric checks if the LLM output is relevant to the given context.
+
+<Tip>
+  If you would like us to add more LLM as a Judge metrics to the platform, do raise an issue on
+  [GitHub](https://github.com/comet-ml/opik/issues) and we will do our best to add them !
+</Tip>
+
+### Writing your own LLM as a Judge metric
+
+Opik's built-in LLM as a Judge metrics are very easy to use and are great for getting started. However, as you start working on more complex tasks, you may need to write your own LLM as a Judge metrics.
+
+We typically recommend that you experiment with LLM as a Judge metrics during development using [Opik's evaluation platform](/evaluation/overview). Once you have a metric that works well for your use case, you can then use it in production.
+
+<Frame>
+  <img src="/img/production/online_evaluation_custom_judge.png" />
+</Frame>
+When writing your own LLM as a Judge metric you will need to specify the prompt variables using the mustache syntax, ie.
+`{{ variable_name }}`. You control the scores it returns with the `Scoring definition` parameter. Under the hood, we will use this definition in conjunction with the [structured outputs](https://platform.openai.com/docs/guides/structured-outputs) functionality to ensure that the LLM as a Judge metric always returns trace scores.
+
+That leaves one decision: where the judge gets its data. For trace and span rules there are two ways, and both work with the built-in metrics as well as your own.
+
+- **Agent as a Judge** — start here. No mapping to fill in, works on any trace shape, handles nesting and attachments. Best while you are still exploring what to measure.
+- **Variable mapping** — use when the judge should see exactly one field, every time.
+
+Thread rules have no mapping to choose. They always use `{{context}}`, which reads the conversation the same way — see [Online thread evaluation rules](#online-thread-evaluation-rules).
+
+#### Agent as a Judge
+
+Add `{{trace}}` to the prompt. There is nothing to map, so the same rule works whatever shape your traces have.
+
+Prompt:
+
+```
+Read the trace below and decide whether the assistant answered the user's question.
+
+{{trace}}
+```
+
+Variable mapping: nothing to fill in.
+
+The judge reads the trace itself, using these tools:
+
+- `read` — read the trace or one of its spans
+- `jq` — pull out a specific path
+- `search` — find text anywhere in the trace
+- `get_trace_spans` — list the trace's spans
+- `get_attachment` — fetch an attached file as image, audio or text
+
+For a span-scope rule, use `{{span}}` instead. To inject the trace's spans as plain JSON without giving the judge any tools, use `{{spans}}`.
+
+Agent as a Judge is built to keep the cost bounded. Opik truncates the trace it puts in the prompt and points the judge at targeted reads instead of loading everything up front. A small trace fits in the prompt and the judge answers in a single call. On a larger one, the judge reads only the parts it needs.
+
+You can also set a hard limit with **Max cost per evaluation (USD)**. Once an evaluation reaches it, the judge wraps up and returns the scores it has. Leave it empty for no limit.
+
+<Note>
+  Agent as a Judge needs a model that supports tool calling. On a model that does not, the rule falls back to a single call with a truncated trace.
+</Note>
+
+#### Variable mapping
+
+Point each prompt variable at a field in the trace. The judge then receives that field and nothing else.
+
+Prompt:
+
+```
+Decide whether the answer below is helpful.
+
+Question: {{question}}
+Answer: {{answer}}
+```
+
+Variable mapping:
+
+- `question` → `input.messages[0].content`
+- `answer` → `output.messages[0].parts[0].content`
+
+Use it when a metric should score the same field on every trace. Because the input is fixed, the scores stay comparable over time, and each evaluation is a single call with no drill-down.
+
+The trade-off is that the path has to match your traces. A rule mapped to your application's traces will not read traces logged in a different shape, such as the ones the playground writes when you run an experiment. Use Agent as a Judge when one rule has to cover both.
+
+### Evaluating traces with images
+
+LLM as a Judge metrics can evaluate traces that contain images when using vision-capable models. This is useful for:
+
+- Evaluating image generation quality
+- Analyzing visual content in multimodal applications
+- Validating image-based responses
+
+To reference image data from traces in your evaluation prompts:
+
+1. In the prompt editor, click the **"Images +"** button to add an image variable
+2. Map the image variable to the trace field containing image data using the Variable Mapping section
+
+<Frame>
+  <img src="/img/production/online_evaluation_rule_add_image.png" />
+</Frame>
+
+<Note>
+  When you add an image using the "Images +" button, Opik automatically adds a new line to the prompt with the image wrapped in `<<<image>>><</image>>>` tags. This wrapper is not visible in the UI but ensures proper image processing during evaluation.
+</Note>
+
+**Example rule configuration:**
+
+Prompt:
+
+```
+Evaluate the quality of this generated image.
+
+Rate the image on the following criteria:
+1. Visual clarity and resolution
+2. Relevance to the prompt
+3. Technical quality
+
+Provide a score between 0 and 1.
+```
+
+Variable Mapping:
+
+- `output_image` → `output.image_data` (path in trace structure)
+
+Model: Vision-capable model required
+
+**Supported image formats:**
+
+- Image URL
+- Base64 encoded image
+
+<Tip>
+  When mapping image variables, ensure the trace field contains image data in a
+  supported format (image URL or base64 encoded image).
+</Tip>
+
+## Reviewing online evaluation scores
+
+The scores returned by the online evaluation rules will be stored as feedback scores for each trace. This will allow you to review these scores in the traces sidebar and track their changes over time in the Opik dashboard.
+
+![Opik dashboard](/img/production/opik_monitoring_dashboard.gif)
+
+You can also view the average feedback scores for all the traces in your project from the traces table.
+
+## Online thread evaluation rules
+
+It is also possible to define LLM as a Judge and Custome Python metrics that run on threads. This is useful to score the entire conversations and not just the individual traces.
+
+<Frame>
+  <img src="/img/production/online_evaluation_thread_rule.gif" />
+</Frame>
+
+We have built-in templates for the LLM as a Judge metrics that you can use to score the entire conversation:
+1. **Conversation Coherence:** This metric checks if the conversation is coherent and follows a logical flow, return a decimal score between 0 and 1.
+2. **User Frustration:** This metric checks if the user is frustrated with the conversation, return a decimal score between 0 and 1.
+3. **Custom LLM as a Judge metrics:** You can use this template to score the entire conversation using your own LLM as a Judge metric. By default, this template uses binary scoring (true/false) following best practices.
+
+For the LLM as a Judge metrics, keep in mind the only variable available is the `{{context}}` one, which is a dictionary containing the entire conversation:
+
+```json
+[
+  {
+      "role": "user",
+      "content": "Hello, how are you?"
+  },
+  {
+      "role": "assistant",
+      "content": "I'm good, thank you!"
+  }
+]
+```
+
+By default, `{{context}}` contains only the messages exchanged in the conversation, as shown above. When your evaluation logic needs to reason about *how* the agent produced its final answer — which tools it called, in what order, and what each tool or LLM call returned — Opik can enrich `{{context}}` with the full thread structure instead: every trace in the thread and every span within it (LLM calls, tool calls, retrieval steps, or any other span type), including that span's type, input, output, metadata, and its position in the conversation.
+
+This makes it possible to write rules that evaluate an agent's full execution path, not just its final response. For example:
+
+- **Tool call order** — verify tools were called in the expected sequence before the agent responded (e.g. a retrieval step must run before synthesis).
+- **Grounding** — verify every claim in the final answer is backed by a tool result seen earlier in the conversation, to catch hallucinations not grounded in retrieved data.
+- **Escalation logic** — verify an agent invoked the correct tool (e.g. a human hand-off tool) when the conversation showed signals that warranted it.
+
+Because a full thread can contain many spans, Opik truncates long field values before injecting them into the prompt, and gives the judge model tools to fetch anything beyond the truncated preview:
+
+```json
+{
+  "name": "answer_question",
+  "type": "llm",
+  "input": "What is the capital of France?",
+  "output": "The capital of France i[TRUNCATED 800 chars — use read(...) to see full]"
+}
+```
+
+The judge model can call:
+
+- **`read`** — fetch a specific trace or span by ID, with an optional truncation tier, to see more (or all) of its content.
+- **`jq`** — evaluate a `jq` expression against previously fetched data, useful for pulling a specific nested field (e.g. a value in span metadata).
+- **`search`** — run a regex search across a cached entity's string fields, useful for locating a term inside a very long input or output.
+
+This keeps evaluation prompts token-efficient even for long-running threads or deeply nested traces, since the judge model only pulls in the extra detail it actually needs.
+
+<Note>
+  Full trace and span context is available when the model selected for the rule supports tool calling.
+</Note>
+
+Similarly, for the Python metrics, you have the `Conversation` object available to you. This object is a `List[Dict]` where each dict represents a message in the conversation.
+
+```python
+[
+  {
+      "role": "user",
+      "content": "Hello, how are you?"
+  },
+  {
+      "role": "assistant",
+      "content": "I'm good, thank you!"
+  }
+]
+```
+
+For online scoring rules on threads, Opik waits for a "cooldown period" after the last activity in a thread
+before running the evaluation. This ensures the scoring is done on the full context of the conversation.
+
+<Note>
+  The default cooldown period is 15 minutes but can be configured at the workspace level under "Thread online scoring rule cooldown period".
+  For self-hosted installations, set the `OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE` environment variable.
+</Note>
+
+## Running online evaluations on historical data
+
+By default, a newly created online evaluation rule will only run on traces or threads logged after the rule was defined. To run a rule against historical data, you can trigger it manually from the UI:
+
+1. Navigate to the **Traces** or **Threads** tab of your project.
+2. Select the traces or threads you want to evaluate.
+3. Click the brain icon (<Icon icon="brain" />) in the toolbar.
+4. You will be prompted to choose which online evaluation rule to apply to the selected items.
+
+<Frame>
+  <img src="/img/production/online_evaluation_historical.png" alt="Running an online evaluation rule on historical traces" />
+</Frame>
+
+<Note>
+  Depending on the model configured in the rule, evaluations may take some time to complete. You can monitor progress in the evaluation rule logs or by refreshing the traces/threads in the UI.
+</Note>

@@ -11,7 +11,8 @@ from typing import (
     Generic,
 )
 
-from opik import context_storage, logging_messages
+import opik.context_storage as context_storage
+import opik.logging_messages as logging_messages
 from opik.api_objects import span, trace
 from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 
@@ -57,11 +58,12 @@ class BaseTrackedGenerator(Generic[YieldType]):
         if self._created_span_data is not None:
             return
 
-        self._created_trace_data, self._created_span_data = (
-            span_creation_handler.create_span_for_current_context(
-                self._start_span_arguments, self._opik_distributed_trace_headers
-            )
+        result = span_creation_handler.create_span_respecting_context(
+            self._start_span_arguments, self._opik_distributed_trace_headers
         )
+
+        self._created_trace_data = result.trace_data
+        self._created_span_data = result.span_data
 
     def _handle_stop_iteration_before_raising(self) -> None:
         output = _try_aggregate_items(
@@ -78,7 +80,7 @@ class BaseTrackedGenerator(Generic[YieldType]):
 
     def _handle_generator_exception_before_raising(self, exception: Exception) -> None:
         LOGGER.debug(
-            "Exception raised from tracked generator",
+            "Exception raised from tracked generator: %s",
             str(exception),
             exc_info=True,
         )

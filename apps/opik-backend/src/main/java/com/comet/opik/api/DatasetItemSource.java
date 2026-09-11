@@ -19,6 +19,11 @@ public enum DatasetItemSource {
     private final String value;
 
     public static DatasetItemSource fromString(String source) {
+
+        if ("unknown".equals(source)) {
+            return null;
+        }
+
         return Arrays.stream(values()).filter(v -> v.value.equals(source)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown dataset source: " + source));
     }

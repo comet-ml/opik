@@ -1,31 +1,66 @@
 package com.comet.opik.infrastructure.redis;
 
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.DistributedLockConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.RedisConfig;
 import com.comet.opik.infrastructure.cache.CacheManager;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.queues.QueueProducer;
 import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import com.google.inject.Provides;
+import io.dropwizard.util.Duration;
+import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import org.redisson.Redisson;
+import org.redisson.api.RedissonClient;
 import org.redisson.api.RedissonReactiveClient;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 public class RedisModule extends DropwizardAwareModule<OpikConfiguration> {
 
+    /**
+     * Provides a reactive Redis client that wraps the same underlying Redisson instance.
+     * This approach reuses all connectivity resources (connection pool, configuration, etc.)
+     * from the synchronous client, avoiding resource duplication.
+     */
     @Provides
     @Singleton
-    public RedissonReactiveClient redisClient(@Config("redis") RedisConfig config) {
-        return Redisson.create(config.build()).reactive();
+    public RedissonReactiveClient redisClient(RedissonClient redisClient) {
+        return redisClient.reactive();
+    }
+
+    @Provides
+    @Singleton
+    public RedissonClient redisNonReactiveClient(@Config("redis") RedisConfig config) {
+        return Redisson.create(config.build());
+    }
+
+    @Provides
+    @Singleton
+    @Named("redis_health_check_timeout")
+    public Duration getHealthCheckTimeout(@Config("redis") RedisConfig config) {
+        return config.getHealthCheckTimeout();
+    }
+
+    @Provides
+    @Singleton
+    public StringRedisClient stringRedisClient(RedissonClient syncClient) {
+        return new StringRedisClient(syncClient);
+    }
+
+    @Provides
+    @Singleton
+    public LockMetrics lockMetrics() {
+        return new LockMetrics();
     }
 
     @Provides
     @Singleton
     public LockService lockService(RedissonReactiveClient redisClient,
-            @Config("distributedLock") DistributedLockConfig distributedLockConfig) {
-        return new RedissonLockService(redisClient, distributedLockConfig);
+            @Config("distributedLock") DistributedLockConfig distributedLockConfig, LockMetrics lockMetrics) {
+        return new RedissonLockService(redisClient, distributedLockConfig, lockMetrics);
     }
 
     @Provides
@@ -36,8 +71,13 @@ public class RedisModule extends DropwizardAwareModule<OpikConfiguration> {
 
     @Provides
     @Singleton
-    public CacheManager cacheManager(RedissonReactiveClient redisClient) {
-        return new RedisCacheManager(redisClient);
+    public CacheManager cacheManager(RedissonReactiveClient redisClient, RedissonClient redisNonReactiveClient) {
+        return new RedisCacheManager(redisClient, redisNonReactiveClient);
     }
 
+    @Provides
+    @Singleton
+    public QueueProducer rqPublisher(RedissonReactiveClient redisClient, IdGenerator idGenerator) {
+        return new RqPublisher(redisClient, configuration(), idGenerator);
+    }
 }

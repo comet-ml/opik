@@ -1,45 +1,74 @@
 package com.comet.opik.api;
 
-import com.comet.opik.utils.ProviderApiKeyDeserializer;
+import com.comet.opik.api.validation.ProviderApiKeyValidation;
+import com.comet.opik.utils.EncryptionDeserializer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+
+import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+@ProviderApiKeyValidation
 public record ProviderApiKey(
-        @JsonView( {
+        @JsonView({
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({View.Public.class, View.Write.class}) @NotNull LlmProvider provider,
         @JsonView({View.Public.class,
-                View.Write.class}) @NotBlank @JsonDeserialize(using = ProviderApiKeyDeserializer.class) String apiKey,
+                View.Write.class}) @JsonDeserialize(using = EncryptionDeserializer.class) String apiKey,
         @JsonView({View.Public.class, View.Write.class}) @Size(max = 150) String name,
+        @JsonView({View.Public.class,
+                View.Write.class}) @Size(max = 150) @Schema(description = "Provider name - required for custom LLM and Bedrock providers to uniquely identify them (e.g., 'ollama', 'vllm', 'Bedrock us-east-1'). "
+                        +
+                        "Must not be blank for custom and Bedrock providers. Should not be set for standard providers (OpenAI, Anthropic, etc.). "
+                        +
+                        "This requirement is conditional and validation is enforced programmatically.", example = "ollama", requiredMode = Schema.RequiredMode.NOT_REQUIRED) String providerName,
+        @JsonView({View.Public.class, View.Write.class}) Map<String, String> headers,
+        @JsonView({View.Public.class, View.Write.class}) Map<String, String> configuration,
+        @JsonView({View.Public.class,
+                View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String baseUrl,
+        @JsonView({View.Public.class,
+                View.Write.class}) @Valid @Schema(description = "Dynamic token auth recipe. When set, Opik fetches a short-lived bearer from the configured auth service instead of using a static api_key. "
+                        +
+                        "Only supported for custom providers. Secret credential values read back masked.", implementation = ProviderAuthConfig.class) EncryptedAuthConfig authConfig,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
-        @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+        @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
+        @JsonView({
+                View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "If true, this provider is system-managed and cannot be edited or deleted") boolean readOnly) {
 
     @Override
     public String toString() {
         return "ProviderApiKey{" +
                 "id=" + id +
-                ", provider='" + provider + '\'' +
+                ", provider=" + provider +
+                ", apiKey='*******'" +
+                ", name='" + name + '\'' +
+                ", providerName='" + providerName + '\'' +
+                ", headers=" + headers +
+                ", authConfig=" + authConfig +
+                ", baseUrl='" + baseUrl + '\'' +
                 ", createdAt=" + createdAt +
                 ", createdBy='" + createdBy + '\'' +
                 ", lastUpdatedAt=" + lastUpdatedAt +
                 ", lastUpdatedBy='" + lastUpdatedBy + '\'' +
+                ", readOnly=" + readOnly +
                 '}';
     }
 
@@ -53,14 +82,14 @@ public record ProviderApiKey(
 
     @Builder(toBuilder = true)
     public record ProviderApiKeyPage(
-            @JsonView( {
+            @JsonView({
                     Project.View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
             @JsonView({View.Public.class}) long total,
             @JsonView({View.Public.class}) List<ProviderApiKey> content,
             @JsonView({View.Public.class}) List<String> sortableBy)
             implements
-                com.comet.opik.api.Page<ProviderApiKey>{
+                com.comet.opik.api.Page<ProviderApiKey> {
 
         public static ProviderApiKeyPage empty(int page) {
             return new ProviderApiKeyPage(page, 0, 0, List.of(), List.of());

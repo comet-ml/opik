@@ -1,0 +1,1672 @@
+import React, { useCallback, useMemo, useState, useEffect } from "react";
+import {
+  JsonParam,
+  NumberParam,
+  StringParam,
+  useQueryParam,
+} from "use-query-params";
+import useLocalStorageState from "use-local-storage-state";
+import {
+  ColumnPinningState,
+  ColumnSort,
+  RowSelectionState,
+} from "@tanstack/react-table";
+import { ExternalLink } from "lucide-react";
+import findIndex from "lodash/findIndex";
+import isObject from "lodash/isObject";
+import isNumber from "lodash/isNumber";
+import isArray from "lodash/isArray";
+import get from "lodash/get";
+import uniqBy from "lodash/uniqBy";
+import uniq from "lodash/uniq";
+import keyBy from "lodash/keyBy";
+import compact from "lodash/compact";
+import {
+  useMetricDateRangeWithQueryAndStorage,
+  DATE_RANGE_PRESET_ALLTIME,
+} from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
+import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
+import EnvironmentFilterSelect from "@/v2/pages-shared/traces/EnvironmentFilterSelect/EnvironmentFilterSelect";
+
+import useTracesOrSpansExist from "@/hooks/useTracesOrSpansExist";
+import useTracesOrSpansList, {
+  TRACE_DATA_TYPE,
+} from "@/hooks/useTracesOrSpansList";
+import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
+import {
+  COLUMN_COMMENTS_ID,
+  COLUMN_ENVIRONMENT_ID,
+  COLUMN_EXPERIMENT_ID,
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_SPAN_FEEDBACK_SCORES_ID,
+  COLUMN_GUARDRAIL_STATISTIC_ID,
+  COLUMN_GUARDRAILS_ID,
+  COLUMN_ID_ID,
+  COLUMN_METADATA_ID,
+  COLUMN_SELECT_ID,
+  COLUMN_TYPE,
+  ColumnData,
+  ColumnsStatistic,
+  DynamicColumn,
+  ROW_HEIGHT,
+} from "@/types/shared";
+import {
+  ENVIRONMENT_UNTAGGED_VALUE,
+  generateEnvironmentFilter,
+} from "@/lib/filters";
+import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
+import useFilterChips from "@/shared/filter-chips/hooks/useFilterChips";
+import FilterChipBar from "@/shared/filter-chips/FilterChipBar/FilterChipBar";
+import { useTagsChipActions } from "@/shared/filter-chips/hooks/useTagsChipActions";
+import { useQuickAttributeFilterActions } from "@/shared/filter-chips/hooks/useQuickAttributeFilterActions";
+import { QuickAttributeFilterProvider } from "@/shared/filter-chips/QuickAttributeFilterContext";
+import { ChipDefinition } from "@/shared/filter-chips/types";
+import { STRING_OPERATORS } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
+import {
+  TRACE_DEFAULT_PINNED_CHIPS,
+  buildSharedDynamicChips,
+  buildTraceChipDefinitions,
+} from "@/v2/pages-shared/traces/traceChipDefinitions";
+import {
+  normalizeMetadataPaths,
+  buildDynamicMetadataColumns,
+} from "@/lib/metadata";
+import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
+import { getJSONPaths } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
+import {
+  generateSelectColumDef,
+  getVirtualizationConfig,
+} from "@/shared/DataTable/utils";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import emptyLogsLightUrl from "/images/empty-logs-light.svg";
+import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
+import SearchInput from "@/shared/SearchInput/SearchInput";
+import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
+import { Separator } from "@/ui/separator";
+import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
+import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
+import DataTable from "@/shared/DataTable/DataTable";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
+import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
+import LinkCell from "@/shared/DataTableCells/LinkCell";
+import ResourceCell from "@/shared/DataTableCells/ResourceCell";
+import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
+import IdCell from "@/shared/DataTableCells/IdCell";
+import CodeCell from "@/shared/DataTableCells/CodeCell";
+import AutodetectCell from "@/shared/DataTableCells/AutodetectCell";
+import ListCell from "@/shared/DataTableCells/ListCell";
+import EnvironmentCell from "@/shared/DataTableCells/EnvironmentCell";
+import CostCell from "@/shared/DataTableCells/CostCell";
+import ErrorCell from "@/shared/DataTableCells/ErrorCell";
+import DurationCell from "@/shared/DataTableCells/DurationCell";
+import { withExplain } from "@/v2/pages/LogsPage/explain/withExplain";
+import {
+  buildCostTarget,
+  buildDurationTarget,
+  buildErrorTarget,
+  buildSpanCostTarget,
+  buildSpanDurationTarget,
+  buildSpanErrorTarget,
+} from "@/v2/pages/LogsPage/TracesSpansTab/explainTargets";
+import FeedbackScoreCell, {
+  resolveFeedbackScoreCell,
+} from "@/shared/DataTableCells/FeedbackScoreCell";
+import PrettyCell from "@/shared/DataTableCells/PrettyCell";
+import CommentsCell from "@/shared/DataTableCells/CommentsCell";
+import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
+import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
+import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
+import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
+import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
+import { formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
+import TimeCell from "@/shared/DataTableCells/TimeCell";
+import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
+import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import GuardrailsCell from "@/shared/DataTableCells/GuardrailsCell";
+import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
+import {
+  DetailsActionSection,
+  DetailsActionSectionParam,
+  DetailsActionSectionValue,
+} from "@/v2/pages-shared/traces/DetailsActionSection";
+import { getSpanTypeOptions } from "@/v2/pages-shared/traces/spanTypeFilter";
+import SpanTypeCell from "@/shared/DataTableCells/SpanTypeCell";
+import { useTruncationEnabled } from "@/contexts/server-sync-provider";
+import SelectionActionBar from "@/v2/components/SelectionActionBar/SelectionActionBar";
+import LogsTypeToggle from "@/v2/pages/LogsPage/LogsTypeToggle";
+import { LOGS_TYPE } from "@/constants/traces";
+import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSummary";
+
+const getRowId = (d: Trace | Span) => d.id;
+
+const REFETCH_INTERVAL = 30000;
+
+const SPAN_FEEDBACK_SCORE_SUFFIX = " (span)";
+
+const formatSpanScoreLabel = (scoreName: string): string =>
+  `${scoreName}${SPAN_FEEDBACK_SCORE_SUFFIX}`;
+
+const parseSpanScoreName = (label: string): string =>
+  label.replace(SPAN_FEEDBACK_SCORE_SUFFIX, "");
+
+const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
+  {
+    id: "name",
+    label: "Name",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "start_time",
+    label: "Start time",
+    type: COLUMN_TYPE.time,
+    cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
+  },
+  {
+    id: "end_time",
+    label: "End time",
+    type: COLUMN_TYPE.time,
+    cell: TimeCell as never,
+    customMeta: {
+      timeMode: "absolute",
+    },
+  },
+  {
+    id: "input",
+    label: "Input",
+    size: 400,
+    type: COLUMN_TYPE.string,
+    cell: PrettyCell as never,
+    customMeta: {
+      fieldType: "input",
+      colorIndicator: true,
+    },
+  },
+  {
+    id: "output",
+    label: "Output",
+    size: 400,
+    type: COLUMN_TYPE.string,
+    cell: PrettyCell as never,
+    customMeta: {
+      fieldType: "output",
+      colorIndicator: true,
+    },
+  },
+  {
+    id: "error_info",
+    label: "Errors",
+    statisticKey: "error_count",
+    type: COLUMN_TYPE.errors,
+    cell: ErrorCell as never,
+  },
+  {
+    id: "duration",
+    label: "Duration",
+    type: COLUMN_TYPE.duration,
+    cell: DurationCell as never,
+    statisticDataFormater: formatDuration,
+    statisticTooltipFormater: formatDuration,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    cell: ListCell as never,
+  },
+  {
+    id: COLUMN_ENVIRONMENT_ID,
+    label: "Environment",
+    type: COLUMN_TYPE.string,
+    cell: EnvironmentCell as never,
+  },
+  {
+    id: "usage.total_tokens",
+    label: "Total tokens",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.total_tokens)
+        ? `${row.usage.total_tokens}`
+        : "-",
+  },
+  {
+    id: "usage.prompt_tokens",
+    label: "Total input tokens",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.prompt_tokens)
+        ? `${row.usage.prompt_tokens}`
+        : "-",
+  },
+  {
+    id: "usage.completion_tokens",
+    label: "Total output tokens",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.completion_tokens)
+        ? `${row.usage.completion_tokens}`
+        : "-",
+  },
+  {
+    id: "total_estimated_cost",
+    label: "Estimated cost",
+    type: COLUMN_TYPE.cost,
+    cell: CostCell as never,
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated],
+    size: 160,
+    statisticDataFormater: formatCost,
+    statisticTooltipFormater: (value: number) =>
+      formatCost(value, { modifier: "full" }),
+  },
+];
+
+const METADATA_MAIN_COLUMN_DATA: ColumnData<BaseTraceData>[] = [
+  {
+    id: COLUMN_METADATA_ID,
+    label: "Metadata",
+    type: COLUMN_TYPE.dictionary,
+    accessorFn: (row) =>
+      isObject(row.metadata)
+        ? JSON.stringify(row.metadata, null, 2)
+        : row.metadata,
+    cell: CodeCell as never,
+  },
+];
+
+const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
+  left: [COLUMN_SELECT_ID],
+  right: [],
+};
+
+const DEFAULT_TRACES_COLUMNS: string[] = [
+  "start_time",
+  "input",
+  "output",
+  "error_info",
+  "duration",
+  "usage.total_tokens",
+  "total_estimated_cost",
+  "tags",
+  COLUMN_ENVIRONMENT_ID,
+  COLUMN_COMMENTS_ID,
+];
+
+const DEFAULT_SPANS_COLUMNS: string[] = [
+  "start_time",
+  "input",
+  "output",
+  "error_info",
+  "name",
+  "type",
+  "duration",
+  "total_estimated_cost",
+  "tags",
+  COLUMN_ENVIRONMENT_ID,
+  COLUMN_COMMENTS_ID,
+];
+
+const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  "start_time",
+  "end_time",
+  "input",
+  "output",
+  "error_info",
+  "duration",
+  "usage.total_tokens",
+  "usage.prompt_tokens",
+  "usage.completion_tokens",
+  "total_estimated_cost",
+  "tags",
+  COLUMN_ENVIRONMENT_ID,
+  COLUMN_COMMENTS_ID,
+  "name",
+  "span_count",
+  "llm_span_count",
+  "thread_id",
+  COLUMN_EXPERIMENT_ID,
+  "created_by",
+  COLUMN_GUARDRAILS_ID,
+];
+
+const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
+  COLUMN_ID_ID,
+  "start_time",
+  "end_time",
+  "input",
+  "output",
+  "error_info",
+  "name",
+  "type",
+  "duration",
+  "usage.total_tokens",
+  "usage.prompt_tokens",
+  "usage.completion_tokens",
+  "total_estimated_cost",
+  "tags",
+  COLUMN_ENVIRONMENT_ID,
+  COLUMN_COMMENTS_ID,
+  "created_by",
+  COLUMN_GUARDRAILS_ID,
+];
+
+const SELECTED_COLUMNS_KEY_SUFFIX = "selected-columns";
+const SELECTED_COLUMNS_KEY_V2_SUFFIX = `${SELECTED_COLUMNS_KEY_SUFFIX}-v2`;
+const COLUMNS_WIDTH_KEY_SUFFIX = "columns-width";
+const COLUMNS_ORDER_KEY_SUFFIX = "columns-order";
+const COLUMNS_SORT_KEY_SUFFIX = "columns-sort";
+const COLUMNS_SCORES_ORDER_KEY_SUFFIX = "scores-columns-order";
+const COLUMNS_METADATA_ORDER_KEY_SUFFIX = "metadata-columns-order";
+const DYNAMIC_COLUMNS_KEY_SUFFIX = "dynamic-columns";
+const PAGINATION_SIZE_KEY_SUFFIX = "pagination-size";
+const ROW_HEIGHT_KEY_SUFFIX = "row-height";
+
+const SPAN_CHIP_DEFINITIONS_STATIC: ChipDefinition[] = [
+  {
+    id: "start_time",
+    field: "start_time",
+    label: "Start time",
+    kind: "time",
+    columnType: COLUMN_TYPE.time,
+  },
+  {
+    id: "end_time",
+    field: "end_time",
+    label: "End time",
+    kind: "time",
+    columnType: COLUMN_TYPE.time,
+  },
+  {
+    id: "duration",
+    field: "duration",
+    label: "Duration",
+    kind: "numeric",
+    columnType: COLUMN_TYPE.duration,
+    format: "duration",
+  },
+  {
+    id: "total_estimated_cost",
+    field: "total_estimated_cost",
+    label: "Cost",
+    kind: "numeric",
+    columnType: COLUMN_TYPE.cost,
+    format: "currency",
+  },
+  {
+    id: "usage_total_tokens",
+    field: "usage.total_tokens",
+    label: "Tokens",
+    kind: "numeric",
+    columnType: COLUMN_TYPE.number,
+    format: "integer",
+  },
+  {
+    id: "usage_prompt_tokens",
+    field: "usage.prompt_tokens",
+    label: "Input tokens",
+    kind: "numeric",
+    columnType: COLUMN_TYPE.number,
+    format: "integer",
+  },
+  {
+    id: "usage_completion_tokens",
+    field: "usage.completion_tokens",
+    label: "Output tokens",
+    kind: "numeric",
+    columnType: COLUMN_TYPE.number,
+    format: "integer",
+  },
+  {
+    id: "input",
+    field: "input",
+    label: "Input",
+    kind: "query-builder",
+    columnType: COLUMN_TYPE.string,
+    operators: STRING_OPERATORS,
+    defaultOperator: "contains",
+    value: { placeholder: "Search input" },
+  },
+  {
+    id: "output",
+    field: "output",
+    label: "Output",
+    kind: "query-builder",
+    columnType: COLUMN_TYPE.string,
+    operators: STRING_OPERATORS,
+    defaultOperator: "contains",
+    value: { placeholder: "Search output" },
+  },
+  {
+    id: "name",
+    field: "name",
+    label: "Span name",
+    kind: "query-builder",
+    columnType: COLUMN_TYPE.string,
+    operators: STRING_OPERATORS,
+    defaultOperator: "contains",
+    value: { placeholder: "Search name" },
+  },
+  {
+    id: "with_errors",
+    field: "error_info",
+    label: "With errors",
+    kind: "boolean",
+    onOperator: "is_not_empty",
+    columnType: COLUMN_TYPE.errors,
+  },
+  {
+    id: "id",
+    field: "id",
+    label: "Span ID",
+    kind: "query-builder",
+    columnType: COLUMN_TYPE.string,
+    operators: STRING_OPERATORS,
+    defaultOperator: "contains",
+    value: { placeholder: "Enter span ID" },
+  },
+  {
+    id: "trace_id",
+    field: "trace_id",
+    label: "Trace ID",
+    kind: "query-builder",
+    columnType: COLUMN_TYPE.string,
+    operators: STRING_OPERATORS,
+    defaultOperator: "contains",
+    value: { placeholder: "Enter trace ID" },
+  },
+  {
+    id: "provider",
+    field: "provider",
+    label: "Provider",
+    kind: "query-builder",
+    columnType: COLUMN_TYPE.string,
+    operators: STRING_OPERATORS,
+    defaultOperator: "contains",
+    value: { placeholder: "Enter provider" },
+  },
+];
+
+const SPAN_CHIP_ORDER: string[] = [
+  "start_time",
+  "end_time",
+  "duration",
+  "total_estimated_cost",
+  "usage_total_tokens",
+  "usage_prompt_tokens",
+  "usage_completion_tokens",
+  "input",
+  "output",
+  "name",
+  "provider",
+  "with_errors",
+  "error_type",
+  "type",
+  "tags",
+  "id",
+  "trace_id",
+  "feedback_scores",
+  "guardrails",
+  "metadata",
+  "custom",
+];
+
+const SPAN_DEFAULT_PINNED_CHIPS = ["type", "tags", "with_errors", "metadata"];
+
+type TracesSpansTabProps = {
+  type: TRACE_DATA_TYPE;
+  projectId: string;
+  projectName: string;
+  logsType: LOGS_TYPE;
+  onLogsTypeChange: (type: LOGS_TYPE) => void;
+  dateRangeConfig: ProjectDateRangeConfig;
+};
+
+export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
+  type,
+  logsType,
+  onLogsTypeChange,
+  projectId,
+  projectName,
+  dateRangeConfig,
+}) => {
+  const { open: openQuickstart } = useOpenQuickStartDialog();
+  const truncationEnabled = useTruncationEnabled();
+
+  const {
+    dateRange,
+    handleDateRangeChange,
+    intervalStart,
+    intervalEnd,
+    minDate,
+    maxDate,
+  } = useMetricDateRangeWithQueryAndStorage({
+    excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+    ...dateRangeConfig,
+  });
+  const [search = "", setSearch] = useQueryParam(
+    `${type}_search`,
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+  const trimmedSearch = (search as string).trim().toLowerCase();
+
+  const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [spanId = "", setSpanId] = useQueryParam("span", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [threadId = "", setThreadId] = useQueryParam("thread", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [environment = "", setEnvironment] = useQueryParam(
+    "environment",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
+  const [page = 1, setPage] = useQueryParam("page", NumberParam, {
+    updateType: "replaceIn",
+  });
+
+  const [size, setSize] = useQueryParamAndLocalStorageState<
+    number | null | undefined
+  >({
+    localStorageKey: `${type}-${PAGINATION_SIZE_KEY_SUFFIX}`,
+    queryKey: "size",
+    defaultValue: 100,
+    queryParamConfig: NumberParam,
+    syncQueryWithLocalStorageOnInit: true,
+  });
+
+  const [, setLastSection] = useQueryParam(
+    "lastSection",
+    DetailsActionSectionParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
+  const [height, setHeight] = useQueryParamAndLocalStorageState<
+    string | null | undefined
+  >({
+    localStorageKey: `${type}-${ROW_HEIGHT_KEY_SUFFIX}`,
+    queryKey: "height",
+    defaultValue: ROW_HEIGHT.small,
+    queryParamConfig: StringParam,
+    syncQueryWithLocalStorageOnInit: true,
+  });
+
+  const { data: environmentsData } = useEnvironmentsList();
+
+  const envList = environmentsData?.content;
+
+  const envIsValid = (() => {
+    if (!environment) return null;
+    if (environment === ENVIRONMENT_UNTAGGED_VALUE) return true;
+    if (!envList) return null;
+    return envList.some((e) => e.name === environment);
+  })();
+
+  useEffect(() => {
+    if (envIsValid === false) {
+      setEnvironment(undefined);
+      setPage(1);
+    }
+  }, [envIsValid, setEnvironment, setPage]);
+
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
+  const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
+    ColumnSort[]
+  >({
+    localStorageKey: `${type}-${COLUMNS_SORT_KEY_SUFFIX}`,
+    queryKey: `${type}_sorting`,
+    defaultValue: [],
+    queryParamConfig: JsonParam,
+  });
+
+  const handleChipFiltersChange = useCallback(() => {
+    setPage(1);
+  }, [setPage]);
+
+  const { data: feedbackScoresData, isPending: isFeedbackScoresPending } =
+    useTracesOrSpansScoresColumns(
+      {
+        projectId,
+        type: type as TRACE_DATA_TYPE,
+      },
+      {
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
+
+  const {
+    data: spanFeedbackScoresData,
+    isPending: isSpanFeedbackScoresPending,
+  } = useTracesOrSpansScoresColumns(
+    {
+      projectId,
+      type: TRACE_DATA_TYPE.spans,
+    },
+    {
+      enabled: type === TRACE_DATA_TYPE.traces,
+      refetchInterval: REFETCH_INTERVAL,
+    },
+  );
+
+  const traceScoreOptions = useMemo(
+    () => ({
+      items: (feedbackScoresData?.scores ?? []).map((s) => s.name),
+      isLoading: isFeedbackScoresPending,
+    }),
+    [feedbackScoresData?.scores, isFeedbackScoresPending],
+  );
+
+  const spanScoreOptions = useMemo(() => {
+    const isTracesActive = type === TRACE_DATA_TYPE.traces;
+    const source = isTracesActive ? spanFeedbackScoresData : feedbackScoresData;
+    const isPending = isTracesActive
+      ? isSpanFeedbackScoresPending
+      : isFeedbackScoresPending;
+    return {
+      items: (source?.scores ?? []).map((s) => s.name),
+      isLoading: isPending,
+    };
+  }, [
+    type,
+    feedbackScoresData,
+    spanFeedbackScoresData,
+    isFeedbackScoresPending,
+    isSpanFeedbackScoresPending,
+  ]);
+
+  const traceChipDefinitions = useMemo<ChipDefinition[]>(
+    () =>
+      buildTraceChipDefinitions({
+        projectId,
+        traceScoreOptions,
+        spanScoreOptions,
+        isGuardrailsEnabled,
+        logsSource: LOGS_SOURCE.sdk,
+      }),
+    [isGuardrailsEnabled, projectId, traceScoreOptions, spanScoreOptions],
+  );
+
+  const spanChipDefinitions = useMemo<ChipDefinition[]>(() => {
+    const dynamicChips: Record<string, ChipDefinition> = {
+      type: {
+        id: "type",
+        field: "type",
+        label: "Type",
+        kind: "single-select",
+        options: getSpanTypeOptions(isGuardrailsEnabled),
+        columnType: COLUMN_TYPE.category,
+        operator: "=",
+      },
+      ...buildSharedDynamicChips({
+        projectId,
+        type: TRACE_DATA_TYPE.spans,
+        scoreOptions: spanScoreOptions,
+        feedbackScoresLabel: "Feedback scores",
+        isGuardrailsEnabled,
+        logsSource: LOGS_SOURCE.sdk,
+      }),
+    };
+    const byId: Record<string, ChipDefinition> = {
+      ...keyBy(SPAN_CHIP_DEFINITIONS_STATIC, "id"),
+      ...dynamicChips,
+    };
+    return compact(SPAN_CHIP_ORDER.map((id) => byId[id]));
+  }, [isGuardrailsEnabled, projectId, spanScoreOptions]);
+
+  const chipDefinitions =
+    type === TRACE_DATA_TYPE.traces
+      ? traceChipDefinitions
+      : spanChipDefinitions;
+  const defaultPinned =
+    type === TRACE_DATA_TYPE.traces
+      ? TRACE_DEFAULT_PINNED_CHIPS
+      : SPAN_DEFAULT_PINNED_CHIPS;
+  const tableId =
+    type === TRACE_DATA_TYPE.traces ? "logs.traces" : "logs.spans";
+  const filtersUrlKey = `${type}_filters`;
+
+  const {
+    chipsPinned,
+    chipsUnpinned,
+    values: chipValues,
+    filters: chipFilters,
+    applyValue: applyChipValue,
+    clearValue: clearChipValue,
+    clearAll: clearAllChips,
+    pinChip,
+    unpinChip,
+    managerOpen: chipManagerOpen,
+    setManagerOpen: setChipManagerOpen,
+    openChipId,
+    setOpenChipId,
+  } = useFilterChips({
+    tableId,
+    urlKey: filtersUrlKey,
+    definitions: chipDefinitions,
+    defaultPinned,
+    onChange: handleChipFiltersChange,
+  });
+
+  const { addTag: addTagFilter } = useTagsChipActions({
+    chipId: "tags",
+    values: chipValues,
+    applyValue: applyChipValue,
+    pinChip,
+  });
+
+  const quickAttributeFilterApi = useQuickAttributeFilterActions({
+    type,
+    tableId,
+    values: chipValues,
+    applyValue: applyChipValue,
+    pinChip,
+  });
+
+  const effectiveFilters = useMemo(() => {
+    if (!environment || envIsValid === false) return chipFilters;
+    return [...chipFilters, ...generateEnvironmentFilter(environment)];
+  }, [chipFilters, environment, envIsValid]);
+
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
+
+  // Declare selectedColumns early so it can be used in excludeFields computation
+  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
+    `${type}-${SELECTED_COLUMNS_KEY_V2_SUFFIX}`,
+    {
+      defaultValue: migrateSelectedColumns(
+        `${type}-${SELECTED_COLUMNS_KEY_SUFFIX}`,
+        type === TRACE_DATA_TYPE.traces
+          ? DEFAULT_TRACES_COLUMNS
+          : DEFAULT_SPANS_COLUMNS,
+        [COLUMN_ID_ID, "start_time"],
+      ),
+    },
+  );
+
+  // Compute exclude parameter based on visible columns and data type
+  const excludeFields = useMemo(() => {
+    const exclude: string[] = [];
+
+    if (
+      type === TRACE_DATA_TYPE.traces &&
+      !selectedColumns.includes(COLUMN_EXPERIMENT_ID)
+    ) {
+      exclude.push("experiment");
+    }
+
+    const hasFeedbackScoreColumn = selectedColumns.some(
+      (col) =>
+        col.startsWith(COLUMN_FEEDBACK_SCORES_ID) ||
+        col.startsWith(COLUMN_SPAN_FEEDBACK_SCORES_ID),
+    );
+    if (!hasFeedbackScoreColumn) {
+      exclude.push("feedback_scores");
+    }
+
+    return exclude;
+  }, [type, selectedColumns]);
+
+  // Enable table data loading after initial render to allow users to change the date filter
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsTableDataEnabled(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+    useTracesOrSpansList(
+      {
+        projectId,
+        type: type as TRACE_DATA_TYPE,
+        sorting: sortedColumns,
+        filters: effectiveFilters,
+        page: page as number,
+        size: size as number,
+        search: trimmedSearch,
+        truncate: truncationEnabled,
+        stripAttachments: true,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
+        exclude: excludeFields,
+        logsSource: LOGS_SOURCE.sdk,
+      },
+      {
+        enabled: isTableDataEnabled,
+        refetchInterval: REFETCH_INTERVAL,
+        refetchOnMount: false,
+      },
+    );
+
+  const { refetch: refetchExportData } = useTracesOrSpansList(
+    {
+      projectId,
+      type: type as TRACE_DATA_TYPE,
+      sorting: sortedColumns,
+      filters: effectiveFilters,
+      page: page as number,
+      size: size as number,
+      search: trimmedSearch,
+      truncate: false,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
+      exclude: excludeFields,
+      logsSource: LOGS_SOURCE.sdk,
+    },
+    {
+      enabled: false,
+      refetchOnMount: "always",
+    },
+  );
+
+  const { data: statisticData, refetch: refetchStatistic } =
+    useTracesOrSpansStatistic(
+      {
+        projectId,
+        type: type as TRACE_DATA_TYPE,
+        filters: effectiveFilters,
+        search: trimmedSearch,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
+        logsSource: LOGS_SOURCE.sdk,
+      },
+      {
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
+
+  // Cheap "does this project have any SDK-logged traces/spans?" probe for the empty-state decision.
+  // Scoped to source=sdk to match the sdk-scoped list above, so a project whose only data is non-sdk
+  // (experiment/playground/optimization/evaluator) reports false and correctly shows the SDK onboarding.
+  // Hits the LIMIT-1 existence endpoint instead of a size:1 list query, which builds full-project
+  // trace/span/cost/feedback aggregations in ClickHouse regardless of the selected time range.
+  const { exists: hasProjectData } = useTracesOrSpansExist(
+    {
+      projectId,
+      type: type as TRACE_DATA_TYPE,
+      source: LOGS_SOURCE.sdk,
+    },
+    {
+      enabled: isTableDataEnabled,
+    },
+  );
+
+  const isTableLoading =
+    isPending || isFeedbackScoresPending || isSpanFeedbackScoresPending;
+
+  const handleClearFilters = useCallback(() => {
+    setSearch("");
+    clearAllChips();
+    setEnvironment(undefined);
+    setPage(1);
+  }, [setSearch, clearAllChips, setEnvironment, setPage]);
+
+  const rows: Array<Span | Trace> = useMemo(
+    () => uniqBy(data?.content ?? [], "id"),
+    [data?.content],
+  );
+
+  const showEmptyState =
+    !isTableLoading && !hasProjectData && rows.length === 0 && page === 1;
+
+  // Extract metadata paths directly from loaded traces/spans data
+  const metadataPaths = useMemo(() => {
+    const allPaths = rows.reduce<string[]>((acc, row) => {
+      if (row.metadata && (isObject(row.metadata) || isArray(row.metadata))) {
+        return acc.concat(getJSONPaths(row.metadata, "metadata", []));
+      }
+      return acc;
+    }, []);
+    return uniq(allPaths).sort();
+  }, [rows]);
+
+  const sortableBy: string[] = useMemo(
+    () => data?.sortable_by ?? [],
+    [data?.sortable_by],
+  );
+
+  const columnsStatistic: ColumnsStatistic = useMemo(
+    () => statisticData?.stats ?? [],
+    [statisticData],
+  );
+
+  const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
+    `${type}-${COLUMNS_ORDER_KEY_SUFFIX}`,
+    {
+      defaultValue:
+        type === TRACE_DATA_TYPE.traces
+          ? DEFAULT_TRACES_COLUMNS_ORDER
+          : DEFAULT_SPANS_COLUMNS_ORDER,
+    },
+  );
+
+  const [scoresColumnsOrder, setScoresColumnsOrder] = useLocalStorageState<
+    string[]
+  >(`${type}-${COLUMNS_SCORES_ORDER_KEY_SUFFIX}`, {
+    defaultValue: [],
+  });
+
+  const [metadataColumnsOrder, setMetadataColumnsOrder] = useLocalStorageState<
+    string[]
+  >(`${type}-${COLUMNS_METADATA_ORDER_KEY_SUFFIX}`, {
+    defaultValue: [COLUMN_METADATA_ID],
+  });
+
+  const [columnsWidth, setColumnsWidth] = useLocalStorageState<
+    Record<string, number>
+  >(`${type}-${COLUMNS_WIDTH_KEY_SUFFIX}`, {
+    defaultValue: {},
+  });
+
+  const dynamicScoresColumns = useMemo(() => {
+    return (feedbackScoresData?.scores?.slice() ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
+        label: c.name,
+        columnType: COLUMN_TYPE.number,
+      }));
+  }, [feedbackScoresData?.scores]);
+
+  const dynamicSpanScoresColumns = useMemo(() => {
+    if (type !== TRACE_DATA_TYPE.traces) return [];
+    return (spanFeedbackScoresData?.scores?.slice() ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: `${COLUMN_SPAN_FEEDBACK_SCORES_ID}.${c.name}`,
+        label: formatSpanScoreLabel(c.name),
+        columnType: COLUMN_TYPE.number,
+      }));
+  }, [spanFeedbackScoresData?.scores, type]);
+
+  const dynamicMetadataColumns = useMemo(() => {
+    const paths = metadataPaths ?? [];
+    const normalizedPaths = normalizeMetadataPaths(paths);
+    return buildDynamicMetadataColumns(normalizedPaths);
+  }, [metadataPaths]);
+
+  // Only include feedback scores in dynamic columns cache (auto-selects new ones)
+  // Metadata columns are NOT auto-selected - users must manually choose them
+  const dynamicColumnsIds = useMemo(
+    () => [
+      ...dynamicScoresColumns.map((c) => c.id),
+      ...dynamicSpanScoresColumns.map((c) => c.id),
+      // Note: metadata columns are NOT included here - they won't be auto-selected
+    ],
+    [dynamicScoresColumns, dynamicSpanScoresColumns],
+  );
+
+  useDynamicColumnsCache({
+    dynamicColumnsKey: `${type}-${DYNAMIC_COLUMNS_KEY_SUFFIX}`,
+    dynamicColumnsIds,
+    setSelectedColumns,
+  });
+
+  const scoresColumnsData = useMemo(() => {
+    const feedbackScoresColumns = dynamicScoresColumns.map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          header: FeedbackScoreHeader as never,
+          cell: resolveFeedbackScoreCell(label) as never,
+          accessorFn: (row) =>
+            row.feedback_scores?.find((f) => f.name === label),
+          statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          statisticDataFormater: formatScoreDisplay,
+        }) as ColumnData<BaseTraceData>,
+    );
+
+    // Add span feedback scores columns only for traces
+    if (type === TRACE_DATA_TYPE.traces) {
+      const spanFeedbackScoresColumns = dynamicSpanScoresColumns.map(
+        ({ label, id, columnType }) => {
+          // Extract the score name without the "(span)" suffix for matching
+          const scoreName = parseSpanScoreName(label);
+          return {
+            id,
+            label,
+            type: columnType,
+            header: FeedbackScoreHeader as never,
+            cell: FeedbackScoreCell as never,
+            accessorFn: (row) =>
+              (row as Trace).span_feedback_scores?.find(
+                (f) => f.name === scoreName,
+              ),
+            statisticKey: `${COLUMN_SPAN_FEEDBACK_SCORES_ID}.${scoreName}`,
+            statisticDataFormater: formatScoreDisplay,
+          } as ColumnData<BaseTraceData>;
+        },
+      );
+      return [...feedbackScoresColumns, ...spanFeedbackScoresColumns];
+    }
+
+    return feedbackScoresColumns;
+  }, [dynamicScoresColumns, dynamicSpanScoresColumns, type]);
+
+  const metadataColumnsData = useMemo(() => {
+    // Add individual metadata field columns (without main "Metadata" column)
+    const fieldColumns = dynamicMetadataColumns.map(({ label, id }) => {
+      // Change label from ".ITEM" to "Metadata.ITEM"
+      const columnLabel = label.startsWith(".")
+        ? `Metadata${label}`
+        : `Metadata.${label}`;
+
+      return {
+        id,
+        label: columnLabel,
+        type: COLUMN_TYPE.string,
+        sortable: false, // Disable sorting for metadata columns - backend may not fully support it yet
+        accessorFn: (row) => {
+          // Use lodash/get to extract nested value
+          // This will return undefined if the path doesn't exist (e.g.,
+          // LLM span doesn't have metadata.tool_name)
+          const value = get(row, id);
+
+          // Handle missing values - show "-" if field doesn't exist
+          // This happens when viewing spans of different types
+          if (value === undefined || value === null) {
+            return "-";
+          }
+
+          // Return raw value - AutodetectCell will handle type detection
+          // and display primitives as text, objects/arrays as JSON
+          return value;
+        },
+        cell: AutodetectCell as never,
+      };
+    }) as ColumnData<BaseTraceData>[];
+
+    return fieldColumns;
+  }, [dynamicMetadataColumns]);
+
+  const selectedRows: Array<Trace | Span> = useMemo(() => {
+    return rows.filter((row) => rowSelection[row.id]);
+  }, [rowSelection, rows]);
+
+  const getDataForExport = useCallback(async (): Promise<
+    Array<Trace | Span>
+  > => {
+    const result = await refetchExportData();
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (!result.data?.content) {
+      throw new Error("Failed to fetch data");
+    }
+
+    const allRows = result.data.content;
+    const selectedIds = Object.keys(rowSelection);
+
+    return allRows.filter((row) => selectedIds.includes(row.id));
+  }, [refetchExportData, rowSelection]);
+
+  const handleRowClick = useCallback(
+    (row?: Trace | Span, lastSection?: DetailsActionSectionValue) => {
+      if (!row) return;
+      if (type === TRACE_DATA_TYPE.traces) {
+        setTraceId((state) => (row.id === state ? "" : row.id));
+        setSpanId("");
+      } else {
+        setTraceId((row as Span).trace_id);
+        setSpanId((state) => (row.id === state ? "" : row.id));
+      }
+
+      if (lastSection) {
+        setLastSection(lastSection);
+      }
+    },
+    [setTraceId, setSpanId, type, setLastSection],
+  );
+
+  const meta = useMemo(
+    () => ({
+      onCommentsReply: (row?: Trace | Span) => {
+        handleRowClick(row, DetailsActionSection.Comments);
+      },
+    }),
+    [handleRowClick],
+  );
+
+  const handleThreadIdClick = useCallback(
+    (row?: Trace) => {
+      if (!row) return;
+      setThreadId(row.thread_id);
+      setTraceId(row.id);
+    },
+    [setThreadId, setTraceId],
+  );
+
+  // Error/Duration/Cost cells get the Ollie Explain button (OPIK-6425). Wrapped
+  // here (not at module scope) so the builder set follows the active view: the
+  // Spans view emits span.* targets, the Traces view emits trace.*. entityId is
+  // the row id in both cases — the backend resolves a span's parent trace. The
+  // button is a no-op in OSS (the PluginsStore slot is empty).
+  const explainCells = useMemo(() => {
+    const isSpans = type === TRACE_DATA_TYPE.spans;
+    return {
+      error_info: withExplain(
+        ErrorCell as never,
+        isSpans ? buildSpanErrorTarget : buildErrorTarget,
+      ),
+      duration: withExplain(
+        DurationCell as never,
+        isSpans ? buildSpanDurationTarget : buildDurationTarget,
+      ),
+      total_estimated_cost: withExplain(
+        CostCell as never,
+        isSpans ? buildSpanCostTarget : buildCostTarget,
+      ),
+    };
+  }, [type]);
+
+  const columnData = useMemo(() => {
+    return [
+      {
+        id: COLUMN_ID_ID,
+        label: "ID",
+        type: COLUMN_TYPE.string,
+        cell: IdCell as never,
+        sortable: true,
+      },
+      ...SHARED_COLUMNS.map((col) => {
+        if (col.id === "tags") {
+          return {
+            ...col,
+            customMeta: {
+              ...col.customMeta,
+              onItemClick: addTagFilter,
+              getItemTooltip: (tag: string) => `Filter by tag: "${tag}"`,
+            },
+          };
+        }
+        if (col.id in explainCells) {
+          return {
+            ...col,
+            cell: explainCells[col.id as keyof typeof explainCells] as never,
+          };
+        }
+        return col;
+      }),
+      ...(type === TRACE_DATA_TYPE.traces
+        ? [
+            {
+              id: "span_count",
+              label: "Span count",
+              type: COLUMN_TYPE.number,
+              accessorFn: (row: BaseTraceData) => get(row, "span_count", "-"),
+            },
+            {
+              id: "llm_span_count",
+              label: "LLM calls count",
+              type: COLUMN_TYPE.number,
+              accessorFn: (row: BaseTraceData) =>
+                get(row, "llm_span_count", "-"),
+            },
+            {
+              id: "thread_id",
+              label: "Thread ID",
+              type: COLUMN_TYPE.string,
+              cell: LinkCell as never,
+              customMeta: {
+                callback: handleThreadIdClick,
+                asId: true,
+              },
+              explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
+            },
+            {
+              id: COLUMN_EXPERIMENT_ID,
+              label: "Experiment",
+              type: COLUMN_TYPE.string,
+              cell: ResourceCell as never,
+              customMeta: {
+                nameKey: "experiment.name",
+                idKey: "experiment.dataset_id",
+                resource: RESOURCE_TYPE.experiment,
+                getSearch: (row: BaseTraceData) => ({
+                  experiments: [get(row, "experiment.id")],
+                }),
+              },
+            },
+          ]
+        : []),
+      ...(type === TRACE_DATA_TYPE.spans
+        ? [
+            {
+              id: "type",
+              label: "Type",
+              type: COLUMN_TYPE.category,
+              cell: SpanTypeCell as never,
+            },
+          ]
+        : []),
+      {
+        id: "created_by",
+        label: "Created by",
+        type: COLUMN_TYPE.string,
+      },
+      {
+        id: COLUMN_COMMENTS_ID,
+        label: "Comments",
+        type: COLUMN_TYPE.string,
+        cell: CommentsCell as never,
+      },
+      ...(isGuardrailsEnabled
+        ? [
+            {
+              id: COLUMN_GUARDRAILS_ID,
+              label: "Guardrails",
+              statisticKey: COLUMN_GUARDRAIL_STATISTIC_ID,
+              type: COLUMN_TYPE.category,
+              accessorFn: (row: BaseTraceData) =>
+                row.guardrails_validations || [],
+              cell: GuardrailsCell as never,
+              statisticDataFormater: (value: number) => `${value} failed`,
+            },
+          ]
+        : []),
+      // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
+    ];
+  }, [
+    type,
+    handleThreadIdClick,
+    isGuardrailsEnabled,
+    addTagFilter,
+    explainCells,
+  ]);
+
+  const columns = useMemo(() => {
+    return [
+      generateSelectColumDef<Trace | Span>(),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(columnData, {
+        columnsOrder,
+        selectedColumns,
+        sortableColumns: sortableBy,
+      }),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
+        scoresColumnsData,
+        {
+          columnsOrder: scoresColumnsOrder,
+          selectedColumns,
+          sortableColumns: sortableBy,
+        },
+      ),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
+        [...METADATA_MAIN_COLUMN_DATA, ...metadataColumnsData],
+        {
+          columnsOrder: metadataColumnsOrder,
+          selectedColumns,
+          sortableColumns: sortableBy,
+        },
+      ),
+    ];
+  }, [
+    sortableBy,
+    columnData,
+    columnsOrder,
+    selectedColumns,
+    scoresColumnsData,
+    scoresColumnsOrder,
+    metadataColumnsData,
+    metadataColumnsOrder,
+  ]);
+
+  const virtualization = useMemo(
+    () => getVirtualizationConfig(columns.length, rows.length || (size ?? 0)),
+    [columns.length, rows.length, size],
+  );
+
+  const columnsToExport = useMemo(() => {
+    return columns
+      .map((c) => get(c, "accessorKey", ""))
+      .filter((c) =>
+        c === COLUMN_SELECT_ID
+          ? false
+          : selectedColumns.includes(c) ||
+            (DEFAULT_TRACES_COLUMN_PINNING.left || []).includes(c),
+      );
+  }, [columns, selectedColumns]);
+
+  const activeRowId = type === TRACE_DATA_TYPE.traces ? traceId : spanId;
+  const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
+
+  const hasNext = rowIndex >= 0 ? rowIndex < rows.length - 1 : false;
+  const hasPrevious = rowIndex >= 0 ? rowIndex > 0 : false;
+
+  const handleRowChange = useCallback(
+    (shift: number) => handleRowClick(rows[rowIndex + shift]),
+    [handleRowClick, rowIndex, rows],
+  );
+
+  const handleClose = useCallback(() => {
+    setThreadId("");
+    setTraceId("");
+    setSpanId("");
+  }, [setSpanId, setTraceId, setThreadId]);
+
+  const sortConfig = useMemo(
+    () => ({
+      enabled: true,
+      sorting: sortedColumns,
+      setSorting: setSortedColumns,
+    }),
+    [setSortedColumns, sortedColumns],
+  );
+
+  const resizeConfig = useMemo(
+    () => ({
+      enabled: true,
+      columnSizing: columnsWidth,
+      onColumnResize: setColumnsWidth,
+    }),
+    [columnsWidth, setColumnsWidth],
+  );
+
+  const columnSections = useMemo(() => {
+    const sections: {
+      title: string;
+      columns: typeof scoresColumnsData;
+      order: string[];
+      onOrderChange: (order: string[]) => void;
+    }[] = [
+      {
+        title: "Feedback scores",
+        columns: scoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+    ];
+
+    const allMetadataColumns = [
+      ...METADATA_MAIN_COLUMN_DATA,
+      ...metadataColumnsData,
+    ];
+
+    if (allMetadataColumns.length > 0) {
+      sections.push({
+        title: "Metadata",
+        columns: allMetadataColumns,
+        order: metadataColumnsOrder,
+        onOrderChange: setMetadataColumnsOrder,
+      });
+    }
+
+    return sections;
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    metadataColumnsData,
+    metadataColumnsOrder,
+    setMetadataColumnsOrder,
+  ]);
+
+  return (
+    <>
+      <PageBodyStickyContainer
+        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2"
+        direction="horizontal"
+        limitWidth
+      >
+        <div className="flex items-center gap-2">
+          <LogsTypeToggle value={logsType} onValueChange={onLogsTypeChange} />
+        </div>
+        <div className="flex items-center gap-2">
+          <DataTableRowHeightSelector
+            type={height as ROW_HEIGHT}
+            setType={setHeight}
+            size="icon-xs"
+          />
+          <ColumnsButton
+            columns={columnData}
+            selectedColumns={selectedColumns}
+            onSelectionChange={setSelectedColumns}
+            order={columnsOrder}
+            onOrderChange={setColumnsOrder}
+            sections={columnSections}
+            layout="labeled"
+            size="xs"
+            excludeFromSelectAll={
+              metadataColumnsData.length > 0
+                ? metadataColumnsData.map((col) => col.id)
+                : []
+            }
+          />
+          <Separator orientation="vertical" className="mx-2 h-6" />
+          <EnvironmentFilterSelect
+            value={environment ?? ""}
+            onChange={(next) => {
+              setEnvironment(next || undefined);
+              setPage(1);
+            }}
+          />
+          <MetricDateRangeSelect
+            value={dateRange}
+            onChangeValue={handleDateRangeChange}
+            minDate={minDate}
+            maxDate={maxDate}
+            hideAlltime
+          />
+          <Separator orientation="vertical" className="mx-2 h-6" />
+          <RefreshButton
+            tooltip={`Refresh ${
+              type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
+            } list`}
+            size="icon-xs"
+            isFetching={isFetching}
+            onRefresh={() => {
+              refetch();
+              refetchStatistic();
+            }}
+          />
+        </div>
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="pt-3"
+        direction="horizontal"
+        limitWidth
+      >
+        <MetricsSummary
+          projectId={projectId}
+          entityType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
+          countLabel={type === TRACE_DATA_TYPE.traces ? "Traces" : "Spans"}
+          filters={effectiveFilters}
+          intervalStart={intervalStart}
+          intervalEnd={intervalEnd}
+          dateRange={dateRange}
+          logsSource={LOGS_SOURCE.sdk}
+        />
+      </PageBodyStickyContainer>
+
+      {selectedRows.length > 0 ? (
+        <SelectionActionBar
+          selectedCount={selectedRows.length}
+          onDeselectAll={() => setRowSelection({})}
+        >
+          <TracesActionsPanel
+            projectId={projectId}
+            projectName={projectName}
+            getDataForExport={getDataForExport}
+            selectedRows={selectedRows}
+            columnsToExport={columnsToExport}
+            type={type as TRACE_DATA_TYPE}
+            buttonVariant="ghostInverted"
+            buttonSize="2xs"
+          />
+        </SelectionActionBar>
+      ) : (
+        <PageBodyStickyContainer
+          className="py-3"
+          direction="bidirectional"
+          limitWidth
+        >
+          <FilterChipBar
+            chipsPinned={chipsPinned}
+            chipsUnpinned={chipsUnpinned}
+            values={chipValues}
+            managerOpen={chipManagerOpen}
+            onManagerOpenChange={setChipManagerOpen}
+            onApplyValue={applyChipValue}
+            onClearValue={clearChipValue}
+            onPinChip={pinChip}
+            onUnpinChip={unpinChip}
+            onClearAll={clearAllChips}
+            openChipId={openChipId}
+            onOpenChipIdChange={setOpenChipId}
+            prefix={
+              <SearchInput
+                searchText={search as string}
+                setSearchText={setSearch}
+                placeholder="Search by anything"
+                className="w-[200px] shrink-0"
+                dimension="xs"
+              />
+            }
+          />
+        </PageBodyStickyContainer>
+      )}
+
+      <DataTableStateHandler
+        isLoading={isTableLoading}
+        isEmpty={showEmptyState}
+        emptyState={
+          <DataTableEmptyContent
+            title={`No ${type} yet`}
+            description={`${
+              type === TRACE_DATA_TYPE.spans ? "Spans" : "Traces"
+            } will appear here once your agent starts receiving requests.`}
+            lightImageUrl={emptyLogsLightUrl}
+            darkImageUrl={emptyLogsDarkUrl}
+          >
+            <div className="flex items-center gap-3">
+              <button
+                onClick={openQuickstart}
+                className="comet-body-s underline underline-offset-4 hover:text-primary"
+              >
+                Quickstart guide
+              </button>
+              <a
+                href={buildDocsUrl("/tracing/advanced/log_traces")}
+                target="_blank"
+                rel="noreferrer"
+                className="comet-body-s inline-flex items-center gap-1 underline underline-offset-4 hover:text-primary"
+              >
+                View docs
+                <ExternalLink className="size-3" />
+              </a>
+            </div>
+          </DataTableEmptyContent>
+        }
+        skeleton
+      >
+        <DataTable
+          columns={columns}
+          columnsStatistic={columnsStatistic}
+          data={rows}
+          onRowClick={handleRowClick}
+          activeRowId={activeRowId ?? ""}
+          sortConfig={sortConfig}
+          resizeConfig={resizeConfig}
+          showSkeleton={isTableLoading}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
+          noData={
+            <DataTableNoMatchingData
+              onClearFilters={
+                search || chipFilters.length > 0 || environment
+                  ? handleClearFilters
+                  : undefined
+              }
+            />
+          }
+          TableWrapper={PageBodyStickyTableWrapper}
+          TableBody={DataTableVirtualBody}
+          columnVirtualization={virtualization}
+          rowVirtualization={virtualization}
+          stickyHeader
+          meta={meta}
+          showLoadingOverlay={isPlaceholderData && isFetching}
+        />
+        <PageBodyStickyContainer
+          className="bottom-0 -mt-px border-t border-border py-2 pb-4"
+          direction="horizontal"
+          limitWidth
+        >
+          <DataTablePagination
+            page={page as number}
+            pageChange={setPage}
+            size={size as number}
+            sizeChange={setSize}
+            total={data?.total ?? 0}
+            supportsTruncation
+            truncationEnabled={truncationEnabled}
+          />
+        </PageBodyStickyContainer>
+      </DataTableStateHandler>
+      <QuickAttributeFilterProvider value={quickAttributeFilterApi}>
+        <TraceDetailsPanel
+          projectId={projectId}
+          traceId={traceId!}
+          spanId={spanId!}
+          setSpanId={setSpanId}
+          setThreadId={setThreadId}
+          hasPreviousRow={hasPrevious}
+          hasNextRow={hasNext}
+          open={Boolean(traceId) && !threadId}
+          onClose={handleClose}
+          onRowChange={handleRowChange}
+        />
+      </QuickAttributeFilterProvider>
+      <ThreadDetailsPanel
+        projectId={projectId}
+        projectName={projectName}
+        traceId={traceId!}
+        setTraceId={setTraceId}
+        threadId={threadId!}
+        open={Boolean(threadId)}
+        onClose={handleClose}
+      />
+    </>
+  );
+};
+
+export default TracesSpansTab;

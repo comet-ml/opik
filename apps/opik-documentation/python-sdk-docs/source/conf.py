@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Add the source directory to the Python path so Sphinx can find our extensions
+sys.path.insert(0, os.path.abspath("."))
+
 # Configuration file for the Sphinx documentation builder.
 #
 # Full list of options can be found in the Sphinx documentation:
@@ -20,6 +26,8 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.todo",
     "sphinx_click.ext",
+    # Custom extensions
+    "docstring_override",
 ]
 
 # -- Options for Autodoc --------------------------------------------------------------
@@ -37,6 +45,37 @@ autodoc_default_options = {
     "private-members": False,
     "show-inheritance": True,
 }
+
+# Mock the heavy third-party integration libraries. autodoc only imports the
+# opik.integrations.* wrappers to read their signatures/docstrings; it does not
+# need the real SDKs, several of which fail to import in the docs environment
+# (e.g. google-genai / litellm raise PydanticSchemaGenerationError at import).
+# Without this, every integration reference page renders empty. Do NOT list
+# libraries the opik core imports (pydantic, httpx), only integration-only deps.
+autodoc_mock_imports = [
+    "agents",
+    "aisuite",
+    "anthropic",
+    "boto3",
+    "botocore",
+    "crewai",
+    "crewai_tools",
+    "dspy",
+    "google",
+    "groq",
+    "guardrails",
+    "harbor",
+    "haystack",
+    "langchain",
+    "langchain_core",
+    "langgraph",
+    "litellm",
+    "llama_index",
+    "mistralai",
+    "openai",
+    "pyagentspec",
+    "sagemaker",
+]
 
 # -- Options for Markdown files ----------------------------------------------
 #

@@ -1,15 +1,25 @@
 <h1 align="center" style="border-bottom: none">
     <div>
         <a href="https://www.comet.com/site/products/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=header_img&utm_campaign=opik"><picture>
-            <source media="(prefers-color-scheme: dark)" srcset="/apps/opik-documentation/documentation/static/img/logo-dark-mode.svg">
-            <source media="(prefers-color-scheme: light)" srcset="https://github.com/comet-ml/opik/blob/HEAD/apps/opik-documentation/documentation/static/img/opik-logo.svg">
-            <img alt="Comet Opik logo" src="https://github.com/comet-ml/opik/blob/HEAD/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
+            <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/logo-dark-mode.svg">
+            <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/opik-logo.svg">
+            <img alt="Comet Opik logo" src="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
         </picture></a>
         <br>
-        Opik
+        Opik TypeScript SDK
     </div>
-    Open source LLM evaluation framework<br>
 </h1>
+<h2 align="center" style="border-bottom: none">Open-source LLM evaluation platform</h2>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/opik"><img src="https://img.shields.io/npm/v/opik.svg" alt="NPM Version"></a>
+  <a href="https://www.npmjs.com/package/opik"><img src="https://img.shields.io/npm/dt/opik.svg" alt="NPM Downloads"></a>
+  <a href="https://github.com/comet-ml/opik/blob/main/LICENSE"><img src="https://img.shields.io/github/license/comet-ml/opik" alt="License"></a>
+</p>
+
+The Opik TypeScript SDK allows you to integrate your TypeScript and JavaScript applications with the Opik platform, enabling comprehensive tracing, evaluation, and monitoring of your LLM systems. Opik helps you build, evaluate, and optimize LLM systems that run better, faster, and cheaper.
+
+Opik is an open-source LLM evaluation platform by [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=github&utm_content=ts_sdk_readme&utm_campaign=opik). For more information about the broader Opik ecosystem, visit our main [GitHub repository](https://github.com/comet-ml/opik), [Website](https://www.comet.com/site/products/opik/), or [Documentation](https://www.comet.com/docs/opik/).
 
 ## Installation
 
@@ -29,7 +39,7 @@ You can configure the Opik client using environment variables.
 OPIK_API_KEY="your-api-key"
 OPIK_URL_OVERRIDE="https://www.comet.com/opik/api"
 OPIK_PROJECT_NAME="your-project-name"
-OPIK_WORKSPACE_NAME="your-workspace-name"
+OPIK_WORKSPACE="your-workspace-name"
 ```
 
 Or you can pass the configuration to the Opik client constructor.
@@ -93,55 +103,14 @@ for (let i = 0; i < 10; i++) {
 await client.flush();
 ```
 
-## Vercel AI SDK Integration
+## Integrations
 
-Opik provides seamless integration with the Vercel AI SDK through OpenTelemetry instrumentation.
+Opik provides seamless integrations with popular AI frameworks and tools. Check out our integration packages:
 
-### Installation
-
-Install the required dependencies:
-
-```bash
-npm install opik ai @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node
-```
-
-### Usage
-
-```typescript
-import { openai } from "@ai-sdk/openai";
-import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
-import { NodeSDK } from "@opentelemetry/sdk-node";
-import { generateText } from "ai";
-import { OpikExporter } from "opik/vercel";
-
-const sdk = new NodeSDK({
-  traceExporter: new OpikExporter(),
-  instrumentations: [getNodeAutoInstrumentations()],
-});
-
-sdk.start();
-
-const { text } = await generateText({
-  model: openai("gpt-4o-mini"),
-  prompt: "What is love? Describe it in 10 words or less.",
-  experimental_telemetry: OpikExporter.getSettings({
-    name: "ai-sdk-integration",
-  }),
-});
-
-await sdk.shutdown();
-```
-
-This integration automatically captures:
-
-- Input prompts and messages
-- Model responses
-- Token usage statistics
-- Tool calls and their results
-- Timing information
-- Error states
-
-All this telemetry data is automatically sent to your Opik project for analysis and monitoring.
+- **Vercel AI** - [`opik-vercel`](https://www.npmjs.com/package/opik-vercel)
+- **OpenAI** - [`opik-openai`](https://www.npmjs.com/package/opik-openai)
+- **LangChain** - [`opik-langchain`](https://www.npmjs.com/package/opik-langchain)
+- **Google Gemini** - [`opik-gemini`](https://www.npmjs.com/package/opik-gemini)
 
 ## Contributing
 

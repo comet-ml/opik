@@ -1,0 +1,135 @@
+import dataclasses
+import logging
+from typing import Any, Callable, Dict, Optional
+
+from google.adk import models as adk_models
+from google.genai import types as genai_types
+
+from .. import helpers as adk_helpers
+
+import opik
+from opik import llm_usage
+from opik.llm_usage import opik_usage
+
+LOGGER = logging.getLogger(__name__)
+
+
+class LlmResponseCreateWrapper:
+    def __init__(
+        self,
+        wrapped_response_create: Callable[
+            [genai_types.GenerateContentResponse], adk_models.LlmResponse
+        ],
+    ) -> None:
+        self.wrapped_response_create = wrapped_response_create
+
+    def __call__(
+        self, generate_content_response: genai_types.GenerateContentResponse
+    ) -> adk_models.LlmResponse:
+        LOGGER.debug("LlmResponseCreateWrapper called")
+        return _wrap_llm_response_create(
+            generate_content_response, self.wrapped_response_create
+        )
+
+
+@dataclasses.dataclass
+class LLMUsageData:
+    opik_usage: opik_usage.OpikUsage
+    model: Optional[str]
+    provider: Optional[str]
+
+
+def pop_response_cost(result_dict: Dict[str, Any]) -> Optional[float]:
+    """Extracts the LiteLLM-computed cost from ADK output and removes it from the result dict.
+
+    Kept separate from ``pop_llm_usage_data``, and called before it, because that
+    function can both give up on and raise over usage it cannot parse, and the two
+    share one try/except: reading the cost afterwards would forfeit it to a problem
+    it has nothing to do with. The cost is reported by the proxy, not derived from
+    the tokens.
+    """
+    if (custom_metadata := result_dict.get("custom_metadata", None)) is None:
+        return None
+
+    return custom_metadata.pop("opik_response_cost", None)
+
+
+def pop_llm_usage_data(
+    result_dict: Dict[str, Any], provider: Optional[str]
+) -> Optional[LLMUsageData]:
+    """Extracts Opik usage metadata from ADK output and removes it from the result dict."""
+    opik_usage_metadata = None
+    model = None
+
+    if (custom_metadata := result_dict.get("custom_metadata", None)) is not None:
+        if (opik_usage_metadata := custom_metadata.pop("opik_usage", None)) is not None:
+            model = custom_metadata.pop("model_version", None)
+            if model is not None:
+                model = model.split("/")[-1]
+
+    # in streaming mode ADK returns the usage metadata in the result dict as the last call
+    # to the after_model_callback bypassing our patching (no opik_usage)
+    if opik_usage_metadata is None:
+        if "usage_metadata" in result_dict:
+            opik_usage_metadata = result_dict["usage_metadata"]
+        else:
+            return None
+
+    if provider in [opik.LLMProvider.GOOGLE_AI, opik.LLMProvider.GOOGLE_VERTEXAI]:
+        usage = llm_usage.try_build_opik_usage_or_log_error(
+            provider=opik.LLMProvider(provider),
+            usage=opik_usage_metadata,
+            logger=LOGGER,
+            error_message="Failed to log token usage from ADK Gemini call",
+        )
+    else:
+        usage = llm_usage.build_opik_usage_from_unknown_provider(
+            usage=opik_usage_metadata,
+        )
+
+    if usage is None:
+        return None
+
+    return LLMUsageData(opik_usage=usage, model=model, provider=provider)
+
+
+def _wrap_llm_response_create(
+    generate_content_response: genai_types.GenerateContentResponse,
+    wrapped_response_create: Callable[
+        [genai_types.GenerateContentResponse], adk_models.LlmResponse
+    ],
+) -> adk_models.LlmResponse:
+    usage_metadata = generate_content_response.usage_metadata
+    LOGGER.debug("_wrap_llm_response_create: usage_metadata=%s", usage_metadata)
+
+    response = wrapped_response_create(generate_content_response)
+    if usage_metadata is None:
+        return response
+
+    if response.custom_metadata is None:
+        response.custom_metadata = {}
+
+    # Store the usage as a plain dict, never the genai model itself. Since google-genai
+    # 2.18.0 (googleapis/python-genai#2784) these classes defer their pydantic build, so
+    # a class holds a MockValSer until something rebuilds it. Serializing one from an
+    # Any-typed field (custom_metadata is dict[str, Any]) takes pydantic's inference
+    # path, which downcasts to SchemaSerializer in Rust without firing the lazy rebuild
+    # hook a Python-level call would, and raises "'MockValSer' object is not an instance
+    # of 'SchemaSerializer'" - fallback=str does not rescue it. That broke both
+    # after_model_callback (silently, losing output and usage) and ADK's own response
+    # serialization (HTTP 500). Upstream, still open:
+    # https://github.com/pydantic/pydantic/issues/13647
+    # Dumping the model directly goes through Python and does rebuild the class, so the
+    # dict we attach is always safe. The reader below already handles a dict - that is
+    # what it gets from the dumped result in the streaming path.
+    response.custom_metadata["opik_usage"] = adk_helpers.convert_adk_base_model_to_dict(
+        usage_metadata
+    )
+    response.custom_metadata["provider"] = adk_helpers.get_adk_provider()
+    response.custom_metadata["model_version"] = generate_content_response.model_version
+    LOGGER.debug(
+        "_wrap_llm_response_create finished: response.custom_metadata=%s",
+        response.custom_metadata,
+    )
+
+    return response

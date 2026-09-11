@@ -1,13 +1,12 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.LlmProviderService;
-import dev.langchain4j.model.chat.ChatLanguageModel;
-
-import static com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters;
+import dev.langchain4j.model.chat.ChatModel;
 
 public interface LlmServiceProvider {
 
-    LlmProviderService getService(String apiKey);
+    LlmProviderService getService(LlmProviderClientApiConfig config);
 
-    ChatLanguageModel getLanguageModel(String apiKey, LlmAsJudgeModelParameters modelParameters);
+    ChatModel getLanguageModel(LlmProviderClientApiConfig config, LlmAsJudgeModelParameters modelParameters);
 }

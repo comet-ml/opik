@@ -1,0 +1,179 @@
+---
+headline: Install with MDM
+og:description: Deploy Cost Intelligence to a fleet with Jamf, Kandji, Intune or
+  JumpCloud by pushing a Claude Code managed-settings drop-in to each device.
+og:site_name: Opik Documentation
+og:title: Install with MDM - Opik
+title: Plugin with MDM
+---
+
+**This is the path we recommend for most organizations.** You deliver the configuration as a file on each device using the device management you already run: Jamf, Kandji, Intune, JumpCloud, or Linux provisioning tooling.
+
+Two reasons it's usually the better choice:
+
+- **You choose who gets it.** Target specific devices or groups, so you can pilot with one team, confirm the data looks right, and widen from there. Managed settings applies to every authenticated user in the org at once, with no way to stage it.
+- **It uses tooling admins already operate.** Pushing a config file to a device group is routine work for whoever runs your fleet, with no new admin surface, and it covers developers on personal Claude accounts and machines whose accounts you don't centrally control.
+
+The configuration itself is identical to the [managed settings path](/cost-intelligence/install/managed-settings); only the delivery differs. Claude Code reads it locally instead of fetching it from Anthropic.
+
+## What lands on the device
+
+A single JSON drop-in, written as root:
+
+| OS | Path |
+| --- | --- |
+| macOS | `/Library/Application Support/ClaudeCode/managed-settings.d/50-opik-cipx.json` |
+| Linux | `/etc/claude-code/managed-settings.d/50-opik-cipx.json` |
+| Windows | `C:\Program Files\ClaudeCode\managed-settings.d\50-opik-cipx.json` |
+
+Claude Code deep-merges everything in `managed-settings.d/` with any existing `managed-settings.json`, so this is **additive**: it won't clobber other policies you already push.
+
+Settings delivered this way are org-enforced: users cannot disable the plugin or override the `OPIK_CIPX_*` environment, and they apply to every user on the device.
+
+## Prepare the configuration
+
+Generate it from **Cost Intelligence → Organization Policies → Copy settings file**, or start from this template:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "opik-enterprise": {
+      "source": { "source": "github", "repo": "comet-ml/cost-intelligence-proxy" },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": {
+    "opik-cipx@opik-enterprise": true
+  },
+  "env": {
+    "OPIK_CIPX_BASE_URL": "https://www.comet.com/opik/api",
+    "OPIK_CIPX_WORKSPACE": "your-org-cc-workspace",
+    "OPIK_CIPX_API_KEY": "<workspace-scoped API key>",
+    "OPIK_CIPX_PROJECT": "claude-code"
+  }
+}
+```
+
+<Warning>
+  The file holds an API key and is world-readable on the device by design,
+  because Claude Code runs as the logged-in user and must be able to read it. Use a
+  **service-account** key scoped to ingest, never a personal token, and rotate it
+  by re-deploying.
+</Warning>
+
+Validate before shipping. A malformed payload is silently ignored by some MDMs, which gives you a rollout that reports success and enforces nothing:
+
+```bash
+plutil -convert json -o /dev/null 50-opik-cipx.json   # macOS
+python3 -m json.tool 50-opik-cipx.json > /dev/null    # any platform
+```
+
+## Deploy
+
+<Tabs>
+
+<Tab title="Any MDM (Jamf, Kandji, Intune)">
+
+Ship the JSON to the device (a pkg payload, or a "files and script" policy), then place it as root:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+DIR="/Library/Application Support/ClaudeCode/managed-settings.d"
+/bin/mkdir -p "$DIR"
+/bin/cp 50-opik-cipx.json "$DIR/50-opik-cipx.json"
+/usr/sbin/chown root:wheel "$DIR/50-opik-cipx.json"
+/bin/chmod 644 "$DIR/50-opik-cipx.json"
+```
+
+MDM script runners already execute as root. Use absolute tool paths; those runners typically have a minimal `PATH`.
+
+</Tab>
+
+<Tab title="JumpCloud">
+
+The whole install fits in one JumpCloud Command, run as **root**. Inline the JSON with a heredoc so no separate file transfer is needed:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+DIR="/Library/Application Support/ClaudeCode/managed-settings.d"
+/bin/mkdir -p "$DIR"
+TMP="$(/usr/bin/mktemp)"
+/bin/cat > "$TMP" <<'JSON'
+{ ...your configuration... }
+JSON
+/usr/bin/plutil -convert json -o /dev/null "$TMP"   # validate; abort if bad
+/bin/mv "$TMP" "$DIR/50-opik-cipx.json"
+/usr/sbin/chown root:wheel "$DIR/50-opik-cipx.json"
+/bin/chmod 644 "$DIR/50-opik-cipx.json"
+```
+
+Two operational notes specific to JumpCloud:
+
+- **Target users, not devices**, so machines belonging to former employees are excluded.
+- **Keep the Command after triggering it.** JumpCloud queues it for offline Macs and runs it on next check-in; deleting the Command cancels those queued deliveries.
+
+</Tab>
+
+<Tab title="Linux">
+
+Same JSON, different path. Any provisioning tool that can write a root-owned file works: Ansible, Puppet, Chef, or a package postinstall:
+
+```bash
+install -d -m 755 /etc/claude-code/managed-settings.d
+install -m 644 -o root -g root \
+  50-opik-cipx.json /etc/claude-code/managed-settings.d/50-opik-cipx.json
+```
+
+</Tab>
+
+</Tabs>
+
+## Verify
+
+As the logged-in user, in a **fresh** Claude Code session (managed settings load at startup):
+
+```bash
+claude plugin list
+cat "/Library/Application Support/ClaudeCode/managed-settings.d/50-opik-cipx.json"
+opik-cipx status
+```
+
+Then confirm traces are arriving in the target workspace.
+
+## Updating configuration later
+
+Two things worth separating, because it determines how often you touch your MDM:
+
+- **Bootstrap configuration**: workspace, API key, base URL, upstream gateway. Changing these means re-deploying the file.
+- **Cost policies**: model defaults, output caps, denied MCP servers and skills, thinking budgets. These do **not** require an MDM push — you manage them from the dashboard and devices pick them up on their own (see [Roll out cost policies](/cost-intelligence/roll-out-cost-policies)).
+
+So you push this file once, and manage cost policy from the Opik dashboard afterwards.
+
+## Uninstall
+
+```bash
+sudo rm "/Library/Application Support/ClaudeCode/managed-settings.d/50-opik-cipx.json"
+```
+
+Then, on each device, `opik-cipx uninstall` removes the hook, stops the daemon, and deletes local state.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Reduce coding agent spend"
+    icon="fa-regular fa-arrow-trend-down"
+    href="/cost-intelligence/reduce-agent-spend"
+  >
+    Turn the data into a lower bill.
+  </Card>
+  <Card
+    title="macOS app with MDM"
+    icon="fa-regular fa-shield-halved"
+    href="/cost-intelligence/install/macos-app"
+  >
+    Transparent capture of every user, including the Claude Code desktop app.
+  </Card>
+</CardGroup>

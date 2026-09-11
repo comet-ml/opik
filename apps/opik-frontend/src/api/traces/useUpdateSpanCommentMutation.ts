@@ -3,7 +3,7 @@ import { AxiosError } from "axios";
 import get from "lodash/get";
 
 import api, { SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseUpdateSpanCommentMutationParams = {
   commentId: string;

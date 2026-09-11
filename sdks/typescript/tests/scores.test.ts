@@ -1,9 +1,6 @@
 import { Opik } from "opik";
 import { MockInstance } from "vitest";
-
-async function mockAPIPromise<T>() {
-  return {} as T;
-}
+import { mockAPIFunction } from "./mockUtils";
 
 describe("Feedback scores", () => {
   let client: Opik;
@@ -25,27 +22,27 @@ describe("Feedback scores", () => {
 
     createSpansSpy = vi
       .spyOn(client.api.spans, "createSpans")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateSpansSpy = vi
       .spyOn(client.api.spans, "updateSpan")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     createSpansFeedbackScoresSpy = vi
       .spyOn(client.api.spans, "scoreBatchOfSpans")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     createTracesSpy = vi
       .spyOn(client.api.traces, "createTraces")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateTracesSpy = vi
       .spyOn(client.api.traces, "updateTrace")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     createTracesFeedbackScoresSpy = vi
       .spyOn(client.api.traces, "scoreBatchOfTraces")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     vi.useFakeTimers();
   });

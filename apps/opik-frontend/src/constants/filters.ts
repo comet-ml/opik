@@ -1,6 +1,11 @@
 import { FilterOperator } from "@/types/filters";
 import { COLUMN_TYPE, DropdownOption } from "@/types/shared";
 
+export const NO_VALUE_OPERATORS: FilterOperator[] = [
+  "is_empty",
+  "is_not_empty",
+];
+
 export const DEFAULT_OPERATORS: DropdownOption<FilterOperator>[] = [
   { label: "contains", value: "contains" },
 ];
@@ -14,6 +19,8 @@ export const DEFAULT_OPERATOR_MAP: Record<COLUMN_TYPE, FilterOperator> = {
   [COLUMN_TYPE.numberDictionary]: "=",
   [COLUMN_TYPE.cost]: "<=",
   [COLUMN_TYPE.duration]: "<=",
+  [COLUMN_TYPE.category]: "=",
+  [COLUMN_TYPE.errors]: "is_not_empty",
 };
 
 export const OPERATORS_MAP: Record<
@@ -146,6 +153,18 @@ export const OPERATORS_MAP: Record<
       value: "contains",
     },
     {
+      label: "doesn't contain",
+      value: "not_contains",
+    },
+    {
+      label: "starts with",
+      value: "starts_with",
+    },
+    {
+      label: "ends with",
+      value: "ends_with",
+    },
+    {
       label: ">",
       value: ">",
     },
@@ -175,5 +194,32 @@ export const OPERATORS_MAP: Record<
       label: "<=",
       value: "<=",
     },
+    {
+      label: "is empty",
+      value: "is_empty",
+    },
+    {
+      label: "is not empty",
+      value: "is_not_empty",
+    },
+  ],
+  [COLUMN_TYPE.category]: [
+    {
+      label: "=",
+      value: "=",
+    },
+  ],
+  [COLUMN_TYPE.errors]: [
+    {
+      label: "is empty",
+      value: "is_empty",
+    },
+    {
+      label: "is not empty",
+      value: "is_not_empty",
+    },
   ],
 };
+
+export const CUSTOM_FILTER_VALIDATION_REGEXP =
+  /^((\$\.)?input|\$?input\[\d+\]|(\$\.)?output|\$?output\[\d+\])(\.[^.]+)*$/;

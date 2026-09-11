@@ -1,0 +1,1154 @@
+package com.comet.opik.domain.cost;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.math.BigDecimal;
+import java.util.Map;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class CostServiceTest {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    @Test
+    void calculateCostForVideoGenerationUsesDuration() {
+        BigDecimal cost = CostService.calculateCost("sora-2", "openai",
+                Map.of("video_duration_seconds", 4), null);
+
+        assertThat(cost).isEqualByComparingTo("0.4");
+    }
+
+    @Test
+    void calculateCostUsesCacheAwareCalculatorWhenCachePricesConfigured() {
+        Map<String, Integer> usage = Map.of(
+                "original_usage.inputTokens", 100,
+                "original_usage.outputTokens", 20,
+                "original_usage.cacheReadInputTokens", 10,
+                "original_usage.cacheWriteInputTokens", 5);
+
+        BigDecimal cost = CostService.calculateCost("anthropic.claude-3-5-haiku-20241022-v1:0", "bedrock", usage, null);
+
+        assertThat(cost).isEqualByComparingTo("0.0001658");
+    }
+
+    /**
+     * Covers every branch of the new audio-token handling in
+     * {@link SpanCostCalculator#textGenerationCost}:
+     * <ul>
+     *   <li>{@code gpt-4o-audio-preview} publishes {@code input_cost_per_audio_token} (4e-5),
+     *       which is 16x the standard input rate (2.5e-6). The Python SDK
+     *       ({@code openai_chat_completions_usage.PromptTokensDetails.audio_tokens}) flattens the
+     *       count under {@code original_usage.prompt_tokens_details.audio_tokens}; the bare OTel
+     *       key {@code prompt_tokens_details.audio_tokens} is the documented fallback.</li>
+     *   <li>{@code gpt-4o-mini} has no {@code input_cost_per_audio_token}, so
+     *       {@code inputAudioRate == 0} and the audio token key in usage is ignored — every
+     *       prompt token bills at the standard input rate.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0} with key={1}")
+    @MethodSource("provideAudioPromptTokenCases")
+    void calculateCostBillsAudioPromptTokensAtTheConfiguredRate(
+            String model, String audioUsageKey, String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1_000,
+                "completion_tokens", 200,
+                audioUsageKey, 300);
+
+        BigDecimal cost = CostService.calculateCost(model, "openai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAudioPromptTokenCases() {
+        // gpt-4o-audio-preview: input 2.5e-6, output 1e-5, input_audio 4e-5
+        // non-audio prompt = 1000 - 300 = 700
+        // 700 * 2.5e-6 + 300 * 4e-5 + 200 * 1e-5 = 0.00175 + 0.012 + 0.002 = 0.01575
+        // gpt-4o-mini: input 1.5e-7, output 6e-7 (no audio rate; audio key is ignored)
+        // 1000 * 1.5e-7 + 200 * 6e-7 = 0.00015 + 0.00012 = 0.00027
+        return Stream.of(
+                Arguments.of("gpt-4o-audio-preview",
+                        "original_usage.prompt_tokens_details.audio_tokens", "0.01575"),
+                Arguments.of("gpt-4o-audio-preview",
+                        "prompt_tokens_details.audio_tokens", "0.01575"),
+                Arguments.of("gpt-4o-mini",
+                        "original_usage.prompt_tokens_details.audio_tokens", "0.00027"));
+    }
+
+    /**
+     * Covers every branch of the new audio-completion handling in
+     * {@link SpanCostCalculator#textGenerationCost}:
+     * <ul>
+     *   <li>{@code gpt-4o-audio-preview} publishes {@code output_cost_per_audio_token} (8e-5),
+     *       which is 8x the standard output rate (1e-5). The Python SDK
+     *       ({@code openai_chat_completions_usage.CompletionTokensDetails.audio_tokens}) flattens
+     *       the count under {@code original_usage.completion_tokens_details.audio_tokens}; the
+     *       bare OTel key {@code completion_tokens_details.audio_tokens} is the documented
+     *       fallback.</li>
+     *   <li>{@code gpt-4o-mini} has no {@code output_cost_per_audio_token}, so
+     *       {@code outputAudioRate == 0} and the audio token key in usage is ignored — every
+     *       completion token bills at the standard output rate.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0} with key={1}")
+    @MethodSource("provideAudioCompletionTokenCases")
+    void calculateCostBillsAudioCompletionTokensAtTheConfiguredRate(
+            String model, String audioUsageKey, String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 200,
+                "completion_tokens", 500,
+                audioUsageKey, 200);
+
+        BigDecimal cost = CostService.calculateCost(model, "openai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAudioCompletionTokenCases() {
+        // gpt-4o-audio-preview: input 2.5e-6, output 1e-5, output_audio 8e-5
+        // non-audio completion = 500 - 200 = 300
+        // 200 * 2.5e-6 + 300 * 1e-5 + 200 * 8e-5 = 0.0005 + 0.003 + 0.016 = 0.0195
+        // gpt-4o-mini: input 1.5e-7, output 6e-7 (no audio rate; audio key is ignored)
+        // 200 * 1.5e-7 + 500 * 6e-7 = 0.00003 + 0.0003 = 0.00033
+        return Stream.of(
+                Arguments.of("gpt-4o-audio-preview",
+                        "original_usage.completion_tokens_details.audio_tokens", "0.0195"),
+                Arguments.of("gpt-4o-audio-preview",
+                        "completion_tokens_details.audio_tokens", "0.0195"),
+                Arguments.of("gpt-4o-mini",
+                        "original_usage.completion_tokens_details.audio_tokens", "0.00033"));
+    }
+
+    @Test
+    void calculateCostUsesAnthropicCacheCalculatorForClaudeOnVertexAI() {
+        // Claude models hosted on Google Vertex AI ship under the litellm_provider
+        // "vertex_ai-anthropic_models" (canonical provider "anthropic_vertexai"), separate from
+        // the bare-Anthropic and Bedrock paths. Without an entry in PROVIDERS_CACHE_COST_CALCULATOR
+        // these requests fell through to textGenerationCost, so prompt-cache tokens were billed
+        // at the full input rate instead of the configured cache-read rate.
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 100,
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 100,
+                "original_usage.cache_read_input_tokens", 200,
+                "original_usage.cache_creation_input_tokens", 50);
+
+        BigDecimal cost = CostService.calculateCost("vertex_ai/claude-haiku-4-5", "anthropic_vertexai", usage, null);
+
+        // vertex_ai/claude-haiku-4-5 (vertex_ai-anthropic_models):
+        // input 1e-6, output 5e-6, cache_read 1e-7, cache_creation 1.25e-6
+        // Anthropic shape: prompt_tokens EXCLUDES cached tokens, so we sum each bucket at its own rate.
+        // 1000*1e-6 + 100*5e-6 + 50*1.25e-6 + 200*1e-7
+        // = 0.001 + 0.0005 + 0.0000625 + 0.00002 = 0.0015825
+        assertThat(cost).isEqualByComparingTo("0.0015825");
+    }
+
+    /**
+     * Whole-prompt tier semantics for {@code *_above_200k_tokens} rates (issue #6982):
+     * once the prompt strictly exceeds 200K every token bills at the tier rate; exactly at
+     * the threshold the base rate still applies.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideGeminiAbove200kTierCases")
+    void calculateCostAppliesAbove200kTierPricingForGemini_issue6982(String description, int promptTokens,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", promptTokens,
+                "completion_tokens", 1_000,
+                "original_usage.prompt_token_count", promptTokens,
+                "original_usage.candidates_token_count", 1_000);
+
+        BigDecimal cost = CostService.calculateCost("gemini-2.5-pro", "google_vertexai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGeminiAbove200kTierCases() {
+        // gemini-2.5-pro base: input 1.25e-6 / output 1e-5; above_200k: input 2.5e-6 / output 1.5e-5.
+        return Stream.of(
+                // 200_000 * 1.25e-6 + 1_000 * 1e-5 = 0.25 + 0.01 = 0.26
+                Arguments.of("at threshold uses base rate", 200_000, "0.26"),
+                // 300_000 * 2.5e-6 + 1_000 * 1.5e-5 = 0.75 + 0.015 = 0.765
+                Arguments.of("above threshold uses tier rate", 300_000, "0.765"));
+    }
+
+    /**
+     * Whole-prompt tier semantics for {@code *_above_128k_tokens} rates: once the prompt strictly
+     * exceeds 128K every token bills at the tier rate; exactly at the threshold the base rate
+     * still applies. {@code gemini-1.5-flash} is the reachable model at this threshold (input
+     * 7.5e-8 base, 1.5e-7 above 128k — 2x).
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideGeminiAbove128kTierCases")
+    void calculateCostAppliesAbove128kTierPricingForGemini(String description, int promptTokens,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", promptTokens,
+                "completion_tokens", 1_000,
+                "original_usage.prompt_token_count", promptTokens,
+                "original_usage.candidates_token_count", 1_000);
+
+        BigDecimal cost = CostService.calculateCost("gemini/gemini-1.5-flash", "google_ai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGeminiAbove128kTierCases() {
+        // gemini-1.5-flash base: input 7.5e-8 / output 0; above_128k: input 1.5e-7 (output stays 0).
+        return Stream.of(
+                // 128_000 * 7.5e-8 + 1_000 * 0 = 0.0096
+                Arguments.of("at threshold uses base rate", 128_000, "0.0096"),
+                // 200_000 * 1.5e-7 + 1_000 * 0 = 0.030
+                Arguments.of("above threshold uses tier rate", 200_000, "0.030"));
+    }
+
+    /**
+     * Whole-prompt tier semantics for {@code *_above_272k_tokens} rates: once the prompt strictly
+     * exceeds 272K every token bills at the tier rate. Reachable models include the OpenAI GPT-5.4
+     * and GPT-5.5 families (and their Azure-hosted twins). {@code gpt-5.4} publishes cache rates
+     * too, so it routes through {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} —
+     * confirming that the effective-rate helpers cover the OpenAI cache path, not just the Google
+     * and Anthropic ones.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideGpt54Above272kTierCases")
+    void calculateCostAppliesAbove272kTierPricingForOpenAI(String description, int promptTokens,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", promptTokens,
+                "completion_tokens", 1_000,
+                "original_usage.prompt_tokens", promptTokens,
+                "original_usage.completion_tokens", 1_000);
+
+        BigDecimal cost = CostService.calculateCost("gpt-5.4", "openai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideGpt54Above272kTierCases() {
+        // gpt-5.4 base: input 2.5e-6 / output 1.5e-5; above_272k: input 5e-6 / output 2.25e-5.
+        return Stream.of(
+                // 272_000 * 2.5e-6 + 1_000 * 1.5e-5 = 0.68 + 0.015 = 0.695
+                Arguments.of("at threshold uses base rate", 272_000, "0.695"),
+                // 300_000 * 5e-6 + 1_000 * 2.25e-5 = 1.5 + 0.0225 = 1.5225
+                Arguments.of("above threshold uses tier rate", 300_000, "1.5225"));
+    }
+
+    @Test
+    void calculateCostUsesGoogleCacheCalculatorWhenCachePricesConfigured_issue6976() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 100,
+                "original_usage.prompt_token_count", 1000,
+                "original_usage.candidates_token_count", 100,
+                "original_usage.cached_content_token_count", 400);
+
+        BigDecimal cost = CostService.calculateCost("gemini-2.5-flash", "google_vertexai", usage, null);
+
+        // gemini-2.5-flash: input 3e-7, output 2.5e-6, cache_read 3e-8
+        // non-cached input = 1000 - 400 = 600 -> 600*3e-7 + 100*2.5e-6 + 400*3e-8
+        // = 0.00018 + 0.00025 + 0.000012 = 0.000442
+        assertThat(cost).isEqualByComparingTo("0.000442");
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideAudioSpeechModels")
+    void calculateCostForAudioSpeech(String model, int inputCharacters, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "openai",
+                Map.of("input_characters", inputCharacters), null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAudioSpeechModels() {
+        return Stream.of(
+                // tts-1 at $0.000015 per character, 1000 characters → $0.015
+                Arguments.of("tts-1", 1000, "0.015"),
+                // tts-1-hd at $0.000030 per character, 500 characters → $0.015
+                Arguments.of("tts-1-hd", 500, "0.015"));
+    }
+
+    @Test
+    void calculateCostForAudioSpeechWithOriginalUsagePrefix() {
+        // SDK 1.6.0+ sends usage with original_usage. prefix
+        BigDecimal cost = CostService.calculateCost("tts-1", "openai",
+                Map.of("original_usage.input_characters", 1000), null);
+
+        assertThat(cost).isEqualByComparingTo("0.015");
+    }
+
+    @Test
+    void calculateCostFallsBackToMetadataWhenNoMatchingModelFound() {
+        ObjectNode metadata = OBJECT_MAPPER.createObjectNode();
+        metadata.putObject("cost")
+                .put("currency", "USD")
+                .put("total_cost", 0.42);
+
+        BigDecimal cost = CostService.calculateCost("unknown-model", "unknown", Map.of(), metadata);
+
+        assertThat(cost).isEqualByComparingTo("0.42");
+    }
+
+    /**
+     * Test for issue #4114: Cost estimate not showing for recent Claude models.
+     *
+     * This test verifies that model names with dots (e.g., "claude-3.5-sonnet")
+     * are correctly normalized to hyphens (e.g., "claude-3-5-sonnet") to match
+     * the pricing database format. It also tests case insensitivity and backwards
+     * compatibility.
+     *
+     * Parameterized test covering both positive (cost > 0) and edge (cost = 0) cases.
+     */
+    @ParameterizedTest
+    @MethodSource("provideModelNamesForNormalization")
+    void calculateCost_shouldNormalizeModelNames_issue4114(String modelName, String provider, boolean shouldHaveCost) {
+        Map<String, Integer> usage = Map.of(
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        if (shouldHaveCost) {
+            assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+        } else {
+            assertThat(cost).isEqualTo(BigDecimal.ZERO);
+        }
+    }
+
+    private static Stream<Arguments> provideModelNamesForNormalization() {
+        return Stream.of(
+                // Dot notation should work (normalized to hyphens)
+                Arguments.of("claude-3.7-sonnet-20250219", "anthropic", true),
+                Arguments.of("claude-sonnet-4.5", "anthropic", true),
+                Arguments.of("claude-haiku-4.5", "anthropic", true),
+                Arguments.of("claude-sonnet-4.5-20250929", "anthropic", true),
+                Arguments.of("claude-haiku-4.5-20251001", "anthropic", true),
+
+                // Case insensitivity should work
+                Arguments.of("Claude-3.7-Sonnet-20250219", "anthropic", true),
+                Arguments.of("CLAUDE-SONNET-4.5", "anthropic", true),
+
+                // Backwards compatibility - exact matches still work
+                Arguments.of("claude-3-7-sonnet-20250219", "anthropic", true),
+                Arguments.of("claude-haiku-4-5", "anthropic", true),
+                Arguments.of("claude-sonnet-4-5", "anthropic", true),
+
+                // Provider prefix + dot notation should work (prefix stripped, then dots normalized)
+                Arguments.of("anthropic/claude-3.7-sonnet-20250219", "anthropic", true),
+                Arguments.of("anthropic/claude-sonnet-4.5", "anthropic", true),
+
+                // Provider prefix + case variation should work
+                Arguments.of("anthropic/Claude-3.7-Sonnet-20250219", "anthropic", true),
+
+                // Unknown models should gracefully return zero
+                Arguments.of("claude-3.5.1", "anthropic", false),
+                Arguments.of("unknown-model-with-dots.1.2.3", "unknown", false));
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideModelNamesWithDateSuffixes")
+    void calculateCost_shouldStripDateSuffixes_issue5018(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    @Test
+    void calculateCost_shouldReturnZeroForUnknownModelWithDateSuffix_issue5018() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost("unknown-model-2025-12-17", "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    /**
+     * A compact-dated name must price at exactly the rate of the base model it normalizes to,
+     * not merely at some non-zero rate -- that is what distinguishes a real price-table hit from
+     * an accidental one. Every case below was observed in production traffic routed through an
+     * enterprise gateway, which emits Anthropic ids in reversed family/version order with a
+     * compact date. Before the fix each of these resolved to DEFAULT_COST and reported $0.00.
+     */
+    @ParameterizedTest
+    @MethodSource("provideCompactDatedModelNamesWithBaseEquivalent")
+    void calculateCost_compactDateSuffixPricesSameAsBaseModel(String datedModelName, String baseModelName,
+            String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal datedCost = CostService.calculateCost(datedModelName, provider, usage, null);
+        BigDecimal baseCost = CostService.calculateCost(baseModelName, provider, usage, null);
+
+        assertThat(baseCost).isGreaterThan(BigDecimal.ZERO);
+        assertThat(datedCost).isEqualByComparingTo(baseCost);
+    }
+
+    private static Stream<Arguments> provideCompactDatedModelNamesWithBaseEquivalent() {
+        return Stream.of(
+                // Reversed family/version order reaches the price row through an `alias_of` entry,
+                // which is only reachable once the compact date is stripped.
+                Arguments.of("anthropic/claude-4.6-opus-20260205", "claude-opus-4-6", "anthropic"),
+                Arguments.of("anthropic/claude-4.6-sonnet-20260217", "claude-sonnet-4-6", "anthropic"),
+                Arguments.of("anthropic/claude-4.5-haiku-20251001", "claude-haiku-4-5", "anthropic"),
+                // Same path without the provider prefix.
+                Arguments.of("claude-4.6-opus-20260205", "claude-opus-4-6", "anthropic"),
+                // Canonical order, compact date, dot form: reaches the row via dot normalization.
+                Arguments.of("claude-opus-4.6-20260205", "claude-opus-4-6", "anthropic"));
+    }
+
+    @Test
+    void calculateCost_shouldReturnZeroForUnknownModelWithCompactDateSuffix() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost("unknown-model-20251217", "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    /**
+     * The month/day ranges in the pattern keep an arbitrary 8-digit build or revision number from
+     * being mistaken for a date and silently collapsing a distinct model onto another model's row.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"gpt-5.2-99999999", "gpt-5.2-20251345", "gpt-5.2-12345678"})
+    void calculateCost_shouldNotStripNonDateEightDigitSuffix(String modelName) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    /**
+     * Test for issue #5621: LiteLLM OTel model names with provider prefix not found in pricing table.
+     *
+     * LiteLLM sends model names with provider prefix via gen_ai.request.model
+     * (e.g. "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022").
+     * These should be stripped before lookup to match the stored keys.
+     */
+    @ParameterizedTest
+    @MethodSource("provideModelNamesWithProviderPrefix")
+    void calculateCost_shouldStripProviderPrefix_issue5621(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> provideModelNamesWithProviderPrefix() {
+        return Stream.of(
+                Arguments.of("openai/gpt-4o", "openai"),
+                Arguments.of("openai/gpt-4o-mini", "openai"),
+                Arguments.of("anthropic/claude-3-7-sonnet-20250219", "anthropic"),
+                Arguments.of("anthropic/claude-haiku-4-5-20251001", "anthropic"));
+    }
+
+    /**
+     * Online evaluation resolves models to LlmProvider serialized values ("gemini", "vertex-ai") that
+     * differ from the canonical price-table vocabulary ("google_ai", "google_vertexai"). calculateCost
+     * must map them so every provider selectable for online evaluation is cost-tracked instead of
+     * silently pricing at zero.
+     */
+    @ParameterizedTest
+    @MethodSource
+    void calculateCost_mapsOnlineEvaluationProviderNames(String modelName, String provider) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> calculateCost_mapsOnlineEvaluationProviderNames() {
+        return Stream.of(
+                Arguments.of("gemini-2.5-flash", "gemini"), // -> google_ai
+                Arguments.of("vertex_ai/gemini-2.5-flash", "vertex-ai")); // -> google_vertexai
+    }
+
+    /**
+     * Overrides file: alias entries should resolve to the target's pricing.
+     */
+    @ParameterizedTest
+    @MethodSource("provideOverrideAliases")
+    void calculateCost_overrideAliasResolvesToTargetPricing(String aliasName, String targetName, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal aliasCost = CostService.calculateCost(aliasName, provider, usage, null);
+        BigDecimal targetCost = CostService.calculateCost(targetName, provider, usage, null);
+
+        assertThat(aliasCost).isGreaterThan(BigDecimal.ZERO);
+        assertThat(aliasCost).isEqualByComparingTo(targetCost);
+    }
+
+    private static Stream<Arguments> provideOverrideAliases() {
+        return Stream.of(
+                Arguments.of("claude-4-5-haiku", "claude-haiku-4-5", "anthropic"),
+                Arguments.of("claude-4-5-opus", "claude-opus-4-5", "anthropic"),
+                Arguments.of("claude-4-5-sonnet", "claude-sonnet-4-5", "anthropic"),
+                Arguments.of("claude-4-6-opus", "claude-opus-4-6", "anthropic"),
+                Arguments.of("claude-4-6-sonnet", "claude-sonnet-4-6", "anthropic"),
+                Arguments.of("claude-4-7-opus", "claude-opus-4-7", "anthropic"));
+    }
+
+    /**
+     * Overrides file: aliases must be reachable via the existing dot→hyphen normalization,
+     * which is how EIS-style names like "claude-4.5-haiku" resolve to the alias key
+     * "claude-4-5-haiku" and from there to the target "claude-haiku-4-5".
+     */
+    @Test
+    void calculateCost_overrideAliasReachableViaDotNormalization() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal dotFormCost = CostService.calculateCost("claude-4.5-haiku", "anthropic", usage, null);
+        BigDecimal canonicalCost = CostService.calculateCost("claude-haiku-4-5", "anthropic", usage, null);
+
+        assertThat(dotFormCost).isGreaterThan(BigDecimal.ZERO);
+        assertThat(dotFormCost).isEqualByComparingTo(canonicalCost);
+    }
+
+    /**
+     * Overrides file: brand-new entries (models absent from upstream LiteLLM) must produce non-zero cost.
+     */
+    @ParameterizedTest
+    @MethodSource("provideOverrideNewEntries")
+    void calculateCost_overrideNewEntry(String model, String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> provideOverrideNewEntries() {
+        return Stream.of(
+                Arguments.of("gpt-oss-120b", "openai"),
+                Arguments.of("gpt-oss-20b", "openai"),
+                Arguments.of("jina-clip-v2", "jina_ai"),
+                Arguments.of("jina-embeddings-v3", "jina_ai"),
+                Arguments.of("jina-embeddings-v5-omni-nano", "jina_ai"),
+                Arguments.of("jina-embeddings-v5-omni-small", "jina_ai"),
+                Arguments.of("jina-embeddings-v5-text-nano", "jina_ai"),
+                Arguments.of("jina-embeddings-v5-text-small", "jina_ai"),
+                Arguments.of("elser_model_2", "elastic"),
+                Arguments.of("gemini-3-flash", "google_ai"),
+                Arguments.of("gemini-3.1-pro", "google_ai"),
+                Arguments.of("gemini-embedding-002", "google_ai"),
+                Arguments.of("mistral-medium-3-5", "mistral"),
+                Arguments.of("mistral-small-2603", "mistral"));
+    }
+
+    /**
+     * Mistral cost tracking: until `mistral` was added to PROVIDERS_MAPPING the entire set of
+     * upstream LiteLLM `litellm_provider: "mistral"` rows was dropped at startup, so every
+     * Mistral span returned cost = 0. This locks in both the upstream-sourced rows and the
+     * two override-only rows (Medium 3.5, Small 4) added alongside the registry fix.
+     */
+    @ParameterizedTest
+    @MethodSource("provideMistralModels")
+    void calculateCostForMistralModels(String model, String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1_000_000, "completion_tokens", 1_000_000);
+
+        BigDecimal cost = CostService.calculateCost(model, "mistral", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideMistralModels() {
+        return Stream.of(
+                // Upstream LiteLLM row: $6e-08 in / $1.8e-07 out → 0.06 + 0.18 = 0.24
+                // Pinned to the dated id rather than the `mistral-small-latest` alias: aliases are
+                // re-priced upstream whenever Mistral ships a new generation (Small 4 moved
+                // `mistral-small-latest` to 1.5e-07 / 6e-07), which breaks an exact-cost assertion
+                // on every automated model-prices update.
+                Arguments.of("mistral-small-3-2-2506", "0.24"),
+                // Upstream LiteLLM row: $5e-07 in / $1.5e-06 out → 0.5 + 1.5 = 2.00
+                Arguments.of("mistral-large-3", "2.00"),
+                // Upstream LiteLLM row: $3e-07 in / $9e-07 out → 0.3 + 0.9 = 1.20
+                Arguments.of("codestral-2508", "1.20"),
+                // New override: $1.5e-06 in / $7.5e-06 out → 1.5 + 7.5 = 9.00
+                Arguments.of("mistral-medium-3-5", "9.00"),
+                // New override: $1.5e-07 in / $6e-07 out → 0.15 + 0.6 = 0.75
+                Arguments.of("mistral-small-2603", "0.75"));
+    }
+
+    /**
+     * Overrides file: `litellm_provider: "microsoft"` is remapped to canonical `azure` via
+     * PROVIDERS_MAPPING. A span emitted with provider=`azure` and the model name must hit
+     * the override row for `azure/multilingual-e5-large`.
+     */
+    @Test
+    void calculateCost_overrideMicrosoftProviderMapsToAzure() {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000);
+
+        BigDecimal cost = CostService.calculateCost("multilingual-e5-large", "azure", usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    /**
+     * Covers both branches of registering {@code azure} as a canonical provider so that the 199
+     * Azure-tagged entries in {@code model_prices_and_context_window.json} (e.g. {@code azure/gpt-4.1},
+     * {@code azure/command-r-plus}, all {@code azure/gpt-4o*} and {@code azure/gpt-5*} variants) are
+     * no longer silently dropped at load time:
+     * <ul>
+     *   <li>Azure model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Azure model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — Azure-hosted OpenAI models share
+     *       the OpenAI usage shape, so cached_tokens are subtracted from prompt_tokens before billing the
+     *       remainder at the standard input rate.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideAzureProviderCases")
+    void calculateCostHandlesAzureHostedModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "azure", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAzureProviderCases() {
+        // azure/command-r-plus: input 3e-6, output 1.5e-5 (no cache rates) -> textGenerationCost
+        // 1000 * 3e-6 + 200 * 1.5e-5 = 0.003 + 0.003 = 0.006
+        // azure/gpt-4.1: input 2e-6, output 8e-6, cache_read 5e-7 -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 2e-6 + 200 * 8e-6 + 300 * 5e-7 = 0.0014 + 0.0016 + 0.00015 = 0.00315
+        return Stream.of(
+                Arguments.of("plain text-generation route", "azure/command-r-plus",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.006"),
+                Arguments.of("cache-aware route via OpenAI calc", "azure/gpt-4.1",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.00315"));
+    }
+
+    /**
+     * Covers registering {@code xai} as a canonical provider so that the xai-tagged entries in
+     * {@code model_prices_and_context_window.json} (the grok-3, grok-4 and grok-code families) are
+     * no longer silently dropped at load time, and that they route through
+     * {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — xAI's cost calculator in
+     * LiteLLM delegates to {@code generic_cost_per_token} using OpenAI-shape
+     * {@code prompt_tokens_details.cached_tokens}, so the same subtract-from-total logic used for
+     * OpenAI/Azure applies unchanged here.
+     * <p>
+     * Both cases take that calculator, because every xai row carrying token rates also publishes
+     * {@code cache_read_input_token_cost}. They differ only in whether the usage payload reports
+     * cached tokens, which pins down that the subtraction leaves an uncached prompt billed in full.
+     * The cache-free {@link SpanCostCalculator#textGenerationCost} route is covered for this same
+     * usage shape by the {@code deepinfra} and {@code snowflake} cases.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideXaiProviderCases")
+    void calculateCostHandlesXaiModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "xai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideXaiProviderCases() {
+        // xai/grok-4.3: input 1.25e-6, output 2.5e-6, cache_read 2e-7. Pinned to this row because its
+        // rates have held while the grok-2 generation was retired upstream and grok-3 / grok-4 were
+        // re-priced; the above_200k tier rates it also publishes stay inactive at a 1000-token prompt.
+        // No cached tokens in usage -> the whole prompt bills at the input rate
+        // 1000 * 1.25e-6 + 200 * 2.5e-6 = 0.00125 + 0.0005 = 0.00175
+        // With cached tokens -> non-cached input = 1000 - 300 = 700
+        // 700 * 1.25e-6 + 200 * 2.5e-6 + 300 * 2e-7 = 0.000875 + 0.0005 + 0.00006 = 0.001435
+        return Stream.of(
+                // Bare usage keys, as logged by SDKs below 1.6.0.
+                Arguments.of("cache-aware route, no cached tokens in usage", "xai/grok-4.3",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00175"),
+                Arguments.of("cache-aware route via OpenAI calc", "xai/grok-4.3",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.001435"));
+    }
+
+    /**
+     * Covers both branches of registering {@code deepseek} as a canonical provider so that the 12
+     * deepseek-tagged entries in {@code model_prices_and_context_window.json} (the
+     * {@code deepseek-chat} / {@code deepseek-reasoner} / {@code deepseek/deepseek-v3} /
+     * {@code deepseek/deepseek-v4-*} families) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>DeepSeek model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>DeepSeek model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — DeepSeek's cost calculator
+     *       in LiteLLM ({@code litellm/llms/deepseek/cost_calculator.py}) delegates to
+     *       {@code generic_cost_per_token}, so its usage payload follows the same OpenAI shape
+     *       (cached tokens flattened under {@code prompt_tokens_details.cached_tokens}).</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideDeepseekProviderCases")
+    void calculateCostHandlesDeepseekModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "deepseek", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideDeepseekProviderCases() {
+        // deepseek/deepseek-coder: input 1.4e-7, output 2.8e-7 (no cache rates) -> textGenerationCost
+        // 1000 * 1.4e-7 + 200 * 2.8e-7 = 0.00014 + 0.000056 = 0.000196
+        // deepseek/deepseek-chat: input 2.8e-7, output 4.2e-7, cache_read 2.8e-8 -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 2.8e-7 + 200 * 4.2e-7 + 300 * 2.8e-8 = 0.000196 + 0.000084 + 0.0000084 = 0.0002884
+        return Stream.of(
+                Arguments.of("plain text-generation route", "deepseek/deepseek-coder",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.000196"),
+                Arguments.of("cache-aware route via OpenAI calc", "deepseek/deepseek-chat",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.0002884"));
+    }
+
+    /**
+     * Covers registering {@code perplexity} as a canonical provider so that the 16 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "perplexity"} (the {@code sonar} family and legacy
+     * {@code perplexity/llama-*} / {@code perplexity/codellama-*} models) are no longer silently
+     * dropped at load time. No Perplexity model publishes cache rates today, so all Perplexity
+     * requests route through {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("providePerplexityProviderCases")
+    void calculateCostHandlesPerplexityModels(String model, Map<String, Integer> usage, String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "perplexity", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> providePerplexityProviderCases() {
+        // perplexity/sonar: input 1e-6, output 1e-6
+        // 1000 * 1e-6 + 200 * 1e-6 = 0.001 + 0.0002 = 0.0012
+        // perplexity/sonar-pro: input 3e-6, output 1.5e-5 (distinct rates for the two dimensions)
+        // 1000 * 3e-6 + 200 * 1.5e-5 = 0.003 + 0.003 = 0.006
+        return Stream.of(
+                Arguments.of("perplexity/sonar",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0012"),
+                Arguments.of("perplexity/sonar-pro",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.006"));
+    }
+
+    /**
+     * Covers both branches of registering {@code fireworks_ai} as a canonical provider so that the
+     * ~260 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "fireworks_ai"} (the {@code accounts/fireworks/models/*} catalog) are
+     * no longer silently dropped at load time:
+     * <ul>
+     *   <li>Fireworks model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Fireworks model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — Fireworks' cost calculator
+     *       in LiteLLM ({@code litellm/llms/fireworks_ai/cost_calculator.py}) delegates to
+     *       {@code generic_cost_per_token}, so its usage payload follows the same OpenAI shape
+     *       (cached tokens flattened under {@code prompt_tokens_details.cached_tokens}).</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideFireworksProviderCases")
+    void calculateCostHandlesFireworksModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "fireworks_ai", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideFireworksProviderCases() {
+        // fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct: input 9e-7, output 9e-7
+        // (no cache rates) -> textGenerationCost
+        // 1000 * 9e-7 + 200 * 9e-7 = 0.0009 + 0.00018 = 0.00108
+        // fireworks_ai/accounts/fireworks/models/kimi-k2p5: input 6e-7, output 3e-6, cache_read 1e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 6e-7 + 200 * 3e-6 + 300 * 1e-7 = 0.00042 + 0.0006 + 0.00003 = 0.00105
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "fireworks_ai/accounts/fireworks/models/llama-v3p1-70b-instruct",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00108"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "fireworks_ai/accounts/fireworks/models/kimi-k2p5",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.00105"));
+    }
+
+    /**
+     * Covers both branches of registering {@code moonshot} as a canonical provider so that the
+     * 22 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "moonshot"} (the {@code moonshot-v1-*} legacy models and the
+     * {@code kimi-*} family) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>Moonshot model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Moonshot model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — Moonshot's API is
+     *       OpenAI-compatible and its LiteLLM cost calculator delegates to
+     *       {@code generic_cost_per_token}, so cached tokens are flattened under
+     *       {@code prompt_tokens_details.cached_tokens}, matching the OpenAI/Azure/xAI/DeepSeek/
+     *       Fireworks routing.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideMoonshotProviderCases")
+    void calculateCostHandlesMoonshotModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "moonshot", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideMoonshotProviderCases() {
+        // moonshot/moonshot-v1-8k: input 2e-7, output 2e-6 (no cache rates) -> textGenerationCost
+        // 1000 * 2e-7 + 200 * 2e-6 = 0.0002 + 0.0004 = 0.0006
+        // moonshot/kimi-k2-0711-preview: input 6e-7, output 2.5e-6, cache_read 1.5e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 6e-7 + 200 * 2.5e-6 + 300 * 1.5e-7 = 0.00042 + 0.0005 + 0.000045 = 0.000965
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "moonshot/moonshot-v1-8k",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0006"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "moonshot/kimi-k2-0711-preview",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.000965"));
+    }
+
+    @Test
+    void calculateCostHandlesCerebrasModels() {
+        // Registering cerebras as a canonical provider loads its 7 non-zero-cost entries in
+        // model_prices_and_context_window.json (llama and qwen models served on Cerebras Cloud),
+        // which drop at load time otherwise. No Cerebras model publishes cache rates, so requests
+        // route through SpanCostCalculator.textGenerationCost.
+        // cerebras/llama-3.3-70b: input 8.5e-7, output 1.2e-6
+        // 1000 * 8.5e-7 + 200 * 1.2e-6 = 0.00085 + 0.00024 = 0.00109
+        BigDecimal cost = CostService.calculateCost("cerebras/llama-3.3-70b", "cerebras",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00109");
+    }
+
+    /**
+     * Covers registering {@code sambanova} as a canonical provider so that the 19 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "sambanova"} (the deepseek, llama, qwen and minimax models served
+     * on SambaNova Cloud) are no longer silently dropped at load time. No SambaNova model
+     * publishes cache rates today, so all SambaNova requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesSambanovaModels() {
+        // sambanova/MiniMax-M2.7: input 6e-7, output 2.4e-6
+        // 1000 * 6e-7 + 200 * 2.4e-6 = 0.0006 + 0.00048 = 0.00108
+        BigDecimal cost = CostService.calculateCost("sambanova/MiniMax-M2.7", "sambanova",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00108");
+    }
+
+    /**
+     * Covers registering {@code nebius} as a canonical provider so that the 30 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "nebius"} (the {@code nebius/<org>/<model>} catalog: deepseek,
+     * qwen, llama and more) are no longer silently dropped at load time. No Nebius model
+     * publishes cache rates today, so all Nebius requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesNebiusModels() {
+        // nebius/deepseek-ai/DeepSeek-R1: input 8e-7, output 2.4e-6
+        // 1000 * 8e-7 + 200 * 2.4e-6 = 0.0008 + 0.00048 = 0.00128
+        BigDecimal cost = CostService.calculateCost("nebius/deepseek-ai/DeepSeek-R1", "nebius",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00128");
+    }
+
+    /**
+     * Covers both branches of registering {@code snowflake} as a canonical provider so that the
+     * 21 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "snowflake"} (Snowflake Cortex-hosted claude, deepseek and llama
+     * models) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>Snowflake model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Snowflake model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI}; Snowflake's cost entry in
+     *       LiteLLM exposes OpenAI-shape {@code cache_read_input_token_cost}, so cached tokens
+     *       arrive flattened under {@code prompt_tokens_details.cached_tokens} like the other
+     *       OpenAI-compatible providers.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideSnowflakeProviderCases")
+    void calculateCostHandlesSnowflakeModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "snowflake", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideSnowflakeProviderCases() {
+        // snowflake/deepseek-r1: input 1.35e-6, output 5.4e-6 (no cache rates) -> textGenerationCost
+        // 1000 * 1.35e-6 + 200 * 5.4e-6 = 0.00135 + 0.00108 = 0.00243
+        // snowflake/claude-3-5-sonnet: input 3e-6, output 1.5e-5, cache_read 3e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 3e-6 + 200 * 1.5e-5 + 300 * 3e-7 = 0.0021 + 0.003 + 0.00009 = 0.00519
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "snowflake/deepseek-r1",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00243"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "snowflake/claude-3-5-sonnet",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.00519"));
+    }
+
+    /**
+     * Covers the provider-prefix fallback in {@link CostService#findModelPrice}. Callers that
+     * route a model through an aggregator ({@link com.comet.opik.api.resources.v1.events.BudgetGuard}
+     * calls {@code CostService.calculateCost} via {@code LlmProviderFactoryImpl.getResolvedModelInfo},
+     * which enumerates {@code perplexity/*} under OpenRouter and therefore returns
+     * {@code provider="openrouter"}) still get the correct pricing row that lives under the
+     * model's actual origin provider. Same rate math as the direct {@code perplexity} call —
+     * only the routing changes.
+     */
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @MethodSource("provideAggregatorRoutedPerplexityCases")
+    void calculateCostFindsPerplexityViaAggregatorProviderPrefix(String model, String provider,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAggregatorRoutedPerplexityCases() {
+        return Stream.of(
+                // aggregator that we don't register as a canonical provider (openrouter): prefix
+                // fallback kicks in and the perplexity row is found.
+                Arguments.of("perplexity/sonar", "openrouter", "0.0012"),
+                Arguments.of("perplexity/sonar-pro", "openrouter", "0.006"),
+                // custom-llm and empty-adjacent providers hit the same fallback path.
+                Arguments.of("perplexity/sonar", "custom-llm", "0.0012"));
+    }
+
+    /**
+     * OpenRouter exposes Moonshot's Kimi family under a different namespace prefix
+     * ({@code moonshotai/*}) than LiteLLM's canonical ({@code moonshot/*}) — see the
+     * {@code MOONSHOTAI_*} entries in {@code OpenRouterModelName}. Without a
+     * {@code moonshotai -> moonshot} alias in {@link CostService#PROVIDERS_MAPPING}, the
+     * provider-prefix fallback returns null and the aggregator-routed request resolves to
+     * {@code DEFAULT_COST}, silently under-charging every Kimi call routed through OpenRouter.
+     * With the alias, the fallback maps {@code moonshotai} to the canonical {@code moonshot}
+     * and the pricing row is found. Mirrors the existing {@code microsoft -> azure} override
+     * pattern in the same map.
+     */
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @MethodSource("provideAggregatorRoutedMoonshotCases")
+    void calculateCostFindsMoonshotViaAggregatorProviderPrefix(String model, String provider,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAggregatorRoutedMoonshotCases() {
+        // moonshot/kimi-k2-0711-preview: input 6e-7, output 2.5e-6 (cache rates ignored here
+        // because usage carries no cached_tokens key -> textGenerationCost path)
+        // 1000 * 6e-7 + 200 * 2.5e-6 = 0.0006 + 0.0005 = 0.0011
+        // moonshot/moonshot-v1-8k: input 2e-7, output 2e-6
+        // 1000 * 2e-7 + 200 * 2e-6 = 0.0002 + 0.0004 = 0.0006
+        return Stream.of(
+                // OpenRouter-style routing: model carries the moonshotai/ prefix and caller
+                // passes provider="openrouter" (or any non-canonical). Alias makes the lookup
+                // find the underlying moonshot/ price row.
+                Arguments.of("moonshotai/kimi-k2-0711-preview", "openrouter", "0.0011"),
+                Arguments.of("moonshotai/moonshot-v1-8k", "openrouter", "0.0006"),
+                // custom-llm and other pass-through providers hit the same fallback.
+                Arguments.of("moonshotai/kimi-k2-0711-preview", "custom-llm", "0.0011"));
+    }
+
+    /**
+     * Test for issue #5130: Bedrock model names carry a version-pin suffix like
+     * "anthropic.claude-opus-4-6-v1:0" while the pricing database stores the base name
+     * "anthropic.claude-opus-4-6-v1". Stripping the ":N" pin lets these price correctly.
+     */
+    @ParameterizedTest
+    @MethodSource("provideBedrockModelNamesWithVersionSuffix")
+    void calculateCost_shouldStripVersionSuffix_issue5130(String modelName) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, "bedrock", usage, null);
+
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    private static Stream<Arguments> provideBedrockModelNamesWithVersionSuffix() {
+        return Stream.of(
+                // Base key stored without ":0"; Bedrock appends the version pin.
+                Arguments.of("anthropic.claude-opus-4-6-v1:0"),
+                Arguments.of("us.anthropic.claude-opus-4-6-v1:0"),
+                // Provider prefix + version pin: prefix stripped first, then version suffix removed.
+                Arguments.of("bedrock/anthropic.claude-opus-4-6-v1:0"));
+    }
+
+    private static Stream<Arguments> provideModelNamesWithDateSuffixes() {
+        return Stream.of(
+                // 1. Stripped date on original name (base model has dots, date suffix removed before lookup)
+                Arguments.of("gpt-5.2-2025-12-17", "openai"),
+                // 2. Stripped date on normalized name (dots normalized to hyphens, then date suffix removed)
+                Arguments.of("claude-sonnet-4.5-2025-12-17", "anthropic"),
+                // 3. Base models without date suffix should still work
+                Arguments.of("gpt-5.2", "openai"),
+                Arguments.of("claude-sonnet-4.5", "anthropic"),
+                // 4. Provider prefix + date suffix: prefix stripped first, then date suffix removed
+                Arguments.of("anthropic/claude-sonnet-4.5-2025-12-17", "anthropic"),
+                Arguments.of("openai/gpt-5.2-2025-12-17", "openai"),
+                // 5. Compact YYYYMMDD dates, the form Anthropic actually ships on every dated id.
+                Arguments.of("gpt-5.2-20251217", "openai"),
+                Arguments.of("claude-sonnet-4.5-20251217", "anthropic"),
+                Arguments.of("anthropic/claude-sonnet-4.5-20251217", "anthropic"),
+                Arguments.of("openai/gpt-5.2-20251217", "openai"));
+    }
+
+    /**
+     * Same gap as the {@code moonshotai} alias, for five more vendors OpenRouter resells.
+     * {@code ai21}, {@code morph}, {@code inception}, {@code meta} and {@code zai} all carry
+     * non-zero-cost rows in {@code model_prices_and_context_window.json}, but none were in
+     * {@link CostService#PROVIDERS_MAPPING}, so {@code buildModelPrice} dropped every one of
+     * them at load time and the provider-prefix fallback had nothing to resolve against. Any
+     * call routed through OpenRouter fell through to {@code DEFAULT_COST}.
+     * <p>
+     * {@code z-ai} needs two entries for the same reason {@code moonshot} does: the map is read
+     * both with the price file's {@code litellm_provider} ({@code zai}) when loading rows, and
+     * with the model-name prefix OpenRouter uses ({@code z-ai}) when resolving the fallback.
+     * The other four spell both the same way, so one entry each.
+     * <p>
+     * All of these take the {@link SpanCostCalculator#textGenerationCost} path. Four of the
+     * models below publish a {@code cache_read_input_token_cost}, but none of these providers is
+     * registered in {@code PROVIDERS_CACHE_COST_CALCULATOR}, so cached tokens are not discounted
+     * yet. Registering them needs evidence of how each API reports cached tokens, which is a
+     * separate change.
+     */
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @MethodSource("provideAggregatorRoutedVendorCases")
+    void calculateCostFindsOpenRouterVendorPricesViaProviderPrefix(String model, String provider,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAggregatorRoutedVendorCases() {
+        // ai21/jamba-large-1.7:   input 2e-6,    output 8e-6    -> 1000*2e-6    + 200*8e-6    = 0.0036
+        // ai21/jamba-mini-1.7:    input 2e-7,    output 4e-7    -> 1000*2e-7    + 200*4e-7    = 0.00028
+        // zai/glm-4.5:            input 6e-7,    output 2.2e-6  -> 1000*6e-7    + 200*2.2e-6  = 0.00104
+        // zai/glm-5:              input 1e-6,    output 3.2e-6  -> 1000*1e-6    + 200*3.2e-6  = 0.00164
+        // morph/morph-v3-fast:    input 8e-7,    output 1.2e-6  -> 1000*8e-7    + 200*1.2e-6  = 0.00104
+        // morph/morph-v3-large:   input 9e-7,    output 1.9e-6  -> 1000*9e-7    + 200*1.9e-6  = 0.00128
+        // inception/mercury-2:    input 2.5e-7,  output 7.5e-7  -> 1000*2.5e-7  + 200*7.5e-7  = 0.0004
+        // meta/muse-spark-1.1:    input 1.25e-6, output 4.25e-6 -> 1000*1.25e-6 + 200*4.25e-6 = 0.0021
+        return Stream.of(
+                Arguments.of("ai21/jamba-large-1.7", "openrouter", "0.0036"),
+                Arguments.of("ai21/jamba-mini-1.7", "openrouter", "0.00028"),
+                // OpenRouter namespaces Z.ai as z-ai/, the price file as zai/.
+                Arguments.of("z-ai/glm-4.5", "openrouter", "0.00104"),
+                Arguments.of("z-ai/glm-5", "openrouter", "0.00164"),
+                Arguments.of("morph/morph-v3-fast", "openrouter", "0.00104"),
+                Arguments.of("morph/morph-v3-large", "openrouter", "0.00128"),
+                Arguments.of("inception/mercury-2", "openrouter", "0.0004"),
+                Arguments.of("meta/muse-spark-1.1", "openrouter", "0.0021"),
+                // custom-llm hits the same fallback, as it does for perplexity and moonshot.
+                Arguments.of("z-ai/glm-4.5", "custom-llm", "0.00104"));
+    }
+
+    /**
+     * Covers both branches of registering {@code deepinfra} as a canonical provider so that the
+     * ~67 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "deepinfra"} (the {@code deepinfra/<org>/<model>} catalog) are no
+     * longer silently dropped at load time:
+     * <ul>
+     *   <li>DeepInfra model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>DeepInfra model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI}; DeepInfra exposes an
+     *       OpenAI-compatible API, so even Claude models it hosts report cached tokens under
+     *       {@code prompt_tokens_details.cached_tokens} rather than the Anthropic shape.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideDeepinfraProviderCases")
+    void calculateCostHandlesDeepinfraModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "deepinfra", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideDeepinfraProviderCases() {
+        // deepinfra/anthropic/claude-4-sonnet: input 3.3e-6, output 1.65e-5 (no cache) -> textGenerationCost
+        // 1000 * 3.3e-6 + 200 * 1.65e-5 = 0.0033 + 0.0033 = 0.0066
+        // Pinned to one of DeepInfra's Anthropic-hosted rows: it re-prices its open-weights catalog
+        // in bulk, while none of the anthropic-hosted rows has been re-priced.
+        // deepinfra/anthropic/claude-3-7-sonnet-latest: input 3.3e-6, output 1.65e-5, cache_read 3.3e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 3.3e-6 + 200 * 1.65e-5 + 300 * 3.3e-7 = 0.00231 + 0.0033 + 0.000099 = 0.005709
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "deepinfra/anthropic/claude-4-sonnet",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0066"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "deepinfra/anthropic/claude-3-7-sonnet-latest",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.005709"));
+    }
+}

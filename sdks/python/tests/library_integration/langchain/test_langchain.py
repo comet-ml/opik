@@ -1,13 +1,17 @@
 import pytest
-from langchain.llms import fake
-from langchain.prompts import PromptTemplate
+from langchain_core.language_models import fake
+from langchain_core.language_models.fake import FakeStreamingListLLM
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import tool
 
 import opik
 from opik import context_storage
 from opik.api_objects import opik_client, span, trace
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
-from opik.integrations.langchain.opik_tracer import OpikTracer
+from opik.integrations.langchain.opik_tracer import OpikTracer, ERROR_SKIPPED_OUTPUTS
 from opik.types import DistributedTraceHeadersDict
+
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -62,67 +66,43 @@ def test_langchain__happyflow(
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="RunnableSequence",
+                type="tool",
+                name="PromptTemplate",
                 input={"title": "Documentary about Bigfoot in Paris"},
                 output=ANY_DICT,
-                tags=["tag1", "tag2"],
                 metadata={
-                    "a": "b",
                     "created_from": "langchain",
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="tool",
-                        name="PromptTemplate",
-                        input={"title": "Documentary about Bigfoot in Paris"},
-                        output=ANY_DICT,
-                        metadata={
-                            "created_from": "langchain",
-                        },
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        project_name=expected_project_name,
-                        spans=[],
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="llm",
-                        name="FakeListLLM",
-                        input={
-                            "prompts": [
-                                "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
-                            ]
-                        },
-                        output=ANY_DICT,
-                        metadata={
-                            "invocation_params": {
-                                "responses": [
-                                    "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                ],
-                                "_type": "fake-list",
-                                "stop": None,
-                            },
-                            "options": {"stop": None},
-                            "batch_size": 1,
-                            "metadata": ANY_BUT_NONE,
-                            "created_from": "langchain",
-                        },
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        project_name=expected_project_name,
-                        spans=[],
-                    ),
-                ],
-            )
+                spans=[],
+                source="sdk",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="FakeListLLM",
+                input={
+                    "prompts": [
+                        "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
+                    ]
+                },
+                output=ANY_DICT,
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
+                spans=[],
+                source="sdk",
+            ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -134,7 +114,7 @@ def test_langchain__distributed_headers__happyflow(
     fake_backend,
 ):
     project_name = "langchain-integration-test--distributed-headers"
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     # PREPARE DISTRIBUTED HEADERS
     trace_data = trace.TraceData(
@@ -147,7 +127,7 @@ def test_langchain__distributed_headers__happyflow(
         tags=["tag_d1", "tag_d2"],
     )
     trace_data.init_end_time()
-    client.trace(**trace_data.__dict__)
+    client.__internal_api__trace__(**trace_data.__dict__)
 
     span_data = span.SpanData(
         trace_id=trace_data.id,
@@ -162,7 +142,7 @@ def test_langchain__distributed_headers__happyflow(
     span_data.init_end_time().update(
         output={"output": "custom-distributed-headers--output"},
     )
-    client.span(**span_data.__dict__)
+    client.__internal_api__span__(**span_data.__dict__)
 
     distributed_headers = DistributedTraceHeadersDict(
         opik_trace_id=span_data.trace_id,
@@ -199,6 +179,7 @@ def test_langchain__distributed_headers__happyflow(
         tags=["tag_d1", "tag_d2"],
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=project_name,
         spans=[
             SpanModel(
@@ -238,6 +219,7 @@ def test_langchain__distributed_headers__happyflow(
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
                                 spans=[],
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -249,29 +231,23 @@ def test_langchain__distributed_headers__happyflow(
                                     ]
                                 },
                                 output=ANY_DICT,
-                                metadata={
-                                    "invocation_params": {
-                                        "responses": [
-                                            "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                        ],
-                                        "_type": "fake-list",
-                                        "stop": None,
-                                    },
-                                    "created_from": "langchain",
-                                    "options": {"stop": None},
-                                    "batch_size": 1,
-                                    "metadata": ANY_BUT_NONE,
-                                },
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "langchain"}
+                                ),
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
                                 spans=[],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -320,6 +296,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
         output={"output": "the-output"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=project_name,
         spans=[
             SpanModel(
@@ -360,6 +337,7 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
                                 spans=[],
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -371,29 +349,23 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                     ]
                                 },
                                 output=ANY_DICT,
-                                metadata={
-                                    "invocation_params": {
-                                        "responses": [
-                                            "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                        ],
-                                        "_type": "fake-list",
-                                        "stop": None,
-                                    },
-                                    "created_from": "langchain",
-                                    "options": {"stop": None},
-                                    "batch_size": 1,
-                                    "metadata": ANY_BUT_NONE,
-                                },
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "langchain"}
+                                ),
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
                                 spans=[],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -422,7 +394,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
 
         synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     # Prepare context to have manually created trace data
     trace_data = trace.TraceData(
@@ -449,6 +421,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
         output={"output": "output-of-manually-created-trace"},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -477,6 +450,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -488,26 +462,17 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                             ]
                         },
                         output=ANY_DICT,
-                        metadata={
-                            "invocation_params": {
-                                "responses": [
-                                    "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                ],
-                                "_type": "fake-list",
-                                "stop": None,
-                            },
-                            "created_from": "langchain",
-                            "options": {"stop": None},
-                            "batch_size": 1,
-                            "metadata": ANY_BUT_NONE,
-                        },
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -537,7 +502,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
 
         synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     span_data = span.SpanData(
         trace_id="some-trace-id",
         name="manually-created-span",
@@ -551,7 +516,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
     span_data.init_end_time().update(
         output={"output": "output-of-manually-created-span"}
     )
-    client.span(**span_data.__dict__)
+    client.__internal_api__span__(**span_data.__dict__)
     opik.flush_tracker()
 
     EXPECTED_SPANS_TREE = SpanModel(
@@ -589,6 +554,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                     SpanModel(
                         id=ANY_BUT_NONE,
@@ -600,26 +566,17 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                             ]
                         },
                         output=ANY_DICT,
-                        metadata={
-                            "invocation_params": {
-                                "responses": [
-                                    "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                ],
-                                "_type": "fake-list",
-                                "stop": None,
-                            },
-                            "created_from": "langchain",
-                            "options": {"stop": None},
-                            "batch_size": 1,
-                            "metadata": ANY_BUT_NONE,
-                        },
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.span_trees) == 1
@@ -649,3 +606,179 @@ def test_langchain_callback__disabled_tracking(fake_backend):
 
         assert len(fake_backend.trace_trees) == 0
         assert len(callback.created_traces()) == 0
+
+
+def test_langchain_callback__skip_error_callback__error_output_skipped(
+    fake_backend,
+):
+    def _should_skip_error(error: str) -> bool:
+        if error is not None and error.startswith("FakeListLLMError"):
+            # skip processing - we are sure that this is OK
+            return True
+        else:
+            return False
+
+    callback = OpikTracer(
+        skip_error_callback=_should_skip_error,
+    )
+
+    llm = FakeStreamingListLLM(
+        error_on_chunk_number=0,  # throw error on the first chunk
+        responses=["I'm sorry, I don't think I'm talented enough to write a synopsis"],
+    )
+
+    template = "Given the title of play, write a synopsis for that. Title: {title}."
+    prompt_template = PromptTemplate(input_variables=["title"], template=template)
+
+    synopsis_chain = prompt_template | llm
+    test_prompts = {"title": "Documentary about Bigfoot in Paris"}
+
+    stream = synopsis_chain.stream(
+        input=test_prompts, config=RunnableConfig(callbacks=[callback])
+    )
+    try:
+        for p in stream:
+            print(p)
+    except Exception:
+        # ignoring exception
+        pass
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="RunnableSequence",
+        project_name="Default Project",
+        input={"title": "Documentary about Bigfoot in Paris"},
+        output=ERROR_SKIPPED_OUTPUTS,
+        metadata={"created_from": "langchain"},
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="PromptTemplate",
+                input={"title": "Documentary about Bigfoot in Paris"},
+                output={"output": ANY_DICT},
+                metadata={"created_from": "langchain"},
+                type="tool",
+                end_time=ANY_BUT_NONE,
+                project_name="Default Project",
+                last_updated_at=ANY_BUT_NONE,
+                source="sdk",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="FakeStreamingListLLM",
+                input={"prompts": ANY_BUT_NONE},
+                output=ANY_DICT,
+                tags=None,
+                metadata=ANY_DICT,
+                type="llm",
+                end_time=ANY_BUT_NONE,
+                project_name="Default Project",
+                last_updated_at=ANY_BUT_NONE,
+                source="sdk",
+            ),
+        ],
+        last_updated_at=ANY_BUT_NONE,
+        source="sdk",
+    )
+
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
+
+
+def test_langchain__tool_with_description__description_attached_to_span_metadata(
+    fake_backend,
+):
+    """Test that tool description/docstring is attached to the tool span metadata."""
+
+    @tool
+    def get_weather(location: str) -> str:
+        """Fetches the current weather for a given location."""
+        return f"The weather in {location} is sunny and 25°C."
+
+    llm = fake.FakeListLLM(responses=["The weather is nice today!"])
+    prompt_template = PromptTemplate(
+        input_variables=["input"],
+        template="Summarize this weather: {input}",
+    )
+
+    # Create a chain: tool -> prompt -> llm
+    chain = get_weather | prompt_template | llm
+
+    callback = OpikTracer()
+    _ = chain.invoke("Paris", config={"callbacks": [callback]})
+
+    callback.flush()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="RunnableSequence",
+        input={"input": "Paris"},
+        output={"output": "The weather is nice today!"},
+        metadata={"created_from": "langchain"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=OPIK_PROJECT_DEFAULT_NAME,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="tool",
+                name="get_weather",
+                input={"input": "Paris"},
+                output={"output": "The weather in Paris is sunny and 25°C."},
+                metadata=ANY_DICT.containing(
+                    {
+                        "created_from": "langchain",
+                        "tool_description": "Fetches the current weather for a given location.",
+                    }
+                ),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=OPIK_PROJECT_DEFAULT_NAME,
+                spans=[],
+                source="sdk",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="tool",
+                name="PromptTemplate",
+                input={"input": "The weather in Paris is sunny and 25°C."},
+                output=ANY_DICT,
+                metadata={"created_from": "langchain"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=OPIK_PROJECT_DEFAULT_NAME,
+                spans=[],
+                source="sdk",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="FakeListLLM",
+                input={
+                    "prompts": [
+                        "Summarize this weather: The weather in Paris is sunny and 25°C."
+                    ]
+                },
+                output=ANY_DICT,
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=OPIK_PROJECT_DEFAULT_NAME,
+                spans=[],
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert len(callback.created_traces()) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

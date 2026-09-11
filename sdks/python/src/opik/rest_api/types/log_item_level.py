@@ -2,6 +2,4 @@
 
 import typing
 
-LogItemLevel = typing.Union[
-    typing.Literal["INFO", "WARN", "ERROR", "DEBUG", "TRACE"], typing.Any
-]
+LogItemLevel = typing.Union[typing.Literal["INFO", "WARN", "ERROR", "DEBUG", "TRACE"], typing.Any]

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import api, {
   COMPARE_EXPERIMENTS_KEY,
   TRACE_KEY,
@@ -20,7 +20,7 @@ const useTraceCommentsBatchDeleteMutation = () => {
   return useMutation({
     mutationFn: async ({ ids }: UseTraceBatchDeleteMutationParams) => {
       const { data } = await api.post(
-        `${TRACES_REST_ENDPOINT}/comments/delete`,
+        `${TRACES_REST_ENDPOINT}comments/delete`,
         {
           ids: ids,
         },

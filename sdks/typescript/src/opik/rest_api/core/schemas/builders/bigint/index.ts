@@ -1,1 +1,1 @@
-export { bigint } from "./bigint";
+export { bigint } from "./bigint.js";

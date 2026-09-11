@@ -11,17 +11,23 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # Fetch all history for git diff
 
       - name: Install Fern
-        run: npm install -g fern-api
+        working-directory: apps/opik-documentation/documentation
+        run: npm install
 
       - name: Publish Docs
         env:
           FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
+          SEGMENT_WRITE_KEY: ${{ secrets.SEGMENT_WRITE_KEY }}
+          GTM_CONTAINER_ID: ${{ secrets.GTM_CONTAINER_ID }}
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_API_HOST: ${{ secrets.POSTHOG_API_HOST }}
         run: |
           cd apps/opik-documentation/documentation
-          fern generate --docs
+          npx fern generate --docs

@@ -10,8 +10,8 @@ import lombok.Builder;
 import java.util.List;
 
 @Builder(toBuilder = true)
-public record SpanBatch(@NotNull @Size(min = 1, max = 1000) @JsonView( {
-        Span.View.Write.class}) @Valid List<Span> spans) implements RateEventContainer{
+public record SpanBatch(@NotNull @Size(min = 1, max = 1000) @JsonView({
+        Span.View.Write.class}) @Valid List<Span> spans) implements RateEventContainer {
 
     @Override
     public long eventCount() {

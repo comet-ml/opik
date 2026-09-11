@@ -5,11 +5,11 @@ import api, {
   PROVIDERS_KEYS_KEY,
 } from "@/api/api";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
-import { ProviderKeyWithAPIKey } from "@/types/providers";
+import { useToast } from "@/ui/use-toast";
+import { PartialProviderKeyUpdate } from "@/types/providers";
 
 type UseProviderKeysCreateMutationParams = {
-  providerKey: Partial<ProviderKeyWithAPIKey>;
+  providerKey: PartialProviderKeyUpdate;
 };
 
 const useProviderKeysCreateMutation = () => {
@@ -22,17 +22,31 @@ const useProviderKeysCreateMutation = () => {
     }: UseProviderKeysCreateMutationParams) => {
       const { data } = await api.post(PROVIDER_KEYS_REST_ENDPOINT, {
         provider: providerKey.provider,
-        api_key: providerKey.apiKey,
+        ...(providerKey.apiKey && { api_key: providerKey.apiKey }),
+        ...(providerKey.base_url && { base_url: providerKey.base_url }),
+        ...(providerKey.provider_name && {
+          provider_name: providerKey.provider_name,
+        }),
+        ...(providerKey?.configuration && {
+          configuration: providerKey.configuration,
+        }),
+        ...(providerKey?.headers && { headers: providerKey.headers }),
+        ...(providerKey.auth_config !== undefined && {
+          auth_config: providerKey.auth_config,
+        }),
       });
 
       return data;
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "errors", "0"],
-        error.message,
-      );
+      // the backend 400s in two shapes: bean validation -> {errors: [...]},
+      // service BadRequestException -> {message: "..."} (Dropwizard ErrorMessage)
+      const errors = get(error, ["response", "data", "errors"]);
+      const message =
+        get(error, ["response", "data", "message"]) ??
+        (Array.isArray(errors) && errors.length > 0
+          ? errors.join("; ")
+          : error.message);
 
       toast({
         title: "Error",

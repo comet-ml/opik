@@ -2,6 +2,7 @@ import { logger } from "@/utils/logger";
 import { Opik } from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
+import { mockAPIFunction, mockAPIFunctionWithError } from "./mockUtils";
 
 const logTraceAndSpan = async ({
   client,
@@ -42,10 +43,6 @@ const logTraceAndSpan = async ({
   await client.flush();
 };
 
-async function mockAPIPromise<T>() {
-  return {} as T;
-}
-
 describe("Opik client batching", () => {
   let client: Opik;
   let createSpansSpy: MockInstance<typeof client.api.spans.createSpans>;
@@ -61,19 +58,19 @@ describe("Opik client batching", () => {
 
     createSpansSpy = vi
       .spyOn(client.api.spans, "createSpans")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateSpansSpy = vi
       .spyOn(client.api.spans, "updateSpan")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     createTracesSpy = vi
       .spyOn(client.api.traces, "createTraces")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateTracesSpy = vi
       .spyOn(client.api.traces, "updateTrace")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     loggerErrorSpy = vi.spyOn(logger, "error");
 
@@ -139,9 +136,7 @@ describe("Opik client batching", () => {
   it("should log an error if trace endpoint fails", async () => {
     const errorMessage = "Test error";
 
-    createTracesSpy.mockImplementation(async () => {
-      throw new Error(errorMessage);
-    });
+    createTracesSpy.mockImplementation(mockAPIFunctionWithError(errorMessage));
 
     const trace = client.trace({ name: "test" });
     trace.end();
@@ -152,5 +147,114 @@ describe("Opik client batching", () => {
     expect(loggerErrorSpy.mock.calls[0].flat().toString()).toContain(
       errorMessage
     );
+  });
+
+  it("should merge multiple trace updates after flush", async () => {
+    const trace = client.trace({ name: "test" });
+    await client.flush(); // Flush create
+
+    trace.update({ output: "result" });
+    trace.end(); // Calls update({ endTime })
+    await client.flush();
+
+    expect(createTracesSpy).toHaveBeenCalledTimes(1);
+    expect(updateTracesSpy).toHaveBeenCalledTimes(1);
+
+    // Verify the update call contains both output AND endTime
+    const updateCall = updateTracesSpy.mock.calls[0];
+    expect(updateCall[1].body).toHaveProperty("output", "result");
+    expect(updateCall[1].body).toHaveProperty("endTime");
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("should merge multiple span updates after flush", async () => {
+    const trace = client.trace({ name: "test" });
+    const span = trace.span({ name: "test-span", type: "llm" });
+    await client.flush();
+
+    span.update({ output: "span-result" });
+    span.end();
+    await client.flush();
+
+    expect(updateSpansSpy).toHaveBeenCalledTimes(1);
+    const updateCall = updateSpansSpy.mock.calls[0];
+    expect(updateCall[1].body).toHaveProperty("output", "span-result");
+    expect(updateCall[1].body).toHaveProperty("endTime");
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("should preserve all data in rapid successive updates", async () => {
+    const trace = client.trace({ name: "test" });
+    await client.flush();
+
+    trace.update({ input: "input-data" });
+    trace.update({ output: "output-data" });
+    trace.update({ metadata: { key: "value" } });
+    trace.end();
+    await client.flush();
+
+    expect(updateTracesSpy).toHaveBeenCalledTimes(1);
+    const updateCall = updateTracesSpy.mock.calls[0];
+    expect(updateCall[1].body).toHaveProperty("input", "input-data");
+    expect(updateCall[1].body).toHaveProperty("output", "output-data");
+    expect(updateCall[1].body.metadata).toEqual({ key: "value" });
+    expect(updateCall[1].body).toHaveProperty("endTime");
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("should merge metadata from update() with initial metadata", async () => {
+    const trace = client.trace({
+      name: "test",
+      metadata: { initial: "yes" },
+    });
+    await client.flush();
+
+    trace.update({ metadata: { updated: "yes" } });
+    trace.end();
+    await client.flush();
+
+    expect(updateTracesSpy).toHaveBeenCalledTimes(1);
+    const updateCall = updateTracesSpy.mock.calls[0];
+    expect(updateCall[1].body.metadata).toEqual({
+      initial: "yes",
+      updated: "yes",
+    });
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("should persist metadata set only via update() on trace", async () => {
+    const trace = client.trace({ name: "test" });
+    await client.flush();
+
+    trace.update({ metadata: { source: "from_update" } });
+    trace.end();
+    await client.flush();
+
+    expect(updateTracesSpy).toHaveBeenCalledTimes(1);
+    const updateCall = updateTracesSpy.mock.calls[0];
+    expect(updateCall[1].body.metadata).toEqual({ source: "from_update" });
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("should merge metadata from update() with initial metadata on span", async () => {
+    const trace = client.trace({ name: "test" });
+    const span = trace.span({
+      name: "test-span",
+      type: "llm",
+      metadata: { initial: "yes" },
+    });
+    await client.flush();
+
+    span.update({ metadata: { updated: "yes" } });
+    span.end();
+    await client.flush();
+
+    expect(updateSpansSpy).toHaveBeenCalledTimes(1);
+    const updateCall = updateSpansSpy.mock.calls[0];
+    expect(updateCall[1].body.metadata).toEqual({
+      initial: "yes",
+      updated: "yes",
+    });
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
   });
 });

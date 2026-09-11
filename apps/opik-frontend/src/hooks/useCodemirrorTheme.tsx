@@ -1,28 +1,41 @@
 import { useMemo } from "react";
 import { tags as t } from "@lezer/highlight";
-import { githubLightInit } from "@uiw/codemirror-theme-github";
+import { githubDarkInit, githubLightInit } from "@uiw/codemirror-theme-github";
+import { useTheme } from "@/contexts/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
 
 type CodemirrorThemeProps = {
   editable?: boolean;
+  transparent?: boolean;
 };
 
 export const useCodemirrorTheme = (props?: CodemirrorThemeProps) => {
-  const { editable = false } = props || {};
-  return useMemo(
-    () =>
-      githubLightInit({
-        settings: {
-          fontFamily: `Ubuntu Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
-          fontSize: "0.875rem",
-          foreground: "#030712",
-          background: "#F8FAFC",
-          gutterBackground: "#F8FAFC",
-          gutterForeground: "#94A3B8",
-          gutterBorder: "#F8FAFC",
-          lineHighlight: editable ? "#F1F5F9" : "transparent",
+  const { editable = false, transparent = false } = props || {};
+  const { themeMode } = useTheme();
+  const isDark = themeMode === THEME_MODE.DARK;
+
+  return useMemo(() => {
+    const themeInit = isDark ? githubDarkInit : githubLightInit;
+    const bg = transparent ? "transparent" : "var(--codemirror-background)";
+    return themeInit({
+      settings: {
+        fontFamily: `Ubuntu Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
+        fontSize: "0.875rem",
+        foreground: "hsl(var(--text-primary))",
+        background: bg,
+        gutterBackground: bg,
+        gutterForeground: "var(--codemirror-gutter)",
+        gutterBorder: bg,
+        lineHighlight: editable
+          ? "var(--codemirror-line-highlight)"
+          : "transparent",
+      },
+      styles: [
+        {
+          tag: [t.className, t.propertyName],
+          color: "var(--codemirror-syntax-blue)",
         },
-        styles: [{ tag: [t.className, t.propertyName], color: "#005CC5" }],
-      }),
-    [editable],
-  );
+      ],
+    });
+  }, [editable, isDark, transparent]);
 };

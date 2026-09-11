@@ -5,16 +5,14 @@ metadata:
   labels:
     {{- include "opik.labels" $  | nindent 4 }}
 data:
-  default.conf: |
-    gzip on;
-    gzip_disable "msie6";
-    gzip_vary on;
-    gzip_proxied any;
-    gzip_comp_level 6;
-    gzip_buffers 16 8k;
-    gzip_http_version 1.1;
-    gzip_min_length 256;
-    gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/vnd.ms-fontobject application/x-font-ttf font/opentype image/svg+xml image/x-icon application/javascript;
+  {{- with .Values.component.frontend.logFormats }}
+  10-log-formats.conf.template: |
+    # nginx log formats template
+    {{- range $name,$format := . }}
+    log_format {{ $name }} {{ $format }};
+    {{- end }}
+  {{- end }}
+  default.conf.template: |
     absolute_redirect off;
     real_ip_header      X-Forwarded-For;
     real_ip_recursive   on;
@@ -23,7 +21,6 @@ data:
     limit_req_log_level info;
     limit_req_status 429;
     map_hash_bucket_size 256;
-    client_max_body_size 500M;
   {{- with .Values.component.frontend.additionalNginxSettings }}
     {{- . | nindent 4 }}
   {{- end }}
@@ -39,7 +36,24 @@ data:
     upstream backend {
       server {{ include "opik.name" $ }}-backend:{{ (.Values.component.backend.service.ports | first).port }};
       keepalive 16;
+      # Recycle upstream keepalive connections so they re-spread across backend pods. An L4
+      # ClusterIP pins each connection to one pod for its lifetime, so without frequent
+      # recycling a few pods absorb ingestion while the rest idle (HPA scales on the average
+      # and never reacts). Default keepalive_requests is 1000 -- too coarse to rebalance under
+      # sustained ingestion with few frontend replicas. Tunable via component.frontend.*.
+      keepalive_requests {{ .Values.component.frontend.keepaliveRequests | default 100 }};
+      keepalive_timeout {{ .Values.component.frontend.keepaliveTimeout | default "60s" }};
     }
+    upstream swagger {
+      server {{ include "opik.name" $ }}-backend:{{ (index .Values.component.backend.service.ports 1).port }};
+      keepalive 16;
+    }
+    {{- if .Values.component.frontend.aiSpendBackend.enabled }}
+    upstream ai-cost-backend {
+      server {{ .Values.component.frontend.aiSpendBackend.host }}:{{ .Values.component.frontend.aiSpendBackend.port }};
+      keepalive 16;
+    }
+    {{- end }}
     {{- if .Values.localFE }}
     upstream local-fe {
       server {{ .Values.localFEAddress }};
@@ -54,25 +68,84 @@ data:
       {{- end}}
     }
     {{- end }}
+    {{- with .Values.component.frontend.cacheControl }}
+    map $uri $cache_control_header {
+      {{- range . }}
+      {{ .pattern }} {{ .value | squote }};
+      {{- end }}
+    }
+    {{- else }}
+    {{- /* Fallback to hardcoded defaults if cacheControl is not defined (backward compatibility) */ -}}
+    map $uri $cache_control_header {
+      ~assets/.*\.(js|css)$              "public, max-age=604800, immutable";
+      ~(images/.*|assets/.*)\.(jpg|jpeg|png|gif|svg|webp|ico)$ "public, max-age=2592000";
+      ~assets/.*\.(woff|woff2|ttf|eot)$  "public, max-age=2592000";
+      ~assets/.*\.json$                  "public, max-age=86400";
+      default                            "no-cache, must-revalidate";
+    }
+    {{- end }}
 
     {{- range $name,$limit := .Values.component.frontend.throttling }}
     limit_req_zone {{ $limit.variable }} zone={{ $limit.zone | default $name }}:{{ $limit.size | default "1m" }} rate={{ $limit.rate | default "10r/m" }};
     {{- end }}
 
-    {{- range $name,$format := .Values.component.frontend.logFormats }}
-    log_format {{ $name }} {{ $format }};
-    {{- end }}
-    
-    access_log /dev/stdout {{ .Values.component.frontend.logFormat | default "main" -}};
-
     server {
         listen {{ (.Values.component.frontend.service.ports | first).targetPort }} default_server;
-        server_name localhost;
-        
-        {{- $rootPath := ternary "" "/opik" .Values.standalone }}
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
 
+        # Increased to 2GB to support large CSV uploads (OPIK-3077)
+        client_max_body_size {{ .Values.component.frontend.clientMaxBodySize | default "500M" }};
+        client_header_buffer_size 16k;
+        large_client_header_buffers 4 64k;
+
+        # Add custom header to identify this nginx instance in multi-proxy setups
+        add_header X-Opik-Nginx "frontend" always;
+        # Add trace ID header for OpenTelemetry
+        add_header X-Trace-ID $otel_trace_id always;
+        # Cache control header (from map variable)
+        add_header Cache-Control $cache_control_header always;
+        {{- /* CSP header - honor legacy csp.enabled flag for backward compatibility */ -}}
+        {{- $cspEnabled := true -}}
+        {{- if hasKey .Values.component.frontend "csp" -}}
+          {{- if hasKey .Values.component.frontend.csp "enabled" -}}
+            {{- $cspEnabled = .Values.component.frontend.csp.enabled -}}
+          {{- end -}}
+        {{- end -}}
+        {{- if and $cspEnabled .Values.component.frontend.contentSecurityPolicy }}
+        # Content Security Policy (CSP)
+        add_header Content-Security-Policy "{{ include "opik.cspHeaderValue" .Values.component.frontend.contentSecurityPolicy }}" always;
+        {{- end }}
+        {{- /* Backward compatibility: support deprecated hstsEnabled flag */ -}}
+        {{- if .Values.component.frontend.hstsEnabled }}
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+        {{- end }}
+        {{- /* Extra server headers (includes OWASP security headers by default) */ -}}
+        {{- range $name, $value := .Values.component.frontend.extraServerHeaders }}
+        {{- if kindIs "slice" $value }}
+        {{- range $value }}
+        add_header {{ $name }} {{ . | squote }} always;
+        {{- end }}
+        {{- else }}
+        add_header {{ $name }} {{ $value | squote }} always;
+        {{- end }}
+        {{- end }}
+
+        {{- $rootPath := ternary "" "/opik" .Values.standalone }}
+        # Dedicated healthcheck endpoint
+        # Returns 200 OK if nginx is running and can serve requests
+        location {{ $rootPath }}/health {
+            add_header Content-Type text/plain;
+            access_log off;
+            # Explicitly disable tracing for health checks to avoid unnecessary trace data,
+            # even if global tracing is enabled via OTEL_TRACE. Health endpoints are hit frequently
+            # by monitoring systems and should not be traced.
+            otel_trace off;
+            return 200 "healthy\n";
+        }
         location @api {
-            rewrite /api/(.*) /$1  break;
+            rewrite /api/(.*) /$1 break;
             proxy_pass http://backend;
             proxy_redirect  off;
             proxy_set_header Host $host;
@@ -80,15 +153,131 @@ data:
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         {{- range $k, $v := .Values.component.frontend.upstreamConfig }}
-            {{ $k }} {{ $v }};
+            {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
         {{- end }}
 
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
         }
-        location ^~ {{ $rootPath }}/api/ {
+
+        {{- if .Values.component.frontend.aiSpendBackend.enabled }}
+        # Cost Intelligence (cost-api): split the ai-spend subset off to the
+        # ai-cost-backend service, same-origin. `^~` + the longer prefix make
+        # nginx prefer this over {{ $rootPath }}/api/, so only ai-spend is
+        # diverted; everything else under /api still goes to opik-backend.
+        # rootPath-aware (works at "" or /opik), so the same switch serves
+        # comet.com and single-tenant SaaS. The rewrite maps
+        # {{ $rootPath }}/api/v1/private/ai-spend/X -> {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/v1/private/ai-spend/X.
+        location ^~ {{ $rootPath }}/api/v1/private/ai-spend/ {
+            try_files /dev/null @ai_spend;
+        }
+        location @ai_spend {
+            rewrite ^{{ $rootPath }}/api/(.*)$ {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/$1 break;
+            proxy_pass http://ai-cost-backend;
+            proxy_redirect  off;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        {{- range $k, $v := .Values.component.frontend.upstreamConfig }}
+            {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
+        {{- end }}
+        }
+
+        # cost-api's build version, so release tooling can read the deployed
+        # cost-api version the same way it reads opik's from
+        # {{ $rootPath }}/api/is-alive/ver.
+        #
+        # `=` makes this an EXACT match: only the version endpoint is reachable,
+        # not the rest of {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/*. The
+        # ai-spend API above stays the only other way in, so cost-api's private
+        # routes still require the platform session cookie.
+        #
+        # The response is public and unauthenticated by design on cost-api's side
+        # ({{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver returns just {"version": "x.y.z"}).
+        location = {{ $rootPath }}{{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver {
+            try_files /dev/null @ai_spend_version;
+        }
+        location @ai_spend_version {
+            # The rewrite carries the target URI, because nginx refuses a
+            # proxy_pass with a URI part inside a named location. Strips the opik
+            # rootPath so the upstream sees its own {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver;
+            # a no-op when rootPath is empty, and `break` stops further rewriting.
+            rewrite ^{{ $rootPath }}{{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver$ {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver break;
+            proxy_pass http://ai-cost-backend;
+            proxy_redirect  off;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        {{- range $k, $v := .Values.component.frontend.upstreamConfig }}
+            {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
+        {{- end }}
+        }
+        {{- end }}
+
+        location {{ $rootPath }}/api/ {
           try_files /dev/null @api;
+        }
+        {{- if .Values.mcpOAuth.enabled }}
+
+        # MCP OAuth — issuer at {{ $rootPath | default "/" }}.
+        # AS endpoints are mounted directly at /oauth/* on opik-backend
+        # (no /api prefix in @Path). The exact-match `consent` route MUST
+        # come before the prefix block — nginx exact-match wins, so the
+        # React consent page renders from the SPA bundle while every other
+        # /oauth/* path is rewritten to / and proxied to the backend.
+        # Clickjacking protection comes from the server-level CSP `frame-ancestors 'none'`
+        # above, which the consent page inherits. We deliberately do NOT set a per-location
+        # add_header here: nginx add_header is all-or-nothing per context, so a local
+        # add_header would drop the inherited CSP/HSTS/extraServerHeaders for this route.
+        location = {{ $rootPath }}/oauth/consent {
+          try_files /dev/null {{ $rootPath }}/index.html;
+        }
+        location @mcp_oauth_backend {
+          rewrite ^{{ $rootPath }}/(.*)$ /$1 break;
+          proxy_pass http://backend;
+          proxy_redirect off;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        location ^~ {{ $rootPath }}/oauth/ {
+          try_files /dev/null @mcp_oauth_backend;
+        }
+        # RFC 8414 §3 — for issuer `<host>{{ $rootPath }}`, the AS metadata
+        # MUST live at `/.well-known/oauth-authorization-server{{ $rootPath }}`
+        # (the well-known segment is inserted between host and issuer path).
+        # Backend mounts the metadata at `/.well-known/oauth-authorization-server`
+        # directly, so we strip the path suffix before proxying.
+        location = /.well-known/oauth-authorization-server{{ $rootPath }} {
+          rewrite ^.*$ /.well-known/oauth-authorization-server break;
+          proxy_pass http://backend;
+          proxy_redirect off;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        {{- end }}
+
+        location @swagger {
+            rewrite /swagger/(.*) /$1 break;
+            proxy_pass http://swagger;
+            proxy_redirect  off;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            otel_trace off;
+        }
+        location ^~ {{ $rootPath }}/swagger/ {
+          try_files /dev/null @swagger;
+        }
+        location = {{ $rootPath }}/swagger {
+            rewrite ^(.*)$ $1/ permanent;
         }
 
         {{- if not .Values.standalone }}
@@ -110,9 +299,6 @@ data:
 
             try_files $uri $uri/ {{ $rootPath }}/index.html;
 
-            if ($uri = {{ $rootPath }}/index.html) {
-                add_header Cache-Control "no-cache";
-            }
             {{- end }}
         }
     {{- range $k, $v := .Values.component.frontend.throttling }}

@@ -4,54 +4,70 @@
 #
 name: SDK Lib GenAI (Google) Tests
 run-name: "SDK Lib GenAI Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 env:
   GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
   GOOGLE_CLOUD_LOCATION: us-east1
   GOOGLE_CLOUD_PROJECT: opik-sdk-tests
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
+  OPIK_TEST_EXPENSIVE: ${{ inputs.run_expensive_tests }}
 on:
   workflow_call:
+    inputs:
+      run_expensive_tests:
+        description: "Run expensive tests (e.g., video generation)"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   tests:
     name: GenAI Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: sdks/python
 
     strategy:
       fail-fast: true
+      # This suite makes live Vertex AI calls against the shared
+      # opik-sdk-tests GCP project (shared with the ADK suite). Running the
+      # full 3.10-3.14 matrix re-multiplied those calls into 429
+      # RESOURCE_EXHAUSTED, so we run only the oldest and newest supported
+      # Python versions — enough to catch version-specific breakage at a
+      # fraction of the request volume — and keep the concurrency cap.
+      max-parallel: 2
       matrix:
-        python_version: [
-          # "3.9", skipped because asyncio requires async context in 3.9 to create a client
-          "3.10",
-          "3.11",
-          "3.12"
-        ]
+        python_version: ["3.10", "3.14"]
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python ${{matrix.python_version}}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{matrix.python_version}}
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+
       - name: Install opik
-        run: pip install .
+        run: uv pip install --system .
 
       - name: Install test tools
         run: |
           cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
+          uv pip install --system -r test_requirements.txt
 
       - name: Install lib
         run: |
           cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r library_integration/genai/requirements.txt
+          uv pip install --system -r library_integration/genai/requirements.txt
 
       - name: Run tests
         run: |

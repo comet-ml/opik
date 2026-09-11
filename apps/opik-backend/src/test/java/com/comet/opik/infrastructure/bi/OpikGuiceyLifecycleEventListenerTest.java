@@ -21,16 +21,18 @@ import org.junit.jupiter.api.TestClassOrder;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
-import java.sql.SQLException;
+import java.util.List;
 import java.util.Random;
+import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.github.tomakehurst.wiremock.client.WireMock.exactly;
 import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -53,10 +55,13 @@ class OpikGuiceyLifecycleEventListenerTest {
     the reason this is needed is to make sure that only the first test will notify the event.
     */
 
-    private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
+    private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer(false);
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final Network network = Network.newNetwork();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer(false,
+            network);
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
-            .newClickHouseContainer();
+            .newClickHouseContainer(false, network, ZOOKEEPER_CONTAINER);
 
     private static final Random RANDOM = new Random();
     private static final String VERSION = "%s.%s.%s".formatted(RANDOM.nextInt(10), RANDOM.nextInt(),
@@ -75,32 +80,23 @@ class OpikGuiceyLifecycleEventListenerTest {
 
         private final WireMockUtils.WireMockRuntime wireMock;
 
+        private final String expectedAnonymousId = UUID.randomUUID().toString();
+
         {
-            Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS).join();
+            Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS, ZOOKEEPER_CONTAINER).join();
 
             wireMock = WireMockUtils.startWireMock();
 
             var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                     CLICK_HOUSE_CONTAINER, DATABASE_NAME);
 
-            try {
-                MigrationUtils.runDbMigration(MYSQL_CONTAINER.createConnection(""),
-                        MySQLContainerUtils.migrationParameters());
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
-
-            try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-                MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                        ClickHouseContainerUtils.migrationParameters());
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
+            MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
+            MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/v1/notify/event"))
                             .withRequestBody(matchingJsonPath("$.anonymous_id", matching(
-                                    "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")))
+                                    expectedAnonymousId)))
                             .withRequestBody(matchingJsonPath("$.event_type",
                                     matching(InstallationReportService.NOTIFICATION_EVENT_TYPE)))
                             .withRequestBody(matchingJsonPath("$.event_properties.opik_app_version", matching(VERSION)))
@@ -114,6 +110,9 @@ class OpikGuiceyLifecycleEventListenerTest {
                             .usageReportEnabled(true)
                             .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
                             .metadataVersion(VERSION)
+                            .customConfigs(List.of(
+                                    new TestDropwizardAppExtensionUtils.CustomConfig(
+                                            "usageReport.anonymousId", expectedAnonymousId)))
                             .build());
         }
 
@@ -123,7 +122,14 @@ class OpikGuiceyLifecycleEventListenerTest {
 
             Assertions.assertTrue(usageReportService.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
             Assertions.assertTrue(usageReportService.getAnonymousId().isPresent());
+            Assertions.assertEquals(expectedAnonymousId, usageReportService.getAnonymousId().get());
         }
+
+        @AfterAll
+        void tearDown() {
+            wireMock.server().stop();
+        }
+
     }
 
     @Nested
@@ -138,26 +144,15 @@ class OpikGuiceyLifecycleEventListenerTest {
         private final WireMockUtils.WireMockRuntime wireMock;
 
         {
-            Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS).join();
+            Startables.deepStart(MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, REDIS, ZOOKEEPER_CONTAINER).join();
 
             wireMock = WireMockUtils.startWireMock();
 
             var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                     CLICK_HOUSE_CONTAINER, DATABASE_NAME);
 
-            try {
-                MigrationUtils.runDbMigration(MYSQL_CONTAINER.createConnection(""),
-                        MySQLContainerUtils.migrationParameters());
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
-
-            try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-                MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                        ClickHouseContainerUtils.migrationParameters());
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
+            MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
+            MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/v1/notify/event"))
@@ -183,10 +178,18 @@ class OpikGuiceyLifecycleEventListenerTest {
             Assertions.assertTrue(usageReportService.isEventReported(GuiceyLifecycle.ApplicationStarted.name()));
             Assertions.assertTrue(usageReportService.getAnonymousId().isPresent());
         }
+
+        @AfterAll
+        void tearDown() {
+            wireMock.server().stop();
+        }
     }
 
     @AfterAll
     void tearDown() {
         MYSQL_CONTAINER.stop();
+        CLICK_HOUSE_CONTAINER.stop();
+        ZOOKEEPER_CONTAINER.stop();
+        network.close();
     }
 }

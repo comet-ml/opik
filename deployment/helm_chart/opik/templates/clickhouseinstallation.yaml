@@ -5,17 +5,14 @@ metadata:
   name: {{ include "opik.name" $ }}-clickhouse
   namespace: {{ .Release.namespace }}
   labels:
-    component: clickhouse
-    {{- include "opik.labels" $  | nindent 4 }}
     {{- with .Values.commonLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+    {{- include "opik.clickhouse.labels" . | nindent 4 }}
 spec:
-  defaults:
-    templates:
-      podTemplate: clickhouse-cluster-pod-template
-      serviceTemplate: {{ .Values.clickhouse.service.serviceTemplate }}
-      volumeClaimTemplate: storage-vc-template
+  {{- with .Values.clickhouse.namespaceDomainPattern }}
+  namespaceDomainPattern: {{ . | quote }}
+  {{- end }}
   configuration:
     users:
       {{- if .Values.clickhouse.adminUser.useSecret.enabled }}
@@ -27,19 +24,42 @@ spec:
       {{ .Values.clickhouse.adminUser.username }}/networks/ip:
         - '127.0.0.1/32'
         - '0.0.0.0/0'
-      {{- if .Values.clickhouse.monitoring.enabled }}
-      {{- if .Values.clickhouse.monitoring.useSecret.enabled }}
+      {{- if and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username }}
+      {{- if and .Values.clickhouse.monitoring.useSecret .Values.clickhouse.monitoring.useSecret.enabled }}
       {{ .Values.clickhouse.monitoring.username }}/k8s_secret_password: {{ include "opik.name" .}}-{{ .Values.clickhouse.monitoring.secretname }}/{{ .Values.clickhouse.monitoring.password_key }}
-      {{- else }}
+      {{- else if .Values.clickhouse.monitoring.password }}
       {{ .Values.clickhouse.monitoring.username }}/password: {{ .Values.clickhouse.monitoring.password }}
       {{- end }}
       {{ .Values.clickhouse.monitoring.username }}/networks/ip:
-        - '127.0.0.1/32'
         - '0.0.0.0/0'
       {{- end }}
-    {{- if .Values.clickhouse.monitoring.enabled }}
+      {{- range .Values.clickhouse.additionalUsers }}
+      {{- if $.Values.clickhouse.adminUser.useSecret.enabled }}
+      {{ .username }}/k8s_secret_password: {{ include "opik.name" $ }}-{{ .secretname | default $.Values.clickhouse.adminUser.secretname }}/{{ .password_key | default (printf "%s_pass" .username) }}
+      {{- else }}
+      {{ .username }}/password: {{ .password }}
+      {{- end }}
+      {{- if .profile }}
+      {{ .username }}/profile: {{ .profile }}
+      {{- end }}
+      {{ .username }}/networks/ip:
+      {{- if .networks }}
+        {{- toYaml .networks | nindent 8 }}
+      {{- else }}
+        - '0.0.0.0/0'
+      {{- end }}
+      {{- end }}
+    {{- if or .Values.clickhouse.additionalProfiles (and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username) }}
     profiles:
+      {{- if and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username }}
       {{ .Values.clickhouse.monitoring.username }}/readonly: 1
+      {{- end }}
+      {{- range .Values.clickhouse.additionalProfiles }}
+      {{- $profileName := .name }}
+      {{- range $key, $value := .settings }}
+      {{ $profileName }}/{{ $key }}: {{ $value }}
+      {{- end }}
+      {{- end }}
     {{- end }}
 
     {{- if .Values.clickhouse.configuration }}
@@ -55,6 +75,10 @@ spec:
       {{- toYaml . | nindent 6 }}
       {{- end }}
       {{- end }}
+      {{- if .Values.clickhouse.tieredStorage.enabled }}
+      conf.d/storage.xml: |
+{{ include "opik.clickhouse.storageXml" . | indent 8 }}
+      {{- end }}
     
     {{- if .Values.zookeeper.enabled }}
     zookeeper:
@@ -67,14 +91,52 @@ spec:
         layout:
           shardsCount: {{ .Values.clickhouse.shardsCount }}
           replicasCount: {{ .Values.clickhouse.replicasCount }}
+          # internal_replication pins Distributed-engine inserts to one live replica per shard and
+          # lets ReplicatedMergeTree replication fan the parts out, instead of the Distributed table
+          # writing every replica itself.
+          #
+          # Gated on sharding.enabled so that upgrading the chart never reshapes an existing
+          # ClickHouseInstallation on its own: with the flag off the operator keeps inferring
+          # internal_replication from replicasCount > 1, which is what every current deployment
+          # already runs with. Without that gate, any deployment on 2+ replicas would pick up an
+          # explicit shards list from a plain version bump, with no flag flipped.
+          #
+          # Also requires more than one replica, since internal_replication has nothing to route to
+          # on a single replica, and a positive shardsCount, so an invalid count renders no list at
+          # all rather than a null or a clamped entry contradicting the shardsCount above. Shard
+          # names are left unset so the operator keeps generating them by index.
+          {{- if and .Values.clickhouse.sharding.enabled (gt (int .Values.clickhouse.replicasCount) 1) (gt (int .Values.clickhouse.shardsCount) 0) }}
+          shards:
+            {{- range $i := until (int .Values.clickhouse.shardsCount) }}
+            - internalReplication: "true"
+            {{- end }}
+          {{- end }}
         templates:
-          podTemplate: clickhouse-cluster-pod-template
-          serviceTemplate: {{ .Values.clickhouse.service.serviceTemplate }}
-          volumeClaimTemplate: storage-vc-template
+          podTemplate: {{ .Values.clickhouse.templates.podTemplate }}
+          serviceTemplate: {{ .Values.clickhouse.templates.serviceTemplate }}
+          {{- if .Values.clickhouse.templates.clusterServiceTemplate }}
+          clusterServiceTemplate: {{ .Values.clickhouse.templates.clusterServiceTemplate }}
+          {{- end }}
+          replicaServiceTemplate: {{ .Values.clickhouse.templates.replicaServiceTemplate }}
+          volumeClaimTemplate: {{ .Values.clickhouse.templates.volumeClaimTemplate }}
   templates:
     podTemplates:
       - name: clickhouse-cluster-pod-template
         spec:
+          serviceAccountName: {{ include "clickhouse.serviceAccountName" . }}
+          securityContext:
+            runAsUser: 101
+            runAsGroup: 101
+            fsGroup: 101
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/default-container: clickhouse
+            labels:
+            {{- include "opik.clickhouse.labels" . | nindent 14 }}
+        {{- if .Values.clickhouse.imagePullSecrets }}
+          imagePullSecrets:
+            {{- .Values.clickhouse.imagePullSecrets | toYaml | nindent 12 }}
+        {{- end }}
           containers:
           - name: clickhouse
             image: {{ .Values.clickhouse.image }}
@@ -82,21 +144,76 @@ spec:
             resources:
               {{- toYaml . | nindent 14 }}
             {{- end }}
-
-          {{- with .Values.clickhouse.nodeSelector }}
+            {{- if .Values.clickhouse.livenessProbe }}
+            livenessProbe:
+              {{- toYaml .Values.clickhouse.livenessProbe | nindent 14 }}
+            {{- end }}
+            {{- if .Values.clickhouse.readinessProbe }}
+            readinessProbe:
+              {{- toYaml .Values.clickhouse.readinessProbe | nindent 14 }}
+            {{- end }}
+            {{- if or .Values.clickhouse.extraVolumeMounts .Values.clickhouse.tieredStorage.enabled }}
+            volumeMounts:
+              {{- with .Values.clickhouse.extraVolumeMounts }}
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
+              {{- if .Values.clickhouse.tieredStorage.enabled }}
+              - name: {{ .Values.clickhouse.tieredStorage.cold.cache.volumeName }}
+                mountPath: {{ .Values.clickhouse.tieredStorage.cold.cache.path }}
+              {{- end }}
+            {{- end }}
+          {{- if .Values.clickhouse.backupServer.enabled }}
+          - name: clickhouse-backup
+            image: {{ .Values.clickhouse.backupServer.image }}
+            imagePullPolicy: {{ .Values.clickhouse.backupServer.imagePullPolicy | default "IfNotPresent" }}
+            {{- with .Values.clickhouse.backupServer.resources }}
+            resources:
+            {{- toYaml . | nindent 14 }}
+            {{- end }}
+            args: ["server"]
+            {{- with .Values.clickhouse.backupServer.env }}
+            env:
+            {{-   range $name, $value := . }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{-   end }}
+            {{- end }}
+            {{- with .Values.clickhouse.backupServer.envFrom }}
+            envFrom:
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            ports:
+            - name: ch-backup-rest
+              containerPort: {{ .Values.clickhouse.backupServer.port }}
+            {{- with .Values.clickhouse.backupServer.extraVolumeMounts }}
+            volumeMounts:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+          {{- end }}
+          {{- with ( .Values.clickhouse.nodeSelector | default .Values.nodeSelector ) }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.clickhouse.affinity }}
+          {{- with ( .Values.clickhouse.affinity | default .Values.affinity ) }}
           affinity:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          
-          {{- with .Values.clickhouse.tolerations }}
+          {{- with ( default .Values.clickhouse.tolerations | default .Values.tolerations ) }}
           tolerations:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-
+          {{- if or .Values.clickhouse.extraVolumes (and .Values.clickhouse.backupServer.enabled .Values.clickhouse.backupServer.extraVolumes) }}
+          volumes:
+            {{- with .Values.clickhouse.extraVolumes }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- if and .Values.clickhouse.backupServer.enabled .Values.clickhouse.backupServer.extraVolumes }}
+            {{- toYaml .Values.clickhouse.backupServer.extraVolumes | nindent 12 }}
+            {{- end }}
+          {{- end }}
+      {{- with .Values.clickhouse.extraPodTemplates }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}
     serviceTemplates:
       - name: clickhouse-cluster-svc-lb-template
         metadata:
@@ -112,8 +229,53 @@ spec:
             - name: tcp
               port: 9000
               targetPort: 9000
-          type: LoadBalancer      
-
+          type: LoadBalancer
+      - name: clickhouse-cluster-svc-template
+        metadata:
+          annotations:
+            {{- with .Values.clickhouse.service.annotations }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        spec:
+          ports:
+            - name: http
+              port: 8123
+              targetPort: 8123
+            - name: tcp
+              port: 9000
+              targetPort: 9000
+          type: ClusterIP
+      - name: clickhouse-replica-svc-template
+        metadata:
+          labels:
+            comet.com/service-monitoring: "true"
+        spec:
+          ports:
+            - name: http
+              port: 8123
+              targetPort: 8123
+            - name: tcp
+              port: 9000
+              targetPort: 9000
+            - name: interserver
+              port: 9009
+              targetPort: 9009
+          {{- if .Values.clickhouse.backupServer.enabled }}
+            - protocol: TCP
+              port: {{ .Values.clickhouse.backupServer.port }}
+              targetPort: {{ .Values.clickhouse.backupServer.port }}
+              name: ch-backup-svc
+          {{- end }}
+          {{- if .Values.clickhouse.monitoring.enabled }}
+            - protocol: TCP
+              port: {{ .Values.clickhouse.monitoring.port }}
+              targetPort: {{ .Values.clickhouse.monitoring.port }}
+              name: ch-monitoring-svc
+          {{- end }}
+          type: ClusterIP
+      {{- with .Values.clickhouse.extraServiceTemplates }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}
     volumeClaimTemplates:
       - name: storage-vc-template
         {{- if .Values.clickhouse.volumeAnnotations }}
@@ -131,5 +293,21 @@ spec:
             - ReadWriteOnce
           resources:
             requests:
-              storage: {{ .Values.clickhouse.storage }}    
+              storage: {{ .Values.clickhouse.storage }}
+      {{- if .Values.clickhouse.tieredStorage.enabled }}
+      {{- $cache := .Values.clickhouse.tieredStorage.cold.cache }}
+      - name: {{ $cache.volumeName }}
+        spec:
+          {{- with ($cache.storageClassName | default .Values.clickhouse.storageClassName) }}
+          storageClassName: {{ . }}
+          {{- end }}
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: {{ $cache.storage }}
+      {{- end }}
+      {{- with .Values.clickhouse.extraVolumeClaimTemplates }}
+      {{- . | toYaml | nindent 6 }}
+      {{- end }}
 {{- end }}

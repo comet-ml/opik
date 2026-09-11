@@ -1,5 +1,7 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TypeGuard, Any
+import random
+import string
 import uuid
 import uuid6
 
@@ -10,6 +12,38 @@ def generate_id(timestamp: Optional[datetime] = None) -> str:
         return str(uuid4_to_uuid7(timestamp, uuid4))
 
     return str(uuid6.uuid7())
+
+
+def generate_random_alphanumeric_string(length: int) -> str:
+    """Generate a random alphanumeric string of the specified length.
+
+    Args:
+        length: The length of the string to generate.
+
+    Returns:
+        A random string containing only alphanumeric characters (a-z, A-Z, 0-9).
+    """
+    if length < 0:
+        raise ValueError("Length must be non-negative")
+
+    characters = string.ascii_letters + string.digits
+    return "".join(random.choice(characters) for _ in range(length))
+
+
+def is_valid_uuid_v7(value: Any) -> TypeGuard[str]:
+    """Return True if `value` is a string that parses as a UUID and is version 7.
+
+    Non-string inputs (including ``None``) return ``False`` rather than raising,
+    so callers can pass arbitrary attribute / baggage values directly. The
+    ``TypeGuard`` return type lets static checkers narrow ``value`` to ``str``
+    in branches where this returns ``True``.
+    """
+    if not isinstance(value, str):
+        return False
+    try:
+        return uuid.UUID(value).version == 7
+    except (ValueError, AttributeError, TypeError):
+        return False
 
 
 def uuid4_to_uuid7(user_datetime: datetime, user_uuid: str) -> uuid.UUID:

@@ -1,9 +1,14 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
+import api, {
+  PROJECT_KEY,
+  PROJECTS_REST_ENDPOINT,
+  QueryConfig,
+} from "@/api/api";
 import { Project } from "@/types/projects";
 
 type UseProjectByNameParams = {
   projectName: string;
+  workspaceName?: string;
 };
 
 const getProjectByName = async (
@@ -28,7 +33,7 @@ export default function useProjectByName(
   options?: QueryConfig<Project>,
 ) {
   return useQuery({
-    queryKey: ["project", params],
+    queryKey: [PROJECT_KEY, params],
     queryFn: (context) => getProjectByName(context, params),
     ...options,
   });

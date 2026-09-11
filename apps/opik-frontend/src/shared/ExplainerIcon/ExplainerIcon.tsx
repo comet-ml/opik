@@ -1,0 +1,45 @@
+import React from "react";
+import { CircleHelp, ExternalLink, Info } from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import { Explainer } from "@/types/shared";
+import { Button } from "@/ui/button";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+
+type ExplainerIconProps = {
+  className?: string;
+} & Omit<Explainer, "id">;
+
+const ExplainerIcon: React.FC<ExplainerIconProps> = ({
+  type = "info",
+  description,
+  docLink,
+  className,
+}) => {
+  const Icon = type === "info" ? Info : CircleHelp;
+  return (
+    <TooltipWrapper
+      stopClickPropagation
+      content={
+        <>
+          {description}
+          {docLink && (
+            <Button variant="link" size="3xs" asChild>
+              <a href={docLink} target="_blank" rel="noreferrer">
+                Read more
+                <ExternalLink className="ml-0.5 size-3 shrink-0" />
+              </a>
+            </Button>
+          )}
+        </>
+      }
+    >
+      <Icon
+        className={cn("size-3.5 shrink-0 text-light-slate", className)}
+        onClick={(e) => e.stopPropagation()}
+      />
+    </TooltipWrapper>
+  );
+};
+
+export default ExplainerIcon;

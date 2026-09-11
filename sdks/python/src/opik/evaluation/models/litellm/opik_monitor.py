@@ -1,23 +1,24 @@
 import functools
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
-from opik import config, opik_context
+import opik.config as config
+import opik.opik_context as opik_context
 
 if TYPE_CHECKING:
     import litellm
 
 
-def lazy_import_opik_logger() -> Optional["litellm.integrations.opik.opik.OpikLogger"]:
+def lazy_import_OpikLogger() -> Optional["litellm.integrations.opik.opik.OpikLogger"]:
     try:
-        from litellm.integrations.opik.opik import OpikLogger as litellm_opik_logger
-    except ImportError:
-        litellm_opik_logger = None
+        from litellm.integrations.opik.opik import OpikLogger
 
-    return litellm_opik_logger
+        return OpikLogger
+    except ImportError:
+        return None
 
 
 def try_add_opik_monitoring_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
-    if lazy_import_opik_logger() is None:
+    if lazy_import_OpikLogger() is None:
         return params
 
     import litellm
@@ -52,17 +53,17 @@ def _add_span_metadata_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
     if "current_span_data" in params.get("metadata", {}).get("opik", {}):
         return params
 
-    return {
-        **params,
-        "metadata": {
-            **params.get("metadata", {}),
-            "opik": {
-                **params.get("metadata", {}).get("opik", {}),
-                "current_span_data": current_span,
-                "project_name": current_span.project_name,
-            },
+    metadata = {
+        **params.get("metadata", {}),
+        "opik": {
+            **params.get("metadata", {}).get("opik", {}),
+            "current_span_data": current_span,
         },
     }
+    if current_span.project_name is not None:
+        metadata["opik"]["project_name"] = current_span.project_name
+
+    return {**params, "metadata": metadata}
 
 
 def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -71,13 +72,13 @@ def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
     has_global_opik_logger = False
     has_local_opik_logger = False
 
-    if opik_logger := lazy_import_opik_logger():
+    if OpikLoggerClass := lazy_import_OpikLogger():
         has_global_opik_logger = any(
-            isinstance(callback, opik_logger) for callback in litellm.callbacks
+            isinstance(callback, OpikLoggerClass) for callback in litellm.callbacks
         )
 
         has_local_opik_logger = any(
-            isinstance(callback, opik_logger)
+            isinstance(callback, OpikLoggerClass)
             for callback in params.get("success_callback", [])
         )
 
@@ -93,6 +94,8 @@ def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-@functools.lru_cache
+@functools.lru_cache()
 def _callback_instance() -> "litellm.integrations.opik.opik.OpikLogger":  # type: ignore
-    return lazy_import_opik_logger()
+    OpikLoggerClass = lazy_import_OpikLogger()
+    assert OpikLoggerClass is not None
+    return OpikLoggerClass()

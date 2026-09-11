@@ -1,9 +1,8 @@
 {
-  "dependencies": {
-    "fern-api": "^0.56.20",
-    "nodemon": "^3.1.9"
-  },
   "scripts": {
-    "dev": "sh dev_script.sh"
+    "dev": "cd fern && fern docs dev"
+  },
+  "dependencies": {
+    "fern-api": "5.67.1"
   }
 }

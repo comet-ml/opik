@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import dataclasses
 
@@ -10,3 +10,6 @@ from .metrics import score_result
 class TestResult:
     test_case: test_case.TestCase
     score_results: List[score_result.ScoreResult]
+    trial_id: int
+    task_execution_time: Optional[float] = None
+    scoring_time: Optional[float] = None

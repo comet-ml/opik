@@ -1,0 +1,206 @@
+import React, { useCallback, useMemo } from "react";
+import {
+  ChevronDown,
+  Check,
+  CircleFadingArrowUp,
+  Loader2,
+  Settings2,
+  X,
+} from "lucide-react";
+import { Link } from "@tanstack/react-router";
+
+import { Button } from "@/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
+import { EnvironmentSquare } from "@/shared/EnvironmentLabel/EnvironmentLabel";
+import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
+import useSetPromptVersionEnvironmentMutation from "@/api/prompts/useSetPromptVersionEnvironmentMutation";
+import useAppStore from "@/store/AppStore";
+import { useToast } from "@/ui/use-toast";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { CONFIGURATION_TABS } from "@/v2/constants/configuration";
+import { PromptVersion } from "@/types/prompts";
+
+type DeployToEnvironmentMenuProps = {
+  promptId: string;
+  versionId: string;
+  versionLabel: string;
+  versions: PromptVersion[] | undefined;
+  activeEnvironments: string[];
+  onOpenChange?: (open: boolean) => void;
+  isLoadingMore?: boolean;
+};
+
+const DeployToEnvironmentMenu: React.FC<DeployToEnvironmentMenuProps> = ({
+  promptId,
+  versionId,
+  versionLabel,
+  versions,
+  activeEnvironments,
+  onOpenChange,
+  isLoadingMore = false,
+}) => {
+  const { toast } = useToast();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const {
+    permissions: { canEditPrompts },
+  } = usePermissions();
+  const { data: environmentsData } = useEnvironmentsList({
+    enabled: canEditPrompts,
+  });
+  const { mutate: setVersionEnvironment, isPending: isDeploying } =
+    useSetPromptVersionEnvironmentMutation();
+
+  const environments = useMemo(
+    () => environmentsData?.content ?? [],
+    [environmentsData?.content],
+  );
+
+  const activeEnvSet = useMemo(
+    () => new Set(activeEnvironments),
+    [activeEnvironments],
+  );
+
+  const environmentOwners = useMemo(() => {
+    const map = new Map<string, PromptVersion>();
+    // `versions` is newest-first; only keep the first writer per environment so
+    // the "Currently vN" label reflects the newest version assigned to that env,
+    // not whichever historical version was iterated last.
+    versions?.forEach((v) => {
+      v.environments?.forEach((env) => {
+        if (!map.has(env)) map.set(env, v);
+      });
+    });
+    return map;
+  }, [versions]);
+
+  const applyEnvironments = useCallback(
+    (next: string[], description: string) => {
+      setVersionEnvironment(
+        { promptId, versionId, environments: next },
+        { onSuccess: () => toast({ description }) },
+      );
+    },
+    [promptId, versionId, setVersionEnvironment, toast],
+  );
+
+  const handleToggle = useCallback(
+    (envName: string) => {
+      if (!canEditPrompts) return;
+      if (activeEnvSet.has(envName)) {
+        const next = activeEnvironments.filter((e) => e !== envName);
+        applyEnvironments(next, `Removed ${versionLabel} from ${envName}`);
+      } else {
+        const next = [...activeEnvironments, envName];
+        applyEnvironments(next, `Deployed ${versionLabel} to ${envName}`);
+      }
+    },
+    [
+      canEditPrompts,
+      activeEnvSet,
+      activeEnvironments,
+      versionLabel,
+      applyEnvironments,
+    ],
+  );
+
+  const handleClearAll = useCallback(() => {
+    if (!canEditPrompts) return;
+    if (activeEnvironments.length === 0) return;
+    applyEnvironments([], `Removed ${versionLabel} from all environments`);
+  }, [
+    canEditPrompts,
+    activeEnvironments.length,
+    versionLabel,
+    applyEnvironments,
+  ]);
+
+  if (!canEditPrompts) return null;
+
+  return (
+    <DropdownMenu onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="px-0"
+          disabled={!versionId || isDeploying}
+        >
+          <CircleFadingArrowUp className="mr-1.5 size-3.5" />
+          Deploy to
+          <ChevronDown className="ml-1 size-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[220px]">
+        {environments.length === 0 ? (
+          <DropdownMenuItem size="sm" disabled>
+            No environments configured
+          </DropdownMenuItem>
+        ) : (
+          environments.map((env) => {
+            const owner = environmentOwners.get(env.name);
+            const isActiveHere = activeEnvSet.has(env.name);
+            const ownerLabel =
+              !isActiveHere && owner
+                ? `Currently ${owner.version_number ?? owner.commit}`
+                : "";
+            return (
+              <DropdownMenuItem
+                key={env.id}
+                size="sm"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  handleToggle(env.name);
+                }}
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <EnvironmentSquare name={env.name} color={env.color} />
+                  <span className="truncate">{env.name}</span>
+                </div>
+                <span className="comet-body-xs ml-3 shrink-0 text-light-slate">
+                  {isActiveHere ? (
+                    <Check className="size-3.5" />
+                  ) : ownerLabel ? (
+                    ownerLabel
+                  ) : null}
+                </span>
+              </DropdownMenuItem>
+            );
+          })
+        )}
+        {isLoadingMore && (
+          <div className="flex justify-center py-2">
+            <Loader2 className="size-4 animate-spin text-light-slate" />
+          </div>
+        )}
+        {activeEnvironments.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem size="sm" onSelect={handleClearAll}>
+              <X className="mr-2 size-3.5 shrink-0 text-muted-slate" />
+              Remove from all
+            </DropdownMenuItem>
+          </>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem size="sm" asChild>
+          <Link
+            to="/$workspaceName/configuration"
+            params={{ workspaceName }}
+            search={{ tab: CONFIGURATION_TABS.ENVIRONMENTS }}
+          >
+            <Settings2 className="mr-2 size-3.5 shrink-0 text-muted-slate" />
+            Manage environments
+          </Link>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
+export default DeployToEnvironmentMenu;

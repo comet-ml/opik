@@ -1,10 +1,12 @@
 import { maskAPIKey } from "./utils";
 import { BASE_API_URL } from "@/api/api";
+import {
+  PROJECT_NAME_PLACEHOLDER,
+  SNIPPET_PROJECT_NAME,
+} from "@/constants/shared";
 
 export const OPIK_API_KEY_TEMPLATE = "# INJECT_OPIK_CONFIGURATION";
 export const OPIK_HIGHLIGHT_LINE_TEMPLATE = " # HIGHLIGHTED_LINE";
-
-export const IMPORT_OS_TEMPLATE = "import os";
 
 export const buildApiKeyConfig = (
   apiKey: string,
@@ -15,6 +17,9 @@ export const buildApiKeyConfig = (
     withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""
   }`;
 
+export const buildProjectNameConfig = (projectName: string) =>
+  `os.environ["OPIK_PROJECT_NAME"] = "${projectName}"`;
+
 export const buildWorkspaceNameConfig = (
   workspaceName: string,
   withHighlight = false,
@@ -24,7 +29,7 @@ export const buildWorkspaceNameConfig = (
   }`;
 
 export const buildOpikUrlOverrideConfig = (withHighlight = false) =>
-  `${IMPORT_OS_TEMPLATE} \n os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
+  `os.environ["OPIK_URL_OVERRIDE"] = "${new URL(
     BASE_API_URL,
     window.location.origin,
   ).toString()}${withHighlight ? OPIK_HIGHLIGHT_LINE_TEMPLATE : ""}"`;
@@ -35,6 +40,7 @@ type PutConfigInCodeArgs = {
   apiKey?: string;
   shouldMaskApiKey?: boolean;
   withHighlight?: boolean;
+  projectName?: string;
 };
 
 export const getConfigCode = (
@@ -42,8 +48,15 @@ export const getConfigCode = (
   apiKey?: string,
   shouldMaskApiKey = false,
   withHighlight = false,
+  projectName?: string,
 ) => {
-  if (!apiKey) return buildOpikUrlOverrideConfig(withHighlight);
+  const projectNameConfig = projectName
+    ? `\n${buildProjectNameConfig(projectName)}`
+    : "";
+
+  if (!apiKey) {
+    return `${buildOpikUrlOverrideConfig(withHighlight)}${projectNameConfig}`;
+  }
 
   const apiKeyConfig = buildApiKeyConfig(
     apiKey,
@@ -55,7 +68,7 @@ export const getConfigCode = (
     withHighlight,
   );
 
-  return `${IMPORT_OS_TEMPLATE} \n${apiKeyConfig} \n${workspaceConfig}`;
+  return `${apiKeyConfig} \n${workspaceConfig}${projectNameConfig}`;
 };
 
 export const putConfigInCode = ({
@@ -64,24 +77,26 @@ export const putConfigInCode = ({
   apiKey,
   shouldMaskApiKey,
   withHighlight = false,
+  projectName,
 }: PutConfigInCodeArgs): { code: string; lines: number[] } => {
-  let patchedCode = "";
+  const resolvedProjectName = projectName || SNIPPET_PROJECT_NAME;
+  const codeWithProjectName = code.replaceAll(
+    PROJECT_NAME_PLACEHOLDER,
+    resolvedProjectName,
+  );
 
-  if (apiKey) {
-    const configCode = getConfigCode(
-      workspaceName,
-      apiKey,
-      shouldMaskApiKey,
-      withHighlight,
-    );
+  const configCode = getConfigCode(
+    workspaceName,
+    apiKey,
+    shouldMaskApiKey,
+    withHighlight,
+    projectName,
+  );
 
-    patchedCode = code.replace(OPIK_API_KEY_TEMPLATE, configCode);
-  } else {
-    patchedCode = code.replace(
-      OPIK_API_KEY_TEMPLATE,
-      buildOpikUrlOverrideConfig(withHighlight),
-    );
-  }
+  const patchedCode = codeWithProjectName.replace(
+    OPIK_API_KEY_TEMPLATE,
+    configCode,
+  );
 
   return {
     code: patchedCode.replaceAll(OPIK_HIGHLIGHT_LINE_TEMPLATE, ""),

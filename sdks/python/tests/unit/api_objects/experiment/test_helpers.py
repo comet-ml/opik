@@ -9,14 +9,25 @@ from tests.conftest import random_chars
 def fake_prompt(with_postfix: bool = False):
     postfix = random_chars()
 
+    def __internal_api__to_info_dict__():
+        return {
+            "name": fake_prompt_obj.name,
+            "version": {
+                "template": fake_prompt_obj.prompt,
+            },
+        }
+
     fake_prompt_obj = types.SimpleNamespace(
         __internal_api__version_id__="some-prompt-version-id",
         prompt="some-prompt-value",
+        name="some-prompt-name",
+        __internal_api__to_info_dict__=__internal_api__to_info_dict__,
     )
 
     if with_postfix:
         fake_prompt_obj.prompt += postfix
         fake_prompt_obj.__internal_api__version_id__ += postfix
+        fake_prompt_obj.name += postfix
 
     return fake_prompt_obj
 
@@ -35,14 +46,14 @@ def fake_prompt(with_postfix: bool = False):
         (
             {"experiment_config": None, "prompts": [fake_prompt()]},
             {
-                "metadata": {"prompts": ["some-prompt-value"]},
+                "metadata": {"prompts": {"some-prompt-name": "some-prompt-value"}},
                 "prompt_versions": [{"id": "some-prompt-version-id"}],
             },
         ),
         (
             {"experiment_config": {}, "prompts": [fake_prompt()]},
             {
-                "metadata": {"prompts": ["some-prompt-value"]},
+                "metadata": {"prompts": {"some-prompt-name": "some-prompt-value"}},
                 "prompt_versions": [{"id": "some-prompt-version-id"}],
             },
         ),
@@ -56,7 +67,7 @@ def fake_prompt(with_postfix: bool = False):
                 "prompts": [fake_prompt()],
             },
             {
-                "metadata": {"prompts": ["some-prompt-value"]},
+                "metadata": {"prompts": {"some-prompt-name": "some-prompt-value"}},
                 "prompt_versions": [{"id": "some-prompt-version-id"}],
             },
         ),

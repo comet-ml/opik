@@ -10,10 +10,12 @@ from typing import (
     Tuple,
     Union,
 )
+from typing_extensions import override
 
 from google.genai import types as genai_types
 
-from opik import dict_utils, llm_usage
+import opik.dict_utils as dict_utils
+import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import LLMProvider
@@ -37,20 +39,28 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
     * aio.models.generate_content_stream
     """
 
-    def __init__(self, provider: str) -> None:
+    def __init__(
+        self,
+        provider: str,
+        cost_callback: Optional[
+            Callable[[genai_types.GenerateContentResponse], Optional[float]]
+        ] = None,
+    ) -> None:
         super().__init__()
         self.provider = provider
+        self._cost_callback = cost_callback
 
+    @override
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Optional[Tuple],
-        kwargs: Optional[Dict[str, Any]],
+        args: Tuple,
+        kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in client.models.generate_content(**kwargs), client.aio.models.generate_content(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in client.models.generate_content(**kwargs), client.aio.models.generate_content(**kwargs)"
+        )
 
         model = kwargs.get("model")
 
@@ -80,6 +90,7 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
 
         return result
 
+    @override
     def _end_span_inputs_preprocessor(
         self,
         output: Any,
@@ -96,7 +107,11 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             result_dict, RESPONSE_KEYS_TO_LOG_AS_OUTPUT
         )
 
-        model = result_dict["model_version"]
+        if result_dict.get("model_version") is not None:
+            # Gemini **may** add "models/" prefix to some model versions
+            model = result_dict["model_version"].split("/")[-1]
+        else:
+            model = None
 
         usage = llm_usage.try_build_opik_usage_or_log_error(
             provider=LLMProvider(self.provider),
@@ -104,6 +119,11 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             logger=LOGGER,
             error_message="Failed to log token usage from genai generate_response call",
         )
+
+        total_cost = None
+        if self._cost_callback is not None:
+            total_cost = self._cost_callback(output)
+
         span_name_without_model = current_span_data.name.split(":")[0]  # type: ignore
         result = arguments_helpers.EndSpanParameters(
             name=f"{span_name_without_model}: {model}",
@@ -112,20 +132,17 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             metadata=metadata,
             model=model,
             provider=self.provider,
+            total_cost=total_cost,
         )
 
         return result
 
+    @override
     def _streams_handler(
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[
-            Callable[
-                [List[genai_types.GenerateContentResponse]],
-                genai_types.GenerateContentResponse,
-            ]
-        ],
+        generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Union[
         None,
         Iterator[genai_types.GenerateContentResponse],

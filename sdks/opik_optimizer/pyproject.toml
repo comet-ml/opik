@@ -1,0 +1,214 @@
+[project]
+name = "opik_optimizer"
+version = "3.2.0"
+description = "Open-source automatic agent and prompt optimization toolkit with Opik"
+authors = [
+    {name = "Comet ML", email = "support@comet.com"}
+]
+license = {text = "Apache 2.0"}
+readme = "README.md"
+requires-python = ">=3.10,<3.15"
+dependencies = [
+    "datasets",
+    "deap>=1.4.3",
+    # 0.1.0 introduced the <curr_param>/<side_info> reflection-template markers
+    # and the reflection_prompt_template kwarg contract GepaOptimizer relies on;
+    # on 0.0.x the optimizer cannot even be constructed.
+    "gepa>=0.1.0",
+    "hf_xet",
+    # LiteLLM dependency comments:
+    # - Exclude 1.81.x: HTTP client closed during concurrent calls
+    #   See: https://github.com/BerriAI/litellm/issues/19608
+    # - Exclude 1.82.7, 1.82.8: compromised in supply chain attack (TeamPCP)
+    #   See: https://docs.litellm.ai/blog/security-update-march-2026
+    # - Exclude 1.82.*, 1.83.0-1.83.6: CVE-2026-42208 (SQL injection in proxy auth path,
+    #   affects 1.81.16-1.83.6, fixed in 1.83.7).
+    #   See: https://docs.litellm.ai/blog/cve-2026-42208-litellm-proxy-sql-injection
+    # - Exclude 1.92.*: core completion() eagerly imports litellm.proxy modules that require
+    #   fastapi/orjson (proxy-only extras), so any completion crashes without litellm[proxy].
+    #   Reverted in 1.93. See litellm/main.py -> responses.mcp.litellm_proxy_mcp_handler.
+    # - Cap Python 3.10 at <1.97: litellm declares requires-python >=3.10 but ships 3.11+
+    #   typing, and every recent break has been 3.10-only with a distinct root cause:
+    #     1.97.*     Message model unconstructible -- the nested forward reference
+    #                ChatCompletionReasoningSummaryTextBlock never resolves, so every
+    #                completion() raises PydanticUserError.
+    #                https://github.com/BerriAI/litellm/issues/36384
+    #     1.98.0rc1  ImportError: cannot import name 'NotRequired' from 'typing'
+    #                typing.NotRequired does not exist on 3.10 (added in 3.11);
+    #                litellm should import it from typing_extensions.
+    #   Both are still unfixed on litellm main, so 1.99+ is expected to break on 3.10 too.
+    #   The cap is the standing guard; 3.11+ deliberately stays uncapped. Lift it once
+    #   upstream actually tests 3.10 (or once we drop 3.10 -- see OPIK_7955).
+    "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*,<1.97; python_version < '3.11'",
+    "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6,!=1.92.*; python_version >= '3.11'",
+    "mcp>=1.0.0",
+    "opik>=1.9.7",
+    "optuna",
+    "pandas",
+    "pydantic",
+    "pyrate-limiter",
+    "tqdm",
+    "rich",
+    "pillow"
+]
+
+[project.optional-dependencies]
+dev = [
+    # Test Related
+    "pytest",
+    "pytest-cov",
+    "pytest-xdist",
+    "pytest-asyncio",
+    "pytest-env",
+    "pytest-profiling",
+    # Pre-commit
+    "pre-commit",
+    "radon",
+    "xenon",
+    "lizard",
+    # Test required packages
+    # "google-adk",
+    "huggingface-hub",
+    "langgraph",
+    "bm25s",
+    "PyStemmer",
+    "scikit-learn",
+]
+benchmarks = [ # Extras - pip install opik_optimizer[benchmarks]
+    "modal",
+    "bm25s[full]",
+    "PyStemmer",
+    "huggingface-hub",
+    "ujson",
+    "pyarrow",  # For optimized Parquet format
+]
+bm25 = [ # Extras - pip install opik_optimizer[bm25]
+    "bm25s[full]",
+    "PyStemmer",
+    "huggingface-hub",
+    "ujson",
+    "pyarrow",  # For optimized Parquet format
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+opik_optimizer = ["data/*.json", "data/*.jsonl"]
+
+[project.urls]
+Homepage = "https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/README.md"
+Repository = "https://github.com/comet-ml/opik"
+
+[tool.mypy]
+follow_imports = "normal"
+ignore_missing_imports = false
+disallow_untyped_defs = true
+disallow_untyped_calls = true
+check_untyped_defs = true
+mypy_path = ["typings", "src"]
+exclude = "(^|.*/)scripts/benchmarks/"
+
+[[tool.mypy.overrides]]
+module = [
+    "opik.*",
+    "deap.*",
+    "litellm.*",
+    "rich.*",
+    "pydantic.*",
+    "optuna.*",
+    "numpy.*",
+    "rapidfuzz.*",
+    "PIL.*",
+    "datasets.*",
+    "pyarrow.*",
+    "gepa.*",
+    "mcp.*",
+    "bm25s.*",
+    "Stemmer.*",
+    "dsp.*",
+    "huggingface_hub.*",
+    "pydantic_ai.*",
+    "crewai.*",
+    "langgraph.*",
+    "agent_framework.*",
+    "langchain_openai.*",
+    "google.adk.*",
+    "google.genai.*",
+    "opik_optimizer.mcp_utils.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "scripts.optimizer_algorithms.*",
+    "scripts.llm_frameworks.*",
+    "scripts.archive.*",
+    "scripts.validation_dataset",
+    "validation_dataset",
+]
+ignore_errors = true
+
+[tool.uv]
+managed = false
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::UserWarning:pydantic.main",
+    "ignore::pytest.PytestConfigWarning",
+    "ignore::RuntimeWarning:litellm.integrations.opik.opik",
+    "ignore:There is no current event loop:DeprecationWarning:litellm._service_logger",
+    "ignore:Argument ``multivariate`` is an experimental feature.:optuna._experimental",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["opik_optimizer"]
+omit = ["opik_optimizer/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+extend-exclude = ["external"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]  # Enable pycodestyle (E), pyflakes (F), and isort (I)
+ignore = ["E402"]  # Ignore module level import not at top of file
+
+[tool.ruff.lint.isort]
+known-first-party = ["opik_optimizer"]
+combine-as-imports = true
+
+[tool.vulture]
+min_confidence = 60
+paths = ["src", "tests", "scripts", "benchmarks"]
+ignore_names = [
+  "__getattr__",
+  "_coerce_aliases",
+  "_normalize",
+  "DATASET_CONFIG",
+  "HF_CACHE_HOME",
+  "HF_DATASETS_CACHE",
+  "OPTIMIZER_CONFIGS",
+  "additionalProperties",
+  "by_alias",
+  "by_name",
+  "detail",
+  "drop_params",
+  "from_attributes",
+  "get_optimized_model",
+  "get_optimized_model_kwargs",
+  "get_optimized_parameters",
+  "input_text",
+  "is_jupyter",
+  "llm_calls",
+  "llm_calls_tools",
+  "make_reflective_dataset",
+  "model_config",
+  "pytestmark",
+  "return_value",
+  "side_effect",
+  "strict",
+]

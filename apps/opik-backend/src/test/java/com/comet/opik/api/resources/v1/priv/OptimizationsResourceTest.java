@@ -1,0 +1,3305 @@
+package com.comet.opik.api.resources.v1.priv;
+
+import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.ErrorInfo;
+import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentScore;
+import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.FeedbackScoreAverage;
+import com.comet.opik.api.Optimization;
+import com.comet.opik.api.OptimizationStatus;
+import com.comet.opik.api.OptimizationStudioConfig;
+import com.comet.opik.api.OptimizationUpdate;
+import com.comet.opik.api.Project;
+import com.comet.opik.api.Span;
+import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.OptimizationCreated;
+import com.comet.opik.api.events.OptimizationsDeleted;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.OptimizationField;
+import com.comet.opik.api.filter.OptimizationFilter;
+import com.comet.opik.api.resources.utils.AuthTestUtils;
+import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MinIOContainerUtils;
+import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.StatsUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.OptimizationStudioJobMessage;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.queues.Queue;
+import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
+import com.google.common.eventbus.EventBus;
+import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.http.HttpStatus;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
+import org.redisson.Redisson;
+import org.redisson.api.RMapReactive;
+import org.redisson.api.RQueueReactive;
+import org.redisson.api.RedissonReactiveClient;
+import org.redisson.client.codec.StringCodec;
+import org.redisson.config.Config;
+import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
+import ru.vyarus.dropwizard.guice.test.ClientSupport;
+import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import uk.co.jemos.podam.api.PodamFactory;
+
+import java.math.BigDecimal;
+import java.sql.SQLException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
+import java.util.stream.Stream;
+
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
+import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@ExtendWith(DropwizardAppExtensionProvider.class)
+class OptimizationsResourceTest {
+
+    public static final String[] OPTIMIZATION_IGNORED_FIELDS = {"datasetId", "createdAt",
+            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "studioConfig", "datasetName",
+            "baselineObjectiveScore", "bestObjectiveScore", "baselineDuration", "bestDuration",
+            "baselineCost", "bestCost", "totalOptimizationCost", "experimentScores",
+            "projectName"};
+
+    private static final String API_KEY = UUID.randomUUID().toString();
+    private static final String WORKSPACE_ID = UUID.randomUUID().toString();
+    private static final String TEST_WORKSPACE_NAME = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
+    private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
+    private static final TimeBasedEpochGenerator ID_GENERATOR = Generators.timeBasedEpochGenerator();
+
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
+    private final GenericContainer<?> MINIO = MinIOContainerUtils.newMinIOContainer();
+
+    private final WireMockUtils.WireMockRuntime wireMock;
+    private final TestDropwizardAppExtensionUtils.AppContextConfig contextConfig;
+
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
+
+    {
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER, MINIO).join();
+
+        String minioUrl = "http://%s:%d".formatted(MINIO.getHost(), MINIO.getMappedPort(9000));
+
+        wireMock = WireMockUtils.startWireMock();
+
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
+                CLICK_HOUSE_CONTAINER, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
+        MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
+        MinIOContainerUtils.setupBucketAndCredentials(minioUrl);
+
+        contextConfig = TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                .jdbcUrl(MYSQL_CONTAINER.getJdbcUrl())
+                .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                .runtimeInfo(wireMock.runtimeInfo())
+                .redisUrl(REDIS.getRedisURI())
+                .authCacheTtlInSeconds(null)
+                .mockEventBus(Mockito.mock(EventBus.class))
+                .minioUrl(minioUrl)
+                .isMinIO(true)
+                .build();
+
+        APP = newTestDropwizardAppExtension(contextConfig);
+    }
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
+
+    private String baseURI;
+    private ClientSupport client;
+    private EventBus defaultEventBus;
+    private RedissonReactiveClient redisClient;
+    private OptimizationResourceClient optimizationResourceClient;
+    private DatasetResourceClient datasetResourceClient;
+    private ExperimentResourceClient experimentResourceClient;
+    private ProjectResourceClient projectResourceClient;
+    private TraceResourceClient traceResourceClient;
+    private SpanResourceClient spanResourceClient;
+
+    @BeforeAll
+    void beforeAll(ClientSupport client) {
+        this.baseURI = TestUtils.getBaseUrl(client);
+        this.client = client;
+
+        ClientSupportUtils.config(client);
+        defaultEventBus = contextConfig.mockEventBus();
+
+        // Initialize Redis client for testing
+        Config redisConfig = new Config();
+        redisConfig.useSingleServer()
+                .setAddress(REDIS.getRedisURI())
+                .setDatabase(0);
+        this.redisClient = Redisson.create(redisConfig).reactive();
+
+        this.optimizationResourceClient = new OptimizationResourceClient(this.client, baseURI, podamFactory);
+        this.datasetResourceClient = new DatasetResourceClient(this.client, baseURI);
+        this.experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, podamFactory);
+        this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, podamFactory);
+        this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
+        this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
+
+        mockTargetWorkspace(API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID);
+    }
+
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+    }
+
+    @AfterAll
+    void tearDownAll() {
+        wireMock.server().stop();
+    }
+
+    @Test
+    @DisplayName("Create optimizer")
+    void createOptimizer() {
+        Mockito.reset(defaultEventBus);
+
+        optimizationResourceClient.create(API_KEY, TEST_WORKSPACE_NAME);
+
+        ArgumentCaptor<OptimizationCreated> experimentCaptor = ArgumentCaptor.forClass(OptimizationCreated.class);
+        Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
+    }
+
+    @ParameterizedTest
+    @MethodSource("getLastUpdatedAt")
+    @DisplayName("Get optimizer by id")
+    void upsertOptimizer(Instant lastUpdatedAt) {
+        Mockito.reset(defaultEventBus);
+
+        var optimization = optimizationResourceClient.createPartialOptimization()
+                .lastUpdatedAt(lastUpdatedAt)
+                .build();
+
+        // Create optimization via upsert
+        var id = optimizationResourceClient.upsert(optimization, API_KEY, TEST_WORKSPACE_NAME);
+        var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+        assertOptimization(optimization, actualOptimization);
+        ArgumentCaptor<OptimizationCreated> experimentCaptor = ArgumentCaptor.forClass(OptimizationCreated.class);
+
+        Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
+
+        // Update the same optimization
+        var updatedOptimization = actualOptimization.toBuilder()
+                .name(UUID.randomUUID().toString())
+                .status(OptimizationStatus.COMPLETED)
+                .objectiveName(UUID.randomUUID().toString())
+                .build();
+        optimizationResourceClient.upsert(updatedOptimization, API_KEY, TEST_WORKSPACE_NAME);
+
+        var updatedActualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+        assertOptimization(updatedOptimization, updatedActualOptimization);
+    }
+
+    static Stream<Instant> getLastUpdatedAt() {
+        return Stream.of(null, Instant.now());
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Delete optimizations passes required permissions to auth endpoint")
+        void deleteOptimizationsPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = optimizationResourceClient.create(apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.delete(Set.of(id), apiKey, workspaceName);
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_RUN_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create optimization passes required permissions to auth endpoint")
+        void createOptimizationPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callCreate(optimization, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create optimization returns 403 when permission is denied")
+        void createOptimizationReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue());
+
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+
+            try (var response = optimizationResourceClient.callCreate(optimization, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Upsert optimization passes required permissions to auth endpoint")
+        void upsertOptimizationPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callUpsert(optimization, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Upsert optimization returns 403 when permission is denied")
+        void upsertOptimizationReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue());
+
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+
+            try (var response = optimizationResourceClient.callUpsert(optimization, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update optimization passes required permissions to auth endpoint")
+        void updateOptimizationPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = optimizationResourceClient.create(apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callUpdate(id, podamFactory.manufacturePojo(OptimizationUpdate.class),
+                    apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Update optimization returns 403 when permission is denied")
+        void updateOptimizationReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue());
+
+            try (var response = optimizationResourceClient.callUpdate(UUID.randomUUID(),
+                    podamFactory.manufacturePojo(OptimizationUpdate.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Find optimizations passes required permissions to auth endpoint")
+        void findOptimizationsPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callFind(apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Find optimizations returns 403 when permission is denied")
+        void findOptimizationsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue());
+
+            try (var response = optimizationResourceClient.callFind(apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Get optimization passes required permissions to auth endpoint")
+        void getOptimizationPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = optimizationResourceClient.create(apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callGet(id, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Get optimization returns 403 when permission is denied")
+        void getOptimizationReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue());
+
+            try (var response = optimizationResourceClient.callGet(UUID.randomUUID(), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Get studio optimization logs passes required permissions to auth endpoint")
+        void getStudioOptimizationLogsPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = optimizationResourceClient.create(apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callGetStudioLogs(id, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Get studio optimization logs returns 403 when permission is denied")
+        void getStudioOptimizationLogsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue());
+
+            try (var response = optimizationResourceClient.callGetStudioLogs(UUID.randomUUID(), apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+    }
+
+    @Nested
+    @DisplayName("Get optimizer by id")
+    class GetOptimizerById {
+
+        @ParameterizedTest
+        @MethodSource("com.comet.opik.api.resources.v1.priv.OptimizationsResourceTest#getLastUpdatedAt")
+        @DisplayName("Get optimizer by id")
+        void getById(Instant lastUpdatedAt) {
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .lastUpdatedAt(lastUpdatedAt)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertOptimization(optimization, actualOptimization);
+        }
+
+        @ParameterizedTest
+        @ValueSource(ints = {0, 1, 10})
+        @DisplayName("Get optimizer by id with the number of trials")
+        void getByIdWithNumTrials(long numTrials) {
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .numTrials(numTrials)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            LongStream.range(0, numTrials)
+                    .parallel()
+                    .forEach(i -> {
+                        var experiment = experimentResourceClient.createPartialExperiment()
+                                .optimizationId(id)
+                                .type(ExperimentType.TRIAL)
+                                .build();
+
+                        experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE_NAME);
+                    });
+
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertThat(actualOptimization)
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .isEqualTo(optimization);
+        }
+
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
+        @DisplayName("Get optimizer by id when a trial item references an unfinished or missing trace")
+        void getByIdWhenTrialItemReferencesUnfinishedTrace(boolean traceExists) {
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            createTrialWithUnfinishedTraceItem(id, traceExists, API_KEY, TEST_WORKSPACE_NAME);
+
+            // The run must not vanish (OPIK-7459): duration aggregates are simply absent.
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            // Whole-payload comparison for the same reason as the sibling find test: a row that comes back
+            // corrupted rather than missing must fail here too.
+            assertThat(actualOptimization)
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .ignoringCollectionOrderInFields("feedbackScores")
+                    .isEqualTo(optimization.toBuilder().id(id).numTrials(1L).build());
+            // Ignored by the comparison above, and the point of this test.
+            assertThat(actualOptimization.bestDuration()).isNull();
+            assertThat(actualOptimization.baselineDuration()).isNull();
+        }
+
+        @Test
+        @DisplayName("Get optimizer by id when a trial carries a non-finite experiment score")
+        void getByIdWhenTrialCarriesNonFiniteScore() {
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // A string-typed "NaN" parses as valid JSON, and FIND's CAST turns it into a Float64 nan —
+            // the exact input the isFinite guard in experiment_scores_parsed filters. Without the guard
+            // it propagates into the aggregates, the row mapper cannot read it as BigDecimal, and the
+            // whole run silently vanishes (OPIK-7459 — same driver behavior as the NaN duration case
+            // above). This cannot be seeded through the API (ExperimentScore.value is a BigDecimal, so
+            // "NaN" is rejected at deserialization) — the column stores raw JSON that older/foreign
+            // writers may have shaped differently, hence the raw insert. A non-finite JSON *number*
+            // (e.g. 1e999) is a different failure mode: simdjson rejects the whole document and
+            // JSONExtractArrayRaw returns [], losing every score of the trial but never producing nan.
+            insertTrialWithRawScores(id,
+                    "[{\"name\":\"finite_metric\",\"value\":0.75},{\"name\":\"nan_metric\",\"value\":\"NaN\"}]");
+
+            // The run must not vanish: the non-finite score entry is simply excluded from the aggregates.
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertThat(actualOptimization.id()).isEqualTo(id);
+            assertThat(actualOptimization.numTrials()).isEqualTo(1L);
+            assertThat(actualOptimization.experimentScores())
+                    .extracting(FeedbackScoreAverage::name)
+                    .containsExactly("finite_metric");
+        }
+
+        @Test
+        @DisplayName("Get optimizer by id when a candidate mixes a finished trial with one still in flight")
+        void getByIdWhenCandidateMixesFinishedAndUnfinishedTrials() {
+            var objectiveName = "accuracy";
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .objectiveName(objectiveName)
+                    .build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Both trials share one candidate_id, which is the grain candidate_metrics averages over
+            // (GROUP BY optimization_id, candidate_id). This is the shape the old NaN did not merely lose
+            // the row for, but silently returned a WRONG NUMBER for: isNotNull(NaN) is true, so the
+            // unfinished trial's trace_count entered the weighted-duration denominator while NaN poisoned
+            // the numerator. The NULL this PR introduces is skipped by both sum() and isNotNull(), so the
+            // arithmetic must reflect the finished trial alone.
+            var candidateId = UUID.randomUUID().toString();
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("candidate_id", candidateId)));
+
+            var finishedTrial = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(id)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(metadata)
+                    .experimentScores(List.of(ExperimentScore.builder()
+                            .name(objectiveName)
+                            .value(BigDecimal.valueOf(0.9))
+                            .build()))
+                    .build();
+            var finishedTrialId = experimentResourceClient.create(finishedTrial, API_KEY, TEST_WORKSPACE_NAME);
+
+            var unfinishedTrial = experimentResourceClient.createPartialExperiment()
+                    .optimizationId(id)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(metadata)
+                    .build();
+            var unfinishedTrialId = experimentResourceClient.create(unfinishedTrial, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Exactly one finished trace, of exactly one second, so the expected p50 is unambiguous.
+            var traceStart = Instant.now().minusSeconds(30);
+            linkItemWithTrace(finishedTrialId, traceStart, traceStart.plusMillis(1_000));
+            linkItemWithTrace(unfinishedTrialId, Instant.now(), null);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+                        // duration_p50 is milliseconds and weighted_duration divides by 1000, so a single
+                        // one-second trace is 1.0 — not 0.5, which is what averaging the unfinished
+                        // trial's trace_count into the denominator would produce.
+                        assertThat(actual.bestDuration()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.bestDuration(),
+                                BigDecimal.valueOf(1.0))).isZero();
+                        assertThat(actual.baselineDuration()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.baselineDuration(),
+                                BigDecimal.valueOf(1.0))).isZero();
+                    });
+        }
+
+        @Test
+        @DisplayName("returns the run when a candidate's objective scores overflow to infinity")
+        void getByIdWhenCandidateObjectiveScoresOverflow() {
+            var objectiveName = "accuracy";
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .objectiveName(objectiveName)
+                    .build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Reaches the OTHER branch of the mapper's getFiniteBigDecimal guard. FIND's isFinite filters
+            // stop non-finite values ENTERING, so every other regression test here only exercises the
+            // null branch and the !isFinite return is dead code as far as the suite is concerned. But the
+            // columns the mapper reads are DERIVED: candidate_metrics sums objective_score * trace_count
+            // before dividing, so two trials in one candidate each carrying a finite 1e308 — which the
+            // isFinite filter accepts — sum to +Inf. Without the mapper guard the driver's BigDecimal
+            // conversion throws, ClickHouseResult.map swallows it, and the row silently disappears: the
+            // exact 404 this PR exists to fix, reopened by arithmetic rather than by input.
+            var candidateId = UUID.randomUUID().toString();
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("candidate_id", candidateId)));
+            var hugeButFinite = new BigDecimal("1e308");
+
+            var trialIds = Stream.of(1, 2)
+                    .map(ignored -> experimentResourceClient.create(experimentResourceClient
+                            .createPartialExperiment()
+                            .optimizationId(id)
+                            .type(ExperimentType.TRIAL)
+                            .metadata(metadata)
+                            .experimentScores(List.of(ExperimentScore.builder()
+                                    .name(objectiveName)
+                                    .value(hugeButFinite)
+                                    .build()))
+                            .build(), API_KEY, TEST_WORKSPACE_NAME))
+                    .toList();
+
+            var traceStart = Instant.now().minusSeconds(30);
+            trialIds.forEach(trialId -> linkItemWithTrace(trialId, traceStart, traceStart.plusMillis(1_000)));
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        // The run must still be reachable — that is the whole point of the guard.
+                        var actual = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+                        assertThat(actual.id()).isEqualTo(id);
+                        // An overflowed aggregate is reported as absent rather than as a bogus number.
+                        assertThat(actual.bestObjectiveScore()).isNull();
+                        assertThat(actual.baselineObjectiveScore()).isNull();
+                        // The durations are unaffected by the overflow and must still be computed.
+                        assertThat(actual.bestDuration()).isNotNull();
+                    });
+        }
+
+        @Test
+        @DisplayName("Get optimizer by id with feedback scores")
+        void getByIdWithFeedbackScores() {
+            // Create dataset
+            Dataset dataset = buildDataset();
+            datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE_NAME);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            DatasetItemBatch itemBatch = DatasetItemBatch.builder().datasetId(dataset.id()).items(items).build();
+
+            datasetResourceClient.createDatasetItems(itemBatch, TEST_WORKSPACE_NAME, API_KEY);
+
+            // Create experiment and attach it to the created dataset and optimizer
+            List<FeedbackScoreAverage> feedbackScoreItems = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreAverage.class);
+
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(dataset.id())
+                    .objectiveName(feedbackScoreItems.getFirst().name())
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            Experiment experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(dataset.id())
+                    .optimizationId(optimization.id())
+                    .datasetName(dataset.name())
+                    .type(ExperimentType.TRIAL)
+                    .build();
+
+            experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE_NAME);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(dataset.name()))
+                    .build();
+
+            projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE_NAME);
+
+            Set<ExperimentItem> experimentItems = new HashSet<>();
+            List<Trace> traces = new ArrayList<>();
+
+            for (DatasetItem datasetItem : items) {
+
+                Trace trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .projectId(project.id())
+                        .projectName(project.name())
+                        .guardrailsValidations(null)
+                        .threadId(null)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+
+                ExperimentItem experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experiment.id())
+                        .traceId(trace.id())
+                        .input(JsonUtils.readTree(datasetItem.data()))
+                        .datasetItemId(datasetItem.id())
+                        .build();
+
+                experimentItems.add(experimentItem);
+                traces.add(trace);
+            }
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE_NAME);
+            experimentResourceClient.createExperimentItem(experimentItems, API_KEY, TEST_WORKSPACE_NAME);
+
+            List<FeedbackScoreBatchItem> scoreBatchItems = traces.stream()
+                    .flatMap(trace -> feedbackScoreItems.stream()
+                            .map(score -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .projectName(project.name())
+                                    .id(trace.id())
+                                    .name(score.name())
+                                    .build()))
+                    .collect(Collectors.toList());
+
+            traceResourceClient.feedbackScores(scoreBatchItems, API_KEY, TEST_WORKSPACE_NAME);
+
+            optimization = optimization.toBuilder()
+                    .feedbackScores(
+                            StatsUtils.calculateFeedbackBatchAverage(scoreBatchItems)
+                                    .entrySet()
+                                    .stream()
+                                    .map(entry -> FeedbackScoreAverage.builder()
+                                            .name(entry.getKey())
+                                            .value(BigDecimal.valueOf(entry.getValue()))
+                                            .build())
+                                    .toList())
+                    .numTrials(1L)
+                    .build();
+
+            // then
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            assertThat(actualOptimization)
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .ignoringCollectionOrderInFields("feedbackScores")
+                    .isEqualTo(optimization);
+        }
+
+        @Test
+        @DisplayName("Get optimizer by id with aggregated scores, durations, and costs")
+        void getById__whenExperimentsHaveScoresAndCosts__returnsAggregatedFields() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset with items
+            var datasetName = "agg-test-" + UUID.randomUUID();
+            Dataset dataset = Dataset.builder()
+                    .name(datasetName)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            DatasetItemBatch itemBatch = DatasetItemBatch.builder().datasetId(datasetId).items(items).build();
+            datasetResourceClient.createDatasetItems(itemBatch, workspaceName, apiKey);
+
+            // Create optimization with objectiveName
+            var objectiveName = "accuracy";
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .objectiveName(objectiveName)
+                    .build();
+
+            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            // Create project for traces
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Experiment 1 (baseline - created first, lower score)
+            var baselineScore = BigDecimal.valueOf(0.6);
+            var baselineCandidateId = UUID.randomUUID().toString();
+            var baselineMetadata = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("candidate_id", baselineCandidateId)));
+
+            Experiment experiment1 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(baselineMetadata)
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(baselineScore).build()))
+                    .build();
+
+            experimentResourceClient.create(experiment1, apiKey, workspaceName);
+
+            // Experiment 2 (best - created second, higher score)
+            var bestScore = BigDecimal.valueOf(0.9);
+            var bestCandidateId = UUID.randomUUID().toString();
+            var bestMetadata = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("candidate_id", bestCandidateId)));
+
+            Experiment experiment2 = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(bestMetadata)
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(bestScore).build()))
+                    .build();
+
+            experimentResourceClient.create(experiment2, apiKey, workspaceName);
+
+            // Create traces and experiment items for experiment 1
+            var experiment1Cost = BigDecimal.valueOf(0.05);
+            createTracesSpansAndItems(
+                    experiment1, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(2), Instant.now().minusSeconds(1),
+                    experiment1Cost);
+
+            // Create traces and experiment items for experiment 2
+            var experiment2Cost = BigDecimal.valueOf(0.10);
+            createTracesSpansAndItems(
+                    experiment2, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(3), Instant.now().minusSeconds(1),
+                    experiment2Cost);
+
+            // Wait for ClickHouse data to be queryable and verify aggregation fields
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actualOptimization = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actualOptimization).isNotNull();
+                        assertThat(actualOptimization.numTrials()).isEqualTo(2L);
+
+                        // Baseline = earliest candidate's objective score
+                        StatsUtils.assertBigDecimalEquals(
+                                actualOptimization.baselineObjectiveScore(), baselineScore);
+
+                        // Best = highest objective score across candidates
+                        StatsUtils.assertBigDecimalEquals(
+                                actualOptimization.bestObjectiveScore(), bestScore);
+
+                        // Duration fields are populated (traces have start/end times)
+                        assertThat(actualOptimization.baselineDuration()).isNotNull();
+                        assertThat(actualOptimization.bestDuration()).isNotNull();
+
+                        // Cost fields are populated (spans have total_estimated_cost)
+                        assertThat(actualOptimization.baselineCost()).isNotNull();
+                        assertThat(actualOptimization.bestCost()).isNotNull();
+
+                        // Total optimization cost is the sum of all experiment costs
+                        assertThat(actualOptimization.totalOptimizationCost()).isNotNull();
+                        assertThat(actualOptimization.totalOptimizationCost().compareTo(BigDecimal.ZERO))
+                                .isGreaterThan(0);
+
+                        // Experiment scores are populated
+                        assertThat(actualOptimization.experimentScores()).isNotNull();
+                        assertThat(actualOptimization.experimentScores()).isNotEmpty();
+                        assertThat(actualOptimization.experimentScores())
+                                .anyMatch(score -> score.name().equals(objectiveName));
+                    });
+        }
+
+        @Test
+        @DisplayName("Total optimization cost includes optimization-tagged traces outside experiment items")
+        void getById__whenOptimizationTaggedTracesExistOutsideTrials__totalCostIncludesThem() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "reflection-cost-test-" + UUID.randomUUID();
+            Dataset dataset = Dataset.builder()
+                    .name(datasetName)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            DatasetItemBatch itemBatch = DatasetItemBatch.builder().datasetId(datasetId).items(items).build();
+            datasetResourceClient.createDatasetItems(itemBatch, workspaceName, apiKey);
+
+            // Production shape: the optimizer writes its internal traces to the
+            // optimization's own project, while trial traces land in the dataset's project.
+            Project optimizerProject = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Optimizer-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(optimizerProject, apiKey, workspaceName);
+
+            var objectiveName = "accuracy";
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .objectiveName(objectiveName)
+                    .projectName(optimizerProject.name())
+                    .build();
+
+            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var trialScore = BigDecimal.valueOf(0.7);
+            var trialMetadata = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(Map.of("candidate_id", UUID.randomUUID().toString())));
+
+            Experiment experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(trialMetadata)
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(trialScore).build()))
+                    .build();
+
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // Trial traces are tagged with the optimization id too - a real run tags every
+            // evaluation trace. In THIS topology they are kept out of the tagged-cost branch by
+            // the query's project bound, since they live in a different project from the
+            // optimization. The experiment-item exclusion is what protects the single-project
+            // topology instead, and it has its own test below.
+            var trialCostPerSpan = BigDecimal.valueOf(0.05);
+            List<Trace> trialTraces = createTracesSpansAndItems(
+                    experiment, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(2), Instant.now().minusSeconds(1),
+                    trialCostPerSpan, optimizationId.toString());
+
+            // Precondition: the trial traces really are tagged with the optimization id.
+            // Without this the query's experiment-item exclusion would be trivially
+            // satisfied and this test could not detect the trial cost being counted twice.
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        Trace storedTrial = traceResourceClient.getById(
+                                trialTraces.getFirst().id(), workspaceName, apiKey);
+                        assertThat(storedTrial.tags()).contains(optimizationId.toString());
+                    });
+
+            var expectedTrialCost = trialCostPerSpan.multiply(BigDecimal.valueOf(items.size()));
+
+            // Cost is asserted with isEqualByComparingTo, not StatsUtils.bigDecimalComparator:
+            // that helper falls through to comparing only the integer parts, so for sub-dollar
+            // costs it returns "equal" for any two values (0.50 vs 0.25 included) and no cost
+            // assertion using it can fail.
+            //
+            // Phase 1, before any non-trial trace exists: the total is the trial cost, counted
+            // once. Asserting this separately is what makes the combined figure below meaningful
+            // - without it, a total that happens to match could be a partially-ingested state on
+            // the way to a wrong one.
+            //
+            // baseline_cost and num_trials are the independent signals that the experiment-item
+            // path is already live: both need the experiment items AND the spans, the same rows
+            // the tagged branch reads, and a single query sees one snapshot of both. So there is
+            // no window where the total is momentarily right for the wrong reason.
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var trialOnly = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(trialOnly.numTrials()).isEqualTo(1L);
+                        assertThat(trialOnly.baselineCost()).isNotNull();
+                        assertThat(trialOnly.totalOptimizationCost()).isEqualByComparingTo(expectedTrialCost);
+                    });
+
+            // Reflection trace as the optimizer SDK actually writes it (verified against a
+            // live GEPA run): named gepa_reflection, tagged [<optimization_id>, Reflection,
+            // GEPA], and linked to no experiment item (OPIK-7521). Its span cost must count
+            // into the run total. It lives in the optimization's own project, a DIFFERENT one
+            // from the trials' — so this also pins that the query scopes optimizer-internal
+            // traces to the optimization's project rather than the dataset's.
+            Project reflectionProject = optimizerProject;
+
+            var reflectionCost = BigDecimal.valueOf(0.07);
+            Trace reflectionTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(reflectionProject.id())
+                    .projectName(reflectionProject.name())
+                    .name("gepa_reflection")
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationId.toString(), "Reflection", "GEPA"))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(reflectionTrace), apiKey, workspaceName);
+
+            Span reflectionSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(reflectionProject.id())
+                    .projectName(reflectionProject.name())
+                    .traceId(reflectionTrace.id())
+                    .parentSpanId(null)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(reflectionCost)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(reflectionSpan), apiKey, workspaceName);
+
+            var expectedTotalCost = expectedTrialCost.add(reflectionCost);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actualOptimization = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actualOptimization).isNotNull();
+
+                        // The run total includes the tagged non-trial trace's spend
+                        assertThat(actualOptimization.totalOptimizationCost())
+                                .isEqualByComparingTo(expectedTotalCost);
+
+                        // best/baseline stay trial-scoped per-trace comparison metrics
+                        assertThat(actualOptimization.bestCost()).isEqualByComparingTo(trialCostPerSpan);
+                        assertThat(actualOptimization.baselineCost()).isEqualByComparingTo(trialCostPerSpan);
+                    });
+        }
+
+        /**
+         * The other topology, and the one that pins the {@code (toString(trace_id), tag) NOT IN (...)}
+         * exclusion: trials and optimizer-internal traces in the SAME project, which is what Studio produces
+         * when the run and its evaluations share a project. Here the query's project bound cannot separate
+         * them, so only the experiment-item exclusion stops the trial spend from being charged a second time
+         * as optimizer-internal. Delete that clause and the total settles at twice the trial cost - a stable
+         * wrong answer, which is why phase one asserts the trial-only figure before any non-trial trace exists
+         * rather than asserting the combined figure alone.
+         */
+        @Test
+        @DisplayName("Trials and internal traces in one project: trial cost is not charged twice")
+        void getById__whenTrialAndInternalTracesShareTheProject__trialCostIsNotCountedTwice() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "shared-project-cost-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            // One project for the run, its trials and its optimizer-internal traces.
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Shared-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var objectiveName = "accuracy";
+            var optimizationId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .projectName(project.name())
+                            .build(),
+                    apiKey, workspaceName);
+
+            Experiment experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(BigDecimal.valueOf(0.7)).build()))
+                    .build();
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trialCostPerSpan = BigDecimal.valueOf(0.05);
+            createTracesSpansAndItems(experiment, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(2), Instant.now().minusSeconds(1),
+                    trialCostPerSpan, optimizationId.toString());
+
+            var expectedTrialCost = trialCostPerSpan.multiply(BigDecimal.valueOf(items.size()));
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var trialOnly = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(trialOnly.numTrials()).isEqualTo(1L);
+                        assertThat(trialOnly.baselineCost()).isNotNull();
+                        assertThat(trialOnly.totalOptimizationCost()).isEqualByComparingTo(expectedTrialCost);
+                    });
+
+            // Now an optimizer-internal trace in that same project: its spend is additive.
+            var reflectionCost = BigDecimal.valueOf(0.07);
+            Trace reflectionTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .name("gepa_reflection")
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationId.toString(), "Reflection", "GEPA"))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(reflectionTrace), apiKey, workspaceName);
+
+            spanResourceClient.batchCreateSpans(List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .traceId(reflectionTrace.id())
+                    .parentSpanId(null)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(reflectionCost)
+                    .feedbackScores(null)
+                    .build()), apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actual.totalOptimizationCost())
+                                .isEqualByComparingTo(expectedTrialCost.add(reflectionCost));
+                    });
+        }
+
+        /**
+         * The experiment-item exclusion must be keyed on (trace, owning optimization), not on the trace alone.
+         * Here one trace is a trial of run Y and also carries run X's id as a tag. Excluding on trace_id alone
+         * drops it from X - and only when Y is in scope, which is true of the list (every optimization on the
+         * dataset) and false of {@code getById(X)} (just X). So the same run reads as free in the list and
+         * priced on the run page. Revert the exclusion to {@code id NOT IN (SELECT trace_id FROM
+         * experiment_items_final)} and the list assertion below fails at 0 while the detail one passes.
+         * <p>
+         * Y is asserted too, because the narrower exclusion must still fire for the run that owns the trial:
+         * if it stopped firing, Y's trial spend would be charged once through {@code experiment_durations} and
+         * again through the tagged branch.
+         */
+        @Test
+        @DisplayName("Trace tagged with another run: list and detail attribute it the same way")
+        void findAndGetById__whenTaggedTraceIsAnotherRunsTrial__attributionDoesNotDependOnScope() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "cross-run-tag-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            // One project for both runs, so the query's project bound cannot separate them and the
+            // experiment-item exclusion is the only thing deciding attribution.
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Shared-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var objectiveName = "accuracy";
+
+            // Run Y: a real trial run, tagging its evaluation traces the way the SDK does.
+            var optimizationYId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .projectName(project.name())
+                            .build(),
+                    apiKey, workspaceName);
+
+            Experiment experimentY = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationYId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(BigDecimal.valueOf(0.7)).build()))
+                    .build();
+            experimentResourceClient.create(experimentY, apiKey, workspaceName);
+
+            var costPerSpan = BigDecimal.valueOf(0.05);
+            List<Trace> trialTraces = createTracesSpansAndItems(experimentY, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(2), Instant.now().minusSeconds(1),
+                    costPerSpan, optimizationYId.toString());
+
+            var expectedYCost = costPerSpan.multiply(BigDecimal.valueOf(items.size()));
+
+            // Run X: same dataset and project, so the list returns both, but no experiment of its own.
+            var optimizationXId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .projectName(project.name())
+                            .build(),
+                    apiKey, workspaceName);
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var y = optimizationResourceClient.get(optimizationYId, apiKey, workspaceName, 200);
+
+                        assertThat(y.numTrials()).isEqualTo(1L);
+                        assertThat(y.totalOptimizationCost()).isEqualByComparingTo(expectedYCost);
+                    });
+
+            // Re-ingest one of Y's trial traces carrying X's id as well. The trace stays linked to Y's
+            // experiment item, so it must keep counting once for Y and start counting for X.
+            Trace crossTagged = trialTraces.getFirst();
+            traceResourceClient.batchCreateTraces(
+                    List.of(crossTagged.toBuilder()
+                            .tags(Set.of(optimizationYId.toString(), optimizationXId.toString(), "Evaluation"))
+                            .build()),
+                    apiKey, workspaceName);
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var x = optimizationResourceClient.get(optimizationXId, apiKey, workspaceName, 200);
+                        assertThat(x.totalOptimizationCost()).isEqualByComparingTo(costPerSpan);
+
+                        // The same figure through the paginated list, where Y is in scope too. This is the
+                        // assertion the trace_id-only exclusion fails.
+                        var page = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+
+                        var xFromList = page.content().stream()
+                                .filter(o -> o.id().equals(optimizationXId))
+                                .findFirst()
+                                .orElseThrow();
+                        assertThat(xFromList.totalOptimizationCost()).isEqualByComparingTo(costPerSpan);
+
+                        // Y is unchanged: still charged exactly once for the same trace.
+                        var yFromList = page.content().stream()
+                                .filter(o -> o.id().equals(optimizationYId))
+                                .findFirst()
+                                .orElseThrow();
+                        assertThat(yFromList.totalOptimizationCost()).isEqualByComparingTo(expectedYCost);
+                    });
+        }
+
+        /**
+         * This fixture has no experiment at all, which is what makes it cover both projections: the paginated
+         * list then takes the {@code FIND_WITHOUT_EXPERIMENTS} fast path while {@code getById} always takes
+         * {@code FIND}. They each carry their own copy of the tagged-cost pipeline, so this pins the two
+         * against each other - a run that died before its first experiment must not read as free in the list
+         * and priced on the run page - and pins that both apply the tag check after the per-trace dedup.
+         */
+        @Test
+        @DisplayName("Tagged cost without experiments: list and detail agree, and both follow the tag")
+        void findAndGetById__whenOptimizationHasNoExperiments__taggedCostAgreesAndFollowsTheTag() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "tag-removal-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Optimizer-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .objectiveName("accuracy")
+                    .projectName(project.name())
+                    .build();
+            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            // A tagged, non-trial trace: counted while the tag is present.
+            Trace taggedTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .name("gepa_reflection")
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationId.toString(), "Reflection", "GEPA"))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            var cost = BigDecimal.valueOf(0.07);
+            Span span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(null)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(cost)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(cost);
+                    });
+
+            // Same number from the list, which reaches this optimization through the
+            // no-experiments fast path rather than through FIND.
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var page = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+
+                        assertThat(page.content()).hasSize(1);
+                        assertThat(page.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(cost);
+                    });
+
+            // Re-ingest the same trace id without the optimization tag. The cost query must
+            // read each trace's LATEST version, so the spend stops counting; a tag filter
+            // applied before dedup would keep charging this run forever.
+            Trace untaggedVersion = taggedTrace.toBuilder()
+                    .tags(Set.of("Reflection", "GEPA"))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(untaggedVersion), apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(BigDecimal.ZERO);
+
+                        var page = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+
+                        assertThat(page.content()).hasSize(1);
+                        assertThat(page.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(BigDecimal.ZERO);
+                    });
+        }
+
+        /**
+         * The tagged-cost branch must charge one span once, from its newest version, no matter how many
+         * physical rows it has. A span re-ingested under a different parent is the case that used to break
+         * both halves of that: {@code /v1/private/spans/batch} goes through {@code SpanDAO.BULK_INSERT},
+         * which binds {@code parent_span_id} straight from the request with no old-row merge, so the rewrite
+         * lands as a second row carrying a <em>different</em> parent. A dedup grouping that still contained
+         * that column then kept both rows and summed the cost twice, and a sort tuple that still contained it
+         * picked the winner by largest parent instead of newest write (OPIK-7750).
+         * <p>
+         * So the fixture makes the two versions differ in cost and gives the <em>stale</em> one the
+         * <em>larger</em> parent: both parents are v7 and minted in order, so the earlier-minted id is the
+         * smaller one and the relationship is deterministic rather than a coin flip. Each failure mode then
+         * lands on its own number - 0.08 correct (newest version, charged once, plus the companion), 0.10 if
+         * the sort picks the stale version by parent, 0.15 if the grouping keeps both rows.
+         * <p>
+         * The rewrite and the companion span go in ONE batch statement, so they become visible together: the
+         * total moves 0.07 -> 0.08 when the batch lands and never transits a wrong value, which is what makes
+         * waiting on 0.08 an edge rather than a value that is merely still stale.
+         */
+        @Test
+        @DisplayName("Tagged cost when a span is re-ingested under another parent, then it is charged once")
+        void findAndGetById__whenTaggedSpanIsRewrittenUnderAnotherParent__spendIsChargedOnce() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "parent-rewrite-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Optimizer-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .objectiveName("accuracy")
+                    .projectName(project.name())
+                    .build();
+            var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            Trace taggedTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .name("gepa_reflection")
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .tags(Set.of(optimizationId.toString(), "Reflection", "GEPA"))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            // Parents must be v7 - the ingestion endpoint rejects anything else. Minted in order, so
+            // smallParent < largeParent holds by v7's time ordering; asserted rather than assumed.
+            var smallParent = ID_GENERATOR.generate();
+            var largeParent = ID_GENERATOR.generate();
+            assertThat(largeParent.toString()).isGreaterThan(smallParent.toString());
+
+            var staleCost = BigDecimal.valueOf(0.07);
+            Span original = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(largeParent)
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(staleCost)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(original), apiKey, workspaceName);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(staleCost);
+                    });
+
+            // Same span id, cheaper, under the SMALLER parent: newest by last_updated_at, oldest by parent.
+            var rewriteCost = BigDecimal.valueOf(0.05);
+            var companionCost = BigDecimal.valueOf(0.03);
+            Span companion = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(project.id())
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(ID_GENERATOR.generate())
+                    .startTime(Instant.now().minusSeconds(2))
+                    .endTime(Instant.now().minusSeconds(1))
+                    .totalEstimatedCost(companionCost)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(
+                    List.of(original.toBuilder()
+                            .parentSpanId(smallParent)
+                            .totalEstimatedCost(rewriteCost)
+                            .build(), companion),
+                    apiKey, workspaceName);
+
+            var expected = rewriteCost.add(companionCost);
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+                        assertThat(actual.totalOptimizationCost()).isEqualByComparingTo(expected);
+
+                        // The list reaches this run through FIND_WITHOUT_EXPERIMENTS, which carries its own
+                        // copy of the same dedup - both copies have to agree.
+                        var page = optimizationResourceClient.find(
+                                apiKey, workspaceName, 1, 10, datasetId, null, null, 200);
+
+                        assertThat(page.content()).hasSize(1);
+                        assertThat(page.content().getFirst().totalOptimizationCost())
+                                .isEqualByComparingTo(expected);
+                    });
+        }
+
+        /**
+         * When two candidates tie on the objective score, the best duration and cost are taken from the
+         * earliest-created candidate - the same candidate the baseline resolves to. So under a tie the best and
+         * baseline values must coincide, and because the two candidates are given clearly different costs and
+         * durations, picking the later candidate instead would break that equality. Without a defined tie-break
+         * these two fields are arbitrary: the previous implementation returned different values for the same data
+         * depending only on the query plan.
+         */
+        @Test
+        @DisplayName("Get optimizer by id when candidates tie on score, then best matches the earliest candidate")
+        void getById__whenCandidatesTieOnScore__bestComesFromEarliestCandidate() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "tie-test-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            var objectiveName = "accuracy";
+            var optimizationId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .build(),
+                    apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Both candidates score identically, so only the tie-break decides which one best_* comes from.
+            var tiedScore = BigDecimal.valueOf(0.75);
+
+            var earliest = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(tiedScore).build()))
+                    .build();
+            experimentResourceClient.create(earliest, apiKey, workspaceName);
+
+            var later = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .optimizationId(optimizationId)
+                    .datasetName(datasetName)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .experimentScores(List.of(
+                            ExperimentScore.builder().name(objectiveName).value(tiedScore).build()))
+                    .build();
+            experimentResourceClient.create(later, apiKey, workspaceName);
+
+            // The fixture creates one trace and one span per dataset item, so per-trace cost reduces to the span
+            // cost. The two costs must differ in their integer parts: bigDecimalComparator falls back to comparing
+            // only toBigInteger(), so 0.01 and 0.99 would compare equal and could not tell the candidates apart.
+            var earliestCost = BigDecimal.valueOf(1);
+            var laterCost = BigDecimal.valueOf(9);
+
+            createTracesSpansAndItems(earliest, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(3), Instant.now().minusSeconds(2), earliestCost);
+            createTracesSpansAndItems(later, items, project, apiKey, workspaceName,
+                    Instant.now().minusSeconds(30), Instant.now().minusSeconds(1), laterCost);
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actual).isNotNull();
+                        assertThat(actual.numTrials()).isEqualTo(2L);
+
+                        // Both candidates score the same, so only the tie-break decides best_*
+                        StatsUtils.assertBigDecimalEquals(actual.bestObjectiveScore(), tiedScore);
+
+                        StatsUtils.assertBigDecimalEquals(actual.baselineObjectiveScore(), tiedScore);
+
+                        // Under a tie the earliest candidate wins. Asserting best equals baseline alone would
+                        // still pass if both rollups picked the later candidate, so also require that neither
+                        // reports the later candidate's cost. Together these catch either rollup drifting,
+                        // without depending on how per-trace cost is derived.
+                        assertThat(actual.bestCost()).isNotNull();
+                        assertThat(actual.baselineCost()).isNotNull();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.bestCost(), laterCost))
+                                .isNotZero();
+                        assertThat(StatsUtils.bigDecimalComparator(actual.baselineCost(), laterCost))
+                                .isNotZero();
+                        StatsUtils.assertBigDecimalEquals(actual.bestCost(), actual.baselineCost());
+
+                        StatsUtils.assertBigDecimalEquals(actual.bestDuration(), actual.baselineDuration());
+                    });
+        }
+
+        /**
+         * A dataset run - what the Studio and every SDK optimizer produce. The objective is scored per trace
+         * as a feedback score and written to no experiment_scores column at all, so the candidate rollups have
+         * to read it from the traces.
+         * <p>
+         * Every other test here that asserts a real best_* builds its trials with experimentScores, i.e. the
+         * test-suite shape, which is why OPIK-8060 survived: reading only experiment_scores left every
+         * candidate in a dataset run unscored, they all tied, the best_* rollups fell through to their
+         * earliest-created tie-break, and "best" collapsed onto the baseline. The runs list then reported the
+         * baseline's latency and cost with a 0% delta while the run page reported the genuine best trial.
+         */
+        @Test
+        @DisplayName("Get optimizer by id when the objective is scored on traces, then best comes from the best-scoring candidate")
+        void getById__whenObjectiveScoredOnTraces__bestComesFromBestScoringCandidate() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetName = "dataset-run-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            var objectiveName = "levenshtein_ratio";
+            var optimizationId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .build(),
+                    apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // The baseline is slow and expensive and scores badly; the winner is created later and beats it on
+            // all three. Whole-second durations and integer costs keep both branches of bigDecimalComparator
+            // (absolute tolerance, then integer part) agreeing on which candidate a value came from.
+            var baselineTrial = createDatasetTrial(datasetId, datasetName, optimizationId, apiKey, workspaceName);
+            var winnerTrial = createDatasetTrial(datasetId, datasetName, optimizationId, apiKey, workspaceName);
+
+            var baselineDuration = BigDecimal.valueOf(9);
+            var baselineCost = BigDecimal.valueOf(9);
+            var winnerDuration = BigDecimal.valueOf(1);
+            var winnerCost = BigDecimal.valueOf(1);
+
+            scoreTrial(baselineTrial, items, project, apiKey, workspaceName, 9, baselineCost, objectiveName,
+                    BigDecimal.valueOf(0.2));
+            scoreTrial(winnerTrial, items, project, apiKey, workspaceName, 1, winnerCost, objectiveName,
+                    BigDecimal.valueOf(0.8));
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actual.numTrials()).isEqualTo(2L);
+
+                        // The scores must survive the trip at all - they were a flat 0 before the fix.
+                        assertThat(actual.bestObjectiveScore()).isNotNull();
+                        assertThat(actual.bestObjectiveScore().doubleValue()).isCloseTo(0.8, within(1e-6));
+                        assertThat(actual.baselineObjectiveScore()).isNotNull();
+                        assertThat(actual.baselineObjectiveScore().doubleValue()).isCloseTo(0.2, within(1e-6));
+
+                        // best_* must come from the winner, and baseline_* from the baseline. Asserting they
+                        // merely differ would still pass if both rollups drifted onto the same wrong candidate.
+                        StatsUtils.assertBigDecimalEquals(actual.bestDuration(), winnerDuration);
+                        StatsUtils.assertBigDecimalEquals(actual.bestCost(), winnerCost);
+                        StatsUtils.assertBigDecimalEquals(actual.baselineDuration(), baselineDuration);
+                        StatsUtils.assertBigDecimalEquals(actual.baselineCost(), baselineCost);
+                    });
+        }
+
+        /**
+         * A candidate that evaluated fewer items than a full evaluation covers holds a partial average, which
+         * is not a result and must not win - the gate the run page applies (OPIK-7460, isStillEvaluating).
+         * Optimizers that evaluate most trials on a subset (GEPA and friends) make this the common case, and
+         * without the same gate here the runs list crowned a subset trial while the run page reported the best
+         * fully evaluated one - the two views still disagreeing after the scores themselves were fixed
+         * (OPIK-8060).
+         */
+        @Test
+        @DisplayName("Get optimizer by id when a partially evaluated candidate scores highest, then best skips it")
+        void getById__whenTopCandidateIsPartiallyEvaluated__bestSkipsIt() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetName = "partial-eval-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            var objectiveName = "levenshtein_ratio";
+            var optimizationId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .build(),
+                    apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var baselineTrial = createDatasetTrial(datasetId, datasetName, optimizationId, apiKey, workspaceName);
+            // Created before the complete trial, so under a score tie it would also win the tie-break - the
+            // gate, not the ordering, is what has to keep it out.
+            var partialTrial = createDatasetTrial(datasetId, datasetName, optimizationId, apiKey, workspaceName);
+            var completeTrial = createDatasetTrial(datasetId, datasetName, optimizationId, apiKey, workspaceName);
+
+            // The baseline covers every item, which is what defines a full evaluation for this run.
+            scoreTrial(baselineTrial, items, project, apiKey, workspaceName, 9, BigDecimal.valueOf(9),
+                    objectiveName, BigDecimal.valueOf(0.2));
+            // Top score, fastest, cheapest - and only one item deep, so none of that counts.
+            scoreTrial(partialTrial, items.subList(0, 1), project, apiKey, workspaceName, 1, BigDecimal.valueOf(1),
+                    objectiveName, BigDecimal.valueOf(0.9));
+            scoreTrial(completeTrial, items, project, apiKey, workspaceName, 4, BigDecimal.valueOf(4),
+                    objectiveName, BigDecimal.valueOf(0.5));
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actual.numTrials()).isEqualTo(3L);
+
+                        // 0.5, not the partial candidate's 0.9.
+                        assertThat(actual.bestObjectiveScore()).isNotNull();
+                        assertThat(actual.bestObjectiveScore().doubleValue()).isCloseTo(0.5, within(1e-6));
+
+                        StatsUtils.assertBigDecimalEquals(actual.bestDuration(), BigDecimal.valueOf(4));
+                        StatsUtils.assertBigDecimalEquals(actual.bestCost(), BigDecimal.valueOf(4));
+                        StatsUtils.assertBigDecimalEquals(actual.baselineDuration(), BigDecimal.valueOf(9));
+                        StatsUtils.assertBigDecimalEquals(actual.baselineCost(), BigDecimal.valueOf(9));
+                    });
+        }
+
+        /** A trial that is its own candidate and carries no experiment-level score. */
+        private Experiment createDatasetTrial(UUID datasetId, String datasetName, UUID optimizationId,
+                String apiKey, String workspaceName) {
+            var trial = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .optimizationId(optimizationId)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .build();
+            experimentResourceClient.create(trial, apiKey, workspaceName);
+            return trial;
+        }
+
+        /**
+         * Backs a trial with one trace and one span per item, every trace lasting {@code durationSeconds} and
+         * every span costing {@code costPerSpan}, then scores each trace with the objective. Per-trace cost
+         * reduces to the span cost and the duration p50 to the single distinct duration, so the candidate's
+         * rolled-up figures are exactly these arguments.
+         */
+        private void scoreTrial(Experiment trial, List<DatasetItem> datasetItems, Project project, String apiKey,
+                String workspaceName, long durationSeconds, BigDecimal costPerSpan, String objectiveName,
+                BigDecimal score) {
+            var traceEnd = Instant.now().minusSeconds(1);
+            var traces = createTracesSpansAndItems(trial, datasetItems, project, apiKey, workspaceName,
+                    traceEnd.minusSeconds(durationSeconds), traceEnd, costPerSpan);
+
+            traceResourceClient.feedbackScores(
+                    traces.stream()
+                            .map(trace -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .projectName(project.name())
+                                    .id(trace.id())
+                                    .name(objectiveName)
+                                    .value(score)
+                                    .build())
+                            .map(FeedbackScoreBatchItem.class::cast)
+                            .toList(),
+                    apiKey, workspaceName);
+        }
+
+        private List<Trace> createTracesSpansAndItems(Experiment experiment, List<DatasetItem> datasetItems,
+                Project project, String apiKey, String workspaceName,
+                Instant traceStart, Instant traceEnd, BigDecimal costPerSpan) {
+            return createTracesSpansAndItems(experiment, datasetItems, project, apiKey, workspaceName, traceStart,
+                    traceEnd, costPerSpan, null);
+        }
+
+        /**
+         * @param optimizationIdTag when set, tags every trial trace with the optimization id the
+         *                          way a real run does (the SDK tags each evaluation trace), so the
+         *                          cost query's "exclude experiment-linked traces" guard is
+         *                          actually exercised instead of being trivially satisfied by
+         *                          podam's random tags.
+         */
+        private List<Trace> createTracesSpansAndItems(Experiment experiment, List<DatasetItem> datasetItems,
+                Project project, String apiKey, String workspaceName,
+                Instant traceStart, Instant traceEnd, BigDecimal costPerSpan, String optimizationIdTag) {
+            Set<ExperimentItem> experimentItems = new HashSet<>();
+            List<Trace> traces = new ArrayList<>();
+            List<Span> spans = new ArrayList<>();
+
+            for (DatasetItem datasetItem : datasetItems) {
+                Trace.TraceBuilder traceBuilder = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .projectId(project.id())
+                        .projectName(project.name())
+                        .startTime(traceStart)
+                        .endTime(traceEnd)
+                        .guardrailsValidations(null)
+                        .threadId(null)
+                        .feedbackScores(null)
+                        .usage(null);
+
+                if (optimizationIdTag != null) {
+                    traceBuilder.tags(Set.of(optimizationIdTag, "Evaluation", "GEPA"));
+                }
+
+                Trace trace = traceBuilder.build();
+
+                ExperimentItem experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experiment.id())
+                        .traceId(trace.id())
+                        .input(JsonUtils.readTree(datasetItem.data()))
+                        .datasetItemId(datasetItem.id())
+                        .build();
+
+                Span span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                        .projectId(project.id())
+                        .projectName(project.name())
+                        .traceId(trace.id())
+                        .parentSpanId(null)
+                        .startTime(traceStart)
+                        .endTime(traceEnd)
+                        .totalEstimatedCost(costPerSpan)
+                        .feedbackScores(null)
+                        .build();
+
+                traces.add(trace);
+                experimentItems.add(experimentItem);
+                spans.add(span);
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            experimentResourceClient.createExperimentItem(experimentItems, apiKey, workspaceName);
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            return traces;
+        }
+
+    }
+
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(podamFactory);
+    }
+
+    /**
+     * Appends one experiment item to an existing trial, backed by a real trace. A null {@code endTime}
+     * leaves the trace unfinished, so it contributes no duration — letting a caller build a candidate
+     * that mixes finished and in-flight trials.
+     */
+    private void linkItemWithTrace(UUID experimentId, Instant startTime, Instant endTime) {
+        var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                .startTime(startTime)
+                .endTime(endTime)
+                .duration(null)
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE_NAME);
+
+        var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .traceId(trace.id())
+                .feedbackScores(null)
+                .build();
+        experimentResourceClient.createExperimentItem(Set.of(item), API_KEY, TEST_WORKSPACE_NAME);
+    }
+
+    /**
+     * Links a trial with one experiment item to the run, the item's trace either still unfinished (no
+     * end time, so no duration) or missing entirely — the state a worker killed mid-trial leaves
+     * behind. Regression state for OPIK-7459: FIND's duration quantile over zero finished traces
+     * produced NaN, the row mapper cannot read NaN as BigDecimal, and the r2dbc driver swallows mapper
+     * exceptions — so the whole run silently vanished from both getById and find.
+     */
+    private void createTrialWithUnfinishedTraceItem(UUID optimizationId, boolean traceExists, String apiKey,
+            String workspaceName) {
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .optimizationId(optimizationId)
+                .type(ExperimentType.TRIAL)
+                .build();
+        var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+        var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                .endTime(null)
+                .duration(null)
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        if (traceExists) {
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+        }
+
+        var item = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .traceId(trace.id())
+                .feedbackScores(null)
+                .build();
+        experimentResourceClient.createExperimentItem(Set.of(item), apiKey, workspaceName);
+    }
+
+    /**
+     * Inserts a trial experiment row straight into ClickHouse with a raw {@code experiment_scores}
+     * JSON string. The API cannot produce every shape this column can hold ({@code ExperimentScore}
+     * types {@code value} as a {@code BigDecimal}), but FIND must survive whatever raw JSON is already
+     * stored — see getByIdWhenTrialCarriesNonFiniteScore.
+     */
+    private void insertTrialWithRawScores(UUID optimizationId, String experimentScoresJson) {
+        var experiment = experimentResourceClient.createPartialExperiment().build();
+        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("");
+                var statement = connection.prepareStatement(
+                        ("INSERT INTO %s.experiments (workspace_id, dataset_id, id, name, optimization_id, "
+                                + "experiment_scores, created_by, last_updated_by) "
+                                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)").formatted(DATABASE_NAME))) {
+            statement.setString(1, WORKSPACE_ID);
+            statement.setString(2, experiment.datasetId().toString());
+            statement.setString(3, experiment.id().toString());
+            statement.setString(4, experiment.name());
+            statement.setString(5, optimizationId.toString());
+            statement.setString(6, experimentScoresJson);
+            statement.setString(7, USER);
+            statement.setString(8, USER);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to seed trial experiment with raw scores", e);
+        }
+    }
+
+    @Test
+    @DisplayName("Delete optimizers by ids")
+    void deleteByIds() {
+        Mockito.reset(defaultEventBus);
+
+        var id = optimizationResourceClient.create(API_KEY, TEST_WORKSPACE_NAME);
+
+        // verify optimization was created
+        optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+        // delete
+        optimizationResourceClient.delete(Set.of(id), API_KEY, TEST_WORKSPACE_NAME);
+
+        // verify optimization was deleted
+        optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 404);
+
+        ArgumentCaptor<OptimizationsDeleted> experimentCaptor = ArgumentCaptor.forClass(OptimizationsDeleted.class);
+        Mockito.verify(defaultEventBus).post(experimentCaptor.capture());
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("Update optimizer by id")
+    void updateById(OptimizationUpdate update) {
+
+        // Create optimization
+        var optimization = optimizationResourceClient.createPartialOptimization().build();
+        var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+        // Update optimization
+        optimizationResourceClient.update(id, update, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+        // Incoming metadata is merged onto the existing metadata (provided keys overwrite, existing keys
+        // preserved); when absent the existing metadata is carried forward untouched.
+        var expectedMetadata = update.metadata() != null
+                ? JsonUtils.merge(optimization.metadata(), update.metadata())
+                : optimization.metadata();
+
+        optimization = optimization.toBuilder().id(id)
+                .name(update.name() != null ? update.name() : optimization.name())
+                .status(update.status() != null ? update.status() : optimization.status())
+                .errorInfo(update.errorInfo() != null ? update.errorInfo() : optimization.errorInfo())
+                .metadata(expectedMetadata)
+                .build();
+
+        var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+        assertOptimization(optimization, actualOptimization);
+    }
+
+    private Stream<Arguments> updateById() {
+        return Stream.of(
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class)),
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().name(null).build()),
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().status(null).build()),
+                // errorInfo-only update: exercises the branch that persists a failure reason without
+                // name/status/metadata (previously short-circuited to Mono.empty() before this behavior was added)
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder()
+                        .name(null).status(null).metadata(null).build()),
+                arguments(podamFactory.manufacturePojo(OptimizationUpdate.class).toBuilder().metadata(null).build()));
+    }
+
+    @Test
+    @DisplayName("Update optimization metadata: merges into existing metadata, preserving other keys")
+    void updateMetadataMergesAndPreservesExistingKeys() {
+        // Create optimization with a pre-existing metadata key (e.g. optimizer) that Wave-0 code relies on
+        var initialMetadata = JsonUtils.getJsonNodeFromString(
+                JsonUtils.writeValueAsString(Map.of("optimizer", "MetaPromptOptimizer", "model", "gpt-4o")));
+        var optimization = optimizationResourceClient.createPartialOptimization()
+                .metadata(initialMetadata)
+                .build();
+        var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+        // Update with a scoring_health metadata payload (the feature contract with PY-4)
+        var scoringHealth = JsonUtils.getJsonNodeFromString(
+                JsonUtils.writeValueAsString(
+                        Map.of("scoring_health", Map.of("failed_count", 2, "total_count", 5))));
+        var update = OptimizationUpdate.builder()
+                .status(OptimizationStatus.COMPLETED)
+                .metadata(scoringHealth)
+                .build();
+        optimizationResourceClient.update(id, update, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+        var afterMerge = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+        // scoring_health added
+        assertThat(afterMerge.metadata().get("scoring_health").get("failed_count").asInt()).isEqualTo(2);
+        assertThat(afterMerge.metadata().get("scoring_health").get("total_count").asInt()).isEqualTo(5);
+        // pre-existing keys preserved (not clobbered)
+        assertThat(afterMerge.metadata().get("optimizer").asText()).isEqualTo("MetaPromptOptimizer");
+        assertThat(afterMerge.metadata().get("model").asText()).isEqualTo("gpt-4o");
+        assertThat(afterMerge.status()).isEqualTo(OptimizationStatus.COMPLETED);
+
+        // A subsequent status-only update (no metadata) must leave the merged metadata untouched
+        var statusOnly = OptimizationUpdate.builder()
+                .status(OptimizationStatus.COMPLETED)
+                .build();
+        optimizationResourceClient.update(id, statusOnly, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+        var afterStatusOnly = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+        assertThat(afterStatusOnly.metadata()).isEqualTo(afterMerge.metadata());
+        assertThat(afterStatusOnly.metadata().get("optimizer").asText()).isEqualTo("MetaPromptOptimizer");
+        assertThat(afterStatusOnly.metadata().get("scoring_health").get("failed_count").asInt()).isEqualTo(2);
+    }
+
+    @Nested
+    @DisplayName("Find optimizations")
+    class FindOptimizations {
+
+        private void assertOptimizationPage(Optimization.OptimizationPage page, int expectedPage,
+                int expectedSize, int expectedContentSize,
+                List<Optimization> expectedOptimizations) {
+            // Validate page metadata
+            assertThat(page).isNotNull();
+            assertThat(page.page()).isEqualTo(expectedPage);
+            assertThat(page.size()).isEqualTo(expectedSize);
+            assertThat(page.content()).hasSize(expectedContentSize);
+
+            // Validate that all expected optimizations are found with correct values
+            assertThat(page.content())
+                    .usingRecursiveComparison()
+                    .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .ignoringCollectionOrderInFields("feedbackScores")
+                    .isEqualTo(expectedOptimizations);
+        }
+
+        @Test
+        @DisplayName("Find optimizations with default parameters")
+        void findWithDefaultParameters() {
+
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create multiple optimizations
+            var optimization1 = optimizationResourceClient.createPartialOptimization().build();
+            var optimization2 = optimizationResourceClient.createPartialOptimization().build();
+
+            var id1 = optimizationResourceClient.create(optimization1, apiKey, workspaceName);
+            var id2 = optimizationResourceClient.create(optimization2, apiKey, workspaceName);
+
+            // Update optimizations with IDs
+            optimization1 = optimization1.toBuilder().id(id1).build();
+            optimization2 = optimization2.toBuilder().id(id2).build();
+
+            List<Optimization> expectedOptimizations = List.of(optimization1, optimization2);
+
+            // Find optimizations with default parameters
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 10, null, null, null, null, 200);
+
+            // Verify results
+            assertOptimizationPage(optimizationPage, 1, 2,
+                    optimizationPage.content().size(), expectedOptimizations.reversed());
+        }
+
+        @Test
+        @DisplayName("Find optimizations includes a run whose trial item references an unfinished trace")
+        void findIncludesRunWhoseTrialItemReferencesUnfinishedTrace() {
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+            var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            createTrialWithUnfinishedTraceItem(id, true, apiKey, workspaceName);
+
+            // The run must stay on the list (OPIK-7459): duration aggregates are simply absent.
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 10, null, null, null, 200);
+
+            // Compare the whole payload, not just the id: the bug this guards against is a row silently
+            // mutating or disappearing on the mapping path, so "one row came back" is too weak an
+            // assertion — name, status, objectiveName or datasetName could all be wrong and still pass.
+            assertOptimizationPage(optimizationPage, 1, 1, 1,
+                    List.of(optimization.toBuilder().id(id).numTrials(1L).build()));
+            // Both duration fields are in OPTIMIZATION_IGNORED_FIELDS, so the recursive comparison above
+            // does not cover them — they are the point of this test and are asserted explicitly.
+            assertThat(optimizationPage.content().getFirst().bestDuration()).isNull();
+            assertThat(optimizationPage.content().getFirst().baselineDuration()).isNull();
+        }
+
+        @Test
+        @DisplayName("Find optimizations by name")
+        void findByName() {
+
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create optimization with specific name
+            var uniqueName = "UniqueOptimizationName-" + UUID.randomUUID();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .name(uniqueName)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+            optimization = optimization.toBuilder().id(id).build();
+
+            // Find optimizations by name
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 1, null, uniqueName, null, null, 200);
+
+            // Verify results
+            assertOptimizationPage(optimizationPage, 1, 1, 1, List.of(optimization));
+        }
+
+        @Test
+        @DisplayName("Find optimizations by dataset ID")
+        void findByDatasetId() {
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            Dataset dataset = buildDataset();
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            // Create optimization with specific dataset ID
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(dataset.id())
+                    .datasetName(dataset.name())
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+            optimization = optimization.toBuilder().id(id).build();
+
+            // Find optimizations by dataset ID
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 10, dataset.id(), null, null, null, 200);
+
+            // Verify results
+            assertOptimizationPage(optimizationPage, 1, 1, 1, List.of(optimization));
+        }
+
+        @Test
+        @DisplayName("Find optimizations with pagination")
+        void findWithPagination() {
+
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create multiple optimizations with unique names to ensure we can identify them
+            var optimizations = new ArrayList<Optimization>();
+
+            for (int i = 0; i < 5; i++) {
+                var name = "PaginationTest-" + i + "-" + UUID.randomUUID();
+                var optimization = optimizationResourceClient.createPartialOptimization()
+                        .name(name)
+                        .build();
+
+                var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+                optimizations.add(optimization.toBuilder().id(id).build());
+            }
+
+            // Find first page with size 2
+            var page1 = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 2, null, null, null, null, 200);
+
+            // Find second page with size 2
+            var page2 = optimizationResourceClient.find(
+                    apiKey, workspaceName, 2, 2, null, null, null, null, 200);
+
+            // Verify pagination
+            assertOptimizationPage(page1, 1, 2, 2, optimizations.reversed().subList(0, 2));
+            assertOptimizationPage(page2, 2, 2, 2, optimizations.reversed().subList(2, 4));
+        }
+
+        @Test
+        @DisplayName("Find optimizations with empty result")
+        void findWithEmptyResult() {
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Find optimizations with non-existent name
+            var nonExistentName = "NonExistentName-" + UUID.randomUUID();
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 10, null, nonExistentName, null, null, 200);
+
+            // Verify empty results
+            assertOptimizationPage(optimizationPage, 1, 0, 0, List.of());
+        }
+
+        @Test
+        @DisplayName("Find optimizations with feedback scores")
+        void findWithFeedbackScores() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            Dataset dataset = buildDataset();
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            DatasetItemBatch itemBatch = DatasetItemBatch.builder().datasetId(dataset.id()).items(items).build();
+
+            datasetResourceClient.createDatasetItems(itemBatch, workspaceName, apiKey);
+
+            // Create feedback score items
+            List<FeedbackScoreAverage> feedbackScoreItems = PodamFactoryUtils.manufacturePojoList(podamFactory,
+                    FeedbackScoreAverage.class);
+
+            // Create optimization with dataset and objective name
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(dataset.id())
+                    .datasetName(dataset.name())
+                    .objectiveName(feedbackScoreItems.getFirst().name())
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            // Create experiment and attach it to the created dataset and optimizer
+            Experiment experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(dataset.id())
+                    .optimizationId(id)
+                    .datasetName(dataset.name())
+                    .type(ExperimentType.TRIAL)
+                    .build();
+
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // Create project
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(dataset.name()))
+                    .build();
+
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create experiment items and traces
+            Set<ExperimentItem> experimentItems = new HashSet<>();
+            List<Trace> traces = new ArrayList<>();
+
+            for (DatasetItem datasetItem : items) {
+                Trace trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .projectId(project.id())
+                        .projectName(project.name())
+                        .guardrailsValidations(null)
+                        .threadId(null)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+
+                ExperimentItem experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experiment.id())
+                        .traceId(trace.id())
+                        .input(JsonUtils.readTree(datasetItem.data()))
+                        .datasetItemId(datasetItem.id())
+                        .build();
+
+                experimentItems.add(experimentItem);
+                traces.add(trace);
+            }
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            experimentResourceClient.createExperimentItem(experimentItems, apiKey, workspaceName);
+
+            // Create feedback scores
+            List<FeedbackScoreBatchItem> scoreBatchItems = traces.stream()
+                    .flatMap(trace -> feedbackScoreItems.stream()
+                            .map(score -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .projectName(project.name())
+                                    .id(trace.id())
+                                    .name(score.name())
+                                    .build()))
+                    .collect(Collectors.toList());
+
+            traceResourceClient.feedbackScores(scoreBatchItems, apiKey, workspaceName);
+
+            // Update optimization with expected feedback scores
+            optimization = optimization.toBuilder()
+                    .id(id)
+                    .feedbackScores(
+                            StatsUtils.calculateFeedbackBatchAverage(scoreBatchItems)
+                                    .entrySet()
+                                    .stream()
+                                    .map(entry -> FeedbackScoreAverage.builder()
+                                            .name(entry.getKey())
+                                            .value(BigDecimal.valueOf(entry.getValue()))
+                                            .build())
+                                    .toList())
+                    .numTrials(1L)
+                    .build();
+
+            // Find optimization
+            var optimizationPage = optimizationResourceClient.find(
+                    apiKey, workspaceName, 1, 10, dataset.id(), null, null, null, 200);
+
+            // Verify results with feedback scores
+            assertOptimizationPage(optimizationPage, 1, 1, 1, List.of(optimization));
+        }
+    }
+
+    private void assertOptimization(Optimization expected, Optimization actual) {
+        assertThat(actual)
+                .usingRecursiveComparison()
+                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                .isEqualTo(expected);
+
+        if (expected.lastUpdatedAt() != null) {
+            assertThat(actual.lastUpdatedAt().truncatedTo(ChronoUnit.MICROS))
+                    // Some JVMs can resolve higher than microseconds, such as nanoseconds in the Ubuntu AMD64 JVM
+                    .isAfterOrEqualTo(expected.lastUpdatedAt().truncatedTo(ChronoUnit.MICROS));
+        } else {
+            assertThat(actual.lastUpdatedAt()).isCloseTo(Instant.now(), within(2, ChronoUnit.SECONDS));
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Optimization Studio Tests")
+    class OptimizationStudioTests {
+
+        private OptimizationStudioConfig createStudioConfig() {
+            // opikApiKey is @JsonIgnore and populated server-side, so we don't include it
+            return podamFactory.manufacturePojo(OptimizationStudioConfig.class).toBuilder()
+                    .opikApiKey(null)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("Create Studio optimization and verify in database")
+        void createStudioOptimization() {
+            Mockito.reset(defaultEventBus);
+
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            // studioConfig is now returned (opikApiKey is null since it's @JsonIgnore)
+            assertThat(actualOptimization.studioConfig()).isNotNull();
+            assertThat(actualOptimization.studioConfig()).isEqualTo(studioConfig);
+            assertOptimization(optimization, actualOptimization);
+
+            ArgumentCaptor<OptimizationCreated> captor = ArgumentCaptor.forClass(OptimizationCreated.class);
+            Mockito.verify(defaultEventBus).post(captor.capture());
+        }
+
+        @Test
+        @DisplayName("Create Studio optimization and verify Redis job enqueued with opikApiKey")
+        void createStudioOptimization__thenVerifyRedisJobEnqueued() {
+            Mockito.reset(defaultEventBus);
+
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            String queueKey = "rq:queue:" + Queue.OPTIMIZER_CLOUD.toString();
+            RQueueReactive<String> queue = redisClient.getQueue(queueKey, StringCodec.INSTANCE);
+            Integer initialSize = queue.size().block();
+            assertThat(initialSize).isNotNull();
+
+            // Create Studio optimization with custom opikApiKey header
+            var customOpikApiKey = "test-opik-api-key-" + UUID.randomUUID();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME, customOpikApiKey);
+
+            // Wait for async job enqueueing to complete (max 2 seconds)
+            await().atMost(2, java.util.concurrent.TimeUnit.SECONDS)
+                    .pollInterval(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> assertThat(queue.size().block()).isGreaterThan(initialSize));
+
+            // Verify a job was enqueued for our optimization
+            // The optimization ID is inside the job's payload data
+            var allJobIds = queue.readAll().block();
+            assertThat(allJobIds).isNotEmpty();
+
+            // Find the job containing our optimization ID in its data
+            boolean foundJob = allJobIds.stream()
+                    .anyMatch(jobId -> {
+                        String jobKey = "rq:job:" + jobId;
+                        RMapReactive<String, Object> jobMap = redisClient.getMap(jobKey, StringCodec.INSTANCE);
+                        String jobData = (String) jobMap.get("data").block();
+
+                        // Verify job data contains our optimization ID, workspace name, and opikApiKey
+                        return jobData != null
+                                && jobData.contains(id.toString())
+                                && jobData.contains(TEST_WORKSPACE_NAME)
+                                && jobData.contains(customOpikApiKey);
+                    });
+
+            assertThat(foundJob)
+                    .as("Expected to find RQ job with optimization ID: %s, workspace name: %s, and opikApiKey: %s",
+                            id, TEST_WORKSPACE_NAME, customOpikApiKey)
+                    .isTrue();
+
+            // Verify opikApiKey is NOT returned when retrieving the optimization
+            var studioResponse = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(studioResponse.studioConfig()).isNotNull();
+            assertThat(studioResponse.studioConfig().opikApiKey()).isNull();
+
+            // Verify event was posted
+            ArgumentCaptor<OptimizationCreated> captor = ArgumentCaptor.forClass(OptimizationCreated.class);
+            Mockito.verify(defaultEventBus).post(captor.capture());
+        }
+
+        @Test
+        @DisplayName("Studio job carries project_name when optimization has projectId (OPIK-6383)")
+        void createStudioOptimization__thenJobIncludesProjectName() {
+            Mockito.reset(defaultEventBus);
+
+            String projectName = "studio-project-" + UUID.randomUUID();
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE_NAME);
+
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .projectName(projectName)
+                    .projectId(null)
+                    .studioConfig(studioConfig)
+                    .build();
+
+            String queueKey = "rq:queue:" + Queue.OPTIMIZER_CLOUD.toString();
+            RQueueReactive<String> queue = redisClient.getQueue(queueKey, StringCodec.INSTANCE);
+            Integer initialSize = queue.size().block();
+            assertThat(initialSize).isNotNull();
+
+            String customOpikApiKey = "test-opik-api-key-" + UUID.randomUUID();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME, customOpikApiKey);
+
+            // Ensure project_id was indeed resolved to a matching projectName on the optimization.
+            var stored = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            await().atMost(2, TimeUnit.SECONDS)
+                    .pollInterval(100, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> assertThat(queue.size().block()).isGreaterThan(initialSize));
+
+            var allJobIds = queue.readAll().block();
+            assertThat(allJobIds).isNotEmpty();
+
+            // RQ data format: [function, null, [args...], {kwargs}] — args[0] is our message.
+            var actualJobMessage = allJobIds.stream()
+                    .map(jobId -> (String) redisClient.getMap("rq:job:" + jobId, StringCodec.INSTANCE)
+                            .get("data").block())
+                    .filter(data -> data != null && data.contains(id.toString()))
+                    .map(data -> JsonUtils.treeToValue(
+                            JsonUtils.getJsonNodeFromString(data).get(2).get(0),
+                            OptimizationStudioJobMessage.class))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError(
+                            "No RQ job payload found for optimization id: " + id));
+
+            // studioConfig.opikApiKey is @JsonIgnore, so it is not present in the wire format;
+            // the top-level opikApiKey on the message is what reaches the Python worker.
+            var expected = OptimizationStudioJobMessage.builder()
+                    .optimizationId(id)
+                    .workspaceId(WORKSPACE_ID)
+                    .workspaceName(TEST_WORKSPACE_NAME)
+                    .config(studioConfig.toBuilder().opikApiKey(null).build())
+                    .opikApiKey(customOpikApiKey)
+                    .projectName(projectName)
+                    .build();
+
+            assertThat(actualJobMessage)
+                    .usingRecursiveComparison()
+                    .isEqualTo(expected);
+
+            assertThat(stored.projectId()).isEqualTo(projectId);
+        }
+
+        @Test
+        @DisplayName("Get Studio optimization logs")
+        void getStudioOptimizationLogs() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Get logs
+            var logs = optimizationResourceClient.getStudioLogs(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(logs.url()).isNotNull();
+            assertThat(logs.url()).contains(WORKSPACE_ID);
+            assertThat(logs.url()).contains(id.toString());
+            assertThat(logs.expiresAt()).isNotNull();
+            assertThat(logs.expiresAt()).isAfter(Instant.now());
+        }
+
+        @Test
+        @DisplayName("Find optimizations returns studioConfig when present")
+        void findOptimizationsReturnsStudioConfig() {
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create a regular optimization (without studio config)
+            var regularOptimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .build();
+            var regularId = optimizationResourceClient.create(regularOptimization, apiKey, workspaceName);
+
+            // Create a Studio optimization
+            var studioConfig = createStudioConfig();
+            var studioOptimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+            var studioId = optimizationResourceClient.create(studioOptimization, apiKey, workspaceName);
+
+            // Find all optimizations - both should be returned
+            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10, null, null, null, 200);
+
+            // Should return both optimizations
+            assertThat(page.content()).hasSize(2);
+
+            // Studio optimization should have studioConfig included
+            var studioOpt = page.content().stream()
+                    .filter(opt -> opt.id().equals(studioId))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(studioOpt.studioConfig()).isNotNull();
+
+            // Regular optimization should have null studioConfig
+            var regularOpt = page.content().stream()
+                    .filter(opt -> opt.id().equals(regularId))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(regularOpt.studioConfig()).isNull();
+        }
+
+        @Test
+        @DisplayName("Get optimization by ID returns studioConfig when present")
+        void getOptimizationByIdReturnsStudioConfig() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Get using standard endpoint
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            // Studio config should be included (opikApiKey is null in both since it's @JsonIgnore)
+            assertThat(actualOptimization).isNotNull();
+            assertThat(actualOptimization.id()).isEqualTo(id);
+            assertThat(actualOptimization.studioConfig()).isNotNull();
+            assertThat(actualOptimization.studioConfig()).isEqualTo(studioConfig);
+        }
+
+        @Test
+        @DisplayName("Studio config is preserved after status update")
+        void studioConfigPreservedAfterStatusUpdate() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify initial state - should have studio_config and INITIALIZED status
+            var initialOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(initialOptimization.studioConfig()).isNotNull();
+            assertThat(initialOptimization.studioConfig()).isEqualTo(studioConfig);
+            assertThat(initialOptimization.status()).isEqualTo(OptimizationStatus.INITIALIZED);
+
+            // Update status to RUNNING
+            var runningUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.RUNNING)
+                    .build();
+            optimizationResourceClient.update(id, runningUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify studio_config is preserved after RUNNING update
+            var runningOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(runningOptimization.status()).isEqualTo(OptimizationStatus.RUNNING);
+            assertThat(runningOptimization.studioConfig()).isNotNull();
+            assertThat(runningOptimization.studioConfig()).isEqualTo(studioConfig);
+
+            // Update status to COMPLETED
+            var completedUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.COMPLETED)
+                    .build();
+            optimizationResourceClient.update(id, completedUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify studio_config is still preserved after COMPLETED update
+            var completedOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(completedOptimization.status()).isEqualTo(OptimizationStatus.COMPLETED);
+            assertThat(completedOptimization.studioConfig()).isNotNull();
+            assertThat(completedOptimization.studioConfig()).isEqualTo(studioConfig);
+        }
+
+        @Test
+        @DisplayName("error_info is preserved when SDK re-upserts with a null errorInfo")
+        void errorInfoPreservedOnReUpsertWithNullErrorInfo() {
+            // Create a Studio optimization (upsert full-row replace path)
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .errorInfo(null)
+                    .build();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Record a failure reason through the PATCH/update path (as the worker does)
+            var errorInfo = podamFactory.manufacturePojo(ErrorInfo.class);
+            optimizationResourceClient.update(id,
+                    OptimizationUpdate.builder().status(OptimizationStatus.CANCELLED).errorInfo(errorInfo).build(),
+                    API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            var afterFailure = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(afterFailure.errorInfo()).isEqualTo(errorInfo);
+
+            // Re-upsert the same optimization with a null errorInfo (SDK behavior): the persisted
+            // failure reason must survive the full-row replace instead of being clobbered to blank.
+            optimizationResourceClient.upsert(optimization.toBuilder().id(id).errorInfo(null).build(),
+                    API_KEY, TEST_WORKSPACE_NAME);
+
+            var afterReUpsert = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            // The re-upsert with a null errorInfo must not drop the persisted failure reason
+            // nor the sibling studioConfig (both preserved through the upsert path). Status
+            // ordering across the update/upsert rows is governed by last_updated_at, so it is
+            // not asserted here.
+            assertThat(afterReUpsert.errorInfo()).isEqualTo(errorInfo);
+            assertThat(afterReUpsert.studioConfig()).isEqualTo(studioConfig);
+        }
+
+        @Test
+        @DisplayName("Filter optimizations by status on generic endpoint")
+        void filterOptimizationsByStatus() {
+            // Create optimizations with different statuses
+            var completedOpt = optimizationResourceClient.createPartialOptimization()
+                    .status(OptimizationStatus.COMPLETED)
+                    .build();
+            var runningOpt = optimizationResourceClient.createPartialOptimization()
+                    .status(OptimizationStatus.RUNNING)
+                    .build();
+
+            optimizationResourceClient.create(completedOpt, API_KEY, TEST_WORKSPACE_NAME);
+            optimizationResourceClient.create(runningOpt, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Filter by completed status
+            var filter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("completed")
+                    .build();
+
+            var page = optimizationResourceClient.find(API_KEY, TEST_WORKSPACE_NAME, 1, 10,
+                    null, null, null, List.of(filter), 200);
+
+            // Should only return completed optimizations
+            assertThat(page.content()).isNotEmpty();
+            assertThat(page.content()).allMatch(opt -> opt.status() == OptimizationStatus.COMPLETED);
+        }
+
+        @Test
+        @DisplayName("Filter optimizations by status - comprehensive test")
+        void filterOptimizationsByStatus__comprehensive() {
+            // Create isolated workspace for this test
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var studioConfig = createStudioConfig();
+
+            // Create 3 optimizations:
+            // 1. Studio with INITIALIZED (forced by service layer)
+            var studioOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+            var studioOptId = optimizationResourceClient.create(studioOpt, apiKey, workspaceName);
+
+            // 2. Regular with INITIALIZED (explicitly set)
+            var regularInitOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.INITIALIZED)
+                    .build();
+            var regularInitOptId = optimizationResourceClient.create(regularInitOpt, apiKey, workspaceName);
+
+            // 3. Regular with COMPLETED
+            var regularCompletedOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.COMPLETED)
+                    .build();
+            var regularCompletedOptId = optimizationResourceClient.create(regularCompletedOpt, apiKey, workspaceName);
+
+            // Test 1: Filter by INITIALIZED status - should get 2 (studio + regular)
+            var initializedFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("initialized")
+                    .build();
+
+            var initializedPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(initializedFilter), 200);
+
+            assertThat(initializedPage.content()).hasSize(2);
+            assertThat(initializedPage.content()).allMatch(opt -> opt.status() == OptimizationStatus.INITIALIZED);
+            assertThat(initializedPage.content()).extracting(Optimization::id)
+                    .containsExactlyInAnyOrder(studioOptId, regularInitOptId);
+
+            // Test 2: Filter by COMPLETED status - should get 1 (regular only)
+            var completedFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("completed")
+                    .build();
+
+            var completedPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(completedFilter), 200);
+
+            assertThat(completedPage.content()).hasSize(1);
+            assertThat(completedPage.content().get(0).id()).isEqualTo(regularCompletedOptId);
+            assertThat(completedPage.content().get(0).status()).isEqualTo(OptimizationStatus.COMPLETED);
+        }
+
+        @Test
+        @DisplayName("Filter optimizations by dataset_id")
+        void filterOptimizationsByDatasetId() {
+            // Create isolated workspace for this test
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create datasets
+            var dataset1 = buildDataset().toBuilder().build();
+            var dataset1Id = datasetResourceClient.createDataset(dataset1, apiKey, workspaceName);
+
+            var dataset2 = buildDataset().toBuilder().build();
+            var dataset2Id = datasetResourceClient.createDataset(dataset2, apiKey, workspaceName);
+
+            // Create optimizations for different datasets
+            var opt1 = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(dataset1Id)
+                    .build();
+            var opt2 = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(dataset2Id)
+                    .build();
+
+            var opt1Id = optimizationResourceClient.create(opt1, apiKey, workspaceName);
+            var opt2Id = optimizationResourceClient.create(opt2, apiKey, workspaceName);
+
+            // Retrieve the actual optimizations to get the correct datasetId
+            var actualOpt1 = optimizationResourceClient.get(opt1Id, apiKey, workspaceName, 200);
+            var actualOpt2 = optimizationResourceClient.get(opt2Id, apiKey, workspaceName, 200);
+
+            // Filter by dataset1 - use the actual datasetId from the retrieved optimization
+            var filter = OptimizationFilter.builder()
+                    .field(OptimizationField.DATASET_ID)
+                    .operator(Operator.EQUAL)
+                    .value(actualOpt1.datasetId().toString())
+                    .build();
+
+            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(filter), 200);
+
+            // Should only return optimizations for dataset1
+            assertThat(page.content()).isNotEmpty();
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.content()).allMatch(opt -> opt.datasetId().equals(actualOpt1.datasetId()));
+        }
+
+        @Test
+        @DisplayName("Filter optimizations by metadata")
+        void filterOptimizationsByMetadata() {
+            // Create isolated workspace for this test
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create optimizations with different metadata
+            var metadata1 = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(java.util.Map.of("version", "1.0", "env", "prod")));
+            var metadata2 = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(java.util.Map.of("version", "2.0", "env", "dev")));
+
+            var opt1 = optimizationResourceClient.createPartialOptimization()
+                    .metadata(metadata1)
+                    .build();
+            var opt2 = optimizationResourceClient.createPartialOptimization()
+                    .metadata(metadata2)
+                    .build();
+
+            optimizationResourceClient.create(opt1, apiKey, workspaceName);
+            optimizationResourceClient.create(opt2, apiKey, workspaceName);
+
+            // Filter by metadata version = "2.0"
+            var filter = OptimizationFilter.builder()
+                    .field(OptimizationField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("version")
+                    .value("2.0")
+                    .build();
+
+            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(filter), 200);
+
+            // Should only return optimizations with version 2.0
+            assertThat(page.content()).isNotEmpty();
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.content())
+                    .allMatch(opt -> opt.metadata() != null && opt.metadata().get("version").asText().equals("2.0"));
+        }
+
+        @Test
+        @DisplayName("Filter optimizations with multiple filters - status + metadata")
+        void filterOptimizationsWithMultipleFilters() {
+            // Create isolated workspace for this test
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var studioConfig = createStudioConfig();
+            var metadataProd = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(java.util.Map.of("env", "prod")));
+            var metadataDev = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(java.util.Map.of("env", "dev")));
+
+            // Create optimizations:
+            // 1. Studio with INITIALIZED + prod metadata
+            var studioInitProdOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .metadata(metadataProd)
+                    .build();
+            var studioInitProdId = optimizationResourceClient.create(studioInitProdOpt, apiKey, workspaceName);
+
+            // 2. Regular with INITIALIZED + prod metadata
+            var regularInitProdOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.INITIALIZED)
+                    .metadata(metadataProd)
+                    .build();
+            var regularInitProdId = optimizationResourceClient.create(regularInitProdOpt, apiKey, workspaceName);
+
+            // 3. Regular with COMPLETED + prod metadata
+            var regularCompletedProdOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.COMPLETED)
+                    .metadata(metadataProd)
+                    .build();
+            var regularCompletedProdId = optimizationResourceClient.create(regularCompletedProdOpt, apiKey,
+                    workspaceName);
+
+            // 4. Regular with COMPLETED + dev metadata
+            var regularCompletedDevOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.COMPLETED)
+                    .metadata(metadataDev)
+                    .build();
+            optimizationResourceClient.create(regularCompletedDevOpt, apiKey, workspaceName);
+
+            // Test: Filter by status=INITIALIZED AND metadata.env=prod
+            // Should return 2 optimizations (studio + regular, both with INITIALIZED + prod)
+            var statusFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("initialized")
+                    .build();
+
+            var metadataFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("env")
+                    .value("prod")
+                    .build();
+
+            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(statusFilter, metadataFilter), 200);
+
+            assertThat(page.content()).hasSize(2);
+            assertThat(page.content()).extracting(Optimization::id)
+                    .containsExactlyInAnyOrder(studioInitProdId, regularInitProdId);
+            assertThat(page.content()).allMatch(opt -> opt.status() == OptimizationStatus.INITIALIZED);
+            assertThat(page.content()).allMatch(opt -> opt.metadata().get("env").asText().equals("prod"));
+
+            // Test: Filter by status=COMPLETED AND metadata.env=prod
+            // Should return 1 optimization (regular with COMPLETED + prod)
+            var completedFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("completed")
+                    .build();
+
+            var completedPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(completedFilter, metadataFilter), 200);
+
+            assertThat(completedPage.content()).hasSize(1);
+            assertThat(completedPage.content().get(0).id()).isEqualTo(regularCompletedProdId);
+            assertThat(completedPage.content().get(0).status()).isEqualTo(OptimizationStatus.COMPLETED);
+            assertThat(completedPage.content().get(0).metadata().get("env").asText()).isEqualTo("prod");
+        }
+
+        @Test
+        @DisplayName("Cancel running Studio optimization sets Redis signal")
+        void cancelRunningStudioOptimization__setsRedisSignal() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Update to RUNNING first (simulating the Python worker starting)
+            var runningUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.RUNNING)
+                    .build();
+            optimizationResourceClient.update(id, runningUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify it's running
+            var runningOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(runningOptimization.status()).isEqualTo(OptimizationStatus.RUNNING);
+
+            // Cancel the optimization
+            var cancelUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.CANCELLED)
+                    .build();
+            optimizationResourceClient.update(id, cancelUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify status is CANCELLED
+            var cancelledOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(cancelledOptimization.status()).isEqualTo(OptimizationStatus.CANCELLED);
+
+            // Verify Redis cancellation signal was set
+            String cancelKey = "opik:cancel:" + id;
+            await().atMost(2, java.util.concurrent.TimeUnit.SECONDS)
+                    .pollInterval(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        Boolean exists = redisClient.getBucket(cancelKey).isExists().block();
+                        assertThat(exists).isTrue();
+                    });
+        }
+
+        @Test
+        @DisplayName("Cancel INITIALIZED Studio optimization sets Redis signal")
+        void cancelInitializedStudioOptimization__setsRedisSignal() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify it's INITIALIZED (forced by service layer for Studio optimizations)
+            var initialOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(initialOptimization.status()).isEqualTo(OptimizationStatus.INITIALIZED);
+
+            // Cancel the optimization directly from INITIALIZED
+            var cancelUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.CANCELLED)
+                    .build();
+            optimizationResourceClient.update(id, cancelUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify status is CANCELLED
+            var cancelledOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(cancelledOptimization.status()).isEqualTo(OptimizationStatus.CANCELLED);
+
+            // Verify Redis cancellation signal was set
+            String cancelKey = "opik:cancel:" + id;
+            await().atMost(2, java.util.concurrent.TimeUnit.SECONDS)
+                    .pollInterval(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        Boolean exists = redisClient.getBucket(cancelKey).isExists().block();
+                        assertThat(exists).isTrue();
+                    });
+        }
+
+        @Test
+        @DisplayName("Cancel COMPLETED Studio optimization returns error")
+        void cancelCompletedStudioOptimization__returnsError() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Update to COMPLETED
+            var completedUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.COMPLETED)
+                    .build();
+            optimizationResourceClient.update(id, completedUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify it's COMPLETED
+            var completedOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(completedOptimization.status()).isEqualTo(OptimizationStatus.COMPLETED);
+
+            // Try to cancel - should fail with 409 Conflict
+            var cancelUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.CANCELLED)
+                    .build();
+            optimizationResourceClient.update(id, cancelUpdate, API_KEY, TEST_WORKSPACE_NAME, 409);
+
+            // Verify status is still COMPLETED
+            var stillCompletedOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(stillCompletedOptimization.status()).isEqualTo(OptimizationStatus.COMPLETED);
+        }
+
+        @Test
+        @DisplayName("Cancel non-Studio optimization does not set Redis signal")
+        void cancelNonStudioOptimization__doesNotSetRedisSignal() {
+            // Create a regular (non-Studio) optimization
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.RUNNING)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Cancel the optimization
+            var cancelUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.CANCELLED)
+                    .build();
+            optimizationResourceClient.update(id, cancelUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify status is CANCELLED
+            var cancelledOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(cancelledOptimization.status()).isEqualTo(OptimizationStatus.CANCELLED);
+
+            // Verify Redis cancellation signal was NOT set (non-Studio optimization)
+            String cancelKey = "opik:cancel:" + id;
+            Boolean exists = redisClient.getBucket(cancelKey).isExists().block();
+            assertThat(exists).isFalse();
+        }
+
+        @Test
+        @DisplayName("Filter by status returns correct results after status updates (eventual consistency test)")
+        void filterByStatusAfterUpdates__eventualConsistency() {
+            // This test verifies that filtering by status works correctly even after
+            // multiple status updates, which could be affected by ClickHouse eventual consistency
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create an optimization with INITIALIZED status
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .status(OptimizationStatus.INITIALIZED)
+                    .build();
+            var optId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            // Verify initial state: filter by INITIALIZED should return 1
+            var initializedFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("initialized")
+                    .build();
+
+            var runningFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("running")
+                    .build();
+
+            var completedFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("completed")
+                    .build();
+
+            var initialPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(initializedFilter), 200);
+            assertThat(initialPage.content()).hasSize(1);
+            assertThat(initialPage.content().get(0).id()).isEqualTo(optId);
+            assertThat(initialPage.content().get(0).status()).isEqualTo(OptimizationStatus.INITIALIZED);
+
+            // Update status to RUNNING
+            var updateToRunning = OptimizationUpdate.builder().status(OptimizationStatus.RUNNING).build();
+            optimizationResourceClient.update(optId, updateToRunning, apiKey, workspaceName, 204);
+
+            // After update to RUNNING:
+            // - Filter by INITIALIZED should return 0
+            // - Filter by RUNNING should return 1
+            // - Filter by COMPLETED should return 0
+            var afterRunningInitPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(initializedFilter), 200);
+            assertThat(afterRunningInitPage.content()).isEmpty();
+
+            var afterRunningRunPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(runningFilter), 200);
+            assertThat(afterRunningRunPage.content()).hasSize(1);
+            assertThat(afterRunningRunPage.content().get(0).id()).isEqualTo(optId);
+            assertThat(afterRunningRunPage.content().get(0).status()).isEqualTo(OptimizationStatus.RUNNING);
+
+            var afterRunningCompletedPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(completedFilter), 200);
+            assertThat(afterRunningCompletedPage.content()).isEmpty();
+
+            // Update status to COMPLETED
+            var updateToCompleted = OptimizationUpdate.builder().status(OptimizationStatus.COMPLETED).build();
+            optimizationResourceClient.update(optId, updateToCompleted, apiKey, workspaceName, 204);
+
+            // After update to COMPLETED:
+            // - Filter by INITIALIZED should return 0
+            // - Filter by RUNNING should return 0
+            // - Filter by COMPLETED should return 1
+            var afterCompletedInitPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(initializedFilter), 200);
+            assertThat(afterCompletedInitPage.content()).isEmpty();
+
+            var afterCompletedRunPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(runningFilter), 200);
+            assertThat(afterCompletedRunPage.content()).isEmpty();
+
+            var afterCompletedCompletedPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(completedFilter), 200);
+            assertThat(afterCompletedCompletedPage.content()).hasSize(1);
+            assertThat(afterCompletedCompletedPage.content().get(0).id()).isEqualTo(optId);
+            assertThat(afterCompletedCompletedPage.content().get(0).status()).isEqualTo(OptimizationStatus.COMPLETED);
+        }
+
+        @Test
+        @DisplayName("Filter optimizations by project_id")
+        void filterOptimizationsByProjectId() {
+            // Create isolated workspace for this test
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create two projects
+            String project1Name = "project-" + UUID.randomUUID();
+            String project2Name = "project-" + UUID.randomUUID();
+            var project1Id = projectResourceClient.createProject(project1Name, apiKey, workspaceName);
+            var project2Id = projectResourceClient.createProject(project2Name, apiKey, workspaceName);
+
+            // Create one optimization per project using projectName
+            var opt1 = optimizationResourceClient.createPartialOptimization()
+                    .projectName(project1Name)
+                    .projectId(null)
+                    .build();
+            var opt2 = optimizationResourceClient.createPartialOptimization()
+                    .projectName(project2Name)
+                    .projectId(null)
+                    .build();
+
+            var opt1Id = optimizationResourceClient.create(opt1, apiKey, workspaceName);
+            var opt2Id = optimizationResourceClient.create(opt2, apiKey, workspaceName);
+
+            // Verify project_id was set on the stored optimization
+            var actualOpt1 = optimizationResourceClient.get(opt1Id, apiKey, workspaceName, 200);
+            assertThat(actualOpt1.projectId()).isEqualTo(project1Id);
+
+            // Filter by project1Id
+            var filter = OptimizationFilter.builder()
+                    .field(OptimizationField.PROJECT_ID)
+                    .operator(Operator.EQUAL)
+                    .value(project1Id.toString())
+                    .build();
+
+            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(filter), 200);
+
+            assertThat(page.content()).containsExactly(actualOpt1);
+        }
+
+        @Test
+        @DisplayName("Create with a non-existent project_id returns 400 (OPIK-7029, C5)")
+        void createWithNonExistentProjectId__returnsBadRequest() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // A random project_id that was never created: resolveProjectId's shared
+            // ProjectService.validateProjectIdExists throws NotFoundException (404); the upsert-scoped
+            // onErrorMap converts that to a 400 BadRequest so a bad project on create is a client error,
+            // not a missing-resource 404.
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .projectId(UUID.randomUUID())
+                    .projectName(null)
+                    .build();
+
+            try (var response = optimizationResourceClient.callCreate(optimization, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+    }
+
+}

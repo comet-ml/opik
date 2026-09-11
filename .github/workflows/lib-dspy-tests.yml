@@ -4,11 +4,14 @@
 #
 name: SDK Lib DSPy Tests
 run-name: "SDK Lib DSPy Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
 on:
   workflow_call:
 
@@ -16,6 +19,7 @@ jobs:
   tests:
     name: DSPy Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: sdks/python
@@ -23,29 +27,33 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ["3.9", "3.10", "3.11", "3.12"]
+        # 3.14 is supported in 3.1.0b1 and up. Once 3.1.0 is released, we can add 3.14 to the matrix.
+        python_version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python ${{matrix.python_version}}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{matrix.python_version}}
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+
       - name: Install opik
-        run: pip install .
+        run: uv pip install --system .
 
       - name: Install test tools
         run: |
           cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
+          uv pip install --system -r test_requirements.txt
 
       - name: Install lib
         run: |
           cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r library_integration/dspy/requirements.txt
+          uv pip install --system -r library_integration/dspy/requirements.txt
 
       - name: Run tests
         run: |

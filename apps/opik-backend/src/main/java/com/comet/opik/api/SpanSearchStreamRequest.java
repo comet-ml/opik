@@ -6,12 +6,16 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.DefaultValue;
 import lombok.Builder;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -22,10 +26,13 @@ public record SpanSearchStreamRequest(
         String projectName,
         UUID projectId,
         SpanType type,
-        List<SpanFilter> filters,
-        @Min(1) @Max(2000) Integer limit,
+        List<@NotNull @Valid SpanFilter> filters,
+        @Schema(description = "Max number of spans to be streamed", defaultValue = "500") @Min(1) @Max(2000) Integer limit,
         UUID lastRetrievedId,
-        @Schema(description = "Truncate image included in either input, output or metadata", defaultValue = "true") @DefaultValue("true") boolean truncate) {
+        @Schema(description = "Truncate image included in either input, output or metadata", defaultValue = "true") @DefaultValue("true") boolean truncate,
+        @Schema(description = "Fields to exclude from the response") Set<Span.SpanField> exclude,
+        @Schema(description = "Filter spans created from this time (ISO-8601 format).") Instant fromTime,
+        @Schema(description = "Filter spans created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant toTime) {
 
     @Override
     public Integer limit() {

@@ -1,1 +1,2 @@
+json-repair!=0.45.0  # TypeError: unsupported operand type(s) for |: 'type' and 'type' - json_repair/string_file_wrapper.py:51
 dspy

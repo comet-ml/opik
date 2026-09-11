@@ -1,12 +1,62 @@
 import abc
-from typing import Any
+import logging
+import sys
+from contextlib import contextmanager, asynccontextmanager
+from typing import Any, List, Dict, Literal, Optional, Type
+import pydantic
+from typing_extensions import TypedDict
+
+if sys.version_info < (3, 11):
+    from typing_extensions import Required
+else:
+    from typing import Required
+
+from opik import exceptions
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+Role = Literal["system", "user", "assistant", "tool"]
+
+
+class ToolCallFunction(TypedDict):
+    name: str
+    arguments: str
+
+
+class ToolCall(TypedDict):
+    id: str
+    type: Literal["function"]
+    function: ToolCallFunction
+
+
+class ConversationDict(TypedDict, total=False):
+    """OpenAI-shape chat message used to ferry turns between callers and LLM wrappers.
+
+    ``role`` is always set. The remaining fields are conditionally required:
+
+    - ``content`` is set on system/user/tool messages and on assistant messages
+      that produce text. It is *omitted* (key absent — never ``None``) on
+      assistant messages that only emit ``tool_calls``, so callers that always
+      expect text — every existing judge — can index ``message["content"]``
+      and get ``str``.
+    - ``tool_calls`` appears on assistant messages that invoke tools.
+    - ``tool_call_id`` (and optional ``name``) appear on tool-result messages.
+    """
+
+    role: Required[Role]
+    content: str
+    tool_calls: List[ToolCall]
+    tool_call_id: str
+    name: str
 
 
 class OpikBaseModel(abc.ABC):
     """
     This class serves as an interface to LLMs.
 
-    If you want to implement custom LLM provider in evaluation metrics,
+    If you want to implement a custom LLM provider in evaluation metrics,
     you should inherit from this class.
     """
 
@@ -20,7 +70,12 @@ class OpikBaseModel(abc.ABC):
         self.model_name = model_name
 
     @abc.abstractmethod
-    def generate_string(self, input: str, **kwargs: Any) -> str:
+    def generate_string(
+        self,
+        input: str,
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
         """
         Simplified interface to generate a string output from the model.
 
@@ -34,7 +89,61 @@ class OpikBaseModel(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def agenerate_string(self, input: str, **kwargs: Any) -> str:
+    def generate_provider_response(
+        self, messages: List[Dict[str, Any]], **kwargs: Any
+    ) -> Any:
+        """
+        Do not use this method directly. It is intended to be used within `get_provider_response()` method.
+
+        Generate a provider-specific response. Can be used to interface with
+        the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
+
+        Args:
+            messages: A list of messages to be sent to the model, should be a list of dictionaries with the keys
+            kwargs: arguments required by the provider to generate a response.
+
+        Returns:
+            Any: The response from the model provider, which can be of any type depending on the use case and LLM.
+        """
+        pass
+
+    # Don't mark it as abstractmethod to avoid breaking existing user implementations
+    def generate_chat_completion(
+        self,
+        messages: List[ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> ConversationDict:
+        """
+        Generate the assistant turn from a list of role-tagged chat messages.
+
+        Implementations should forward the messages to the underlying
+        chat-completions API verbatim. Preserving the caller's ``system``/``user``
+        split is what allows providers to cache the stable system prefix across
+        calls — which is the whole point of using this method instead of
+        :meth:`generate_string`.
+
+        Args:
+            messages: A list of ``{"role": ..., "content": ...}`` dictionaries
+                following the OpenAI chat-completions shape.
+            response_format: Optional Pydantic model specifying the expected output
+                format.
+            kwargs: Additional arguments forwarded to the underlying provider call.
+
+        Returns:
+            A ``{"role": "assistant", "content": ...}`` dict so callers can append
+            it back onto the input ``messages`` for follow-up turns.
+        """
+        raise NotImplementedError(
+            "Chat completion generation not implemented for this provider"
+        )
+
+    async def agenerate_string(
+        self,
+        input: str,
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
         """
         Simplified interface to generate a string output from the model. Async version.
 
@@ -45,33 +154,138 @@ class OpikBaseModel(abc.ABC):
         Returns:
             str: The generated string output.
         """
-        pass
+        raise NotImplementedError("Async generation not implemented for this provider")
 
-    @abc.abstractmethod
-    def generate_provider_response(self, **kwargs: Any) -> Any:
+    async def agenerate_provider_response(
+        self, messages: List[Dict[str, Any]], **kwargs: Any
+    ) -> Any:
         """
-        Generate a provider-specific response. Can be used to interface with
-        the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
+        Do not use this method directly. It is intended to be used within `aget_provider_response()` method.
 
-        Args:
-            kwargs: arguments required by the provider to generate a response.
-
-        Returns:
-            Any: The response from the model provider, which can be of any type depending on the use case and LLM.
-        """
-        pass
-
-    @abc.abstractmethod
-    async def agenerate_provider_response(self, **kwargs: Any) -> Any:
-        """
         Generate a provider-specific response. Can be used to interface with
         the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
         Async version.
 
         Args:
+            messages: A list of messages to be sent to the model, should be a list of dictionaries with the keys
+                "content" and "role".
             kwargs: arguments required by the provider to generate a response.
 
         Returns:
             Any: The response from the model provider, which can be of any type depending on the use case and LLM.
         """
-        pass
+        raise NotImplementedError("Async generation not implemented for this provider")
+
+    async def agenerate_chat_completion(
+        self,
+        messages: List[ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> ConversationDict:
+        """
+        Async counterpart of :meth:`generate_chat_completion`.
+        """
+        raise NotImplementedError("Async generation not implemented for this provider")
+
+
+@contextmanager
+def get_provider_response(
+    model_provider: OpikBaseModel, messages: List[Dict[str, Any]], **kwargs: Any
+) -> Any:
+    """
+    Provides a context manager for getting and managing the response from a
+    model provider. Ensures that errors during the interaction with the model
+    provider are handled appropriately and logged.
+
+    Args:
+        model_provider: Instance of a class derived from `OpikBaseModel`
+            responsible for interfacing with the model.
+        messages: List of dictionaries containing the messages or inputs to be
+            passed to the model.
+        **kwargs: Additional keyword arguments to customize the generation of
+            the model responses.
+
+    Yields:
+        Any: The response generated by the model provider.
+
+    Raises:
+        exceptions.BaseLLMError: If the response generation from the model provider
+            fails due to an exception.
+    """
+    try:
+        yield model_provider.generate_provider_response(messages, **kwargs)
+    except exceptions.BaseLLMError as e:
+        # Re-wrapping would erase the subclass callers retry on, but the
+        # diagnostic still belongs in the log.
+        LOGGER.error("Failed to call LLM provider, reason: %s", e)
+        raise
+    except Exception as e:
+        LOGGER.error("Failed to call LLM provider, reason: %s", e)
+        raise exceptions.BaseLLMError(str(e))
+
+
+@asynccontextmanager
+async def aget_provider_response(
+    model_provider: OpikBaseModel, messages: List[Dict[str, Any]], **kwargs: Any
+) -> Any:
+    """
+    Asynchronous context manager for getting a response from a model provider.
+
+    This function asynchronously interacts with the specified `model_provider` to
+    generate a response based on the given list of `messages` and additional
+    optional keyword arguments. If an error occurs during this process, it is
+    logged, and a custom exception is raised.
+
+    Args:
+        model_provider: The model provider from which to request
+            the response.
+        messages: A list of dictionaries containing the
+            messages for the model provider to process.
+        **kwargs: Additional keyword arguments passed to the model provider's
+            response generation method.
+
+    Yields:
+        Any: The response generated asynchronously by the model provider.
+
+    Raises:
+        exceptions.BaseLLMError: If there is an error during the asynchronous
+            interaction with the model provider.
+    """
+    try:
+        response = await model_provider.agenerate_provider_response(
+            messages=messages, **kwargs
+        )
+        yield response
+    except exceptions.BaseLLMError as e:
+        LOGGER.error("Failed to call LLM provider asynchronously, reason: %s", e)
+        raise
+    except Exception as e:
+        LOGGER.error("Failed to call LLM provider asynchronously, reason: %s", e)
+        raise exceptions.BaseLLMError(str(e))
+
+
+def check_model_output_string(output: Optional[str]) -> str:
+    """
+    Checks the output of a model and verifies that it is not None.
+
+    This function ensures that the output returned from a language model (LLM) has a valid, non-null value.
+    If the output is found to be None, an error is raised with a detailed message. This can help in
+    debugging issues related to incorrect environment configuration or missing API keys.
+
+    Args:
+        output: The output string generated by the language model to be validated.
+
+    Returns:
+        The output of the language model that was validated.
+
+    Raises:
+        exceptions.BaseLLMError: Raised if the output is evaluated to None. The error message contains suggestions to
+        verify environment configurations and check model API key availability.
+    """
+    if output is None:
+        raise exceptions.BaseLLMError(
+            "Received None as the output from the LLM. Please verify your environment configuration "
+            "and ensure that the API keys for the models in use (e.g., OPENAI_API_KEY) are set correctly."
+        )
+
+    return output

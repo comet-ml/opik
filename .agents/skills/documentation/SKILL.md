@@ -1,0 +1,111 @@
+---
+name: documentation
+description: Feature documentation and release notes patterns. Use when documenting changes, writing PR descriptions, or preparing releases.
+---
+
+# Documentation
+
+## PR Description
+
+Use the repository template at `.github/pull_request_template.md` — read the FULL file before drafting (the required sections continue past the first screen). CI (`.github/workflows/pr-lint.yml`) fails any PR whose description is missing one of these exact headings:
+
+- `## Details`
+- `## Change checklist`
+- `## Issues`
+- `## Testing`
+- `## Documentation`
+
+Also fill in the template's `## AI-WATERMARK` section (yes/no; if yes: Tools, Model(s), Scope, Human verification). Never invent a different structure such as `## Summary` / `## Test Plan`.
+
+A section that does not apply gets `N/A` — never delete a heading.
+
+### `## Details` — style
+
+Write what changes for a user. A reviewer reads the diff for the code; this section tells them what is different when they use the product.
+
+- **Short.** Most PRs need 3–10 bullets. If it runs longer, the section is doing the diff's job — cut it.
+- **Bullets, not prose paragraphs.** One behavior per bullet. Nest one level for sub-cases.
+- **Authoritative.** State what happens: "The run is scored once." Not "This should now mean that the run will be scored once."
+- **No fluff.** No motivation paragraph, no "this PR …", no approach summary, no benefits list, no restating the diff.
+- **Observable behavior first.** What the UI shows, what the API returns, what gets scored, stored or logged. Name a class, method or file only when the behavior makes no sense without it.
+
+Pick the shape that fits the change — do not force one:
+
+- **Before / After bullet lists** when a behavior changed and the contrast is the point.
+- **A flat bullet list** for a new capability, where there is no "before".
+- **One or two lines** when users cannot see the change (refactor, dependency bump) — say what is unchanged and what improved, then stop.
+
+## Changelog Entry
+
+```markdown
+### [VERSION] - [DATE]
+
+#### New Features
+- **Feature Name**: Brief description
+
+#### Improvements
+- **Improvement**: What changed and why
+
+#### Bug Fixes
+- **Fix**: What was broken (#issue)
+
+#### Breaking Changes
+- **Change**: What breaks, migration steps
+```
+
+## Feature Documentation
+
+When documenting a feature, cover:
+
+**User Impact**
+- What capability does this add?
+- How do users access it?
+
+**Technical Changes**
+- API changes (endpoints, params)
+- SDK changes (new methods)
+- Database migrations
+- Config changes
+
+**Breaking Changes** (if any)
+- What breaks
+- Migration steps
+
+## Key Files
+
+- `apps/opik-documentation/documentation/fern/docs-v2/self-host/changelog.mdx` - Self-hosted deployment changelog (breaking/critical changes only; the former repo-root `CHANGELOG.md` was removed)
+- `apps/opik-documentation/documentation/fern/docs-v2/changelog/` - Main product docs changelog entries (dated `.mdx` files)
+- `apps/opik-documentation/documentation/fern/docs-v2/development/optimization-runs/changelog.mdx` - Agent Optimizer release changelog
+- `apps/opik-documentation/documentation/fern/docs.yml` - Docs routing/navigation source of truth for changelog surfaces
+- `.github/release-drafter.yml` - Release template
+
+## Changelog Routing Rules
+
+- Pick the changelog target by scope; do not default everything to one surface.
+- Use `apps/opik-documentation/documentation/fern/docs-v2/self-host/changelog.mdx` only for self-hosted deployment breaking/critical/security-impacting notes.
+- Use `apps/opik-documentation/documentation/fern/docs-v2/changelog/*.mdx` for general Opik product release notes shown in `/docs/opik/changelog`.
+- Use `apps/opik-documentation/documentation/fern/docs-v2/development/optimization-runs/changelog.mdx` for Agent Optimizer version updates (for example `sdks/opik_optimizer` releases like `3.1.0`).
+- Liquibase `changelog.xml` files are migration manifests, not user-facing release-note changelogs.
+- If unsure where an entry belongs, confirm the surface from `apps/opik-documentation/documentation/fern/docs.yml` before editing.
+
+## Images in documentation
+
+- **Use `fern/img`** for documentation images (e.g. `apps/opik-documentation/documentation/fern/img/...`).
+- **Do not use `static/img`** for new assets; it is a legacy folder used by external integrations and cannot be deleted.
+- Reference images in docs as `/img/...` (e.g. `/img/tracing/openai_integration.png`).
+- In repos that define `docs.yaml`/`docs.yml`, treat that file as the routing source of truth; do not assume URLs mirror directory layout.
+
+## Internationalized READMEs
+
+Non-English README files (`readme_CN.md`, `readme_ES.md`, `readme_FR.md`, `readme_DE.md`) are AI machine-translated from the English `README.md`.
+
+- Each non-English README must have a notice at the top (as a blockquote) warning that the file is AI-translated and welcoming improvements.
+- When the English README is updated with significant content changes, re-translate the affected non-English READMEs using AI and update accordingly.
+- Do not manually edit translated READMEs for content changes; update the English source and re-translate.
+
+## Style
+
+- User perspective, not implementation details
+- Specific (version numbers, dates)
+- Code examples for API/SDK changes
+- Concise - link to docs, don't duplicate

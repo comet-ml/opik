@@ -5,22 +5,25 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
-import org.junit.jupiter.api.Assertions;
+import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Is Alive Resource Test")
@@ -28,21 +31,20 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 class IsAliveE2ETest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
     private static final String TEST_VERSION = "2.4.1";
 
     @RegisterApp
-    private final TestDropwizardAppExtension APP;
+    private final TestDropwizardAppExtension app;
 
     {
-        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
-
+        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS, ZOOKEEPER_CONTAINER).join();
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICKHOUSE, DATABASE_NAME);
-
-        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 TestDropwizardAppExtensionUtils.AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
@@ -56,36 +58,47 @@ class IsAliveE2ETest {
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
-
         ClientSupportUtils.config(client);
     }
 
     @Test
     @DisplayName("Should return 200 OK")
     void testIsAlive() {
-        var response = client.target("%s/is-alive/ping".formatted(baseURI))
-                .request()
-                .get();
+        var actualResponse = callIsAliveAndAssertOk();
 
-        Assertions.assertEquals(200, response.getStatus());
-        var health = response.readEntity(IsAliveResource.IsAliveResponse.class);
-
-        Assertions.assertTrue(health.healthy());
+        var expectedResponse = IsAliveResource.IsAliveResponse.builder()
+                .message("Healthy Server")
+                .healthy(true)
+                .build();
+        assertThat(actualResponse).isEqualTo(expectedResponse);
     }
 
     @Test
     @DisplayName("Should return correct version")
     void testGetVersion() {
-        var response = client.target("%s/is-alive/ver".formatted(baseURI))
+        var actualResponse = callGetVersionAndAssertOk();
+
+        var expectedResponse = IsAliveResource.VersionResponse.builder().version(TEST_VERSION).build();
+        assertThat(actualResponse).isEqualTo(expectedResponse);
+    }
+
+    private IsAliveResource.IsAliveResponse callIsAliveAndAssertOk() {
+        try (var response = client.target("%s/is-alive/ping".formatted(baseURI))
                 .request()
-                .get();
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(IsAliveResource.IsAliveResponse.class);
+        }
+    }
 
-        Assertions.assertEquals(200, response.getStatus());
-        var versionResponse = response.readEntity(IsAliveResource.VersionResponse.class);
-
-        Assertions.assertEquals(TEST_VERSION, versionResponse.version());
+    private IsAliveResource.VersionResponse callGetVersionAndAssertOk() {
+        try (var response = client.target("%s/is-alive/ver".formatted(baseURI))
+                .request()
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(IsAliveResource.VersionResponse.class);
+        }
     }
 }

@@ -1,0 +1,10 @@
+# Private plugins (e.g. a closed-source overlay) are symlinked into this folder
+# at dev/build time and must NEVER be committed to this public repository.
+# Ignore everything here except the public plugins explicitly allowlisted below.
+#
+# Keep generic plugin SPI code OUT of this folder (it lives under src/store or
+# src/lib) so the allowlist can stay folder-only.
+/*
+!.gitignore
+!comet/
+!development/

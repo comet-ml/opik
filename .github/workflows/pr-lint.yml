@@ -1,0 +1,120 @@
+permissions:
+  contents: read
+  pull-requests: write
+name: PR Linter
+
+# This workflow runs on pull requests that are opened, edited, or have new commits pushed.
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  lint-pr:
+    # Dependabot PRs have a bot-generated title/body that can't follow the PR
+    # template — skip the linter for them rather than surface a permanent red check.
+    # Key off the PR author, not github.actor: a human editing the PR would make
+    # github.actor the human and let the lint run on a Dependabot PR anyway.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Validate PR Title, Description, and Commits
+        uses: actions/github-script@v9
+        with:
+          script: |
+            // Get the PR context
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.setFailed("Could not get PR from context.");
+              return;
+            }
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            
+            let errors = [];
+
+            // 1. Validate PR Title
+            const title = pr.title;
+            const titleRegex = /^\[(OPIK-\d+|DND-\d+|DEV-\d+|CUST-\d+|issue-\d+|NA)\](\s*\[(BE|FE|DOCS|SDK|GHA|CI|HELM)\])*\s*.+$/;
+            if (!titleRegex.test(title)) {
+              errors.push(
+                "❌ **Invalid Title Format.** Your PR title must include a ticket/issue number and may optionally include component tags (`[FE]`, `[BE]`, etc.).\n\n" +
+                "  - **Internal contributors: Open a JIRA ticket and link to it:** `[OPIK-xxxx]` or `[CUST-xxxx]` or `[DND-xxxx]` or `[DEV-xxxx] [COMPONENT] Your change`\n" +
+                "  - **External contributors: Open a Github Issue and link to it via its number:** `[issue-xxxx] [COMPONENT] Your change`\n" +
+                "  - **No ticket:** Use `[NA] [COMPONENT] Your change` (Issues section not required)\n\n" +
+                "  *Example: `[issue-3108] [BE] [FE] Fix authentication bug` or `[OPIK-1234] Fix bug` or `[NA] Update README`*"
+              );
+            }
+
+            // 2. Validate PR Description
+            const body = pr.body || "";
+            const requiredHeadings = ["## Details", "## Change checklist", "## Issues", "## Testing", "## Documentation"];
+            if (body.length === 0) {
+              errors.push("❌ **Missing Description.** The PR description cannot be empty.");
+            } else {
+              for (const heading of requiredHeadings) {
+                if (!body.includes(heading)) {
+                  errors.push(`❌ **Missing Section.** The description is missing the \`${heading}\` section.`);
+                }
+              }
+
+              // Helper function to get content of a markdown section
+              const getSectionContent = (sectionTitle) => {
+                const startIndex = body.indexOf(sectionTitle);
+                if (startIndex === -1) return null;
+                const nextHeaderIndex = body.indexOf("## ", startIndex + sectionTitle.length);
+                const endIndex = nextHeaderIndex !== -1 ? nextHeaderIndex : body.length;
+                return body.substring(startIndex + sectionTitle.length, endIndex).trim();
+              };
+              
+              const detailsContent = getSectionContent("## Details");
+              if (detailsContent !== null && detailsContent.length === 0) {
+                  errors.push("❌ **Incomplete Details Section.** The `## Details` section cannot be empty.");
+              }
+
+              const issuesContent = getSectionContent("## Issues");
+              const issuesRegex = /(#\d+|OPIK-\d+|DND-\d+|DEV-\d+|CUST-\d+)/;
+              const isNATicket = title.startsWith("[NA]");
+              if (issuesContent !== null && !isNATicket && !issuesRegex.test(issuesContent)) {
+                 errors.push(
+                   "❌ **Incomplete Issues Section.** You must reference at least one GitHub issue (`#xxxx`), Jira ticket (`OPIK-xxxx`), CUST ticket (`CUST-xxxx`), DEV ticket (`DEV-xxxx`), or DND ticket (`DND-xxxx`) under the `## Issues` section."
+                 );
+              }
+            }
+            
+            // 3. Find all existing linter comments across all pages
+            const COMMENT_MARKER = "<!-- pr-linter-comment -->";
+            const allComments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number });
+            const markerComments = allComments.filter(c => c.body && c.body.includes(COMMENT_MARKER));
+
+            // 4. Final step: upsert/delete comment and/or fail the job
+            if (errors.length > 0) {
+              const commentBody = COMMENT_MARKER + "\n### 📋 PR Linter Failed\n\n" + errors.join("\n\n---\n\n");
+
+              const logMessage = "PR Linter Failed:\n\n" + errors.join("\n\n")
+                  .replace(/❌ \*\*/g, '❌ ')
+                  .replace(/\*\*`/g, '`')
+                  .replace(/`\*\*/g, '`')
+                  .replace(/###\s/g, '')
+                  .replace(/---\n\n/g, '');
+
+              if (markerComments.length > 0) {
+                // Keep the newest, delete any duplicates
+                const [keep, ...duplicates] = [...markerComments].sort((a, b) => b.id - a.id);
+                await github.rest.issues.updateComment({ owner, repo, comment_id: keep.id, body: commentBody });
+                await Promise.all(duplicates.map(c => github.rest.issues.deleteComment({ owner, repo, comment_id: c.id })));
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: commentBody });
+              }
+
+              core.setFailed(logMessage);
+            } else {
+              await Promise.all(markerComments.map(c => github.rest.issues.deleteComment({ owner, repo, comment_id: c.id })));
+              console.log("✅ PR linting passed!");
+            }

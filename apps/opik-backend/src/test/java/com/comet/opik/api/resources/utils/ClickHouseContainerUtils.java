@@ -1,23 +1,102 @@
 package com.comet.opik.api.resources.utils;
 
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.google.common.collect.Sets;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
 import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.utility.MountableFile;
 
 import java.util.Map;
+import java.util.Set;
 
 public class ClickHouseContainerUtils {
 
     public static final String DATABASE_NAME = "opik";
     public static final String DATABASE_NAME_VARIABLE = "ANALYTICS_DB_DATABASE_NAME";
+    private static final Network NETWORK = Network.newNetwork();
+    private static final Set<GenericContainer<?>> CONTAINERS = Sets.newConcurrentHashSet();
+
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            CONTAINERS.forEach(container -> {
+                if (container.isRunning()) {
+                    container.stop();
+                }
+            });
+            NETWORK.close();
+        }));
+    }
 
     public static ClickHouseContainer newClickHouseContainer() {
         return newClickHouseContainer(true);
     }
 
     public static ClickHouseContainer newClickHouseContainer(boolean reusable) {
-        return new ClickHouseContainer(DockerImageName.parse("clickhouse/clickhouse-server:24.3.6.48-alpine"))
+        ClickHouseContainer container = new ClickHouseContainer(
+                DockerImageName.parse("clickhouse/clickhouse-server:26.3.16.16-alpine"))
                 .withReuse(reusable);
+
+        CONTAINERS.add(container);
+
+        return container;
+    }
+
+    public static GenericContainer<?> newZookeeperContainer() {
+        return newZookeeperContainer(true, NETWORK);
+    }
+
+    public static GenericContainer<?> newZookeeperContainer(boolean reusable, Network network) {
+        var container = new GenericContainer<>(DockerImageName.parse("zookeeper:3.9.4"))
+                .withExposedPorts(2181)
+                .withNetworkAliases("zookeeper")
+                .withNetwork(network)
+                .withReuse(reusable)
+                .withEnv("JVMFLAGS", "-Xmx512m");
+
+        CONTAINERS.add(container);
+
+        return container;
+    }
+
+    public static ClickHouseContainer newClickHouseContainer(GenericContainer<?> zooKeeperContainer) {
+        return newClickHouseContainer(true, NETWORK, zooKeeperContainer);
+    }
+
+    public static ClickHouseContainer newClickHouseContainer(boolean reusable, Network network,
+            GenericContainer<?> zooKeeperContainer) {
+
+        try {
+
+            ClickHouseContainer container = newClickHouseContainer(reusable);
+
+            if (zooKeeperContainer != null) {
+                container.dependsOn(zooKeeperContainer);
+            }
+
+            CONTAINERS.add(container);
+
+            return container
+                    .withReuse(reusable)
+                    .withNetworkAliases("clickhouse")
+                    .withEnv("CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT", "1")
+                    .withNetwork(network)
+                    // Default user and password for test containers are test:test while for clickhouse it's default user and no password.
+                    // We need to override the default user and password so that we can use the same credentials as test containers.
+                    .withUsername("default")
+                    .withPassword("")
+                    .withCopyFileToContainer(MountableFile.forClasspathResource("clickhouse.xml"),
+                            "/etc/clickhouse-server/config.d/clickhouse.xml")
+                    // Provision the production-shape Agent Insights read-only user globally
+                    // (settings profile, user, per-table SELECT grants, row policies; mirrors
+                    // provision_agent_insights_readonly_user.sh). Loaded at server startup.
+                    .withCopyFileToContainer(MountableFile.forClasspathResource("users.xml"),
+                            "/etc/clickhouse-server/users.d/users.xml");
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static DatabaseAnalyticsFactory newDatabaseAnalyticsFactory(ClickHouseContainer clickHouseContainer,

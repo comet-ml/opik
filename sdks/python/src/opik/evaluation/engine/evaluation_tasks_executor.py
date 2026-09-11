@@ -1,43 +1,272 @@
+import contextvars
+import logging
+import threading
+import time
+from collections import defaultdict
 from concurrent import futures
-from typing import List
+from typing import Any, Dict, List, Optional, TypeVar, Generic
 
-import tqdm
-
-from .. import test_result
+from opik.api_objects import opik_client
+from ..metrics.score_result import ScoreResult
 from .types import EvaluationTask
+
+LOGGER = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+class StreamingExecutor(Generic[T]):
+    """
+    Executor that accepts and processes evaluation tasks incrementally using a thread pool.
+
+    Tasks can be submitted one at a time and will begin executing immediately, allowing
+    for streaming behavior regardless of the number of workers configured.
+
+    Progress bar updates happen immediately as tasks complete via future callbacks,
+    even while the main thread is still submitting new tasks.
+
+    When ``workers == 1`` no thread pool is created and submitted tasks run
+    synchronously in the caller thread — equivalent to a plain ``for`` loop.
+    """
+
+    def __init__(
+        self,
+        workers: int,
+        verbose: int,
+        client: "opik_client.Opik",
+        desc: str = "Evaluation",
+        total: Optional[int] = None,
+        show_score_postfix: bool = True,
+    ):
+        self._workers = workers
+        self._verbose = verbose
+        self._desc = desc
+        self._total = total
+        self._show_score_postfix = show_score_postfix
+        self._client = client
+        self._task_count = 0
+        self._pool: Optional[futures.ThreadPoolExecutor] = None
+        self._client_context_token: Optional[
+            contextvars.Token[Optional[opik_client.Opik]]
+        ] = None
+        self._submitted_futures: List[futures.Future[T]] = []
+        self._progress_bar: Optional[Any] = None
+        self._future_to_group: Dict[futures.Future[T], str] = {}
+        self._group_sizes: Dict[str, int] = {}
+
+        # Callback state — accessed from worker threads under lock
+        self._lock = threading.Lock()
+        self._results: List[T] = []
+        self._score_totals: Dict[str, float] = defaultdict(float)
+        self._score_counts: Dict[str, int] = defaultdict(int)
+        self._group_completed: Dict[str, int] = defaultdict(int)
+        self._first_update_done = False
+
+    def __enter__(self) -> "StreamingExecutor[T]":
+        if self._workers > 1:
+            self._pool = futures.ThreadPoolExecutor(max_workers=self._workers)
+            self._pool.__enter__()
+        else:
+            self._client_context_token = opik_client._context_client_var.set(
+                self._client
+            )
+        # Initialize progress bar on enter (lazy import for mockability)
+        from opik.environment import get_tqdm_for_current_environment
+
+        _tqdm = get_tqdm_for_current_environment()
+        self._progress_bar = _tqdm(
+            disable=(self._verbose < 1),
+            desc=f"{self._desc} (there might be a delay before the first items are processed)",
+            total=self._total,
+        )
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        # Close progress bar if it exists
+        if self._progress_bar is not None:
+            self._progress_bar.close()
+        if self._pool is not None:
+            self._pool.__exit__(exc_type, exc_val, exc_tb)
+        if self._client_context_token is not None:
+            opik_client._context_client_var.reset(self._client_context_token)
+            self._client_context_token = None
+
+    def set_group_size(self, group_id: str, size: int) -> None:
+        """Declare the expected number of tasks for a group.
+
+        Must be called before submitting tasks for that group to avoid
+        race conditions between task completion callbacks and submission.
+        """
+        self._group_sizes[group_id] = size
+
+    def submit(self, task: EvaluationTask[T], group_id: Optional[str] = None) -> None:
+        """Submit a task for execution.
+
+        When workers > 1 the task is dispatched to the thread pool. When
+        workers == 1 the task runs synchronously in the caller thread before
+        ``submit()`` returns.
+
+        Args:
+            task: The evaluation task to execute.
+            group_id: Optional group identifier. When provided, progress bar
+                updates once per group (when all tasks in the group complete)
+                instead of once per task. The group size must be declared
+                via ``set_group_size()`` before submitting grouped tasks.
+        """
+        self._task_count += 1
+
+        if self._pool is None:
+            future: futures.Future[T] = futures.Future()
+            self._submitted_futures.append(future)
+            if group_id is not None:
+                self._future_to_group[future] = group_id
+            try:
+                result = task()
+                future.set_result(result)
+            except BaseException as exc:
+                future.set_exception(exc)
+            self._on_future_done(future)
+            return
+
+        original_task = task
+        client = self._client
+
+        def task_with_client() -> T:
+            opik_client.set_global_client(client, context_wise=True)
+            return original_task()
+
+        future = self._pool.submit(task_with_client)
+        self._submitted_futures.append(future)
+
+        if group_id is not None:
+            self._future_to_group[future] = group_id
+
+        future.add_done_callback(self._on_future_done)
+
+    def _on_future_done(self, future: futures.Future[T]) -> None:
+        """Callback fired by worker thread when a task completes."""
+        exc = future.exception()
+        if exc is not None:
+            group_id = self._future_to_group.get(future)
+            LOGGER.warning(
+                "Evaluation task failed (group=%s): %s: %s",
+                group_id,
+                type(exc).__name__,
+                exc,
+            )
+            return
+
+        result = future.result()
+
+        with self._lock:
+            self._results.append(result)
+
+            # Update running scores if result has score_results attribute
+            if hasattr(result, "score_results") and isinstance(
+                result.score_results, list
+            ):
+                for score in result.score_results:
+                    if isinstance(score, ScoreResult) and not score.scoring_failed:
+                        self._score_totals[score.name] += score.value
+                        self._score_counts[score.name] += 1
+
+                # Update progress bar with running averages
+                if (
+                    self._progress_bar is not None
+                    and self._score_counts
+                    and self._show_score_postfix
+                ):
+                    postfix_dict = {
+                        name: f"{self._score_totals[name] / self._score_counts[name]:.4f}"
+                        for name in self._score_counts
+                    }
+                    self._progress_bar.set_postfix(postfix_dict)
+
+            # Update progress bar
+            if self._progress_bar is not None:
+                should_update = False
+                if future in self._future_to_group:
+                    gid = self._future_to_group[future]
+                    self._group_completed[gid] += 1
+                    if self._group_completed[gid] == self._group_sizes[gid]:
+                        should_update = True
+                else:
+                    should_update = True
+
+                if should_update:
+                    if not self._first_update_done:
+                        self._first_update_done = True
+                        self._progress_bar.set_description(self._desc)
+                    self._progress_bar.update(1)
+
+    def get_results(self) -> List[T]:
+        """Wait for all submitted tasks and return their results.
+
+        Progress tracking happens via callbacks during both the submit and
+        wait phases. This method sets the total if it wasn't known at
+        construction, waits for completion, and re-raises any exceptions.
+        """
+        # Update total if it wasn't known initially
+        if self._progress_bar is not None and self._total is None:
+            use_groups = bool(self._future_to_group)
+            if use_groups:
+                self._progress_bar.total = len(self._group_sizes)
+            else:
+                self._progress_bar.total = self._task_count
+
+        # Wait for all futures to complete
+        LOGGER.debug(
+            "[executor] Waiting for %d futures to complete...",
+            len(self._submitted_futures),
+        )
+        wait_start = time.monotonic()
+        futures.wait(self._submitted_futures)
+        elapsed = time.monotonic() - wait_start
+        LOGGER.debug(
+            "[executor] All %d futures completed in %.1fs",
+            len(self._submitted_futures),
+            elapsed,
+        )
+
+        # Re-raise first exception if any task failed
+        for future in self._submitted_futures:
+            future.result()
+
+        with self._lock:
+            return list(self._results)
 
 
 def execute(
-    evaluation_tasks: List[EvaluationTask], workers: int, verbose: int
-) -> List[test_result.TestResult]:
+    evaluation_tasks: List[EvaluationTask[T]],
+    workers: int,
+    verbose: int,
+    client: "opik_client.Opik",
+    desc: str = "Evaluation",
+) -> List[T]:
     if workers == 1:
+        from opik.environment import get_tqdm_for_current_environment
+
+        opik_client.set_global_client(client, context_wise=True)
+        _tqdm = get_tqdm_for_current_environment()
         test_results = [
             evaluation_task()
-            for evaluation_task in tqdm.tqdm(
+            for evaluation_task in _tqdm(
                 evaluation_tasks,
                 disable=(verbose < 1),
-                desc="Evaluation",
+                desc=desc,
                 total=len(evaluation_tasks),
             )
         ]
 
         return test_results
 
-    with futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        test_result_futures = [
-            pool.submit(evaluation_task) for evaluation_task in evaluation_tasks
-        ]
-
-        test_results = [
-            test_result_future.result()
-            for test_result_future in tqdm.tqdm(
-                futures.as_completed(
-                    test_result_futures,
-                ),
-                disable=(verbose < 1),
-                desc="Evaluation",
-                total=len(test_result_futures),
-            )
-        ]
-
-    return test_results
+    with StreamingExecutor[T](
+        workers=workers,
+        verbose=verbose,
+        client=client,
+        desc=desc,
+        total=len(evaluation_tasks),
+    ) as executor:
+        for evaluation_task in evaluation_tasks:
+            executor.submit(evaluation_task)
+        return executor.get_results()

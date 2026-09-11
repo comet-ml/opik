@@ -7,11 +7,11 @@ Main features
 
 The Comet Opik platform is a suite of tools that allow you to evaluate the output of an LLM powered application.
 
-In includes the following features:
+It includes the following features:
 
-- `Tracing <https://www.comet.com/docs/opik/tracing/log_traces>`_: Ability to log LLM calls and traces to the Opik platform.
+- `Tracing <https://www.comet.com/docs/opik/tracing/advanced/log_traces>`_: Ability to log LLM calls and traces to the Opik platform.
 - `LLM evaluation metrics <https://www.comet.com/docs/opik/evaluation/metrics/heuristic_metrics>`_: A set of functions that evaluate the output of an LLM, these are both heuristic metrics and LLM as a Judge.
-- `Evaluation <https://www.comet.com/docs/opik//evaluation/evaluate_your_llm>`_: Ability to log test datasets in Opik and evaluate using some of our LLM evaluation metrics.
+- `Evaluation <https://www.comet.com/docs/opik/evaluation/advanced/evaluate_your_llm>`_: Ability to log test datasets in Opik and evaluate using some of our LLM evaluation metrics.
 
 For a more detailed overview of the platform, you can refer to the `Comet Opik documentation <https://www.comet.com/docs/opik>`_.
 
@@ -19,7 +19,7 @@ For a more detailed overview of the platform, you can refer to the `Comet Opik d
 Installation
 ============
 
-To get start with the package, you can install it using pip::
+To get started with the package, you can install it using pip::
 
    pip install opik
 
@@ -58,9 +58,9 @@ To log your first trace, you can use the `track` decorator::
 
    llm_function("Hello")
 
-**Note:** The `track` decorator supports nested functions, if you track multiple functions, each functionc call will be associated with the parent trace.
+**Note:** The `track` decorator supports nested functions, if you track multiple functions, each function call will be associated with the parent trace.
 
-**Integrations**: If you are using LangChain or OpenAI, Comet Opik as `built-in integrations <https://www.comet.com/docs/opik/tracing/integrations/langchain>`_ for these libraries.
+**Integrations**: If you are using LangChain or OpenAI, Comet Opik has `built-in integrations <https://www.comet.com/docs/opik/integrations/langchain>`_ for these libraries.
 
 ----------------------------
 Using LLM evaluation metrics
@@ -89,12 +89,12 @@ Running evaluations
 
 Evaluations are run using the `evaluate` function, this function takes a dataset, a task and a list of metrics and returns a dictionary of scores::
 
+   import openai
+
    from opik import Opik, track
    from opik.evaluation import evaluate
-   from opik.evaluation.metrics import EqualsMetric, HallucinationMetric
+   from opik.evaluation.metrics import Equals, Hallucination
    from opik.integrations.openai import track_openai
-   from typing import Dict
-
    from typing import Dict
 
    # Define the task to evaluate
@@ -118,8 +118,8 @@ Evaluations are run using the `evaluate` function, this function takes a dataset
    dataset = client.get_dataset(name="your-dataset-name")
 
    # Define the metrics
-   equals_metric = EqualsMetric()
-   hallucination_metric = HallucinationMetric()
+   equals_metric = Equals()
+   hallucination_metric = Hallucination()
 
    # Define and run the evaluation
    def evaluation_task(x: Dict):
@@ -139,13 +139,27 @@ Evaluations are run using the `evaluate` function, this function takes a dataset
 Storing prompts
 ---------------
 
-You can store prompts in the Opik library using the `Prompt` object:
+You can store prompts in the Opik library using the `Prompt` and `ChatPrompt` objects:
+
+**Text Prompts:**
 
 .. code-block:: python
    
    import opik
 
    prompt = opik.Prompt(name="my-prompt", prompt="Write a summary of the following text: {{text}}")
+
+**Chat Prompts:**
+
+.. code-block:: python
+   
+   import opik
+
+   messages = [
+       {"role": "system", "content": "You are a helpful assistant."},
+       {"role": "user", "content": "Hello, {{name}}!"}
+   ]
+   chat_prompt = opik.ChatPrompt(name="my-chat-prompt", messages=messages)
 
 =========
 Reference
@@ -160,6 +174,7 @@ You can learn more about the `opik` python SDK in the following sections:
    track
    configure
    opik_context/index
+   context_manager/index
 
 .. toctree::
    :caption: Integrations
@@ -174,22 +189,39 @@ You can learn more about the `opik` python SDK in the following sections:
    integrations/langchain/index
    integrations/llama_index/index
    integrations/openai/index
+   integrations/adk/index
 
 .. toctree::
    :caption: Evaluation
    :maxdepth: 1
    
    evaluation/Dataset
+   evaluation/TestSuite
    evaluation/evaluate
    evaluation/evaluate_prompt
    evaluation/evaluate_experiment
+   evaluation/evaluate_threads
    evaluation/metrics/index
+   message_processing_emulation/index
 
 .. toctree::
    :caption: Prompt management
    :maxdepth: 1
    
    library/Prompt
+   library/ChatPrompt
+
+.. toctree::
+   :caption: Guardrails
+   :maxdepth: 1
+   
+   guardrails/guardrail
+   guardrails/topic
+   guardrails/pii
+   guardrails/prompt_injection
+   guardrails/llm_judge
+   guardrails/custom_guardrail
+   guardrails/validation_response
 
 .. toctree::
    :caption: Testing
@@ -198,24 +230,45 @@ You can learn more about the `opik` python SDK in the following sections:
    testing/llm_unit
 
 .. toctree::
-   :caption: Objects
+   :caption: Simulation
    :maxdepth: 1
    
+   simulation/index
+
+.. toctree::
+   :caption: REST API Reference
+   :maxdepth: 1
+   
+   rest_api/overview
+   rest_api/clients/index
+   rest_api/objects
+
+.. toctree::
+   :caption: Objects
+   :maxdepth: 1
+
    Objects/Trace.rst
    Objects/TraceData.rst
    Objects/TracePublic.rst
    Objects/Span.rst
    Objects/SpanData.rst
    Objects/SpanPublic.rst
+   Objects/Attachment.rst
+   Objects/AttachmentClient.rst
    Objects/FeedbackScoreDict.rst
-   Objects/UsageDict.rst
    Objects/Experiment.rst
    Objects/ExperimentItemContent.rst
    Objects/ExperimentItemReferences.rst
+   Objects/EvaluationResult.rst
+   Objects/TestResult.rst
+   Objects/TestSuiteResult.rst
    Objects/Prompt.rst
+   Objects/ChatPrompt.rst
+   Objects/ScoreResult.rst
    Objects/OpikBaseModel.rst
    Objects/LiteLLMChatModel.rst
    Objects/DistributedTraceHeadersDict.rst
+
 .. toctree::
    :maxdepth: 1
    :caption: Command Line Interface

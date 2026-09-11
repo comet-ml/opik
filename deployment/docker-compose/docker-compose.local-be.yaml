@@ -1,0 +1,23 @@
+name: opik
+
+# Override for local backend development mode
+
+services:
+
+  # Override to not depend on any service
+  # This is mostly for consistent operations like docker compose up/down and to avoid hanging containers
+  # Demo data creation is triggered from opik.sh and dev-runner.sh
+  demo-data-generator:
+    depends_on: !override
+      [ ]
+  # Override to not depend on backend
+  frontend:
+    depends_on: !override
+      mysql:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

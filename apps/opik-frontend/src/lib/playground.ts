@@ -5,44 +5,82 @@ import {
   DEFAULT_GEMINI_CONFIGS,
   DEFAULT_OPEN_AI_CONFIGS,
   DEFAULT_OPEN_ROUTER_CONFIGS,
+  DEFAULT_VERTEX_AI_CONFIGS,
+  DEFAULT_CUSTOM_CONFIGS,
 } from "@/constants/llm";
+import {
+  getDefaultTemperatureForModel,
+  getDefaultThinkingLevel,
+  supportsAnthropicThinkingEffort,
+  supportsGeminiThinkingLevel,
+  supportsOpenAIReasoningEffort,
+  supportsSamplingParams,
+  supportsVertexAIThinkingLevel,
+} from "@/lib/modelUtils";
 import {
   LLMAnthropicConfigsType,
   LLMGeminiConfigsType,
   LLMOpenAIConfigsType,
   LLMOpenRouterConfigsType,
   LLMPromptConfigsType,
+  LLMVertexAIConfigsType,
+  LLMCustomConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
+  COMPOSED_PROVIDER_TYPE,
 } from "@/types/providers";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import {
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
+import { RunStreamingReturn } from "@/api/playground/useCompletionProxyStreaming";
+import { parseComposedProviderType } from "@/lib/provider";
 
 export const getDefaultConfigByProvider = (
-  provider?: PROVIDER_TYPE | "",
+  provider: COMPOSED_PROVIDER_TYPE,
+  model?: PROVIDER_MODEL_TYPE | "",
 ): LLMPromptConfigsType => {
-  if (provider === PROVIDER_TYPE.OPEN_AI) {
-    return {
-      temperature: DEFAULT_OPEN_AI_CONFIGS.TEMPERATURE,
+  const providerType = parseComposedProviderType(provider);
+
+  if (providerType === PROVIDER_TYPE.OPEN_AI) {
+    const config: LLMOpenAIConfigsType = {
+      temperature: getDefaultTemperatureForModel(model),
       maxCompletionTokens: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_OPEN_AI_CONFIGS.TOP_P,
       frequencyPenalty: DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY,
       presencePenalty: DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY,
-    } as LLMOpenAIConfigsType;
+      throttling: DEFAULT_OPEN_AI_CONFIGS.THROTTLING,
+      maxConcurrentRequests: DEFAULT_OPEN_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
+    };
+
+    if (supportsOpenAIReasoningEffort(model)) {
+      config.reasoningEffort = "high";
+    }
+
+    return config;
   }
 
-  if (provider === PROVIDER_TYPE.ANTHROPIC) {
-    return {
-      temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
+  if (providerType === PROVIDER_TYPE.ANTHROPIC) {
+    const acceptsSamplingParams = supportsSamplingParams(model);
+    const config: LLMAnthropicConfigsType = {
+      temperature: acceptsSamplingParams
+        ? DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE
+        : undefined,
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
-      topP: DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
-    } as LLMAnthropicConfigsType;
+      topP: undefined,
+      throttling: DEFAULT_ANTHROPIC_CONFIGS.THROTTLING,
+      maxConcurrentRequests: DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS,
+    };
+
+    if (supportsAnthropicThinkingEffort(model)) {
+      config.thinkingEffort = "high";
+    }
+
+    return config;
   }
 
-  if (provider === PROVIDER_TYPE.OPEN_ROUTER) {
+  if (providerType === PROVIDER_TYPE.OPEN_ROUTER) {
     return {
       maxTokens: DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS,
       temperature: DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE,
@@ -53,15 +91,55 @@ export const getDefaultConfigByProvider = (
       repetitionPenalty: DEFAULT_OPEN_ROUTER_CONFIGS.REPETITION_PENALTY,
       minP: DEFAULT_OPEN_ROUTER_CONFIGS.MIN_P,
       topA: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_A,
+      throttling: DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING,
+      maxConcurrentRequests:
+        DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS,
     } as LLMOpenRouterConfigsType;
   }
 
-  if (provider === PROVIDER_TYPE.GEMINI) {
-    return {
+  if (providerType === PROVIDER_TYPE.GEMINI) {
+    const config: LLMGeminiConfigsType = {
       temperature: DEFAULT_GEMINI_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_GEMINI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_GEMINI_CONFIGS.TOP_P,
-    } as LLMGeminiConfigsType;
+      throttling: DEFAULT_GEMINI_CONFIGS.THROTTLING,
+      maxConcurrentRequests: DEFAULT_GEMINI_CONFIGS.MAX_CONCURRENT_REQUESTS,
+    };
+
+    if (supportsGeminiThinkingLevel(model)) {
+      config.thinkingLevel = getDefaultThinkingLevel(model);
+    }
+
+    return config;
+  }
+
+  if (providerType === PROVIDER_TYPE.VERTEX_AI) {
+    const config: LLMVertexAIConfigsType = {
+      temperature: DEFAULT_VERTEX_AI_CONFIGS.TEMPERATURE,
+      maxCompletionTokens: DEFAULT_VERTEX_AI_CONFIGS.MAX_COMPLETION_TOKENS,
+      topP: DEFAULT_VERTEX_AI_CONFIGS.TOP_P,
+      throttling: DEFAULT_VERTEX_AI_CONFIGS.THROTTLING,
+      maxConcurrentRequests: DEFAULT_VERTEX_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
+    };
+
+    if (supportsVertexAIThinkingLevel(model)) {
+      config.thinkingLevel = getDefaultThinkingLevel(model);
+    }
+
+    return config;
+  }
+
+  if (providerType === PROVIDER_TYPE.CUSTOM) {
+    return {
+      temperature: DEFAULT_CUSTOM_CONFIGS.TEMPERATURE,
+      maxCompletionTokens: DEFAULT_CUSTOM_CONFIGS.MAX_COMPLETION_TOKENS,
+      topP: DEFAULT_CUSTOM_CONFIGS.TOP_P,
+      frequencyPenalty: DEFAULT_CUSTOM_CONFIGS.FREQUENCY_PENALTY,
+      presencePenalty: DEFAULT_CUSTOM_CONFIGS.PRESENCE_PENALTY,
+      custom_parameters: DEFAULT_CUSTOM_CONFIGS.CUSTOM_PARAMETERS,
+      throttling: DEFAULT_CUSTOM_CONFIGS.THROTTLING,
+      maxConcurrentRequests: DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS,
+    } as LLMCustomConfigsType;
   }
 
   return {};
@@ -69,7 +147,7 @@ export const getDefaultConfigByProvider = (
 
 interface GenerateDefaultPromptParams {
   initPrompt?: Partial<PlaygroundPromptType>;
-  setupProviders: PROVIDER_TYPE[];
+  setupProviders: COMPOSED_PROVIDER_TYPE[];
   lastPickedModel?: PROVIDER_MODEL_TYPE | "";
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
@@ -90,8 +168,18 @@ export const generateDefaultPrompt = ({
     messages: [generateDefaultLLMPromptMessage()],
     model: modelByDefault,
     provider,
-    configs: getDefaultConfigByProvider(provider),
+    configs: getDefaultConfigByProvider(provider, modelByDefault),
     ...initPrompt,
     id: generateRandomString(),
   };
+};
+
+export const parseCompletionOutput = (run: RunStreamingReturn) => {
+  return (
+    run.result ||
+    run.opikError ||
+    run.providerError ||
+    run.pythonProxyError ||
+    "The AI provider returned an empty response. Please, try again."
+  );
 };

@@ -2,50 +2,171 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+global:
+  argocd: false
+  useHelmHooks: true
+  security:
+    allowInsecureImages: true
+
 nameOverride: "opik"
 fullnameOverride: ""
 
 standalone: true
 basicAuth: false
-  
+
 registry: &registry ghcr.io/comet-ml/opik
 
 localFEAddress: "host.minikube.internal:5174"
 localFE: false
 
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
+demoDataJob:
+  enabled: true
+
+chartMigration:
+  # Enable this for the first upgrade that includes a migration from Bitnami charts and images
+  # After successful migration, set this back to false
+  enabled: true
+  image: "alpine/kubectl:1.35.0"
+  # Service account name (must have permissions to delete StatefulSets and Deployments)
+  serviceAccountName: ""
+  # Node selector for the migration job pod (falls back to global nodeSelector if not specified)
+  nodeSelector: {}
+  # Tolerations for the migration job pod (falls back to global tolerations if not specified)
+  tolerations: []
+
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+caCerts:
+  # -- (list) Additional Certificate Authority Certificates to trust.
+  # Each list entry has two keys: `name` and `content`. `name` should be a
+  # unique identifier. content Should be PEM formated Public Certificate
+  # contents.
+  additionalCACerts:
+
+  # -- Certificates are Public Keys + Metadata, but some organizations may
+  # still prefer storing these in Secrets.
+  additionalCACertsInSecret: false
+
+  # -- If there is an existing ConfigMap containing the additional CA
+  # Certificates you can provide its name here instead of creatinga a new one.
+  # If `additionalCACertsInSecret` is `true` we will look for this name in
+  # Secrets.
+  existingAdditionalCACertsRef:
+
+  overwriteJavaCATrustStore:
+    # -- If enabled we will not inject additional CA Certificates to the Java
+    # TrustStore, but instead will mount a given volume containing a Java Trust
+    # Store to replace the default one in the containers.
+    enabled: false
+    # -- A Kubernetes Volume definition which will contain a valid Java Trust
+    # Store. See
+    # https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/volume/
+    # for valid parameters.
+    volume: {}
+    # -- The sub-path of the valid Java Trust Store to mount from the volume.
+    subPath: cacerts
+
+
+# Opik MCP OAuth Authorization Server
+mcpOAuth:
+  # -- Render nginx locations (AS endpoints, consent UI, discovery URL). Turn on together with
+  # opik-backend MCP_OAUTH_ENABLED=true and a path-prefix OPIK_BASE_URL (e.g. https://www.comet.com/opik).
+  enabled: false
+
+
 component:
   backend:
     enabled: true
-    run_migration: true
-    serviceAccount: 
+    serviceAccount:
       create: true
+      name: opik-backend
+    metrics:
+      enabled: false
     image:
+      # -- Registry for this component only. Defaults to the chart-wide `registry`.
+      # Set it when one component is pulled from a different registry.
+      registry:
       repository: opik-backend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 60
+          policies:
+          - type: Pods
+            value: 2
+            periodSeconds: 60
+          selectPolicy: Max
     backendConfigMap:
       enabled: true
-    initContainers:
-    - name: wait-for-clickhouse-service
-      image: stefanevinance/wait-for-200
-      env:
-        - name: URL
-          value: http://clickhouse-opik-clickhouse:8123
-
-    # livenessProbe:
-    #   path: /health-check?name=all&type=alive
-    #   port:  8080
-    # readinessProbe:
-    #   path: /health-check?name=all&type=ready
-    #   port:  8080
-    #   initialDelaySeconds: 20
-
+    run_migration: true
+    # Resource requests/limits for the `backend-migrations` init container.
+    # Empty ({}) by default — no resources set.
+    run_migration_resources: {}
+    waitForClickhouse:
+      clickhouse:
+        host: clickhouse-opik-clickhouse
+        port: 8123
+        protocol: http
+      image:
+        registry: docker.io
+        repository: curlimages/curl
+        tag: 8.12.1
+      # Resource requests/limits for the `wait-for-clickhouse-service` init container.
+      # Empty ({}) by default — no resources set.
+      resources: {}
+    waitForMysql:
+      enabled: false
+      mysql:
+        host: opik-mysql
+        port: 3306
+      image:
+        registry: docker.io
+        repository: busybox
+        tag: 1.36
+      # Resource requests/limits for the `wait-for-mysql-service` init container.
+      # Empty ({}) by default — no resources set.
+      resources: {}
+    resources:
+      requests:
+        ephemeral-storage: 10Gi
+    livenessProbe:
+      httpGet:
+        path: /health-check?name=all&type=alive
+        port: 8080
+        httpHeaders:
+          - name: Accept
+            value: application/json
+    readinessProbe:
+      httpGet:
+        path: /health-check?name=all&type=ready
+        port: 8080
+        httpHeaders:
+          - name: Accept
+            value: application/json
+      initialDelaySeconds: 20
+    podDisruptionBudget:
+      enabled: false
     env:
       STATE_DB_PROTOCOL: "jdbc:mysql://"
-      STATE_DB_URL: "opik-mysql:3306/opik?rewriteBatchedStatements=true"
+      STATE_DB_URL: "opik-mysql:3306/opik?rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
       STATE_DB_DATABASE_NAME: "opik"
       STATE_DB_USER: opik
       ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://clickhouse-opik-clickhouse:8123"
@@ -54,9 +175,12 @@ component:
       ANALYTICS_DB_HOST: "clickhouse-opik-clickhouse"
       ANALYTICS_DB_PORT: "8123"
       ANALYTICS_DB_USERNAME: "opik"
-      ANALYTICS_DB_DATABASE_NAME: "opik"  
+      ANALYTICS_DB_DATABASE_NAME: "opik"
       JAVA_OPTS: "-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"
       REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/
+      # Self-hosted deployments legitimately point custom-provider token auth at internal gateways;
+      # the application default is "strict" (SSRF guard) for non-self-hosted deployments.
+      LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD: "relaxed"
       ANALYTICS_DB_MIGRATIONS_PASS: opik
       ANALYTICS_DB_PASS: opik
       STATE_DB_PASS: opik
@@ -67,10 +191,30 @@ component:
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
+      PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
+      UI_DEFAULT_PAGE_SIZE: "100"
+      # CIPX device-token auth (see apps/opik-backend/config.yml `cipxTokenValidation`).
+      # Off by default: validation is delegated to a cost-api service that
+      # self-hosted deployments do not run, and while disabled the backend
+      # never inspects the token prefix.
+      CIPX_TOKEN_VALIDATION_ENABLED: "false"
+      # The in-cluster service, not the public front door: the validator is
+      # reached only from inside the cluster.
+      CIPX_TOKEN_VALIDATION_URL: "http://ai-cost-backend"
+      # LLM model registry (see apps/opik-backend/config.yml:1309-1317).
+      # Remote CDN fetch is opt-in: self-hosted / OSS deployments serve
+      # the classpath YAML shipped with the release by default, no
+      # outbound traffic. Operators who want fresh models between
+      # releases can set LLM_MODEL_REGISTRY_REMOTE_ENABLED: "true" and
+      # point LLM_MODEL_REGISTRY_REMOTE_URL at their preferred source.
+      LLM_MODEL_REGISTRY_DEFAULT_RESOURCE: "llm-models-default.yaml"
+      LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH: ""
+      LLM_MODEL_REGISTRY_REMOTE_ENABLED: "false"
+      LLM_MODEL_REGISTRY_REMOTE_URL: ""
+      LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS: "300"
     envFrom:
       - configMapRef:
           name: opik-backend
-
     service:
       type: ClusterIP
       ports:
@@ -78,49 +222,232 @@ component:
         port:  8080
         protocol: TCP
         targetPort:  8080
-      - name: backend
+      - name: swagger
         port:  3003
         protocol: TCP
         targetPort:  3003
-
     ingress:
       enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
+    # @ignored
+    usesJavaTrustStore: true
 
   python-backend:
     enabled: true
-    serviceAccount: 
+    serviceAccount:
       create: true
+      name: opik-python-backend
+    metrics:
+      enabled: false
     image:
+      # -- Registry for this component only. Defaults to the chart-wide `registry`.
+      # Set it when one component is pulled from a different registry.
+      registry:
       repository: opik-python-backend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 60
+          policies:
+          - type: Pods
+            value: 2
+            periodSeconds: 60
+          selectPolicy: Max
     backendConfigMap:
       enabled: true
+    # Without a readiness probe a pod joins the Service's endpoints as soon as its container
+    # starts, so during a rollout the backend's evaluator calls reach a gunicorn that is not
+    # listening yet and get "connection refused" (HttpHostConnectException) — the backend's four
+    # retries span only ~3.5s, less than a pod takes to boot. Readiness gates the endpoint on the
+    # app actually answering; the preStop sleep covers the other side of the race, giving
+    # kube-proxy time to drop a terminating pod from the endpoint list before the process exits.
+    #
+    # Overriding any of these replaces only the keys you set — Helm merges the rest of the map in
+    # from here. Set every field you care about, or null the ones you want gone
+    # (`httpGet: null`, `periodSeconds: null`, ...).
+    #
+    # The startup probe is what makes the liveness probe safe: with
+    # PYTHON_CODE_EXECUTOR_STRATEGY=docker, entrypoint.sh waits up to 30s for dockerd and then
+    # loads the sandbox executor image before gunicorn binds, so liveness alone (15s x 3) could
+    # restart the pod before it ever finished starting. Kubernetes suppresses both liveness and
+    # readiness until the startup probe passes, and 5s x 60 gives startup five minutes.
+    startupProbe:
+      httpGet:
+        path: /health/liveness
+        port: 8000
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 60
+    livenessProbe:
+      httpGet:
+        path: /health/liveness
+        port: 8000
+      periodSeconds: 15
+      # Above the 1s Kubernetes default: gunicorn under load can take longer than
+      # a second to answer, and a probe timeout counts as a failure.
+      timeoutSeconds: 3
+      failureThreshold: 3
+    # Deliberately /health/liveness, not /health/readiness: the latter pings Redis whenever the RQ
+    # worker is enabled, which it is by default (RQ_WORKER_ENABLED defaults to "true" and this chart
+    # never sets it). That would put a shared dependency in the endpoint-membership decision, so a
+    # Redis blip would fail readiness on every replica at once and leave the backend's evaluator
+    # calls with no endpoints — the same outage this probe exists to prevent. Code execution needs
+    # no Redis; only the Optimization Studio worker does, and that is not what Service endpoints
+    # gate. (REDIS_TIMEOUT_SECONDS also defaults to 5s, above the timeout below, so a slow Redis
+    # would trip the probe before the handler could answer.)
+    readinessProbe:
+      httpGet:
+        path: /health/liveness
+        port: 8000
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+    lifecycle:
+      preStop:
+        exec:
+          command: ["/bin/sh", "-c", "sleep 5"]
+    podDisruptionBudget:
+      enabled: false
+    # Init container that blocks startup until Redis is reachable. Rendered only
+    # when the RQ worker is enabled (RQ_WORKER_ENABLED unset or != "false") AND
+    # bundled Redis is deployed (redis.enabled: true). Skipped automatically for
+    # managed/external Redis (redis.enabled: false) — no StatefulSet boot race
+    # there, and the default host below would not resolve.
+    waitForRedis:
+      # Explicit opt-out for bundled-Redis installs. Has no effect when
+      # redis.enabled is false (the wait is already skipped in that case).
+      enabled: true
+      redis:
+        # Empty by default so the template falls back to redis.fullnameOverride
+        # (then "opik-redis-master"). Set explicitly to target a different host.
+        host: ""
+        port: 6379
+      image:
+        registry: docker.io
+        repository: busybox
+        tag: "1.36"
+      # Resource requests/limits for the `wait-for-redis-service` init container.
+      # Empty ({}) by default — no resources set.
+      resources: {}
     env:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
-      PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python" 
-      PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
+      PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
+      # PYTHON_CODE_EXECUTOR_IMAGE_TAG defaults to Chart.AppVersion when not specified
+      PYTHON_CODE_EXECUTOR_STRATEGY: "process"
+      PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
+      PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
+      PYTHON_CODE_EXECUTOR_ALLOW_NETWORK: "false"
+      PYTHON_CODE_EXECUTOR_CPU_SHARES: "512"
+      PYTHON_CODE_EXECUTOR_MEM_LIMIT: "256m"
+      # PYTHON_CODE_EXECUTOR_CPU_LIMIT: "0.5"  # Hard CPU limit per executor container (in CPUs, e.g. "0.5" = half a core). Unset by default — no hard limit.
+      PYTHON_CODE_EXECUTOR_METRICS_INTERVAL_IN_SECONDS: "60"
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
+      OTEL_SERVICE_NAME: "opik-python-backend"
+      OTEL_METRIC_EXPORT_INTERVAL: "60000"
+      OTEL_PROPAGATORS: "tracecontext,baggage"
+      OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED: true
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
+      # Opik SDK URL for optimizer to reach Java backend
+      OPIK_URL_OVERRIDE: "http://opik-backend:8080"
+      # Redis URL for Optimization Studio log streaming
+      REDIS_URL: redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/
+
+      # ============================================================
+      # Optimization Studio Configuration (optional)
+      # ============================================================
+      # The Optimization Studio RQ worker runs in this service by default
+      # (RQ_WORKER_ENABLED defaults to true). Set RQ_WORKER_ENABLED: "false"
+      # to run an executor-only python-backend without the worker.
+      # Maximum number of concurrent optimization jobs (default: 5)
+      # Each job runs in a separate worker thread with isolated subprocess
+      # OPTSTUDIO_MAX_CONCURRENT_JOBS: "5"
+      # Number of dataset items to sample for optimization (default: 1000)
+      # Limits memory usage for large datasets
+      # OPTSTUDIO_DATASET_SAMPLES: "1000"
+      # Terminal width for Rich log output formatting (default: 80)
+      # OPTSTUDIO_LOG_TERM_WIDTH: "150"
+      # Execution timeout for optimization jobs in seconds (default: 21600 = 6 hours)
+      # OPTSTUDIO_EXECUTION_TIMEOUT: "21600"
+      # Log level for the opik-optimizer SDK (default: DEBUG)
+      # OPIK_OPTIMIZER_LOG_LEVEL: "DEBUG"
+      # TTL for optimization logs in Redis in seconds (default: 86400 = 24 hours)
+      # OPTSTUDIO_LOG_REDIS_TTL: "86400"
+      # Default max output tokens for optimizer LLM calls (default: 8192)
+      # Prevents truncation of structured JSON outputs from LLM
+      # OPTSTUDIO_LLM_MAX_TOKENS: "8192"
+      # TTL for failed RQ jobs in Redis in seconds (default: 86400 = 1 day)
+      # RQ_WORKER_TTL_FAILURE: "86400"
+
+    # LLM provider API keys are no longer injected via environment variables.
+    # Configure them per workspace in the Opik UI under "AI Providers" — the
+    # backend resolves the key from workspace settings when the Optimization
+    # Studio and Playground make LLM calls.
+    #
+    # Optional: Reference external Kubernetes secrets for other sensitive
+    # configuration (e.g. AWS credentials, DB credentials) from external secret
+    # managers (AWS Secrets Manager, GCP Secret Manager, Azure Key Vault).
+    #
+    # Customers can create secrets using:
+    # - ExternalSecret Operator (recommended for production)
+    # - Kubernetes Secrets CSI Driver
+    # - Manual kubectl create secret
+    #
+    # Each secretRef will be added as an envFrom entry, making all key-value pairs
+    # from the secret available as environment variables in the python-backend pod.
+    #
+    # Example configuration:
+    # secretRefs:
+    #   - name: "opik-aws-credentials"    # Contains AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+    secretRefs: []
+
     envFrom:
       - configMapRef:
           name: opik-python-backend
-          
+
     securityContext:
       privileged: true
     networkPolicy:
-      enabled: true
-      engineEgress:
-        ipBlock: 0.0.0.0/0
-        except:
-          - 10.0.0.0/8
-          - 100.64.0.0/10
-          - 172.16.0.0/12
-          - 192.0.0.0/24
-          - 198.18.0.0/15
-          - 192.168.0.0/16
+      enabled: false
+      annotations: {}
+      additionalRules: []
+      # example networks to block
+      # # Allow egress to public internet, excluding private / reserved ranges
+      #   - to:
+      #     - ipBlock:
+      #         cidr: 0.0.0.0/0
+      #         except:
+      #           # Standard RFC1918 Private Ranges
+      #           - 10.0.0.0/8
+      #           - 172.16.0.0/12
+      #           - 192.168.0.0/16
+      #           # EKS / Carrier Grade NAT
+      #           - 100.64.0.0/10
+      #           # AWS Metadata & Link Local (Very Important)
+      #           - 169.254.0.0/16
+      #           # Loopback range
+      #           - 127.0.0.0/8
+      #           # Reserved / Protocol Ranges
+      #           - 192.0.0.0/24
+      #           - 198.18.0.0/15
+      #           # Multicast ranges
+      #           - 224.0.0.0/4
+      #           # Broadcast address
+      #           - 255.255.255.255/32
 
     service:
       type: ClusterIP
@@ -132,31 +459,49 @@ component:
 
     ingress:
       enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
 
-    
   frontend:
     enabled: true
-    serviceAccount: 
+    serviceAccount:
       create: true
+      name: opik-frontend
+    metrics:
+      enabled: false
     image:
+      # -- Registry for this component only. Defaults to the chart-wide `registry`.
+      # Set it when one component is pulled from a different registry.
+      registry:
       repository: opik-frontend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 60
+          policies:
+          - type: Pods
+            value: 2
+            periodSeconds: 60
+          selectPolicy: Max
     backendConfigMap:
       enabled: false
-    volumeMounts:
-    - mountPath: /etc/nginx/conf.d/
-      name: opik-frontend-nginx
-    volumes:
-    - name: opik-frontend-nginx
-      configMap:
-        name: opik-frontend-nginx
-        items:
-        - key: default.conf
-          path: default.conf
+    resources:
+      requests:
+        ephemeral-storage: 10Gi
     service:
       type: ClusterIP
       ports:
@@ -166,35 +511,183 @@ component:
         targetPort:  5173
     ingress:
       enabled: false
+      ingressClassName: ""
+      annotations: {}
+      hosts: []
+        # - host: opik.example.com
+        #   paths:
+        #     - path: /
+        #       port: 5173
+        #       pathType: Prefix
+        #     - path: /api
+        #       port: 5173
+        #       pathType: Prefix
+        #     - path: /opik-ai
+        #       port: 5173
+        #       pathType: Prefix
+      tls:
+        enabled: false
+        hosts: []
+        secretName: ""
     # throttled locations
     throttling: {}
     # map variables for use with throttling and other places
     maps: []
     # use internal aws resolvr on vpc
     awsResolver: false
-    logFormat: logger-json
-    logFormats:
-      "logger-json": >-
-        escape=json '{
-        "body_bytes_sent": $body_bytes_sent,
-        "http_referer": "$http_referer",
-        "http_user_agent": "$http_user_agent",
-        "remote_addr": "$remote_addr",
-        "remote_user": "$remote_user",
-        "request": "$request",
-        "status": $status,
-        "time_local": "$time_local",
-        "x_forwarded_for": "$http_x_forwarded_for"
-        }'
+    # nginx -> opik-backend upstream keepalive connection recycling (OPIK-7327).
+    # Recycling re-spreads long-lived keepalive connections across backend pods; without it a
+    # few pods absorb ingestion while the rest idle and HPA (average CPU) never scales out.
+    # Tune low enough to rebalance under sustained load, but not so low that connection reuse
+    # races on non-idempotent POSTs (keep >= ~50; nginx's own default is 1000).
+    keepaliveRequests: 100    # max requests per upstream keepalive connection before recycle (count)
+    keepaliveTimeout: 60s     # idle timeout for upstream keepalive connections (duration, e.g. 30s/60s)
+    # Enable HSTS header (only enable when running behind HTTPS termination)
+    # DEPRECATED: Use extraServerHeaders instead for more flexibility
+    hstsEnabled: false
+    # Cache control configuration for static assets
+    # Defines max-age values for different file types based on deployment frequency
+    # List of pattern/value pairs - order matters! First match wins in nginx map.
+    # Patterns are evaluated in the order defined here.
+    cacheControl:
+      # JavaScript and CSS - 7 days cache (frequent deployments with versioned/hashed filenames)
+      - pattern: "~assets/.*\\.(js|css)$"
+        value: "public, max-age=604800, immutable"
+      # Images - 30 days cache (static assets, but may update)
+      - pattern: "~(images/.*|assets/.*)\\.(jpg|jpeg|png|gif|svg|webp|ico)$"
+        value: "public, max-age=2592000"
+      # Fonts - 30 days cache (rarely change, but shorter for frequent updates)
+      - pattern: "~assets/.*\\.(woff|woff2|ttf|eot)$"
+        value: "public, max-age=2592000"
+      # JSON/data files - 1 day cache (may update frequently)
+      - pattern: "~assets/.*\\.json$"
+        value: "public, max-age=86400"
+      # HTML files and everything else - always revalidate to get fresh content
+      - pattern: "default"
+        value: "no-cache, must-revalidate"
+    # Extra server-level headers to add to all responses
+    # Use this to add custom security headers or override defaults
+    # Key is the header name, value can be a string or list of strings
+    # If list, multiple add_header directives will be generated
+    extraServerHeaders:
+      # OWASP recommended security headers (defaults)
+      X-Content-Type-Options: "nosniff"
+      X-Frame-Options: "DENY"
+      X-XSS-Protection: "0"
+      # Add custom headers or override defaults:
+      # X-Custom-Header: "custom-value"
+      # Strict-Transport-Security: "max-age=31536000; includeSubDomains; preload"
+      # Multiple values example (list):
+      # Link:
+      #   - "</style.css>; rel=preload; as=style"
+      #   - "</script.js>; rel=preload; as=script"
+    # Content Security Policy (CSP) configuration
+    # Customize these lists to allow additional external services (analytics, CDNs, etc.)
+    # Note: The legacy 'csp.enabled' flag is still honored for backward compatibility.
+    # If you previously set 'csp.enabled: false', CSP headers will not be added.
+    contentSecurityPolicy:
+      # Default source for all directives
+      default-src:
+        - "'self'"
+      # Scripts allowed to execute
+      script-src:
+        - "'self'"
+        - "'unsafe-inline'"
+        - "'unsafe-eval'"
+        # Add external services here, e.g.:
+        # - "https://cdn.example.com"
+      # Styles allowed to load
+      style-src:
+        - "'self'"
+        - "'unsafe-inline'"
+        - "https://fonts.googleapis.com"
+      # Images allowed to load
+      img-src:
+        - "'self'"
+        - "data:"
+        - "blob:"
+        - "https:"
+        - "http:"
+      # Media (audio/video) allowed to load
+      media-src:
+        - "'self'"
+        - "data:"
+        - "blob:"
+        - "https:"
+        - "http:"
+      # Fonts allowed to load
+      font-src:
+        - "'self'"
+        - "data:"
+        - "https://fonts.gstatic.com"
+      # XHR/Fetch/WebSocket connections allowed
+      connect-src:
+        - "'self'"
+        - "ws:"
+        - "wss:"
+        - "https:"
+        # Add external API endpoints here, e.g.:
+        # - "https://api.example.com"
+      # Objects/plugins (Flash, Java, etc.)
+      object-src:
+        - "'none'"
+      # Base URI for relative URLs
+      base-uri:
+        - "'self'"
+      # Frame ancestors (who can embed this site)
+      frame-ancestors:
+        - "'none'"
+      # Child frames/workers
+      child-src:
+        - "'self'"
+        - https://cdn.comet.com
+      # Form submission targets
+      form-action:
+        - "'self'"
+      # Manifest files
+      manifest-src:
+        - "'self'"
+      # Worker, shared worker, service worker sources
+      worker-src:
+        - "'self'"
+        - "blob:"
     upstreamConfig: {}
       # proxy_read_timeout: 60
       # proxy_connect_timeout: 60
       # proxy_send_timeout: 60
       # proxy_buffering: 'on'
       # proxy_request_buffering: 'on'
+    # Cost Intelligence (cost-api): when enabled, the frontend nginx routes the
+    # ai-spend subset (<rootPath>/api/v1/private/ai-spend/*) to the standalone
+    # ai-cost-backend service instead of opik-backend, served same-origin so the
+    # platform session cookie still reaches it. Off by default; the consuming
+    # deployment turns it on the same way on both comet.com (comet-helm) and
+    # single-tenant SaaS (comet-ml-helm-chart). rootPath-aware, so it works
+    # whether opik is served at the root or under /opik.
+    #
+    # This also exposes cost-api's version endpoint at <rootPath>/cost-api/ver
+    # (exact match only, so none of cost-api's other routes become reachable),
+    # mirroring opik's own <rootPath>/api/is-alive/ver so release tooling can read
+    # the deployed cost-api version.
+    #
+    # Scope of that guarantee: this chart owns the proxy hop only — it forwards
+    # <rootPath>/cost-api/ver to the ai-cost-backend service with the rootPath
+    # stripped. The response is cost-api's own contract, not this chart's: it
+    # serves that path unauthenticated and answers {"version": "<build version>"}.
+    # Nothing here pins that, so if cost-api changes the shape or starts requiring
+    # auth, this location keeps proxying and the consumer sees the new behaviour.
+    aiSpendBackend:
+      enabled: false
+      host: ai-cost-backend
+      port: 8000
+      # cost-api's ROOT_PATH — the rewrite target prefix. A request to
+      # <rootPath>/api/v1/private/ai-spend/X is proxied as <costApiRootPath>/v1/private/ai-spend/X.
+      costApiRootPath: /cost-api
+    podDisruptionBudget:
+      enabled: false
 
 mysql:
-  enabled: true 
+  enabled: true
   fullnameOverride: opik-mysql
   auth:
     rootPassword: "opik"
@@ -204,121 +697,523 @@ mysql:
       CREATE USER IF NOT EXISTS 'opik'@'%' IDENTIFIED BY 'opik';
       GRANT ALL ON `opik`.* TO 'opik'@'%';
       FLUSH PRIVILEGES;
+  primary:
+    # Use Bitnami MySQL data directory path for compatibility
+    dataDir: /bitnami/mysql/data
+    persistence:
+      enabled: true
+      size: 20Gi
+
+minio:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: cloudpirates/image-minio
+    tag: "RELEASE.2025-10-15T17-29-55Z-hardened"
+    imagePullPolicy: IfNotPresent
+  replicaCount: 1
+  config:
+    browserEnabled: false
+  persistence:
+    enabled: true
+    size: 50Gi
+  auth:
+    rootUser: "THAAIOSFODNN7EXAMPLE"
+    rootPassword: "LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  defaultBuckets: "public:download"
+  fullnameOverride: opik-minio
+
 
 redis:
   enabled: true
-  ssl: false
-  fullnameOverride: opik-redis
+  # Use bitnami redis fullnameOverride for compatibility
+  fullnameOverride: opik-redis-master
   architecture: standalone
   metrics:
     enabled: false
   auth:
+    enabled: true
     password: "wFSuJX9nDBdCa25sKZG7bh"
   image:
+    registry: docker.io
     repository: redis/redis-stack-server
-    tag: 7.2.0-v10
-  master:
-    resources:
-      requests:
-        cpu: 15m
-        memory: 105M
-      limits:
-        # cpu: 15m
-        memory: 1Gi
-    args:
-      - -c
-      - /opt/bitnami/scripts/merged-start-scripts/start-master.sh
-    configuration: maxmemory 105M
-    extraVolumes:
-      - name: merged-start-scripts
-        configMap:
-          name: bitnami-redis-stack-server-merged
-          defaultMode: 493
-    extraVolumeMounts:
-      - name: merged-start-scripts
-        mountPath: /opt/bitnami/scripts/merged-start-scripts
-  extraDeploy:
-    - apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: bitnami-redis-stack-server-merged
-      data:
-        start-master.sh: "#!/usr/bin/dumb-init /bin/bash\n### docker entrypoint script,\
-          \ for starting redis stack\nBASEDIR=/opt/redis-stack\ncd ${BASEDIR}\nCMD=${BASEDIR}/bin/redis-server\n\
-          if [ -z \"${REDISEARCH_ARGS}\" ]; then\nREDISEARCH_ARGS=\"MAXSEARCHRESULTS\
-          \ 10000 MAXAGGREGATERESULTS 10000\"\nfi\n[[ -f $REDIS_PASSWORD_FILE ]] &&\
-          \ export REDIS_PASSWORD=\"$(< \"${REDIS_PASSWORD_FILE}\")\"\nif [[ -f /opt/bitnami/redis/mounted-etc/master.conf\
-          \ ]];then\n    cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf\n\
-          fi\nif [[ -f /opt/bitnami/redis/mounted-etc/redis.conf ]];then\n    cp /opt/bitnami/redis/mounted-etc/redis.conf\
-          \ /opt/bitnami/redis/etc/redis.conf\nfi\n${CMD} \\\n--port \"${REDIS_PORT}\"\
-          \ \\\n--requirepass \"${REDIS_PASSWORD}\" \\\n--masterauth \"${REDIS_PASSWORD}\"\
-          \ \\\n--include \"/opt/bitnami/redis/etc/redis.conf\" \\\n--include \"/opt/bitnami/redis/etc/master.conf\"\
-          \ \\\n--loadmodule ${BASEDIR}/lib/redisearch.so ${REDISEARCH_ARGS} \\\n\
-          --loadmodule ${BASEDIR}/lib/redistimeseries.so ${REDISTIMESERIES_ARGS} \\\
-          \n--loadmodule ${BASEDIR}/lib/rejson.so ${REDISJSON_ARGS} \\\n--loadmodule\
-          \ ${BASEDIR}/lib/redisbloom.so ${REDISBLOOM_ARGS}\n"
+    tag: "7.2.0-v10"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 15m
+      memory: 105M
+    limits:
+      memory: 1Gi
+  config:
+    content: |
+      # Redis Stack configuration
+      dir /data
+      maxmemory 105M
+      maxmemory-policy allkeys-lru
+      # Redis Stack modules are automatically loaded by the redis-stack-server image
+  persistence:
+    enabled: true
+    size: 8Gi
 
 altinity-clickhouse-operator:
+  enabled: true
   metrics:
     enabled: false
   serviceMonitor:
     enabled: false
+    interval: '' # workaround for https://github.com/Altinity/clickhouse-operator/issues/1759
+
+# Backend-side settings for the analytics (ClickHouse) database. Rendered into the backend env
+# ConfigMap; each key maps to the env var of the same name documented in apps/opik-backend/config.yml.
+# An explicit key under component.backend.env always wins over the value derived here.
+databaseAnalytics:
+  # Gates the `clickhouse-cold-storage-disk` readiness probe, which fails readiness when the `cold_s3`
+  # tiered-storage disk isn't reachable from the node. Independent of clickhouse.tieredStorage.enabled
+  # on purpose: the disk is provisioned first and only becomes load-bearing once a migration attaches
+  # the `tiered_replicated` policy to a table, so this is turned on separately, after that.
+  coldStorageDiskHealthCheckEnabled: false
+  # UUIDv7 ingestion validation. `enabled` is the kill-switch; while it is false the other two are
+  # inert. `auditOnly` counts out-of-window ids (opik.ingestion.uuid_v7.rejected, tagged by workspace)
+  # and logs them instead of rejecting with HTTP 400, so offenders surface without breaking ingestion.
+  uuidV7ValidationEnabled: false
+  uuidV7ValidationAuditOnly: false
+  # Validation window as a Dropwizard duration. Writes whose `id` is a UUIDv7 embedding a timestamp
+  # further than this into the past or future are out of window. Accepted range is 12h .. 45d; the
+  # backend rejects anything outside that at startup.
+  uuidV7ValidationWindow: 24h
+
+# Cutover toggles for the trace/span analytics data model. Each one is flipped in lockstep with a
+# migration, so they stay false until that migration runs — see apps/opik-backend/config.yml for the
+# exact ordering constraints.
+databaseAnalyticsDataModel:
+  # Turn true once the traces table's Nullable end_time/duration/ttft columns are replaced with
+  # sentinel-defaulted non-nullable ones, in lockstep with the cutover EXCHANGE. Gates reads too.
+  traceColumnsNonNullable: false
+  # Spans sibling of traceColumnsNonNullable, for the later spans cutover. Flip independently.
+  spanColumnsNonNullable: false
+  # Turn true once the trace backfill starts, so trace deletes also record the deleted ids in the
+  # deletion_events_local bridge. Scope to the backfill-to-cutover window.
+  traceDeletionEventsCaptureEnabled: false
+  # Spans sibling: captures the span ids removed by the trace-delete cascade. Flip independently.
+  spanDeletionEventsCaptureEnabled: false
+  # Rows per INSERT into the deletion_events_local bridge.
+  deletionEventsInsertBatchSize: 1000
+  # Turn true in lockstep with applying the Distributed wrap, so trace delete/retention mutations target
+  # traces_local (a Distributed traces rejects mutations). Leave false while traces is still a MergeTree.
+  # Asserted against the live database by the backend's `clickhouse-traces-topology` readiness probe: if this
+  # disagrees with the actual `traces` engine in either direction, the backend fails readiness at startup with a
+  # message naming the flag and the observed engine. That is intentional — it beats serving traffic whose trace
+  # deletes are guaranteed to fail — and it clears on the next probe once the two sides are back in step.
+  tracesDistributedWrapEnabled: false
+
+# ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
+# lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps
+# a single instance polling.
+partitionMetrics:
+  enabled: false
+  # Poll interval as a Dropwizard duration. Min 30s, max 1h.
+  interval: 5m
+  # Comma-separated tables scanned for lightweight-deleted (masked) rows.
+  lwdTables: "traces,spans"
 
 clickhouse:
   enabled: true
   shardsCount: 1
+  # Declares that this deployment fronts its tables with Distributed tables (the Hyperscale
+  # topology). While off, nothing here is rendered, so upgrading the chart never reshapes an
+  # existing cluster on its own. Turning it on does two things:
+  #   - enables the backend's `clickhouse-cluster` readiness probe, which verifies the Distributed
+  #     cluster definition is visible from the node (ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED — set
+  #     that key explicitly under component.backend.env to decouple the two)
+  #   - pins internal_replication on each shard of the ClickHouseInstallation, whenever
+  #     replicasCount > 1. With the flag off the operator infers it from replicasCount > 1 instead,
+  #     which is the behaviour every deployment already has.
+  #
+  # Note this is deliberately NOT tied to shardsCount > 1. internal_replication governs replica
+  # fan-out *within* a shard, not the number of shards: on a single shard with 2 replicas it decides
+  # whether an INSERT into the Distributed table writes one replica and lets ReplicatedMergeTree
+  # replicate the parts, or writes both directly. That single-shard case is the near-term target —
+  # the traces cutover fronts the table with a Distributed table that is "transparent on a single
+  # shard", with real sharding turned on later — so gating on shardsCount > 1 would exclude the very
+  # deployment this is meant to cover. Turn the flag on when the Distributed tables land, whatever
+  # shardsCount is.
+  sharding:
+    enabled: false
+  # Rendered into the ClickHouseInstallation's `spec.configuration.profiles`. The Altinity
+  # operator turns these into `users.d/chop-generated-profiles.xml`, the last file the server
+  # reads, so a value here wins over both the chart's `conf.d/profiles.xml` below and the
+  # operator's own `users.d/02-clickhouse-default-profile.xml`. That precedence is why the
+  # Distributed insert-queue settings live here rather than in `configuration.files`.
+  #
+  # WARNING: this is a Helm list, and Helm replaces lists wholesale rather than merging them. A
+  # values file declaring its own `additionalProfiles` must repeat the `default` entry below or
+  # silently lose these settings. `tests/clickhouse_profiles_test.yaml` asserts both.
+  #
+  # -- (list) Extra ClickHouse settings profiles. Wins over the operator's own defaults; carries
+  # the Distributed insert-queue baseline on `default`. A values file declaring its own list must
+  # repeat that entry — Helm replaces lists rather than merging them.
+  additionalProfiles:
+    # An INSERT into a Distributed table that does not land on a local replica is serialised to a
+    # file on disk, and a single background sender per node ships those files one per network
+    # round trip unless batching is on — each trip paying the receiving node's async-insert
+    # flush. That caps forwarding throughput hard, and once arrivals exceed it the queue and the
+    # ingestion visibility lag grow without bound, with no errors and no MergeTree throttling.
+    # Batching packs many files into each round trip; split_batch_on_failure retries a failed
+    # batch file-by-file rather than wedging the queue behind one bad file.
+    #
+    # These session-setting spellings are what belongs in a profile: they seed the Distributed
+    # engine's own background_insert_* table settings for tables created without a SETTINGS
+    # clause, which is all of ours.
+    #
+    # IMPORTANT: that seeding happens when the table is ATTACHED — on CREATE and on every server
+    # start — and is read from the server-wide context, so setting them per session has no
+    # effect. Landing these needs a rolling ClickHouse restart. No table recreate is required and
+    # the table definition is untouched; `ALTER TABLE ... MODIFY SETTING` is rejected on a
+    # Distributed table (Code 48, NOT_IMPLEMENTED).
+    #
+    - name: default
+      settings:
+        distributed_background_insert_batch: 1
+        distributed_background_insert_split_batch_on_failure: 1
+  # For a FRESH High-Availability install, use the two-phase flow: install with replicasCount 1, let
+  # opik-backend finish all migrations, THEN raise replicasCount and upgrade so the ClickHouse operator
+  # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
+  # migrations from completing on a fresh cluster. See the self-host/scaling docs.
   replicasCount: 1
-  image: altinity/clickhouse-server:24.3.5.47.altinitystable
+  image: altinity/clickhouse-server:26.3.16.10001.altinitystable
   storage: 50Gi
   logsLevel: information
+  # Custom health checks with longer timeouts for major version upgrades
+  livenessProbe:
+    httpGet:
+      path: /ping
+      port: 8123
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 10
+  readinessProbe:
+    httpGet:
+      path: /ping
+      port: 8123
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+  configuration:
+    files:
+      conf.d/memory.xml: |
+        <yandex>
+          <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
+        </yandex>
+      conf.d/profiles.xml: |
+        <clickhouse>
+          <profiles>
+            <default>
+                <max_bytes_ratio_before_external_sort>0.2</max_bytes_ratio_before_external_sort>
+                <max_bytes_ratio_before_external_group_by>0.2</max_bytes_ratio_before_external_group_by>
+                <!-- CH 25.8 made the experimental Time type opt-in; required for fresh installs to replay migration 000030. -->
+                <enable_time_time64_type>1</enable_time_time64_type>
+                <!-- the new CH 25.x default (1) makes FINAL reads on skip-indexed tables over-read massively; our queries already prune on the PK/project_id, so exact mode isn't needed. -->
+                <use_skip_indexes_if_final_exact_mode>0</use_skip_indexes_if_final_exact_mode>
+            </default>
+          </profiles>
+        </clickhouse>
+      # Remove or add TTL to system tables that are not needed
+      conf.d/system_tables.xml: |
+        <clickhouse>
+          <opentelemetry_span_log remove="1"/>
+          <asynchronous_metric_log remove="1"/>
+          <processors_profile_log remove="1"/>
+          <text_log remove="1"/>
+          <trace_log remove="1"/>
+          <blob_storage_log remove="1"/>
+          <error_log>
+              <engine>
+                  ENGINE MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>error_log</table>
+          </error_log>
+          <latency_log>
+              <engine>
+                  ENGINE = MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>latency_log</table>
+          </latency_log>
+          <metric_log>
+              <engine>
+                  ENGINE = MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>metric_log</table>
+          </metric_log>
+          <query_metric_log>
+              <engine>
+                  ENGINE = MergeTree
+                  PARTITION BY toYYYYMM(event_date)
+                  ORDER BY (event_date, event_time)
+                  TTL event_date + toIntervalDay(30)
+                  SETTINGS index_granularity = 8192
+              </engine>
+              <database>system</database>
+              <table>query_metric_log</table>
+          </query_metric_log>
+        </clickhouse>
   service:
     serviceTemplate: clickhouse-cluster-svc-template
+  templates:
+    podTemplate: clickhouse-cluster-pod-template
+    replicaServiceTemplate: clickhouse-replica-svc-template
+    serviceTemplate: clickhouse-cluster-svc-template
+    volumeClaimTemplate: storage-vc-template
+  extraServiceTemplates: []
+  extraPodTemplates: []
+  extraVolumeClaimTemplates: []
+  # -- (list) Additional volume mounts for the ClickHouse server container.
+  # Use this to mount volumes that ClickHouse server needs direct access to,
+  # such as a backup disk for embedded backups (BACKUP TO Disk(...)).
+  # The mount name can reference a CHI volumeClaimTemplate defined in
+  # `clickhouse.extraVolumeClaimTemplates` (matched by name automatically by
+  # the ClickHouse operator), or a volume defined in `clickhouse.extraVolumes`.
+  extraVolumeMounts: []
+  # -- (list) Additional pod-level volumes for the ClickHouse pod, independent
+  # of the backup server sidecar. Use this for non-PVC volume types (configMap,
+  # secret, emptyDir, hostPath, etc.) that should be available to the ClickHouse
+  # server container. For persistent storage, prefer defining a CHI-managed PVC
+  # via `clickhouse.extraVolumeClaimTemplates` and referencing it by name in
+  # `extraVolumeMounts` above.
+  extraVolumes: []
+  # -- Tiered storage (hot local disk -> cold S3 with a read-through cache).
+  # Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold
+  # disks) and provisions a per-node EBS cache volume for the S3 cache. This is
+  # pure server-side infrastructure: it stays inert until a migration attaches
+  # the `tiered_replicated` policy to a table, so `enabled: false` (default) is
+  # a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros
+  # ({shard}/{replica}) cannot be used because the S3 disk is read at server
+  # start, before macros bind.
+  tieredStorage:
+    enabled: false
+    hot:
+      # keep_free_space_bytes on the hot disk (headroom before TTL MOVE to cold).
+      # The hot tier is ClickHouse's built-in `default` disk (the server data
+      # path); this only tunes its free-space headroom.
+      keepFreeSpaceBytes: "10737418240" # 10 GiB
+    cold:
+      s3:
+        # Base S3 URL for the cold disk, e.g. https://<bucket>.s3.<region>.amazonaws.com
+        endpoint: ""
+        # Per-replica bucket prefix. Rendered concretely by Helm (no CH macros).
+        prefix: "clickhouse-cold/"
+        region: ""
+        # Use the pod's IAM role (IRSA) instead of static keys.
+        useEnvironmentCredentials: true
+        # Keep false: the tiered_replicated policy writes parts to cold on TTL
+        # MOVE, so the disk must be writable. Set true only for a pre-populated /
+        # externally-managed bucket that ClickHouse should never write to.
+        readOnly: false
+        maxGetRps: 1000
+        maxPutRps: 500
+      cache:
+        # Read-through LRU cache wrapping cold_s3, on a local EBS volume.
+        # Must be a DNS label (<=63 chars, lowercase alphanumeric or '-', start
+        # with a letter) — used verbatim as the K8s volume / PVC name.
+        volumeName: s3-cache-vc-template
+        path: /var/cache/clickhouse_s3
+        storage: 200Gi
+        maxSize: "214748364800" # 200 GiB
+        # Falls back to clickhouse.storageClassName when empty.
+        storageClassName: ""
   adminUser:
     useSecret:
       enabled: false
     username: opik
     password: opik
-  backup: 
+  serviceAccount:
+    annotations: {}
+    create: false
+    name: ""
+  zookeeper:
+      host: opik-zookeeper
+  backup:
     enabled: false
     successfulJobsHistoryLimit: 1
-    # bucketURL: ""
-    # secretName: ""
-    # schedule: ""
-    # baseBackup: ""
+    serviceAccount:
+      annotations: {}
+      create: false
+      name: ""
+    schedule: "0 0 * * *" # daily at midnight
+    extraEnv: {}
+    command:
+      - /bin/bash
+      - '-cx'
+      - |-
+        export backupname=backup$(date +'%Y%m%d%H%M')
+        echo "BACKUP ALL EXCEPT DATABASE system TO S3('${CLICKHOUSE_BACKUP_BUCKET}/${backupname}/', '$ACCESS_KEY', '$SECRET_KEY');" > /tmp/backQuery.sql
+        clickhouse-client -h clickhouse-opik-clickhouse --send_timeout 600000 --receive_timeout 600000 --port 9000 --queries-file=/tmp/backQuery.sql
+    restore:
+      # Set to true to create the restore job (does not run by default).
+      # IMPORTANT: set this back to false once the restore has completed.
+      # Otherwise the next `helm upgrade` re-creates the job and restores again.
+      createJob: false
+      # -- Name of the backup to restore, REQUIRED when createJob is true (Helm
+      # rendering fails otherwise). Must be a `name` from the backup server's
+      # `/backup/list`, e.g. "2026-01-16" — a backup the backup server created.
+      # Backups written by the SQL-based CronJob above cannot be restored by it.
+      backupName: ""
+      # Override with any image that has bash and curl — the job needs nothing else.
+      image: "amazon/aws-cli:2.27.49"
+      # Hard cap on the job runtime (seconds) so a stuck restore whose status
+      # never resolves cannot run forever. Default: 24h.
+      activeDeadlineSeconds: 86400
+      extraEnv: {}
+      resources:
+        limits:
+          cpu: 10m
+          memory: 64Mi
+        requests:
+          cpu: 10m
+          memory: 32Mi
+      nodeSelector: {}  # Defaults to .Values.clickhouse.nodeSelector if not specified
+      affinity: {}  # Defaults to .Values.clickhouse.affinity if not specified
+      tolerations: []  # Defaults to .Values.clickhouse.tolerations if not specified
+  backupServer:
+    enabled: false
+    image: altinity/clickhouse-backup:2.6.39
+    port: 7171
+    # Service the restore job uses to reach the clickhouse-backup REST API.
+    # The backup port is exposed on the operator's per-replica service, so this
+    # defaults (in the restore job template) to chi-<opik.name>-clickhouse-cluster-0-0
+    # — opik.name, not the release name — on service.port, falling back to
+    # backupServer.port. Override name/port if your shard/replica layout differs.
+    service:
+      name: ""
+      port: ""
+    monitoring:
+      enabled: false
+      additionalLabels: {}
+      annotations: {}
+      service:
+        type: ClusterIP
+        ports:
+          - name: ch-backup-rest
+            port: 80
+            targetPort: 7171
+      serviceMonitor:
+        enabled: false
+        additionalLabels: {}
+        annotations: {}
+        namespace: ""
+        portName: ""
+        interval: "60s"
+        scrapeTimeout: "30s"
+        relabelings: []
+        metricRelabelings: []
+        podTargetLabels: []
+        honorLabels: false
+    # -- (list) Additional volumes to add to the ClickHouse pod when the backup
+    # server is enabled. Use this for non-PVC volume types (emptyDir, configMap,
+    # secret, hostPath, etc.). For persistent storage, prefer using
+    # `clickhouse.extraVolumeClaimTemplates` to define a CHI-managed PVC and
+    # reference its name directly in `extraVolumeMounts` below (the clickhouse
+    # operator matches volumeMount names to volumeClaimTemplate names
+    # automatically). Note that `clickhouse-backup` writes local backups to
+    # `/var/lib/clickhouse/backup/` by default (on the same filesystem as
+    # ClickHouse data to preserve hard links). Mounting a separate volume at
+    # that path will cause backups to use full copies instead of hard links.
+    extraVolumes: []
+    # -- (list) Additional volume mounts for the `clickhouse-backup` container.
+    # The mount name can reference a CHI `volumeClaimTemplate` defined in
+    # `clickhouse.extraVolumeClaimTemplates` (matched by name), or a volume
+    # defined in `extraVolumes` above.
+    extraVolumeMounts: []
+    env:
+      LOG_LEVEL: info
+      ALLOW_EMPTY_BACKUPS: true
+      API_LISTEN: 0.0.0.0:7171
+      API_CREATE_INTEGRATION_TABLES: true
   monitoring:
     enabled: false
     username: opikmon # readonly user
     password: opikmon
+    useSecret:
+      enabled: false
     # resources:
     #   requests:
     #     cpu: 300m
     #     memory: 1Gi
     #   limits:
     #     memory: 1Gi
-    
+    additionalLabels: {}
+    annotations: {}
+    port: 9363
+    service:
+      type: ClusterIP
+      ports:
+        - name: prometheus-metrics
+          port: 80
+          targetPort: 9363
+    serviceMonitor:
+      enabled: false
+      additionalLabels: {}
+      annotations: {}
+      namespace: ""
+      portName: ""
+      interval: "60s"
+      scrapeTimeout: "30s"
+      relabelings: []
+      metricRelabelings: []
+      podTargetLabels: []
+      honorLabels: false
+  namespaceDomainPattern:  ""
+
 zookeeper:
-    enabled: false
-    fullnameOverride: opik-zookeeper
-    replicaCount: 1
-    # podAntiAffinityPreset: hard
-    podDisruptionBudget:
-      enabled: true
-    persistence:
-      enabled: true
-      ## The amount of PV storage allocated to each Zookeeper pod in the statefulset
-      size: "50Gi"
-    ## Environmental variables to set in Zookeeper
-    ##
-    env:
-      ## The JVM heap size to allocate to Zookeeper
-      ZK_HEAP_SIZE: "512M"
-    ## Configure Zookeeper headless
-    headless:
-      publishNotReadyAddresses: true
+  enabled: true
+  fullnameOverride: opik-zookeeper
+  # Server ID offset for Zookeeper cluster. Default is 1 for compatibility with
+  # previous Bitnami-based installations. Set to 0 only for fresh installs.
+  serverIdOffset: 1
+  image:
+    registry: docker.io
+    repository: zookeeper
+    tag: "3.9.4"
+    imagePullPolicy: IfNotPresent
+  replicaCount: 1
+  podDisruptionBudget:
+    enabled: true
+  persistence:
+    # Use bitnami zookeeper data directory path for compatibility
+    mountPath: /bitnami/zookeeper
+    dataDir: /bitnami/zookeeper/data
+    enabled: true
+    size: "50Gi"
+  headless:
+    publishNotReadyAddresses: true
+  extraEnvVars:
+    - name: ZK_HEAP_SIZE
+      value: "512M"
+    - name: ZOO_DATA_DIR
+      value: "/bitnami/zookeeper/data"
+  commonLabels:
+    app.kubernetes.io/name: zookeeper-opik
 
     # resources:
     #   requests:
     #     cpu: 300m
-    #     memory: 1Gi
+    #     memory: 1500Mi
     #   limits:
-    #     memory: 1Gi
+    #     memory: 2Gi

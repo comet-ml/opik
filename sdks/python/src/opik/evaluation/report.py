@@ -1,11 +1,11 @@
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from rich import align, console, panel, table, text
 
 
-from .. import url_helpers
-from . import test_result
+from . import test_result, evaluation_result
+from .metrics import score_result
 
 
 def _format_time(seconds: float) -> str:
@@ -42,16 +42,33 @@ def _compute_average_scores(
 
 
 def display_experiment_results(
-    dataset_name: str, total_time: float, test_results: List[test_result.TestResult]
+    dataset_name: str,
+    total_time: float,
+    test_results: List[test_result.TestResult],
+    experiment_scores: Optional[List[score_result.ScoreResult]] = None,
 ) -> None:
     average_scores, failed_scores = _compute_average_scores(test_results)
-    nb_items = len(test_results)
+    nb_runs = len(test_results)
+
+    # Count unique dataset items (not runs)
+    unique_item_ids = {
+        result.test_case.dataset_item_id
+        for result in test_results
+        if result.test_case.dataset_item_id is not None
+    }
+    nb_items = len(unique_item_ids) if unique_item_ids else nb_runs
 
     time_text = text.Text(f"Total time:        {_format_time(total_time)}")
     time_text.stylize("bold", 0, 18)
     time_text = align.Align.left(time_text)
 
-    nb_samples_text = text.Text(f"Number of samples: {nb_items:,}")
+    # Show both items and runs if they differ
+    if nb_runs != nb_items:
+        nb_samples_text = text.Text(
+            f"Number of items:   {nb_items:,} ({nb_runs:,} runs)"
+        )
+    else:
+        nb_samples_text = text.Text(f"Number of samples: {nb_items:,}")
     nb_samples_text.stylize("bold", 0, 18)
     nb_samples_text = align.Align.left(nb_samples_text)
 
@@ -62,6 +79,14 @@ def display_experiment_results(
         if failed_scores[name] > 0:
             score_strings += text.Text(f" - {failed_scores[name]} failed", style="red")
         score_strings += text.Text("\n")
+
+    # Add experiment scores if available
+    if experiment_scores:
+        for score in experiment_scores:
+            score_strings += text.Text(
+                f"{score.name}: {score.value:.4f}", style="green bold"
+            )
+            score_strings += text.Text("\n")
 
     aligned_test_results = align.Align.left(score_strings)
 
@@ -74,9 +99,13 @@ def display_experiment_results(
     content.add_row(aligned_test_results)
 
     # Create panel with content inside
+    if nb_runs != nb_items:
+        panel_title = f"{dataset_name} ({nb_items} items, {nb_runs} runs)"
+    else:
+        panel_title = f"{dataset_name} ({nb_items} samples)"
     panel_content = panel.Panel(
         content,
-        title=f"{dataset_name} ({nb_items} samples)",
+        title=panel_title,
         title_align="left",
         expand=False,
     )
@@ -87,16 +116,71 @@ def display_experiment_results(
     console_container.print("Uploading results to Opik ... ")
 
 
-def display_experiment_link(
-    experiment_id: str, dataset_id: str, url_override: str
-) -> None:
+def display_experiment_link(experiment_url: str) -> None:
     console_container = console.Console()
 
-    experiment_url = url_helpers.get_experiment_url_by_id(
-        experiment_id=experiment_id,
-        dataset_id=dataset_id,
-        url_override=url_override,
-    )
     console_container.print(
         f"View the results [link={experiment_url}]in your Opik dashboard[/link]."
     )
+
+
+def display_evaluation_in_progress(experiment_url: str) -> None:
+    console_container = console.Console()
+    console_container.print(
+        f"Running test suite, results will be available in "
+        f"[bold cyan][link={experiment_url}]Opik dashboard[/link][/bold cyan]."
+    )
+
+
+def display_evaluation_scores_statistics(
+    dataset_name: str,
+    evaluation_results: evaluation_result.EvaluationResult,
+) -> None:
+    """
+    Displays evaluation scores statistics for a given dataset.
+
+    The function generates a summary of evaluation scores including mean, max,
+    min, and optionally standard deviation for each metric in the evaluation
+    results. The summarized scores are formatted and presented in a table
+    within a panel for user clarity.
+
+    Args:
+        dataset_name: Name of the dataset for which evaluation statistics are
+            being displayed.
+        evaluation_results: An object containing evaluation results with
+            aggregated scores and statistical data.
+    """
+    aggregated_view = evaluation_results.aggregate_evaluation_scores()
+    if not aggregated_view.aggregated_scores:
+        return
+
+    # Create a table for the statistics
+    stats_table = table.Table()
+    stats_table.add_column("Name", style="cyan", no_wrap=True)
+    stats_table.add_column("Mean", justify="right", style="green")
+    stats_table.add_column("Min", justify="right", style="yellow")
+    stats_table.add_column("Max", justify="right", style="yellow")
+    stats_table.add_column("Std", justify="right", style="magenta")
+
+    # Add rows for each metric
+    for name, stats in aggregated_view.aggregated_scores.items():
+        std_value = f"{stats.std:.4f}" if stats.std is not None else "N/A"
+        stats_table.add_row(
+            name,
+            f"{stats.mean:.4f}",
+            f"{stats.min:.4f}",
+            f"{stats.max:.4f}",
+            std_value,
+        )
+
+    # Create a panel with the table inside
+    panel_content = panel.Panel(
+        stats_table,
+        title=f"Evaluation statistics for {dataset_name}",
+        title_align="left",
+        expand=False,
+    )
+
+    # Display results
+    console_container = console.Console()
+    console_container.print(panel_content)

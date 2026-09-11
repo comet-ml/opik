@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The NEGATIVE control for the topology-aware traces DDL pattern (OPIK-7772): a traces migration written the ordinary,
+  unguarded way. Test fixture; applied by the parity gates to prove the pattern is load-bearing rather than ceremony.
+-->
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <includeAll relativeToChangelogFile="true" path="migrations/" endsWithFilter=".sql"/>
+
+</databaseChangeLog>

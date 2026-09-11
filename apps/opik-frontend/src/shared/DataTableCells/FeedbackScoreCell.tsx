@@ -1,0 +1,183 @@
+import React, { useMemo } from "react";
+import { CellContext, TableMeta } from "@tanstack/react-table";
+import { MessageSquareMore } from "lucide-react";
+import isNumber from "lodash/isNumber";
+import isFunction from "lodash/isFunction";
+
+import { cn } from "@/lib/utils";
+import CellWrapper from "@/shared/DataTableCells/CellWrapper";
+import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
+import { TraceFeedbackScore, Thread, Span } from "@/types/traces";
+import {
+  extractReasonsFromValueByAuthor,
+  getIsMultiValueFeedbackScore,
+  formatScoreDisplay,
+} from "@/lib/feedback-scores";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
+import { BaseTraceData } from "@/types/traces";
+import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
+import { isObjectSpan, isObjectThread } from "@/lib/traces";
+import { ROW_HEIGHT } from "@/types/shared";
+import { USER_FEEDBACK_NAME } from "@/constants/shared";
+
+type FeedbackScoreCellContentProps = {
+  context: CellContext<unknown, unknown>;
+  feedbackScore?: TraceFeedbackScore;
+  isUserFeedbackColumn?: boolean;
+  onValueChange?: (name: string, value: number) => void;
+};
+
+const FeedbackScoreCellContent = ({
+  context,
+  feedbackScore,
+  isUserFeedbackColumn = false,
+  onValueChange,
+}: FeedbackScoreCellContentProps) => {
+  const reason = feedbackScore?.reason;
+  const { rowHeight = ROW_HEIGHT.small } = (context.table.options.meta ??
+    {}) as TableMeta<unknown>;
+
+  const reasons = useMemo(() => {
+    if (getIsMultiValueFeedbackScore(feedbackScore?.value_by_author)) {
+      return extractReasonsFromValueByAuthor(feedbackScore?.value_by_author);
+    }
+
+    return reason
+      ? [
+          {
+            reason,
+            author: feedbackScore?.last_updated_by,
+            lastUpdatedAt: feedbackScore?.last_updated_at,
+          },
+        ]
+      : [];
+  }, [
+    feedbackScore?.value_by_author,
+    reason,
+    feedbackScore?.last_updated_by,
+    feedbackScore?.last_updated_at,
+  ]);
+
+  const isCompact =
+    rowHeight === ROW_HEIGHT.small || rowHeight === ROW_HEIGHT.medium;
+
+  return (
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className={cn(
+        "flex w-full justify-end gap-1",
+        isCompact
+          ? "h-4 items-center"
+          : "flex-col items-end justify-start overflow-hidden",
+        isUserFeedbackColumn && "group",
+      )}
+    >
+      <FeedbackScoreCellValue
+        feedbackScore={feedbackScore}
+        isUserFeedbackColumn={isUserFeedbackColumn}
+        onValueChange={onValueChange}
+        size={isCompact ? "sm" : "md"}
+      />
+
+      {reasons.length > 0 &&
+        (isCompact ? (
+          <FeedbackScoreReasonTooltip reasons={reasons}>
+            <div className="flex h-[20px] items-center">
+              <MessageSquareMore className="mt-0.5 size-3.5 shrink-0 text-light-slate" />
+            </div>
+          </FeedbackScoreReasonTooltip>
+        ) : (
+          <span className="w-full min-w-0 overflow-y-auto break-words text-xs text-muted-foreground">
+            {reasons.map((r) => r.reason).join(", ")}
+          </span>
+        ))}
+    </CellWrapper>
+  );
+};
+
+// The default cell is read-only, so a table only pays for the inline-edit
+// hooks on the one column that can actually be edited (see
+// EditableFeedbackScoreCell and resolveFeedbackScoreCell).
+const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => (
+  <FeedbackScoreCellContent
+    context={context}
+    feedbackScore={context.getValue() as TraceFeedbackScore | undefined}
+  />
+);
+
+export const EditableFeedbackScoreCell = (
+  context: CellContext<unknown, unknown>,
+) => {
+  const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
+  const row = context.row.original as BaseTraceData | Thread | Span;
+  const { projectId, projectName } = (context.table.options.meta ??
+    {}) as TableMeta<unknown>;
+
+  const { handleValueChange } = useFeedbackScoreInlineEdit({
+    id: row.id,
+    isThread: isObjectThread(row),
+    isSpan: isObjectSpan(row),
+    feedbackScore,
+    projectId,
+    projectName,
+  });
+
+  return (
+    <FeedbackScoreCellContent
+      context={context}
+      feedbackScore={feedbackScore}
+      isUserFeedbackColumn
+      onValueChange={handleValueChange}
+    />
+  );
+};
+
+export const resolveFeedbackScoreCell = (scoreName: string) =>
+  scoreName === USER_FEEDBACK_NAME
+    ? EditableFeedbackScoreCell
+    : FeedbackScoreCell;
+
+type CustomMeta = {
+  accessorFn?: string;
+  dataFormatter?: (value: number) => string;
+};
+
+const FeedbackScoreAggregationCell = <TData,>(
+  context: CellContext<TData, string>,
+) => {
+  const { custom } = context.column.columnDef.meta ?? {};
+  const { accessorFn, dataFormatter = formatScoreDisplay } = (custom ??
+    {}) as CustomMeta;
+
+  const rowId = context.row.id;
+  const { aggregationMap } = context.table.options.meta ?? {};
+
+  const data = aggregationMap?.[rowId] ?? {};
+  const rawValue = isFunction(accessorFn) ? accessorFn(data) : undefined;
+  let value = "-";
+
+  if (isNumber(rawValue)) {
+    value = dataFormatter(rawValue);
+  }
+
+  return (
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+    >
+      {isNumber(rawValue) ? (
+        <TooltipWrapper content={String(rawValue)}>
+          <span className="truncate text-light-slate">{value}</span>
+        </TooltipWrapper>
+      ) : (
+        <span className="truncate text-light-slate">{value}</span>
+      )}
+    </CellWrapper>
+  );
+};
+
+FeedbackScoreCell.Aggregation = FeedbackScoreAggregationCell;
+
+export default FeedbackScoreCell;

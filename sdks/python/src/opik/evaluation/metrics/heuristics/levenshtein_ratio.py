@@ -1,8 +1,7 @@
-from typing import Any
-
-import Levenshtein
+from typing import Any, Optional
 
 from .. import base_metric, score_result
+from opik.exceptions import MetricComputationError
 
 
 class LevenshteinRatio(base_metric.BaseMetric):
@@ -21,6 +20,7 @@ class LevenshteinRatio(base_metric.BaseMetric):
         case_sensitive: Whether the comparison should be case-sensitive. Defaults to False.
         name: The name of the metric. Defaults to "levenshtein_ratio_metric".
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when there are no parent span/trace to inherit project name from.
 
     Example:
         >>> from opik.evaluation.metrics import LevenshteinRatio
@@ -35,10 +35,12 @@ class LevenshteinRatio(base_metric.BaseMetric):
         case_sensitive: bool = False,
         name: str = "levenshtein_ratio_metric",
         track: bool = True,
+        project_name: Optional[str] = None,
     ):
         super().__init__(
             name=name,
             track=track,
+            project_name=project_name,
         )
 
         self._case_sensitive = case_sensitive
@@ -58,9 +60,16 @@ class LevenshteinRatio(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object with a value between 0.0 and 1.0,
                 representing the Levenshtein ratio between the output and reference strings.
         """
+        if output is None or reference is None:
+            raise MetricComputationError(
+                f"LevenshteinRatio metric requires non-None 'output' and 'reference' arguments, "
+                f"got output={output!r}, reference={reference!r}"
+            )
+
+        import rapidfuzz.distance.Indel
+
         value = output if self._case_sensitive else output.lower()
         reference = reference if self._case_sensitive else reference.lower()
 
-        score = Levenshtein.ratio(value, reference)
-
+        score = rapidfuzz.distance.Indel.normalized_similarity(value, reference)
         return score_result.ScoreResult(value=score, name=self.name)

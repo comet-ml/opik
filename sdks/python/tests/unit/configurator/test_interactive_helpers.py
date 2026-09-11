@@ -1,7 +1,11 @@
 import sys
 from unittest.mock import patch
 
-from opik.configurator.interactive_helpers import ask_user_for_approval, is_interactive
+from opik.configurator.interactive_helpers import (
+    ask_user_for_approval,
+    ask_user_for_approval_default_no,
+    is_interactive,
+)
 
 
 class TestIsInteractive:
@@ -113,4 +117,24 @@ class TestAskUserForApproval:
         """
         result = ask_user_for_approval("Do you disapprove?")
         assert result is False
+        mock_logger_error.assert_called_once_with("Wrong choice. Please try again.")
+
+
+class TestAskUserForApprovalDefaultNo:
+    @patch("builtins.input", return_value="")
+    def test_empty_input__returns_false(self, mock_input):
+        assert ask_user_for_approval_default_no("Proceed?") is False
+
+    @patch("builtins.input", return_value="n")
+    def test_no__returns_false(self, mock_input):
+        assert ask_user_for_approval_default_no("Proceed?") is False
+
+    @patch("builtins.input", return_value="y")
+    def test_yes__returns_true(self, mock_input):
+        assert ask_user_for_approval_default_no("Proceed?") is True
+
+    @patch("builtins.input", side_effect=["maybe", "y"])
+    @patch("opik.configurator.interactive_helpers.LOGGER.error")
+    def test_invalid_then_yes__returns_true(self, mock_logger_error, mock_input):
+        assert ask_user_for_approval_default_no("Proceed?") is True
         mock_logger_error.assert_called_once_with("Wrong choice. Please try again.")

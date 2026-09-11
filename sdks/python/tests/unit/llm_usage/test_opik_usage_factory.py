@@ -1,5 +1,8 @@
+import logging
+
 import opik
 from opik import llm_usage
+from opik.api_objects import validation_helpers
 
 
 def test_opik_usage_factory__openai_happyflow():
@@ -29,3 +32,56 @@ def test_opik_usage_factory__anthropic_happyflow():
 
     assert result.provider_usage.input_tokens == 10
     assert result.provider_usage.output_tokens == 20
+
+
+def test_opik_usage_factory__vertex_ai_none_candidates_token_count__happy_flow():
+    result = llm_usage.build_opik_usage(
+        provider=opik.LLMProvider.GOOGLE_VERTEXAI,
+        usage={
+            "cached_content_token_count": None,
+            "candidates_token_count": None,
+            "prompt_token_count": 7859,
+            "thoughts_token_count": None,
+            "total_token_count": 7859,
+        },
+    )
+
+    assert result.completion_tokens == 0
+    assert result.prompt_tokens == 7859
+    assert result.total_tokens == 7859
+
+
+def test_opik_usage_factory__unknown_provider__unparseable_usage__returns_none():
+    """The last-resort builder must not raise.
+
+    It sits behind every provider-specific builder and its callers all treat a
+    failure as "no usage", but its own fallback ends in ``UnknownUsage(**usage)`` -
+    so a payload that is not a mapping raised out of a best-effort function and took
+    the caller's surrounding work (span output, cost) down with it.
+    """
+    assert llm_usage.build_opik_usage_from_unknown_provider("not-a-usage-dict") is None
+
+
+def test_opik_usage_factory__unknown_provider__usage_dict__still_parsed():
+    """The guard must not swallow the case the fallback exists for."""
+    result = llm_usage.build_opik_usage_from_unknown_provider(
+        {"prompt_tokens": 20, "completion_tokens": 10, "some_provider_field": 5}
+    )
+
+    assert result is not None
+    assert result.prompt_tokens == 20
+    assert result.completion_tokens == 10
+    assert result.total_tokens == 30
+
+
+def test_validate_and_parse_usage__unknown_provider__unparseable_usage__returns_none():
+    """The public entry point this reaches from ``Opik.span(usage=...)``.
+
+    A user-supplied usage value the SDK cannot parse is a reason to log and drop the
+    usage, not to raise out of a validation helper.
+    """
+    result = validation_helpers.validate_and_parse_usage(
+        usage="not-a-usage-dict", logger=logging.getLogger(__name__), provider=None
+    )
+
+    assert result is None

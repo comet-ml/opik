@@ -1,9 +1,56 @@
 export { OpikClient as Opik } from "@/client/Client";
-export { OpikConfig } from "@/config/Config";
-export { getTrackContext, track, trackOpikClient } from "@/decorators/track";
+export type { FeedbackScoreData } from "@/tracer/types";
+export type { OpikConfig } from "@/config/Config";
+export {
+  isTracingActive,
+  setTracingActive,
+  resetTracingToConfigDefault,
+} from "@/config/TracingRuntimeConfig";
+export { getTrackContext, track } from "@/decorators/track";
 export { generateId } from "@/utils/generateId";
 export { flushAll } from "@/utils/flushAll";
 export { disableLogger, logger, setLoggerLevel } from "@/utils/logger";
 
 export type { Span } from "@/tracer/Span";
 export type { Trace } from "@/tracer/Trace";
+export type { ErrorInfo } from "@/rest_api/api/types/ErrorInfo";
+export type { SpanType } from "@/rest_api/api/types/SpanType";
+export { SpanType as OpikSpanType } from "@/rest_api/api/types/SpanType";
+export type { DatasetPublic } from "@/rest_api/api/types/DatasetPublic";
+export type { EnvironmentPublic as Environment } from "@/rest_api/api/types/EnvironmentPublic";
+export * from "./evaluation";
+
+// Dataset exports
+export { Dataset } from "@/dataset/Dataset";
+export { DatasetVersion } from "@/dataset/DatasetVersion";
+export { DatasetVersionNotFoundError } from "@/errors/dataset/errors";
+export type { DatasetVersionPublic } from "@/rest_api/api/types/DatasetVersionPublic";
+
+export { Prompt, ChatPrompt, PromptType } from "@/prompt";
+export { getGlobalClient, setGlobalClient, resetGlobalClient } from "@/client/globalClient";
+export { OpikQueryLanguage } from "@/query";
+export type { FilterExpression } from "@/query";
+
+export { TracesAnnotationQueue, ThreadsAnnotationQueue } from "@/annotation-queue";
+export type { AnnotationQueuePublicScope as AnnotationQueueScope } from "@/rest_api/api/types/AnnotationQueuePublicScope";
+
+// Config exports
+export { agentConfigContext } from "@/agent-config";
+export type { Config } from "@/agent-config";
+export { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
+
+// Runner exports
+export { activateRunner } from "@/runner/activate";
+export type { RegistryEntry, Param } from "@/runner/registry";
+
+// Distributed trace context helpers
+export {
+  OPIK_TRACE_ID_HEADER,
+  OPIK_PARENT_SPAN_ID_HEADER,
+  getDistributedTraceHeaders,
+} from "@/context";
+export type { DistributedTraceHeaders } from "@/context";
+
+
+// Re-export Zod to ensure consumers use the same version as the SDK
+export { z } from "zod";

@@ -12,7 +12,8 @@ import java.util.Arrays;
 public enum PromptType {
 
     MUSTACHE("mustache"),
-    JINJA2("jinja2");
+    JINJA2("jinja2"),
+    PYTHON("python");
 
     @JsonValue
     private final String value;

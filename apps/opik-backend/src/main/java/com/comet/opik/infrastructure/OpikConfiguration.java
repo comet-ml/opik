@@ -1,14 +1,17 @@
 package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.jobs.JobConfiguration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.ToString;
 
 @Getter
+@Setter
 public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
@@ -21,7 +24,26 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsFactory databaseAnalytics = new DatabaseAnalyticsFactory();
 
     @Valid @NotNull @JsonProperty
+    private DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModel = DatabaseAnalyticsDataModelConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
+
+    @Valid @NotNull @JsonProperty
+    private UuidValidationConfig uuidValidation = UuidValidationConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
     private AuthenticationConfig authentication = new AuthenticationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private SharedHttpClientHealthCheckConfig sharedHttpClientHealthCheck = new SharedHttpClientHealthCheckConfig();
+
+    @Valid @NotNull @JsonProperty
+    private McpOAuthConfig mcpOAuth = new McpOAuthConfig();
+
+    @Valid @NotNull @JsonProperty
+    private CipxTokenValidationConfig cipxTokenValidation = new CipxTokenValidationConfig();
 
     @Valid @NotNull @JsonProperty
     private RedisConfig redis = new RedisConfig();
@@ -33,10 +55,16 @@ public class OpikConfiguration extends JobConfiguration {
     private RateLimitConfig rateLimit = new RateLimitConfig();
 
     @Valid @NotNull @JsonProperty
+    private UsageLimitConfig usageLimit = new UsageLimitConfig();
+
+    @Valid @NotNull @JsonProperty
     private MetadataConfig metadata = new MetadataConfig();
 
     @Valid @NotNull @JsonProperty
     private UsageReportConfig usageReport = new UsageReportConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AnalyticsConfig analytics = new AnalyticsConfig();
 
     @Valid @NotNull @JsonProperty
     private CorsConfig cors = new CorsConfig();
@@ -52,10 +80,19 @@ public class OpikConfiguration extends JobConfiguration {
     private LlmProviderClientConfig llmProviderClient = new LlmProviderClientConfig();
 
     @Valid @NotNull @JsonProperty
+    private LlmProviderTokenAuthConfig llmProviderTokenAuth = new LlmProviderTokenAuthConfig();
+
+    @Valid @NotNull @JsonProperty
     private CacheConfiguration cacheManager = new CacheConfiguration();
 
     @Valid @NotNull @JsonProperty
     private OnlineScoringConfig onlineScoring = new OnlineScoringConfig();
+
+    @Valid @NotNull @JsonProperty
+    private DatasetExportConfig datasetExport = new DatasetExportConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AgentInsightsReportConfig agentInsightsReport = new AgentInsightsReportConfig();
 
     @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
@@ -64,5 +101,99 @@ public class OpikConfiguration extends JobConfiguration {
     private OpenTelemetryConfig openTelemetry = new OpenTelemetryConfig();
 
     @Valid @NotNull @JsonProperty
-    private WorkspaceSettings workspaceSettings = new WorkspaceSettings();
+    private WorkspaceSettings workspaceSettings = WorkspaceSettings.builder().build();
+
+    @Valid @NotNull @JsonProperty
+    private S3Config s3Config = new S3Config();
+
+    @Valid @NotNull @JsonProperty
+    private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
+
+    @Valid @NotNull @JsonProperty
+    private JerseyClientConfiguration jerseyClient = new JerseyClientConfiguration();
+
+    @Valid @NotNull @JsonProperty
+    private ServiceTogglesConfig serviceToggles = new ServiceTogglesConfig();
+
+    @Valid @NotNull @JsonProperty
+    private TraceThreadConfig traceThreadConfig = new TraceThreadConfig();
+
+    @Valid @NotNull @JsonProperty
+    private JobTimeoutConfig jobTimeout = new JobTimeoutConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ResponseFormattingConfig responseFormatting = new ResponseFormattingConfig();
+
+    @Valid @NotNull @JsonProperty
+    private WebhookConfig webhook = new WebhookConfig();
+
+    @Valid @JsonProperty
+    private QueuesConfig queues = new QueuesConfig();
+
+    @Valid @NotNull @JsonProperty
+    private JacksonConfig jacksonConfig = new JacksonConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AttachmentsConfig attachmentsConfig = new AttachmentsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private FreeModelConfig freeModel = new FreeModelConfig();
+
+    @Valid @NotNull @JsonProperty
+    private OptimizationLogsConfig optimizationLogs = new OptimizationLogsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private OptimizationStalledReaperConfig optimizationStalledReaper = OptimizationStalledReaperConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
+    private RetentionConfig retention = new RetentionConfig();
+
+    @Valid @NotNull @JsonProperty
+    private PartitionMetricsConfig partitionMetrics = new PartitionMetricsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private DatasetVersioningConfig datasetVersioning = DatasetVersioningConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
+    private LocalRunnerConfig localRunner = new LocalRunnerConfig();
+
+    @Valid @NotNull @JsonProperty
+    private StreamConsumerReaperConfig streamConsumerReaper = StreamConsumerReaperConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
+    private ExperimentAggregatesConfig experimentAggregates = new ExperimentAggregatesConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ExperimentDenormalizationConfig experimentDenormalization = new ExperimentDenormalizationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ProjectLastUpdatedFlushConfig projectLastUpdatedFlush = new ProjectLastUpdatedFlushConfig();
+
+    @Valid @NotNull @JsonProperty
+    private LlmModelRegistryConfig llmModelRegistry = new LlmModelRegistryConfig();
+
+    @Valid @NotNull @JsonProperty
+    private OllieStateConfig ollieStateConfig = new OllieStateConfig();
+
+    @Valid @NotNull @JsonProperty
+    private TestSuiteConfig testSuite = new TestSuiteConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ExperimentExecutionConfig experimentExecution = new ExperimentExecutionConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AgentConfigConfiguration agentConfig = new AgentConfigConfiguration();
+
+    @Valid @NotNull @JsonProperty
+    private EnvironmentConfig environment = new EnvironmentConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ReportGenerationConfig reportGeneration = new ReportGenerationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private RedactionConfig redaction = new RedactionConfig();
 }

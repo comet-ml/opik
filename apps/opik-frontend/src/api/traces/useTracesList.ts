@@ -2,34 +2,82 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig, TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
-import { generateSearchByIDFilters, processFilters } from "@/lib/filters";
+import {
+  generateLogsSourceFilter,
+  generateVisibilityFilters,
+  processFilters,
+} from "@/lib/filters";
+import { LOGS_SOURCE, TRACE_VISIBILITY_MODE } from "@/types/traces";
+import { Sorting } from "@/types/sorting";
+import { processSorting } from "@/lib/sorting";
 
 type UseTracesListParams = {
   projectId: string;
   filters?: Filters;
+  sorting?: Sorting;
   search?: string;
   page: number;
   size: number;
   truncate?: boolean;
+  stripAttachments?: boolean;
+  fromTime?: string;
+  toTime?: string;
+  exclude?: string[];
+  logsSource?: LOGS_SOURCE;
+  visibilityMode?: TRACE_VISIBILITY_MODE;
+  annotationQueueId?: string;
 };
 
 export type UseTracesListResponse = {
   content: Trace[];
+  sortable_by: string[];
   total: number;
 };
 
 const getTracesList = async (
   { signal }: QueryFunctionContext,
-  { projectId, filters, search, size, page, truncate }: UseTracesListParams,
+  {
+    projectId,
+    filters,
+    sorting,
+    search,
+    size,
+    page,
+    truncate,
+    stripAttachments,
+    fromTime,
+    toTime,
+    exclude,
+    logsSource,
+    visibilityMode = TRACE_VISIBILITY_MODE.default,
+    annotationQueueId,
+  }: UseTracesListParams,
 ) => {
+  const additionalFilters = [
+    ...generateVisibilityFilters(visibilityMode),
+    ...(logsSource ? generateLogsSourceFilter(logsSource) : []),
+  ];
+
   const { data } = await api.get<UseTracesListResponse>(TRACES_REST_ENDPOINT, {
     signal,
     params: {
       project_id: projectId,
-      ...processFilters(filters, generateSearchByIDFilters(search)),
+      ...processFilters(filters, additionalFilters),
+      ...processSorting(sorting),
+      ...(search && { search }),
       size,
       page,
       truncate,
+      ...(stripAttachments !== undefined && {
+        strip_attachments: stripAttachments,
+      }),
+      ...(fromTime && { from_time: fromTime }),
+      ...(toTime && { to_time: toTime }),
+      ...(exclude &&
+        exclude.length > 0 && { exclude: JSON.stringify(exclude) }),
+      ...(annotationQueueId && {
+        annotation_queue_id: annotationQueueId,
+      }),
     },
   });
 

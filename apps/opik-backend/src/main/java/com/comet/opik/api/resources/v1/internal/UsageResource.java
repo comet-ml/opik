@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.TraceCountResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.SpanService;
@@ -31,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor(onConstructor_ = @jakarta.inject.Inject)
 @Tag(name = "System usage", description = "System usage related resource")
 public class UsageResource {
+
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull ExperimentService experimentService;
@@ -53,6 +55,16 @@ public class UsageResource {
     public Response getSpansCountForWorkspaces() {
         return spanService.countSpansPerWorkspace()
                 .map(spansCountResponse -> Response.ok(spansCountResponse).build())
+                .block();
+    }
+
+    @GET
+    @Path("/workspace-span-counts-breakdown")
+    @Operation(operationId = "getSpansCountBreakdownForWorkspaces", summary = "Get spans count on previous day grouped by workspace, project and user", description = "Get spans count on previous day grouped by workspace, project and user", responses = {
+            @ApiResponse(responseCode = "200", description = "UsageByWorkspaceProjectUserResponse resource", content = @Content(schema = @Schema(implementation = UsageByWorkspaceProjectUserResponse.class)))})
+    public Response getSpansCountBreakdownForWorkspaces() {
+        return spanService.getSpanBreakdownPerWorkspace()
+                .map(breakdownResponse -> Response.ok(breakdownResponse).build())
                 .block();
     }
 
@@ -82,5 +94,15 @@ public class UsageResource {
             @ApiResponse(responseCode = "200", description = "Datasets BiInformationResponse resource", content = @Content(schema = @Schema(implementation = BiInformationResponse.class)))})
     public Response getDatasetBiInfo() {
         return Response.ok(datasetService.getDatasetBIInformation()).build();
+    }
+
+    @GET
+    @Path("/bi-spans")
+    @Operation(operationId = "getSpansBiInfo", summary = "Get spans information for BI events", description = "Get spans information for BI events per user per workspace", responses = {
+            @ApiResponse(responseCode = "200", description = "Spans BiInformationResponse resource", content = @Content(schema = @Schema(implementation = BiInformationResponse.class)))})
+    public Response getSpansBiInfo() {
+        return spanService.getSpanBIInformation()
+                .map(spanBiInfoResponse -> Response.ok(spanBiInfoResponse).build())
+                .block();
     }
 }

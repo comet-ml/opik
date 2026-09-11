@@ -1,63 +1,64 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import copy from "clipboard-copy";
-import sortBy from "lodash/sortBy";
 import {
-  Book,
+  Check,
   Copy,
-  GraduationCap,
-  Grip,
   KeyRound,
   LogOut,
   Settings,
+  Settings2,
   Shield,
   UserPlus,
 } from "lucide-react";
-import { useState } from "react";
-
-import QuickstartDialog from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import SupportHubSubMenu from "@/shared/SupportHub/SupportHubSubMenu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuPortal,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useToast } from "@/components/ui/use-toast";
+} from "@/ui/dropdown-menu";
+import { useToast } from "@/ui/use-toast";
+import { useThemeOptions } from "@/hooks/useThemeOptions";
 import { APP_VERSION } from "@/constants/app";
-import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
-import useAppStore from "@/store/AppStore";
+import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
+import { cn, maskAPIKey } from "@/lib/utils";
+import useAppStore, { useOpikWorkspaceName } from "@/store/AppStore";
 import api from "./api";
-import { Organization, ORGANIZATION_ROLE_TYPE } from "./types";
-import useAllUserWorkspaces from "./useAllUserWorkspaces";
+import { ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
 import useUserPermissions from "./useUserPermissions";
 import { buildUrl } from "./utils";
 
+import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
+import useUserPermission from "@/plugins/comet/useUserPermission";
+import UserMenuAppLinks from "@/plugins/comet/UserMenuAppLinks";
+
 const UserMenu = () => {
-  const navigate = useNavigate();
   const { toast } = useToast();
-  const [openQuickstart, setOpenQuickstart] = useState(false);
+  const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
+    useThemeOptions();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
     enabled: !!user?.loggedIn,
   });
-  const { data: workspaces } = useAllUserWorkspaces({
+
+  const { data: allWorkspaces } = useAllWorkspaces({
     enabled: !!user?.loggedIn,
   });
 
-  const workspace = workspaces?.find(
+  const workspace = allWorkspaces?.find(
     (workspace) => workspace.workspaceName === workspaceName,
   );
 
@@ -69,104 +70,74 @@ const UserMenu = () => {
     { enabled: !!user?.loggedIn && !!workspace },
   );
 
+  const { canInviteMembers } = useUserPermission();
+  const opikWorkspaceName = useOpikWorkspaceName();
+  const [inviteSearchQuery, setInviteSearchQuery] = useState("");
+  const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
+
+  const handleInviteClose = () => {
+    setIsInviteSubmenuOpen(false);
+    setInviteSearchQuery("");
+  };
+
   if (
     !user ||
     !user.loggedIn ||
     isLoading ||
     !organizations ||
     !userPermissions ||
-    !workspaces
+    !allWorkspaces
   ) {
     return null;
   }
 
-  const handleSwitchToEM = () => {
-    window.location.href = buildUrl(
-      workspaceName,
-      workspaceName,
-      "&changeApplication=em",
-    );
-  };
-
   const organization = organizations.find((org) => {
     return org.id === workspace?.organizationId;
   });
-  const organizationWorkspaces = workspaces.filter(
-    (workspace) => workspace.organizationId === organization?.id,
-  );
-  const teamNames = user.getTeams.teams.map((team) => team.teamName);
-  const organizationWorkspacesAsMember = organizationWorkspaces.filter(
-    (workspace) => teamNames.includes(workspace.workspaceName),
-  );
+
   const isOrganizationAdmin =
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
-  const workspacePermissions = userPermissions.find(
-    (userPermission) => userPermission.workspaceName === workspaceName,
-  );
-  const invitePermission = workspacePermissions?.permissions.find(
-    (permission) => permission.permissionName === "invite_users_to_workspace",
-  );
-  const canInviteMembers =
-    isOrganizationAdmin || invitePermission?.permissionValue === "true";
 
-  const handleChangeOrganization = (newOrganization: Organization) => {
-    const newOrganizationWorkspaces = workspaces.filter(
-      (workspace) => workspace.organizationId === newOrganization.id,
-    );
-
-    const newWorkspace =
-      newOrganizationWorkspaces.find((workspace) => workspace.default) ||
-      newOrganizationWorkspaces[0];
-
-    if (newWorkspace) {
-      navigate({
-        to: "/$workspaceName",
-        params: { workspaceName: newWorkspace.workspaceName },
-      });
-    }
-  };
+  const isLLMOnlyOrganization =
+    organization?.role === ORGANIZATION_ROLE_TYPE.opik;
 
   const renderAvatar = (clickable = false) => {
     return (
-      <Avatar className={cn(clickable ? "cursor-pointer" : "")}>
+      <Avatar className={cn("size-6", clickable && "cursor-pointer")}>
         <AvatarImage src={user.profileImages.small} />
         <AvatarFallback>{user.userName.charAt(0).toUpperCase()}</AvatarFallback>
       </Avatar>
     );
   };
 
-  const renderAppSelector = () => {
+  const renderInviteMembers = () => {
+    if (!canInviteMembers) {
+      return null;
+    }
+
     return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon">
-            <Grip className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuLabel>Your apps</DropdownMenuLabel>
-
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              className="flex cursor-pointer flex-row gap-3"
-              onClick={handleSwitchToEM}
-            >
-              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[#6C6FF7] text-[8px] font-medium text-white">
-                EM
-              </span>
-              <span>Experiment management</span>
-            </DropdownMenuItem>
-
-            <DropdownMenuItem className="flex cursor-pointer flex-row gap-3">
-              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[#52AEA4] text-[8px] font-medium text-white">
-                LLM
-              </span>
-
-              <span>LLM Evaluation (Opik)</span>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <DropdownMenuSub
+        open={isInviteSubmenuOpen}
+        onOpenChange={(open) => {
+          setIsInviteSubmenuOpen(open);
+          if (!open) {
+            setInviteSearchQuery("");
+          }
+        }}
+      >
+        <DropdownMenuSubTrigger className="cursor-pointer">
+          <UserPlus className="mr-2 size-4" />
+          <span>Invite members</span>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuPortal>
+          <InviteUsersPopover
+            searchQuery={inviteSearchQuery}
+            setSearchQuery={setInviteSearchQuery}
+            onClose={handleInviteClose}
+            asSubContent
+          />
+        </DropdownMenuPortal>
+      </DropdownMenuSub>
     );
   };
 
@@ -174,62 +145,18 @@ const UserMenu = () => {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>{renderAvatar(true)}</DropdownMenuTrigger>
-        <DropdownMenuContent className="w-60" align="end">
+        <DropdownMenuContent className="w-64" align="end">
           <div className="flex items-center gap-2 px-4 py-2">
             {renderAvatar()}
             <TooltipWrapper content={user.userName}>
-              <span className="comet-body-s-accented truncate text-secondary-foreground">
+              <span className="comet-body-s-accented truncate text-foreground">
                 {user.userName}
               </span>
             </TooltipWrapper>
           </div>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className="cursor-pointer">
-                <span className="comet-body-s-accented pr-1">Workspace:</span>
-                <span className="comet-body-s truncate">{workspaceName}</span>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuPortal>
-                <DropdownMenuSubContent className="w-60">
-                  <div className="max-h-[200px] overflow-auto">
-                    {sortBy(
-                      organizationWorkspacesAsMember,
-                      "workspaceName",
-                    ).map((workspace) => (
-                      <Link
-                        key={workspace.workspaceName}
-                        to={`/${workspace.workspaceName}`}
-                      >
-                        <DropdownMenuCheckboxItem
-                          checked={workspaceName === workspace.workspaceName}
-                        >
-                          <TooltipWrapper content={workspace.workspaceName}>
-                            <span className="truncate">
-                              {workspace.workspaceName}
-                            </span>
-                          </TooltipWrapper>
-                        </DropdownMenuCheckboxItem>
-                      </Link>
-                    ))}
-                  </div>
-                  <DropdownMenuSeparator />
-                  <a
-                    className="flex justify-center"
-                    href={buildUrl(
-                      "account-settings/workspaces",
-                      workspaceName,
-                    )}
-                  >
-                    <Button variant="link">View all workspaces</Button>
-                  </a>
-                </DropdownMenuSubContent>
-              </DropdownMenuPortal>
-            </DropdownMenuSub>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <a href={buildUrl("account-settings", workspaceName)}>
+            <a href={buildUrl("account-settings", opikWorkspaceName)}>
               <DropdownMenuItem className="cursor-pointer">
                 <Settings className="mr-2 size-4" />
                 <span>Account settings</span>
@@ -239,12 +166,12 @@ const UserMenu = () => {
               <a
                 href={buildUrl(
                   `organizations/${workspace?.organizationId}`,
-                  workspaceName,
+                  opikWorkspaceName,
                 )}
               >
                 <DropdownMenuItem className="cursor-pointer">
                   <Shield className="mr-2 size-4" />
-                  <span>Admin Dashboard</span>
+                  <span>{ADMIN_DASHBOARD_LABEL}</span>
                 </DropdownMenuItem>
               </a>
             ) : null}
@@ -255,89 +182,72 @@ const UserMenu = () => {
                   <span>API Key</span>
                 </DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
-                  <DropdownMenuSubContent className="w-60">
-                    <DropdownMenuItem
-                      className="cursor-pointer"
-                      onClick={() => {
-                        copy(user.apiKeys[0]);
-                        toast({ description: "Successfully copied API Key" });
-                      }}
-                    >
-                      <span>{maskAPIKey(user.apiKeys[0])}</span>
-                      <Copy className="ml-2 size-3 shrink-0" />
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <a
-                      className="comet-body-s flex justify-center"
-                      href={buildUrl("account-settings/apiKeys", workspaceName)}
-                    >
-                      <Button variant="link">Manage API keys</Button>
-                    </a>
+                  <DropdownMenuSubContent className="w-64">
+                    <div className="flex h-10 items-center justify-between gap-2 px-4">
+                      <span className="comet-body-s truncate text-foreground">
+                        {maskAPIKey(user.apiKeys[0])}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-1 text-light-slate">
+                        <button
+                          className="cursor-pointer rounded p-0.5 hover:text-foreground"
+                          onClick={() => {
+                            copy(user.apiKeys[0]);
+                            toast({
+                              description: "Successfully copied API Key",
+                            });
+                          }}
+                        >
+                          <Copy className="size-3.5" />
+                        </button>
+                        <div className="mx-0.5 h-3.5 w-px bg-border" />
+                        <a
+                          className="cursor-pointer rounded p-0.5 hover:text-foreground"
+                          href={buildUrl(
+                            "account-settings/apiKeys",
+                            opikWorkspaceName,
+                          )}
+                        >
+                          <Settings2 className="size-3.5" />
+                        </a>
+                      </div>
+                    </div>
                   </DropdownMenuSubContent>
                 </DropdownMenuPortal>
               </DropdownMenuSub>
             ) : null}
-            {canInviteMembers ? (
-              <a
-                href={buildUrl(
-                  "account-settings/workspaces",
-                  workspaceName,
-                  `&initialInviteId=${workspace?.workspaceId}`,
-                )}
-              >
-                <DropdownMenuItem className="cursor-pointer">
-                  <UserPlus className="mr-2 size-4" />
-                  <span>Invite members</span>
-                </DropdownMenuItem>
-              </a>
-            ) : null}
+            {renderInviteMembers()}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              onClick={() => setOpenQuickstart(true)}
-              className="cursor-pointer"
-            >
-              <GraduationCap className="mr-2 size-4" />
-              <span>Quickstart guide</span>
-            </DropdownMenuItem>
-            <a href={buildDocsUrl()} target="_blank" rel="noreferrer">
-              <DropdownMenuItem className="cursor-pointer">
-                <Book className="mr-2 size-4" />
-                <span>Docs</span>
-              </DropdownMenuItem>
-            </a>
-          </DropdownMenuGroup>
+          <SupportHubSubMenu />
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
-                <span className="mr-2 mt-px flex size-4 items-center justify-center rounded border border-black text-xs">
-                  {organization?.name.charAt(0).toUpperCase()}
-                </span>
-                <span className="comet-body-s truncate">
-                  {organization?.name}
-                </span>
+                <CurrentIcon className="mr-2 size-4" />
+                <span>Theme</span>
               </DropdownMenuSubTrigger>
               <DropdownMenuPortal>
-                <DropdownMenuSubContent className="w-60">
-                  <div className="max-h-[200px] overflow-auto">
-                    {sortBy(organizations, "name").map((org) => (
-                      <DropdownMenuCheckboxItem
-                        checked={organization?.name === org.name}
-                        key={org.name}
-                        onClick={() => handleChangeOrganization(org)}
-                      >
-                        <TooltipWrapper content={org.name}>
-                          <span className="truncate">{org.name}</span>
-                        </TooltipWrapper>
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </div>
+                <DropdownMenuSubContent>
+                  {themeOptions.map(({ value, label, icon: Icon }) => (
+                    <DropdownMenuItem
+                      key={value}
+                      className="cursor-pointer"
+                      onClick={() => handleThemeSelect(value)}
+                    >
+                      <div className="relative flex w-full items-center pl-6">
+                        {theme === value && (
+                          <Check className="absolute left-0 size-4" />
+                        )}
+                        <Icon className="mr-2 size-4" />
+                        <span>{label}</span>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
                 </DropdownMenuSubContent>
               </DropdownMenuPortal>
             </DropdownMenuSub>
           </DropdownMenuGroup>
+          <UserMenuAppLinks isLLMOnlyOrganization={isLLMOnlyOrganization} />
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={async () => {
@@ -353,11 +263,11 @@ const UserMenu = () => {
             <LogOut className="mr-2 size-4" />
             <span>Logout</span>
           </DropdownMenuItem>
-          {APP_VERSION ? (
+          {APP_VERSION && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="cursor-pointer justify-center text-muted-slate"
+                className="cursor-pointer justify-center text-light-slate"
                 onClick={() => {
                   copy(APP_VERSION);
                   toast({ description: "Successfully copied version" });
@@ -369,20 +279,13 @@ const UserMenu = () => {
                 <Copy className="ml-2 size-3 shrink-0" />
               </DropdownMenuItem>
             </>
-          ) : null}
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     );
   };
 
-  return (
-    <div className="flex shrink-0 items-center gap-4">
-      {renderAppSelector()}
-      {renderUserMenu()}
-
-      <QuickstartDialog open={openQuickstart} setOpen={setOpenQuickstart} />
-    </div>
-  );
+  return renderUserMenu();
 };
 
 export default UserMenu;

@@ -9,29 +9,34 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @UtilityClass
-class AsyncContextUtils {
+public class AsyncContextUtils {
 
-    static ContextAwareStream<Result> bindWorkspaceIdToFlux(Statement statement) {
+    public static ContextAwareStream<Result> bindWorkspaceIdToFlux(Statement statement) {
         return (userName, workspaceId) -> {
             statement.bind("workspace_id", workspaceId);
             return Flux.from(statement.execute());
         };
     }
 
-    static ContextAwareAction<Result> bindWorkspaceIdToMono(Statement statement) {
+    public static ContextAwareAction<Result> bindWorkspaceIdToMono(Statement statement) {
         return (userName, workspaceId) -> {
             statement.bind("workspace_id", workspaceId);
             return Mono.from(statement.execute());
         };
     }
 
-    static ContextAwareAction<Result> bindUserNameAndWorkspaceContext(Statement statement) {
+    public static ContextAwareAction<Result> bindUserNameAndWorkspaceContext(Statement statement) {
         return (userName, workspaceId) -> {
             statement.bind("user_name", userName);
             statement.bind("workspace_id", workspaceId);
 
             return Mono.from(statement.execute());
         };
+    }
+
+    public static void bindUserNameAndWorkspace(Statement statement, String userName, String workspaceId) {
+        statement.bind("user_name", userName);
+        statement.bind("workspace_id", workspaceId);
     }
 
     static ContextAwareStream<Result> bindUserNameAndWorkspaceContextToStream(

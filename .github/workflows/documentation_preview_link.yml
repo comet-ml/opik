@@ -4,17 +4,27 @@ on:
   pull_request:
     paths:
         - 'apps/opik-documentation/documentation/**'
+        - '.github/workflows/documentation_preview_link.yml'
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
     run:
         runs-on: ubuntu-latest
-        permissions: write-all
+        timeout-minutes: 15
+        # Only needs to check out the repo and post the preview-link PR comment.
+        permissions:
+          contents: read
+          pull-requests: write
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v4
-
+              uses: actions/checkout@v7
+                
             - name: Install Fern
-              run: npm install -g fern-api
+              working-directory: apps/opik-documentation/documentation
+              run: npm install
 
             - name: Generate preview URL
               id: generate-docs
@@ -22,13 +32,120 @@ jobs:
               env:
                   FERN_TOKEN: ${{ secrets.FERN_TOKEN }}
               run: |
-                  OUTPUT=$(fern generate --docs --preview 2>&1) || true
+                  OUTPUT=$(npx fern generate --docs --preview 2>&1) || true
                   echo "$OUTPUT"
                   URL=$(echo "$OUTPUT" | grep -oP 'Published docs to \K.*(?= \()')
                   echo "Preview URL: $URL"
+                  echo "URL=$URL" >> "$GITHUB_OUTPUT"
                   echo "🌿 Preview your docs: $URL" > preview_url.txt
 
+            - name: Check for broken links
+              id: check-broken-links
+              working-directory: apps/opik-documentation/documentation
+              run: |
+                echo -e "\n\n" >> preview_url.txt
+
+                # --concurrency 500: the preview CDN serves bursts without rate-limiting;
+                # the recurse otherwise brushes the job's 15-minute timeout.
+                #
+                # app.buildwithfern.com is skipped: Fern's own platform JS bundle 404s with
+                # a per-build hash, so it is a false positive we do not control.
+                npx linkinator ${{ steps.generate-docs.outputs.URL }} \
+                  --recurse \
+                  --concurrency 500 \
+                  --skip "search\/v2\/key" \
+                  --skip "app.buildwithfern.com" \
+                  --skip "https://ai.google.dev/gemini-api" \
+                  --skip "https://ai.google.dev/aistudio" \
+                  --skip "chat.comet.com" \
+                  --skip "http://localhost" \
+                  --skip "http://localhost:5173" \
+                  --skip "googletagmanager.com" \
+                  --skip "insights/script.js" \
+                  --format json > linkinator_results.json || true
+
+                PREVIEW_ORIGIN=$(echo "${{ steps.generate-docs.outputs.URL }}" | grep -oE '^https?://[^/]+')
+
+                # linkinator exits non-zero both when it finds broken links and when it
+                # crashes mid-crawl (e.g. unhandled ECONNRESET), so trust the output, not
+                # the exit code: invalid/missing JSON means the crawl didn't complete.
+                if ! jq -e 'type == "object" and (.links | type == "array")' linkinator_results.json > /dev/null 2>&1; then
+                  {
+                    echo "⚠️ The link check did not complete (likely a crawl crash or timeout). Please re-run this check."
+                    echo ""
+                    echo "---"
+                    echo "📌 Results for commit ${{ github.sha }}"
+                  } >> preview_url.txt
+                  echo "true" > check_failed.flag
+                  exit 0
+                fi
+
+                # Only 404/410 means a link is genuinely broken — the resource is gone or
+                # renamed. That is what catches real regressions (a moved provider page, a
+                # deleted doc) from any host. Everything else non-OK (0=timeout, 403=bot
+                # block, 429=rate limit, 5xx=their server) is an external host being slow or
+                # hostile to crawlers, not a broken link — and must not fail the check:
+                # under --concurrency 500 a different random subset of external hosts flakes
+                # every run, so failing on those never converges. `↳ on page` strips the
+                # ephemeral preview host to leave a stable, greppable doc path; dedup by url
+                # so one bad sidebar link cannot overflow GitHub's 65,536-char comment cap.
+                BROKEN_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" '
+                  [.links[] | select(.state == "BROKEN" and (.status == 404 or .status == 410))]
+                  | group_by(.url) | map(.[0]) | .[]
+                  | "❌ Broken link: \(.url) (\(.status))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
+                ' linkinator_results.json)
+
+                # Links the crawl could not confirm (timeout / bot block / rate limit / 5xx).
+                # Listed for visibility only — they do NOT fail the check.
+                UNVERIFIED_LINKS=$(jq -r --arg origin "$PREVIEW_ORIGIN" '
+                  [.links[] | select(.state == "BROKEN" and (.status != 404 and .status != 410))]
+                  | group_by(.url) | map(.[0]) | .[]
+                  | "• \(.url) (\(if .status == 0 then "timeout" else .status | tostring end))\n   ↳ on page: \((.parent // "") | sub("^" + $origin; ""))"
+                ' linkinator_results.json)
+
+                if [ -n "$BROKEN_LINKS" ]; then
+                  {
+                    echo "**The following broken links were found:**"
+                    echo ""
+                    echo "$BROKEN_LINKS"
+                  } >> preview_url.txt
+                  # Fail the job AFTER the comment is posted (see the Fail step below).
+                  echo "true" > check_failed.flag
+                else
+                  echo "No broken links found" >> preview_url.txt
+                fi
+
+                if [ -n "$UNVERIFIED_LINKS" ]; then
+                  {
+                    echo ""
+                    echo "<details><summary>Unverified links (timeout / rate-limited / server error — not failing the check)</summary>"
+                    echo ""
+                    echo "$UNVERIFIED_LINKS"
+                    echo ""
+                    echo "</details>"
+                  } >> preview_url.txt
+                fi
+
+                rm -f linkinator_results.json
+
+                {
+                  echo ""
+                  echo "---"
+                  echo "📌 Results for commit ${{ github.sha }}"
+                } >> preview_url.txt
+
             - name: Comment URL in PR
-              uses: thollander/actions-comment-pull-request@v2.4.3
+              if: always()
+              uses: thollander/actions-comment-pull-request@v3
               with:
-                  filePath: apps/opik-documentation/documentation/preview_url.txt
+                  file-path: apps/opik-documentation/documentation/preview_url.txt
+                  comment-tag: docs-preview
+
+            - name: Fail if the link check failed
+              if: always()
+              working-directory: apps/opik-documentation/documentation
+              run: |
+                if [ -f check_failed.flag ]; then
+                  echo "Link check failed — broken links were found, or the crawl did not complete. See the PR comment."
+                  exit 1
+                fi

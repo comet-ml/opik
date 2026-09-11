@@ -3,7 +3,7 @@ import get from "lodash/get";
 import api, { FEEDBACK_DEFINITIONS_REST_ENDPOINT } from "@/api/api";
 import { FeedbackDefinition } from "@/types/feedback-definitions";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseFeedbackDefinitionUpdateMutationParams = {
   feedbackDefinition: Partial<FeedbackDefinition>;

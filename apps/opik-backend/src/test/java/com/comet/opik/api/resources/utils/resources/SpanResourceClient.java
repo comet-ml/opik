@@ -1,18 +1,29 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.Comment;
+import com.comet.opik.api.DeleteFeedbackScore;
+import com.comet.opik.api.ExistenceResponse;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
-import com.comet.opik.api.FeedbackScoreBatchItem;
+import com.comet.opik.api.FeedbackScoreBatchContainer;
+import com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import com.comet.opik.api.ProjectStats;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
+import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanSearchStreamRequest;
-import com.comet.opik.api.filter.Filter;
-import com.comet.opik.api.resources.utils.DurationUtils;
-import com.comet.opik.api.resources.utils.TestUtils;
+import com.comet.opik.api.SpanUpdate;
+import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.SpanType;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -21,34 +32,25 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.http.HttpStatus;
-import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.glassfish.jersey.client.ChunkedInput;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamUtils;
 
-import java.math.BigDecimal;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.comet.opik.api.resources.utils.CommentAssertionUtils.assertComments;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
+import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
+import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
 
 public class SpanResourceClient extends BaseCommentResourceClient {
 
     private static final GenericType<ChunkedInput<String>> CHUNKED_INPUT_STRING_GENERIC_TYPE = new GenericType<>() {
     };
-
-    public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
-            "totalEstimatedCostVersion", "comments"};
-
-    public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy"};
 
     public SpanResourceClient(ClientSupport client, String baseURI) {
         super("%s/v1/private/spans", client, baseURI);
@@ -56,24 +58,19 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
     public UUID createSpan(Span span, String apiKey, String workspaceName) {
         try (var response = createSpan(span, apiKey, workspaceName, HttpStatus.SC_CREATED)) {
-
-            var actualId = TestUtils.getIdFromLocation(response.getLocation());
-
+            assertThat(response.hasEntity()).isFalse();
+            var actualId = getIdFromLocation(response.getLocation());
             if (span.id() != null) {
                 assertThat(actualId).isEqualTo(span.id());
+            } else {
+                assertThat(actualId).isNotNull();
             }
-
             return actualId;
         }
     }
 
     public Response createSpan(Span span, String apiKey, String workspaceName, int expectedStatus) {
-        var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(span));
+        var response = callCreateSpan(span, apiKey, workspaceName);
 
         assertThat(response.getStatus()).isEqualTo(expectedStatus);
 
@@ -90,8 +87,39 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
 
-            return TestUtils.getIdFromLocation(response.getLocation());
+            return getIdFromLocation(response.getLocation());
         }
+    }
+
+    public Response callCreateSpan(Span span, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(span));
+    }
+
+    public void updateSpan(UUID spanId, SpanUpdate spanUpdate, String apiKey, String workspaceName) {
+        try (var response = updateSpan(spanId, spanUpdate, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT)) {
+            assertThat(response.hasEntity()).isFalse();
+        }
+    }
+
+    public Response updateSpan(
+            UUID spanId, SpanUpdate spanUpdate, String apiKey, String workspaceName, int expectedStatus) {
+        var response = callUpdateSpan(spanId, spanUpdate, apiKey, workspaceName);
+        assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        return response;
+    }
+
+    public Response callUpdateSpan(UUID spanId, SpanUpdate spanUpdate, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(spanId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(spanUpdate));
     }
 
     public void feedbackScores(List<FeedbackScoreBatchItem> score, String apiKey, String workspaceName) {
@@ -101,10 +129,51 @@ public class SpanResourceClient extends BaseCommentResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(new FeedbackScoreBatch(score)))) {
+                .put(Entity.json(FeedbackScoreBatch.builder().scores(score).build()))) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
+    }
+
+    public Response callFeedbackScoresWithContainer(FeedbackScoreBatchContainer request, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("feedback-scores")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(request));
+    }
+
+    public Response callGetSpansWithQueryParams(String apiKey, String workspaceName, Map<String, String> queryParams) {
+        WebTarget target = addQueryParameters(client.target(RESOURCE_PATH.formatted(baseURI)), queryParams);
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callGetSpansWithQueryParamsAndCookie(String sessionToken, String workspaceName,
+            Map<String, String> queryParams) {
+        WebTarget target = addQueryParameters(client.target(RESOURCE_PATH.formatted(baseURI)), queryParams);
+
+        return target
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callFeedbackScoresWithContainerAndCookie(FeedbackScoreBatchContainer request, String sessionToken,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("feedback-scores")
+                .request()
+                .cookie(RequestContext.SESSION_COOKIE, sessionToken)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(request));
     }
 
     public void feedbackScore(UUID entityId, FeedbackScore score, String workspaceName, String apiKey) {
@@ -121,30 +190,59 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         }
     }
 
-    public void batchCreateSpans(List<Span> spans, String apiKey, String workspaceName) {
+    public void deleteSpanFeedbackScore(DeleteFeedbackScore score, UUID spanId, String apiKey, String workspaceName) {
+
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("batch")
+                .path(spanId.toString())
+                .path("feedback-scores")
+                .path("delete")
                 .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(SpanBatch.builder().spans(spans).build()))) {
+                .post(Entity.json(score))) {
 
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public void batchCreateSpans(List<Span> spans, String apiKey, String workspaceName) {
+        try (var actualResponse = callBatchCreateSpans(spans, apiKey, workspaceName)) {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             assertThat(actualResponse.hasEntity()).isFalse();
         }
     }
 
-    public Span getById(UUID id, String workspaceName, String apiKey) {
-        try (var response = callGetSpanIdApi(id, workspaceName, apiKey)) {
+    public Response callBatchCreateSpans(List<Span> spans, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(SpanBatch.builder().spans(spans).build()));
+    }
 
+    public Span getById(UUID id, String workspaceName, String apiKey) {
+        return getById(id, workspaceName, apiKey, false);
+    }
+
+    public Span getById(UUID id, String workspaceName, String apiKey, boolean stripAttachments) {
+        try (var response = callGetSpanIdApi(id, workspaceName, apiKey, stripAttachments)) {
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.hasEntity()).isTrue();
             return response.readEntity(Span.class);
         }
     }
 
     public Response callGetSpanIdApi(UUID id, String workspaceName, String apiKey) {
+        return callGetSpanIdApi(id, workspaceName, apiKey, false);
+    }
+
+    public Response callGetSpanIdApi(UUID id, String workspaceName, String apiKey, boolean stripAttachments) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
+                .queryParam("strip_attachments", stripAttachments)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -152,15 +250,27 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public Span.SpanPage getByTraceIdAndProject(UUID traceId, String projectName, String workspaceName, String apiKey) {
+        return getByTraceIdAndProject(traceId, projectName, workspaceName, apiKey, false, false);
+    }
+
+    public Span.SpanPage getByTraceIdAndProject(UUID traceId, String projectName, String workspaceName, String apiKey,
+            boolean truncate, boolean stripAttachments) {
         var requestBuilder = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("trace_id", traceId.toString());
 
         if (StringUtils.isNotEmpty(projectName)) {
-            requestBuilder = requestBuilder.queryParam("project", projectName);
+            requestBuilder = requestBuilder.queryParam("project_name", projectName);
+        }
+
+        if (truncate) {
+            requestBuilder = requestBuilder.queryParam("truncate", true);
+        }
+
+        if (stripAttachments) {
+            requestBuilder = requestBuilder.queryParam("strip_attachments", true);
         }
 
         var response = requestBuilder
-                .queryParam("project_name", projectName)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -168,19 +278,6 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
         assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
         return response.readEntity(Span.SpanPage.class);
-    }
-
-    public void deleteSpan(UUID id, String workspaceName, String apiKey) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(id.toString())
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .delete()) {
-
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            assertThat(actualResponse.hasEntity()).isFalse();
-        }
     }
 
     public OpenaiModelName randomModel() {
@@ -196,11 +293,15 @@ public class SpanResourceClient extends BaseCommentResourceClient {
     }
 
     public Map<String, Integer> getTokenUsage() {
-        return Map.of("completion_tokens", randomNumber(1, 500), "prompt_tokens", randomNumber(1, 500));
+        int completionTokens = randomNumber(1, 500);
+        int promptTokens = randomNumber(1, 500);
+        return Map.of("completion_tokens", completionTokens,
+                "prompt_tokens", promptTokens,
+                "total_tokens", completionTokens + promptTokens);
     }
 
-    public void getStreamAndAssertContent(String apiKey, String workspaceName, SpanSearchStreamRequest streamRequest,
-            List<Span> expectedSpans, String userName) {
+    public List<Span> getStreamAndAssertContent(String apiKey, String workspaceName,
+            SpanSearchStreamRequest streamRequest) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("search")
                 .request()
@@ -210,14 +311,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
-            var actualSpans = getStreamedItems(actualResponse);
-
-            assertThat(actualSpans).hasSize(expectedSpans.size());
-            assertThat(actualSpans)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS)
-                    .containsExactlyElementsOf(expectedSpans);
-
-            assertIgnoredFields(actualSpans, expectedSpans, userName);
+            return getStreamedItems(actualResponse);
         }
     }
 
@@ -233,86 +327,224 @@ public class SpanResourceClient extends BaseCommentResourceClient {
         return items;
     }
 
-    public void assertIgnoredFields(List<Span> actualSpans, List<Span> expectedSpans, String userName) {
-        for (int i = 0; i < actualSpans.size(); i++) {
-            var actualSpan = actualSpans.get(i);
-            var expectedSpan = expectedSpans.get(i);
-            var expectedFeedbackScores = expectedSpan.feedbackScores() == null
-                    ? null
-                    : expectedSpan.feedbackScores().reversed();
-            assertThat(actualSpan.projectId()).isNotNull();
-            assertThat(actualSpan.projectName()).isNull();
-            assertThat(actualSpan.createdAt()).isAfter(expectedSpan.createdAt());
-            assertThat(actualSpan.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
-            assertThat(actualSpan.feedbackScores())
-                    .usingRecursiveComparison(
-                            RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(BigDecimal::compareTo, BigDecimal.class)
-                                    .withIgnoredFields(IGNORED_FIELDS_SCORES)
-                                    .build())
-                    .isEqualTo(expectedFeedbackScores);
-            var expected = DurationUtils.getDurationInMillisWithSubMilliPrecision(
-                    expectedSpan.startTime(), expectedSpan.endTime());
-            if (actualSpan.duration() == null || expected == null) {
-                assertThat(actualSpan.duration()).isEqualTo(expected);
-            } else {
-                assertThat(actualSpan.duration()).isEqualTo(expected, within(0.001));
-            }
-
-            if (actualSpan.feedbackScores() != null) {
-                actualSpan.feedbackScores().forEach(feedbackScore -> {
-                    assertThat(feedbackScore.createdAt()).isAfter(expectedSpan.createdAt());
-                    assertThat(feedbackScore.lastUpdatedAt()).isAfter(expectedSpan.lastUpdatedAt());
-                    assertThat(feedbackScore.createdBy()).isEqualTo(userName);
-                    assertThat(feedbackScore.lastUpdatedBy()).isEqualTo(userName);
-                });
-            }
-
-            if (actualSpan.comments() != null) {
-                assertComments(expectedSpan.comments(), actualSpan.comments());
-
-                actualSpan.comments().forEach(comment -> {
-                    assertThat(comment.createdAt()).isAfter(actualSpan.createdAt());
-                    assertThat(comment.lastUpdatedAt()).isAfter(actualSpan.lastUpdatedAt());
-                    assertThat(comment.createdBy()).isEqualTo(userName);
-                    assertThat(comment.lastUpdatedBy()).isEqualTo(userName);
-                });
-            }
-        }
+    public Span.SpanPage findSpans(String workspaceName, String apiKey, String projectName,
+            UUID projectId, Integer page, Integer size, UUID traceId, SpanType type, List<? extends SpanFilter> filters,
+            List<SortingField> sortingFields, List<Span.SpanField> exclude) {
+        return findSpans(workspaceName, apiKey, projectName, projectId, page, size, traceId, type, filters,
+                sortingFields, exclude, null, null);
     }
 
-    public <T> T searchSpan(String apiKey, String workspaceName, SpanSearchStreamRequest request, int expectedStatus,
-            Class<T> bodyClass) {
-        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("search")
+    public Span.SpanPage findSpans(String workspaceName, String apiKey, String projectName,
+            UUID projectId, Integer page, Integer size, UUID traceId, SpanType type, List<? extends SpanFilter> filters,
+            List<SortingField> sortingFields, List<Span.SpanField> exclude, String fromTime, String toTime) {
+        return findSpans(workspaceName, apiKey, projectName, projectId, page, size, traceId, type, filters,
+                sortingFields, exclude, fromTime, toTime, null);
+    }
+
+    public Span.SpanPage findSpans(String workspaceName, String apiKey, String projectName,
+            UUID projectId, Integer page, Integer size, UUID traceId, SpanType type, List<? extends SpanFilter> filters,
+            List<SortingField> sortingFields, List<Span.SpanField> exclude, String fromTime, String toTime,
+            String search) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI));
+
+        if (page != null) {
+            webTarget = webTarget.queryParam("page", page);
+        }
+
+        if (size != null) {
+            webTarget = webTarget.queryParam("size", size);
+        }
+
+        if (projectName != null) {
+            webTarget = webTarget.queryParam("project_name", projectName);
+        }
+
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
+
+        if (traceId != null) {
+            webTarget = webTarget.queryParam("trace_id", traceId);
+        }
+
+        if (type != null) {
+            webTarget = webTarget.queryParam("type", type);
+        }
+
+        if (filters != null) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        if (sortingFields != null) {
+            webTarget = webTarget.queryParam("sorting", toURLEncodedQueryParam(sortingFields));
+        }
+
+        if (!CollectionUtils.isEmpty(exclude)) {
+            webTarget = webTarget.queryParam("exclude", toURLEncodedQueryParam(exclude));
+        }
+
+        if (fromTime != null) {
+            webTarget = webTarget.queryParam("from_time", fromTime);
+        }
+
+        if (toTime != null) {
+            webTarget = webTarget.queryParam("to_time", toTime);
+        }
+
+        if (StringUtils.isNotBlank(search)) {
+            webTarget = webTarget.queryParam("search", search);
+        }
+
+        try (var actualResponse = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
+                .get()) {
 
-            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
-            return actualResponse.readEntity(bodyClass);
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(Span.SpanPage.class);
         }
     }
 
-    public <T> T findSpans(String apiKey, String workspaceName, String projectName, List<? extends Filter> filters,
-            int expectedStatus, Class<T> bodyClass) {
-        var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
-                .queryParam("project_name", projectName)
-                .queryParam("filters", toURLEncodedQueryParam(filters))
+    public ProjectStats getSpansStats(String projectName,
+            UUID projectId,
+            List<? extends SpanFilter> filters,
+            String apiKey,
+            String workspaceName,
+            Map<String, String> queryParams) {
+        return getSpansStats(projectName, projectId, filters, apiKey, workspaceName, queryParams, HttpStatus.SC_OK);
+    }
+
+    public ProjectStats getSpansStats(String projectName,
+            UUID projectId,
+            List<? extends SpanFilter> filters,
+            String apiKey,
+            String workspaceName,
+            Map<String, String> queryParams,
+            int expectedStatus) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("stats");
+
+        if (projectName != null) {
+            webTarget = webTarget.queryParam("project_name", projectName);
+        }
+
+        if (filters != null) {
+            webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
+
+        webTarget = queryParams.entrySet()
+                .stream()
+                .reduce(webTarget, (acc, entry) -> acc.queryParam(entry.getKey(), entry.getValue()), (a, b) -> b);
+
+        var actualResponse = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get();
 
-        assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+        assertThat(actualResponse.getStatus()).isEqualTo(expectedStatus);
+        if (expectedStatus == HttpStatus.SC_OK) {
+            return actualResponse.readEntity(ProjectStats.class);
+        }
 
-        return actualResponse.readEntity(bodyClass);
+        return null;
     }
 
-    private String toURLEncodedQueryParam(List<? extends Filter> filters) {
-        return CollectionUtils.isEmpty(filters)
-                ? null
-                : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
+    public boolean existsSpans(String projectName, String apiKey, String workspaceName) {
+        return existsSpans(projectName, null, apiKey, workspaceName);
     }
+
+    public boolean existsSpans(String projectName, Source source, String apiKey, String workspaceName) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("exists")
+                .queryParam("project_name", projectName);
+
+        if (source != null) {
+            webTarget = webTarget.queryParam("source", source.getValue());
+        }
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(ExistenceResponse.class).exists();
+        }
+    }
+
+    public boolean existsSpans(UUID projectId, String apiKey, String workspaceName) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("exists")
+                .queryParam("project_id", projectId)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return actualResponse.readEntity(ExistenceResponse.class).exists();
+        }
+    }
+
+    public void batchUpdateSpans(SpanBatchUpdate batchUpdate, String apiKey, String workspaceName) {
+        try (var actualResponse = callBatchUpdateSpans(batchUpdate, apiKey, workspaceName)) {
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            assertThat(actualResponse.hasEntity()).isFalse();
+        }
+    }
+
+    public Response callBatchUpdateSpans(SpanBatchUpdate batchUpdate, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(batchUpdate));
+    }
+
+    public Response callAddSpanComment(UUID spanId, Comment comment, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(spanId.toString())
+                .path("comments")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(comment));
+    }
+
+    public Response callUpdateSpanComment(UUID commentId, Comment comment, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("comments")
+                .path(commentId.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method(HttpMethod.PATCH, Entity.json(comment));
+    }
+
+    public Response callDeleteSpanComments(BatchDelete batchDelete, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("comments")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(batchDelete));
+    }
+
+    public Response callAddSpanFeedbackScore(UUID spanId, FeedbackScore score, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(spanId.toString())
+                .path("feedback-scores")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(score));
+    }
+
 }

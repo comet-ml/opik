@@ -1,21 +1,33 @@
-name: SDK Unit Tests
-run-name: "SDK Unit Tests ${{ github.ref_name }} by @${{ github.actor }}"
+name: Python SDK Unit Tests
+run-name: "Python SDK Unit Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
 on:
   pull_request:
     paths:
-    - 'sdks/python/**'
+      - 'sdks/python/**'
+      - '.github/workflows/python_sdk_unit_tests.yml'
   push:
-    branches: 
+    branches:
       - 'main'
     paths:
       - 'sdks/python/**'
+      - '.github/workflows/python_sdk_unit_tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
 jobs:
   UnitTests:
-    name: Units_Python_${{matrix.python_version}}
+    name: Python SDK Unit Tests ${{matrix.python_version}}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     defaults:
       run:
@@ -24,39 +36,50 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python_version: [
-          "3.8",
-          "3.9",
-          "3.10",
-          "3.11",
-          "3.12"
-        ]
+        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS || '["3.10","3.11","3.12","3.13","3.14"]') }}
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Print environment variables
         run: env
 
       - name: Print event object
-        run: cat $GITHUB_EVENT_PATH
+        run: cat "$GITHUB_EVENT_PATH"
 
       - name: Print the PR title
-        run: echo "${{ github.event.pull_request.title }}"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: echo "$PR_TITLE"
 
       - name: Setup Python ${{ matrix.python_version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python_version }}
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.0.1
+
       - name: Install opik
-        run: pip install .
+        run: uv pip install --system .
 
       - name: Install test requirements
         run: |
           cd ./tests
-          pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt -r ./unit/test_requirements.txt
+          uv pip install --system -r test_requirements.txt -r ./unit/test_requirements.txt
+          uv pip list --system
 
       - name: Running SDK Unit Tests
-        run: python -m pytest --cov=src/opik -vv tests/unit/
+        # Per-test timeout (thread method dumps all thread stacks via faulthandler)
+        # so a hung test fails fast with a traceback instead of a silent 20-min cancel.
+        run: python -m pytest -vv tests/unit/ --timeout=120 --timeout-method=thread --junitxml=${{ github.workspace }}/test_results.xml
+
+      - name: Publish Test Report
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          action_fail: true
+          comment_mode: failures
+          check_name: Python SDK Unit Tests Results (Python ${{matrix.python_version}})
+          files: ${{ github.workspace }}/test_results.xml

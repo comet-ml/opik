@@ -7,6 +7,7 @@ import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.sql.BatchUpdateException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.function.Supplier;
 
@@ -28,9 +29,27 @@ class EntityConstraintHandlerTest {
         assertThrows(EntityAlreadyExistsException.class, () -> handler.withError(ENTITY_ALREADY_EXISTS));
     }
 
+    @Test
+    void testWithError__whenBatchUpdateException__thenThrowEntityAlreadyExistsException() {
+        EntityConstraintHandler<String> handler = EntityConstraintHandler.handle(() -> {
+            throwBatchDuplicateEntryException();
+            return null;
+        });
+
+        assertThrows(EntityAlreadyExistsException.class, () -> handler.withError(ENTITY_ALREADY_EXISTS));
+    }
+
     private static void throwDuplicateEntryException() {
         throw new UnableToExecuteStatementException(new SQLIntegrityConstraintViolationException(
                 "Duplicate entry '1' for key 'PRIMARY'"), Mockito.mock(StatementContext.class));
+    }
+
+    private static void throwBatchDuplicateEntryException() {
+        // Simulates the exception chain from @SqlBatch: UnableToExecuteStatementException -> BatchUpdateException -> SQLIntegrityConstraintViolationException
+        var rootCause = new SQLIntegrityConstraintViolationException("Duplicate entry '1' for key 'PRIMARY'");
+        var batchException = new BatchUpdateException("Batch update failed", new int[0]);
+        batchException.initCause(rootCause);
+        throw new UnableToExecuteStatementException(batchException, Mockito.mock(StatementContext.class));
     }
 
     @Test

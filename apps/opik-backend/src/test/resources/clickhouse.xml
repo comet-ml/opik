@@ -1,0 +1,37 @@
+<clickhouse>
+    <!-- Permits SQL_-prefixed custom settings (SQL_workspace_id / SQL_project_id) used by the Agent Insights
+         read-only user's settings profile. Mirrors deployment/docker-compose/clickhouse_config/additional_config.xml.
+         Inert unless a test provisions that profile. -->
+    <custom_settings_prefixes>SQL_</custom_settings_prefixes>
+
+    <macros>
+        <shard>01</shard>
+        <replica>clickhouse</replica>
+        <cluster>cluster</cluster>
+    </macros>
+    <zookeeper>
+        <node>
+            <host>zookeeper</host>
+            <port>2181</port>
+        </node>
+    </zookeeper>
+
+    <zookeeper_path>/clickhouse</zookeeper_path>
+    <zookeeper_session_timeout_ms>30000</zookeeper_session_timeout_ms>
+
+    <distributed_ddl>
+        <path>/clickhouse/task_queue/ddl</path>
+    </distributed_ddl>
+
+    <remote_servers>
+        <cluster>
+        <shard>
+            <internal_replication>true</internal_replication>
+            <replica>
+            <host>clickhouse</host>
+            <port>9000</port>
+            </replica>
+        </shard>
+        </cluster>
+    </remote_servers>
+</clickhouse>

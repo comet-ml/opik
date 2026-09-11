@@ -1,0 +1,296 @@
+import typing
+
+from opik.rest_api import client as rest_client
+from opik.rest_api import core as rest_api_core
+from opik.rest_api.core.request_options import RequestOptions
+from opik.rest_api.types.agent_blueprint_write import AgentBlueprintWrite
+from opik.rest_api.types.agent_config_env import AgentConfigEnv
+from opik.rest_api.types.agent_config_value_write import AgentConfigValueWrite
+from opik.api_objects import rest_helpers
+from opik import id_helpers
+
+from .blueprint import Blueprint
+from . import cache as cache_mod, types
+from .. import type_helpers
+
+
+class ConfigManager:
+    """Project-level config entity — internal REST operations."""
+
+    def __init__(
+        self,
+        project_name: str,
+        rest_client_: rest_client.OpikApi,
+    ) -> None:
+        self._project_name = project_name
+        self._rest_client = rest_client_
+
+    @property
+    def project_name(self) -> str:
+        return self._project_name
+
+    @staticmethod
+    def _resolve_fields_with_values(
+        parameters: typing.Optional[typing.Dict[str, typing.Any]],
+        fields_with_values: typing.Optional[typing.Dict[str, types.FieldValueSpec]],
+    ) -> typing.Dict[str, types.FieldValueSpec]:
+        if fields_with_values is not None:
+            return fields_with_values
+        return {
+            k: types.FieldValueSpec(
+                python_type=type(v) if v is not None else str, value=v
+            )
+            for k, v in (parameters or {}).items()
+        }
+
+    def get_blueprint(
+        self,
+        *,
+        name: typing.Optional[str] = None,
+        env: typing.Optional[str] = None,
+        mask_id: typing.Optional[str] = None,
+        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        timeout_in_seconds: typing.Optional[int] = None,
+    ) -> typing.Optional[Blueprint]:
+        """Fetch a blueprint by name, environment name, or latest.
+
+        Priority: ``name`` > ``env`` > latest.
+        Returns ``None`` if not found.
+
+        Args:
+            name: Fetch the blueprint with this version name.
+            env: Fetch the blueprint tagged with this environment name.
+            mask_id: ID of a mask blueprint to overlay on the result.
+            field_types: Mapping of field name to Python type used
+                for deserialising backend values.
+            timeout_in_seconds: HTTP request timeout in seconds.
+        """
+        request_options: typing.Optional[RequestOptions] = (
+            RequestOptions(timeout_in_seconds=timeout_in_seconds)
+            if timeout_in_seconds is not None
+            else None
+        )
+        try:
+            project_id = rest_helpers.resolve_project_id_by_name(
+                self._rest_client, self._project_name
+            )
+            if name is not None:
+                raw = self._rest_client.agent_configs.get_blueprint_by_name(
+                    project_id=project_id,
+                    name=name,
+                    mask_id=mask_id,
+                    request_options=request_options,
+                )
+            elif env is not None:
+                raw = self._rest_client.agent_configs.get_blueprint_by_env(
+                    env_name=env,
+                    project_id=project_id,
+                    mask_id=mask_id,
+                    request_options=request_options,
+                )
+            else:
+                raw = self._rest_client.agent_configs.get_latest_blueprint(
+                    project_id=project_id,
+                    mask_id=mask_id,
+                    request_options=request_options,
+                )
+        except rest_api_core.ApiError as e:
+            if e.status_code == 404:
+                return None
+            raise
+        return Blueprint(
+            raw_blueprint=raw,
+            field_types=field_types,
+            rest_client_=self._rest_client,
+        )
+
+    def create_blueprint(
+        self,
+        parameters: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        fields_with_values: typing.Optional[
+            typing.Dict[str, types.FieldValueSpec]
+        ] = None,
+        description: typing.Optional[str] = None,
+        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    ) -> Blueprint:
+        """Create and return the initial blueprint for this agent config (first version only).
+
+        Use this method to establish the first version of the agent config.
+        For subsequent updates use :meth:`update_blueprint`.
+
+        Pass either ``parameters`` (plain key-value pairs whose types are
+        inferred) or ``fields_with_values`` (explicit ``{key: types.FieldValueSpec(type, value)}``
+        mapping). If both are given ``fields_with_values`` takes precedence.
+
+        Args:
+            parameters: Plain ``{field_name: value}`` dict; types are inferred
+                via ``type(value)``.
+            fields_with_values: Explicit ``{field_name: types.FieldValueSpec(python_type, value)}``
+                mapping, bypassing type inference.
+            description: Human-readable description stored with the blueprint.
+            field_types: Mapping of field name to Python type used
+                when fetching back the created blueprint.
+        """
+        resolved_fields_with_values = self._resolve_fields_with_values(
+            parameters, fields_with_values
+        )
+        blueprint_id = id_helpers.generate_id()
+        payload = _build_blueprint_payload(
+            resolved_fields_with_values, description, id=blueprint_id
+        )
+        self._rest_client.agent_configs.create_agent_config(
+            blueprint=payload,
+            project_name=self._project_name,
+        )
+        raw = self._rest_client.agent_configs.get_blueprint_by_id(blueprint_id)
+        return Blueprint(
+            raw_blueprint=raw,
+            field_types=field_types,
+            rest_client_=self._rest_client,
+        )
+
+    def update_blueprint(
+        self,
+        fields_with_values: typing.Optional[
+            typing.Dict[str, types.FieldValueSpec]
+        ] = None,
+        description: typing.Optional[str] = None,
+        field_types: typing.Optional[typing.Dict[str, typing.Any]] = None,
+    ) -> Blueprint:
+        """Create a new blueprint with only the supplied fields (not merged with previous).
+
+        Each call creates a new versioned snapshot containing exactly the fields
+        you provide in ``fields_with_values``. Fields omitted from that mapping
+        are **not** carried over from the previous version.
+
+        ``fields_with_values`` must map each field name to a
+        :class:`~opik.api_objects.agent_config.types.FieldValueSpec` that
+        declares both the Python type and the value.  For prompt fields the
+        value must be a :class:`~opik.api_objects.prompt.text.prompt.Prompt`
+        (or :class:`~opik.api_objects.prompt.chat.chat_prompt.ChatPrompt`)
+        instance::
+
+            config.update_blueprint(
+                fields_with_values={
+                    "system_prompt": types.FieldValueSpec(
+                        python_type=Prompt, value=my_prompt
+                    ),
+                    "temperature": types.FieldValueSpec(
+                        python_type=float, value=0.7
+                    ),
+                }
+            )
+
+        Args:
+            fields_with_values: ``{field_name: types.FieldValueSpec(python_type, value)}``
+                mapping.  Each entry overrides that field in the new blueprint.
+            description: Human-readable description stored with the blueprint.
+            field_types: Mapping of field name to Python type used
+                when fetching back the created blueprint.
+        """
+        resolved_fields_with_values = self._resolve_fields_with_values(
+            None, fields_with_values
+        )
+        blueprint_id = id_helpers.generate_id()
+        payload = _build_blueprint_payload(
+            resolved_fields_with_values, description, id=blueprint_id
+        )
+        self._rest_client.agent_configs.update_agent_config(
+            blueprint=payload,
+            project_name=self._project_name,
+        )
+        raw = self._rest_client.agent_configs.get_blueprint_by_id(blueprint_id)
+        return Blueprint(
+            raw_blueprint=raw,
+            field_types=field_types,
+            rest_client_=self._rest_client,
+        )
+
+    def set_env(self, version: str, env: str) -> None:
+        """Tag a specific blueprint version with an environment name.
+
+        After tagging, ``get_blueprint(env=env)`` will return this version.
+
+        Args:
+            version: Version name of the blueprint to tag.
+            env: Environment name (e.g. ``"prod"``, ``"staging"``).
+        """
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, self._project_name
+        )
+        # Use the cached blueprint_id when available to skip a round-trip.
+        cached = cache_mod.get_cached_config(self._project_name, None, None, version)
+        blueprint_id = cached.blueprint_id
+        if blueprint_id is None:
+            blueprint = self._rest_client.agent_configs.get_blueprint_by_name(
+                project_id=project_id,
+                name=version,
+            )
+            blueprint_id = blueprint.id
+        self._rest_client.agent_configs.create_or_update_envs(
+            project_id=project_id,
+            envs=[AgentConfigEnv(env_name=env, blueprint_id=blueprint_id)],
+        )
+
+    def create_mask(
+        self,
+        parameters: typing.Optional[typing.Dict[str, typing.Any]] = None,
+        fields_with_values: typing.Optional[
+            typing.Dict[str, types.FieldValueSpec]
+        ] = None,
+        description: typing.Optional[str] = None,
+    ) -> str:
+        """Create a mask blueprint and return its ID.
+
+        A mask overlays a subset of fields on top of an existing blueprint.
+        Apply it by passing the returned ID to ``get_blueprint(mask_id=...)``.
+
+        Args:
+            parameters: Plain ``{field_name: value}`` dict; types are inferred
+                via ``type(value)``.
+            fields_with_values: Explicit ``{field_name: types.FieldValueSpec(python_type, value)}``
+                mapping, bypassing type inference.
+            description: Human-readable description stored with the mask.
+        """
+        resolved_fields_with_values = self._resolve_fields_with_values(
+            parameters, fields_with_values
+        )
+        mask_id = id_helpers.generate_id()
+        payload = _build_blueprint_payload(
+            resolved_fields_with_values, description, id=mask_id, config_type="mask"
+        )
+        self._rest_client.agent_configs.update_agent_config(
+            blueprint=payload,
+            project_name=self._project_name,
+        )
+        return mask_id
+
+
+def _build_blueprint_payload(
+    fields_with_values: typing.Dict[str, types.FieldValueSpec],
+    description: typing.Optional[str],
+    id: typing.Optional[str] = None,
+    config_type: str = "blueprint",
+) -> AgentBlueprintWrite:
+    backend_values = []
+    for field_name, field_spec in fields_with_values.items():
+        backend_type = (
+            type_helpers.python_type_to_backend_type(field_spec.python_type)
+            if field_spec.value is not None
+            else "string"
+        )
+        backend_values.append(
+            AgentConfigValueWrite(
+                key=field_name,
+                type=backend_type,
+                value=type_helpers.python_value_to_backend_value(
+                    field_spec.value, field_spec.python_type
+                ),
+            )
+        )
+    return AgentBlueprintWrite(
+        id=id,
+        type=config_type,
+        values=backend_values,
+        description=description,
+    )

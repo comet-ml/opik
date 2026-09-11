@@ -1,0 +1,655 @@
+import logging
+import time
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import google.adk.agents
+from google.adk.agents import callback_context
+from google.adk import models
+from google.adk.tools import base_tool
+from google.adk.tools import tool_context
+
+import opik
+from opik import context_storage
+from opik.api_objects import span, trace
+from opik.types import DistributedTraceHeadersDict
+from opik.decorator import span_creation_handler, arguments_helpers
+
+from . import (
+    helpers as adk_helpers,
+    callback_context_info_extractors,
+    output_cache,
+    pending_llm_spans,
+    patchers,
+)
+from .patchers import (
+    litellm_wrappers,
+    llm_response_wrapper,
+)
+from .patchers.adk_otel_tracer import llm_span_helpers
+from .graph import mermaid_graph_builder
+from ... import analytics
+
+LOGGER = logging.getLogger(__name__)
+
+SpanOrTraceData = Union[span.SpanData, trace.TraceData]
+
+
+class OpikTracer:
+    """
+    Opik tracer for google-adk.
+    """
+
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        project_name: Optional[str] = None,
+        distributed_headers: Optional[DistributedTraceHeadersDict] = None,
+    ):
+        """
+        Initialize OpikTracer.
+
+        Arguments:
+            name: The default name for root span or trace created by the tracer.
+            tags: The default tags for all the traces and spans created by the tracer.
+            metadata: The default metadata for all the traces and spans created by the tracer.
+            project_name: The name of the project for tracing.
+            distributed_headers: The distributed trace headers.
+        """
+        analytics.track_event("integration", "adk")
+        self.name = name
+        self.tags = tags
+        self.metadata = metadata or {}
+        self.metadata["created_from"] = "google-adk"
+        self.project_name = project_name
+        self._distributed_headers = distributed_headers
+
+        self._init_internal_attributes()
+
+    @property
+    def _opik_client(self) -> opik.Opik:
+        return opik.get_global_client()
+
+    def _init_internal_attributes(self) -> None:
+        # Cache the last model output per ADK ``invocation_id``. A single tracer
+        # instance is shared across concurrent invocations (the
+        # ``track_adk_agent_recursive`` pattern), so keying by invocation isolates
+        # their output; the cache is bounded so it can't grow without bound.
+        self._last_model_output = output_cache.LastModelOutputCache()
+        # In-flight LLM spans keyed by id(callback_context.actions) so
+        # after_model_callback can recover the span created in
+        # before_model_callback even when ContextCacheConfig detaches the
+        # contextvar span stack under SSE streaming (comet-ml/opik#5524).
+        self._pending_llm_spans = pending_llm_spans.PendingLlmSpanRegistry()
+        # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
+        self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
+
+        patchers.patch_adk(
+            distributed_headers=self._distributed_headers,
+        )
+
+    def _has_response_content(self, llm_response: models.LlmResponse) -> bool:
+        """
+        Check if the LlmResponse contains actual content (text or function calls).
+
+        Arguments:
+            llm_response: The LLM response to check.
+
+        Returns:
+            True if the response contains text content or function calls, False otherwise.
+        """
+        try:
+            # Check the LlmResponse object directly for content structure
+            if llm_response.content is not None and llm_response.content.parts:
+                for part in llm_response.content.parts:
+                    # Check for text content
+                    if part.text and part.text.strip():
+                        return True
+                    # Check for function call content (tool calls)
+                    if part.function_call:
+                        return True
+            return False
+        except Exception as e:
+            LOGGER.debug(
+                f"Error checking LlmResponse.content.parts for TTFT: {e}",
+                exc_info=True,
+            )
+            return False
+
+    def _safe_ttft_tracking(
+        self, span_id: Optional[str], pop: bool = False
+    ) -> Tuple[Optional[float], Optional[float]]:
+        """
+        Safely retrieve time-to-first-token tracking data for a span.
+
+        Arguments:
+            span_id: The span ID to look up in tracking.
+            pop: If True, remove the entry after fetching. If False, keep it.
+
+        Returns:
+            Tuple of (request_start_time, first_token_time). Returns (None, None) if
+            span_id is None or not found in tracking.
+        """
+        if span_id is None or span_id not in self._ttft_tracking:
+            return (None, None)
+        if pop:
+            return self._ttft_tracking.pop(span_id)
+        return self._ttft_tracking[span_id]
+
+    def flush(self) -> None:
+        self._opik_client.flush()
+
+    def before_agent_callback(
+        self,
+        callback_context: callback_context.CallbackContext,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        try:
+            current_trace = context_storage.get_trace_data()
+            current_span = context_storage.top_span_data()
+
+            thread_id, session_metadata = (
+                callback_context_info_extractors.try_get_session_info(callback_context)
+            )
+
+            agent_metadata = self.metadata.copy()
+            agent_metadata["adk_invocation_id"] = callback_context.invocation_id
+            agent_metadata.update(session_metadata)
+
+            _try_add_agent_graph_to_metadata(agent_metadata, callback_context)
+
+            if callback_context.user_content is not None:
+                user_input = adk_helpers.convert_adk_base_model_to_dict(
+                    callback_context.user_content
+                )
+            else:
+                user_input = None
+
+            name = self.name or callback_context.agent_name
+
+            if current_span is not None:
+                current_span.update(
+                    name=name,
+                    metadata={**agent_metadata},
+                    input=user_input,
+                    tags=self.tags,
+                    project_name=self.project_name,
+                )
+            elif current_trace is not None:
+                current_trace.update(
+                    name=name,
+                    metadata={**agent_metadata},
+                    input=user_input,
+                    tags=self.tags,
+                    thread_id=thread_id,
+                    project_name=self.project_name,
+                )
+            else:
+                LOGGER.warning(
+                    f"No current span or trace found in context for agent: {callback_context.agent_name}"
+                )
+
+        except Exception as e:
+            LOGGER.error(f"Failed during before_agent_callback(): {e}", exc_info=True)
+
+    def after_agent_callback(
+        self,
+        callback_context: callback_context.CallbackContext,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        try:
+            output = self._last_model_output.get(callback_context.invocation_id)
+            current_span = context_storage.top_span_data()
+            current_trace = context_storage.get_trace_data()
+            if current_span is not None:
+                current_span.update(
+                    output=output,
+                    project_name=self.project_name,
+                )
+            elif current_trace is not None:
+                current_trace.update(
+                    output=output,
+                    project_name=self.project_name,
+                )
+            else:
+                LOGGER.warning(
+                    "No current span or trace found in context for agent output update"
+                )
+        except Exception as e:
+            LOGGER.error(f"Failed during after_agent_callback(): {e}", exc_info=True)
+
+    def before_model_callback(
+        self,
+        callback_context: callback_context.CallbackContext,
+        llm_request: models.LlmRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        try:
+            input = adk_helpers.convert_adk_base_model_to_dict(llm_request)
+
+            provider, model = litellm_wrappers.parse_provider_and_model(
+                llm_request.model
+            )
+            if provider is None:
+                provider = adk_helpers.get_adk_provider()
+
+            # ADK runs `before_model_callback` before running `start_as_current_span` function for the LLM call,
+            # which makes it impossible to update the Opik span from this method.
+            # So we create a span manually here. This flow is handled inside ADKTracerWrapper.
+            result = span_creation_handler.create_span_respecting_context(
+                start_span_arguments=arguments_helpers.StartSpanParameters(
+                    name=model,
+                    project_name=self.project_name,
+                    metadata={
+                        **self.metadata,
+                        llm_span_helpers.SPAN_STATUS: llm_span_helpers.LLMSpanStatus.STARTED,
+                    },
+                    type="llm",
+                    model=model,
+                    provider=provider,
+                    input=input,
+                ),
+                distributed_trace_headers=None,
+            )
+
+            context_storage.add_span_data(result.span_data)
+            # Also register the span under a contextvar-independent, per-model-call
+            # key so after_model_callback can recover it if ContextCacheConfig
+            # detaches the context stack (comet-ml/opik#5524). The key resolves
+            # the shared EventActions across the whole supported ADK range (public
+            # ``.actions`` on >= 1.29, private ``_event_actions`` before it).
+            actions = _resolve_event_actions(callback_context)
+            if actions is not None:
+                self._pending_llm_spans.register(actions, result.span_data)
+
+            # Track request start time for time-to-first-token calculation
+            request_start_time = time.time()
+            self._ttft_tracking[result.span_data.id] = (request_start_time, None)
+        except Exception as e:
+            LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
+
+    def _force_close_llm_span(self, span_data: span.SpanData, reason: str) -> None:
+        """Close a recovered LLM span that reached a terminal state with nothing
+        to record -- a terminal empty SSE response (see after_model_callback).
+        Without this the span stays stuck in the ``started`` state with no end
+        time (comet-ml/opik#5524).
+
+        Best-effort and idempotent: it skips a span already finalized (a normal
+        ``after_model_callback`` won the race) and never raises, since it runs
+        from an early-return path. It pops the span off the context stack when it
+        is on top so a closed span never lingers to mis-parent later spans.
+        ``reason`` is recorded in metadata so an incomplete span (no output/usage)
+        is distinguishable from a normally finalized one when inspecting traces.
+        """
+        try:
+            if span_data.end_time is not None:
+                return
+            if span_data.metadata is None:
+                span_data.metadata = {}
+            span_data.metadata[llm_span_helpers.SPAN_STATUS] = (
+                llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
+            )
+            # Leading-underscore internal-metadata convention (cf. _OPIK_SPAN_STATUS).
+            span_data.metadata["_opik_llm_span_force_closed_reason"] = reason
+            stack_top = context_storage.top_span_data()
+            if stack_top is not None and stack_top.id == span_data.id:
+                context_storage.pop_span_data(ensure_id=span_data.id)
+            span_data.init_end_time()
+            # Drop the matching TTFT entry so it can't leak either.
+            self._ttft_tracking.pop(span_data.id, None)
+            if opik.is_tracing_active():
+                self._opik_client.__internal_api__span__(**span_data.as_parameters)
+        except Exception:
+            LOGGER.debug(
+                "Failed to force-close LLM span (reason=%s)", reason, exc_info=True
+            )
+
+    def after_model_callback(
+        self,
+        callback_context: callback_context.CallbackContext,
+        llm_response: models.LlmResponse,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        try:
+            is_partial = llm_response.partial is True
+        except Exception:
+            LOGGER.debug("Error checking for partial chunks", exc_info=True)
+            is_partial = False
+
+        span_id: Optional[str] = None
+        actions = _resolve_event_actions(callback_context)
+        exception_occurred = False
+        try:
+            model = None
+            usage = None
+            output = None
+            total_cost = None
+
+            # Resolve the LLM span created in before_model_callback up front, so
+            # the ``finally`` can clean up its TTFT and pending-registry entries
+            # even on the empty-content early return below. Prefer the
+            # per-model-call registry entry (keyed by id(callback_context.actions)),
+            # which survives a context detach under ContextCacheConfig + SSE
+            # streaming (comet-ml/opik#5524). Fall back to the context stack top
+            # when it is our not-yet-finalized LLM span -- keeping the normal path
+            # working if no entry was registered (a callback context without
+            # ``actions``) or it was evicted under extreme concurrency. A parent
+            # span left on top by a detached context is not ours, so it is ignored.
+            stack_top = context_storage.top_span_data()
+            current_span = (
+                self._pending_llm_spans.get(actions) if actions is not None else None
+            )
+            if (
+                current_span is None
+                and stack_top is not None
+                and llm_span_helpers.is_externally_created_llm_span_that_just_started(
+                    stack_top
+                )
+            ):
+                current_span = stack_top
+            if current_span is not None:
+                # Recorded early so the finally can clean up TTFT on any exit path.
+                span_id = current_span.id
+
+            if adk_helpers.has_empty_text_part_content(llm_response):
+                # Empty content. A partial chunk may be followed by more (ADK
+                # calls again with the final response), so keep the span, its TTFT
+                # entry, and its registry entry and wait. But the TERMINAL
+                # (non-partial) empty response is the last callback for this call:
+                # there is nothing to record, yet the finally drops the registry
+                # entry and -- under a detached ContextCacheConfig context -- the
+                # span isn't on the stack either, so a bare return would strand the
+                # recovered span in ``started``. Force-close it instead
+                # (comet-ml/opik#5524); _force_close_llm_span also pops it off the
+                # stack when it is on top.
+                if not is_partial and current_span is not None:
+                    self._force_close_llm_span(
+                        current_span, reason="empty_terminal_response"
+                    )
+                return
+
+            if current_span is None:
+                # No LLM span was registered for this call: before_model_callback
+                # didn't run, or the entry was already consumed. The detached-
+                # context case (#5524) is handled above via _pending_llm_spans, so
+                # here we only recover the model OUTPUT into the per-invocation,
+                # bounded _last_model_output cache (#7266) so after_agent_callback
+                # still stamps the trace output. Discard up front so a failed
+                # conversion leaves no stale value; partial chunks never cache.
+                self._last_model_output.discard(callback_context.invocation_id)
+                if not is_partial:
+                    try:
+                        recovered_output = adk_helpers.convert_adk_base_model_to_dict(
+                            llm_response
+                        )
+                        # There is no span to charge here, but the cost must still be
+                        # taken out of the output: after_agent_callback stamps this
+                        # dict as the trace output, so leaving it in would surface an
+                        # internal marker as ordinary agent output.
+                        llm_response_wrapper.pop_response_cost(recovered_output)
+                        self._last_model_output.set(
+                            callback_context.invocation_id, recovered_output
+                        )
+                    except Exception:
+                        LOGGER.debug(
+                            "Failed to recover model output without a current span",
+                            exc_info=True,
+                        )
+                LOGGER.debug(
+                    "No current span in context (detached async context, e.g. "
+                    "ContextCacheConfig); recovered model output via the cache"
+                )
+                return
+
+            # Pop the context stack at finalization only if it actually holds our
+            # span; when the context was detached the span isn't on the stack and
+            # the top (if any) is a parent we must not touch.
+            span_on_stack = stack_top is not None and stack_top.id == current_span.id
+
+            # Track time-to-first-token: detect first token arrival
+            # We check for first token on EVERY callback (including partial chunks)
+            # to catch the first moment content appears
+            request_start_time, first_token_time = self._safe_ttft_tracking(
+                span_id, pop=False
+            )
+            if (
+                first_token_time is None
+                and request_start_time is not None
+                and span_id is not None
+            ):
+                # Check if this response contains actual content (first token)
+                # Content can be text or function calls (tool calls)
+                if self._has_response_content(llm_response):
+                    # First token detected - record the time
+                    first_token_time = time.time()
+                    self._ttft_tracking[span_id] = (
+                        request_start_time,
+                        first_token_time,
+                    )
+
+            # Ignore partial chunks for final processing, ADK will call this method with the full response at the end
+            # Note: We intentionally keep the TTFT tracking entry for partial chunks since ADK will call
+            # this method again with the final non-partial response, where we'll properly clean it up
+            if is_partial:
+                return
+
+            # Final (non-partial) response for this call: clear any output cached
+            # for this invocation up front, so a failed conversion (or a later
+            # error) below leaves no stale value for after_agent_callback to
+            # stamp. It is re-set only if conversion succeeds.
+            self._last_model_output.discard(callback_context.invocation_id)
+
+            try:
+                output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
+                # Before the usage parsing below, which can raise - the cost must not
+                # be lost to a usage problem it has nothing to do with.
+                total_cost = llm_response_wrapper.pop_response_cost(output)
+                usage_data = llm_response_wrapper.pop_llm_usage_data(
+                    output, current_span.provider
+                )
+                if usage_data is not None:
+                    model = usage_data.model
+                    usage = usage_data.opik_usage
+            except Exception:
+                # Not debug: this is silent data loss. The span is still logged, but
+                # without output or usage, and nothing else reports that.
+                LOGGER.error(
+                    "Error converting LlmResponse to dict or extracting usage data, "
+                    "the LLM span will be logged without output and usage",
+                    exc_info=True,
+                )
+
+            # Calculate time-to-first-token and add to metadata
+            metadata_update = {}
+            request_start_time, first_token_time = self._safe_ttft_tracking(
+                span_id, pop=True
+            )
+            if first_token_time is not None and request_start_time is not None:
+                time_to_first_token = first_token_time - request_start_time
+                metadata_update["time_to_first_token"] = time_to_first_token
+
+            # Merge with existing metadata
+            if current_span.metadata is None:
+                current_span.metadata = {}
+            current_span.metadata.update(metadata_update)
+            current_span.metadata[llm_span_helpers.SPAN_STATUS] = (
+                llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
+            )
+
+            current_span.update(
+                output=output,
+                name=model or current_span.model,
+                type="llm",
+                model=model,
+                usage=usage,
+                total_cost=total_cost,
+                metadata=current_span.metadata,
+                project_name=self.project_name,
+            )
+
+            if span_on_stack:
+                context_storage.pop_span_data(ensure_id=current_span.id)
+            current_span.init_end_time()
+            # We close this span manually because otherwise ADK will close it too late,
+            # and it will also add tool spans inside of it, which we want to avoid.
+            if opik.is_tracing_active():
+                self._opik_client.__internal_api__span__(**current_span.as_parameters)
+            if output is not None:
+                self._last_model_output.set(callback_context.invocation_id, output)
+
+        except Exception as e:
+            exception_occurred = True
+            LOGGER.error(f"Failed during after_model_callback(): {e}", exc_info=True)
+        finally:
+            # Clean up the TTFT entry on any final-response or error exit (partial
+            # chunks keep it, since ADK calls again with the final response). On
+            # the main path it was already popped above, so this is a no-op; on the
+            # empty-content early return this is where the cleanup happens.
+            if span_id is not None and (exception_occurred or not is_partial):
+                self._ttft_tracking.pop(span_id, None)
+            # Drop the recovered span from the registry once this call is done
+            # (any final-response exit, success or error), so a failed
+            # finalization above can't leave a stale entry that a later id() reuse
+            # maps to. Partial chunks keep it for the final response.
+            if actions is not None and not is_partial:
+                self._pending_llm_spans.pop(actions)
+
+    def before_tool_callback(
+        self,
+        tool: base_tool.BaseTool,
+        args: Dict[str, Any],
+        tool_context: tool_context.ToolContext,
+        *other_args: Any,
+        **kwargs: Any,
+    ) -> None:
+        try:
+            current_span = context_storage.top_span_data()
+
+            tool_metadata = {
+                "function_call_id": tool_context.function_call_id,
+                **self.metadata,
+            }
+
+            # Update existing span with tool information
+            if current_span is not None:
+                current_span.update(
+                    name=tool.name,
+                    type="tool",
+                    input=args,
+                    metadata={**tool_metadata},
+                    project_name=self.project_name,
+                )
+            else:
+                LOGGER.warning(
+                    f"No current span found in context for tool: {tool.name}"
+                )
+                _log_tool_context_warning(context=tool_context)
+
+        except Exception as e:
+            LOGGER.error(f"Failed during before_tool_callback(): {e}", exc_info=True)
+
+    def after_tool_callback(
+        self,
+        tool: base_tool.BaseTool,
+        args: Dict[str, Any],
+        tool_context: tool_context.ToolContext,
+        tool_response: Any,
+        *other_args: Any,
+        **kwargs: Any,
+    ) -> None:
+        try:
+            # Debug logging for callback invocation
+            current_span = context_storage.top_span_data()
+
+            output = (
+                tool_response
+                if isinstance(tool_response, dict)
+                else {"output": tool_response}
+            )
+
+            # Update existing span with tool output
+            if current_span is not None:
+                current_span.update(
+                    output=output,
+                    project_name=self.project_name,
+                )
+            else:
+                LOGGER.warning(
+                    f"No current span found in context for tool output update: {tool.name}"
+                )
+                _log_tool_context_warning(context=tool_context)
+        except Exception as e:
+            LOGGER.error(f"Failed during after_tool_callback(): {e}", exc_info=True)
+
+    def __getstate__(self) -> Dict[str, Any]:
+        state = self.__dict__.copy()
+        state.pop("_opik_client", None)
+        # Don't serialize TTFT tracking as it's runtime state
+        state.pop("_ttft_tracking", None)
+        # The output cache and pending-span registry hold a threading.Lock
+        # (unpicklable) and are per-process runtime state; __setstate__ recreates
+        # fresh ones.
+        state.pop("_last_model_output", None)
+        state.pop("_pending_llm_spans", None)
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        self.__dict__.update(state)
+        self._init_internal_attributes()
+
+
+def _resolve_event_actions(
+    callback_context: callback_context.CallbackContext,
+) -> Optional[Any]:
+    """Return the per-model-call ``EventActions`` object ADK passes to both
+    before/after_model_callback -- the contextvar-free key the pending-span
+    registry uses for comet-ml/opik#5524 recovery.
+
+    ADK >= 1.29 exposes it as the public ``.actions`` property; earlier supported
+    versions -- where ContextCacheConfig + SSE can still strand the span -- only
+    store it privately as ``_event_actions``. Prefer the public property and fall
+    back to the private attribute so the key is populated across the whole range;
+    both resolve to the same object, so before/after_model_callback agree on the
+    key. Returns ``None`` for a callback context exposing neither.
+    """
+    actions = getattr(callback_context, "actions", None)
+    if actions is None:
+        actions = getattr(callback_context, "_event_actions", None)
+    return actions
+
+
+def _try_add_agent_graph_to_metadata(
+    metadata: Dict[str, Any], callback_context: callback_context.CallbackContext
+) -> None:
+    current_agent: Optional[google.adk.agents.BaseAgent] = (
+        callback_context_info_extractors.try_get_current_agent_instance(
+            callback_context
+        )
+    )
+
+    if current_agent is None:
+        return
+
+    try:
+        metadata["_opik_graph_definition"] = {
+            "format": "mermaid",
+            "data": mermaid_graph_builder.build_mermaid_graph_definition(
+                current_agent.root_agent
+            ),
+        }
+    except Exception:
+        LOGGER.error("Failed to build mermaid graph for agent.", exc_info=True)
+
+
+def _log_tool_context_warning(context: tool_context.ToolContext) -> None:
+    if context is not None:
+        warning = f"Function call id: {context.function_call_id}, agent name: {context.agent_name}"
+        if context.actions is not None:
+            warning += f", is escalate: {context.actions.escalate}, transfer to: {context.actions.transfer_to_agent}"
+
+        LOGGER.warning(warning)

@@ -1,0 +1,189 @@
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Navigate, useNavigate } from "@tanstack/react-router";
+import { useFeatureFlagVariantKey } from "posthog-js/react";
+import useLocalStorageState from "use-local-storage-state";
+import AgentOnboardingOverlay from "./AgentOnboarding/AgentOnboardingOverlay";
+import {
+  AGENT_ONBOARDING_KEY,
+  AGENT_ONBOARDING_STEPS,
+  AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
+  DEFAULT_ONBOARDING_FLOW,
+  GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY,
+  GUIDED_MOBILE_ONBOARDING_VARIANTS,
+  MANUAL_ONBOARDING_KEY,
+} from "./AgentOnboarding/AgentOnboardingContext";
+import { useActiveWorkspaceName } from "@/store/AppStore";
+import useProjectByName from "@/api/projects/useProjectByName";
+import { IntegrationExplorer } from "@/v2/pages-shared/onboarding/IntegrationExplorer";
+import OnboardingIntegrationsPage from "@/shared/OnboardingIntegrationsPage/OnboardingIntegrationsPage";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import DemoLoadingContent from "./AgentOnboarding/DemoLoadingContent";
+import LoggedDataStatus from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/LoggedDataStatus";
+import useFirstTraceReceived from "@/api/projects/useFirstTraceReceived";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsPhone } from "@/hooks/useIsPhone";
+import MobileOnboarding from "./MobileOnboarding/MobileOnboarding";
+
+const AgentOnboardingQuickstart: React.FC = () => {
+  const workspaceName = useActiveWorkspaceName();
+  const [agentOnboardingState] = useLocalStorageState<{
+    step: unknown;
+    agentName?: string;
+  }>(`${AGENT_ONBOARDING_KEY}-${workspaceName}`);
+
+  const {
+    permissions: { canCreateProjects },
+  } = usePermissions();
+
+  const isOnboardingDone =
+    agentOnboardingState?.step === AGENT_ONBOARDING_STEPS.DONE;
+  const agentName = agentOnboardingState?.agentName || "";
+
+  const { data: project, isPending } = useProjectByName(
+    { projectName: agentName },
+    { enabled: isOnboardingDone && !!agentName },
+  );
+
+  if (!isOnboardingDone && canCreateProjects) {
+    return <AgentOnboardingOverlay />;
+  }
+
+  if (isPending && agentName) {
+    return null;
+  }
+
+  if (project?.id) {
+    return (
+      <Navigate
+        to="/$workspaceName/projects/$projectId/logs"
+        params={{ workspaceName, projectId: project.id }}
+      />
+    );
+  }
+
+  return <Navigate to="/$workspaceName/home" params={{ workspaceName }} />;
+};
+
+const NewQuickstart: React.FC = () => {
+  const { isPhone } = useIsPhone();
+
+  // Guided mobile onboarding A/B test (OPIK-7476). On phones only, split between
+  // the guided MobileOnboarding flow ("test" / Group B, no Run button) and the
+  // legacy onboarding flow with the Run button ("control" / Group A, which falls
+  // through to the standard desktop logic below). `undefined` falls back to
+  // "control": PostHog is never initialized on self-hosted/OSS and can be
+  // blocked on cloud, where the flag would otherwise stay unresolved forever.
+  const mobileOnboardingVariant =
+    useFeatureFlagVariantKey(GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY) ??
+    GUIDED_MOBILE_ONBOARDING_VARIANTS.CONTROL;
+  const showGuidedMobileOnboarding =
+    isPhone &&
+    mobileOnboardingVariant === GUIDED_MOBILE_ONBOARDING_VARIANTS.TEST;
+
+  // Variants: "control" = agent onboarding modal with Opik skills tab; "connect-to-ollie" = agent onboarding modal with Connect to Ollie tab; "manual" = skip the modal and render the full integrations page. Undefined (PostHog unavailable) falls back to "control".
+  const variant =
+    useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
+    DEFAULT_ONBOARDING_FLOW;
+  const [showDemoLoading, setShowDemoLoading] = useState(false);
+  const workspaceName = useActiveWorkspaceName();
+  const navigate = useNavigate();
+  const demoDataEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DEMO_DATA_ENABLED,
+  );
+
+  const [manualOnboardingDone, setManualOnboardingDone] =
+    useLocalStorageState<boolean>(`${MANUAL_ONBOARDING_KEY}-${workspaceName}`, {
+      defaultValue: false,
+    });
+
+  // Capture done state at mount — the re-entry guard should only redirect when
+  // the user arrives already done, not when done flips mid-session (where
+  // explicit navigation from handleExplore / DemoLoadingContent is in flight).
+  const wasDoneOnMount = useRef(manualOnboardingDone);
+
+  const isManualActive =
+    variant === "manual" && !showDemoLoading && !manualOnboardingDone;
+  const { hasTraces, firstTraceProjectId, pollExpired } = useFirstTraceReceived(
+    {
+      workspaceName,
+      enabled: isManualActive,
+      poll: isManualActive,
+    },
+  );
+
+  useEffect(() => {
+    // Set the #manual step hash for the standard (legacy) manual flow. This
+    // covers desktop as well as the guided-mobile "control" arm (which renders
+    // the same flow on phones); it is skipped for the guided mobile flow.
+    if (
+      !showGuidedMobileOnboarding &&
+      variant === "manual" &&
+      !manualOnboardingDone
+    ) {
+      window.history.replaceState(null, "", "#manual");
+    }
+  }, [showGuidedMobileOnboarding, variant, manualOnboardingDone]);
+
+  const handleExplore = useCallback(() => {
+    if (!firstTraceProjectId) return;
+    setManualOnboardingDone(true);
+    navigate({
+      to: "/$workspaceName/projects/$projectId/logs",
+      params: { workspaceName, projectId: firstTraceProjectId },
+    });
+  }, [navigate, workspaceName, firstTraceProjectId, setManualOnboardingDone]);
+
+  const handleSkip = useCallback(() => {
+    if (demoDataEnabled) {
+      setShowDemoLoading(true);
+      return;
+    }
+    setManualOnboardingDone(true);
+    void navigate({
+      to: "/$workspaceName/home",
+      params: { workspaceName },
+    });
+  }, [demoDataEnabled, navigate, workspaceName, setManualOnboardingDone]);
+
+  // Group B: guided mobile onboarding flow (no Run button).
+  if (showGuidedMobileOnboarding) {
+    return <MobileOnboarding />;
+  }
+
+  // Group A (control) falls through to the legacy onboarding flow below — the
+  // same path desktop users take, which includes the Run button.
+  if (variant === "manual") {
+    if (wasDoneOnMount.current) {
+      return <Navigate to="/$workspaceName/home" params={{ workspaceName }} />;
+    }
+    if (showDemoLoading) {
+      return (
+        <DemoLoadingContent
+          onRetry={() => setShowDemoLoading(false)}
+          retryLabel="Back to setup"
+          onComplete={() => setManualOnboardingDone(true)}
+        />
+      );
+    }
+    return (
+      <OnboardingIntegrationsPage
+        IntegrationExplorer={IntegrationExplorer}
+        source="get-started"
+        banner={
+          !pollExpired || hasTraces ? (
+            <LoggedDataStatus
+              status={hasTraces ? "logged" : "waiting"}
+              onExplore={handleExplore}
+            />
+          ) : undefined
+        }
+        onSkip={handleSkip}
+      />
+    );
+  }
+
+  return <AgentOnboardingQuickstart />;
+};
+
+export default NewQuickstart;

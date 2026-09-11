@@ -12,7 +12,11 @@ body:
     attributes:
       label: What component(s) are affected?
       options:
-        - label: Python SDK
+        - label: Opik Python SDK
+          required: false
+        - label: Opik Typescript SDK
+          required: false
+        - label: Opik Agent Optimizer SDK
           required: false
         - label: Opik UI
           required: false

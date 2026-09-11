@@ -1,0 +1,540 @@
+/**
+ * A seeded span's `usage` map: the three counts every LLM span reports, plus
+ * whatever else the scenario needs.
+ *
+ * Open-ended because the backend's cost calculators read far more than the
+ * trio — audio, cache and reasoning token counts all arrive as extra keys on
+ * this same flat map (`original_usage.completion_tokens_details.reasoning_tokens`
+ * and friends), and the bridge types the field as a plain `dict[str, int]`.
+ *
+ * Note the Python SDK normalises what it is given: a bare OTel key is re-emitted
+ * under the `original_usage.` prefix. A seed that must arrive with the bare key
+ * cannot go through the bridge at all — see `backendClient.createSpan`.
+ */
+export type SpanSeedUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+} & Record<string, number>;
+
+export interface PythonSdkClient {
+  createProject(args: { name: string; workspace?: string }): Promise<{ id: string; name: string }>;
+  createTrace(args: {
+    project_name: string;
+    name: string;
+    input: string;
+    output: string;
+    thread_id?: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string; project_id: string }>;
+  createNestedTrace(args: {
+    project_name: string;
+    name: string;
+    input?: Record<string, unknown>;
+    output?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+    tags?: string[];
+    thread_id?: string;
+    feedback_scores?: Array<{ name: string; value: number; reason?: string }>;
+    error_info?: { exception_type: string; message: string; traceback?: string };
+    duration_seconds?: number;
+    /**
+     * Ages the trace (and its spans) by this many days, stamping a matching
+     * UUIDv7 id. Time-windowed read paths — `GET /v1/private/projects/stats`
+     * above all — window on the id's embedded timestamp, so this is what puts
+     * a seeded trace deterministically inside or outside a rolling window.
+     */
+    age_days?: number;
+    spans: Array<{
+      name: string;
+      type?: 'general' | 'llm' | 'tool';
+      input?: Record<string, unknown>;
+      output?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+      model?: string;
+      provider?: string;
+      usage?: SpanSeedUsage;
+      total_cost?: number;
+      parent_index?: number;
+    }>;
+    workspace?: string;
+  }): Promise<{ id: string; name: string; project_id: string; span_count: number }>;
+  createFeedbackDefinition(args: {
+    name: string;
+    min?: number;
+    max?: number;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  // Workspace is resolved from the bridge's env (OPIK_WORKSPACE), the same as
+  // createFeedbackDefinition, so both operate on one workspace per run.
+  deleteFeedbackDefinition(args: { id: string }): Promise<void>;
+  createDataset(args: {
+    name: string;
+    project_name: string;
+    description?: string;
+    items?: Array<Record<string, unknown>>;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  /**
+   * One `Dataset.insert(...)` into an existing dataset — and therefore exactly
+   * one new dataset version, however many 1000-item batches the SDK splits the
+   * payload into. `num_threads` > 1 uploads those batches in parallel.
+   * `deduplication: false` bypasses the content-hash dedup path, so identical
+   * content sent twice is stored twice.
+   */
+  insertDatasetItems(args: {
+    dataset_name: string;
+    project_name: string;
+    items: Array<Record<string, unknown>>;
+    num_threads?: number;
+    deduplication?: boolean;
+    workspace?: string;
+  }): Promise<{ dataset_id: string; inserted: number }>;
+  /**
+   * Several `Dataset.insert(...)` calls sharing ONE `Dataset` object — the
+   * shape `insertDatasetItems` cannot express, because the bridge builds a
+   * fresh client per request and a backend-fetched `Dataset` always starts
+   * with its hash cache unsynced. Reach for this only when one insert's effect
+   * on the NEXT one is the subject; otherwise use `insertDatasetItems`.
+   */
+  insertDatasetItemsSession(args: {
+    dataset_name: string;
+    project_name: string;
+    inserts: Array<{
+      items: Array<Record<string, unknown>>;
+      num_threads?: number;
+      deduplication?: boolean;
+    }>;
+    workspace?: string;
+  }): Promise<{ dataset_id: string; inserted: number[] }>;
+  /**
+   * One `Dataset.get_items(...)`, reduced to the item ids it returned **in the
+   * order it returned them** — the property a concurrent paged read has to
+   * preserve, and the one a set comparison would not notice losing.
+   *
+   * Omit a knob to exercise the SDK's own default for it; the bridge only
+   * forwards the ones set here. `num_threads`, `chunk_size` and `nb_samples`
+   * are deliberately unconstrained so a caller can assert the SDK's own
+   * validation: an argument it refuses comes back as `value_error` carrying the
+   * ValueError's message, with no items, rather than as a bridge failure.
+   */
+  readDatasetItems(args: {
+    dataset_name: string;
+    project_name: string;
+    nb_samples?: number;
+    num_threads?: number;
+    chunk_size?: number;
+    filter_string?: string;
+    workspace?: string;
+  }): Promise<{ item_ids: string[]; value_error: string | null }>;
+  /**
+   * A chunked `stream_items()` read with an insert committed part-way through
+   * it — the scenario the read's version pin exists for.
+   *
+   * The interleaving is deterministic, not raced: the bridge consumes
+   * `pause_after_chunks` chunks, runs the insert to completion, then consumes
+   * the remaining pages, which are therefore all fetched against a backend that
+   * already holds the new items. `chunk_size * (pause_after_chunks + 2 *
+   * num_threads)` must stay well under the dataset size, or the reader's
+   * look-ahead will have fetched everything before the insert lands and the
+   * scenario silently degrades into an ordinary read.
+   */
+  readDatasetItemsWithMidReadInsert(args: {
+    dataset_name: string;
+    project_name: string;
+    items: Array<Record<string, unknown>>;
+    chunk_size: number;
+    num_threads?: number;
+    pause_after_chunks: number;
+    workspace?: string;
+  }): Promise<{
+    item_ids: string[];
+    chunk_sizes: number[];
+    chunks_before_insert: number;
+    inserted: number;
+  }>;
+  evaluateExperiment(args: {
+    project_name: string;
+    dataset_name: string;
+    experiment_name: string;
+    items: Array<Record<string, unknown>>;
+    dataset_description?: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    experiment_name: string;
+    dataset_id: string;
+    item_count: number;
+    scored_item_count: number;
+    scores: Array<{
+      dataset_item_id: string;
+      input: string;
+      expected_output: string;
+      task_output: string;
+      score_name: string;
+      score_value: number;
+    }>;
+  }>;
+  compareSeed(args: {
+    project_name: string;
+    dataset_name: string;
+    items: Array<{ input: string; expected_output: string }>;
+    experiments: Array<{ experiment_name: string; task_outputs: string[] }>;
+    dataset_description?: string;
+    workspace?: string;
+  }): Promise<{
+    dataset_id: string;
+    dataset_name: string;
+    item_count: number;
+    experiments: Array<{
+      experiment_id: string;
+      experiment_name: string;
+      scores: Array<{
+        dataset_item_id: string;
+        input: string;
+        expected_output: string;
+        task_output: string;
+        score_name: string;
+        score_value: number;
+      }>;
+    }>;
+  }>;
+  createTextPrompt(args: {
+    name: string;
+    prompt: string;
+    description?: string;
+    project_name?: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  createChatPrompt(args: {
+    name: string;
+    messages: Array<{ role: string; content: string }>;
+    description?: string;
+    project_name?: string;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  createTestSuite(args: {
+    name: string;
+    project_name: string;
+    description?: string;
+    global_assertions?: string[];
+    runs_per_item?: number;
+    pass_threshold?: number;
+    items?: Array<{
+      data: Record<string, unknown>;
+      assertions?: string[];
+      description?: string;
+    }>;
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  /** `deduplication: false` stores identical test cases as separate items. */
+  insertTestSuiteItems(args: {
+    suite_name: string;
+    project_name: string;
+    items: Array<{
+      data: Record<string, unknown>;
+      assertions?: string[];
+      description?: string;
+    }>;
+    deduplication?: boolean;
+    workspace?: string;
+    /**
+     * Which client factory the suite being inserted into is obtained from.
+     * `get_or_create` (the bridge's default) is what every other caller wants;
+     * `list` reaches the suite through `get_test_suites()`. The two build a
+     * suite object with different local content-hash state, and that state is
+     * what decides whether an insert of an item the suite already holds is
+     * deduplicated — so a spec covering dedup has to name the path it means.
+     */
+    resolve_via?: 'get_or_create' | 'list';
+  }): Promise<{ suite_id: string; inserted: number }>;
+  runTestSuite(args: {
+    suite_name: string;
+    project_name: string;
+    task_output: string;
+    experiment_name: string;
+    judge_model?: string;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string | null;
+    experiment_name: string | null;
+    pass_rate: number | null;
+    items_passed: number;
+    items_failed: number;
+    items_total: number;
+  }>;
+  createAnnotationQueue(args: {
+    project_name: string;
+    name: string;
+    trace_ids: string[];
+    feedback_definition_names?: string[];
+    workspace?: string;
+  }): Promise<{ id: string; name: string }>;
+  /**
+   * Run `opik.evaluation.evaluate_threads` over one seeded thread with a
+   * deterministic fixed-score metric.
+   *
+   * `context_metadata_key` is three-valued in effect: omitted/undefined means
+   * the SDK is called WITHOUT `trace_context_transform` at all (the caller
+   * shape that predates it), a string means it is called with a transform
+   * reading that key off `trace.metadata`.
+   */
+  evaluateThreads(args: {
+    project_name: string;
+    eval_project_name: string;
+    thread_id: string;
+    trace_input_key: string;
+    trace_output_key: string;
+    metric_name: string;
+    score_value: number;
+    score_reason: string;
+    context_metadata_key?: string;
+    workspace?: string;
+  }): Promise<{
+    thread_id: string;
+    eval_project_name: string;
+    scores: Array<{ name: string; value: number; reason: string | null }>;
+    /**
+     * The conversation the metric received, verbatim. Messages are
+     * `Record<string, unknown>` rather than a shaped type on purpose: whether
+     * the `context` key is PRESENT is the fact callers assert on, and an
+     * optional typed field would erase the difference between absent and null.
+     */
+    conversation: Array<Record<string, unknown>>;
+  }>;
+}
+
+export class PythonSdkBridgeError extends Error {
+  readonly status: number;
+  readonly endpoint: string;
+  readonly detail: unknown;
+
+  constructor(args: { status: number; endpoint: string; detail: unknown; message: string }) {
+    super(args.message);
+    this.name = 'PythonSdkBridgeError';
+    this.status = args.status;
+    this.endpoint = args.endpoint;
+    this.detail = args.detail;
+  }
+}
+
+const DEFAULT_BRIDGE_URL = 'http://localhost:5175';
+const REQUEST_TIMEOUT_MS = 30_000;
+
+export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSdkClient {
+  const bridgeUrl = opts.bridgeUrl ?? process.env.OPIK_SDK_DRIVER_URL ?? DEFAULT_BRIDGE_URL;
+
+  async function request<TResponse>(
+    method: 'GET' | 'POST' | 'DELETE',
+    path: string,
+    body?: unknown,
+    opts: { timeoutMs?: number } = {},
+  ): Promise<TResponse> {
+    const endpoint = `${method} ${path}`;
+    const timeoutMs = opts.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const headers: Record<string, string> = {};
+      if (body !== undefined) headers['content-type'] = 'application/json';
+      // Read OPIK_API_KEY at request time so the minted key from globalSetup
+      // is picked up after the bridge has already spawned.
+      const apiKey = process.env.OPIK_API_KEY;
+      if (apiKey) headers['X-Opik-Api-Key'] = apiKey;
+      let res: Response;
+      try {
+        res = await fetch(`${bridgeUrl}${path}`, {
+          method,
+          headers: Object.keys(headers).length > 0 ? headers : undefined,
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+          signal: ctrl.signal,
+        });
+      } catch (err) {
+        if (ctrl.signal.aborted) {
+          throw new PythonSdkBridgeError({
+            status: 0,
+            endpoint,
+            detail: 'client-timeout',
+            message: `opik-sdk-driver ${endpoint} aborted after ${timeoutMs}ms (client-side timeout — the bridge or backend did not respond in time)`,
+          });
+        }
+        throw err;
+      }
+      if (res.ok) {
+        return (await res.json()) as TResponse;
+      }
+      const text = await res.text();
+      let detail: unknown;
+      try {
+        detail = JSON.parse(text);
+      } catch {
+        detail = text;
+      }
+      const summary =
+        typeof detail === 'object' && detail !== null && 'detail' in detail
+          ? JSON.stringify((detail as { detail: unknown }).detail)
+          : text.slice(0, 200);
+      throw new PythonSdkBridgeError({
+        status: res.status,
+        endpoint,
+        detail,
+        message: `opik-sdk-driver ${endpoint} -> ${res.status}: ${summary}`,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return {
+    async createProject({ name, workspace }) {
+      return request<{ id: string; name: string }>('POST', '/projects', { name, workspace });
+    },
+    async createTrace(args) {
+      return request<{ id: string; name: string; project_id: string }>('POST', '/traces', args);
+    },
+    async createNestedTrace(args) {
+      // The route confirms the trace and its spans are queryable before
+      // returning, and that read-back is rate-limited on shared cloud
+      // workspaces: a 429 makes the SDK back off for up to a minute, which is
+      // slow but not a failure. Aborting at the default 30s would turn a
+      // throttled seed into a red test.
+      return request<{ id: string; name: string; project_id: string; span_count: number }>(
+        'POST',
+        '/traces/nested',
+        args,
+        { timeoutMs: 150_000 },
+      );
+    },
+    async createFeedbackDefinition(args) {
+      return request<{ id: string; name: string }>('POST', '/feedback-definitions', args);
+    },
+    async deleteFeedbackDefinition({ id }) {
+      await request<{ deleted: boolean }>('DELETE', `/feedback-definitions/${id}`);
+    },
+    async createDataset(args) {
+      return request<{ id: string; name: string }>('POST', '/datasets', args);
+    },
+    async insertDatasetItems(args) {
+      // Multi-batch inserts against a cloud backend outlive the default budget
+      // when the workspace is being rate-limited, and a client-side abort here
+      // would leave a half-written dataset behind.
+      return request<{ dataset_id: string; inserted: number }>(
+        'POST',
+        '/datasets/insert-items',
+        args,
+        { timeoutMs: 180_000 },
+      );
+    },
+    async insertDatasetItemsSession(args) {
+      // Same budget as insertDatasetItems, and for the same reason — except
+      // this route runs several inserts back to back inside one request.
+      return request<{ dataset_id: string; inserted: number[] }>(
+        'POST',
+        '/datasets/insert-items-session',
+        args,
+        { timeoutMs: 180_000 },
+      );
+    },
+    async readDatasetItems(args) {
+      // A multi-page read of a few thousand items is well inside the default
+      // budget, but a `num_threads=1` pass over small chunks is not.
+      return request<{ item_ids: string[]; value_error: string | null }>(
+        'POST',
+        '/datasets/read-items',
+        args,
+        { timeoutMs: 180_000 },
+      );
+    },
+    async readDatasetItemsWithMidReadInsert(args) {
+      // Holds a whole chunked read AND an insert open on one request.
+      return request<{
+        item_ids: string[];
+        chunk_sizes: number[];
+        chunks_before_insert: number;
+        inserted: number;
+      }>('POST', '/datasets/read-with-mid-read-insert', args, { timeoutMs: 180_000 });
+    },
+    async compareSeed(args) {
+      return request<{
+        dataset_id: string;
+        dataset_name: string;
+        item_count: number;
+        experiments: Array<{
+          experiment_id: string;
+          experiment_name: string;
+          scores: Array<{
+            dataset_item_id: string;
+            input: string;
+            expected_output: string;
+            task_output: string;
+            score_name: string;
+            score_value: number;
+          }>;
+        }>;
+      }>('POST', '/experiments/compare-seed', args);
+    },
+    async createTextPrompt(args) {
+      return request<{ id: string; name: string }>('POST', '/prompts/text', args);
+    },
+    async createChatPrompt(args) {
+      return request<{ id: string; name: string }>('POST', '/prompts/chat', args);
+    },
+    async evaluateExperiment(args) {
+      return request<{
+        experiment_id: string;
+        experiment_name: string;
+        dataset_id: string;
+        item_count: number;
+        scored_item_count: number;
+        scores: Array<{
+          dataset_item_id: string;
+          input: string;
+          expected_output: string;
+          task_output: string;
+          score_name: string;
+          score_value: number;
+        }>;
+      }>('POST', '/experiments/evaluate', args);
+    },
+    async createTestSuite(args) {
+      return request<{ id: string; name: string }>('POST', '/test-suites', args);
+    },
+    async insertTestSuiteItems(args) {
+      return request<{ suite_id: string; inserted: number }>(
+        'POST',
+        '/test-suites/insert-items',
+        args,
+      );
+    },
+    async runTestSuite(args) {
+      // Runs real LLM judge calls across every item/run in the suite, which
+      // routinely outlives the default 30s budget on a loaded cloud
+      // workspace. Aborting early would turn a slow run into a red test.
+      // Capped at 90s, not the caller's full test.setTimeout(120_000), to
+      // leave headroom for the UI verification steps that follow this call.
+      return request<{
+        experiment_id: string | null;
+        experiment_name: string | null;
+        pass_rate: number | null;
+        items_passed: number;
+        items_failed: number;
+        items_total: number;
+      }>('POST', '/test-suites/run', args, { timeoutMs: 90_000 });
+    },
+    async createAnnotationQueue(args) {
+      return request<{ id: string; name: string }>('POST', '/annotation-queues', args);
+    },
+    async evaluateThreads(args) {
+      // The route blocks until the seeded thread has been aggregated (thread
+      // rollup is eventually consistent) and only then runs the evaluation, so
+      // its budget has to cover both. Aborting at the default 30s would turn a
+      // slow rollup into a red test.
+      return request<{
+        thread_id: string;
+        eval_project_name: string;
+        scores: Array<{ name: string; value: number; reason: string | null }>;
+        conversation: Array<Record<string, unknown>>;
+      }>('POST', '/threads/evaluate', args, { timeoutMs: 150_000 });
+    },
+  };
+}

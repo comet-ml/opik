@@ -1,12 +1,11 @@
 {
   "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsbuildinfo/frontend.tsbuildinfo",
     "baseUrl": ".",
     "paths": {
       "@/*": [
         "./src/*"
-      ],
-      "@e2e/*": [
-        "./e2e/*"
       ]
     },
     "target": "esnext",
@@ -36,9 +35,7 @@
     ]
   },
   "include": [
-    "src",
-    "e2e/**/*.ts",
-    "playwright.config.ts"
+    "src"
   ],
   "exclude": [
     "node_modules"

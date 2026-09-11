@@ -4,6 +4,7 @@ import { FeedbackScoreName } from "@/types/shared";
 
 type UseExperimentsFeedbackScoresNamesParams = {
   experimentsIds?: string[];
+  projectId?: string;
 };
 
 export type FeedbackScoresNamesResponse = {
@@ -12,16 +13,17 @@ export type FeedbackScoresNamesResponse = {
 
 const getFeedbackScoresNames = async (
   { signal }: QueryFunctionContext,
-  { experimentsIds }: UseExperimentsFeedbackScoresNamesParams,
+  { experimentsIds, projectId }: UseExperimentsFeedbackScoresNamesParams,
 ) => {
   const { data } = await api.get<FeedbackScoresNamesResponse>(
-    `${EXPERIMENTS_REST_ENDPOINT}/feedback-scores/names`,
+    `${EXPERIMENTS_REST_ENDPOINT}feedback-scores/names`,
     {
       signal,
       params: {
         ...(experimentsIds && {
           experiment_ids: JSON.stringify(experimentsIds),
         }),
+        ...(projectId && { project_id: projectId }),
       },
     },
   );

@@ -9,7 +9,7 @@ import api, {
   TRACES_REST_ENDPOINT,
 } from "@/api/api";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { FEEDBACK_SCORE_TYPE } from "@/types/traces";
 import {
   generateUpdateMutation,
@@ -18,6 +18,7 @@ import {
   setTraceCache,
   setTracesCache,
 } from "@/lib/feedback-scores";
+import { useLoggedInUserName } from "@/store/AppStore";
 
 type UseTraceFeedbackScoreSetMutationParams = {
   categoryName?: string;
@@ -26,11 +27,13 @@ type UseTraceFeedbackScoreSetMutationParams = {
   traceId: string;
   value: number;
   reason?: string;
+  sourceQueueId?: string;
 };
 
 const useTraceFeedbackScoreSetMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const currentUserName = useLoggedInUserName();
 
   return useMutation({
     mutationFn: async ({
@@ -40,6 +43,7 @@ const useTraceFeedbackScoreSetMutation = () => {
       traceId,
       value,
       reason,
+      sourceQueueId,
     }: UseTraceFeedbackScoreSetMutationParams) => {
       const endpoint = spanId
         ? `${SPANS_REST_ENDPOINT}${spanId}/feedback-scores`
@@ -51,6 +55,7 @@ const useTraceFeedbackScoreSetMutation = () => {
         source: FEEDBACK_SCORE_TYPE.ui,
         value,
         reason,
+        source_queue_id: sourceQueueId,
       });
 
       return data;
@@ -73,13 +78,17 @@ const useTraceFeedbackScoreSetMutation = () => {
         traceId: params.traceId,
       };
 
-      const updateMutation = generateUpdateMutation({
-        name: params.name,
-        category_name: params.categoryName,
-        value: params.value,
-        source: FEEDBACK_SCORE_TYPE.ui,
-        reason: params.reason,
-      });
+      const updateMutation = generateUpdateMutation(
+        {
+          name: params.name,
+          category_name: params.categoryName,
+          value: params.value,
+          source: FEEDBACK_SCORE_TYPE.ui,
+          reason: params.reason,
+        },
+        currentUserName,
+        params.sourceQueueId,
+      );
 
       if (params.spanId) {
         // make optimistic update for spans
@@ -116,12 +125,18 @@ const useTraceFeedbackScoreSetMutation = () => {
       await queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
       await queryClient.invalidateQueries({ queryKey: ["traces-columns"] });
       await queryClient.invalidateQueries({ queryKey: ["traces-statistic"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["experiment-items-statistic"],
+      });
 
       await queryClient.invalidateQueries({
         queryKey: [TRACE_KEY, { traceId: variables.traceId }],
       });
       await queryClient.invalidateQueries({
         queryKey: ["experiments-columns"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["experiment"],
       });
       await queryClient.invalidateQueries({
         queryKey: [COMPARE_EXPERIMENTS_KEY],

@@ -1,22 +1,304 @@
-from typing import List
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any, Dict, Iterator, List, Optional, Set, TYPE_CHECKING
+
 from opik.rest_api import OpikApi
-from opik import exceptions
-from . import dataset
-from .. import experiment
+from opik.rest_api.types import (
+    dataset_item as rest_dataset_item_read,
+    dataset_version_public,
+)
+import opik.exceptions as exceptions
+from opik.message_processing import streamer
+from opik.rest_client_configurator import retry_decorator
+from opik.api_objects import opik_query_language, rest_stream_parser
+from . import dataset, dataset_item, execution_policy, parallel_items_reader
+from .. import experiment, constants, rest_helpers
+from ..experiment import experiments_client
 from ...rest_api.core.api_error import ApiError
+
+if TYPE_CHECKING:
+    from opik.evaluation.suite_evaluators import llm_judge
+    from .test_suite.test_suite import TestSuite
+
+LOGGER = logging.getLogger(__name__)
+
+# Data keys that collide with a DatasetItem field cannot survive being unpacked
+# into one, so both read paths drop them and say so once per read.
+SHADOWED_KEYS_WARNING = (
+    "Dataset item data contains keys that shadow DatasetItem fields and will be ignored: %s. "
+    "Rename these keys in your dataset to preserve them."
+)
+
+
+def stream_dataset_items(
+    rest_client: OpikApi,
+    dataset_name: str,
+    project_name: Optional[str],
+    nb_samples: Optional[int] = None,
+    batch_size: Optional[int] = None,
+    dataset_item_ids: Optional[List[str]] = None,
+    filter_string: Optional[str] = None,
+    dataset_version: Optional[str] = None,
+) -> Iterator[dataset_item.DatasetItem]:
+    """
+    Stream dataset items from the backend as a generator.
+
+    Args:
+        rest_client: The REST API client.
+        dataset_name: Name of the dataset to stream items from.
+        project_name: Name of the project to stream items from.
+        nb_samples: Maximum number of items to retrieve. If None, all items are streamed.
+        batch_size: Maximum number of items to fetch per batch from the backend.
+        dataset_item_ids: Optional list of specific item IDs to retrieve.
+        filter_string: Optional OQL filter string to filter dataset items.
+        dataset_version: Optional dataset version hash to filter items by a specific version.
+
+    Yields:
+        DatasetItem objects one at a time.
+    """
+    if batch_size is None:
+        batch_size = constants.DATASET_STREAM_BATCH_SIZE
+
+    last_retrieved_id: Optional[str] = None
+    should_retrieve_more_items = True
+    items_yielded = 0
+    dataset_items_ids_left: Optional[Set[str]] = (
+        set(dataset_item_ids) if dataset_item_ids else None
+    )
+    _conflicting_keys_warned = False
+
+    filters = _serialize_dataset_item_filters(filter_string)
+
+    while should_retrieve_more_items:
+
+        @retry_decorator.opik_rest_retry
+        def _fetch_batch() -> List[rest_dataset_item_read.DatasetItem]:
+            return rest_stream_parser.read_and_parse_stream(
+                stream=rest_client.datasets.stream_dataset_items(
+                    dataset_name=dataset_name,
+                    project_name=project_name,
+                    last_retrieved_id=last_retrieved_id,
+                    steam_limit=batch_size,
+                    filters=filters,
+                    dataset_version=dataset_version,
+                ),
+                item_class=rest_dataset_item_read.DatasetItem,
+                nb_samples=nb_samples,
+            )
+
+        dataset_items = _fetch_batch()
+
+        if len(dataset_items) == 0:
+            should_retrieve_more_items = False
+            break
+
+        for item in dataset_items:
+            item_id = item.id
+            last_retrieved_id = item_id
+
+            if dataset_items_ids_left is not None:
+                if item_id not in dataset_items_ids_left:
+                    continue
+                else:
+                    dataset_items_ids_left.remove(item_id)
+
+            # Convert evaluators from REST format to DatasetItem format
+            evaluators = None
+            if item.evaluators:
+                evaluators = [
+                    dataset_item.EvaluatorItem(
+                        name=e.name,
+                        type=e.type,
+                        config=e.config,
+                    )
+                    for e in item.evaluators
+                ]
+
+            # Convert execution_policy from REST format to DatasetItem format
+            execution_policy = None
+            if item.execution_policy:
+                execution_policy = dataset_item.ExecutionPolicyItem(
+                    runs_per_item=item.execution_policy.runs_per_item,
+                    pass_threshold=item.execution_policy.pass_threshold,
+                )
+
+            # Strip DatasetItem field names from user data before unpacking to avoid
+            # "multiple values for keyword argument" errors. This happens when user data
+            # contains a key that matches a DatasetItem field (e.g. 'id' in HotpotQA).
+            conflicting = (
+                item.data.keys() & dataset_item.DatasetItem.model_fields.keys()
+            )
+            if conflicting and not _conflicting_keys_warned:
+                _conflicting_keys_warned = True
+                LOGGER.warning(SHADOWED_KEYS_WARNING, sorted(conflicting))
+            extra_data = {
+                k: v
+                for k, v in item.data.items()
+                if k not in dataset_item.DatasetItem.model_fields
+            }
+
+            reconstructed_item = dataset_item.DatasetItem(
+                id=item.id,
+                trace_id=item.trace_id,
+                span_id=item.span_id,
+                source=item.source,
+                description=item.description,
+                evaluators=evaluators,
+                execution_policy=execution_policy,
+                **extra_data,
+            )
+
+            yield reconstructed_item
+            items_yielded += 1
+
+            if nb_samples is not None and items_yielded >= nb_samples:
+                should_retrieve_more_items = False
+                break
+
+            if dataset_items_ids_left is not None and len(dataset_items_ids_left) == 0:
+                should_retrieve_more_items = False
+                break
+
+    if dataset_items_ids_left and len(dataset_items_ids_left) > 0:
+        LOGGER.warning(
+            "The following dataset items were not found in the dataset: %s",
+            dataset_items_ids_left,
+        )
+
+
+def stream_dataset_item_chunks(
+    rest_client: OpikApi,
+    dataset_id: str,
+    chunk_size: int,
+    num_threads: int,
+    nb_samples: Optional[int] = None,
+    filter_string: Optional[str] = None,
+    dataset_version: Optional[str] = None,
+) -> Iterator[List[Dict[str, Any]]]:
+    """
+    Read dataset items as chunks of raw dictionaries, fetching chunks in parallel.
+
+    Args:
+        rest_client: The REST API client.
+        dataset_id: Id of the dataset to read items from.
+        chunk_size: Number of items per chunk.
+        num_threads: Number of chunks fetched concurrently.
+        nb_samples: Maximum number of items to retrieve. If None, all items are read.
+        filter_string: Optional OQL filter string to filter dataset items.
+        dataset_version: Optional dataset version hash to read a specific version.
+
+    Yields:
+        Lists of item dictionaries, in dataset order, each holding the item's
+        data plus its id -- the shape :meth:`Dataset.get_items` returns.
+    """
+    # Not a generator, so a malformed filter string is rejected on the call
+    # rather than on the first chunk the caller pulls.
+    raw_chunks = parallel_items_reader.stream_item_chunks(
+        rest_client=rest_client,
+        dataset_id=dataset_id,
+        chunk_size=chunk_size,
+        num_threads=num_threads,
+        max_items=nb_samples,
+        filters=_serialize_dataset_item_filters(filter_string),
+        dataset_version=dataset_version,
+    )
+
+    return _to_item_dict_chunks(raw_chunks)
+
+
+def _to_item_dict_chunks(
+    raw_chunks: Iterator[List[Dict[str, Any]]],
+) -> Iterator[List[Dict[str, Any]]]:
+    """Project raw REST items into the dicts the read APIs hand to users.
+
+    Mirrors what unpacking a REST item into a ``DatasetItem`` and reading its
+    content back does: the item's real id wins, and data keys shadowing a
+    DatasetItem field are dropped. The warn-once state deliberately spans the
+    whole read rather than a single chunk.
+    """
+    shadowed_keys_warned = False
+    reserved_keys = dataset_item.DatasetItem.model_fields.keys()
+
+    for raw_chunk in raw_chunks:
+        chunk = []
+        for raw_item in raw_chunk:
+            data: Dict[str, Any] = raw_item.get("data") or {}
+
+            shadowed = data.keys() & reserved_keys
+            if shadowed and not shadowed_keys_warned:
+                shadowed_keys_warned = True
+                LOGGER.warning(SHADOWED_KEYS_WARNING, sorted(shadowed))
+
+            chunk.append(
+                {
+                    "id": raw_item.get("id"),
+                    **{k: v for k, v in data.items() if k not in reserved_keys},
+                }
+            )
+
+        yield chunk
+
+
+def _serialize_dataset_item_filters(filter_string: Optional[str]) -> Optional[str]:
+    """Turn an OQL filter string into the JSON the items endpoints expect."""
+    if not filter_string:
+        return None
+
+    oql = opik_query_language.OpikQueryLanguage.for_dataset_items(filter_string)
+    filter_expressions = oql.get_filter_expressions()
+    if not filter_expressions:
+        return None
+
+    return json.dumps(filter_expressions)
+
+
+def find_version_by_name(
+    rest_client: OpikApi,
+    dataset_id: str,
+    version_name: str,
+) -> Optional[dataset_version_public.DatasetVersionPublic]:
+    """
+    Find a dataset version by version name.
+
+    Args:
+        rest_client: The REST API client.
+        dataset_id: The dataset ID to search versions in.
+        version_name: Version name to search for (e.g., 'v1', 'v2').
+
+    Returns:
+        The DatasetVersionPublic if found, None otherwise.
+    """
+    try:
+        return rest_client.datasets.retrieve_dataset_version(
+            id=dataset_id, version_name=version_name
+        )
+    except ApiError as e:
+        if e.status_code == 404:
+            return None
+        raise
 
 
 def get_datasets(
-    rest_client: OpikApi, max_results: int = 1000, sync_items: bool = True
+    project_name: Optional[str],
+    rest_client: OpikApi,
+    max_results: int = 1000,
+    sync_items: bool = False,
 ) -> List[dataset.Dataset]:
     page_size = 100
     datasets: List[dataset.Dataset] = []
-
     page = 1
+
+    project_id = rest_helpers.resolve_project_id_by_name_optional(
+        rest_client, project_name=project_name
+    )
+
     while len(datasets) < max_results:
         page_datasets = rest_client.datasets.find_datasets(
             page=page,
             size=page_size,
+            project_id=project_id,
         )
 
         if len(page_datasets.content) == 0:
@@ -26,11 +308,22 @@ def get_datasets(
             dataset_ = dataset.Dataset(
                 name=dataset_fern.name,
                 description=dataset_fern.description,
+                project_name=project_name,
                 rest_client=rest_client,
+                dataset_items_count=dataset_fern.dataset_items_count,
             )
+            # Seed the id from the listing so reads don't re-resolve each
+            # dataset by name.
+            if dataset_fern.id is not None:
+                dataset_.__dict__["id"] = dataset_fern.id
 
             if sync_items:
                 dataset_.__internal_api__sync_hashes__()
+            else:
+                # Backend holds items we haven't seen locally; defer the sync
+                # until the first `insert()` so dedup still works without
+                # paying an N+1 sync right now.
+                dataset_.__internal_api__hashes_synced__ = False
 
             datasets.append(dataset_)
 
@@ -39,10 +332,70 @@ def get_datasets(
     return datasets
 
 
-def get_dataset_id(rest_client: OpikApi, dataset_name: str) -> str:
+def get_test_suites(
+    project_name: Optional[str],
+    rest_client: OpikApi,
+    max_results: int = 1000,
+    client: Optional[Any] = None,
+) -> List[TestSuite]:
+    from .test_suite import test_suite as test_suite_module
+
+    page_size = 100
+    suites: List[test_suite_module.TestSuite] = []
+    page = 1
+
+    project_id = rest_helpers.resolve_project_id_by_name_optional(
+        rest_client, project_name=project_name
+    )
+
+    while len(suites) < max_results:
+        page_datasets = rest_client.datasets.find_datasets(
+            page=page,
+            size=page_size,
+            project_id=project_id,
+        )
+
+        if len(page_datasets.content) == 0:
+            break
+
+        for dataset_fern in page_datasets.content:
+            if len(suites) >= max_results:
+                break
+            if dataset_fern.type != "evaluation_suite":
+                continue
+
+            suite_dataset = dataset.Dataset(
+                name=dataset_fern.name,
+                description=dataset_fern.description,
+                project_name=project_name,
+                rest_client=rest_client,
+                dataset_items_count=dataset_fern.dataset_items_count,
+                client=client,
+            )
+            # This suite already holds items on the backend that we have not
+            # hashed locally, so the first insert must sync before it can tell
+            # a duplicate from a new item.
+            suite_dataset.__internal_api__hashes_synced__ = False
+
+            suites.append(
+                test_suite_module.TestSuite(
+                    name=dataset_fern.name,
+                    dataset_=suite_dataset,
+                    client=client,
+                )
+            )
+
+        page += 1
+
+    return suites
+
+
+def get_dataset_id(
+    rest_client: OpikApi, dataset_name: str, project_name: Optional[str]
+) -> str:
     try:
         dataset_id = rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=dataset_name
+            dataset_name=dataset_name, project_name=project_name
         ).id
     except ApiError as e:
         if e.status_code == 404:
@@ -55,7 +408,11 @@ def get_dataset_id(rest_client: OpikApi, dataset_name: str) -> str:
 
 
 def get_dataset_experiments(
-    rest_client: OpikApi, dataset_id: str, max_results: int = 1000
+    rest_client: OpikApi,
+    dataset_id: str,
+    max_results: int,
+    streamer: streamer.Streamer,
+    experiments_client: experiments_client.ExperimentsClient,
 ) -> List[experiment.Experiment]:
     page_size = 100
     experiments: List[experiment.Experiment] = []
@@ -78,10 +435,153 @@ def get_dataset_experiments(
                     name=experiment_.name,
                     dataset_name=experiment_.dataset_name,
                     rest_client=rest_client,
-                    # TODO: add prompt if exists
+                    streamer=streamer,
+                    experiments_client=experiments_client,
+                    tags=experiment_.tags,
                 )
             )
 
         page += 1
 
     return experiments
+
+
+def create_test_suite_dataset(
+    rest_client: OpikApi,
+    dataset_name: str,
+    project_name: Optional[str],
+    description: Optional[str],
+    evaluators: Optional[List[llm_judge.LLMJudge]],
+    exec_policy: Optional[execution_policy.ExecutionPolicy],
+    tags: Optional[List[str]] = None,
+) -> str:
+    """
+    Create a dataset of type 'test_suite' and its initial version
+    with evaluators and execution_policy persisted to the backend.
+
+    Args:
+        rest_client: The REST API client.
+        dataset_name: The name of the dataset/suite.
+        project_name: The name of the project.
+        description: Optional description.
+        evaluators: LLMJudge evaluators.
+        exec_policy: Execution policy dict.
+        tags: Optional list of tags for the suite.
+
+    Returns:
+        The dataset ID.
+    """
+    rest_client.datasets.create_dataset(
+        name=dataset_name,
+        description=description,
+        project_name=project_name,
+        # TODO: OPIK-5795 - migrate DB value from 'evaluation_suite' to 'test_suite'
+        type="evaluation_suite",
+        tags=tags,
+    )
+
+    dataset_fern = rest_client.datasets.get_dataset_by_identifier(
+        dataset_name=dataset_name,
+        project_name=project_name,
+    )
+
+    # Skip initial version when there is no metadata to persist.
+    # This avoids an empty v1 that the TS SDK doesn't create (OPIK-5815).
+    if not evaluators and not exec_policy:
+        return dataset_fern.id
+
+    resolved_policy = exec_policy or execution_policy.DEFAULT_EXECUTION_POLICY.copy()
+    request: Dict[str, Any] = {
+        "change_description": "Suite created via SDK",
+    }
+    if evaluators:
+        request["evaluators"] = [
+            {
+                "name": e.name,
+                "type": "llm_judge",
+                "config": e.to_config().model_dump(by_alias=True),
+            }
+            for e in evaluators
+        ]
+    request["execution_policy"] = {
+        "runs_per_item": resolved_policy.get("runs_per_item", 1),
+        "pass_threshold": resolved_policy.get("pass_threshold", 1),
+    }
+    rest_client.datasets.apply_dataset_item_changes(
+        id=dataset_fern.id, request=request, override=True
+    )
+
+    return dataset_fern.id
+
+
+def create_initial_test_suite_version(
+    rest_client: OpikApi,
+    dataset_id: str,
+    evaluators: List[llm_judge.LLMJudge],
+    exec_policy: execution_policy.ExecutionPolicy,
+) -> None:
+    """
+    Create the first version for a test suite that has no versions yet.
+    Uses override=True since there is no base version to build on.
+    """
+    request: Dict[str, Any] = {
+        "change_description": "Suite created via SDK",
+    }
+    if evaluators:
+        request["evaluators"] = [
+            {
+                "name": e.name,
+                "type": "llm_judge",
+                "config": e.to_config().model_dump(by_alias=True),
+            }
+            for e in evaluators
+        ]
+    request["execution_policy"] = {
+        "runs_per_item": exec_policy.get("runs_per_item", 1),
+        "pass_threshold": exec_policy.get("pass_threshold", 1),
+    }
+    rest_client.datasets.apply_dataset_item_changes(
+        id=dataset_id, request=request, override=True
+    )
+
+
+def update_test_suite_dataset(
+    rest_client: OpikApi,
+    dataset_id: str,
+    base_version_id: str,
+    evaluators: List[llm_judge.LLMJudge],
+    exec_policy: execution_policy.ExecutionPolicy,
+    change_description: Optional[str] = None,
+) -> None:
+    """
+    Update suite-level evaluators and execution_policy by creating a new
+    dataset version based on the current latest version.
+
+    Args:
+        rest_client: The REST API client.
+        dataset_id: The dataset ID.
+        base_version_id: The current latest version UUID to base the update on.
+        evaluators: Suite-level LLMJudge evaluators.
+        exec_policy: Execution policy dict.
+        change_description: Optional description of the change for the new version.
+    """
+    request: Dict[str, Any] = {
+        "base_version": base_version_id,
+        "evaluators": [
+            {
+                "name": e.name,
+                "type": "llm_judge",
+                "config": e.to_config().model_dump(by_alias=True),
+            }
+            for e in evaluators
+        ],
+        "execution_policy": {
+            "runs_per_item": exec_policy.get("runs_per_item", 1),
+            "pass_threshold": exec_policy.get("pass_threshold", 1),
+        },
+    }
+    if change_description:
+        request["change_description"] = change_description
+    rest_client.datasets.apply_dataset_item_changes(
+        id=dataset_id, request=request, override=False
+    )

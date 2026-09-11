@@ -5,6 +5,7 @@ import com.comet.opik.utils.TypeReferenceUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.type.TypeFactory;
+import io.vavr.CheckedFunction2;
 import jakarta.inject.Provider;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +26,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -49,74 +49,75 @@ public class CacheInterceptor implements MethodInterceptor {
 
         var cacheable = method.getAnnotation(Cacheable.class);
         if (cacheable != null) {
-            return runCacheAwareAction(invocation, isReactive, cacheable.name(), cacheable.key(),
+            return runCacheAwareAction(invocation, cacheable.name(), cacheable.key(),
                     (key, group) -> processCacheableMethod(invocation, isReactive, key, group, cacheable));
         }
 
         var cachePut = method.getAnnotation(CachePut.class);
         if (cachePut != null) {
-            return runCacheAwareAction(invocation, isReactive, cachePut.name(), cachePut.key(),
+            return runCacheAwareAction(invocation, cachePut.name(), cachePut.key(),
                     (key, group) -> processCachePutMethod(invocation, isReactive, key, group));
         }
 
         var cacheEvict = method.getAnnotation(CacheEvict.class);
         if (cacheEvict != null) {
-            return runCacheAwareAction(invocation, isReactive, cacheEvict.name(), cacheEvict.key(),
+            return runCacheAwareAction(invocation, cacheEvict.name(), cacheEvict.key(),
                     (key, group) -> processCacheEvictMethod(invocation, isReactive, key, cacheEvict));
         }
 
         return invocation.proceed();
     }
 
-    private Object runCacheAwareAction(MethodInvocation invocation, boolean isReactive, String group, String keyAgs,
-            BiFunction<String, String, Object> action) throws Throwable {
-
+    private Object runCacheAwareAction(
+            MethodInvocation invocation, String group, String keyArgs, CheckedFunction2<String, String, Object> action)
+            throws Throwable {
         String key;
-
         try {
-            key = getKeyName(group, keyAgs, invocation);
+            key = getKeyName(group, keyArgs, invocation);
         } catch (Exception e) {
             // If there is an error evaluating the key, proceed without caching
-            log.error("Error evaluating key expression: {}", keyAgs, e);
-            log.warn("Cache will be skipped due to error evaluating key expression");
+            log.warn("Cache will be skipped due to error evaluating key expression '{}'", keyArgs, e);
             return invocation.proceed();
         }
-
-        if (isReactive) {
-            return action.apply(key, group);
-        }
-
-        return ((Mono<?>) action.apply(key, group)).block();
+        return action.apply(key, group);
     }
 
-    private Mono<Object> processCacheEvictMethod(MethodInvocation invocation, boolean isReactive, String key,
-            CacheEvict cacheEvict) {
+    private Object processCacheEvictMethod(
+            MethodInvocation invocation, boolean isReactive, String key, CacheEvict cacheEvict) throws Throwable {
         if (isReactive) {
             try {
                 return ((Mono<?>) invocation.proceed())
                         .flatMap(value -> cacheManager.get().evict(key, cacheEvict.keyUsesPatternMatching())
-                                .thenReturn(value))
+                                .thenReturn(value)
+                                .onErrorResume(exception -> {
+                                    log.error("Error evicting cache", exception);
+                                    return Mono.just(value); // Return value even if evict fails
+                                }))
                         .switchIfEmpty(
-                                cacheManager.get().evict(key, cacheEvict.keyUsesPatternMatching()).then(Mono.empty()))
+                                cacheManager.get().evict(key, cacheEvict.keyUsesPatternMatching())
+                                        .onErrorResume(exception -> {
+                                            log.error("Error evicting cache", exception);
+                                            return Mono.empty();
+                                        })
+                                        .then(Mono.empty()))
                         .map(Function.identity());
             } catch (Throwable e) {
                 return Mono.error(e);
             }
         } else {
+            var value = invocation.proceed();
             try {
-                var value = invocation.proceed();
-                if (value == null) {
-                    return cacheManager.get().evict(key, cacheEvict.keyUsesPatternMatching()).then(Mono.empty());
-                }
-                return cacheManager.get().evict(key, cacheEvict.keyUsesPatternMatching()).thenReturn(value);
-            } catch (Throwable e) {
-                return Mono.error(e);
+                // Evict cache asynchronously to avoid blocking the execution thread. Makes cache eventual consistent
+                cacheManager.get().evictAsync(key, cacheEvict.keyUsesPatternMatching());
+            } catch (RuntimeException exception) {
+                log.error("Error evicting async cache", exception);
             }
+            return value;
         }
     }
 
-    private Mono<Object> processCachePutMethod(MethodInvocation invocation, boolean isReactive, String key,
-            String group) {
+    private Object processCachePutMethod(
+            MethodInvocation invocation, boolean isReactive, String key, String group) throws Throwable {
         if (isReactive) {
             try {
                 return ((Mono<?>) invocation.proceed()).flatMap(value -> cachePut(value, key, group));
@@ -124,38 +125,37 @@ public class CacheInterceptor implements MethodInterceptor {
                 return Mono.error(e);
             }
         } else {
-            try {
-                var value = invocation.proceed();
-                return cachePut(value, key, group).thenReturn(value);
-            } catch (Throwable e) {
-                return Mono.error(e);
-            }
+            return processSyncCacheMiss(invocation, key, group);
         }
     }
 
-    private Object processCacheableMethod(MethodInvocation invocation, boolean isReactive, String key,
-            String group, Cacheable cacheable) {
-
+    private Object processCacheableMethod(
+            MethodInvocation invocation, boolean isReactive, String key, String group, Cacheable cacheable)
+            throws Throwable {
         if (isReactive) {
-
             if (invocation.getMethod().getReturnType().isAssignableFrom(Mono.class)) {
                 return handleMono(invocation, key, group, cacheable);
             } else {
                 return handleFlux(invocation, key, group, cacheable);
             }
         } else {
-
-            if (cacheable.wrapperType() != Object.class) {
-                TypeReference typeReference = TypeReferenceUtils.forTypes(cacheable.wrapperType(),
-                        cacheable.returnType());
-
-                return cacheManager.get().get(key, typeReference)
-                        .switchIfEmpty(processSyncCacheMiss(invocation, key, group));
+            Object cachedValue;
+            try {
+                if (cacheable.wrapperType() != Object.class) {
+                    var typeReference = TypeReferenceUtils.forTypes(
+                            cacheable.wrapperType(), cacheable.returnType());
+                    cachedValue = cacheManager.get().getSync(key, typeReference);
+                } else {
+                    cachedValue = cacheManager.get().getSync(key, invocation.getMethod().getReturnType());
+                }
+            } catch (RuntimeException exception) {
+                log.error("Error getting value synchronously from cache", exception);
+                cachedValue = null; // Treat as cache miss
             }
-
-            return cacheManager.get().get(key, invocation.getMethod().getReturnType())
-                    .map(Object.class::cast)
-                    .switchIfEmpty(processSyncCacheMiss(invocation, key, group));
+            if (cachedValue != null) {
+                return cachedValue;
+            }
+            return processSyncCacheMiss(invocation, key, group);
         }
     }
 
@@ -189,6 +189,10 @@ public class CacheInterceptor implements MethodInterceptor {
             TypeReference<List<?>> collectionType) {
         return cacheManager.get()
                 .get(key, collectionType)
+                .onErrorResume(exception -> {
+                    log.error("Error getting value from cache", exception);
+                    return Mono.empty(); // Treat as cache miss
+                })
                 .map(Collection.class::cast)
                 .flatMapMany(Flux::fromIterable)
                 .switchIfEmpty(processFluxCacheMiss(invocation, key, group));
@@ -200,22 +204,26 @@ public class CacheInterceptor implements MethodInterceptor {
                     cacheable.returnType());
 
             return cacheManager.get().get(key, typeReference)
+                    .onErrorResume(exception -> {
+                        log.error("Error getting value from cache", exception);
+                        return Mono.empty(); // Treat as cache miss
+                    })
                     .switchIfEmpty(processCacheMiss(invocation, key, group));
         }
 
         return cacheManager.get().get(key, cacheable.returnType())
+                .onErrorResume(exception -> {
+                    log.error("Error getting value from cache", exception);
+                    return Mono.empty(); // Treat as cache miss
+                })
                 .map(Object.class::cast)
                 .switchIfEmpty(processCacheMiss(invocation, key, group));
     }
 
-    private Mono<Object> processSyncCacheMiss(MethodInvocation invocation, String key, String group) {
-        return Mono.defer(() -> {
-            try {
-                return Mono.just(invocation.proceed());
-            } catch (Throwable e) {
-                return Mono.error(e);
-            }
-        }).flatMap(value -> cachePut(value, key, group));
+    private Object processSyncCacheMiss(MethodInvocation invocation, String key, String group) throws Throwable {
+        var value = invocation.proceed();
+        cachePutAsync(value, key, group);
+        return value;
     }
 
     private Mono<Object> processCacheMiss(MethodInvocation invocation, String key, String group) {
@@ -239,11 +247,9 @@ public class CacheInterceptor implements MethodInterceptor {
                         .flatMap(value -> cachePut(value, key, group));
 
                 return flux
-                        .doOnSubscribe(subscription -> Schedulers.boundedElastic().schedule(() -> {
-                            cacheable.subscribe(
-                                    __ -> log.info("Flux value put in cache"),
-                                    e -> log.error("Error putting flux value in cache", e));
-                        }));
+                        .doOnSubscribe(subscription -> Schedulers.boundedElastic().schedule(() -> cacheable.subscribe(
+                                __ -> log.debug("Flux value put in cache"),
+                                e -> log.error("Error putting flux value in cache", e))));
             } catch (Throwable e) {
                 return Flux.error(e);
             }
@@ -261,10 +267,25 @@ public class CacheInterceptor implements MethodInterceptor {
                 });
     }
 
+    private void cachePutAsync(Object value, String key, String group) {
+        // Methods returning null values are not cached
+        if (value == null) {
+            return;
+        }
+        try {
+            var ttlDuration = cacheConfiguration.getCaches()
+                    .getOrDefault(group, cacheConfiguration.getDefaultDuration());
+            // Set cache asynchronously to avoid blocking the execution thread. Makes cache eventual consistent
+            cacheManager.get().putAsync(key, value, ttlDuration);
+        } catch (RuntimeException exception) {
+            log.error("Error putting async value in cache", exception);
+        }
+    }
+
     private String getKeyName(String name, String key, MethodInvocation invocation) {
         Map<String, Object> params = new HashMap<>();
 
-        // Use Paranamer to resolve parameter names
+        // Use Parameter to resolve parameter names
         Parameter[] parameters = invocation.getMethod().getParameters();
         Object[] args = invocation.getArguments();
 
@@ -281,5 +302,4 @@ public class CacheInterceptor implements MethodInterceptor {
         }
         return "%s:-%s".formatted(name, evaluatedKey);
     }
-
 }

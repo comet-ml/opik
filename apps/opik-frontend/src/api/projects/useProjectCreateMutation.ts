@@ -7,14 +7,20 @@ import api, {
 } from "@/api/api";
 import { Project } from "@/types/projects";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
 
 type UseProjectCreateMutationParams = {
   project: Partial<Project>;
 };
 
-const useProjectCreateMutation = () => {
+type UseProjectCreateMutationOptions = {
+  showErrorToast?: boolean;
+};
+
+const useProjectCreateMutation = ({
+  showErrorToast = true,
+}: UseProjectCreateMutationOptions = {}) => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -30,6 +36,8 @@ const useProjectCreateMutation = () => {
       return { id };
     },
     onError: (error: AxiosError) => {
+      if (!showErrorToast) return;
+
       const message = get(
         error,
         ["response", "data", "message"],

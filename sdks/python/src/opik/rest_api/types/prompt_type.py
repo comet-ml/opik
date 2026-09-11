@@ -2,4 +2,4 @@
 
 import typing
 
-PromptType = typing.Union[typing.Literal["mustache", "jinja2"], typing.Any]
+PromptType = typing.Union[typing.Literal["mustache", "jinja2", "python"], typing.Any]

@@ -16,10 +16,10 @@ import java.util.Set;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ExperimentItemsBatch(
-        @JsonView( {
+        @JsonView({
                 ExperimentItem.View.Write.class}) @NotNull @Size(min = 1, max = 1000) @Valid Set<ExperimentItem> experimentItems)
         implements
-            RateEventContainer{
+            RateEventContainer {
 
     @Override
     public long eventCount() {

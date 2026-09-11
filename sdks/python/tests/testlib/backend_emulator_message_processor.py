@@ -1,233 +1,199 @@
-from opik.message_processing import message_processors, messages
-from typing import List, Tuple, Type, Dict, Union, Optional
+import datetime
+from typing import List, Dict, Optional, Any, TYPE_CHECKING
 
-from .models import TraceModel, SpanModel, FeedbackScoreModel
-from opik import dict_utils
-import collections
-import logging
+from opik.message_processing.emulation import emulator_message_processor
+from opik.types import ErrorInfoDict, SpanType, TraceSource
+from . import models
 
-LOGGER = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from . import noop_file_upload_manager
 
 
-class BackendEmulatorMessageProcessor(message_processors.BaseMessageProcessor):
+class BackendEmulatorMessageProcessor(
+    emulator_message_processor.EmulatorMessageProcessor
+):
     """
-    This class serves as a replacement for the real backend. It's built specifically for
-    running tests.
+    This class serves as a replacement for the real backend. It collects all logged messages
+    to be used in tests.
 
-    The real message processor uses data from messages passed to `process` method to send
-    data to the backend. Emulator does not send any requests, it accumulates the
-    data that came from messages in it's attributes.
-
-    Moreover, it doesn't just store the raw data. You can access full trace or span trees
-    that were built with received messages. Those trees are specified via the model classes
-    implemented in `testlib.models`.
-
-    IMPORTANT: if a new type of message is added to the Opik SDK, this class should be updated
-    accordingly.
+    Optionally accepts a file_upload_manager to access attachment data that was
+    intercepted by the FileUploadPreprocessor before reaching the message processor.
     """
 
-    def __init__(self) -> None:
-        self.processed_messages: List[messages.BaseMessage] = []
-        self._trace_trees: List[TraceModel] = []
+    def __init__(
+        self,
+        active: bool = True,
+        merge_duplicates: bool = True,
+        file_upload_manager: Optional[
+            "noop_file_upload_manager.FileUploadManagerEmulator"
+        ] = None,
+    ) -> None:
+        super().__init__(active=active, merge_duplicates=merge_duplicates)
+        self._file_upload_manager = file_upload_manager
 
-        self._traces_to_spans_mapping: Dict[str, List[str]] = collections.defaultdict(
-            list
-        )
-        self._span_trees: List[
-            SpanModel
-        ] = []  # the same as _trace_trees but without a trace. Useful for distributed tracing.
-        self._observations: Dict[str, Union[TraceModel, SpanModel]] = {}
+    def create_trace_model(
+        self,
+        trace_id: str,
+        start_time: datetime.datetime,
+        name: Optional[str],
+        project_name: str,
+        input: Any,
+        output: Any,
+        tags: Optional[List[str]],
+        metadata: Optional[Dict[str, Any]],
+        end_time: Optional[datetime.datetime],
+        spans: Optional[List[models.SpanModel]],
+        feedback_scores: Optional[List[models.FeedbackScoreModel]],
+        error_info: Optional[ErrorInfoDict],
+        thread_id: Optional[str],
+        source: TraceSource,
+        last_updated_at: Optional[datetime.datetime] = None,
+        environment: Optional[str] = None,
+    ) -> models.TraceModel:
+        if spans is None:
+            spans = []
+        if feedback_scores is None:
+            feedback_scores = []
 
-        self._span_to_parent_span: Dict[str, Optional[str]] = {}
-        self._span_to_trace: Dict[str, Optional[str]] = {}
-        self._trace_to_feedback_scores: Dict[str, List[FeedbackScoreModel]] = (
-            collections.defaultdict(list)
+        return models.TraceModel(
+            id=trace_id,
+            start_time=start_time,
+            name=name,
+            project_name=project_name,
+            input=input,
+            output=output,
+            tags=tags,
+            metadata=metadata,
+            end_time=end_time,
+            spans=spans,
+            feedback_scores=feedback_scores,
+            error_info=error_info,
+            thread_id=thread_id,
+            last_updated_at=last_updated_at,
+            source=source,
+            environment=environment,
         )
-        self._span_to_feedback_scores: Dict[str, List[FeedbackScoreModel]] = (
-            collections.defaultdict(list)
+
+    def create_span_model(
+        self,
+        span_id: str,
+        start_time: datetime.datetime,
+        name: Optional[str],
+        input: Any,
+        output: Any,
+        tags: Optional[List[str]],
+        metadata: Optional[Dict[str, Any]],
+        type: SpanType,
+        usage: Optional[Dict[str, Any]],
+        end_time: Optional[datetime.datetime],
+        project_name: str,
+        spans: Optional[List[models.SpanModel]],
+        feedback_scores: Optional[List[models.FeedbackScoreModel]],
+        model: Optional[str],
+        provider: Optional[str],
+        error_info: Optional[ErrorInfoDict],
+        total_cost: Optional[float],
+        last_updated_at: Optional[datetime.datetime],
+        source: TraceSource,
+        environment: Optional[str] = None,
+    ) -> models.SpanModel:
+        if spans is None:
+            spans = []
+        if feedback_scores is None:
+            feedback_scores = []
+
+        return models.SpanModel(
+            id=span_id,
+            start_time=start_time,
+            name=name,
+            input=input,
+            output=output,
+            tags=tags,
+            metadata=metadata,
+            type=type,
+            usage=usage,
+            end_time=end_time,
+            project_name=project_name,
+            spans=spans,
+            feedback_scores=feedback_scores,
+            model=model,
+            provider=provider,
+            error_info=error_info,
+            total_cost=total_cost,
+            last_updated_at=last_updated_at,
+            source=source,
+            environment=environment,
+        )
+
+    def create_feedback_score_model(
+        self,
+        score_id: str,
+        name: str,
+        value: float,
+        category_name: Optional[str],
+        reason: Optional[str],
+    ) -> models.FeedbackScoreModel:
+        return models.FeedbackScoreModel(
+            id=score_id,
+            name=name,
+            value=value,
+            category_name=category_name,
+            reason=reason,
         )
 
     @property
-    def trace_trees(self):
+    def trace_trees(self) -> List[models.TraceModel]:
         """
-        Builds list of trace trees based on the data from the processed messages.
-        Before processing traces, builds span_trees
+        Override to add attachments from the file upload manager.
+
+        Attachments are intercepted by FileUploadPreprocessor before reaching
+        the message processor, so we need to get them from the upload manager.
         """
-        self.span_trees  # call to connect all spans
+        # Get base trace trees from parent
+        traces = super().trace_trees
 
-        for span_id, trace_id in self._span_to_trace.items():
-            if trace_id is None:
-                continue
+        # If we have a file upload manager, add attachments to spans and traces
+        if self._file_upload_manager is not None:
+            self._add_attachments_to_traces(traces)
 
-            trace = self._observations[trace_id]
-            if self._span_to_parent_span[
-                span_id
-            ] is None and not _observation_already_stored(span_id, trace.spans):
-                trace.spans.append(self._observations[span_id])
-                trace.spans.sort(key=lambda x: x.start_time)
+        return traces
 
-        for trace in self._trace_trees:
-            trace.feedback_scores = self._trace_to_feedback_scores[trace.id]
-
-        self._trace_trees.sort(key=lambda x: x.start_time)
-        return self._trace_trees
-
-    @property
-    def span_trees(self):
-        """
-        Builds list of span trees based on the data from the processed messages.
-        Children spans are sorted by creation time
-        """
-        for span_id, parent_span_id in self._span_to_parent_span.items():
-            if parent_span_id is None:
-                continue
-
-            parent_span = self._observations[parent_span_id]
-            if not _observation_already_stored(span_id, parent_span.spans):
-                parent_span.spans.append(self._observations[span_id])
-                parent_span.spans.sort(key=lambda x: x.start_time)
-
-        all_span_ids = self._span_to_trace
-        for span_id in all_span_ids:
-            span = self._observations[span_id]
-            span.feedback_scores = self._span_to_feedback_scores[span_id]
-
-        self._span_trees.sort(key=lambda x: x.start_time)
-        return self._span_trees
-
-    def _dispatch_message(self, message: messages.BaseMessage) -> None:
-        if isinstance(message, messages.CreateTraceMessage):
-            trace = TraceModel(
-                id=message.trace_id,
-                name=message.name,
-                input=message.input,
-                output=message.output,
-                tags=message.tags,
-                metadata=message.metadata,
-                start_time=message.start_time,
-                end_time=message.end_time,
-                project_name=message.project_name,
-                error_info=message.error_info,
-                thread_id=message.thread_id,
+    def _add_attachments_to_traces(self, traces: List[models.TraceModel]) -> None:
+        """Add attachments from file upload manager to traces and their spans."""
+        for trace in traces:
+            # Add trace-level attachments
+            trace_attachments = self._file_upload_manager.attachments_by_trace.get(
+                trace.id, []
             )
+            if trace_attachments:
+                trace.attachments = [
+                    models.AttachmentModel(
+                        file_path=att.file_path,
+                        file_name=att.file_name,
+                        content_type=att.mime_type or "",
+                    )
+                    for att in trace_attachments
+                ]
 
-            self._trace_trees.append(trace)
-            self._observations[message.trace_id] = trace
+            # Add span-level attachments recursively
+            self._add_attachments_to_spans(trace.spans)
 
-        elif isinstance(message, messages.CreateSpanMessage):
-            span = SpanModel(
-                id=message.span_id,
-                name=message.name,
-                input=message.input,
-                output=message.output,
-                tags=message.tags,
-                metadata=message.metadata,
-                type=message.type,
-                start_time=message.start_time,
-                end_time=message.end_time,
-                usage=message.usage,
-                project_name=message.project_name,
-                model=message.model,
-                provider=message.provider,
-                error_info=message.error_info,
-                total_cost=message.total_cost,
+    def _add_attachments_to_spans(self, spans: List[models.SpanModel]) -> None:
+        """Recursively add attachments to spans."""
+        for span in spans:
+            span_attachments = self._file_upload_manager.attachments_by_span.get(
+                span.id, []
             )
+            if span_attachments:
+                span.attachments = [
+                    models.AttachmentModel(
+                        file_path=att.file_path,
+                        file_name=att.file_name,
+                        content_type=att.mime_type or "",
+                    )
+                    for att in span_attachments
+                ]
 
-            self._span_to_parent_span[span.id] = message.parent_span_id
-            if message.parent_span_id is None:
-                self._span_trees.append(span)
-
-            self._span_to_trace[span.id] = message.trace_id
-
-            self._observations[message.span_id] = span
-        elif isinstance(message, messages.CreateSpansBatchMessage):
-            for item in message.batch:
-                self.process(item)
-        elif isinstance(message, messages.CreateTraceBatchMessage):
-            for item in message.batch:
-                self.process(item)
-        elif isinstance(message, messages.UpdateSpanMessage):
-            span: SpanModel = self._observations[message.span_id]
-            update_payload = {
-                "output": message.output,
-                "usage": message.usage,
-                "provider": message.provider,
-                "model": message.model,
-                "end_time": message.end_time,
-                "metadata": message.metadata,
-                "error_info": message.error_info,
-                "tags": message.tags,
-                "input": message.input,
-                "total_cost": message.total_cost,
-            }
-            cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
-            span.__dict__.update(cleaned_update_payload)
-
-        elif isinstance(message, messages.UpdateTraceMessage):
-            current_trace: TraceModel = self._observations[message.trace_id]
-            update_payload = {
-                "output": message.output,
-                "end_time": message.end_time,
-                "metadata": message.metadata,
-                "error_info": message.error_info,
-                "tags": message.tags,
-                "input": message.input,
-                "thread_id": message.thread_id,
-            }
-            cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
-            current_trace.__dict__.update(cleaned_update_payload)
-
-        elif isinstance(message, messages.AddSpanFeedbackScoresBatchMessage):
-            for feedback_score_message in message.batch:
-                feedback_model = FeedbackScoreModel(
-                    id=feedback_score_message.id,
-                    name=feedback_score_message.name,
-                    value=feedback_score_message.value,
-                    category_name=feedback_score_message.category_name,
-                    reason=feedback_score_message.reason,
-                )
-                self._span_to_feedback_scores[feedback_score_message.id].append(
-                    feedback_model
-                )
-        elif isinstance(message, messages.AddTraceFeedbackScoresBatchMessage):
-            for feedback_score_message in message.batch:
-                feedback_model = FeedbackScoreModel(
-                    id=feedback_score_message.id,
-                    name=feedback_score_message.name,
-                    value=feedback_score_message.value,
-                    category_name=feedback_score_message.category_name,
-                    reason=feedback_score_message.reason,
-                )
-                self._trace_to_feedback_scores[feedback_score_message.id].append(
-                    feedback_model
-                )
-
-        self.processed_messages.append(message)
-
-    def process(self, message: messages.BaseMessage) -> None:
-        try:
-            self._dispatch_message(message)
-        except Exception as exception:
-            LOGGER.error(
-                "Unexpected exception in BackendEmulatorMessageProcessor.process",
-                exc_info=True,
-            )
-            print(exception)
-
-    def get_messages_of_type(self, allowed_types: Tuple[Type, ...]):
-        """
-        Returns all messages instances of requested types
-        """
-        return [
-            message
-            for message in self.processed_messages
-            if isinstance(message, allowed_types)
-        ]
-
-
-def _observation_already_stored(id, observations) -> bool:
-    for observation in observations:
-        if observation.id == id:
-            return True
-
-    return False
+            # Recurse into nested spans
+            if span.spans:
+                self._add_attachments_to_spans(span.spans)

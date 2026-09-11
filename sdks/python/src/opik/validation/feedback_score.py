@@ -1,16 +1,16 @@
 import pydantic
 
 from typing import Any
-from ..types import FeedbackScoreDict
+from ..types import BatchFeedbackScoreDict
 from . import validator, result
 
 
 class PydanticWrapper(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="forbid")
-    feedback_score: FeedbackScoreDict
+    feedback_score: BatchFeedbackScoreDict
 
 
-EXPECTED_TYPES = "{'id': str, 'name': str, 'value': float, 'reason': NotRequired[str], 'category_name': NotRequired[str]}"
+EXPECTED_TYPES = "{'id': str, 'name': str, 'value': float, 'reason': NotRequired[str], 'category_name': NotRequired[str], 'project_name': NotRequired[str]}"
 
 
 class FeedbackScoreValidator(validator.Validator):
@@ -30,8 +30,7 @@ class FeedbackScoreValidator(validator.Validator):
             for e in exception.errors():
                 component_name: str = ".".join(e["loc"])
                 msg: str = (
-                    f"{component_name} - {e['msg']}.\n"
-                    f"Expected dict: {EXPECTED_TYPES}."
+                    f"{component_name} - {e['msg']}.\nExpected dict: {EXPECTED_TYPES}."
                 )
                 failure_reasons.append(msg)
             self.validation_result = result.ValidationResult(
@@ -41,7 +40,7 @@ class FeedbackScoreValidator(validator.Validator):
         return self.validation_result
 
     def failure_reason_message(self) -> str:
-        assert (
-            len(self.validation_result.failure_reasons) > 0
-        ), "validate() must be called before accessing failure reason message"
+        assert len(self.validation_result.failure_reasons) > 0, (
+            "validate() must be called before accessing failure reason message"
+        )
         return self.validation_result.failure_reasons[0]

@@ -1,2 +1,1 @@
-export * as findFeedbackScoreNames1 from "./findFeedbackScoreNames1";
-export * from "./requests";
+export * from "./requests/index.js";

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.llm.openai;
 
+import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -11,36 +12,89 @@ import java.util.Optional;
  */
 @Slf4j
 @RequiredArgsConstructor
-public enum OpenaiModelName {
-    CHATGPT_4O_LATEST("chatgpt-4o-latest"),
-    GPT_4O("gpt-4o"),
-    GPT_4O_2024_05_13("gpt-4o-2024-05-13"),
-    GPT_4O_2024_08_06("gpt-4o-2024-08-06"),
-    GPT_4O_2024_11_20("gpt-4o-2024-11-20"),
-    GPT_4O_MINI("gpt-4o-mini"),
-    GPT_4O_MINI_2024_07_18("gpt-4o-mini-2024-07-18"),
-    GPT_3_5_TURBO("gpt-3.5-turbo"),
-    GPT_3_5_TURBO_1106("gpt-3.5-turbo-1106"),
-    GPT_3_5_TURBO_0125("gpt-3.5-turbo-0125"),
-    GPT_4("gpt-4"),
-    GPT_4_0613("gpt-4-0613"),
-    GPT_4_0314("gpt-4-0314"),
-    GPT_4_TURBO("gpt-4-turbo"),
-    GPT_4_TURBO_2024_04_09("gpt-4-turbo-2024-04-09"),
-    GPT_4_TURBO_PREVIEW("gpt-4-turbo-preview"),
-    GPT_4_1106_PREVIEW("gpt-4-1106-preview"),
-    GPT_4_0125_PREVIEW("gpt-4-0125-preview"),
-    GPT_O1("o1"),
-    GPT_O1_2024_12_17("o1-2024-12-17"),
-    GPT_O1_MINI("o1-mini"),
-    GPT_O1_MINI_2024_09_12("o1-mini-2024-09-12"),
-    GPT_O1_PREVIEW("o1-preview"),
-    GPT_O1_PREVIEW_2024_09_12("o1-preview-2024-09-12"),
-    ;
+public enum OpenaiModelName implements StructuredOutputSupported {
+    CHATGPT_4O_LATEST("chatgpt-4o-latest", true),
+    CHATGPT_IMAGE_LATEST("chatgpt-image-latest", false),
+    GPT_3_5_TURBO("gpt-3.5-turbo", false),
+    GPT_3_5_TURBO_0125("gpt-3.5-turbo-0125", false),
+    GPT_3_5_TURBO_1106("gpt-3.5-turbo-1106", false),
+    GPT_3_5_TURBO_INSTRUCT("gpt-3.5-turbo-instruct", false),
+    GPT_3_5_TURBO_INSTRUCT_0914("gpt-3.5-turbo-instruct-0914", false),
+    GPT_4("gpt-4", false),
+    GPT_4_0125_PREVIEW("gpt-4-0125-preview", false),
+    GPT_4_0314("gpt-4-0314", false),
+    GPT_4_0613("gpt-4-0613", false),
+    GPT_4_1106_PREVIEW("gpt-4-1106-preview", false),
+    GPT_4_TURBO("gpt-4-turbo", false),
+    GPT_4_TURBO_2024_04_09("gpt-4-turbo-2024-04-09", false),
+    GPT_4_TURBO_PREVIEW("gpt-4-turbo-preview", false),
+    GPT_4_1("gpt-4.1", true),
+    GPT_4_1_MINI("gpt-4.1-mini", true),
+    GPT_4_1_NANO("gpt-4.1-nano", true),
+    GPT_4O("gpt-4o", true),
+    GPT_4O_2024_05_13("gpt-4o-2024-05-13", false),
+    GPT_4O_2024_08_06("gpt-4o-2024-08-06", true),
+    GPT_4O_2024_11_20("gpt-4o-2024-11-20", true),
+    GPT_4O_MINI("gpt-4o-mini", true),
+    GPT_4O_MINI_2024_07_18("gpt-4o-mini-2024-07-18", true),
+    GPT_4O_TRANSCRIBE_DIARIZE("gpt-4o-transcribe-diarize", false),
+    GPT_5("gpt-5", true),
+    GPT_5_CHAT_LATEST("gpt-5-chat-latest", false),
+    GPT_5_CODEX("gpt-5-codex", true),
+    GPT_5_MINI("gpt-5-mini", true),
+    GPT_5_NANO("gpt-5-nano", true),
+    GPT_5_PRO("gpt-5-pro", true),
+    GPT_5_1("gpt-5.1", true),
+    GPT_5_1_CHAT_LATEST("gpt-5.1-chat-latest", true),
+    GPT_5_1_CODEX("gpt-5.1-codex", true),
+    GPT_5_1_CODEX_MAX("gpt-5.1-codex-max", true),
+    GPT_5_1_CODEX_MINI("gpt-5.1-codex-mini", true),
+    GPT_5_2("gpt-5.2", true),
+    GPT_5_2_CHAT_LATEST("gpt-5.2-chat-latest", false),
+    GPT_5_2_CODEX("gpt-5.2-codex", true),
+    GPT_5_2_PRO("gpt-5.2-pro", true),
+    GPT_5_3_CHAT_LATEST("gpt-5.3-chat-latest", true),
+    GPT_5_3_CODEX("gpt-5.3-codex", true),
+    GPT_5_4("gpt-5.4", true),
+    GPT_5_4_MINI("gpt-5.4-mini", false),
+    GPT_5_4_NANO("gpt-5.4-nano", false),
+    GPT_5_4_PRO("gpt-5.4-pro", false),
+    GPT_5_5("gpt-5.5", true),
+    GPT_5_5_PRO("gpt-5.5-pro", false),
+    GPT_5_6_LUNA("gpt-5.6-luna", false),
+    GPT_5_6_SOL("gpt-5.6-sol", false),
+    GPT_5_6_TERRA("gpt-5.6-terra", false),
+    GPT_6_ASTRA("gpt-6-astra", false),
+    GPT_IMAGE_1("gpt-image-1", false),
+    GPT_IMAGE_1_MINI("gpt-image-1-mini", false),
+    GPT_IMAGE_1_5("gpt-image-1.5", false),
+    GPT_IMAGE_2("gpt-image-2", false),
+    GPT_IMAGE_2_5_FLARE("gpt-image-2.5-flare", false),
+    GPT_IMAGE_2_5_SUNBURST("gpt-image-2.5-sunburst", false),
+    GPT_O1("o1", false),
+    GPT_O1_2024_12_17("o1-2024-12-17", false),
+    GPT_O1_MINI("o1-mini", false),
+    GPT_O1_MINI_2024_09_12("o1-mini-2024-09-12", false),
+    GPT_O1_PREVIEW("o1-preview", false),
+    GPT_O1_PREVIEW_2024_09_12("o1-preview-2024-09-12", false),
+    GPT_O1_PRO("o1-pro", true),
+    GPT_O3("o3", true),
+    GPT_O3_DEEP_RESEARCH("o3-deep-research", true),
+    GPT_O3_MINI("o3-mini", false),
+    GPT_O3_PRO("o3-pro", true),
+    GPT_O4_MINI("o4-mini", true),
+    GPT_O4_MINI_DEEP_RESEARCH("o4-mini-deep-research", true),
+    GPT_LIVE_1("gpt-live-1", false);
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenaiModelName with value '{}'";
 
     private final String value;
+    private final boolean structuredOutputSupported;
+
+    @Override
+    public boolean isStructuredOutputSupported() {
+        return this.structuredOutputSupported;
+    }
 
     public static Optional<OpenaiModelName> byValue(String value) {
         var response = Arrays.stream(OpenaiModelName.values())

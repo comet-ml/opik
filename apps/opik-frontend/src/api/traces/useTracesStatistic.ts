@@ -2,12 +2,16 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig, TRACES_REST_ENDPOINT } from "@/api/api";
 import { ColumnsStatistic } from "@/types/shared";
 import { Filters } from "@/types/filters";
-import { generateSearchByIDFilters, processFilters } from "@/lib/filters";
+import { generateLogsSourceFilter, processFilters } from "@/lib/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 
 type UseTracesStatisticParams = {
   projectId: string;
   filters?: Filters;
   search?: string;
+  fromTime?: string;
+  toTime?: string;
+  logsSource?: LOGS_SOURCE;
 };
 
 export type UseTracesStatisticResponse = {
@@ -16,7 +20,14 @@ export type UseTracesStatisticResponse = {
 
 const getTracesStatistic = async (
   { signal }: QueryFunctionContext,
-  { projectId, filters, search }: UseTracesStatisticParams,
+  {
+    projectId,
+    filters,
+    search,
+    fromTime,
+    toTime,
+    logsSource,
+  }: UseTracesStatisticParams,
 ) => {
   const { data } = await api.get<UseTracesStatisticResponse>(
     `${TRACES_REST_ENDPOINT}stats`,
@@ -24,7 +35,13 @@ const getTracesStatistic = async (
       signal,
       params: {
         project_id: projectId,
-        ...processFilters(filters, generateSearchByIDFilters(search)),
+        ...processFilters(
+          filters,
+          logsSource ? generateLogsSourceFilter(logsSource) : undefined,
+        ),
+        ...(search && { search }),
+        ...(fromTime && { from_time: fromTime }),
+        ...(toTime && { to_time: toTime }),
       },
     },
   );

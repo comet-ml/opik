@@ -1,25 +1,39 @@
 package com.comet.opik.utils;
 
+import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Provider;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.context.Context;
-import reactor.util.retry.Retry;
-import reactor.util.retry.RetryBackoffSpec;
 
-import java.net.SocketException;
-import java.time.Duration;
+import java.util.Optional;
 
 @UtilityClass
 @Slf4j
 public class AsyncUtils {
 
     public static Context setRequestContext(Context ctx, Provider<RequestContext> requestContext) {
-        return ctx.put(RequestContext.USER_NAME, requestContext.get().getUserName())
-                .put(RequestContext.WORKSPACE_ID, requestContext.get().getWorkspaceId());
+        return setRequestContext(ctx, requestContext.get());
+    }
+
+    public static Context setRequestContext(Context ctx, RequestContext requestContext) {
+        return ctx.put(RequestContext.USER_NAME, requestContext.getUserName())
+                .put(RequestContext.WORKSPACE_ID, requestContext.getWorkspaceId())
+                .put(RequestContext.WORKSPACE_NAME, requestContext.getWorkspaceName())
+                .put(RequestContext.CIPX_DEVICE_ID, StringUtils.defaultString(requestContext.getCipxDeviceId()))
+                .put(RequestContext.VISIBILITY,
+                        Optional.ofNullable(requestContext.getVisibility()).orElse(Visibility.PRIVATE));
+    }
+
+    public static Context setRequestContext(Context ctx, String workspaceId, String userName, Visibility visibility) {
+        return ctx.put(RequestContext.USER_NAME, userName)
+                .put(RequestContext.WORKSPACE_ID, workspaceId)
+                .put(RequestContext.VISIBILITY, Optional.ofNullable(visibility).orElse(Visibility.PRIVATE));
+
     }
 
     public static Context setRequestContext(Context ctx, String userName, String workspaceId) {
@@ -51,19 +65,6 @@ public class AsyncUtils {
 
             return action.subscriberContext(userName, workspaceId);
         });
-    }
-
-    public static RetryBackoffSpec handleConnectionError() {
-        return Retry.backoff(3, Duration.ofMillis(100))
-                .doBeforeRetry(retrySignal -> log.debug("Retrying due to: {}", retrySignal.failure().getMessage()))
-                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> retrySignal.failure())
-                .filter(throwable -> {
-                    log.debug("Filtering for retry: {}", throwable.getMessage());
-
-                    return SocketException.class.isAssignableFrom(throwable.getClass())
-                            || (throwable instanceof IllegalStateException
-                                    && throwable.getMessage().contains("Connection pool shut down"));
-                });
     }
 
 }

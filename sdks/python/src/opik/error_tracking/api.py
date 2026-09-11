@@ -6,7 +6,7 @@ import sentry_sdk
 
 import opik
 import opik.config
-from opik import _logging
+import opik._logging as _logging
 
 from . import before_send, logger_setup, shutdown_hooks
 

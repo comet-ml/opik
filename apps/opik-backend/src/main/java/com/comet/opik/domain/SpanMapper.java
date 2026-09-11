@@ -9,21 +9,10 @@ import org.mapstruct.MappingTarget;
 import org.mapstruct.NullValuePropertyMappingStrategy;
 import org.mapstruct.factory.Mappers;
 
-import java.time.Instant;
-import java.util.List;
-
-@Mapper(imports = Instant.class)
+@Mapper
 public interface SpanMapper {
 
     SpanMapper INSTANCE = Mappers.getMapper(SpanMapper.class);
-
-    Span toSpan(SpanModel spanModel);
-
-    List<Span> toSpan(List<SpanModel> spanModel);
-
-    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
-    @Mapping(target = "lastUpdatedAt", expression = "java( Instant.now() )")
-    void updateSpanModelBuilder(@MappingTarget SpanModel.SpanModelBuilder spanModelBuilder, SpanUpdate spanUpdate);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "duration", ignore = true)

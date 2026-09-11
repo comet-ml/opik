@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 584" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" role="img" aria-labelledby="ci-arch-title">
+  <title id="ci-arch-title">Cost Intelligence architecture: a local opik-cipx daemon on each developer machine forwards Claude Code traffic unchanged to Anthropic and ships metadata-only spans to Opik.</title>
+  <style>
+    .flow-a { stroke-dasharray: 7 5; animation: dashA 1.4s linear infinite; }
+    .flow-c { stroke-dasharray: 3 5; animation: dashC 1.8s linear infinite; }
+    @keyframes dashA { to { stroke-dashoffset: -24; } }
+    @keyframes dashC { to { stroke-dashoffset: -16; } }
+    @media (prefers-reduced-motion: reduce) {
+      .flow-a, .flow-c { animation: none; }
+    }
+  </style>
+  <defs>
+    <marker id="arrGray" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L8 4L0 8z" fill="#cbd5e1"/>
+    </marker>
+    <marker id="arrDark" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L8 4L0 8z" fill="#334155"/>
+    </marker>
+    <marker id="arrGreen" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L8 4L0 8z" fill="#2e8555"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="980" height="584" fill="#ffffff"/>
+
+  <!-- ===================== flows between panels ===================== -->
+  <!-- faint collector stubs from machines 2 and N -->
+  <line x1="384" y1="260" x2="448" y2="260" stroke="#e2e8f0" stroke-width="1.2"/>
+  <line x1="384" y1="428" x2="448" y2="428" stroke="#e2e8f0" stroke-width="1.2"/>
+  <line x1="448" y1="124" x2="448" y2="428" stroke="#e2e8f0" stroke-width="1.2"/>
+  <!-- LLM traffic to Anthropic -->
+  <path d="M384 124 H448 V372 H484" fill="none" stroke="#334155" stroke-width="1.6" class="flow-a" marker-end="url(#arrDark)"/>
+  <!-- metadata to Opik -->
+  <path d="M384 115.5 H484" fill="none" stroke="#2e8555" stroke-width="1.4" class="flow-c" marker-end="url(#arrGreen)"/>
+
+  <!-- ===================== your organization ===================== -->
+  <rect x="28" y="36" width="396" height="496" rx="14" fill="none" stroke="#94a3b8" stroke-width="1.4"/>
+  <rect x="46" y="29" width="152" height="14" fill="#ffffff"/>
+  <text x="54" y="40" font-size="9" font-weight="700" letter-spacing="1.5" fill="#64748b">YOUR ORGANIZATION</text>
+
+  <!-- machine card 1 (annotated) -->
+  <g>
+    <rect x="52" y="76" width="348" height="112" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+    <text x="86" y="94" font-size="7.5" fill="#94a3b8" text-anchor="middle">developer</text>
+    <circle cx="86" cy="110" r="7" fill="none" stroke="#64748b" stroke-width="1.4"/>
+    <rect x="74" y="121" width="24" height="13" rx="6.5" fill="none" stroke="#64748b" stroke-width="1.4"/>
+    <line x1="103" y1="116" x2="124" y2="116" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+    <text x="148" y="94" font-size="7.5" fill="#94a3b8" text-anchor="middle">Claude Code</text>
+    <rect x="130" y="102" width="36" height="28" rx="6" fill="#1f2937"/>
+    <text x="148" y="120" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">&gt;_</text>
+    <circle cx="181" cy="116" r="7.5" fill="#ffffff" stroke="#64748b" stroke-width="1.2"/>
+    <text x="181" y="119" font-size="8" font-weight="700" fill="#475569" text-anchor="middle">1</text>
+    <line x1="190" y1="116" x2="248" y2="116" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+    <text x="206" y="134" font-size="7.5" fill="#94a3b8" text-anchor="middle">ANTHROPIC_BASE_URL</text>
+    <text x="206" y="144" font-size="7.5" fill="#94a3b8" text-anchor="middle">plain HTTP - no TLS</text>
+    <rect x="252" y="94" width="132" height="44" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.2"/>
+    <text x="318" y="113" font-size="11" font-weight="700" fill="#1f2937" text-anchor="middle">opik-cipx</text>
+    <text x="318" y="127" font-size="8" fill="#94a3b8" text-anchor="middle">127.0.0.1:9000</text>
+    <text x="66" y="176" font-size="8" letter-spacing="1" fill="#94a3b8">DEV MACHINE #1</text>
+  </g>
+
+  <!-- machine card 2 -->
+  <g opacity="0.5">
+    <rect x="52" y="216" width="348" height="112" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+    <circle cx="86" cy="250" r="7" fill="none" stroke="#64748b" stroke-width="1.4"/>
+    <rect x="74" y="261" width="24" height="13" rx="6.5" fill="none" stroke="#64748b" stroke-width="1.4"/>
+    <line x1="103" y1="256" x2="124" y2="256" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+    <rect x="130" y="242" width="36" height="28" rx="6" fill="#1f2937"/>
+    <text x="148" y="260" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">&gt;_</text>
+    <line x1="174" y1="256" x2="248" y2="256" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+    <rect x="252" y="234" width="132" height="44" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.2"/>
+    <text x="318" y="253" font-size="11" font-weight="700" fill="#1f2937" text-anchor="middle">opik-cipx</text>
+    <text x="318" y="267" font-size="8" fill="#94a3b8" text-anchor="middle">127.0.0.1:9000</text>
+    <text x="66" y="316" font-size="8" letter-spacing="1" fill="#94a3b8">DEV MACHINE #2</text>
+  </g>
+
+  <circle cx="226" cy="346" r="1.5" fill="#94a3b8"/>
+  <circle cx="226" cy="354" r="1.5" fill="#94a3b8"/>
+  <circle cx="226" cy="362" r="1.5" fill="#94a3b8"/>
+
+  <!-- machine card N -->
+  <g opacity="0.5">
+    <rect x="52" y="384" width="348" height="112" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+    <circle cx="86" cy="418" r="7" fill="none" stroke="#64748b" stroke-width="1.4"/>
+    <rect x="74" y="429" width="24" height="13" rx="6.5" fill="none" stroke="#64748b" stroke-width="1.4"/>
+    <line x1="103" y1="424" x2="124" y2="424" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+    <rect x="130" y="410" width="36" height="28" rx="6" fill="#1f2937"/>
+    <text x="148" y="428" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">&gt;_</text>
+    <line x1="174" y1="424" x2="248" y2="424" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+    <rect x="252" y="402" width="132" height="44" rx="8" fill="#f8fafc" stroke="#64748b" stroke-width="1.2"/>
+    <text x="318" y="421" font-size="11" font-weight="700" fill="#1f2937" text-anchor="middle">opik-cipx</text>
+    <text x="318" y="435" font-size="8" fill="#94a3b8" text-anchor="middle">127.0.0.1:9000</text>
+    <text x="66" y="484" font-size="8" letter-spacing="1" fill="#94a3b8">DEV MACHINE #N</text>
+  </g>
+
+  <text x="52" y="560" font-size="8.5" fill="#94a3b8">one local daemon per machine — no shared collector, no traffic through Comet</text>
+
+  <!-- ===================== Comet / Opik ===================== -->
+  <rect x="470" y="36" width="482" height="250" rx="14" fill="none" stroke="#2e8555" stroke-width="1.4"/>
+  <rect x="488" y="29" width="56" height="14" fill="#ffffff"/>
+  <text x="496" y="40" font-size="9" font-weight="700" letter-spacing="1.5" fill="#2e8555">COMET</text>
+
+  <circle cx="498" cy="115" r="7.5" fill="#ffffff" stroke="#2e8555" stroke-width="1.2"/>
+  <text x="498" y="118" font-size="8" font-weight="700" fill="#2e8555" text-anchor="middle">4</text>
+  <text x="512" y="112" font-size="9" fill="#334155">HTTPS — spans only</text>
+  <text x="512" y="126" font-size="8" fill="#94a3b8">content capture off by default</text>
+  <line x1="700" y1="115" x2="778" y2="115" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+  <rect x="784" y="91" width="144" height="48" rx="10" fill="#f0fdf4" stroke="#2e8555" stroke-width="1.4"/>
+  <text x="856" y="112" font-size="15" font-weight="700" fill="#166534" text-anchor="middle">Opik</text>
+  <text x="856" y="128" font-size="8" fill="#94a3b8" text-anchor="middle">your workspace</text>
+
+  <text x="494" y="168" font-size="8.5" font-weight="700" letter-spacing="1" fill="#475569">INPUT TOKENS BY CATEGORY</text>
+  <text x="928" y="168" font-size="8.5" fill="#94a3b8" text-anchor="end">14,812 in - 612 out</text>
+
+  <g font-size="8.5">
+    <text x="494" y="189" fill="#475569">system prompt</text>
+    <rect x="610" y="182" width="250" height="8" rx="4" fill="#f1f5f9"/>
+    <rect x="610" y="182" width="250" height="8" rx="4" fill="#2e8555"/>
+    <text x="868" y="189" fill="#475569">38%</text>
+
+    <text x="494" y="210" fill="#475569">tool schemas</text>
+    <rect x="610" y="203" width="250" height="8" rx="4" fill="#f1f5f9"/>
+    <rect x="610" y="203" width="132" height="8" rx="4" fill="#2e8555"/>
+    <text x="868" y="210" fill="#475569">20%</text>
+
+    <text x="494" y="231" fill="#475569">memory files</text>
+    <rect x="610" y="224" width="250" height="8" rx="4" fill="#f1f5f9"/>
+    <rect x="610" y="224" width="92" height="8" rx="4" fill="#2e8555"/>
+    <text x="868" y="231" fill="#475569">14%</text>
+
+    <text x="494" y="252" fill="#475569">reminders, other</text>
+    <rect x="610" y="245" width="250" height="8" rx="4" fill="#f1f5f9"/>
+    <rect x="610" y="245" width="86" height="8" rx="4" fill="#2e8555"/>
+    <text x="868" y="252" fill="#475569">13%</text>
+
+    <text x="494" y="273" fill="#475569">user input</text>
+    <rect x="610" y="266" width="250" height="8" rx="4" fill="#f1f5f9"/>
+    <rect x="610" y="266" width="59" height="8" rx="4" fill="#2e8555"/>
+    <text x="868" y="273" fill="#475569">9%</text>
+  </g>
+
+  <!-- ===================== Anthropic ===================== -->
+  <rect x="470" y="310" width="482" height="222" rx="14" fill="none" stroke="#1f2937" stroke-width="1.4"/>
+  <rect x="488" y="303" width="86" height="14" fill="#ffffff"/>
+  <text x="496" y="314" font-size="9" font-weight="700" letter-spacing="1.5" fill="#1f2937">ANTHROPIC</text>
+
+  <circle cx="498" cy="372" r="7.5" fill="#ffffff" stroke="#334155" stroke-width="1.2"/>
+  <text x="498" y="375" font-size="8" font-weight="700" fill="#334155" text-anchor="middle">2</text>
+  <text x="512" y="375" font-size="9" fill="#334155">HTTPS — forwarded unchanged</text>
+  <line x1="700" y1="372" x2="750" y2="372" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+  <rect x="756" y="346" width="172" height="52" rx="10" fill="#f8fafc" stroke="#1f2937" stroke-width="1.4"/>
+  <text x="842" y="368" font-size="11" font-weight="700" fill="#1f2937" text-anchor="middle">LLM inference</text>
+  <text x="842" y="384" font-size="8" fill="#94a3b8" text-anchor="middle">api.anthropic.com</text>
+
+  <circle cx="498" cy="430" r="7.5" fill="#ffffff" stroke="#334155" stroke-width="1.2"/>
+  <text x="498" y="433" font-size="8" font-weight="700" fill="#334155" text-anchor="middle">3</text>
+  <text x="512" y="433" font-size="9" fill="#334155">response streamed back (SSE)</text>
+  <line x1="750" y1="430" x2="704" y2="430" stroke="#cbd5e1" stroke-width="1.2" marker-end="url(#arrGray)"/>
+
+  <text x="512" y="492" font-size="8.5" fill="#94a3b8">response.usage → exact token totals</text>
+</svg>

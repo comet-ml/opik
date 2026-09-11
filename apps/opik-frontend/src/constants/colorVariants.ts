@@ -1,4 +1,4 @@
-import md5 from "md5";
+export const HEX_COLOR_REGEX = /^#[0-9a-fA-F]{6}$/;
 
 export const COLOR_VARIANTS = [
   "gray",
@@ -14,23 +14,42 @@ export const COLOR_VARIANTS = [
 ] as const;
 
 export type ColorVariant = (typeof COLOR_VARIANTS)[number];
+export type ExtendedColorVariant =
+  | ColorVariant
+  | "primary"
+  | "purpleDark"
+  | "default";
 
-export const COLOR_VARIANTS_MAP: Record<ColorVariant, string> = {
-  gray: "#64748B",
-  purple: "#945FCF",
-  burgundy: "#BF399E",
-  pink: "#ED4A7B",
-  red: "#EF6868",
-  orange: "#FB9341",
-  yellow: "#F4B400",
-  green: "#19A979",
-  turquoise: "#12A4B4",
-  blue: "#5899DA",
+export const COLOR_VARIANTS_MAP: Record<
+  ExtendedColorVariant,
+  { css: string; hex: string }
+> = {
+  gray: { css: "var(--color-gray)", hex: "#64748b" },
+  purple: { css: "var(--color-purple)", hex: "#8b5cf6" },
+  burgundy: { css: "var(--color-burgundy)", hex: "#bf399e" },
+  pink: { css: "var(--color-pink)", hex: "#f43f5e" },
+  red: { css: "var(--color-red)", hex: "#ef4444" },
+  orange: { css: "var(--color-orange)", hex: "#f97316" },
+  yellow: { css: "var(--color-yellow)", hex: "#eab308" },
+  green: { css: "var(--color-green)", hex: "#10b981" },
+  turquoise: { css: "var(--color-turquoise)", hex: "#06b6d4" },
+  blue: { css: "var(--color-blue)", hex: "#3b82f6" },
+  primary: { css: "var(--color-primary)", hex: "#6366f1" },
+  purpleDark: { css: "var(--color-purple-dark)", hex: "#491b7e" },
+  default: { css: "var(--color-gray)", hex: "#64748b" },
 };
 
-export function getRandomColorByLabel(label: string): string {
-  const hash = md5(label);
-  const numericHash = parseInt(hash.slice(-8), 16);
-  const index = numericHash % COLOR_VARIANTS.length;
-  return COLOR_VARIANTS_MAP[COLOR_VARIANTS[index]];
-}
+export const PRESET_HEX_COLORS = COLOR_VARIANTS.map(
+  (v) => COLOR_VARIANTS_MAP[v].hex,
+);
+
+export const DEFAULT_HEX_COLOR = COLOR_VARIANTS_MAP.blue.hex;
+
+// `primary` and `purpleDark` are not in COLOR_VARIANTS (they are not picker presets) but are still
+// reachable as resolved colors, so their css vars must round-trip to hex for the color picker.
+export const CSS_VAR_TO_HEX: Record<string, string> = Object.fromEntries(
+  [...COLOR_VARIANTS, "primary" as const, "purpleDark" as const].map((v) => [
+    COLOR_VARIANTS_MAP[v].css,
+    COLOR_VARIANTS_MAP[v].hex,
+  ]),
+);

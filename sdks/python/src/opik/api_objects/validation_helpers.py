@@ -1,10 +1,20 @@
 import logging
 from typing import Any, Optional, cast, Union, Dict
 
-from ..types import FeedbackScoreDict
+from ..types import BatchFeedbackScoreDict
 from ..validation import feedback_score as feedback_score_validator
 from .. import logging_messages, llm_usage
 from opik.types import LLMProvider
+
+
+def _is_already_backend_format(usage: Dict[str, Any]) -> bool:
+    """Check if usage dict is already in backend-compatible format.
+
+    Backend format has 'original_usage.' prefixed keys for provider-specific data.
+    This is used to detect usage data from exports that should be passed through
+    without reprocessing.
+    """
+    return any(key.startswith("original_usage.") for key in usage.keys())
 
 
 def validate_and_parse_usage(
@@ -18,12 +28,16 @@ def validate_and_parse_usage(
     if usage is None:
         return usage
 
+    # Check if usage is already in backend format (from export/import)
+    # If so, return it as-is to preserve the original values
+    if isinstance(usage, dict) and _is_already_backend_format(usage):
+        # Filter to only keep integer values as expected by backend
+        return {k: v for k, v in usage.items() if isinstance(v, int)}
+
     unknown_provider = (provider is None) or (not LLMProvider.has_value(provider))
 
     if unknown_provider:
-        return llm_usage.build_opik_usage_from_unknown_provider(
-            usage
-        ).to_backend_compatible_full_usage_dict()
+        return _parse_usage_of_unknown_provider(usage, logger)
 
     provider = LLMProvider(provider)
 
@@ -31,14 +45,35 @@ def validate_and_parse_usage(
         opik_usage = llm_usage.build_opik_usage(provider=provider, usage=usage)
         return opik_usage.to_backend_compatible_full_usage_dict()
     except Exception:
-        return llm_usage.build_opik_usage_from_unknown_provider(
-            usage
-        ).to_backend_compatible_full_usage_dict()
+        return _parse_usage_of_unknown_provider(usage, logger)
+
+
+def _parse_usage_of_unknown_provider(
+    usage: Any, logger: logging.Logger
+) -> Optional[Dict[str, int]]:
+    opik_usage = llm_usage.build_opik_usage_from_unknown_provider(usage)
+    if opik_usage is None:
+        return None
+
+    try:
+        return opik_usage.to_backend_compatible_full_usage_dict()
+    except Exception:
+        # Flattening walks the provider payload, so pathological input (deep or
+        # cyclic nesting -> RecursionError) can still fail here even though parsing
+        # succeeded. This is the best-effort path and it is reached with arbitrary
+        # caller data from `Opik.span(usage=...)`: the usage is droppable, the span
+        # it rides on is not. Type only, never the value.
+        logger.error(
+            "Failed to serialize token usage of an unknown provider (received %s)",
+            type(usage).__name__,
+            exc_info=True,
+        )
+        return None
 
 
 def validate_feedback_score(
     feedback_score: Any, logger: logging.Logger
-) -> Optional[FeedbackScoreDict]:
+) -> Optional[BatchFeedbackScoreDict]:
     feedback_score_validator_ = feedback_score_validator.FeedbackScoreValidator(
         feedback_score
     )
@@ -51,4 +86,4 @@ def validate_feedback_score(
         )
         return None
 
-    return cast(FeedbackScoreDict, feedback_score)
+    return cast(BatchFeedbackScoreDict, feedback_score)

@@ -1,15 +1,26 @@
-from typing import Any, Dict, List, Optional, Union
+import contextlib
+from typing import Any, Dict, List, Optional, Iterator, Union
 
 from opik import llm_usage
-from opik.api_objects import span, trace
-from opik.types import DistributedTraceHeadersDict, FeedbackScoreDict, LLMProvider
+from opik.api_objects import span, trace, opik_client, prompt
+from opik.api_objects.observation_data import ObservationData
+from opik.api_objects.attachment import Attachment
+from opik.types import (
+    DistributedTraceHeadersDict,
+    FeedbackScoreDict,
+    LLMProvider,
+    ErrorInfoDict,
+)
+
+from opik import tracing_runtime_config
 
 from . import context_storage, exceptions
+from .decorator import error_info_collector
 
 
 def get_current_span_data() -> Optional[span.SpanData]:
     """
-    Returns current span created by track() decorator or None if no span was found.
+    Returns the current span created by track() decorator or None if no span was found.
     """
     span_data = context_storage.top_span_data()
     if span_data is None:
@@ -20,7 +31,7 @@ def get_current_span_data() -> Optional[span.SpanData]:
 
 def get_current_trace_data() -> Optional[trace.TraceData]:
     """
-    Returns current trace created by track() decorator or None if no trace was found.
+    Returns the current trace created by track() decorator or None if no trace was found.
     """
     trace_data = context_storage.get_trace_data()
     if trace_data is None:
@@ -31,13 +42,13 @@ def get_current_trace_data() -> Optional[trace.TraceData]:
 
 def get_distributed_trace_headers() -> DistributedTraceHeadersDict:
     """
-    Returns headers dictionary to be passed into tracked function on remote node.
+    Returns headers' dictionary to be passed into tracked function on remote node.
     Requires an existing span in the context, otherwise raises an error.
     """
     current_span_data = context_storage.top_span_data()
 
     if current_span_data is None:
-        raise Exception("There is no span in the context.")
+        raise exceptions.OpikException("There is no span in the context.")
 
     return DistributedTraceHeadersDict(
         opik_trace_id=current_span_data.trace_id,
@@ -56,6 +67,9 @@ def update_current_span(
     model: Optional[str] = None,
     provider: Optional[Union[str, LLMProvider]] = None,
     total_cost: Optional[float] = None,
+    attachments: Optional[List[Attachment]] = None,
+    error_info: Optional[ErrorInfoDict] = None,
+    prompts: Optional[List[prompt.BasePrompt]] = None,
 ) -> None:
     """
     Update the current span with the provided parameters. This method is usually called within a tracked function.
@@ -66,17 +80,26 @@ def update_current_span(
         output: The output data of the span.
         metadata: The metadata of the span.
         tags: The tags of the span.
-        usage: Usage data for the span. In order for input, output and total tokens to be visible in the UI,
-            the usage must contain OpenAI-formatted keys (they can be passed additionaly to original usage on the top level of the dict):  prompt_tokens, completion_tokens and total_tokens.
+        usage: Usage data for the span. In order for input, output, and total tokens to be visible in the UI,
+            the usage must contain OpenAI-formatted keys (they can be passed additionally to the original usage on the top level of the dict): prompt_tokens, completion_tokens, and total_tokens.
             If OpenAI-formatted keys were not found, Opik will try to calculate them automatically if the usage
             format is recognized (you can see which provider's formats are recognized in opik.LLMProvider enum), but it is not guaranteed.
         feedback_scores: The feedback scores of the span.
         model: The name of LLM (in this case type parameter should be == llm)
         provider: The provider of LLM. You can find providers officially supported by Opik for cost tracking
-            in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our github - https://github.com/comet-ml/opik.
-            If your provider not in the list, you can still specify it but the cost tracking will not be available
+            in `opik.LLMProvider` enum. If your provider is not here, please open an issue in our GitHub - https://github.com/comet-ml/opik.
+            If your provider is not in the list, you can still specify it, but the cost tracking will not be available
         total_cost: The cost of the span in USD. This value takes priority over the cost calculated by Opik from the usage.
+        attachments: The list of attachments to be uploaded to the span.
+        error_info: The error information of the span.
+        prompts: The list of prompts used in the span.
     """
+    if not tracing_runtime_config.is_tracing_active():
+        return
+
+    if prompts is not None:
+        prompts = [p.__internal_api__to_info_dict__() for p in prompts]
+
     new_params = {
         "name": name,
         "input": input,
@@ -88,6 +111,9 @@ def update_current_span(
         "model": model,
         "provider": provider,
         "total_cost": total_cost,
+        "attachments": attachments,
+        "error_info": error_info,
+        "prompts": prompts,
     }
     current_span_data = context_storage.top_span_data()
     if current_span_data is None:
@@ -104,6 +130,8 @@ def update_current_trace(
     tags: Optional[List[str]] = None,
     feedback_scores: Optional[List[FeedbackScoreDict]] = None,
     thread_id: Optional[str] = None,
+    attachments: Optional[List[Attachment]] = None,
+    prompts: Optional[List[prompt.BasePrompt]] = None,
 ) -> None:
     """
     Update the current trace with the provided parameters. This method is usually called within a tracked function.
@@ -117,7 +145,15 @@ def update_current_trace(
         feedback_scores: The feedback scores of the trace.
         thread_id: Used to group multiple traces into a thread.
             The identifier is user-defined and has to be unique per project.
+        attachments: The list of attachments to be uploaded to the trace.
+        prompts: The list of prompts used in the trace.
     """
+    if not tracing_runtime_config.is_tracing_active():
+        return
+
+    if prompts is not None:
+        prompts = [p.__internal_api__to_info_dict__() for p in prompts]
+
     new_params = {
         "name": name,
         "input": input,
@@ -126,6 +162,8 @@ def update_current_trace(
         "tags": tags,
         "feedback_scores": feedback_scores,
         "thread_id": thread_id,
+        "attachments": attachments,
+        "prompts": prompts,
     }
     current_trace_data = context_storage.get_trace_data()
     if current_trace_data is None:
@@ -134,10 +172,111 @@ def update_current_trace(
     current_trace_data.update(**new_params)
 
 
+def attach_prompt_to_current_span(prompt_obj: prompt.BasePrompt) -> None:
+    """
+    Attaches a prompt to the current span's metadata (opik_prompts list), deduplicating by id+commit.
+    """
+    if not tracing_runtime_config.is_tracing_active():
+        return
+
+    span_data = context_storage.top_span_data()
+    if span_data is None:
+        return
+
+    _attach_prompt_to_observation(span_data, prompt_obj)
+
+
+def attach_prompt_to_current_trace(prompt_obj: prompt.BasePrompt) -> None:
+    """
+    Attaches a prompt to the current trace's metadata (opik_prompts list), deduplicating by id+commit.
+    """
+    if not tracing_runtime_config.is_tracing_active():
+        return
+
+    trace_data = context_storage.get_trace_data()
+    if trace_data is None:
+        return
+
+    _attach_prompt_to_observation(trace_data, prompt_obj)
+
+
+def _attach_prompt_to_observation(
+    observation_data: ObservationData, prompt_obj: prompt.BasePrompt
+) -> None:
+    prompt_info = prompt_obj.__internal_api__to_info_dict__()
+    existing = (observation_data.metadata or {}).get("opik_prompts", [])
+    dedup_key = (
+        prompt_info.get("id"),
+        (prompt_info.get("version") or {}).get("commit"),
+    )
+    existing_keys = {
+        (p.get("id"), (p.get("version") or {}).get("commit")) for p in existing
+    }
+    if dedup_key not in existing_keys:
+        observation_data.update(metadata={"opik_prompts": existing + [prompt_info]})
+
+
+@contextlib.contextmanager
+def trace_context(
+    trace_data: trace.TraceData,
+    client: opik_client.Opik,
+) -> Iterator[None]:
+    """
+    Provides a context manager to handle trace data within an execution context.
+
+    This function sets up trace data for the current context, ensuring it is
+    properly cleaned up and processed during the lifecycle of the context. It also
+    handles exceptions by collecting error information and associating it with
+    the trace data before raising the exception further. At the end of the context,
+    it finalizes the trace and logs it using the provided client.
+
+    Args:
+        trace_data: An instance of trace.TraceData containing information
+            about the current trace context, such as start time, end time, and
+            any relevant metadata for tracking execution.
+        client: An object of type opik_client.Opik used to report the trace
+            data, typically communicating with an external tracing or monitoring
+            system.
+
+    Yields:
+        None: The context manager yields control back to the caller, allowing
+            code execution within the defined trace context.
+
+    Raises:
+        Exception: The function raises any exceptions encountered within the
+            context after collecting error information and associating it with the
+            trace data.
+    """
+    if client.config.log_start_trace_span:
+        client.__internal_api__trace__(**trace_data.as_start_parameters)
+
+    error_info: Optional[ErrorInfoDict] = None
+    try:
+        context_storage.set_trace_data(trace_data)
+        yield
+    except Exception as exception:
+        error_info = error_info_collector.collect(exception)
+        raise
+    finally:
+        trace_data = context_storage.pop_trace_data()  # type: ignore
+
+        assert trace_data is not None
+
+        if error_info is not None:
+            trace_data.error_info = error_info
+
+        trace_data.init_end_time()
+
+        client.__internal_api__trace__(**trace_data.as_parameters)
+
+
 __all__ = [
     "get_current_span_data",
     "get_current_trace_data",
     "update_current_span",
     "update_current_trace",
     "get_distributed_trace_headers",
+    "trace_context",
+    "attach_prompt_to_current_span",
+    "attach_prompt_to_current_trace",
 ]

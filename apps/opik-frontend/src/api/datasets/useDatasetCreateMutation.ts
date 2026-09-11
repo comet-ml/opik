@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
+import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { Dataset } from "@/types/datasets";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
 
 type UseDatasetCreateMutationParams = {
@@ -20,14 +20,29 @@ const useDatasetCreateMutation = () => {
         ...dataset,
       });
 
-      return data
-        ? data
-        : {
-            ...dataset,
-            id: extractIdFromLocation(headers?.location),
-          };
+      if (data) {
+        return data;
+      }
+
+      const extractedId = extractIdFromLocation(headers?.location);
+
+      if (!extractedId) {
+        throw new Error(
+          "Failed to create test suite: No ID returned from server",
+        );
+      }
+
+      return {
+        ...dataset,
+        id: extractedId,
+      };
     },
     onError: (error: AxiosError) => {
+      const statusCode = get(error, ["response", "status"]);
+      if (statusCode === HttpStatusCode.Conflict) {
+        return;
+      }
+
       const message = get(
         error,
         ["response", "data", "message"],
@@ -41,6 +56,7 @@ const useDatasetCreateMutation = () => {
       });
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
       return queryClient.invalidateQueries({
         queryKey: ["datasets"],
       });

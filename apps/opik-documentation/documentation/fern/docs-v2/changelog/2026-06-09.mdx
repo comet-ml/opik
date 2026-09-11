@@ -1,0 +1,64 @@
+## Resume Interrupted Evaluations with `evaluate_resume`
+
+Long-running evaluation jobs that get cut short — by Ctrl-C, an OOM error, a failed scoring metric, or a network blip — can now be continued from where they stopped instead of restarting from scratch. `opik.evaluate_resume(experiment_id, task, scoring_metrics=[...])` replays only the trials that did not complete, merges them with the ones that did, and returns a single `EvaluationResult` covering the whole experiment.
+
+A trial counts as complete only when `trace.output` is set, which happens after the task, scoring, and score-logging all succeed. Any failure mode that prevents reaching that point — a metric raising an exception, a `KeyboardInterrupt` between task and scoring — leaves the trial replayable.
+
+```python
+import opik
+
+# Continue a partially-completed experiment — only missing trials are replayed
+result = opik.evaluate_resume(
+    experiment_id="...",
+    task=my_task,
+    scoring_metrics=[Equals()],
+)
+```
+
+The original `evaluate(...)` call writes a resume snapshot into `experiment_config` so the exact iteration (pinned dataset version, sample count, per-item trial counts) can be reconstructed server-side. When the original call used a custom `dataset_sampler` or explicit `dataset_item_ids`, the SDK also writes a local checkpoint next to the experiment ID for those cases.
+
+👉 [Resume evaluations documentation](https://www.comet.com/docs/opik/evaluation/advanced/resume_evaluations)
+
+## OpenAI Responses API Support in Playground and LLM-as-a-Judge
+
+The Playground and LLM-as-a-Judge now support OpenAI's `/v1/responses` API, making it possible to use o-series reasoning models (`o1`, `o3`, `o3-mini`, `o4-mini`) and other deployments that are only available on the newer API path. Previously, sending these models through the Chat Completions path returned "This is not a chat model and thus not supported in the v1/chat/completions endpoint."
+
+To opt in, open the **Manage AI Providers** dialog, select your OpenAI key, and set **Pipeline mode** to **Responses API**. The Chat Completions path remains the default and is unchanged for all other models.
+
+The Playground's `Top P` slider is now also hidden for OpenAI reasoning models (`gpt-5.x`, `o1*`, `o3*`, `o4*`). Those models reject `top_p` outright; the slider was causing 400 errors when it appeared.
+
+## Bug Fixes & Improvements
+
+- **Annotation queues: claim mechanism for parallel annotation** — Multiple annotators working the same queue simultaneously now see each item locked while another reviewer is looking at it, preventing duplicate work. Items show an "In review" indicator (orange) when all annotator slots are occupied by a combination of active locks and existing scores. Locks are kept alive by a heartbeat and expire via TTL when the reviewer navigates away. The sidebar also gains "To review" / "Processed" filter tabs, and each annotator sees items in a distinct shuffled order to reduce contention.
+
+- **Collapsible JSON/YAML in trace and span detail view** — JSON objects, arrays, and YAML blocks in the trace and span detail view can now be folded and unfolded with an inline chevron at the end of each foldable line. Collapsed blocks render as a clickable gray placeholder. This makes it easier to navigate large payloads without scrolling past content you don't need.
+
+- **Redesigned dataset and test suite creation flow** — The creation dialog now presents two explicit paths: **Upload a file** (CSV or JSON dropzone with auto-naming and optional evaluation criteria for test suites) and **Use SDK** (name + code snippet). Both options are accessible from the header button and from the list empty state. On success the panel closes and a "Go to …" toast appears.
+
+- **Evaluate experiment traces directly from the UI** — The Compare Experiments page has a new **Evaluate** button (brain icon) in the action bar. It opens the online evaluation dialog scoped to all traces in the current experiment, so you can score an experiment's output without leaving the page.
+
+- **Span filtering by `created_at` and `last_updated_at`** — The span search API now accepts `created_at` and `last_updated_at` as filter fields with all comparison operators (`=`, `!=`, `>`, `>=`, `<`, `<=`). These fields were already supported on traces; span support was missing.
+
+- **OpenTelemetry: in-process spans now linked to the active `@opik.track` trace** — When an OTel-instrumented library (such as logfire or PydanticAI) emits spans from inside an `@opik.track`-decorated function, those spans are now nested under the active tracked trace rather than starting a separate trace. Distributed flows where parent spans or W3C baggage carry Opik IDs continue to take precedence over the in-process context.
+
+- **Optimization: best trial configuration now shows the optimized prompt** — The Best Trial Configuration panel was displaying the baseline prompt instead of the prompt produced by the optimizer. It now shows the correct optimized result. The Trials table also gains a Prompt column with per-message formatting and a diff-vs-baseline popover.
+
+- **Experiment views: prompt version labels instead of commit hashes** — The Experiments table, the single-experiment Configuration tab, and the Dashboard Experiments leaderboard now display prompts as "name (v3)" instead of raw commit hashes, consistent with the display already used in the Prompt Library.
+
+- **AI Spend dashboard: total tokens KPI card and onboarding empty state** — The placeholder "Budget remaining" card is replaced by a **Total tokens** KPI showing the sum of all token tiers across models, with a period-over-period trend indicator. The dashboard also shows an onboarding empty state with setup instructions and a ready-to-copy configuration snippet when no trace data has been received yet.
+
+- **Cost calculation: tiered pricing above 200k tokens now applied** — For models such as `gemini-2.5-pro` and `vertex_ai/claude-sonnet-4-5` that carry `above_200k_tokens` rate tiers, requests exceeding the 200k-token threshold were being billed at the base input rate. Opik now applies the tier rate when the threshold is crossed (the entire request is billed at the tier price, mirroring LiteLLM's semantics).
+
+- **Cost calculation: Claude on Vertex AI cached tokens now discounted** — Claude models on Vertex AI (`vertex_ai/claude-haiku-4-5`, `vertex_ai/claude-sonnet-4-5`, `vertex_ai/claude-opus-4-1`) were having cache-read tokens billed at the full input rate. They now use the Anthropic cache calculator, correctly applying the discount on cached tokens.
+
+- **Vertex AI: model selection preserved across provider switches** — Switching away from Vertex AI and back in the Playground no longer resets the previously selected model.
+
+## Performance Improvements
+
+- **Span timestamp filters use ClickHouse skip indexes** — `created_at` and `last_updated_at` on the `spans` and `traces` tables now have `minmax` skip indexes. Range filters on these columns prune granules instead of scanning the full project partition, significantly reducing query time and ClickHouse CPU load on large tables.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.0.52...2.0.59)
+
+_Releases_: `2.0.53`, `2.0.54`, `2.0.55`, `2.0.56`, `2.0.57`, `2.0.58`, `2.0.59`

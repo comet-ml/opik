@@ -5,20 +5,31 @@ import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.Project;
-import com.comet.opik.api.ProjectCriteria;
 import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.TokenUsageNames;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.FiltersFactory;
+import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.api.metrics.KpiCardRequest;
+import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
-import com.comet.opik.api.resources.v1.priv.validate.IdParamsValidator;
+import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryProjects;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.KpiCardCriteria;
+import com.comet.opik.domain.KpiCardService;
+import com.comet.opik.domain.ProjectCriteria;
 import com.comet.opik.domain.ProjectMetricsService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -52,13 +63,17 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.comet.opik.api.Project.ProjectPage;
+import static com.comet.opik.api.Project.View;
 import static com.comet.opik.domain.ProjectMetricsService.ERR_START_BEFORE_END;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+import static com.comet.opik.utils.ValidationUtils.validateTimeRangeParameters;
 
 @Path("/v1/private/projects")
 @Produces(MediaType.APPLICATION_JSON)
@@ -73,18 +88,21 @@ public class ProjectsResource {
     private final @NonNull ProjectService projectService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull SortingFactoryProjects sortingFactory;
-    private final @NonNull ProjectMetricsService metricsService;
+    private final @NonNull ProjectMetricsService projectMetricsService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
+    private final @NonNull FiltersFactory filtersFactory;
+    private final @NonNull KpiCardService kpiCardService;
 
     @GET
     @Operation(operationId = "findProjects", summary = "Find projects", description = "Find projects", responses = {
-            @ApiResponse(responseCode = "200", description = "Project resource", content = @Content(schema = @Schema(implementation = Project.ProjectPage.class)))
+            @ApiResponse(responseCode = "200", description = "Project resource", content = @Content(schema = @Schema(implementation = ProjectPage.class)))
     })
-    @JsonView({Project.View.Public.class})
+    @JsonView({View.Public.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response find(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue(PAGE_SIZE) int size,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter projects by name (partial match, case insensitive)") String name,
             @QueryParam("sorting") String sorting) {
 
         var criteria = ProjectCriteria.builder()
@@ -106,7 +124,8 @@ public class ProjectsResource {
     @Path("{id}")
     @Operation(operationId = "getProjectById", summary = "Get project by id", description = "Get project by id", responses = {
             @ApiResponse(responseCode = "200", description = "Project resource", content = @Content(schema = @Schema(implementation = Project.class)))})
-    @JsonView({Project.View.Public.class})
+    @JsonView({View.Public.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response getById(@PathParam("id") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -128,8 +147,9 @@ public class ProjectsResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_CREATE)
     public Response create(
-            @RequestBody(content = @Content(schema = @Schema(implementation = Project.class))) @JsonView(Project.View.Write.class) @Valid Project project,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Project.class))) @JsonView(View.Write.class) @Valid Project project,
             @Context UriInfo uriInfo) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -172,6 +192,7 @@ public class ProjectsResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DELETE)
     public Response deleteById(@PathParam("id") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -190,12 +211,13 @@ public class ProjectsResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    @JsonView({Project.View.Detailed.class})
+    @JsonView({View.Detailed.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response retrieveProject(
             @RequestBody(content = @Content(schema = @Schema(implementation = ProjectRetrieve.class))) @Valid ProjectRetrieve retrieve) {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Retrieve project by name '{}', on workspace_id '{}'", retrieve.name(), workspaceId);
-        Project project = projectService.retrieveByName(retrieve.name());
+        Project project = projectService.retrieveByName(retrieve.name(), retrieve.includeStats());
         log.info("Retrieved project id '{}' by name '{}', on workspace_id '{}'", project.id(), retrieve.name(),
                 workspaceId);
         return Response.ok().entity(project).build();
@@ -206,6 +228,7 @@ public class ProjectsResource {
     @Operation(operationId = "deleteProjectsBatch", summary = "Delete projects", description = "Delete projects batch", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DELETE)
     public Response deleteProjectsBatch(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -222,7 +245,8 @@ public class ProjectsResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
-    @JsonView({Project.View.Public.class})
+    @JsonView({View.Public.class})
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response getProjectMetrics(
             @PathParam("id") UUID projectId,
             @RequestBody(content = @Content(schema = @Schema(implementation = ProjectMetricRequest.class))) @Valid ProjectMetricRequest request) {
@@ -231,11 +255,56 @@ public class ProjectsResource {
 
         log.info("Retrieve project metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
-        ProjectMetricResponse<? extends Number> response = metricsService.getProjectMetrics(projectId, request)
+        request = request.toBuilder()
+                .spanFilters(filtersFactory.validateFilter(request.spanFilters()))
+                .traceFilters(filtersFactory.validateFilter(request.traceFilters()))
+                .threadFilters(filtersFactory.validateFilter(request.threadFilters()))
+                .build();
+
+        ProjectMetricResponse<? extends Number> response = projectMetricsService.getProjectMetrics(projectId, request)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Retrieved project id metrics for projectId '{}', on workspace_id '{}', metric '{}'", projectId,
                 workspaceId, request.metricType());
+
+        return Response.ok().entity(response).build();
+    }
+
+    @POST
+    @Path("/{id}/kpi-cards")
+    @Operation(operationId = "getProjectKpiCards", summary = "Get Project KPI Cards", description = "Gets KPI card metrics for a project", responses = {
+            @ApiResponse(responseCode = "200", description = "KPI Card Metrics", content = @Content(schema = @Schema(implementation = KpiCardResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
+    public Response getProjectKpiCards(
+            @PathParam("id") UUID projectId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = KpiCardRequest.class))) @Valid KpiCardRequest request) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Retrieve KPI cards for projectId '{}', on workspace_id '{}', entity type '{}'", projectId,
+                workspaceId, request.entityType());
+
+        var filters = switch (request.entityType()) {
+            case TRACES -> filtersFactory.newFilters(request.filters(), TraceFilter.LIST_TYPE_REFERENCE);
+            case SPANS -> filtersFactory.newFilters(request.filters(), SpanFilter.LIST_TYPE_REFERENCE);
+            case THREADS -> filtersFactory.newFilters(request.filters(), TraceThreadFilter.LIST_TYPE_REFERENCE);
+        };
+
+        var criteria = KpiCardCriteria.builder()
+                .projectId(projectId)
+                .entityType(request.entityType())
+                .filters(filters)
+                .intervalStart(request.intervalStart())
+                .intervalEnd(request.intervalEnd() != null ? request.intervalEnd() : Instant.now())
+                .build();
+
+        KpiCardResponse response = kpiCardService.getKpiCards(criteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Retrieved KPI cards for projectId '{}', on workspace_id '{}', entity type '{}'", projectId,
+                workspaceId, request.entityType());
 
         return Response.ok().entity(response).build();
     }
@@ -245,10 +314,12 @@ public class ProjectsResource {
     @Operation(operationId = "findFeedbackScoreNamesByProjectIds", summary = "Find Feedback Score names By Project Ids", description = "Find Feedback Score names By Project Ids", responses = {
             @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(schema = @Schema(implementation = FeedbackScoreNames.class)))
     })
-    public Response findFeedbackScoreNames(@QueryParam("project_ids") String projectIdsQueryParam) {
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
+    public Response findFeedbackScoreNames(
+            @QueryParam("project_ids") String projectIdsQueryParam) {
 
         var projectIds = Optional.ofNullable(projectIdsQueryParam)
-                .map(IdParamsValidator::getIds)
+                .map(ParamsValidator::getIds)
                 .orElse(Collections.emptySet());
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -266,7 +337,8 @@ public class ProjectsResource {
     }
 
     private void validate(ProjectMetricRequest request) {
-        if (!request.intervalStart().isBefore(request.intervalEnd())) {
+        // interval_end is optional, but if provided, interval_start must be before interval_end
+        if (request.intervalEnd() != null && !request.intervalStart().isBefore(request.intervalEnd())) {
             throw new BadRequestException(ERR_START_BEFORE_END);
         }
     }
@@ -276,14 +348,25 @@ public class ProjectsResource {
     @Operation(operationId = "getProjectStats", summary = "Get Project Stats", description = "Get Project Stats", responses = {
             @ApiResponse(responseCode = "200", description = "Project Stats", content = @Content(schema = @Schema(implementation = ProjectStatsSummary.class))),
     })
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response getProjectStats(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue(PAGE_SIZE) int size,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter projects by name (partial match, case insensitive)") String name,
+            @QueryParam("filters") String filters,
+            @QueryParam("from_time") @Schema(description = "When set, scope the project metrics from this time (ISO-8601 format); omitted keeps the all-time aggregates") Instant fromTime,
+            @QueryParam("to_time") @Schema(description = "Scope the project metrics up to this time (ISO-8601 format). Must be after 'from_time'.") Instant toTime,
             @QueryParam("sorting") String sorting) {
+
+        validateTimeRangeParameters(fromTime, toTime);
+
+        var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
 
         var criteria = ProjectCriteria.builder()
                 .projectName(name)
+                .filters(traceFilters)
+                .fromTime(fromTime)
+                .toTime(toTime)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -296,6 +379,26 @@ public class ProjectsResource {
                 projectStatisticsSummary.content().size(), workspaceId);
 
         return Response.ok().entity(projectStatisticsSummary).build();
+    }
+
+    @GET
+    @Path("/{id}/token-usage/names")
+    @Operation(operationId = "findTokenUsageNames", summary = "Find Token Usage names", description = "Find Token Usage names", responses = {
+            @ApiResponse(responseCode = "200", description = "Token Usage names resource", content = @Content(schema = @Schema(implementation = TokenUsageNames.class)))
+    })
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
+    public Response findTokenUsageNames(@PathParam("id") UUID projectId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Find token usage names by project_id '{}', on workspaceId '{}'", projectId, workspaceId);
+        List<String> tokenUsageNames = projectMetricsService.getProjectTokenUsageNames(workspaceId, projectId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Found token usage names '{}' by project_id '{}', on workspaceId '{}'",
+                tokenUsageNames.size(), projectId, workspaceId);
+
+        return Response.ok(TokenUsageNames.builder().names(tokenUsageNames).build()).build();
     }
 
 }

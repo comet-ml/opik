@@ -1,8 +1,10 @@
 {
   "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsbuildinfo/sdk.tsbuildinfo",
     "target": "ES2019",
     "module": "ESNext",
-    "lib": ["ESNext", "DOM"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
@@ -17,11 +19,18 @@
     "baseUrl": ".",
     "paths": {
       "opik": ["./src/opik/index.ts"],
-      "opik/vercel": ["./src/opik/integrations/vercel/index.ts"],
       "@/*": ["./src/opik/*"],
       "@tests/*": ["./tests/*"]
     }
   },
   "include": ["src", "tests"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "src/opik/integrations/opik-langchain",
+    "src/opik/integrations/opik-openai",
+    "src/opik/integrations/opik-gemini",
+    "src/opik/integrations/opik-vercel",
+    "src/opik/integrations/opik-otel",
+    "src/opik/configure"
+  ]
 }

@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Comment;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
@@ -11,9 +12,10 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.stringtemplate.v4.ST;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -30,7 +32,8 @@ public interface CommentDAO {
     @RequiredArgsConstructor
     enum EntityType {
         TRACE("trace", "traces"),
-        SPAN("span", "spans");
+        SPAN("span", "spans"),
+        THREAD("thread", "trace_threads");
 
         private final String type;
         private final String tableName;
@@ -46,7 +49,9 @@ public interface CommentDAO {
 
     Mono<Long> deleteByEntityId(EntityType entityType, UUID entityId);
 
-    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
+    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId);
+
+    Flux<CommentEntityRef> getEntityRefsByCommentIds(Set<UUID> commentIds);
 }
 
 @Singleton
@@ -62,6 +67,7 @@ class CommentDAOImpl implements CommentDAO {
                 project_id,
                 workspace_id,
                 text,
+                source_queue_id,
                 created_by,
                 last_updated_by
             )
@@ -73,6 +79,7 @@ class CommentDAOImpl implements CommentDAO {
                  :project_id,
                  :workspace_id,
                  :text,
+                 :source_queue_id,
                  :user_name,
                  :user_name
             )
@@ -93,14 +100,16 @@ class CommentDAOImpl implements CommentDAO {
 
     private static final String UPDATE = """
             INSERT INTO comments (
-            	id, entity_id, entity_type, project_id, workspace_id, text, created_at, created_by, last_updated_by
-            ) SELECT
+            	id, entity_id, entity_type, project_id, workspace_id, text, source_queue_id, created_at, created_by, last_updated_by
+            )
+            SELECT
             	id,
             	entity_id,
             	entity_type,
             	project_id,
             	workspace_id,
             	:text as text,
+            	source_queue_id,
             	created_at,
             	created_by,
                 :user_name as last_updated_by
@@ -124,6 +133,17 @@ class CommentDAOImpl implements CommentDAO {
             WHERE entity_id IN :entity_ids
             AND entity_type = :entity_type
             AND workspace_id = :workspace_id
+            <if(project_id)>AND project_id = :project_id<endif>
+            ;
+            """;
+
+    private static final String SELECT_ENTITY_REFS_BY_COMMENT_IDS = """
+            SELECT id, entity_id, entity_type
+            FROM comments
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
+            ORDER BY id DESC, last_updated_at DESC
+            LIMIT 1 BY id
             ;
             """;
 
@@ -134,7 +154,6 @@ class CommentDAOImpl implements CommentDAO {
             @NonNull UUID projectId,
             @NonNull Comment comment) {
         return asyncTemplate.nonTransaction(connection -> {
-
             var statement = connection.createStatement(INSERT_COMMENT);
 
             bindParameters(commentId, entityId, entityType, projectId, comment, statement);
@@ -148,7 +167,7 @@ class CommentDAOImpl implements CommentDAO {
     public Mono<Comment> findById(UUID entityId, @NonNull UUID commentId) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            var template = new ST(SELECT_COMMENT_BY_ID);
+            var template = TemplateUtils.newST(SELECT_COMMENT_BY_ID);
             if (entityId != null) {
                 template.add("entity_id", entityId);
             }
@@ -169,7 +188,6 @@ class CommentDAOImpl implements CommentDAO {
     @Override
     public Mono<Void> updateComment(@NonNull UUID commentId, @NonNull Comment comment) {
         return asyncTemplate.nonTransaction(connection -> {
-
             var statement = connection.createStatement(UPDATE)
                     .bind("text", comment.text())
                     .bind("id", commentId);
@@ -184,7 +202,7 @@ class CommentDAOImpl implements CommentDAO {
         return asyncTemplate.nonTransaction(connection -> {
 
             var statement = connection.createStatement(DELETE_COMMENT_BY_ID)
-                    .bind("ids", commentIds);
+                    .bind("ids", commentIds.toArray(UUID[]::new));
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(Result::getRowsUpdated)
@@ -194,26 +212,62 @@ class CommentDAOImpl implements CommentDAO {
 
     @Override
     public Mono<Long> deleteByEntityId(@NonNull EntityType entityType, @NonNull UUID entityId) {
-        return deleteByEntityIds(entityType, Set.of(entityId));
+        return deleteByEntityIds(entityType, Set.of(entityId), null);
     }
 
     @Override
-    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
-        log.info("Deleting comments for entityType '{}', entityIds count '{}'", entityType, entityIds.size());
+    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds, UUID projectId) {
+        log.info("Deleting comments for entityType '{}', entityIds count '{}', project id '{}'", entityType,
+                entityIds.size(), projectId);
         if (entityIds.isEmpty()) {
             return Mono.just(0L);
         }
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            var statement = connection.createStatement(DELETE_COMMENT_BY_ENTITY_IDS)
+            var template = TemplateUtils.newST(DELETE_COMMENT_BY_ENTITY_IDS);
+            if (projectId != null) {
+                template.add("project_id", projectId);
+            }
+
+            var statement = connection.createStatement(template.render())
                     .bind("entity_ids", entityIds)
                     .bind("entity_type", entityType.getType());
+            if (projectId != null) {
+                statement.bind("project_id", projectId);
+            }
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(Result::getRowsUpdated)
                     .reduce(0L, Long::sum);
         });
+    }
+
+    @Override
+    public Flux<CommentEntityRef> getEntityRefsByCommentIds(@NonNull Set<UUID> commentIds) {
+        if (commentIds.isEmpty()) {
+            return Flux.empty();
+        }
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_ENTITY_REFS_BY_COMMENT_IDS)
+                    .bind("ids", commentIds.toArray(UUID[]::new));
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> Flux.from(result.map((row, rowMetadata) -> new CommentEntityRef(
+                            row.get("id", UUID.class),
+                            row.get("entity_id", UUID.class),
+                            parseEntityType(row.get("entity_type", String.class))))))
+                    .collectList();
+        }).flatMapMany(Flux::fromIterable);
+    }
+
+    private EntityType parseEntityType(String type) {
+        return switch (type) {
+            case "trace" -> EntityType.TRACE;
+            case "span" -> EntityType.SPAN;
+            case "thread" -> EntityType.THREAD;
+            default -> throw new IllegalArgumentException("Unknown entity type: '" + type + "'");
+        };
     }
 
     private void bindParameters(UUID commentId, UUID entityId, EntityType entityType, UUID projectId, Comment comment,
@@ -223,5 +277,8 @@ class CommentDAOImpl implements CommentDAO {
                 .bind("entity_type", entityType.getType())
                 .bind("project_id", projectId)
                 .bind("text", comment.text());
+
+        statement.bind("source_queue_id",
+                Optional.ofNullable(comment.sourceQueueId()).map(UUID::toString).orElse(""));
     }
 }

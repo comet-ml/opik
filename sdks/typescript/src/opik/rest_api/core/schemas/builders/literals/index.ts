@@ -1,2 +1,2 @@
-export { stringLiteral } from "./stringLiteral";
-export { booleanLiteral } from "./booleanLiteral";
+export { booleanLiteral } from "./booleanLiteral.js";
+export { stringLiteral } from "./stringLiteral.js";

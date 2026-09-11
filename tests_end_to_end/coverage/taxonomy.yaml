@@ -1,0 +1,954 @@
+# Opik QA capability taxonomy
+#
+# This file defines "100%". Coverage % of an area = capabilities with >=1 recent
+# passing test / total capabilities in that area. Adding a capability here lowers
+# coverage until a test covers it — that is the point: it makes a known gap
+# visible instead of silently absent.
+#
+# It is a REVIEWED file. Changes to the denominator are a QA-owned decision, not
+# an implementation detail. See ../TESTING-TAGS.md for the tag grammar and the
+# process for adding areas and capabilities.
+#
+# Enforced by coverage/tag_lint.py, which runs on every PR touching
+# tests_end_to_end/ (.github/workflows/tag_lint.yml).
+#
+# SCOPE: tests_end_to_end/ only — e2e (Playwright) + visual-tests. Nothing else.
+#
+# Every `specs:` list is kept in sorted order, and a new spec goes in its sorted
+# position rather than at the end. Appending put every concurrent addition on the
+# same last line, so two open spec PRs in one area always conflicted here — this
+# file was the single most-conflicted in the QA queue, touched by 4 of 4 open spec
+# PRs at one point. Sorted insertion lands them on different lines, which git
+# merges without a conflict. Nothing reads the order, so it costs nothing.
+#
+# Verified against main @ c54a6a99d7 (2026-07-29):
+#   24 e2e specs across 13 dirs, 3 visual specs.
+#
+# ---------------------------------------------------------------------------
+# TAG GRAMMAR (two orthogonal dimensions — see PHASE-1-FINDINGS.md Q2')
+#
+#   tier    exactly one of @t1-smoke | @t2-cuj | @t3-nightly     -> drives coverage %
+#   suites  zero or more of @t1-stsaas | @provider-sanity        -> drives WHERE it runs
+#   area    exactly one @area:<area>                             -> from `areas:` keys below
+#   caps    one or more @cap:<area>.<capability>                 -> from `capabilities:` keys
+#
+# Why the split: optimization-studio.spec.ts is @t2-cuj + @t1-stsaas — t2 depth,
+# but included in the STSaaS sanity set (deliberate: it was unstable on client
+# envs) and excluded from the 3x/day t1 prod runs because each run incurs real
+# LLM cost. A flat tag enum would model t1-stsaas as a fifth tier and mis-report
+# this spec. Confirmed: `test:t1` greps @t1-smoke only.
+#
+# Allure note: Allure strips the leading `@`. `@cap:prompts.create-text` arrives
+# as tag `cap:prompts.create-text` and is queryable via AQL `tag = "..."`.
+# No allure.label() calls needed — verified live against project 1.
+# ---------------------------------------------------------------------------
+
+version: 1
+product: opik
+
+# ---------------------------------------------------------------------------
+# DIMENSIONS — coverage is not one number
+#
+# A capability can be covered functionally, visually, and under load. These are
+# independent questions ("does it work?" / "does it look right?" / "does it hold
+# up?"), so each capability carries a per-dimension coverage state and each area
+# reports one % per dimension. Never blended into a single figure.
+#
+# Rationale for keeping them in ONE file rather than three: the *denominator*
+# (area -> capability) is shared. Splitting the file would fork the taxonomy and
+# guarantee drift. Splitting the *percentages* is the actual requirement.
+#
+# `applicability` is what stops the load column from being dishonest. Most UI
+# capabilities are not load-bearing; counting them as "0% load covered" would
+# invent a 180-capability gap that nobody intends to close. Only capabilities
+# marked applicable enter that dimension's denominator.
+# ---------------------------------------------------------------------------
+
+dimensions:
+
+  functional:
+    label: Functional
+    source: tests_end_to_end/e2e
+    tag_prefix: "@cap:"
+    applicability: all            # every capability should work
+    status: active
+
+  visual:
+    label: Visual
+    source: tests_end_to_end/visual-tests
+    tag_prefix: "@vcap:"
+    applicability: opt_in         # only capabilities with `visual: {...}`
+    status: active
+    # Visual coverage is page/state-shaped, not behaviour-shaped: one screenshot
+    # asserts a whole page renders. So visual capabilities are coarser than
+    # functional ones and get their own sub-keys (see `visual:` blocks below)
+    # rather than being forced onto functional capability names.
+    states: [default, empty, loading, error]
+
+  load:
+    label: Load / performance
+    source: tests_load            # NOTE: outside tests_end_to_end/ — see below
+    tag_prefix: "@lcap:"
+    applicability: opt_in         # only capabilities with `load: {...}`
+    status: planned               # long-term goal; denominator defined, not yet wired
+    # Load coverage is dimension-shaped, not capability-shaped. A load test
+    # exercises an *axis* against a capability, so a covered load capability
+    # declares which axes are exercised. Axes derived from the existing
+    # tests_load/suite/python_sdk scenarios.
+    axes:
+      ingestion-rate:   "sustained writes/sec (test_many_traces_one_span_each)"
+      fan-out:          "many children per parent (test_many_spans_per_trace)"
+      payload-size:     "large single payloads (test_traces_with_one_megabyte_payload)"
+      burstiness:       "spike then idle (test_burst_single_loop, test_spread_over_time)"
+      concurrency:      "parallel writers sharing a client (test_concurrent_writers_share_one_client)"
+      attachments:      "binary/media upload paths (test_traces_with_explicit_attachments)"
+      retrieval:        "read-path latency under volume (test_trace_span_retrieval)"
+      versioning-depth: "many versions of one entity (test_dataset_insert_many_versions)"
+
+# ---------------------------------------------------------------------------
+# SCOPE NOTE ON tests_load/
+#
+# The agreed estate is tests_end_to_end/ only, and that remains true for the
+# functional and visual dimensions — the two this task ships.
+#
+# `tests_load/` is a real third estate in the opik repo (5 pytest scenario files
+# under suite/python_sdk, run weekly by .github/workflows/load_tests.yml, cron
+# '0 4 * * 0', on ubuntu-latest-m against a docker-compose stack). It reports to
+# JUnit XML, NOT to Allure, so it is invisible to the Allure-joined builder.
+#
+# It is declared here so the schema is ready, but the load dimension is
+# `status: planned` and the v1 builder MUST skip it. Wiring it up needs a
+# separate decision (does tests_load report to Allure? does it get @lcap: tags?)
+# and is not in scope for OPIK-7532. Flagging rather than assuming.
+# ---------------------------------------------------------------------------
+
+# Legacy bare area tags that no longer map to exactly one area. The retro-tagging
+# pass replaces each with the right @area:/@cap: pair per spec, so these are
+# recorded for the lint's benefit (clear message instead of "unrecognised") and
+# then removed once the pass lands.
+#
+# @trace-explore is the interesting one: it predates the split of the Logs surface
+# into `traces` and `threads`, which are distinct nav toggles with distinct
+# capabilities. The three specs carrying it divide cleanly —
+#   trace-explore-smoke.spec.ts  -> @area:traces
+#   trace-spans-depth.spec.ts    -> @area:traces
+#   thread-logging-smoke.spec.ts -> @area:threads
+retired_tags:
+  trace-explore:
+    reason: "split into `traces` and `threads` — resolve per spec, not by rename"
+    replaced_by: [traces, threads]
+
+# Coverage-counting rules the builder must apply.
+rules:
+  # A capability counts as covered when a test carrying its tag passed
+  # within this window. Tunable; 7d matches the dashboard's pass-rate window.
+  recent_window_days: 7
+  # Specs in these dirs are infrastructure, not product coverage. Excluded from
+  # both numerator and denominator, and exempt from the area/cap tag lint.
+  exempt_dirs:
+    - _seed          # sdk-clients.spec.ts — harness self-test
+  # Capabilities flagged `cloud_only: true` are excluded from the self-hosted
+  # coverage view but counted in the cloud view. They depend on the out-of-tree
+  # `comet` frontend plugin (PluginsStore) and cannot run self-hosted.
+  cloud_only_separate_view: true
+  # Report one % per dimension per area. Never a blended figure.
+  report_per_dimension: true
+  # What counts as PRODUCT SURFACE when attributing a release's changed files to
+  # areas (consumed by the release-coverage skill in comet-ml/qa-plugin).
+  # Declared here rather than in tooling because both lists are scope decisions
+  # this file already owns.
+  #
+  # The path->area mapping ITSELF is not here: it is derived by joining the V2
+  # router tree (routes resolved transitively through getParentRoute) with the
+  # `routes:` on each area below, so it follows a page rename automatically and
+  # is never hand-maintained.
+  #
+  # That join is NOT literal string equality — the two spellings diverge by
+  # design, and the resolver normalises both sides before comparing:
+  #   * `$param` -> `*`, so this file's `/annotation-queues/$id` matches the
+  #     router's `.../annotation-queues/$annotationQueueId`
+  #   * the query string is DROPPED, which is what lets one component serve two
+  #     areas: `/logs?type=traces` and `/logs?type=threads` are one route
+  #     (LogsPage) and two areas (traces, threads)
+  #   * the `/opik` basepath is stripped
+  #   * comparison is suffix-based, so a route written relative to a project
+  #     matches the router's workspace-prefixed form
+  # Measured against main: all 18 areas join to at least one component, and no
+  # component resolves to more than two areas.
+  release_surface:
+    # Never product surface. A change confined to these is not a coverage gap;
+    # counting them manufactures gaps and buries the real ones.
+    not_surface:
+      - .github/
+      - tests_end_to_end/
+      - .agents/
+      - apps/opik-documentation/
+      - sdks/code_generation/
+      - scripts/
+      - version.txt
+      - .pre-commit-config.yaml
+      - CONTRIBUTING.md
+      - README.md
+      - .gitignore
+      - Makefile
+    # Real product surface this taxonomy does not enumerate AS ITS OWN AREA — it
+    # covers 18 UI areas. Changes here are reported by name, never mapped to a UI
+    # area, and never scored as zero.
+    #
+    # "Not enumerated" is not the same as "not exercised". The e2e estate drives
+    # the SDKs and the API heavily as fixtures — 11 specs use the SDK or the
+    # backend client, and five capabilities are explicitly SDK-shaped
+    # (datasets.create-dataset-sdk, datasets.sdk-round-trip,
+    # test-suites.create-suite-sdk, test-suites.run-suite-sdk,
+    # prompts.sdk-seeded-visible), all covered. What is untracked is each of
+    # these as a product surface in ITS OWN RIGHT: SDK ergonomics and options
+    # (num_threads, retries, error handling), REST contract details, and
+    # deployment behaviour. Report those as **coverage not measured here**, and
+    # say what the estate does exercise incidentally rather than implying zero.
+    untracked:
+      - prefix: sdks/python
+        label: Python SDK
+      - prefix: sdks/typescript
+        label: TypeScript SDK
+      - prefix: apps/opik-backend/
+        label: Backend (Java API / internal)
+      - prefix: apps/opik-python-backend/
+        label: Python backend
+      - prefix: apps/opik-guardrails-backend/
+        label: Guardrails backend
+      - prefix: apps/opik-sandbox-executor-python/
+        label: Sandbox executor
+      - prefix: deployment/
+        label: Deployment / Helm
+  # Tag-lint enforcement. All three are hard CI failures, not warnings.
+  enforce:
+    # every non-exempt e2e spec declares exactly one tier and one @area:
+    tier_and_area_required: true
+    # @area:/@cap:/@vcap: values must exist in this file
+    tags_must_exist_in_taxonomy: true
+    # every `state:` in a visual: block must be one of dimensions.visual.states
+    visual_state_enum: true
+
+# ---------------------------------------------------------------------------
+# AREAS
+#
+# Spine = the app's own v2 nav grouping (getMenuItems.ts), which is what users
+# see. `nav_group` records it so the Notion dashboard can order areas the way
+# the product does.
+#
+# `specs:` lists CURRENT covering specs (informational — the tags are the real
+# source of truth once Phase 3 lands). `covered: false` capabilities are the
+# gap list the radar ranks.
+# ---------------------------------------------------------------------------
+
+areas:
+
+  # ===================== OBSERVABILITY =====================
+
+  traces:
+    label: Traces & Spans
+    nav_group: Observability
+    routes: ["/projects/$projectId/logs?type=traces", "/logs?type=spans"]
+    spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
+    specs:
+      - trace-explore/span-cost-resolution.spec.ts
+      - trace-explore/trace-attachments.spec.ts
+      - trace-explore/trace-delete.spec.ts
+      - trace-explore/trace-explore-smoke.spec.ts
+      - trace-explore/trace-filters.spec.ts
+      - trace-explore/trace-id-time-window.spec.ts
+      - trace-explore/trace-partial-update-merge.spec.ts
+      - trace-explore/trace-spans-depth.spec.ts
+
+    # ---- functional dimension ----
+    capabilities:
+      list-traces:            { covered: true,  tier: t1-smoke }
+      trace-ordering:         { covered: true,  tier: t1-smoke }
+      open-trace-panel:       { covered: true,  tier: t1-smoke }
+      span-tree-expand:       { covered: true,  tier: t2-cuj }
+      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls; also reasoning-token billing on perplexity/sonar-deep-research (the only shipped-price-table model that can observe it) — the reasoning rate applied and subtracted from the standard-output bucket, the bare OTel usage key as a fallback for the original_usage one, and both clamps; also a non-token price key (mistral/voxtral-mini-tts-latest, priced per input character) billed from usage.input_characters, against an identical span carrying the same token counts and no character count as the negative control" }
+      trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
+      manual-feedback-score:  { covered: true,  tier: t2-cuj }
+      toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
+      filter-traces:          { covered: true,  tier: t2-cuj }
+      configure-columns:      { covered: false }
+      add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
+      add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
+      messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details" }
+      agent-graph-tab:        { covered: false }
+      prompts-tab:            { covered: false, note: "PromptsTab — conditional on opik_prompts metadata + canViewPrompts, like agent-graph-tab" }
+      attachments-media:      { covered: true,  tier: t2-cuj, note: "presigned multipart upload with mime_type omitted, asserting the type tika derives from each file name (incl. the octet-stream fallback), plus every attachment rendering as a thumbnail in the trace panel" }
+      set-guardrail:          { covered: false, note: "SetGuardrailDialog — GUARDRAILS_ENABLED flag" }
+      guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
+      delete-traces:          { covered: true,  tier: t2-cuj, note: "Logs bulk delete; also the span cascade behind it — a 5-deep span chain, asserted gone project-wide rather than only through a filter on the deleted trace_id, against a bystander trace that keeps its own spans, scores and comments" }
+      delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table; also the span cascade behind DELETE /v1/private/traces/{id}, same shape as delete-traces" }
+      update-trace-api:       { covered: true,  tier: t2-cuj, note: "PATCH /traces/{id} merges into the existing row rather than replacing it with a partial; asserted at the epoch-week, present and ~2201 id ages" }
+      export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
+
+    # ---- visual dimension (opt-in; page/state-shaped) ----
+    visual:
+      logs-traces-view:       { covered: true,  state: default, spec: "visual-comparison.spec.ts 02" }
+      logs-traces-empty:      { covered: true,  state: empty,   spec: "empty-states.spec.ts E01" }
+      trace-sidebar-messages: { covered: true,  state: default, spec: "trace-sidebar.spec.ts S01" }
+      trace-sidebar-details:  { covered: true,  state: default, spec: "trace-sidebar.spec.ts S02" }
+      trace-sidebar-feedback: { covered: true,  state: default, spec: "trace-sidebar.spec.ts S03" }
+      trace-sidebar-prompts:  { covered: true,  state: default, spec: "trace-sidebar.spec.ts S04" }
+      logs-spans-view:        { covered: true,  state: default, spec: "visual-comparison.spec.ts 07" }
+      trace-sidebar-agent-graph: { covered: true, state: default, spec: "trace-sidebar.spec.ts S05" }
+
+    # ---- load dimension (opt-in; axis-shaped; status: planned) ----
+    load:
+      trace-span-ingestion:
+        covered: false
+        axes: [ingestion-rate, fan-out, burstiness, concurrency]
+        existing_scenarios:
+          - "tests_load/suite/python_sdk/test_ingestion_rate.py::test_many_traces_one_span_each"
+          - "tests_load/suite/python_sdk/test_ingestion_rate.py::test_many_spans_per_trace"
+          - "tests_load/suite/python_sdk/test_bursts.py::test_burst_single_loop"
+        note: "scenarios exist in tests_load/ but report to JUnit, not Allure — not yet joinable"
+      trace-heavy-payload:
+        covered: false
+        axes: [payload-size]
+        existing_scenarios:
+          - "tests_load/suite/python_sdk/test_heavy_payload.py::test_traces_with_one_megabyte_payload"
+          - "tests_load/suite/python_sdk/test_heavy_payload.py::test_spans_with_heavy_payload"
+      trace-attachments:
+        covered: false
+        axes: [attachments]
+        existing_scenarios:
+          - "tests_load/suite/python_sdk/test_attachments.py::test_traces_with_explicit_attachments"
+      trace-retrieval:
+        covered: false
+        axes: [retrieval]
+        existing_scenarios:
+          - "tests_load/tests/test_trace_span_retrieval.py"
+
+  threads:
+    label: Threads & Conversations
+    nav_group: Observability
+    routes: ["/projects/$projectId/logs?type=threads"]
+    spec_dir: trace-explore
+    specs:
+      - trace-explore/thread-duration-format.spec.ts
+      - trace-explore/thread-evaluation.spec.ts
+      - trace-explore/thread-id-prefilter.spec.ts
+      - trace-explore/thread-logging-smoke.spec.ts
+    capabilities:
+      list-threads:            { covered: true,  tier: t1-smoke }
+      thread-message-count:    { covered: true,  tier: t1-smoke }
+      open-thread-panel:       { covered: true,  tier: t1-smoke }
+      turn-order-io:           { covered: true,  tier: t1-smoke }
+      thread-feedback-score:   { covered: true,  tier: t2-cuj }
+      thread-actions-panel:    { covered: false }
+      thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics; also the thread panel header's duration, asserted at both ends of formatDuration(_, false) — a 3_615_300 ms thread (float remainder 15.300000000000182) rendering as '1h 15.3s', and a 5 ms thread keeping '0.005s'" }
+
+    visual:
+      logs-threads-view:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 03" }
+      logs-threads-empty:  { covered: true,  state: empty,   spec: "empty-states.spec.ts E02" }
+      thread-panel:        { covered: false, state: default }
+
+    load:
+      thread-ingestion:
+        covered: false
+        axes: [ingestion-rate, fan-out]
+        existing_scenarios: ["tests_load/tests/test_thread_ingestion.py"]
+
+  diagnostics:
+    label: Diagnostics
+    nav_group: Observability
+    routes: ["/projects/$projectId/diagnostics", "/diagnostics/resolved"]
+    cloud_only: true   # requires AssistantSidebar plugin + OLLIE_ENABLED + AGENT_INSIGHTS_ENABLED
+    specs: []
+    capabilities:
+      list-issues:          { covered: false }
+      issue-detail:         { covered: false }
+      severity-badge:       { covered: false }
+      occurrence-chart:     { covered: false }
+      affected-traces:      { covered: false }
+      resolve-issue:        { covered: false }
+      view-resolved:        { covered: false }
+      enable-diagnostics:   { covered: false }
+      configure-settings:   { covered: false }
+
+    visual:
+      diagnostics-list:   { covered: false, state: default }
+      diagnostics-empty:  { covered: false, state: empty }
+
+  dashboards:
+    label: Dashboards
+    nav_group: Observability
+    routes: ["/$workspaceName/dashboards", "/dashboards/$dashboardId", "/projects/$projectId/dashboards"]
+    spec_dir: dashboards
+    specs:
+      - dashboards/dashboards-list-filters.spec.ts
+      - dashboards/project-span-metrics.spec.ts
+      - dashboards/workspace-span-metrics.spec.ts
+    capabilities:
+      list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list is filtered by the Description column; the other operators and columns are uncovered" }
+      create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
+      open-dashboard:       { covered: false }
+      edit-dashboard:       { covered: false }
+      delete-dashboard:     { covered: false }
+      add-widget:           { covered: true,  tier: t2-cuj, note: "Time series widget added through the widget dialog by workspace-span-metrics; other widget types and the config dialog's remaining options are uncovered" }
+      configure-widget:     { covered: true,  tier: t2-cuj, note: "scoping a Time series widget to one project and picking its metric through the widget dialog, plus the data contract of the per-project read it then makes (POST /projects/{id}/metrics across every MetricType and span breakdown); the widget dialog's remaining options — chart type, filters, group by, sub-metric — are uncovered" }
+      widget-filters:       { covered: true,  tier: t2-cuj, note: "data contract (POST /workspaces/metrics/spans against the front end's own filter payload, incl. the 400 path) plus a UI test that builds a workspace-scoped Time series widget and reads its chart" }
+      metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract for the four presets at the interval calculateIntervalType implies, plus the UI date-range control driving a rendered widget" }
+
+  # ===================== DEVELOPMENT =====================
+
+    visual:
+      dashboards-default:  { covered: true,  state: default, spec: "empty-states.spec.ts E06" }
+      dashboard-detail:    { covered: false, state: default }
+
+  prompts:
+    label: Prompt library
+    nav_group: Development
+    routes: ["/projects/$projectId/prompts", "/prompts/$promptId"]
+    spec_dir: prompts
+    specs:
+      - prompts/prompt-delete.spec.ts
+      - prompts/prompt-library-smoke.spec.ts
+      - prompts/prompt-version-pagination.spec.ts
+    capabilities:
+      list-prompts:            { covered: true,  tier: t1-smoke }
+      create-text-prompt-ui:   { covered: true,  tier: t1-smoke }
+      create-chat-prompt-ui:   { covered: true,  tier: t1-smoke }
+      sdk-seeded-visible:      { covered: true,  tier: t1-smoke }
+      edit-creates-version:    { covered: true,  tier: t1-smoke }
+      old-version-preserved:   { covered: true,  tier: t1-smoke }
+      version-history:         { covered: true,  tier: t1-smoke, note: "smoke covers select-a-version on a 2-version prompt; prompt-version-pagination adds the 31-version case — the timeline pages, the labels come from version_number, a version deep-linked onto page 2 renders its own template, and the Compare-against menu lists every version rather than only the page that had loaded" }
+      compare-versions:        { covered: false, note: "prompt-version-pagination asserts the Compare-against menu's contents label by label, but never selects an entry — nothing yet opens the compare sheet or asserts a rendered diff, so a broken comparison would not fail any test. The menu assertion counts under version-history instead." }
+      experiments-tab:         { covered: false, note: "prompt detail -> Experiments tab" }
+      delete-prompt:           { covered: true,  tier: t2-cuj }
+
+    visual:
+      prompt-library-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E07" }
+      prompt-library-list:  { covered: false, state: default }
+      prompt-detail:        { covered: false, state: default }
+
+  playground:
+    label: Prompt playground
+    nav_group: Development
+    routes: ["/projects/$projectId/playground"]
+    spec_dir: playground
+    specs:
+      - playground/playground-providers.spec.ts
+      - playground/playground-smoke.spec.ts
+      - prompts/prompt-playground-new-prompt.spec.ts
+      - prompts/prompt-playground-save.spec.ts
+      - prompts/prompt-playground-traces.spec.ts
+      - prompts/prompt-version-playground.spec.ts
+    capabilities:
+      compose-run-prompt:        { covered: true,  tier: t1-smoke }
+      select-model-provider:     { covered: true,  suites: [provider-sanity] }
+      run-against-dataset:       { covered: true,  tier: t1-smoke, note: "auto-creates experiment" }
+      save-new-prompt:           { covered: true,  tier: t1-smoke }
+      save-prompt-version:       { covered: true,  tier: t2-cuj }
+      load-prompt-version:       { covered: true,  tier: t2-cuj }
+      verify-trace-from-run:     { covered: true,  tier: t2-cuj }
+      playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
+      configure-model-settings:  { covered: false, note: "PromptModelSettings / providerConfigs" }
+
+    visual:
+      playground-default: { covered: false, state: default }
+      playground-empty:   { covered: false, state: empty }
+
+    load:
+      playground-batch-run:
+        covered: false
+        axes: [concurrency, ingestion-rate]
+        note: "run-against-dataset fans out one LLM call per item; no load scenario yet"
+
+  agent-playground:
+    label: Agent playground
+    nav_group: Development
+    routes: ["/projects/$projectId/agent-playground"]
+    spec_dir: agent-playground
+    specs:
+      - agent-playground/agent-playground-local-runner.spec.ts
+    capabilities:
+      drive-connected-agent:  { covered: true,  tier: t3-nightly }
+      connected-state-ui:     { covered: false }
+      agent-input-form:       { covered: false }
+      select-prompt-to-run:   { covered: false }
+      view-agent-result:      { covered: false }
+      sandbox-flow-diagram:   { covered: false }
+
+    visual:
+      agent-playground-empty: { covered: true,  state: empty, spec: "empty-states.spec.ts E08" }
+      agent-playground-run:   { covered: false, state: default }
+
+  optimization-studio:
+    label: Optimization runs
+    nav_group: Development
+    routes: ["/projects/$projectId/optimizations", "/optimizations/$optimizationId"]
+    spec_dir: optimization-studio
+    specs:
+      - optimization-studio/optimization-studio.spec.ts
+      - optimization-studio/optimization-trial-logs.spec.ts
+    capabilities:
+      new-run-form-validation:  { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
+      launch-gepa-run:          { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
+      launch-hier-reflective:   { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
+      run-completes-healthy:    { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
+      studio-logs-download:     { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
+      list-optimization-runs:   { covered: false }
+      trials-table:             { covered: false }
+      trial-detail:             { covered: true,  tier: t2-cuj }
+      best-trial-prompt:        { covered: false }
+      kpi-cards:                { covered: false }
+      compare-runs:             { covered: false }
+      delete-run:               { covered: false }
+      other-algorithms:         { covered: false, note: "MetaPrompt, Few-Shot Bayesian, Evolutionary, Parameter, Tool — 2 of 7 covered" }
+
+  # ===================== EVALUATION =====================
+
+    visual:
+      optimization-runs-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E09" }
+      optimization-runs-list:  { covered: false, state: default }
+      optimization-detail:     { covered: false, state: default }
+
+  datasets:
+    label: Datasets
+    nav_group: Evaluation
+    routes: ["/projects/$projectId/datasets", "/datasets/$datasetId/items"]
+    spec_dir: datasets
+    specs:
+      - datasets/dataset-crud-smoke.spec.ts
+      - datasets/dataset-insert-deduplication.spec.ts
+      - datasets/dataset-item-count.spec.ts
+      - datasets/dataset-items-filter-scope.spec.ts
+      - datasets/dataset-items.spec.ts
+      - datasets/dataset-list-summary-columns.spec.ts
+      - datasets/dataset-parallel-item-read.spec.ts
+      - datasets/dataset-read-version-pinning.spec.ts
+      - datasets/dataset-version-concurrent-writes.spec.ts
+      - datasets/dataset-version-counters.spec.ts
+      - datasets/dataset-version-repeated-item-id.spec.ts
+    capabilities:
+      list-datasets:          { covered: true,  tier: t1-smoke, note: "row is listed (t1); t2 asserts the Item count column against the items endpoint on a page mixing a versioned dataset (items_total) with a version-less one (legacy count scan), and follows it through an item delete; t2 also asserts the rest of the computed summary each row carries — dataset_items_count, experiment_count, optimization_count and latest_version — per row over four datasets with pairwise-distinct shapes (one empty), list vs detail vs the dataset's own items/versions endpoints, unchanged across two pages, and on screen the Item count plus the two recency columns populated on exactly the right rows" }
+      create-dataset-ui:      { covered: true,  tier: t1-smoke }
+      create-dataset-sdk:     { covered: true,  tier: t1-smoke }
+      view-items:             { covered: true,  tier: t1-smoke }
+      add-item-ui:            { covered: true,  tier: t1-smoke }
+      edit-item-versions:     { covered: true,  tier: t2-cuj }
+      bulk-delete-items:      { covered: true,  tier: t3-nightly }
+      filter-scoped-batch-update: { covered: true,  tier: t3-nightly, note: "tags exactly the filter-matched items; bystanders asserted present and untouched; ungrouped form only (no batch_group_id), so version-commit semantics are not asserted" }
+      filter-scoped-mutation-validation: { covered: true,  tier: t3-nightly, note: "unsupported operator -> 400 naming field+operator; malformed filter list -> 422; asserted on both delete and batch-update" }
+      search-items:           { covered: true,  tier: t3-nightly }
+      sdk-round-trip:         { covered: true,  tier: t1-smoke, note: "UI-created dataset + first item read back through the SDK, single-page get_items() round trip (t1); t2 also covers the multi-page parallel read — 5000 items over 3 default-chunk pages, list-equal across thread/chunk settings and against a REST enumeration, nb_samples as an exact prefix, and the documented ValueError arguments — plus the read's version pin holding against an insert committed mid-read, and Dataset.insert's deduplication flag both ways (deduplication=False stores every duplicate under its own id and cuts a version per insert; the default collapses the duplicate and cuts no second version), paired against a control dataset and asserted in the API and on the Records tab" }
+      version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the per-version Changes tags (+ N) after a non-deduplicated insert invalidates the SDK's hash cache" }
+      export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
+      import-huggingface:     { covered: false }
+
+    visual:
+      datasets-page:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 04" }
+      datasets-empty:  { covered: true,  state: empty,   spec: "empty-states.spec.ts E03" }
+      dataset-items:   { covered: false, state: default }
+
+    load:
+      dataset-item-volume:
+        covered: false
+        axes: [ingestion-rate, versioning-depth]
+        existing_scenarios:
+          - "tests_load/suite/python_sdk/test_dataset_items.py::test_dataset_insert_many_versions"
+
+  test-suites:
+    label: Test suites
+    nav_group: Evaluation
+    routes: ["/projects/$projectId/test-suites", "/test-suites/$suiteId/items"]
+    spec_dir: test-suites
+    specs:
+      - test-suites/test-suite-delete.spec.ts
+      - test-suites/test-suite-insert-dedup-listed-suite.spec.ts
+      - test-suites/test-suite-insert-deduplication.spec.ts
+      - test-suites/test-suites-smoke.spec.ts
+    capabilities:
+      # The t2 spec drives `get_test_suites()`, the listing factory nothing else
+      # in the estate reaches, and asserts that a suite reached through it
+      # deduplicates an insert of an item it already holds. list-suites names
+      # the listing, which is genuinely the path the spec goes through, and it
+      # was already covered before that spec existed — so nothing flips here.
+      #
+      # OPEN, needs a human call: the DEDUP half has no capability of its own in
+      # this area. It rides on list-suites for want of a better key. Either add a
+      # capability for insert dedup or drop that half from the note and leave the
+      # behaviour honestly uncovered — do not let it sit here as a silent
+      # widening of list-suites.
+      list-suites:           { covered: true,  tier: t1-smoke, note: "t2 additionally reaches a suite through get_test_suites() and asserts insert() deduplicates an item the suite already holds, while a genuinely new item still lands" }
+      create-suite-ui:       { covered: true,  tier: t1-smoke }
+      create-suite-sdk:      { covered: true,  tier: t1-smoke }
+      view-suite-items:      { covered: true,  tier: t1-smoke, note: "3 SDK-seeded items render; t2 also covers TestSuite.insert's deduplication flag both ways — deduplication=False renders both identical test cases as separate rows (asserted by data-row-id, since the Test cases table shows no data columns), the default renders one" }
+      run-suite-sdk:         { covered: true,  tier: t1-smoke, note: "3/3 pass experiment" }
+      run-suite-playground:  { covered: true,  tier: t1-smoke }
+      pass-rate-display:     { covered: true,  tier: t1-smoke }
+      global-assertions:     { covered: true,  tier: t1-smoke }
+      delete-suite:          { covered: true,  tier: t2-cuj }
+
+    visual:
+      test-suites-page:  { covered: true,  state: default, spec: "visual-comparison.spec.ts 05" }
+      test-suites-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E04" }
+      suite-items:       { covered: false, state: default }
+
+  experiments:
+    label: Experiments
+    nav_group: Evaluation
+    routes: ["/projects/$projectId/experiments", "/experiments/$datasetId/compare"]
+    spec_dir: experiments
+    specs:
+      - experiments/compare-json-key-sorting.spec.ts
+      - experiments/experiment-delete.spec.ts
+      - experiments/experiment-logs-date-window.spec.ts
+      - experiments/experiments-compare.spec.ts
+      - experiments/experiments-smoke.spec.ts
+    capabilities:
+      list-experiments:        { covered: true,  tier: t1-smoke }
+      per-item-scores:         { covered: true,  tier: t1-smoke }
+      compare-side-by-side:    { covered: true,  tier: t2-cuj }
+      compare-sort-search:     { covered: true,  tier: t2-cuj }
+      compare-feedback-tab:    { covered: true,  tier: t2-cuj }
+      compare-row-detail:      { covered: true,  tier: t2-cuj }
+      insights-tab:            { covered: false }
+      configuration-tab:       { covered: false }
+      logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
+      export-comparison:       { covered: false }
+      delete-experiment:       { covered: true,  tier: t2-cuj }
+
+    visual:
+      experiments-page:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 06" }
+      experiments-empty:  { covered: true,  state: empty,   spec: "empty-states.spec.ts E05" }
+      compare-view:       { covered: false, state: default }
+
+    load:
+      experiment-item-bulk:
+        covered: false
+        axes: [ingestion-rate, payload-size]
+        note: "backend exposes ExperimentItemBulkUpload; no load scenario yet"
+
+  annotation-queues:
+    label: Annotation queues
+    nav_group: Evaluation
+    routes: ["/projects/$projectId/annotation-queues", "/annotation-queues/$id", "/$workspaceName/sme"]
+    spec_dir: annotation-queues
+    # Was the one dir<->tag mismatch (@annotation-queue singular). Normalised to
+    # plural @annotation-queues so dir == area == tag holds everywhere.
+    # opik PR #7676.
+    #
+    # BUILDER: Allure results predating that merge carry tag "annotation-queue";
+    # results after it carry "annotation-queues". Accept both when querying, or a
+    # 7-day window spanning the merge reports a false gap.
+    tag_aliases: [annotation-queue]
+    specs:
+      - annotation-queues/annotation-queue-delete.spec.ts
+      - annotation-queues/annotation-queue-scoring.spec.ts
+    capabilities:
+      score-queue-item:        { covered: true,  tier: t2-cuj }
+      score-with-reason:       { covered: true,  tier: t2-cuj }
+      skip-item:               { covered: true,  tier: t2-cuj }
+      scores-reach-traces:     { covered: true,  tier: t2-cuj, note: "SDK-verified" }
+      list-queues:             { covered: false }
+      create-queue:            { covered: false }
+      edit-queue:              { covered: false }
+      # Second case in this spec is a test.fail() known failure for OPIK-7903
+      # (deleted-queue URL loads forever instead of showing a not-found state).
+      # Fixing that bug turns the run red until the annotation is removed.
+      delete-queue:            { covered: true,  tier: t2-cuj, note: "row-actions delete; sibling queue + source traces asserted to survive; deleted-queue URL known-failure OPIK-7903" }
+      queue-configuration-tab: { covered: false }
+      add-traces-to-queue:     { covered: false }
+      sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
+      export-annotated-data:   { covered: false }
+
+  # ===================== PRODUCTION =====================
+
+    visual:
+      annotation-queues-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E10" }
+      annotation-queues-list:  { covered: false, state: default }
+      queue-detail:            { covered: false, state: default }
+
+  online-evaluation:
+    label: Online evaluation
+    nav_group: Production
+    routes: ["/projects/$projectId/online-evaluation", "/$workspaceName/automation-logs"]
+    spec_dir: online-evaluation
+    specs:
+      - online-evaluation/online-evaluation-delete-rule.spec.ts
+      - online-evaluation/online-evaluation-edit-rule-preserves-model-parameters.spec.ts
+      - online-evaluation/online-evaluation-enable-disable-rule.spec.ts
+      - online-evaluation/online-evaluation-json-looking-judge-prompts.spec.ts
+      - online-evaluation/online-evaluation-judge-prompt-round-trip.spec.ts
+      - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-oversized-payload.spec.ts
+      - online-evaluation/online-evaluation-provider-error-classification.spec.ts
+      - online-evaluation/online-evaluation-python-metric-errors.spec.ts
+      - online-evaluation/online-evaluation-sampling-rate.spec.ts
+      - online-evaluation/online-evaluation-smoke.spec.ts
+      - online-evaluation/online-evaluation-thread-judge-provider-failure.spec.ts
+      - online-evaluation/online-evaluation-thread-scope-batch-close.spec.ts
+    capabilities:
+      create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
+      llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe; t2 also covers provider-failure classification (OPIK-8262) — a permanent status costs exactly one upstream call, a transient one the whole retry budget, and neither writes a score" }
+      create-python-rule:      { covered: true,  tier: t1-smoke }
+      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line; t3 covers a span-scope rule still scoring the spans logged AFTER a 21M-character span, which is the OPIK-8164 wedge — the oversized span's own score is deliberately not asserted, since whether it is scored depends on the deployment's Jackson stream-read limits; t2 also covers the THREAD-scope metric contract, where the runner hands the metric the whole conversation positionally instead of a mapped argument map (online-evaluation-thread-scope-batch-close.spec.ts)" }
+      scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
+      list-rules:              { covered: true,  tier: t2-cuj, note: "project-scoped and workspace-wide listing over a project holding six bracket-opening judge prompts, plus the rules page rendering a row for each" }
+      # Now true, and only because BOTH halves are exercised — which is what the
+      # previous note here was holding out for. Span scope:
+      # online-evaluation-oversized-payload.spec.ts (t3). Thread scope:
+      # online-evaluation-thread-scope-batch-close.spec.ts (t2), which creates a
+      # trace_thread_user_defined_metric_python rule, reads the discriminator
+      # back, and drives it end to end through a batch close. `tier` records the
+      # stronger of the two.
+      #
+      # Thread scope is covered twice over, and deliberately: batch-close pins
+      # the SUCCESS path of the python metric shape, and
+      # online-evaluation-thread-judge-provider-failure.spec.ts (t2) pins the
+      # FAILURE path of the OTHER thread-scope rule shape
+      # (trace_thread_llm_as_judge). Neither subsumes the other — a fold that
+      # kept one sibling's failure, or one that never terminated the message,
+      # is invisible to a spec whose provider answers.
+      rule-scope-thread-span:  { covered: true,  tier: t2-cuj, note: "span/thread scope flags, both halves covered: span scope by online-evaluation-oversized-payload.spec.ts (t3), thread scope by online-evaluation-thread-scope-batch-close.spec.ts (t2) — six threads closed in ONE PUT /threads/close, each carrying exactly one score, with a mid-batch thread whose metric raises scoring nothing while its siblings do. Scoped: since #8162 the close fans out to one stream entry PER thread id, so what the spec pins is the grouped publish reaching every sampled id, not a scorer walking a multi-id message. A duplicate score WRITE is not observable — thread feedback scores upsert by name, so 'exactly once' is asserted as exactly one stored row per thread, held across a quiet period, not as insert multiplicity. Thread scope is also covered for the trace_thread_llm_as_judge shape by online-evaluation-thread-judge-provider-failure.spec.ts (t2), over an unreachable provider: two threads closed in one call, each reporting its OWN provider failure exactly once and neither carrying a thread score. Rule filters on either scope are a different key (rule-filters) and are still uncovered" }
+      rule-filters:            { covered: false }
+      sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
+      clone-rule:              { covered: false }
+      # Scoped, and the three parts are not equally scoped:
+      #   - plain-string prompt: the edit dialog IS opened, its hydrated prompt
+      #     asserted byte-exact, and submitted unchanged, so the UI save round
+      #     trip is real.
+      #   - content_array prompt: API-level only. The dialog renders no image
+      #     part, so the url/detail that a regression would drop are not
+      #     observable in the UI; that half is a read-then-write over REST and
+      #     no dialog gesture is made.
+      #   - model custom_parameters: the edit dialog IS opened and submitted
+      #     with no field changed, asserting the model's custom_parameters
+      #     survive — the payload the form serializes AND the persisted blob.
+      # Editing a FIELD through the dialog (renaming, changing the model,
+      # rewriting the prompt, changing variables or scope) is still uncovered by
+      # all three.
+      #
+      # OPEN, needs a human call: the content_array test asserts judge-message
+      # content-SHAPE preservation, which no capability in this area names. It
+      # rides on edit-rule for want of a better key. Either add a capability for
+      # it or drop that tag and leave the behaviour honestly uncovered — do not
+      # let it sit here as a silent widening of edit-rule.
+      edit-rule:               { covered: true,  tier: t2-cuj, note: "plain-string prompt: edit-dialog hydration + no-op re-save, byte-for-byte; content_array prompt: API-only read-then-write re-save, no dialog gesture; model custom_parameters: rule seeded over REST, saved unchanged through the edit dialog, PATCH body and persisted blob both asserted to carry the thinking block and an unrelated free-form key; editing a field through the dialog is not covered" }
+      enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
+      delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
+      # Flipped by two specs that open the /$workspaceName/automation-logs PAGE
+      # itself (AutomationLogsPage) and assert the rendered rows — not, as the
+      # API-only specs do, the GET /automations/evaluators/{id}/logs stream
+      # behind it. That distinction is why this key stayed false while
+      # online-evaluation-python-metric-errors.spec.ts asserted the same stream.
+      #   - thread-judge-provider-failure.spec.ts: ERROR rows, one per failed
+      #     thread and no others — the row set is pinned by exhaustion. Its
+      #     provider is the backend's own discard port, so it needs nothing from
+      #     the test runner and runs on EVERY deployment.
+      #   - provider-error-classification.spec.ts: the INFO Evaluating / Sending
+      #     rows as well as the ERROR one, matched on a seeded TRACE id, so the
+      #     non-error half of the stream is rendered-and-asserted too. This one
+      #     needs the backend to reach the host-run mock gateway, so it skips on
+      #     any deployment other than oss (mockAuthSkipReason) — the same gate as
+      #     configuration's ai-provider-add / ai-provider-token-refetch.
+      #
+      # So the flag itself is not oss-only: the thread-judge spec holds it up
+      # everywhere, and the classification spec deepens it on oss.
+      automation-logs:         { covered: true,  tier: t2-cuj, note: "rule_id-scoped log stream renders: one ERROR row per failed thread and no others (thread-judge-provider-failure, every deployment); and Evaluating / Sending / ERROR rows for one seeded trace id on a failed LLM-judge rule (provider-error-classification, oss only — it needs the host-run mock gateway). Both are deliberately silent on refresh, expand-all and marker columns" }
+
+    visual:
+      online-evaluation-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E11" }
+      online-evaluation-list:  { covered: false, state: default }
+
+    load:
+      rule-evaluation-throughput:
+        covered: false
+        axes: [ingestion-rate, concurrency]
+        note: "online scoring is the known prod bottleneck (see /check-online-scoring)"
+
+  alerts:
+    label: Alerts
+    nav_group: Production
+    routes: ["/projects/$projectId/alerts", "/alerts/new", "/alerts/$alertId"]
+    spec_dir: alerts
+    specs:
+      - alerts/alerts-crud.spec.ts
+    capabilities:
+      list-alerts:         { covered: true,  tier: t1-smoke }
+      create-alert:        { covered: true,  tier: t1-smoke }
+      edit-alert:          { covered: true,  tier: t2-cuj }
+      event-triggers:      { covered: true,  tier: t2-cuj }
+      webhook-destination: { covered: true,  tier: t1-smoke }
+      enable-disable:      { covered: true,  tier: t2-cuj }
+      delete-alert:        { covered: true,  tier: t2-cuj }
+      # "Test connection" / "Test trigger" POST the draft alert to the endpoint
+      # in the form. Asserting a *success* needs a receiver the suite controls;
+      # against example.com the mutation answers failure, so a passing test
+      # would only be pinning the error toast. Left uncovered until a receiver
+      # exists rather than covered by asserting the sad path.
+      test-alert:          { covered: false }
+
+    visual:
+      alerts-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E12" }
+      alerts-list:  { covered: false, state: default }
+      alert-editor: { covered: false, state: default }
+
+  # ===================== ASSISTANT / CONNECT =====================
+
+  ollie:
+    label: Opik Connect
+    nav_group: Home
+    routes: ["/projects/$projectId/ollie", "/pair/v1"]
+    spec_dir: ollie
+    cloud_only: true   # requires AssistantSidebar plugin + OLLIE_ENABLED
+    specs:
+      - ollie/ollie-agentic.spec.ts
+      - ollie/ollie-connect.spec.ts
+      - ollie/ollie-explain.spec.ts
+      - ollie/ollie-smoke.spec.ts
+    capabilities:
+      surface-mounts:          { covered: true,  tier: t1-smoke }
+      sidebar-persists-nav:    { covered: true,  tier: t1-smoke }
+      basic-completion:        { covered: true,  tier: t2-cuj }
+      context-badge-count:     { covered: true,  tier: t2-cuj }
+      analyze-command:         { covered: true,  tier: t3-nightly }
+      explain-cells:           { covered: true,  tier: t3-nightly, note: "Errors/cost/duration cells" }
+      explain-continue-convo:  { covered: true,  tier: t3-nightly }
+      instrument-command:      { covered: true,  tier: t3-nightly, note: "local runner" }
+      improve-command:         { covered: true,  tier: t3-nightly, note: "local runner" }
+      pairing-approve:         { covered: true,  tier: t3-nightly }
+      daily-briefing:          { covered: false, note: "project home" }
+
+    visual:
+      ollie-surface: { covered: false, state: default }
+      ollie-sidebar: { covered: false, state: default }
+
+  # ===================== PLATFORM / WORKSPACE =====================
+
+  projects:
+    label: Projects
+    nav_group: Workspace
+    routes: ["/$workspaceName/projects", "/projects/$projectId/home"]
+    spec_dir: projects
+    specs:
+      - projects/project-delete.spec.ts
+      - projects/projects-list-stats.spec.ts
+    capabilities:
+      list-projects:         { covered: true,  tier: t2-cuj }
+      create-project:        { covered: false }
+      delete-project:        { covered: true,  tier: t2-cuj, note: "asserts the project and its traces are gone; deliberately silent on orphaned project-scoped datasets/experiments pending a product decision" }
+      project-selector:      { covered: false }
+      pin-unpin-project:     { covered: false }
+      project-home:          { covered: false }
+      recent-activity:       { covered: false }
+      breadcrumb-selector:   { covered: false, note: "trace-explore-smoke checks the breadcrumb, but only as project context for the trace panel — not as coverage of the selector itself. A cross-area @cap: here would over-claim." }
+
+    visual:
+      projects-page: { covered: true,  state: default, spec: "visual-comparison.spec.ts 01" }
+      project-home:  { covered: false, state: default }
+
+  configuration:
+    label: Configuration
+    nav_group: Workspace
+    routes: ["/$workspaceName/configuration"]
+    specs:
+      - ai-providers/token-auth-dialog.spec.ts
+      - ai-providers/token-auth-refetch.spec.ts
+    # Split per-tab: the page has 5 distinct tabs (CONFIGURATION_TABS), each with
+    # its own CRUD surface, so one capability per tab was too coarse. Capabilities
+    # below are read off the tab components on origin/main.
+    capabilities:
+      # -- Feedback definitions tab --
+      feedback-def-list:        { covered: false }
+      feedback-def-create:      { covered: false, note: "AddEditFeedbackDefinitionDialog" }
+      feedback-def-edit:        { covered: false }
+      feedback-def-delete:      { covered: false }
+      feedback-def-search:      { covered: false, note: "search by name" }
+      # -- Environments tab --
+      environment-list:         { covered: false }
+      environment-create:       { covered: false, note: "AddEditEnvironmentDialog" }
+      environment-edit:         { covered: false }
+      environment-delete:       { covered: false }
+      # -- AI providers tab --
+      ai-provider-list:         { covered: false }
+      ai-provider-add:          { covered: true,  tier: t1-smoke }
+      ai-provider-edit:         { covered: true,  tier: t1-smoke }
+      ai-provider-delete:       { covered: false, note: "exercised as spec teardown (token-auth-dialog.spec.ts), never asserted" }
+      ai-provider-token-refetch: { covered: true,  tier: t1-smoke, note: "OAuth2 token auth (OPIK-7940): gateway-revoked bearer is refetched and the request retried transparently" }
+      # -- Workspace preferences tab --
+      pref-thread-timeout:      { covered: false, note: "EditThreadTimeoutDialog" }
+      pref-truncation-toggle:   { covered: false, note: "EditTruncationToggleDialog" }
+      # -- Members tab (plugin-only) --
+      members-list:             { covered: false, cloud_only: true }
+      members-invite:           { covered: false, cloud_only: true }
+      members-change-role:      { covered: false, cloud_only: true }
+
+    visual:
+      config-feedback-definitions: { covered: true,  state: default }
+      config-feedback-def-empty:   { covered: false, state: empty, note: "'No feedback definitions yet'" }
+      config-environments:         { covered: true,  state: default }
+      config-environments-empty:   { covered: true,  state: empty, note: "'No environments yet'" }
+      config-ai-providers:         { covered: true,  state: default }
+      config-ai-providers-empty:   { covered: true,  state: empty, note: "'No AI providers yet'" }
+      config-workspace-prefs:      { covered: true,  state: default }
+
+  workspace-roles:
+    label: Workspace roles
+    nav_group: Workspace
+    routes: ["/$workspaceName/configuration"]
+    spec_dir: workspace-roles
+    # Permission enforcement is cross-cutting by nature (it gates screens and
+    # CRUD controls across every other area), but the taxonomy requires exactly
+    # one @area: per spec. This area owns "does the role gate the right thing",
+    # not the underlying feature behaviour itself — that stays with its own area.
+    specs:
+      - workspace-roles/workspace-roles-permissions.spec.ts
+    capabilities:
+      role-assign-via-ui:          { covered: true, tier: t3-nightly, note: "Members tab role Select round-trips to the API-reported permission set" }
+      manage-role-full-access:     { covered: true, tier: t3-nightly, note: "Manage: full create/edit/delete across resources, workspace settings, AI providers, invite users" }
+      write-role-resource-crud:    { covered: true, tier: t3-nightly, note: "Write: resource CRUD allowed; workspace settings/AI providers/invite users denied" }
+      annotate-role-restricted:    { covered: true, tier: t3-nightly, note: "Annotate: create/delete controls hidden; annotation queues remain accessible" }
+      read-role-view-only:         { covered: true, tier: t3-nightly, note: "Read: no create/delete controls anywhere; annotation queues remain accessible" }
+      permission-api-cross-check:  { covered: true, tier: t3-nightly, note: "getUserPermissions() response asserted against the UI-enforced access per role" }
+
+  onboarding:
+    label: Get started
+    nav_group: Onboarding
+    routes: ["/$workspaceName/get-started", "/$workspaceName/quickstart"]
+    specs: []
+    capabilities:
+      quickstart-page:      { covered: false }
+      start-preference:     { covered: false }
+      integration-explorer: { covered: false }
+      copy-snippet:         { covered: false }
+      api-key-generate:     { covered: false }
+      demo-project-banner:  { covered: false }
+      welcome-wizard:       { covered: false, cloud_only: true }
+
+# ---------------------------------------------------------------------------
+# VISUAL DIMENSION
+#
+# The 3 visual specs currently carry NO tags at all, so they are invisible to
+# every tier run and to the coverage map. Phase 3 tags them. Mapping of the
+# existing visual tests onto areas above:
+#
+#   visual-comparison.spec.ts  01 Projects page    -> projects
+#                              02 Logs/Traces view -> traces
+#                              03 Logs/Threads     -> threads
+#                              04 Datasets page    -> datasets
+#                              05 Test Suites page -> test-suites
+#                              06 Experiments page -> experiments
+#   empty-states.spec.ts       E01..E12 -> traces, threads, datasets, test-suites,
+#                              experiments, dashboards, prompts, agent-playground,
+#                              optimization-studio, annotation-queues,
+#                              online-evaluation, alerts
+#   trace-sidebar.spec.ts      S01 Messages, S02 Details, S03 Feedback scores,
+#                              S04 Prompts -> traces (tab-level)
+#
+# Open question for review: should visual coverage count toward the same
+# capability denominator as functional coverage (current draft: yes, marked
+# `tier: visual`), or be a separate percentage per area? Counting an empty-state
+# screenshot as "alerts is covered" flatters the number — hence `alerts` reads
+# 1/9 rather than 0/9 today.
+# ---------------------------------------------------------------------------
+
+    visual:
+      get-started-page: { covered: false, state: default }
+

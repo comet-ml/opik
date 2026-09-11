@@ -2,7 +2,6 @@ import { keepPreviousData, UseQueryOptions } from "@tanstack/react-query";
 import useTracesFeedbackScoresNames from "@/api/traces/useTracesFeedbackScoresNames";
 import useSpansFeedbackScoresNames from "@/api/traces/useSpansFeedbackScoresNames";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import { SPAN_TYPE } from "@/types/traces";
 import { FeedbackScoreName } from "@/types/shared";
 
 type UseTracesOrSpansScoresColumnsParams = {
@@ -35,7 +34,7 @@ export default function useTracesOrSpansScoresColumns(
     useSpansFeedbackScoresNames(
       {
         ...params,
-        type: SPAN_TYPE.llm,
+        type: undefined,
       },
       {
         ...config,

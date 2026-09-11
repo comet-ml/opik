@@ -1,20 +1,39 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import isBoolean from "lodash/isBoolean";
-import api, { EXPERIMENTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { Experiment } from "@/types/datasets";
+import api, {
+  EXPERIMENTS_REST_ENDPOINT,
+  PROJECTS_REST_ENDPOINT,
+  QueryConfig,
+} from "@/api/api";
+import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
+import { Sorting } from "@/types/sorting";
+import { processSorting } from "@/lib/sorting";
+import { Filters } from "@/types/filters";
+import { generatePromptFilters, processFilters } from "@/lib/filters";
+
+const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
 
 export type UseExperimentsListParams = {
-  workspaceName: string;
-  datasetId?: string;
+  workspaceName?: string;
   promptId?: string;
+  projectId?: string;
+  projectDeleted?: boolean;
+  optimizationId?: string;
   datasetDeleted?: boolean;
+  types?: EXPERIMENT_TYPE[];
+  filters?: Filters;
+  sorting?: Sorting;
   search?: string;
   page: number;
   size: number;
+  queryKey?: string;
+  experimentIds?: string[];
+  forceSorting?: boolean;
 };
 
 export type UseExperimentsListResponse = {
   content: Experiment[];
+  sortable_by: string[];
   total: number;
 };
 
@@ -22,22 +41,39 @@ export const getExperimentsList = async (
   { signal }: QueryFunctionContext,
   {
     workspaceName,
-    datasetId,
     promptId,
+    projectId,
+    projectDeleted,
+    optimizationId,
     datasetDeleted,
+    types = DEFAULT_EXPERIMENTS_TYPES,
+    filters,
+    sorting,
     search,
     size,
     page,
+    experimentIds,
+    forceSorting,
   }: UseExperimentsListParams,
 ) => {
-  const { data } = await api.get(EXPERIMENTS_REST_ENDPOINT, {
+  const endpoint = projectId
+    ? `${PROJECTS_REST_ENDPOINT}${projectId}/experiments`
+    : EXPERIMENTS_REST_ENDPOINT;
+
+  const { data } = await api.get(endpoint, {
     signal,
     params: {
-      workspace_name: workspaceName,
+      ...(workspaceName && { workspace_name: workspaceName }),
       ...(isBoolean(datasetDeleted) && { dataset_deleted: datasetDeleted }),
+      ...(!projectId &&
+        isBoolean(projectDeleted) && { project_deleted: projectDeleted }),
+      ...processFilters(filters, generatePromptFilters(promptId)),
+      ...processSorting(sorting),
       ...(search && { name: search }),
-      ...(datasetId && { datasetId }),
-      ...(promptId && { prompt_id: promptId }),
+      ...(optimizationId && { optimization_id: optimizationId }),
+      ...(types && { types: JSON.stringify(types) }),
+      ...(experimentIds && { experiment_ids: JSON.stringify(experimentIds) }),
+      ...(forceSorting && { force_sorting: true }),
       size,
       page,
     },
@@ -51,7 +87,7 @@ export default function useExperimentsList(
   options?: QueryConfig<UseExperimentsListResponse>,
 ) {
   return useQuery({
-    queryKey: ["experiments", params],
+    queryKey: [params.queryKey ?? "experiments", params],
     queryFn: (context) => getExperimentsList(context, params),
     ...options,
   });

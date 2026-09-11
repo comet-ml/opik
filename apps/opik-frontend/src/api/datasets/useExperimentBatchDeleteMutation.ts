@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import get from "lodash/get";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import api, { EXPERIMENTS_REST_ENDPOINT } from "@/api/api";
 
 type UseExperimentBatchDeleteMutationParams = {
@@ -32,6 +32,7 @@ const useExperimentBatchDeleteMutation = () => {
       });
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
       queryClient.invalidateQueries({ queryKey: ["datasets"] });
       return queryClient.invalidateQueries({
         queryKey: ["experiments"],

@@ -4,11 +4,15 @@ from typing import Dict, Any, List, Optional
 from opik.types import FeedbackScoreDict
 from opik.rest_api.types import experiment_item_compare
 
+AssertionResultDict = Dict[str, Any]
+
 
 @dataclasses.dataclass
 class ExperimentItemReferences:
     dataset_item_id: str
     trace_id: str
+    project_name: Optional[str] = None
+    execution_policy: Optional[Dict[str, Any]] = None
 
 
 @dataclasses.dataclass
@@ -19,11 +23,15 @@ class ExperimentItemContent:
     dataset_item_data: Optional[Dict[str, Any]]
     evaluation_task_output: Optional[Dict[str, Any]]
     feedback_scores: List[FeedbackScoreDict]
+    assertion_results: List[AssertionResultDict] = dataclasses.field(
+        default_factory=list
+    )
 
     @classmethod
     def from_rest_experiment_item_compare(
         cls,
         value: experiment_item_compare.ExperimentItemCompare,
+        dataset_item_data: Optional[Dict[str, Any]] = None,
     ) -> "ExperimentItemContent":
         if value.feedback_scores is None:
             feedback_scores: List[FeedbackScoreDict] = []
@@ -38,11 +46,22 @@ class ExperimentItemContent:
                 for rest_feedback_score in value.feedback_scores
             ]
 
+        if value.assertion_results is None:
+            assertion_results: List[AssertionResultDict] = []
+        else:
+            assertion_results = [
+                ar
+                if isinstance(ar, dict)
+                else {"value": ar.value, "passed": ar.passed, "reason": ar.reason}
+                for ar in value.assertion_results
+            ]
+
         return ExperimentItemContent(
             id=value.id,
             trace_id=value.trace_id,
             dataset_item_id=value.dataset_item_id,
-            dataset_item_data=value.input,
+            dataset_item_data=dataset_item_data if dataset_item_data else value.input,
             evaluation_task_output=value.output,
             feedback_scores=feedback_scores,
+            assertion_results=assertion_results,
         )

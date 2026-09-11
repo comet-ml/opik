@@ -4907,14 +4907,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\n3. Use the scoring metric wrapper within the Opik evaluation framework\n\nYou can now use the scoring metric wrapper within the Opik evaluation framework:\n\n```python\nfrom opik.evaluation import evaluate\n\nevaluation_task = evaluate(\n    dataset=dataset,\n    task=evaluation_task,\n    scoring_metrics=[answer_relevancy],\n    nb_samples=10,\n)\n```\n"
+                    "\n\n3. Use the scoring metric wrapper within the Opik evaluation platform\n\nYou can now use the scoring metric wrapper within the Opik evaluation platform:\n\n```python\nfrom opik.evaluation import evaluate\n\nevaluation_task = evaluate(\n    dataset=dataset,\n    task=evaluation_task,\n    scoring_metrics=[answer_relevancy],\n    nb_samples=10,\n)\n```\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "3. Use the scoring metric wrapper within the Opik evaluation framework\n\nYou can now use the scoring metric wrapper within the Opik evaluation framework:\n\n```python\nfrom opik.evaluation import evaluate\n\nevaluation_task = evaluate(\n    dataset=dataset,\n    task=evaluation_task,\n    scoring_metrics=[answer_relevancy],\n    nb_samples=10,\n)\n```"
+                    "3. Use the scoring metric wrapper within the Opik evaluation platform\n\nYou can now use the scoring metric wrapper within the Opik evaluation platform:\n\n```python\nfrom opik.evaluation import evaluate\n\nevaluation_task = evaluate(\n    dataset=dataset,\n    task=evaluation_task,\n    scoring_metrics=[answer_relevancy],\n    nb_samples=10,\n)\n```"
                 ],
                 "num_chunks": 1,
             }
@@ -4979,14 +4979,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nUsing Ragas metrics to evaluate a RAG pipeline\n\nIn order to use a Ragas metric within the Opik evaluation framework, we will need to wrap it in a custom scoring method. In the example below we will:\n\n1. Define the Ragas metric\n2. Create a scoring metric wrapper\n3. Use the scoring metric wrapper within the Opik evaluation framework\n"
+                    "\n\nUsing Ragas metrics to evaluate a RAG pipeline\n\nIn order to use a Ragas metric within the Opik evaluation platform, we will need to wrap it in a custom scoring method. In the example below we will:\n\n1. Define the Ragas metric\n2. Create a scoring metric wrapper\n3. Use the scoring metric wrapper within the Opik evaluation platform\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Using Ragas metrics to evaluate a RAG pipeline\n\nIn order to use a Ragas metric within the Opik evaluation framework, we will need to wrap it in a custom scoring method. In the example below we will:\n\n1. Define the Ragas metric\n2. Create a scoring metric wrapper\n3. Use the scoring metric wrapper within the Opik evaluation framework"
+                    "Using Ragas metrics to evaluate a RAG pipeline\n\nIn order to use a Ragas metric within the Opik evaluation platform, we will need to wrap it in a custom scoring method. In the example below we will:\n\n1. Define the Ragas metric\n2. Create a scoring metric wrapper\n3. Use the scoring metric wrapper within the Opik evaluation platform"
                 ],
                 "num_chunks": 1,
             }
@@ -6543,14 +6543,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nBuilding the Opik platform from source\n\nYou can also build the Opik platform from source by running the following command:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Build the Opik platform from source\ndocker compose up --build\n```\n\nThis will build the Frontend and Backend Docker images and start the Opik platform.\n"
+                    "\n\nBuilding the Opik platform from source\n\nYou can also build the Opik platform from source by running the following command:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik directory\ncd opik\n\n# Build the Opik platform from source\n./opik.sh --build\n```\n\nThis will build the Frontend and Backend Docker images and start the Opik platform.\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Building the Opik platform from source\n\nYou can also build the Opik platform from source by running the following command:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Build the Opik platform from source\ndocker compose up --build\n```\n\nThis will build the Frontend and Backend Docker images and start the Opik platform."
+                    "Building the Opik platform from source\n\nYou can also build the Opik platform from source by running the following command:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik directory\ncd opik\n\n# Build the Opik platform from source\n./opik.sh --build\n```\n\nThis will build the Frontend and Backend Docker images and start the Opik platform."
                 ],
                 "num_chunks": 1,
             }
@@ -6567,14 +6567,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nRunning a specific version of Opik\n\nYou can run a specific version of Opik by setting the `OPIK_VERSION` environment variable:\n\n```bash\nOPIK_VERSION=latest docker compose up\n```\n"
+                    "\n\nRunning a specific version of Opik\n\nYou can run a specific version of Opik by setting the `OPIK_VERSION` environment variable:\n\n```bash\nOPIK_VERSION=latest\n\n./opik.sh\n```\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Running a specific version of Opik\n\nYou can run a specific version of Opik by setting the `OPIK_VERSION` environment variable:\n\n```bash\nOPIK_VERSION=latest docker compose up\n```"
+                    "Running a specific version of Opik\n\nYou can run a specific version of Opik by setting the `OPIK_VERSION` environment variable:\n\n```bash\nOPIK_VERSION=latest\n\n./opik.sh\n```"
                 ],
                 "num_chunks": 1,
             }
@@ -6602,14 +6602,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nRemoving Opik\n\nTo remove Opik, you will need to remove the Opik containers and volumes:\n\n```bash\n# Remove the Opik containers and volumes\ndocker compose down --volumes\n```\n\n:::warning\nRemoving the volumes will delete all the data stored in the Opik platform and cannot be recovered. We do not recommend this option unless you are sure that you will not need any of the data stored in the Opik platform.\n:::\n"
+                    "\n\nRemoving Opik\n\nTo remove Opik, you can use the script or remove containers and volumes manually:\n\n```bash\n# Using the script (recommended)\n./opik.sh --stop\n\n# Or manually remove containers and volumes\ncd deployment/docker-compose\ndocker compose --profile opik down --volumes\n```\n\n:::warning\nRemoving the volumes will delete all the data stored in the Opik platform and cannot be recovered. We do not recommend this option unless you are sure that you will not need any of the data stored in the Opik platform.\n:::\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Removing Opik\n\nTo remove Opik, you will need to remove the Opik containers and volumes:\n\n```bash\n# Remove the Opik containers and volumes\ndocker compose down --volumes\n```\n\n:::warning\nRemoving the volumes will delete all the data stored in the Opik platform and cannot be recovered. We do not recommend this option unless you are sure that you will not need any of the data stored in the Opik platform.\n:::"
+                    "Removing Opik\n\nTo remove Opik, you can use the script or remove containers and volumes manually:\n\n```bash\n# Using the script (recommended)\n./opik.sh --stop\n\n# Or manually remove containers and volumes\ncd deployment/docker-compose\ndocker compose --profile opik down --volumes\n```\n\n:::warning\nRemoving the volumes will delete all the data stored in the Opik platform and cannot be recovered. We do not recommend this option unless you are sure that you will not need any of the data stored in the Opik platform.\n:::"
                 ],
                 "num_chunks": 1,
             }
@@ -6626,14 +6626,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nUpgrading Opik\n\nTo upgrade Opik, you can run the following command:\n\n```bash\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Update the repository to pull the most recent docker compose file\ngit pull\n\n# Update the docker compose image to get the most recent version of Opik\ndocker compose pull\n\n# Restart the Opik platform with the latest changes\ndocker compose up --detach\n```\n\n:::tip\nSince the Docker Compose deployment is using mounted volumes, your data will **_not_** be lost when you upgrade Opik. You can also safely start and stop the Opik platform without losing any data.\n:::\n"
+                    "\n\nUpgrading Opik\n\nTo upgrade Opik, you can run the following command:\n\n```bash\n# Navigate to the opik directory\ncd opik\n\n# Update the repository to pull the most recent changes\ngit pull\n\n# Restart the Opik platform with the latest changes\n./opik.sh\n```\n\n:::tip\nSince the Docker Compose deployment is using mounted volumes, your data will **_not_** be lost when you upgrade Opik. You can also safely start and stop the Opik platform without losing any data.\n:::\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Upgrading Opik\n\nTo upgrade Opik, you can run the following command:\n\n```bash\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Update the repository to pull the most recent docker compose file\ngit pull\n\n# Update the docker compose image to get the most recent version of Opik\ndocker compose pull\n\n# Restart the Opik platform with the latest changes\ndocker compose up --detach\n```\n\n:::tip\nSince the Docker Compose deployment is using mounted volumes, your data will **_not_** be lost when you upgrade Opik. You can also safely start and stop the Opik platform without losing any data.\n:::"
+                    "Upgrading Opik\n\nTo upgrade Opik, you can run the following command:\n\n```bash\n# Navigate to the opik directory\ncd opik\n\n# Update the repository to pull the most recent changes\ngit pull\n\n# Restart the Opik platform with the latest changes\n./opik.sh\n```\n\n:::tip\nSince the Docker Compose deployment is using mounted volumes, your data will **_not_** be lost when you upgrade Opik. You can also safely start and stop the Opik platform without losing any data.\n:::"
                 ],
                 "num_chunks": 1,
             }
@@ -6650,14 +6650,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nStarting, stopping\n\n:::note\nAll the `docker compose` commands should be run from the `opik/deployment/docker-compose` directory.\n:::\n\nThe `docker compose up` command can be used to install, start and upgrade Opik:\n\n```bash\n# Start, upgrade or restart the Opik platform\ndocker compose up --detach\n```\n\nTo stop Opik, you can run:\n\n```bash\n# Stop the Opik platform\ndocker compose down\n```\n\n**Note:** You can safely start and stop the Opik platform without losing any data.\n"
+                    "\n\nStarting, stopping\n\n:::note\nAll commands should be run from the root `opik` directory.\n:::\n\nThe `opik.sh` script can be used to install, start and upgrade Opik:\n\n```bash\n# Start, upgrade or restart the Opik platform\n./opik.sh\n```\n\nTo stop Opik, you can run:\n\n```bash\n# Stop the Opik platform\n./opik.sh --stop\n```\n\n**Note:** You can safely start and stop the Opik platform without losing any data.\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Starting, stopping\n\n:::note\nAll the `docker compose` commands should be run from the `opik/deployment/docker-compose` directory.\n:::\n\nThe `docker compose up` command can be used to install, start and upgrade Opik:\n\n```bash\n# Start, upgrade or restart the Opik platform\ndocker compose up --detach\n```\n\nTo stop Opik, you can run:\n\n```bash\n# Stop the Opik platform\ndocker compose down\n```\n\n**Note:** You can safely start and stop the Opik platform without losing any data."
+                    "Starting, stopping\n\n:::note\nAll commands should be run from the root `opik` directory.\n:::\n\nThe `opik.sh` script can be used to install, start and upgrade Opik:\n\n```bash\n# Start, upgrade or restart the Opik platform\n./opik.sh\n```\n\nTo stop Opik, you can run:\n\n```bash\n# Stop the Opik platform\n./opik.sh --stop\n```\n\n**Note:** You can safely start and stop the Opik platform without losing any data."
                 ],
                 "num_chunks": 1,
             }
@@ -6674,14 +6674,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nInstallation\n\nTo install Opik, you will need to clone the Opik repository and run the `docker-compose.yaml` file:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Start the Opik platform\ndocker compose up --detach\n```\n\nOpik will now be available at http://localhost:5173\n\n:::tip\nIn order to use the Opik Python SDK with your local Opik instance, you will need to run:\n\n```bash\npip install opik\n\nopik configure --use_local\n```\n\nor in python:\n\n```python\nimport opik\n\nopik.configure(use_local=True)\n```\n\nThis will create a `~/.opik.config` file that will store the URL of your local Opik instance.\n:::\n\nAll the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data.\n"
+                    "\n\nInstallation\n\nTo install Opik, you will need to clone the Opik repository and run the installation script:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik directory\ncd opik\n\n# Start the Opik platform\n./opik.sh\n```\n\nOpik will now be available at http://localhost:5173\n\n:::tip\nIn order to use the Opik Python SDK with your local Opik instance, you will need to run:\n\n```bash\npip install opik\n\nopik configure --use_local\n```\n\nor in python:\n\n```python\nimport opik\n\nopik.configure(use_local=True)\n```\n\nThis will create a `~/.opik.config` file that will store the URL of your local Opik instance.\n:::\n\nAll the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data.\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Installation\n\nTo install Opik, you will need to clone the Opik repository and run the `docker-compose.yaml` file:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik/deployment/docker-compose directory\ncd opik/deployment/docker-compose\n\n# Start the Opik platform\ndocker compose up --detach\n```\n\nOpik will now be available at http://localhost:5173\n\n:::tip\nIn order to use the Opik Python SDK with your local Opik instance, you will need to run:\n\n```bash\npip install opik\n\nopik configure --use_local\n```\n\nor in python:\n\n```python\nimport opik\n\nopik.configure(use_local=True)\n```\n\nThis will create a `~/.opik.config` file that will store the URL of your local Opik instance.\n:::\n\nAll the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data."
+                    "Installation\n\nTo install Opik, you will need to clone the Opik repository and run the installation script:\n\n```bash\n# Clone the Opik repository\ngit clone https://github.com/comet-ml/opik.git\n\n# Navigate to the opik directory\ncd opik\n\n# Start the Opik platform\n./opik.sh\n```\n\nOpik will now be available at http://localhost:5173\n\n:::tip\nIn order to use the Opik Python SDK with your local Opik instance, you will need to run:\n\n```bash\npip install opik\n\nopik configure --use_local\n```\n\nor in python:\n\n```python\nimport opik\n\nopik.configure(use_local=True)\n```\n\nThis will create a `~/.opik.config` file that will store the URL of your local Opik instance.\n:::\n\nAll the data logged to the Opik platform will be stored in the `~/opik` directory, which means that you can start and stop the Opik platform without losing any data."
                 ],
                 "num_chunks": 1,
             }
@@ -9523,14 +9523,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "---\nsidebar_label: Custom Metric\ndescription: Describes how to create your own metric to use with Opik's evaluation framework\ntoc_max_heading_level: 4\n---\n"
+                    "---\nsidebar_label: Custom Metric\ndescription: Describes how to create your own metric to use with Opik's evaluation platform\ntoc_max_heading_level: 4\n---\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "---\nsidebar_label: Custom Metric\ndescription: Describes how to create your own metric to use with Opik's evaluation framework\ntoc_max_heading_level: 4\n---"
+                    "---\nsidebar_label: Custom Metric\ndescription: Describes how to create your own metric to use with Opik's evaluation platform\ntoc_max_heading_level: 4\n---"
                 ],
                 "num_chunks": 1,
             }
@@ -10027,14 +10027,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nExperiment Configuration\n\nOne of the main advantages of having an automated evaluation framework is the ability to iterate quickly. The main drawback is that it can become difficult to track what has changed between two different iterations of an experiment.\n\nThe experiment configuration object allows you to store some metadata associated with a given experiment. This is useful for tracking things like the prompt template used for a given experiment, the model used, the temperature, etc.\n\nYou can then compare the configuration of two different experiments from the Opik UI to see what has changed.\n\n!Experiment Configuration\n"
+                    "\n\nExperiment Configuration\n\nOne of the main advantages of having an automated evaluation platform is the ability to iterate quickly. The main drawback is that it can become difficult to track what has changed between two different iterations of an experiment.\n\nThe experiment configuration object allows you to store some metadata associated with a given experiment. This is useful for tracking things like the prompt template used for a given experiment, the model used, the temperature, etc.\n\nYou can then compare the configuration of two different experiments from the Opik UI to see what has changed.\n\n!Experiment Configuration\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Experiment Configuration\n\nOne of the main advantages of having an automated evaluation framework is the ability to iterate quickly. The main drawback is that it can become difficult to track what has changed between two different iterations of an experiment.\n\nThe experiment configuration object allows you to store some metadata associated with a given experiment. This is useful for tracking things like the prompt template used for a given experiment, the model used, the temperature, etc.\n\nYou can then compare the configuration of two different experiments from the Opik UI to see what has changed.\n\n!Experiment Configuration"
+                    "Experiment Configuration\n\nOne of the main advantages of having an automated evaluation platform is the ability to iterate quickly. The main drawback is that it can become difficult to track what has changed between two different iterations of an experiment.\n\nThe experiment configuration object allows you to store some metadata associated with a given experiment. This is useful for tracking things like the prompt template used for a given experiment, the model used, the temperature, etc.\n\nYou can then compare the configuration of two different experiments from the Opik UI to see what has changed.\n\n!Experiment Configuration"
                 ],
                 "num_chunks": 1,
             }
@@ -10051,14 +10051,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nExperiments\n\nExperiments are the core building block of the Opik evaluation framework. Each time you run a new evaluation, a new experiment is created. Each experiment is made up of two main components:\n\n1. **Experiment Configuration**: The configuration object associated with each experiment allows you to track some metadata, often you would use this field to store the prompt template used for a given experiment for example.\n2. **Experiment Items**: Experiment items store the input, expected output, actual output and feedback scores for each dataset sample that was processed during an experiment.\n\nIn addition, for each experiment you will be able to see the average scores for each metric.\n"
+                    "\n\nExperiments\n\nExperiments are the core building block of the Opik evaluation platform. Each time you run a new evaluation, a new experiment is created. Each experiment is made up of two main components:\n\n1. **Experiment Configuration**: The configuration object associated with each experiment allows you to track some metadata, often you would use this field to store the prompt template used for a given experiment for example.\n2. **Experiment Items**: Experiment items store the input, expected output, actual output and feedback scores for each dataset sample that was processed during an experiment.\n\nIn addition, for each experiment you will be able to see the average scores for each metric.\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Experiments\n\nExperiments are the core building block of the Opik evaluation framework. Each time you run a new evaluation, a new experiment is created. Each experiment is made up of two main components:\n\n1. **Experiment Configuration**: The configuration object associated with each experiment allows you to track some metadata, often you would use this field to store the prompt template used for a given experiment for example.\n2. **Experiment Items**: Experiment items store the input, expected output, actual output and feedback scores for each dataset sample that was processed during an experiment.\n\nIn addition, for each experiment you will be able to see the average scores for each metric."
+                    "Experiments\n\nExperiments are the core building block of the Opik evaluation platform. Each time you run a new evaluation, a new experiment is created. Each experiment is made up of two main components:\n\n1. **Experiment Configuration**: The configuration object associated with each experiment allows you to track some metadata, often you would use this field to store the prompt template used for a given experiment for example.\n2. **Experiment Items**: Experiment items store the input, expected output, actual output and feedback scores for each dataset sample that was processed during an experiment.\n\nIn addition, for each experiment you will be able to see the average scores for each metric."
                 ],
                 "num_chunks": 1,
             }
@@ -10099,14 +10099,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "\n\nEvaluation Concepts\n\n:::tip\nIf you want to jump straight to running evaluations, you can head to the Evaluate your LLM application section.\n:::\n\nWhen working with LLM applications, the bottleneck to iterating faster is often the evaluation process. While it is possible to manually review your LLM application's output, this process is slow and not scalable. Instead of manually reviewing your LLM application's output, Opik allows you to automate the evaluation of your LLM application.\n\nIn order to understand how to run evaluations in Opik, it is important to first become familiar with the concepts of:\n\n1. **Dataset**: A dataset is a collection of samples that your LLM application will be evaluated on. Datasets only store the input and expected outputs for each sample, the output from your LLM application will be computed and scored during the evaluation process.\n2. **Experiment**: An experiment is a single evaluation of your LLM application. During an experiment, we process each dataset item, compute the output based on your LLM application and then score the output.\n\n!Evaluation Concepts\n\nIn this section, we will walk through all the concepts associated with Opik's evaluation framework.\n"
+                    "\n\nEvaluation Concepts\n\n:::tip\nIf you want to jump straight to running evaluations, you can head to the Evaluate your LLM application section.\n:::\n\nWhen working with LLM applications, the bottleneck to iterating faster is often the evaluation process. While it is possible to manually review your LLM application's output, this process is slow and not scalable. Instead of manually reviewing your LLM application's output, Opik allows you to automate the evaluation of your LLM application.\n\nIn order to understand how to run evaluations in Opik, it is important to first become familiar with the concepts of:\n\n1. **Dataset**: A dataset is a collection of samples that your LLM application will be evaluated on. Datasets only store the input and expected outputs for each sample, the output from your LLM application will be computed and scored during the evaluation process.\n2. **Experiment**: An experiment is a single evaluation of your LLM application. During an experiment, we process each dataset item, compute the output based on your LLM application and then score the output.\n\n!Evaluation Concepts\n\nIn this section, we will walk through all the concepts associated with Opik's evaluation platform.\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "Evaluation Concepts\n\n:::tip\nIf you want to jump straight to running evaluations, you can head to the Evaluate your LLM application section.\n:::\n\nWhen working with LLM applications, the bottleneck to iterating faster is often the evaluation process. While it is possible to manually review your LLM application's output, this process is slow and not scalable. Instead of manually reviewing your LLM application's output, Opik allows you to automate the evaluation of your LLM application.\n\nIn order to understand how to run evaluations in Opik, it is important to first become familiar with the concepts of:\n\n1. **Dataset**: A dataset is a collection of samples that your LLM application will be evaluated on. Datasets only store the input and expected outputs for each sample, the output from your LLM application will be computed and scored during the evaluation process.\n2. **Experiment**: An experiment is a single evaluation of your LLM application. During an experiment, we process each dataset item, compute the output based on your LLM application and then score the output.\n\n!Evaluation Concepts\n\nIn this section, we will walk through all the concepts associated with Opik's evaluation framework."
+                    "Evaluation Concepts\n\n:::tip\nIf you want to jump straight to running evaluations, you can head to the Evaluate your LLM application section.\n:::\n\nWhen working with LLM applications, the bottleneck to iterating faster is often the evaluation process. While it is possible to manually review your LLM application's output, this process is slow and not scalable. Instead of manually reviewing your LLM application's output, Opik allows you to automate the evaluation of your LLM application.\n\nIn order to understand how to run evaluations in Opik, it is important to first become familiar with the concepts of:\n\n1. **Dataset**: A dataset is a collection of samples that your LLM application will be evaluated on. Datasets only store the input and expected outputs for each sample, the output from your LLM application will be computed and scored during the evaluation process.\n2. **Experiment**: An experiment is a single evaluation of your LLM application. During an experiment, we process each dataset item, compute the output based on your LLM application and then score the output.\n\n!Evaluation Concepts\n\nIn this section, we will walk through all the concepts associated with Opik's evaluation platform."
                 ],
                 "num_chunks": 1,
             }
@@ -10123,14 +10123,14 @@ demo_spans = [
         "input": {
             "input": {
                 "chunks": [
-                    "---\nsidebar_label: Concepts\ndescription: Introduces the concepts behind Opik's evaluation framework\n---\n"
+                    "---\nsidebar_label: Concepts\ndescription: Introduces the concepts behind Opik's evaluation platform\n---\n"
                 ]
             }
         },
         "output": {
             "output": {
                 "chunks": [
-                    "---\nsidebar_label: Concepts\ndescription: Introduces the concepts behind Opik's evaluation framework\n---"
+                    "---\nsidebar_label: Concepts\ndescription: Introduces the concepts behind Opik's evaluation platform\n---"
                 ],
                 "num_chunks": 1,
             }

@@ -14,6 +14,11 @@ public enum LlmProvider {
     ANTHROPIC("anthropic"),
     GEMINI("gemini"),
     OPEN_ROUTER("openrouter"),
+    VERTEX_AI("vertex-ai"),
+    BEDROCK("bedrock"),
+    OLLAMA("ollama"),
+    CUSTOM_LLM("custom-llm"),
+    OPIK_FREE("opik-free"),
     ;
 
     @JsonValue
@@ -25,5 +30,24 @@ public enum LlmProvider {
                 .filter(llmProvider -> llmProvider.value.equals(value))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown llm provider '%s'".formatted(value)));
+    }
+
+    /**
+     * Checks if this provider supports custom naming (multiple instances with different names).
+     * Providers that support naming can have multiple configurations distinguished by provider_name.
+     *
+     * @return true if this provider supports custom naming (CUSTOM_LLM, BEDROCK, OLLAMA), false otherwise
+     */
+    public boolean supportsProviderName() {
+        return this == CUSTOM_LLM || this == BEDROCK || this == OLLAMA;
+    }
+
+    /**
+     * Providers whose requests route through {@code CustomLlmClientGenerator} — the only client
+     * that injects a dynamically fetched bearer, so the only ones where an {@code auth_config}
+     * takes effect.
+     */
+    public boolean supportsDynamicTokenAuth() {
+        return this == CUSTOM_LLM || this == BEDROCK || this == OLLAMA;
     }
 }

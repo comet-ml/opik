@@ -1,19 +1,34 @@
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
-import relativeTime from "dayjs/plugin/relativeTime";
+import duration from "dayjs/plugin/duration";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 import isString from "lodash/isString";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
 import isNull from "lodash/isNull";
 
 dayjs.extend(utc);
-dayjs.extend(relativeTime);
+dayjs.extend(duration);
+dayjs.extend(customParseFormat);
 
-const FORMATTED_DATE_STRING_REGEXP =
-  /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/(\d{2}|\d{4})\s(0[1-9]|1[0-2]):([0-5][0-9])\s(AM|PM)$/;
+export const DEFAULT_DATE_FORMAT = "D MMM YYYY, h:mm A";
+const DATE_FORMAT_WITH_SECONDS = "D MMM YYYY, h:mm:ss A";
+/** Compact, sortable date-time, e.g. "2026-02-04 14:42". */
+export const SORTABLE_DATE_TIME_FORMAT = "YYYY-MM-DD HH:mm";
 
-export const formatDate = (value: string, utc: boolean = false) => {
-  const dateTimeFormat = "MM/DD/YY hh:mm A";
+type FormatDateConfig = {
+  utc?: boolean;
+  includeSeconds?: boolean;
+  format?: string;
+};
+
+export const formatDate = (
+  value: string,
+  { utc = false, includeSeconds = false, format }: FormatDateConfig = {},
+) => {
+  const dateTimeFormat =
+    format || (includeSeconds ? DATE_FORMAT_WITH_SECONDS : DEFAULT_DATE_FORMAT);
+
   if (isString(value) && dayjs(value).isValid()) {
     if (utc) {
       return dayjs(value).utc().format(dateTimeFormat);
@@ -24,15 +39,67 @@ export const formatDate = (value: string, utc: boolean = false) => {
   return "";
 };
 
-export const isStringValidFormattedDate = (value: string) => {
-  return isString(value) && FORMATTED_DATE_STRING_REGEXP.test(value);
+export const getTimeFromNow = (value: string): string => {
+  if (!isString(value)) return "";
+
+  const date = dayjs(value);
+  if (!date.isValid()) return "";
+
+  const now = dayjs();
+  const diffMinutes = now.diff(date, "minute");
+  const diffHours = now.diff(date, "hour");
+  const diffDays = now.diff(date, "day");
+
+  if (diffMinutes < 0) return date.format("D MMM YYYY");
+  if (diffMinutes < 1) return "< 1 min ago";
+  if (diffMinutes < 60) return `${diffMinutes} mins ago`;
+  if (diffHours < 24)
+    return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
+  if (diffDays <= 7)
+    return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
+
+  return date.year() === now.year()
+    ? date.format("D MMM")
+    : date.format("D MMM YYYY");
 };
 
-export const getTimeFromNow = (date: string) => {
-  if (isString(date) && dayjs(date).isValid()) {
-    return dayjs().to(dayjs(date));
-  }
-  return "";
+export const parseUtcTimeToLocalDate = (timeUtc: string): Date => {
+  const today = dayjs.utc().format("YYYY-MM-DD");
+  return dayjs.utc(`${today}T${timeUtc}`).local().toDate();
+};
+
+export const formatUtcTimeAsLocal = (timeUtc: string): string => {
+  return dayjs(parseUtcTimeToLocalDate(timeUtc)).format("h:mm A");
+};
+
+export const formatLocalTimeAsUtc = (localTime: string): string => {
+  const today = dayjs().format("YYYY-MM-DD");
+  return dayjs(`${today}T${localTime}`).utc().format("HH:mm:ss");
+};
+
+export const formatRelativeDateTime = (
+  value: string,
+  includeTime = true,
+): string => {
+  if (!isString(value)) return "";
+
+  const date = dayjs(value);
+  if (!date.isValid()) return "";
+
+  const now = dayjs();
+  const fallback = includeTime ? formatDate(value) : date.format("D MMM YYYY");
+
+  if (date.isAfter(now)) return fallback;
+
+  const time = includeTime ? `, ${date.format("h:mm A")}` : "";
+
+  if (date.isSame(now, "day")) return `Today${time}`;
+  if (date.isSame(now.subtract(1, "day"), "day")) return `Yesterday${time}`;
+
+  const diffDays = now.diff(date, "day");
+  if (diffDays <= 7) return `${diffDays} days ago${time}`;
+
+  return fallback;
 };
 
 export const makeStartOfMinute = (value: string) => {
@@ -43,9 +110,9 @@ export const makeEndOfMinute = (value: string) => {
   return dayjs(value).endOf("minute").toISOString();
 };
 
-const millisecondsToSeconds = (milliseconds: number) => {
-  // rounds with precision, one character after the point
-  return round(milliseconds / 1000, 1);
+export const millisecondsToSeconds = (milliseconds: number) => {
+  const precision = milliseconds > 100 ? 1 : milliseconds > 10 ? 2 : 3;
+  return round(milliseconds / 1000, precision);
 };
 
 export const secondsToMilliseconds = (seconds: number) => {
@@ -91,13 +158,59 @@ export const formatDuration = (value?: number | null, onlySeconds = true) => {
     }
     if (seconds >= 60) {
       minutes = Math.floor(seconds / 60);
-      seconds = round(seconds % 60, 1);
+      seconds %= 60;
+    }
+    if (seconds !== totalSeconds) {
+      seconds = round(seconds, 1);
     }
 
-    return `${years ? years + "y " : ""}${months ? months + "mth " : ""}${
-      weeks ? weeks + "w " : ""
-    }${days ? days + "d " : ""}${hours ? hours + "h " : ""}${
-      minutes ? minutes + "m " : ""
-    }${seconds}s`.trim();
+    const result = `${years ? years + "y " : ""}${
+      months ? months + "mth " : ""
+    }${weeks ? weeks + "w " : ""}${days ? days + "d " : ""}${
+      hours ? hours + "h " : ""
+    }${minutes ? minutes + "m " : ""}${!seconds ? "" : seconds + "s"}`.trim();
+
+    return result || "0s";
+  }
+};
+
+/**
+ * Validates an ISO-8601 duration string and checks if it's within the maximum allowed duration
+ * @param durationString - ISO-8601 duration string (e.g., "PT30M", "P1D", "PT2H30M")
+ * @param maxDays - Maximum allowed duration in days (default: 7)
+ * @returns boolean indicating if the duration is valid and within limits
+ */
+export const isValidIso8601Duration = (
+  durationString: string,
+  maxDays: number = 7,
+): boolean => {
+  try {
+    const dur = dayjs.duration(durationString);
+    const totalMs = dur.asMilliseconds();
+
+    if (isNaN(totalMs) || totalMs <= 0) {
+      return false;
+    }
+
+    const maxDuration = dayjs.duration(maxDays, "days");
+    return totalMs <= maxDuration.asMilliseconds();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Converts an ISO-8601 duration string to a human-readable format
+ * @param durationString - ISO-8601 duration string
+ * @returns Human-readable duration string or "NA" if invalid
+ */
+export const formatIso8601Duration = (durationString: string): string => {
+  try {
+    const dur = dayjs.duration(durationString);
+    const totalMs = dur.asMilliseconds();
+
+    return formatDuration(totalMs, false);
+  } catch {
+    return "NA";
   }
 };

@@ -10,10 +10,13 @@ import uk.co.jemos.podam.common.ManufacturingContext;
 import uk.co.jemos.podam.typeManufacturers.AbstractTypeManufacturer;
 
 import java.time.Instant;
+import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 
 public class ProviderApiKeyManufacturer extends AbstractTypeManufacturer<ProviderApiKey> {
     public static final ProviderApiKeyManufacturer INSTANCE = new ProviderApiKeyManufacturer();
+    public static final Random RANDOM = new Random();
 
     @Override
     public ProviderApiKey getType(DataProviderStrategy strategy, AttributeMetadata metadata,
@@ -24,10 +27,18 @@ public class ProviderApiKeyManufacturer extends AbstractTypeManufacturer<Provide
         return ProviderApiKey.builder()
                 .id(id)
                 .provider(randomLlmProvider())
-                .apiKey(RandomStringUtils.randomAlphanumeric(20))
+                .apiKey(RandomStringUtils.secure().nextAlphabetic(20))
                 .name(strategy.getTypeValue(metadata, context, String.class))
                 .createdBy(strategy.getTypeValue(metadata, context, String.class))
+                .baseUrl("http://" + strategy.getTypeValue(metadata, context, String.class) + ".com")
+                .headers(Map.of(
+                        RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5),
+                        RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5),
+                        RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5),
+                        RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5),
+                        RandomStringUtils.secure().nextAlphabetic(5), RandomStringUtils.secure().nextAlphabetic(5)))
                 .createdAt(Instant.now())
+                .lastUpdatedAt(Instant.now())
                 .build();
     }
 

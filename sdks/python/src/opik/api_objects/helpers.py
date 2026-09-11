@@ -1,13 +1,52 @@
 import datetime
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, TypeVar, Type, Union, Literal
 
-from opik import llm_usage
+import opik.llm_usage as llm_usage
+from . import opik_query_language, validation_helpers, constants
+from .. import _logging as opik_logging
+from .. import config, datetime_helpers, logging_messages, id_helpers
+from ..message_processing import messages
+from ..rest_api.types import (
+    span_filter_public,
+    trace_filter_public,
+    trace_thread_filter,
+)
+from ..types import BatchFeedbackScoreDict
 
-from .. import config, datetime_helpers, logging_messages
-from ..id_helpers import generate_id  # noqa: F401 , keep it here for backward compatibility with external dependants
+# Re-export for backward compatibility
+generate_id = id_helpers.generate_id
 
 LOGGER = logging.getLogger(__name__)
+
+
+def warn_if_batching_update(
+    use_batching: bool,
+    suppress_warning: bool,
+    method_name: str,
+) -> None:
+    if use_batching and not suppress_warning:
+        LOGGER.warning(
+            logging_messages.BATCHING_UPDATE_DATA_LOSS_WARNING,
+            method_name,
+        )
+
+
+FilterParsedItemT = TypeVar(
+    "FilterParsedItemT",
+    bound=Union[
+        span_filter_public.SpanFilterPublic,
+        trace_filter_public.TraceFilterPublic,
+        trace_thread_filter.TraceThreadFilter,
+    ],
+)
+OptionalFilterParsedItemList = Optional[List[FilterParsedItemT]]
+
+ScoreMessageT = TypeVar(
+    "ScoreMessageT",
+    bound=Union[messages.FeedbackScoreMessage, messages.ThreadsFeedbackScoreMessage],
+)
+OptionalScoreMessageList = Optional[List[ScoreMessageT]]
 
 
 def datetime_to_iso8601_if_not_None(
@@ -51,18 +90,42 @@ def resolve_child_span_project_name(
     return project_name
 
 
+def resolve_child_span_environment(
+    parent_environment: Optional[str],
+    child_environment: Optional[str],
+    show_warning: bool = True,
+) -> Optional[str]:
+    if (
+        show_warning
+        and child_environment is not None
+        and child_environment != parent_environment
+    ):
+        LOGGER.warning(
+            logging_messages.NESTED_SPAN_ENVIRONMENT_MISMATCH_WARNING_MESSAGE.format(
+                child_environment,
+                parent_environment if parent_environment is not None else "",
+            )
+        )
+    return parent_environment
+
+
 def add_usage_to_metadata(
     usage: Optional[Dict[str, Any]],
     metadata: Optional[Dict[str, Any]],
+    create_metadata: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    if usage is None and metadata is None:
-        return None
-
     if usage is None:
         return metadata
 
-    if metadata is None:
-        metadata = {}
+    if metadata is None and not create_metadata:
+        return None
+
+    metadata = {} if metadata is None else {**metadata}
+
+    # Don't overwrite existing metadata.usage - it may contain original provider data
+    # that should be preserved (e.g., during import from exported data)
+    if "usage" in metadata:
+        return metadata
 
     if isinstance(usage, llm_usage.OpikUsage):
         metadata["usage"] = usage.provider_usage.model_dump(exclude_none=True)
@@ -70,3 +133,110 @@ def add_usage_to_metadata(
 
     metadata["usage"] = usage
     return metadata
+
+
+def parse_filter_expressions(
+    filter_string: Optional[str],
+    parsed_item_class: Type[FilterParsedItemT],
+    entity_type: Literal["traces", "threads", "spans"],
+) -> OptionalFilterParsedItemList:
+    """
+    Parses filter expressions from a filter string using a specified class for parsed items.
+
+    Args:
+        filter_string: A string representing the filter expressions to be parsed.
+        parsed_item_class: The class type to which the parsed filter expressions are mapped.
+        entity_type: The entity type to determine which OQL config to use.
+            Use "traces" for trace filtering, "spans" for span filtering,
+            "threads" for trace thread filtering.
+
+    Returns:
+        Optional[List[T]]: A list of objects of type T created from the parsed filter
+        expressions, or None if no valid expressions are found.
+    """
+    if filter_string is None:
+        return None
+
+    if entity_type == "spans":
+        oql = opik_query_language.OpikQueryLanguage.for_spans(filter_string)
+    elif entity_type == "threads":
+        oql = opik_query_language.OpikQueryLanguage.for_threads(filter_string)
+    else:
+        oql = opik_query_language.OpikQueryLanguage.for_traces(filter_string)
+
+    filter_expressions = oql.get_filter_expressions()
+
+    return parse_search_expressions(
+        filter_expressions, parsed_item_class=parsed_item_class
+    )
+
+
+def parse_search_expressions(
+    filter_expressions: Optional[List[Dict[str, Any]]],
+    parsed_item_class: Type[FilterParsedItemT],
+) -> OptionalFilterParsedItemList:
+    if filter_expressions is None:
+        return None
+
+    return [parsed_item_class(**expression) for expression in filter_expressions]
+
+
+def parse_feedback_score_messages(
+    scores: List[BatchFeedbackScoreDict],
+    project_name: str,
+    parsed_item_class: Type[ScoreMessageT],
+    logger: logging.Logger,
+) -> OptionalScoreMessageList:
+    valid_scores = [
+        score
+        for score in scores
+        if validation_helpers.validate_feedback_score(score, logger) is not None
+    ]
+
+    if len(valid_scores) == 0:
+        return None
+
+    score_messages = [
+        parsed_item_class(
+            id=score_dict["id"],
+            name=score_dict["name"],
+            value=score_dict["value"],
+            source=constants.FEEDBACK_SCORE_SOURCE_SDK,
+            project_name=score_dict.get("project_name") or project_name,
+            reason=score_dict.get("reason"),
+            category_name=score_dict.get("category_name"),
+        )
+        for score_dict in valid_scores
+    ]
+
+    return score_messages
+
+
+def resolve_project_name(
+    explicitly_passed_value: Optional[str],
+    value_from_config: str,
+    value_from_context: Optional[str] = None,
+) -> str:
+    """Resolve the project name using the following precedence:
+
+    1. Explicitly passed ``project_name`` argument (if not None).
+    2. Active project context (if not None).
+    3. The client's configured project name.
+    """
+    if explicitly_passed_value is not None:
+        return explicitly_passed_value
+
+    if value_from_context is not None:
+        return value_from_context
+
+    if value_from_config == config.OPIK_PROJECT_DEFAULT_NAME:
+        opik_logging.log_once_at_level(
+            logging_level=logging.WARNING,
+            message='No project name configured. Traces are being logged to "Default Project".\n'
+            "Set OPIK_PROJECT_NAME environment variable or pass project_name to the Opik client\n"
+            "to log to a specific project.\n"
+            "See https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration",
+            logger=LOGGER,
+        )
+
+    return value_from_config

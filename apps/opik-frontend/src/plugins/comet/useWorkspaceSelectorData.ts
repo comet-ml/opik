@@ -1,0 +1,193 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import orderBy from "lodash/orderBy";
+import sortBy from "lodash/sortBy";
+import toLower from "lodash/toLower";
+
+import { useToast } from "@/ui/use-toast";
+import { calculateWorkspaceName } from "@/lib/utils";
+import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
+import useOrganizations from "@/plugins/comet/useOrganizations";
+import useUser from "@/plugins/comet/useUser";
+import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import useRecentWorkspaces from "@/plugins/comet/useRecentWorkspaces";
+import useAppStore from "@/store/AppStore";
+import {
+  Workspace,
+  Organization,
+  ORGANIZATION_ROLE_TYPE,
+} from "@/plugins/comet/types";
+import { isAiSpendWorkspace } from "@/plugins/comet/lib/aiSpend";
+import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
+import { buildUrl } from "@/plugins/comet/utils";
+
+const useWorkspaceSelectorData = () => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isOrgSubmenuOpen, setIsOrgSubmenuOpen] = useState(false);
+
+  const { data: user } = useUser();
+  const { data: allWorkspaces, isLoading } = useAllWorkspaces({
+    enabled: !!user?.loggedIn,
+  });
+  const { data: organizations } = useOrganizations({
+    enabled: !!user?.loggedIn,
+  });
+  const currentOrganization = useCurrentOrganization();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  const { getVisitedAt, recordVisit } = useRecentWorkspaces();
+
+  // Mark the active workspace as recently visited so recency ordering reflects
+  // arrivals via direct URL, not only in-menu switches.
+  useEffect(() => {
+    if (workspaceName) recordVisit(workspaceName);
+  }, [workspaceName, recordVisit]);
+
+  const handleOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open && isOrgSubmenuOpen) {
+        setIsOrgSubmenuOpen(false);
+        return;
+      }
+
+      setIsDropdownOpen(open);
+      if (!open) {
+        setSearch("");
+      }
+    },
+    [isOrgSubmenuOpen],
+  );
+
+  const handleChangeWorkspace = useCallback(
+    (newWorkspace: Workspace) => {
+      recordVisit(newWorkspace.workspaceName);
+      navigate({
+        to: "/$workspaceName",
+        params: { workspaceName: newWorkspace.workspaceName },
+      });
+    },
+    [navigate, recordVisit],
+  );
+
+  const handleChangeOrganization = useCallback(
+    (newOrganization: Organization) => {
+      const newOrganizationWorkspaces =
+        allWorkspaces?.filter(
+          (workspace) =>
+            workspace.organizationId === newOrganization.id &&
+            workspace.workspaceName !== DEFAULT_WORKSPACE_NAME &&
+            !isAiSpendWorkspace(workspace),
+        ) || [];
+
+      if (newOrganizationWorkspaces.length === 0) {
+        toast({
+          description: `You are not part of any workspaces in ${newOrganization.name}, please ask to be invited to one`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const newWorkspace =
+        newOrganizationWorkspaces.find((workspace) => workspace.default) ||
+        newOrganizationWorkspaces[0];
+
+      if (newWorkspace) {
+        recordVisit(newWorkspace.workspaceName);
+        navigate({
+          to: "/$workspaceName",
+          params: { workspaceName: newWorkspace.workspaceName },
+        });
+      }
+    },
+    [navigate, allWorkspaces, toast, recordVisit],
+  );
+
+  const handleOrgSettingsClick = useCallback(() => {
+    if (currentOrganization && workspaceName) {
+      window.location.href = buildUrl(
+        `organizations/${currentOrganization.id}`,
+        workspaceName,
+      );
+    }
+  }, [currentOrganization, workspaceName]);
+
+  const memberWorkspaces = useMemo(() => {
+    if (!allWorkspaces || !currentOrganization) return [];
+    return allWorkspaces.filter(
+      (workspace) =>
+        workspace.organizationId === currentOrganization.id &&
+        workspace.workspaceName !== DEFAULT_WORKSPACE_NAME &&
+        !isAiSpendWorkspace(workspace),
+    );
+  }, [allWorkspaces, currentOrganization]);
+
+  const filteredWorkspaces = useMemo(() => {
+    const trimmed = search.trim();
+    if (!trimmed) return memberWorkspaces;
+
+    const searchLower = toLower(trimmed);
+    return memberWorkspaces.filter((workspace) => {
+      const displayName = calculateWorkspaceName(workspace.workspaceName);
+      return toLower(displayName).includes(searchLower);
+    });
+  }, [memberWorkspaces, search]);
+
+  // Recently visited first (mirrors the projects menu's last-updated ordering),
+  // falling back to alphabetical for workspaces that have never been visited.
+  const sortedWorkspaces = useMemo(
+    () =>
+      orderBy(
+        filteredWorkspaces,
+        [
+          (workspace) => getVisitedAt(workspace.workspaceName),
+          (workspace) =>
+            toLower(calculateWorkspaceName(workspace.workspaceName)),
+        ],
+        ["desc", "asc"],
+      ),
+    [filteredWorkspaces, getVisitedAt],
+  );
+
+  const sortedOrganizations = useMemo(() => {
+    if (!organizations) return [];
+    return sortBy(organizations, "name");
+  }, [organizations]);
+
+  const hasMultipleOrganizations = organizations && organizations.length > 1;
+  const hasMemberWorkspaces = memberWorkspaces.length > 0;
+  const shouldShowDropdown = hasMemberWorkspaces || hasMultipleOrganizations;
+  const isOrgAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
+
+  return {
+    user,
+    workspaceName,
+    currentOrganization,
+    isLoading,
+    organizations,
+
+    search,
+    setSearch,
+    isDropdownOpen,
+    setIsDropdownOpen,
+    isOrgSubmenuOpen,
+    setIsOrgSubmenuOpen,
+
+    handleOpenChange,
+    handleChangeWorkspace,
+    handleChangeOrganization,
+    handleOrgSettingsClick,
+
+    sortedWorkspaces,
+    sortedOrganizations,
+
+    shouldShowDropdown,
+    hasMemberWorkspaces,
+    hasMultipleOrganizations,
+    isOrgAdmin,
+  };
+};
+
+export default useWorkspaceSelectorData;

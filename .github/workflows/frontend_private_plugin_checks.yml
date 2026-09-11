@@ -1,0 +1,190 @@
+name: Frontend Private Plugin Checks
+run-name: "Frontend Private Plugin Checks ${{ github.ref_name }} by @${{ github.actor }}"
+
+# The comet frontend image compiles comet-ml/opik-plugin-ai-spend, checked out at
+# build time into src/plugins/ai-spend. Nothing else here compiles it, so a
+# breaking change to a shared surface it imports passes every check on the PR
+# that makes it and only fails later, in the image build. This runs the frontend
+# checks with the plugin staged the same way the image stages it.
+#
+# For a change that intentionally breaks the plugin, name the plugin branch that
+# adapts to it in the PR body, then merge the plugin PR first:
+#
+#   ai-spend-plugin-ref: someone/my-branch
+#
+# Same-repo PRs get the token; that is the standard model this repo already
+# uses for other secrets (e.g. typescript_sdk_e2e_tests.yml), and this repo
+# additionally requires maintainer approval before any workflow runs for a
+# first-time/outside contributor. Fork PRs get no token at all, from GitHub
+# itself, regardless of what any workflow file says.
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    # edited: the ai-spend-plugin-ref override lives in the PR body, so adding
+    # it after opening the PR must retrigger this -- default types
+    # (opened, synchronize, reopened) do not cover an edited description.
+    types: [opened, synchronize, reopened, edited]
+    paths:
+      - "apps/opik-frontend/**"
+      # A change to this check, or to the workflow that controls how the real
+      # image stages this same plugin, should re-run it.
+      - ".github/workflows/frontend_private_plugin_checks.yml"
+      - ".github/workflows/build_and_push_docker.yaml"
+  workflow_dispatch:
+    inputs:
+      ai_spend_plugin_ref:
+        type: string
+        required: false
+        description: ai-spend plugin ref
+        default: "main"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Checks with ai-spend plugin
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # Token availability checked first: without one, the job exits green with
+      # a notice, before ref parsing -- a malformed ai-spend-plugin-ref must
+      # never fail a fork event, since nothing downstream would use it anyway.
+      - name: Resolve plugin ref and token availability
+        id: resolve
+        env:
+          HAS_TOKEN: ${{ secrets.OPIK_PLUGIN_AI_SPEND_TOKEN != '' }}
+          DISPATCH_REF: ${{ inputs.ai_spend_plugin_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          echo "has_token=${HAS_TOKEN}" >> "$GITHUB_OUTPUT"
+
+          if [ "${HAS_TOKEN}" != "true" ]; then
+            echo "::notice title=ai-spend plugin not checked::No access to the private plugin repository from this event. The plugin was not checked."
+            exit 0
+          fi
+
+          # Fenced blocks are skipped: a PR that documents this syntax in an
+          # example must not be taken as using it. CR stripped first: a body
+          # edited in the GitHub web UI is CRLF, and awk's default field
+          # separator does not treat \r as one, so it would otherwise stay
+          # attached to the captured ref and fail the validation below on an
+          # otherwise valid value.
+          ref="${DISPATCH_REF:-}"
+          if [ -z "${ref}" ]; then
+            ref="$(printf '%s' "${PR_BODY:-}" \
+              | tr -d '\r' \
+              | awk '/^[[:space:]]*```/ { fenced = !fenced; next } !fenced' \
+              | grep -iEm1 '^[[:space:]]*ai-spend-plugin-ref:[[:space:]]*[^[:space:]]+' \
+              | sed -E 's/^[^:]*:[[:space:]]*//' \
+              | awk '{print $1}' || true)"
+          fi
+          ref="${ref:-main}"
+
+          if ! printf '%s' "${ref}" | grep -qE '^[A-Za-z0-9._/-]+$'; then
+            echo "::error title=Invalid ai-spend-plugin-ref::'${ref}' is not a valid git ref."
+            exit 1
+          fi
+
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+          echo "Plugin ref: ${ref}"
+
+          if [ "${ref}" != "main" ]; then
+            echo "::warning title=Checking against a non-main plugin ref::This run verifies against '${ref}', not the plugin's main -- nothing enforces that branch is merged before this PR merges."
+          fi
+
+      # Ahead of the plugin checkout: npm ci's PR-controlled postinstall runs
+      # with no private plugin source on disk yet.
+      - name: Set up Node.js
+        if: steps.resolve.outputs.has_token == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        if: steps.resolve.outputs.has_token == 'true'
+        run: npm ci
+        working-directory: apps/opik-frontend
+
+      - name: Checkout ai-spend plugin (private)
+        if: steps.resolve.outputs.has_token == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: comet-ml/opik-plugin-ai-spend
+          ref: ${{ steps.resolve.outputs.ref }}
+          token: ${{ secrets.OPIK_PLUGIN_AI_SPEND_TOKEN }}
+          path: .ai-spend-plugin
+          fetch-depth: 1
+          persist-credentials: false
+
+      # Same staging as the image build. Asserted non-empty, and specifically
+      # checked for the manifest PluginsStore actually loads by name -- a layout
+      # change that drops or misnames manifest.ts would otherwise leave
+      # production silently without the plugin's routes while this still passed
+      # on an unrelated .ts file count. The source directory is checked before
+      # copying: cp -R against a missing/renamed src fails under set -e with a
+      # raw cp error, before the friendlier "produced nothing" message below.
+      - name: Stage ai-spend plugin into frontend src
+        if: steps.resolve.outputs.has_token == 'true'
+        run: |
+          set -euo pipefail
+          if [ ! -d .ai-spend-plugin/src ]; then
+            echo "::error title=Plugin src directory missing::.ai-spend-plugin/src does not exist. The plugin's src layout likely changed."
+            exit 1
+          fi
+
+          mkdir -p apps/opik-frontend/src/plugins/ai-spend
+          cp -R .ai-spend-plugin/src/. apps/opik-frontend/src/plugins/ai-spend/
+          rm -rf .ai-spend-plugin
+
+          count="$(find apps/opik-frontend/src/plugins/ai-spend -type f \( -name '*.ts' -o -name '*.tsx' \) | wc -l | tr -d ' ')"
+          if [ "${count}" -eq 0 ]; then
+            echo "::error title=Plugin staging produced nothing::Copied 0 TypeScript files. The plugin's src layout likely changed."
+            exit 1
+          fi
+
+          manifest=apps/opik-frontend/src/plugins/ai-spend/manifest.ts
+          if [ ! -f "${manifest}" ] || ! grep -qE "name:[[:space:]]*['\"]ai-spend['\"]" "${manifest}"; then
+            echo "::error title=Plugin manifest missing or misnamed::PluginsStore loads plugins by the name declared in plugins/*/manifest.ts. ${manifest} is missing, or no longer declares name: \"ai-spend\" -- production would silently drop the plugin's routes."
+            exit 1
+          fi
+
+          echo "Staged ${count} TypeScript files from the plugin; manifest present and named correctly."
+
+      # All three run even if an earlier one fails, so a PR sees every problem in
+      # one go. eslint is scoped to the plugin: core files are already linted by
+      # the code quality workflow.
+      - name: Typecheck, lint and validate dependencies
+        if: steps.resolve.outputs.has_token == 'true'
+        working-directory: apps/opik-frontend
+        run: |
+          set -uo pipefail
+          failed=0
+
+          echo "::group::typecheck"
+          npm run typecheck || failed=1
+          echo "::endgroup::"
+
+          echo "::group::eslint (plugin sources)"
+          npx eslint src/plugins/ai-spend --max-warnings=0 || failed=1
+          echo "::endgroup::"
+
+          echo "::group::dependency-cruiser"
+          npm run deps:validate || failed=1
+          echo "::endgroup::"
+
+          if [ "${failed}" -ne 0 ]; then
+            echo "::error title=Frontend checks fail with the ai-spend plugin staged::Reproduce locally: symlink or copy a sibling opik-plugin-ai-spend checkout's src/ into apps/opik-frontend/src/plugins/ai-spend, then from apps/opik-frontend run: npm run typecheck && npx eslint src/plugins/ai-spend --max-warnings=0 && npm run deps:validate. (bash scripts/dev-runner.sh --lint-fe is close but not equivalent -- it lints the whole src tree with --fix, plus stylelint, none of which this check runs.) Keep the shared surface backward compatible, or land the matching plugin change first and add 'ai-spend-plugin-ref: <branch>' to this PR body."
+            exit 1
+          fi

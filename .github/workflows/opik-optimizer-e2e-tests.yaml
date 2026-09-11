@@ -1,0 +1,199 @@
+name: "Opik Optimizer - E2E Tests"
+run-name: "Opik Optimizer E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+concurrency:
+    group: opik-optimizer-e2e-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+on:
+    workflow_dispatch:
+    pull_request:
+        paths:
+          - 'sdks/opik_optimizer/**'
+          - '.github/workflows/opik-optimizer-e2e-tests.yaml'
+    push:
+        branches:
+          - 'main'
+        paths:
+          - 'sdks/opik_optimizer/**'
+          - '.github/workflows/opik-optimizer-e2e-tests.yaml'
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
+  HF_HUB_ENABLE_PROGRESS_BARS: "0"
+  HF_HUB_DISABLE_TELEMETRY: "1"
+  OPIK_URL_OVERRIDE: http://localhost:8080
+  OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
+
+jobs:
+    build-opik:
+        # The reusable build workflow pushes images to GHCR; pass down the
+        # packages: write grant here rather than at the workflow level (a
+        # called workflow's permissions can only be maintained or reduced from
+        # the caller's, never elevated).
+        permissions:
+          contents: read
+          packages: write
+        uses: ./.github/workflows/build_e2e_docker.yaml
+        with:
+          include_guardrails: true
+
+    run-e2e-tests:
+        name: Opik Optimizer E2E Tests Python ${{matrix.python_version}}
+        needs: build-opik
+        runs-on: ubuntu-latest
+        timeout-minutes: 40
+
+        defaults:
+          run:
+            working-directory: sdks/opik_optimizer/
+
+        strategy:
+            fail-fast: false
+            matrix:
+                python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
+
+        steps:
+        - name: Check out code
+          uses: actions/checkout@v7
+
+        - name: Login to GHCR
+          uses: docker/login-action@v4
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: Pull Docker images from GHCR
+          env:
+            TAG: ${{ needs.build-opik.outputs.image_tag }}
+          run: |
+            docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
+            docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
+            docker pull "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG"
+            docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
+            docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
+            docker tag "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG" ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
+
+        - name: Setup Python ${{matrix.python_version}}
+          uses: actions/setup-python@v7
+          with:
+            python-version: ${{matrix.python_version}}
+
+        - name: Set up uv
+          uses: astral-sh/setup-uv@v10.0.1
+
+        - name: Run latest Opik server
+          env:
+            OPIK_USAGE_REPORT_ENABLED: false
+            # Avoid Buildx Bake concurrent image export collisions in CI.
+            COMPOSE_BAKE: false
+            TOGGLE_RUNNERS_ENABLED: "true"
+            OPIK_BACKEND_PULL_POLICY: never
+            PYTHON_BACKEND_PULL_POLICY: never
+            OPIK_GUARDRAILS_BACKEND_PULL_POLICY: never
+          run: |
+            cd ${{ github.workspace }}
+            ./opik.sh --backend --port-mapping --guardrails
+
+        - name: Check Opik server availability
+          shell: bash
+          run: |
+            chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/*.sh
+            cd ${{ github.workspace }}/deployment/docker-compose
+            echo "Check Docker pods are up"
+            ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+            echo "Check backend health"
+            ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+        - name: Cache HuggingFace datasets
+          uses: actions/cache@v6
+          with:
+            path: ~/.cache/huggingface
+            key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
+            restore-keys: |
+              hf-datasets-
+
+        - name: Cache LiteLLM cache
+          uses: actions/cache@v6
+          with:
+            path: ~/.litellm_cache
+            key: litellm-cache-${{ hashFiles('**/requirements.txt', '**/pyproject.toml', '**/setup.py') }}
+            restore-keys: |
+              litellm-cache-
+
+        - name: Install opik_optimizer
+          run: uv pip install --system .[dev]
+
+        - name: Install test requirements
+          run: |
+            cd ./tests
+            uv pip install --system -r test_requirements.txt
+
+        - name: Run E2E tests
+          run: pytest tests/e2e -vv  --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+
+        - name: Upload test artifacts on failure
+          if: failure()
+          uses: actions/upload-artifact@v7
+          with:
+              name: opik-optimizer-e2e-logs-p${{matrix.python_version}}
+              path: |
+                *.log
+                tests/**/*.log
+              retention-days: 7
+
+        - name: Stop opik server
+          if: always()
+          run: |
+            cd ${{ github.workspace }}
+            ./opik.sh --stop --guardrails
+
+    dataset-source-check:
+        name: Opik Optimizer Integration Smoke Tests
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: run-e2e-tests
+        env:
+            OPIK_USE_HF_STREAMING: "true"
+
+        defaults:
+          run:
+            working-directory: sdks/opik_optimizer/
+
+        steps:
+        - name: Check out code
+          uses: actions/checkout@v7
+
+        - name: Setup Python 3.12
+          uses: actions/setup-python@v7
+          with:
+            python-version: "3.12"
+
+        - name: Set up uv
+          uses: astral-sh/setup-uv@v10.0.1
+
+        - name: Cache HuggingFace datasets
+          uses: actions/cache@v6
+          with:
+            path: ~/.cache/huggingface
+            key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
+            restore-keys: |
+              hf-datasets-
+
+        - name: Install opik_optimizer
+          run: uv pip install --system .
+
+        - name: Install test requirements
+          run: |
+            cd ./tests
+            uv pip install --system -r test_requirements.txt
+
+        - name: Run dataset integration check
+          run: pytest -n auto --dist loadfile tests/integration/datasets/test_dataset_sources.py -vv

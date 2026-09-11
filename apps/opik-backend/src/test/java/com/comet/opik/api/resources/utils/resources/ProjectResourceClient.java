@@ -2,18 +2,32 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectStatsSummary;
+import com.comet.opik.api.TokenUsageNames;
+import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.metrics.KpiCardRequest;
+import com.comet.opik.api.metrics.KpiCardResponse;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.JsonUtils;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.Response;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RequiredArgsConstructor
@@ -31,6 +45,11 @@ public class ProjectResourceClient {
                 .name(projectName)
                 .build();
 
+        return createProject(project, apiKey, workspaceName);
+    }
+
+    public UUID createProject(Project project, String apiKey, String workspaceName) {
+
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -40,6 +59,16 @@ public class ProjectResourceClient {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
 
             return TestUtils.getIdFromLocation(response.getLocation());
+        }
+    }
+
+    public void deleteProject(UUID projectId, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + projectId)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .delete()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 
@@ -57,14 +86,18 @@ public class ProjectResourceClient {
         }
     }
 
-    public Project getByName(String projectName, String apiKey, String workspaceName) {
-
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+    public Response callGetprojectByName(String projectName, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("name", projectName)
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .get()) {
+                .get();
+    }
+
+    public Project getByName(String projectName, String apiKey, String workspaceName) {
+
+        try (var response = callGetprojectByName(projectName, apiKey, workspaceName)) {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 
@@ -88,10 +121,130 @@ public class ProjectResourceClient {
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
                 .get()) {
 
-            // then
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
 
             return actualResponse.readEntity(FeedbackScoreNames.class);
         }
     }
+
+    public TokenUsageNames findTokenUsageNames(UUID projectId, String apiKey, String workspaceName) {
+        return findTokenUsageNames(projectId, apiKey, workspaceName, org.apache.http.HttpStatus.SC_OK);
+    }
+
+    public TokenUsageNames findTokenUsageNames(UUID projectId, String apiKey, String workspaceName,
+            int expectedStatus) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(projectId.toString())
+                .path("token-usage")
+                .path("names");
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == org.apache.http.HttpStatus.SC_OK) {
+                return actualResponse.readEntity(TokenUsageNames.class);
+            }
+
+            return null;
+        }
+    }
+
+    public Response callCreateProject(Project project, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(project));
+    }
+
+    public Response callFindProjects(String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public Response callGetProjectById(UUID id, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI) + "/" + id)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public KpiCardResponse getKpiCards(UUID projectId, KpiCardRequest request, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(projectId.toString())
+                .path("kpi-cards")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            assertThat(response.hasEntity()).isTrue();
+
+            return response.readEntity(KpiCardResponse.class);
+        }
+    }
+
+    public Response getKpiCardsRaw(UUID projectId, KpiCardRequest request, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(projectId.toString())
+                .path("kpi-cards")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
+            @NonNull String workspaceName) {
+        return getProjectStatsSummary(projectName, apiKey, workspaceName, null);
+    }
+
+    public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
+            @NonNull String workspaceName, List<TraceFilter> filters) {
+        return getProjectStatsSummary(projectName, apiKey, workspaceName, filters, null, null);
+    }
+
+    public ProjectStatsSummary getProjectStatsSummary(String projectName, @NonNull String apiKey,
+            @NonNull String workspaceName, List<TraceFilter> filters, Instant fromTime, Instant toTime) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("/stats");
+
+        if (StringUtils.isEmpty(projectName)) {
+            webTarget = webTarget.queryParam("name", projectName);
+        }
+
+        if (fromTime != null) {
+            webTarget = webTarget.queryParam("from_time", fromTime);
+        }
+
+        if (toTime != null) {
+            webTarget = webTarget.queryParam("to_time", toTime);
+        }
+
+        if (filters != null && !filters.isEmpty()) {
+            webTarget = webTarget.queryParam("filters",
+                    URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8));
+        }
+
+        Response actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        assertThat(actualResponse.getStatus()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
+
+        return actualResponse.readEntity(ProjectStatsSummary.class);
+    }
+
 }

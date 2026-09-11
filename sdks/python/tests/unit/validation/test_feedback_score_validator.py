@@ -51,6 +51,65 @@ from opik.validation import feedback_score
             True,
         ),
         ("not-even-a-dict", False),
+        # Test cases for project_name type coercion prevention (StrictStr)
+        (
+            {
+                "id": "some-id",
+                "name": "toxicity",
+                "value": 0.5,
+                "project_name": "valid-project",
+            },
+            True,
+        ),
+        (
+            {
+                "id": "some-id",
+                "name": "toxicity",
+                "value": 0.5,
+                "project_name": 123,  # Integer should be rejected for project_name
+            },
+            False,
+        ),
+        (
+            {
+                "id": "some-id",
+                "name": "toxicity",
+                "value": 0.5,
+                "project_name": [
+                    "project-list"
+                ],  # List should be rejected for project_name
+            },
+            False,
+        ),
+        (
+            {
+                "id": "some-id",
+                "name": "toxicity",
+                "value": 0.5,
+                "project_name": {
+                    "name": "project"
+                },  # Dict should be rejected for project_name
+            },
+            False,
+        ),
+        (
+            {
+                "id": "some-id",
+                "name": "toxicity",
+                "value": 0.5,
+                "project_name": True,  # Boolean should be rejected for project_name
+            },
+            False,
+        ),
+        (
+            {
+                "id": "some-id",
+                "name": "toxicity",
+                "value": 0.5,
+                "project_name": 3.14,  # Float should be rejected for project_name
+            },
+            False,
+        ),
     ],
 )
 def test_feedback_score_validator(feedback_score_dict, is_valid):

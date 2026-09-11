@@ -1,61 +1,221 @@
-import { loadConfig, OpikConfig } from "@/config/Config";
-import { OpikApiClient } from "@/rest_api";
-import type { Trace as ITrace } from "@/rest_api/api";
+import { ConstructorOpikConfig, loadConfig, OpikConfig } from "@/config/Config";
+import { isTracingActive } from "@/config/TracingRuntimeConfig";
+import { OpikApiError, OpikApiTimeoutError, serialization } from "@/rest_api";
+import type { ExperimentPublic, Trace as ITrace } from "@/rest_api/api";
+import * as OpikApi from "@/rest_api/api";
+import { FeedbackScoreBatchItemSource } from "@/rest_api/api/types/FeedbackScoreBatchItemSource";
 import { Trace } from "@/tracer/Trace";
+import type { FeedbackScoreData } from "@/tracer/types";
 import { generateId } from "@/utils/generateId";
 import { createLink, logger } from "@/utils/logger";
-import { getProjectUrl } from "@/utils/url";
+import { getProjectUrlByTraceId } from "@/utils/url";
+import { AssertionResultsBatchQueue } from "./AssertionResultsBatchQueue";
 import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
 import { TraceFeedbackScoresBatchQueue } from "./TraceFeedbackScoresBatchQueue";
+import {
+  OpikApiClientTemp,
+  OpikApiClientTempOptions,
+} from "@/client/OpikApiClientTemp";
+import { DatasetBatchQueue } from "./DatasetBatchQueue";
+import { Dataset, DatasetItemData, DatasetNotFoundError } from "@/dataset";
+import type { TestSuite, CreateTestSuiteOptions } from "@/evaluation/suite";
+import { Experiment } from "@/experiment/Experiment";
+import { TestSuiteExperiment } from "@/experiment/TestSuiteExperiment";
+import { buildMetadataAndPromptVersions } from "@/experiment/helpers";
+import { ExperimentType } from "@/rest_api/api/types";
+import { ExperimentNotFoundError } from "@/errors/experiment/errors";
+import { parseNdjsonStreamToArray } from "@/utils/stream";
+import {
+  Prompt,
+  CreatePromptOptions,
+  GetPromptOptions,
+  PromptType,
+} from "@/prompt";
+import { ChatPrompt } from "@/prompt/ChatPrompt";
+import { BasePrompt, PROMPT_SYNC_TIMEOUT_MS } from "@/prompt/BasePrompt";
+import { PromptTemplateStructure, type CreateChatPromptOptions, type CommonPromptOptions } from "@/prompt/types";
+import {
+  EnvironmentNotFoundError,
+  PromptNotFoundError,
+  PromptTemplateStructureMismatch,
+} from "@/prompt/errors";
+import {
+  fetchLatestPromptVersion,
+  shouldCreateNewVersion,
+} from "@/prompt/versionHelpers";
+import { getOrFetch as promptCacheGetOrFetch, getGlobalCache } from "@/prompt/promptCache";
+import { getActiveMaskForPrompt } from "@/prompt/maskContext";
+import { OpikQueryLanguage } from "@/query";
+import {
+  searchTracesWithFilters,
+  searchThreadsWithFilters,
+  searchSpansWithFilters,
+  searchAndWaitForDone,
+  parseFilterString,
+  parseThreadFilterString,
+  parseSpanFilterString,
+} from "@/utils/searchHelpers";
+import { SearchTimeoutError } from "@/errors";
+import {
+  AnnotationQueueNotFoundError,
+  TracesAnnotationQueue,
+  ThreadsAnnotationQueue,
+} from "@/annotation-queue";
+import { ConfigManager } from "@/agent-config/ConfigManager";
+import { Blueprint } from "@/agent-config/Blueprint";
+import { serializeValuesRecord, deserializeFromBlueprint, type SupportedValue } from "@/typeHelpers";
+import { createTypedConfig, type Config } from "@/agent-config/Config";
+import { getActiveConfigMask, getActiveConfigBlueprintName } from "@/agent-config/configContext";
+import {
+  getCachedBlueprint,
+  initBlueprintCacheEntry,
+} from "@/agent-config/blueprintCache";
+import { trackStorage, getTrackContext } from "@/decorators/track";
+import { UpdateService } from "@/tracer/UpdateService";
+import { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
+import {
+  EnvironmentAlreadyExistsError,
+  EnvironmentConfigurationError,
+} from "@/errors/environment/errors";
+import { DEFAULT_CONFIG } from "@/config/Config";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
 }
 
+interface AnnotationQueueOptions {
+  name: string;
+  projectName?: string;
+  description?: string;
+  instructions?: string;
+  commentsEnabled?: boolean;
+  feedbackDefinitionNames?: string[];
+}
+
 export const clients: OpikClient[] = [];
 
+let defaultProjectWarningEmitted = false;
+
+/** @internal Reset warning state — for tests only. */
+export function resetDefaultProjectWarning() {
+  defaultProjectWarningEmitted = false;
+}
+
+const AGENT_CONFIG_PROMPT_READY_TIMEOUT_MS = PROMPT_SYNC_TIMEOUT_MS + 500;
+
 export class OpikClient {
-  public api: OpikApiClient;
+  public api: OpikApiClientTemp;
   public config: OpikConfig;
   public spanBatchQueue: SpanBatchQueue;
   public traceBatchQueue: TraceBatchQueue;
   public spanFeedbackScoresBatchQueue: SpanFeedbackScoresBatchQueue;
   public traceFeedbackScoresBatchQueue: TraceFeedbackScoresBatchQueue;
+  public traceAssertionResultsBatchQueue: AssertionResultsBatchQueue;
+  public datasetBatchQueue: DatasetBatchQueue;
+
   private lastProjectNameLogged: string | undefined;
 
-  constructor(explicitConfig?: Partial<OpikConfig>) {
+  constructor(explicitConfig?: Partial<ConstructorOpikConfig>) {
     logger.debug("Initializing OpikClient with config:", explicitConfig);
+
     this.config = loadConfig(explicitConfig);
-    this.api = new OpikApiClient({
+    const apiConfig: OpikApiClientTempOptions = {
       apiKey: this.config.apiKey,
       environment: this.config.apiUrl,
       workspaceName: this.config.workspaceName,
-    });
+    };
 
-    this.spanBatchQueue = new SpanBatchQueue(this.api);
-    this.traceBatchQueue = new TraceBatchQueue(this.api);
+    if (explicitConfig?.headers) {
+      logger.debug(
+        "Initializing OpikClient with additional headers:",
+        explicitConfig?.headers
+      );
+
+      apiConfig.requestOptions = {
+        headers: explicitConfig?.headers,
+      };
+    }
+
+    this.api = new OpikApiClientTemp(apiConfig);
+
+    const delay = this.config.holdUntilFlush
+      ? 24 * 60 * 60 * 1000
+      : this.config.batchDelayMs;
+
+    const attachmentUploadConfig = this.config.isAttachmentExtractionActive
+      ? {
+          minSizeBytes:
+            this.config.minBase64EmbeddedAttachmentSize ??
+            DEFAULT_CONFIG.minBase64EmbeddedAttachmentSize,
+          apiUrl: this.config.apiUrl!,
+          workspaceName: this.config.workspaceName,
+          apiKey: this.config.apiKey || undefined,
+          extraHeaders: explicitConfig?.headers,
+        }
+      : undefined;
+
+    this.spanBatchQueue = new SpanBatchQueue(
+      this.api,
+      delay,
+      this.config.maxPayloadSizeMb,
+      attachmentUploadConfig
+    );
+    this.traceBatchQueue = new TraceBatchQueue(
+      this.api,
+      delay,
+      this.config.maxPayloadSizeMb,
+      attachmentUploadConfig
+    );
     this.spanFeedbackScoresBatchQueue = new SpanFeedbackScoresBatchQueue(
-      this.api
+      this.api,
+      delay
     );
     this.traceFeedbackScoresBatchQueue = new TraceFeedbackScoresBatchQueue(
-      this.api
+      this.api,
+      delay
     );
+    this.traceAssertionResultsBatchQueue = new AssertionResultsBatchQueue(
+      this.api,
+      delay,
+      "TRACE"
+    );
+    this.datasetBatchQueue = new DatasetBatchQueue(this.api, delay);
 
     clients.push(this);
   }
 
-  private displayTraceLog = (projectName: string) => {
+  /**
+   * Resolves the project name, falling back to the client's configured project name.
+   */
+  public resolveProjectName(projectName?: string): string {
+    if (projectName !== undefined) {
+      return projectName;
+    }
+
+    if (
+      !defaultProjectWarningEmitted &&
+      this.config.projectName === DEFAULT_CONFIG.projectName
+    ) {
+      defaultProjectWarningEmitted = true;
+      logger.warn(
+        'No project name configured. Traces are being logged to "Default Project".\n' +
+          "Set OPIK_PROJECT_NAME environment variable or pass projectName to the Opik client\n" +
+          "to log to a specific project.\n" +
+          "See https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
+      );
+    }
+
+    return this.config.projectName;
+  }
+
+  private displayTraceLog = (traceId: string, projectName: string) => {
     if (projectName === this.lastProjectNameLogged || !this.config.apiUrl) {
       return;
     }
 
-    const projectUrl = getProjectUrl({
-      apiUrl: this.config.apiUrl,
-      projectName,
-      workspaceName: this.config.workspaceName,
-    });
+    const projectUrl = getProjectUrlByTraceId(traceId, this.config.apiUrl);
 
     logger.info(
       `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`
@@ -66,36 +226,2536 @@ export class OpikClient {
 
   public trace = (traceData: TraceData) => {
     logger.debug("Creating new trace with data:", traceData);
-    const projectName = traceData.projectName ?? this.config.projectName;
+    const projectName = this.resolveProjectName(traceData.projectName);
+    const environment =
+      traceData.environment !== undefined
+        ? traceData.environment
+        : this.config.environment;
     const trace = new Trace(
       {
         id: generateId(),
         startTime: new Date(),
+        source: "sdk",
         ...traceData,
         projectName,
+        ...(environment !== undefined ? { environment } : {}),
       },
       this
     );
 
-    this.traceBatchQueue.create(trace.data);
-    logger.debug("Trace added to the queue with ID:", trace.data.id);
-    this.displayTraceLog(projectName);
+    if (isTracingActive()) {
+      this.traceBatchQueue.create(trace.data);
+      logger.debug("Trace added to the queue with ID:", trace.data.id);
+      this.displayTraceLog(trace.data.id, projectName);
+    }
 
     return trace;
   };
 
-  public flush = async () => {
+  /**
+   * Retrieves an existing dataset by name
+   *
+   * @param name The name of the dataset to retrieve
+   * @param projectName Optional project name to scope the dataset lookup. If not provided, uses the client's configured project.
+   * @returns A Dataset object associated with the specified name
+   * @throws Error if the dataset doesn't exist
+   */
+  public getDataset = async <T extends DatasetItemData = DatasetItemData>(
+    name: string,
+    projectName?: string
+  ): Promise<Dataset<T>> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
+    logger.debug(`Getting dataset with name "${name}"`);
+    try {
+      // TODO Requires Batch class update to be able use name instead of id and get it from there
+      await this.datasetBatchQueue.flush();
+
+      const response = await this.api.datasets.getDatasetByIdentifier({
+        datasetName: name,
+        projectName: resolvedProjectName,
+      });
+
+      return new Dataset<T>({ ...response, projectName: resolvedProjectName }, this);
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        throw new DatasetNotFoundError(name);
+      }
+      throw error;
+    }
+  };
+
+  /**
+   * Creates a new dataset with the given name and optional description
+   *
+   * @param name The name of the dataset
+   * @param description Optional description of the dataset
+   * @param projectName Optional project name to scope the dataset. If not provided, uses the client's configured project.
+   * @returns The created Dataset object
+   */
+  public createDataset = async <T extends DatasetItemData = DatasetItemData>(
+    name: string,
+    description?: string,
+    projectName?: string
+  ): Promise<Dataset<T>> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
+    logger.debug(`Creating dataset with name "${name}"`);
+
+    const entity = new Dataset<T>({ name, description, projectName: resolvedProjectName }, this);
+
+    try {
+      this.datasetBatchQueue.create({
+        name: entity.name,
+        description: entity.description,
+        id: entity.id,
+        projectName: resolvedProjectName,
+      });
+
+      logger.debug("Dataset added to the queue with name:", entity.name);
+
+      return entity;
+    } catch (error) {
+      logger.error(`Failed to create dataset "${name}"`, { error });
+      throw new Error(`Error creating dataset "${name}": ${error}`);
+    }
+  };
+
+  /**
+   * Retrieves an existing dataset by name or creates a new one if it doesn't exist.
+   *
+   * @param name The name of the dataset
+   * @param description Optional description of the dataset (used if created)
+   * @param projectName Optional project name to scope the dataset. If not provided, uses the client's configured project.
+   * @returns A promise that resolves to the existing or newly created Dataset object
+   */
+  public getOrCreateDataset = async <
+    T extends DatasetItemData = DatasetItemData,
+  >(
+    name: string,
+    description?: string,
+    projectName?: string
+  ): Promise<Dataset<T>> => {
+    logger.debug(
+      `Attempting to retrieve or create dataset with name: "${name}"`
+    );
+
+    try {
+      return await this.getDataset(name, projectName);
+    } catch (error) {
+      if (error instanceof DatasetNotFoundError) {
+        logger.info(
+          `Dataset "${name}" not found. Proceeding to create a new one.`
+        );
+        return this.createDataset(name, description, projectName);
+      }
+      logger.error(`Error retrieving dataset "${name}":`, error);
+      throw error;
+    }
+  };
+
+  /**
+   * Returns all datasets up to the specified limit
+   *
+   * @param maxResults Maximum number of datasets to return (default: 100)
+   * @param projectName Optional project name to filter datasets by. If not provided, uses the client's configured project.
+   * @returns List of Dataset objects
+   */
+  public getDatasets = async <T extends DatasetItemData = DatasetItemData>(
+    maxResults: number = 100,
+    projectName?: string
+  ): Promise<Dataset<T>[]> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
+    logger.debug(`Getting all datasets (limit: ${maxResults})`);
+
+    try {
+      // Flush the queue first to ensure all pending datasets are created
+      await this.datasetBatchQueue.flush();
+
+      let projectId: string | undefined;
+      try {
+        projectId = await this.getProjectIdByName(resolvedProjectName);
+      } catch {
+        // Project doesn't exist yet — list without project filter
+      }
+
+      const response = await this.api.datasets.findDatasets({
+        size: maxResults,
+        ...(projectId && { projectId }),
+      });
+
+      const datasets: Dataset<T>[] = [];
+
+      for (const datasetData of response.content || []) {
+        datasets.push(new Dataset<T>({ ...datasetData, projectName: resolvedProjectName }, this));
+      }
+
+      logger.info(`Retrieved ${datasets.length} datasets`);
+      return datasets;
+    } catch (error) {
+      logger.error("Failed to retrieve datasets", { error });
+      throw new Error("Failed to retrieve datasets");
+    }
+  };
+
+  /**
+   * Deletes a dataset by name
+   *
+   * @param name The name of the dataset to delete
+   * @param projectName Optional project name to scope the dataset lookup. If not provided, uses the client's configured project.
+   */
+  public deleteDataset = async (name: string, projectName?: string): Promise<void> => {
+    logger.debug(`Deleting dataset with name "${name}"`);
+
+    try {
+      const dataset = await this.getDataset(name, projectName);
+      if (!dataset.id) {
+        throw new Error(`Cannot delete dataset "${name}": ID not available`);
+      }
+
+      this.datasetBatchQueue.delete(dataset.id);
+    } catch (error) {
+      logger.error(`Failed to delete dataset "${name}"`, { error });
+      throw new Error(`Failed to delete dataset "${name}": ${error}`);
+    }
+  };
+
+  /**
+   * Creates a new test suite with the given options.
+   *
+   * @param options - The options for creating the test suite
+   * @returns The created TestSuite object
+   */
+  public createTestSuite = async (
+    options: CreateTestSuiteOptions
+  ): Promise<TestSuite> => {
+    logger.debug(`Creating test suite with name "${options.name}"`);
+    const { TestSuite } = await import("@/evaluation/suite");
+    return TestSuite.create(this, options);
+  };
+
+  /**
+   * Retrieves an existing test suite by name.
+   *
+   * @param name The name of the test suite to retrieve
+   * @param projectName Optional project name to scope the lookup. If not provided, uses the client's configured project.
+   * @returns A TestSuite object
+   * @throws DatasetNotFoundError if the test suite doesn't exist
+   */
+  public getTestSuite = async (
+    name: string,
+    projectName?: string
+  ): Promise<TestSuite> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
+    logger.debug(`Getting test suite with name "${name}"`);
+    const { TestSuite } = await import("@/evaluation/suite");
+    return TestSuite.get(this, name, resolvedProjectName);
+  };
+
+  /**
+   * Retrieves an existing test suite by name or creates a new one if it doesn't exist.
+   *
+   * @param options - The options for creating the test suite if it doesn't exist
+   * @returns A TestSuite object (existing or newly created)
+   */
+  public getOrCreateTestSuite = async (
+    options: CreateTestSuiteOptions
+  ): Promise<TestSuite> => {
+    logger.debug(
+      `Attempting to retrieve or create test suite with name: "${options.name}"`
+    );
+    const { TestSuite } = await import("@/evaluation/suite");
+    return TestSuite.getOrCreate(this, options);
+  };
+
+  /**
+   * Deletes a test suite by name.
+   *
+   * @param name The name of the test suite to delete
+   * @param projectName Optional project name to scope the lookup. If not provided, uses the client's configured project.
+   */
+  public deleteTestSuite = async (
+    name: string,
+    projectName?: string
+  ): Promise<void> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
+    logger.debug(`Deleting test suite with name "${name}"`);
+    const { TestSuite } = await import("@/evaluation/suite");
+    await TestSuite.delete(this, name, resolvedProjectName);
+  };
+
+  /**
+   * Returns all test suites up to the specified limit.
+   *
+   * @param maxResults Maximum number of test suites to return (default: 100)
+   * @param projectName Optional project name to filter by. If not provided, uses the client's configured project.
+   * @returns List of TestSuite objects
+   */
+  public getTestSuites = async (
+    maxResults: number = 1000,
+    projectName?: string
+  ): Promise<TestSuite[]> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
+    logger.debug(`Getting all test suites (limit: ${maxResults})`);
+
+    try {
+      await this.datasetBatchQueue.flush();
+
+      const projectId = await this.resolveProjectId(resolvedProjectName);
+      const { TestSuite } = await import("@/evaluation/suite");
+
+      const suites: TestSuite[] = [];
+      let page = 1;
+      const pageSize = 100;
+
+      while (suites.length < maxResults) {
+        const response = await this.api.datasets.findDatasets({
+          page,
+          size: pageSize,
+          ...(projectId && { projectId }),
+        });
+
+        const content = response.content ?? [];
+        if (content.length === 0) break;
+
+        for (const datasetData of content) {
+          if (suites.length >= maxResults) break;
+          if (datasetData.type !== OpikApi.DatasetPublicType.EvaluationSuite) continue;
+          suites.push(
+            new TestSuite(
+              new Dataset({ ...datasetData, projectName: resolvedProjectName }, this),
+              this
+            )
+          );
+        }
+
+        page++;
+      }
+
+      logger.info(`Retrieved ${suites.length} test suites`);
+      return suites;
+    } catch (error) {
+      logger.error("Failed to retrieve test suites", { error });
+      throw new Error("Failed to retrieve test suites");
+    }
+  };
+
+  private async getProjectIdByName(projectName: string): Promise<string> {
+    const project = await this.api.projects.retrieveProject({
+      name: projectName,
+    });
+
+    if (!project?.id) {
+      throw new Error(`Project "${projectName}" not found`);
+    }
+    return project.id;
+  }
+
+  /**
+   * Resolves a project name to its ID.
+   * Returns undefined if projectName is undefined (no API call made).
+   * Errors from the API are propagated — matching Python's resolve_project_id_by_name_optional().
+   */
+  private async resolveProjectId(projectName: string | undefined): Promise<string | undefined> {
+    if (projectName === undefined) {
+      return undefined;
+    }
+    return this.getProjectIdByName(projectName);
+  }
+
+  private async createAnnotationQueueInternal<T extends TracesAnnotationQueue | ThreadsAnnotationQueue>(
+    options: AnnotationQueueOptions,
+    QueueClass: (new (data: OpikApi.AnnotationQueuePublic, opik: OpikClient) => T) & {
+      readonly SCOPE: "trace" | "thread";
+    }
+  ): Promise<T> {
+    const {
+      name,
+      projectName,
+      description,
+      instructions,
+      commentsEnabled,
+      feedbackDefinitionNames,
+    } = options;
+
+    const scope = QueueClass.SCOPE;
+
+    logger.debug(`Creating ${scope} annotation queue "${name}"`);
+
+    const targetProjectName = projectName ?? this.config.projectName;
+
+    try {
+      const projectId = await this.getProjectIdByName(targetProjectName);
+      const queueId = generateId();
+
+      await this.api.annotationQueues.createAnnotationQueue({
+        id: queueId,
+        projectId,
+        name,
+        scope,
+        description,
+        instructions,
+        commentsEnabled,
+        feedbackDefinitionNames,
+      });
+
+      logger.debug(`Created ${scope} annotation queue "${name}" with ID "${queueId}"`);
+
+      return new QueueClass(
+        {
+          id: queueId,
+          name,
+          projectId,
+          scope,
+          description,
+          instructions,
+          commentsEnabled,
+          feedbackDefinitionNames,
+        },
+        this
+      );
+    } catch (error) {
+      logger.error(`Failed to create ${scope} annotation queue "${name}"`, { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Creates a new traces annotation queue for human annotation workflows.
+   *
+   * @param options - Configuration options for the annotation queue
+   * @param options.name - The name of the annotation queue
+   * @param options.projectName - Optional project name (defaults to client's configured project)
+   * @param options.description - Optional description of the queue
+   * @param options.instructions - Optional instructions for reviewers
+   * @param options.commentsEnabled - Optional flag to enable/disable comments
+   * @param options.feedbackDefinitionNames - Optional list of feedback definition names
+   * @returns The created TracesAnnotationQueue object
+   */
+  public createTracesAnnotationQueue = async (options: AnnotationQueueOptions): Promise<TracesAnnotationQueue> => {
+    return this.createAnnotationQueueInternal(options, TracesAnnotationQueue);
+  };
+
+  /**
+   * Creates a new threads annotation queue for human annotation workflows.
+   *
+   * @param options - Configuration options for the annotation queue
+   * @param options.name - The name of the annotation queue
+   * @param options.projectName - Optional project name (defaults to client's configured project)
+   * @param options.description - Optional description of the queue
+   * @param options.instructions - Optional instructions for reviewers
+   * @param options.commentsEnabled - Optional flag to enable/disable comments
+   * @param options.feedbackDefinitionNames - Optional list of feedback definition names
+   * @returns The created ThreadsAnnotationQueue object
+   */
+  public createThreadsAnnotationQueue = async (options: AnnotationQueueOptions): Promise<ThreadsAnnotationQueue> => {
+    return this.createAnnotationQueueInternal(options, ThreadsAnnotationQueue);
+  };
+
+  private async fetchAnnotationQueueById<T extends TracesAnnotationQueue | ThreadsAnnotationQueue>(
+    id: string,
+    expectedScope: "trace" | "thread",
+    QueueClass: new (data: OpikApi.AnnotationQueuePublic, opik: OpikClient) => T
+  ): Promise<T> {
+    logger.debug(`Getting ${expectedScope} annotation queue with ID "${id}"`);
+
+    try {
+      const response = await this.api.annotationQueues.getAnnotationQueueById(id);
+
+      if (response.scope !== expectedScope) {
+        throw new Error(`Annotation queue "${id}" is not a ${expectedScope} queue (scope: ${response.scope})`);
+      }
+
+      return new QueueClass(response, this);
+    } catch (error) {
+      if (error instanceof OpikApiError) {
+        if (error.statusCode === 404) {
+          throw new AnnotationQueueNotFoundError(id);
+        }
+        logger.error(`Failed to get ${expectedScope} annotation queue with ID "${id}"`, { error });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieves a traces annotation queue by its ID.
+   *
+   * @param id - The unique identifier of the annotation queue
+   * @returns The TracesAnnotationQueue object
+   * @throws AnnotationQueueNotFoundError if the queue doesn't exist or is not a traces queue
+   */
+  public getTracesAnnotationQueue = async (id: string): Promise<TracesAnnotationQueue> => {
+    return this.fetchAnnotationQueueById(id, "trace", TracesAnnotationQueue);
+  };
+
+  /**
+   * Retrieves a threads annotation queue by its ID.
+   *
+   * @param id - The unique identifier of the annotation queue
+   * @returns The ThreadsAnnotationQueue object
+   * @throws AnnotationQueueNotFoundError if the queue doesn't exist or is not a threads queue
+   */
+  public getThreadsAnnotationQueue = async (id: string): Promise<ThreadsAnnotationQueue> => {
+    return this.fetchAnnotationQueueById(id, "thread", ThreadsAnnotationQueue);
+  };
+
+  /**
+   * Retrieves all traces annotation queues, optionally filtered by project.
+   *
+   * @param options - Optional configuration
+   * @param options.projectName - Optional project name to filter by
+   * @param options.maxResults - Maximum number of results to return (default: 1000)
+   * @returns List of TracesAnnotationQueue objects
+   */
+  public getTracesAnnotationQueues = async (options?: {
+    projectName?: string;
+    maxResults?: number;
+  }): Promise<TracesAnnotationQueue[]> => {
+    const queues = await this.getAnnotationQueuesByScope("trace", options);
+    return queues.map(queueData => new TracesAnnotationQueue(queueData, this));
+  };
+
+  /**
+   * Retrieves all threads annotation queues, optionally filtered by project.
+   *
+   * @param options - Optional configuration
+   * @param options.projectName - Optional project name to filter by
+   * @param options.maxResults - Maximum number of results to return (default: 1000)
+   * @returns List of ThreadsAnnotationQueue objects
+   */
+  public getThreadsAnnotationQueues = async (options?: {
+    projectName?: string;
+    maxResults?: number;
+  }): Promise<ThreadsAnnotationQueue[]> => {
+    const queues = await this.getAnnotationQueuesByScope("thread", options);
+    return queues.map(queueData => new ThreadsAnnotationQueue(queueData, this));
+  };
+
+  private async getAnnotationQueuesByScope(
+    scope: "trace" | "thread",
+    options?: {
+      projectName?: string;
+      maxResults?: number;
+    }
+  ): Promise<OpikApi.AnnotationQueuePublic[]> {
+    const { projectName, maxResults = 1000 } = options ?? {};
+
+    logger.debug(
+      `Getting ${scope} annotation queues (project: ${projectName ?? "all"}, limit: ${maxResults})`
+    );
+
+    try {
+      let filters: string | undefined;
+
+      if (projectName) {
+        const projectId = await this.getProjectIdByName(projectName);
+        filters = JSON.stringify([
+          { field: "project_id", operator: "=", value: projectId },
+          { field: "scope", operator: "=", value: scope },
+        ]);
+      } else {
+        filters = JSON.stringify([
+          { field: "scope", operator: "=", value: scope },
+        ]);
+      }
+
+      const response = await this.api.annotationQueues.findAnnotationQueues({
+        size: maxResults,
+        filters,
+      });
+
+      const queues = response.content || [];
+      logger.info(`Retrieved ${queues.length} ${scope} annotation queues`);
+      return queues;
+    } catch (error) {
+      logger.error(`Failed to retrieve ${scope} annotation queues`, { error });
+      throw error;
+    }
+  }
+
+  private async deleteAnnotationQueueById(id: string, scope: "traces" | "threads"): Promise<void> {
+    logger.debug(`Deleting ${scope} annotation queue with ID "${id}"`);
+
+    try {
+      await this.api.annotationQueues.deleteAnnotationQueueBatch({
+        ids: [id],
+      });
+
+      logger.debug(`Successfully deleted ${scope} annotation queue with ID "${id}"`);
+    } catch (error) {
+      logger.error(`Failed to delete ${scope} annotation queue with ID "${id}"`, {
+        error,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Deletes a traces annotation queue by its ID.
+   *
+   * @param id - The ID of the traces annotation queue to delete
+   */
+  public deleteTracesAnnotationQueue = async (id: string): Promise<void> => {
+    return this.deleteAnnotationQueueById(id, "traces");
+  };
+
+  /**
+   * Deletes a threads annotation queue by its ID.
+   *
+   * @param id - The ID of the threads annotation queue to delete
+   */
+  public deleteThreadsAnnotationQueue = async (id: string): Promise<void> => {
+    return this.deleteAnnotationQueueById(id, "threads");
+  };
+
+  /**
+   * Creates a new experiment with the given dataset name and optional parameters
+   *
+   * @param datasetName The name of the dataset to associate with the experiment
+   * @param name Optional name for the experiment (if not provided, a generated name will be used)
+   * @param experimentConfig Optional experiment configuration parameters
+   * @param prompts Optional array of Prompt objects to link with the experiment
+   * @param type Optional experiment type (defaults to "regular")
+   * @param optimizationId Optional ID of an optimization associated with the experiment
+   * @param datasetVersionId Optional ID of the dataset version to link the experiment to
+   * @param evaluationMethod @internal Used by test suites — not part of the public API
+   * @returns The created Experiment object
+   */
+  public createExperiment = async ({
+    datasetName,
+    name,
+    experimentConfig,
+    prompts,
+    type = ExperimentType.Regular,
+    optimizationId,
+    datasetVersionId,
+    evaluationMethod,
+    tags,
+    projectName,
+  }: {
+    datasetName: string;
+    name?: string;
+    experimentConfig?: Record<string, unknown>;
+    prompts?: Prompt[];
+    type?: ExperimentType;
+    optimizationId?: string;
+    datasetVersionId?: string;
+    evaluationMethod?: OpikApi.ExperimentWriteEvaluationMethod;
+    tags?: string[];
+    projectName?: string;
+  }): Promise<Experiment> => {
+    logger.debug(`Creating experiment for dataset "${datasetName}"`);
+
+    if (!datasetName) {
+      throw new Error("Dataset name is required to create an experiment");
+    }
+
+    // Process prompts and build metadata
+    const [metadata, promptVersions] = buildMetadataAndPromptVersions(
+      experimentConfig,
+      prompts
+    );
+
+    const resolvedProjectName = this.resolveProjectName(projectName);
+    const id = generateId();
+    const experiment = new Experiment({ id, name, datasetName, prompts, tags, projectName: resolvedProjectName }, this);
+
+    try {
+      await this.api.experiments.createExperiment({
+        id,
+        datasetName,
+        name,
+        metadata,
+        promptVersions,
+        type,
+        optimizationId,
+        datasetVersionId,
+        tags,
+        evaluationMethod,
+        projectName: resolvedProjectName,
+      });
+
+      logger.debug("Experiment created with id:", id);
+      return experiment;
+    } catch (error) {
+      logger.error(`Failed to create experiment for dataset "${datasetName}"`, {
+        error,
+      });
+      throw new Error(`Error creating experiment: ${error}`);
+    }
+  };
+
+    /**
+     * Updates an experiment by ID
+     *
+     * @param id The ID of the experiment
+     * @param experimentUpdate Object containing the fields to update
+     * @param experimentUpdate.name Optional new name for the experiment
+     * @param experimentUpdate.experimentConfig Optional new configuration for the experiment
+     * @returns Promise that resolves when the experiment is updated
+     * @throws {Error} If id is not provided or if neither name nor experimentConfig is provided
+     */
+    public updateExperiment = async (
+        id: string,
+        experimentUpdate: {
+            name?: string;
+            experimentConfig?: Record<string, unknown>;
+        }
+    ): Promise<void> => {
+        if (!id) {
+            throw new Error("id is required to update an experiment");
+        }
+
+        const { name, experimentConfig } = experimentUpdate;
+
+        if (!name && !experimentConfig) {
+            throw new Error("At least one of 'name' or 'experimentConfig' must be provided to update an experiment");
+        }
+
+        logger.debug(`Updating experiment with ID "${id}"`);
+
+        // Only include parameters that are provided to avoid clearing fields
+        const request: OpikApi.ExperimentUpdate = {};
+        if (name !== undefined) {
+            request.name = name;
+        }
+        if (experimentConfig !== undefined) {
+            request.metadata = experimentConfig;
+        }
+
+        try {
+            await this.api.experiments.updateExperiment(id, { body: request });
+        } catch (error) {
+            logger.error(`Failed to update experiment with ID "${id}"`, { error });
+            throw error;
+        }
+    };
+
+  /**
+   * Gets an experiment by its unique ID
+   *
+   * @param id The unique identifier of the experiment
+   * @returns The Experiment object
+   */
+  public getExperimentById = async (id: string): Promise<Experiment> => {
+    logger.debug(`Getting experiment with ID "${id}"`);
+
+    try {
+      const experimentData = await this.api.experiments.getExperimentById(id);
+
+      return new Experiment(
+        {
+          id: experimentData.id,
+          name: experimentData.name,
+          datasetName: experimentData.datasetName ?? undefined,
+          projectName: experimentData.projectName ?? undefined,
+        },
+        this
+      );
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        throw new ExperimentNotFoundError(
+          `No experiment found with ID '${id}'`
+        );
+      }
+      logger.error(`Failed to get experiment with ID "${id}"`, { error });
+      throw error;
+    }
+  };
+
+  /**
+   * Gets experiments by name (can return multiple experiments with the same name)
+   *
+   * @param name The name of the experiments to retrieve
+   * @returns A list of Experiment objects with the given name
+   */
+  public getExperimentsByName = async (name: string, projectName?: string): Promise<Experiment[]> => {
+    const resolvedProjectName = this.resolveProjectName(projectName);
+    logger.debug(`Getting experiments with name "${name}"`);
+
+    try {
+      const streamResponse = await this.api.experiments.streamExperiments({
+        name,
+        projectName: resolvedProjectName,
+      });
+
+      const rawItems = await parseNdjsonStreamToArray<ExperimentPublic>(
+        streamResponse,
+        serialization.ExperimentPublic
+      );
+
+      return rawItems.map(
+        (exp) =>
+          new Experiment(
+            {
+              id: exp.id,
+              name: exp.name,
+              datasetName: exp.datasetName ?? undefined,
+              projectName: exp.projectName ?? undefined,
+            },
+            this
+          )
+      );
+    } catch (error) {
+      logger.error(`Failed to get experiments with name "${name}"`, { error });
+      throw error;
+    }
+  };
+
+  /**
+   * Gets a single experiment by name (returns the first match if multiple exist)
+   *
+   * @param name The name of the experiment to retrieve
+   * @returns The Experiment object
+   */
+  public getExperiment = async (name: string, projectName?: string): Promise<Experiment> => {
+    logger.debug(`Getting experiment with name "${name}"`);
+
+    const experiments = await this.getExperimentsByName(name, projectName);
+
+    if (experiments.length === 0) {
+      throw new ExperimentNotFoundError(name);
+    }
+
+    return experiments[0];
+  };
+
+  /**
+   * Gets all experiments associated with a dataset
+   *
+   * @param datasetName The name of the dataset
+   * @param maxResults Maximum number of experiments to return (default: 100)
+   * @param projectName Optional project name to scope the dataset lookup. If not provided, uses the client's configured project.
+   * @returns A list of Experiment objects associated with the dataset
+   * @throws {DatasetNotFoundError} If the dataset doesn't exist
+   */
+  public getDatasetExperiments = async (
+    datasetName: string,
+    maxResults: number = 100,
+    projectName?: string
+  ): Promise<Experiment[]> => {
+    logger.debug(`Getting experiments for dataset "${datasetName}"`);
+
+    const dataset = await this.getDataset(datasetName, projectName);
+
+    try {
+      return await this.findExperimentsByDatasetId(
+        dataset.id,
+        maxResults,
+        (exp) =>
+          new Experiment(
+            {
+              id: exp.id,
+              name: exp.name,
+              datasetName: exp.datasetName ?? undefined,
+            },
+            this
+          )
+      );
+    } catch (error) {
+      logger.error(`Failed to get experiments for dataset "${datasetName}"`, {
+        error,
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * Retrieves all experiments associated with a test suite.
+   *
+   * @param name The name of the test suite
+   * @param maxResults Maximum number of experiments to return (default: 100)
+   * @param projectName Optional project name to scope the suite lookup. If not provided, uses the client's configured project.
+   * @returns A list of TestSuiteExperiment objects associated with the test suite,
+   *   each carrying the suite-specific assertion aggregates (`passRate`, `passedCount`,
+   *   `totalCount`, `assertionScores`) populated by the backend.
+   * @throws {DatasetNotFoundError} If the test suite doesn't exist
+   */
+  public getTestSuiteExperiments = async (
+    name: string,
+    maxResults: number = 100,
+    projectName?: string
+  ): Promise<TestSuiteExperiment[]> => {
+    logger.debug(`Getting experiments for test suite "${name}"`);
+
+    const suiteDataset = await this.getDataset(name, projectName);
+
+    try {
+      return await this.findExperimentsByDatasetId(
+        suiteDataset.id,
+        maxResults,
+        (exp) =>
+          new TestSuiteExperiment(
+            {
+              id: exp.id,
+              name: exp.name,
+              datasetName: exp.datasetName ?? undefined,
+              passRate: exp.passRate,
+              passedCount: exp.passedCount,
+              totalCount: exp.totalCount,
+              assertionScores: exp.assertionScores,
+            },
+            this
+          )
+      );
+    } catch (error) {
+      logger.error(`Failed to get experiments for test suite "${name}"`, {
+        error,
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * Paginated fetch of experiments for a given dataset ID, mapping each raw
+   * `ExperimentPublic` row to a caller-chosen entity. Used internally by
+   * `getDatasetExperiments` and `getTestSuiteExperiments` to share the
+   * loop shape and only differ on the constructed type.
+   */
+  private findExperimentsByDatasetId = async <T>(
+    datasetId: string,
+    maxResults: number,
+    factory: (exp: ExperimentPublic) => T
+  ): Promise<T[]> => {
+    const pageSize = Math.min(100, maxResults);
+    const experiments: T[] = [];
+    let page = 1;
+
+    while (experiments.length < maxResults) {
+      const pageExperiments = await this.api.experiments.findExperiments({
+        page,
+        size: pageSize,
+        datasetId,
+      });
+
+      const content = pageExperiments?.content ?? [];
+
+      if (content.length === 0) {
+        break;
+      }
+
+      const remainingItems = maxResults - experiments.length;
+      const itemsToProcess = Math.min(content.length, remainingItems);
+
+      for (let i = 0; i < itemsToProcess; i++) {
+        experiments.push(factory(content[i]));
+      }
+
+      if (itemsToProcess < content.length) {
+        break;
+      }
+
+      page += 1;
+    }
+
+    return experiments;
+  };
+
+  /**
+   * Deletes an experiment by ID
+   *
+   * @param id The ID of the experiment to delete
+   */
+  public deleteExperiment = async (id: string): Promise<void> => {
+    logger.debug(`Deleting experiment with ID "${id}"`);
+
+    try {
+      await this.api.experiments.deleteExperimentsById({ ids: [id] });
+    } catch (error) {
+      logger.error(`Failed to delete experiment with ID "${id}"`, { error });
+      throw error;
+    }
+  };
+
+  /**
+   * Internal helper for creating prompts (text or chat).
+   * Handles common logic: version checking, creation, and property updates.
+   *
+   * @param name - Prompt name
+   * @param template - Template string (raw text or JSON-serialized messages)
+   * @param templateStructure - Text or Chat structure
+   * @param options - Common prompt options (metadata, type, description, tags)
+   * @param validateStructure - Callback to validate template structure against existing prompt
+   * @param createInstance - Factory function to create Prompt or ChatPrompt instance
+   * @param logContext - Context string for logging (e.g., "prompt" or "chat prompt")
+   * @returns Promise resolving to Prompt or ChatPrompt instance
+   */
+  private createPromptInternal = async <T extends Prompt | ChatPrompt>(
+    name: string,
+    template: string,
+    templateStructure: PromptTemplateStructure,
+    options: CommonPromptOptions,
+    validateStructure: (latest: OpikApi.PromptVersionDetail | null) => void,
+    createInstance: (
+      promptData: OpikApi.PromptPublic,
+      versionData: OpikApi.PromptVersionDetail
+    ) => T,
+    createUnsyncedInstance: () => T,
+    logContext: string,
+    projectName?: string
+  ): Promise<T> => {
+    logger.debug(`Creating ${logContext}`, { name });
+
+    try {
+      // Fetch latest version (returns null if prompt doesn't exist yet)
+      const latestVersion = await fetchLatestPromptVersion(
+        this.api.prompts,
+        name,
+        this.api.requestOptions
+      );
+
+      // Validate template structure against existing prompt
+      validateStructure(latestVersion);
+
+      // Determine if we need to create a new version
+      const normalizedType = options.type ?? PromptType.MUSTACHE;
+      const needsNewVersion = shouldCreateNewVersion(
+        { prompt: template, metadata: options.metadata },
+        latestVersion,
+        normalizedType
+      );
+
+      let versionResponse: OpikApi.PromptVersionDetail;
+
+      if (needsNewVersion) {
+        // Create new version
+        logger.debug(`Creating new ${logContext} version`, { name });
+        versionResponse = await this.api.prompts.createPromptVersion(
+          {
+            name,
+            version: {
+              template,
+              metadata: options.metadata,
+              type: normalizedType,
+            },
+            templateStructure,
+            projectName,
+          },
+          this.api.requestOptions
+        );
+      } else {
+        // Return existing version (idempotent)
+        logger.debug(`Returning existing ${logContext} version`, { name });
+        versionResponse = latestVersion!;
+      }
+
+      // Fetch full prompt data and create instance
+      if (!versionResponse.promptId) {
+        throw new Error("Invalid API response: missing promptId");
+      }
+
+      const promptData = await this.api.prompts.getPromptById(
+        versionResponse.promptId,
+        {},
+        this.api.requestOptions
+      );
+
+      const promptInstance = createInstance(promptData, versionResponse) as T;
+
+      logger.debug(`${logContext} created`, { name });
+
+      // Update properties if provided
+      if (options.description || options.tags) {
+        return (await promptInstance.updateProperties({
+          description: options.description,
+          tags: options.tags,
+        })) as T;
+      }
+
+      return promptInstance;
+    } catch (error) {
+      if (error instanceof OpikApiError || error instanceof OpikApiTimeoutError) {
+        logger.warn(
+          `Failed to sync ${logContext} '${name}' with the backend. ` +
+            "The prompt will work locally but is not persisted on the server. " +
+            "You can retry by calling .syncWithBackend().",
+          { error }
+        );
+        return createUnsyncedInstance();
+      }
+      logger.error(`Failed to create ${logContext}`, { name, error });
+      throw error;
+    }
+  };
+
+  /**
+   * Creates a new prompt or new version if content differs.
+   *
+   * Key Behaviors:
+   * - Smart Versioning: Only creates a new version if template, metadata, or type differ from latest
+   * - Idempotent: Returns existing version if identical (no duplicate versions)
+   * - 404 Handling: Gracefully handles first-time prompt creation
+   * - Uses create_prompt_version endpoint (not create_prompt which is for containers)
+   * - Synchronous: Returns immediately with the created/retrieved version
+   *
+   * @param options - Prompt configuration
+   * @returns Promise resolving to Prompt instance
+   * @throws PromptValidationError if parameters invalid
+   */
+  public createPrompt = async (
+    options: CreatePromptOptions
+  ): Promise<Prompt> => {
+    const resolvedProjectName = this.resolveProjectName(options.projectName);
+    return this.createPromptInternal(
+      options.name,
+      options.prompt,
+      PromptTemplateStructure.Text,
+      options,
+      () => {
+        // No structure validation needed for text prompts
+      },
+      (promptData, versionData) =>
+        Prompt.fromApiResponse(promptData, versionData, this, resolvedProjectName),
+      () =>
+        new Prompt(
+          {
+            name: options.name,
+            prompt: options.prompt,
+            metadata: options.metadata,
+            type: options.type ?? PromptType.MUSTACHE,
+            description: options.description,
+            tags: options.tags,
+            projectName: resolvedProjectName,
+            synced: false,
+          },
+          this
+        ),
+      "prompt",
+      resolvedProjectName
+    );
+  };
+
+  /**
+   * Creates a new chat prompt or returns existing one if identical.
+   * Chat prompts use message arrays instead of string templates.
+   * Idempotent: returns existing version if messages, metadata, and type match.
+   *
+   * @param options - Chat prompt configuration with messages array
+   * @returns Promise resolving to ChatPrompt instance
+   * @throws PromptTemplateStructureMismatch if a text prompt with same name exists
+   *
+   * @example
+   * ```typescript
+   * const chatPrompt = await client.createChatPrompt({
+   *   name: "assistant-prompt",
+   *   messages: [
+   *     { role: "system", content: "You are a helpful assistant" },
+   *     { role: "user", content: "Help me with {{task}}" }
+   *   ],
+   *   type: "mustache"
+   * });
+   * ```
+   */
+  public createChatPrompt = async (
+    options: CreateChatPromptOptions
+  ): Promise<ChatPrompt> => {
+    const resolvedProjectName = this.resolveProjectName(options.projectName);
+    // Serialize messages to JSON for backend storage
+    const messagesJson = JSON.stringify(options.messages);
+
+    return this.createPromptInternal(
+      options.name,
+      messagesJson,
+      PromptTemplateStructure.Chat,
+      options,
+      (latestVersion) => {
+        // Check for template structure mismatch
+        if (
+          latestVersion &&
+          latestVersion.templateStructure &&
+          latestVersion.templateStructure !== PromptTemplateStructure.Chat
+        ) {
+          throw new PromptTemplateStructureMismatch(
+            options.name,
+            latestVersion.templateStructure,
+            PromptTemplateStructure.Chat
+          );
+        }
+      },
+      (promptData, versionData) =>
+        ChatPrompt.fromApiResponse(promptData, versionData, this, resolvedProjectName),
+      () =>
+        new ChatPrompt(
+          {
+            name: options.name,
+            messages: structuredClone(options.messages),
+            metadata: options.metadata,
+            type: options.type ?? PromptType.MUSTACHE,
+            description: options.description,
+            tags: options.tags,
+            projectName: resolvedProjectName,
+            synced: false,
+          },
+          this
+        ),
+      "chat prompt",
+      resolvedProjectName
+    );
+  };
+
+  /**
+   * Retrieves a text prompt by name, optionally targeting a specific `version`.
+   * Results are cached client-side (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS,
+   * default 300s). When called inside a track() context the prompt reference
+   * is injected into the active trace/span metadata.
+   *
+   * @param options - Prompt name and optional version pin or environment
+   * @param options.name - Name of the prompt
+   * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
+   *   provided, the latest version is returned.
+   * @param options.commit - **Deprecated.** Use `version` instead.
+   * @param options.projectName - Optional project scope.
+   * @param options.environment - Optional environment name. Resolves to the version
+   *   currently owned by that workspace environment. Mutually exclusive with both
+   *   `commit` and `version`.
+   * @returns Promise resolving to Prompt or null if not found
+   * @throws Error if both `commit` and `version` are provided, or if `environment` is
+   *   combined with either `commit` or `version`
+   * @throws PromptTemplateStructureMismatch if prompt exists but is a chat prompt
+   */
+  public getPrompt = async (
+    options: GetPromptOptions
+  ): Promise<Prompt | null> => {
+    return this.getPromptWithCache<Prompt>(
+      options,
+      PromptTemplateStructure.Text,
+      (promptData, versionData, projectName) =>
+        Prompt.fromApiResponse(promptData, versionData, this, projectName),
+      "prompt"
+    );
+  };
+
+  /**
+   * Retrieves a chat prompt by name, optionally targeting a specific `version`.
+   * Results are cached client-side (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS,
+   * default 300s). When called inside a track() context the prompt reference
+   * is injected into the active trace/span metadata.
+   *
+   * @param options - Prompt name and optional version pin or environment
+   * @param options.name - Name of the prompt
+   * @param options.version - Sequential version identifier (e.g. `"v3"`). If not
+   *   provided, the latest version is returned.
+   * @param options.commit - **Deprecated.** Use `version` instead.
+   * @param options.projectName - Optional project scope.
+   * @param options.environment - Optional environment name. Resolves to the version
+   *   currently owned by that workspace environment. Mutually exclusive with both
+   *   `commit` and `version`.
+   * @returns Promise resolving to ChatPrompt or null if not found
+   * @throws Error if both `commit` and `version` are provided, or if `environment` is
+   *   combined with either `commit` or `version`
+   * @throws PromptTemplateStructureMismatch if prompt exists but is a text prompt
+   *
+   * @example
+   * ```typescript
+   * const chatPrompt = await client.getChatPrompt({ name: "assistant-prompt" });
+   * if (chatPrompt) {
+   *   const messages = chatPrompt.format({ task: "coding" });
+   * }
+   * ```
+   */
+  public getChatPrompt = async (
+    options: GetPromptOptions
+  ): Promise<ChatPrompt | null> => {
+    return this.getPromptWithCache<ChatPrompt>(
+      options,
+      PromptTemplateStructure.Chat,
+      (promptData, versionData, projectName) =>
+        ChatPrompt.fromApiResponse(promptData, versionData, this, projectName),
+      "chat prompt"
+    );
+  };
+
+  private getPromptWithCache = async <T extends BasePrompt>(
+    options: GetPromptOptions,
+    expectedStructure: PromptTemplateStructure,
+    createInstance: (
+      promptData: OpikApi.PromptPublic,
+      versionData: OpikApi.PromptVersionDetail,
+      projectName: string
+    ) => T,
+    logContext: string
+  ): Promise<T | null> => {
+    // Validate mutual exclusivity synchronously, before touching any async work.
+    if (options.commit && options.version) {
+      throw new Error(
+        "Provide either `commit` or `version`, not both. " +
+          "Prefer `version` — `commit` is deprecated."
+      );
+    }
+
+    logger.debug(`Getting ${logContext}`, options);
+
+    if (options.commit && options.environment) {
+      throw new Error(
+        "'commit' and 'environment' are mutually exclusive; pass at most one.",
+      );
+    }
+
+    if (options.version && options.environment) {
+      throw new Error(
+        "'version' and 'environment' are mutually exclusive; pass at most one.",
+      );
+    }
+
+    const resolvedProjectName = this.resolveProjectName(options.projectName);
+
+    const fetchFn = async (maskId?: string | null): Promise<T | null> => {
+      try {
+        let promptData: OpikApi.PromptPublic | undefined;
+        let versionData: OpikApi.PromptVersionDetail;
+
+        if (maskId) {
+          versionData = await this.api.prompts.getPromptVersionById(
+            maskId,
+            {},
+            this.api.requestOptions
+          );
+          if (!versionData.promptId) {
+            return null;
+          }
+          promptData = await this.api.prompts.getPromptById(
+            versionData.promptId,
+            {},
+            this.api.requestOptions
+          );
+        } else {
+          let projectId: string | undefined;
+          try {
+            projectId = await this.getProjectIdByName(resolvedProjectName);
+          } catch {
+            // Project doesn't exist yet — search without project filter
+          }
+
+          const searchResponse = await this.api.prompts.getPrompts(
+            {
+              filters: JSON.stringify([
+                { field: "name", operator: "=", value: options.name },
+              ]),
+              size: 1,
+              ...(projectId && { projectId }),
+            },
+            this.api.requestOptions
+          );
+
+          promptData = searchResponse.content?.[0];
+          if (!promptData) {
+            logger.debug(`${logContext.charAt(0).toUpperCase() + logContext.slice(1)} not found`, { name: options.name });
+            return null;
+          }
+
+          // Build the REST request body explicitly so we never leak SDK-only
+          // fields (such as `version` — the wire format calls it `versionNumber`).
+          const retrieveRequest: OpikApi.PromptVersionRetrieveDetail = {
+            name: options.name,
+            projectName: resolvedProjectName,
+            ...(options.commit ? { commit: options.commit } : {}),
+            ...(options.version ? { versionNumber: options.version } : {}),
+            ...(options.environment ? { environment: options.environment } : {}),
+          };
+
+          versionData = await this.api.prompts.retrievePromptVersion(
+            retrieveRequest,
+            this.api.requestOptions
+          );
+        }
+
+
+        const templateStructure = versionData.templateStructure;
+        if (expectedStructure === PromptTemplateStructure.Text) {
+          if (templateStructure && templateStructure !== PromptTemplateStructure.Text) {
+            throw new PromptTemplateStructureMismatch(
+              options.name,
+              templateStructure,
+              PromptTemplateStructure.Text
+            );
+          }
+        } else {
+          if (!templateStructure || templateStructure !== PromptTemplateStructure.Chat) {
+            throw new PromptTemplateStructureMismatch(
+              options.name,
+              templateStructure ?? "undefined",
+              PromptTemplateStructure.Chat
+            );
+          }
+        }
+
+        return createInstance(promptData, versionData, resolvedProjectName);
+      } catch (error) {
+        if (error instanceof OpikApiError && error.statusCode === 404) {
+          return null;
+        }
+        logger.error(`Failed to get ${logContext}`, { name: options.name, error });
+        throw error;
+      }
+    };
+
+    const unmasked = await promptCacheGetOrFetch<T>(
+      options.name,
+      options.commit,
+      resolvedProjectName,
+      expectedStructure,
+      () => fetchFn(),
+      this.config.promptCacheTtlSeconds,
+      undefined,
+      options.version,
+      options.environment
+    );
+
+    const activeMaskId = unmasked?.id
+      ? getActiveMaskForPrompt(unmasked.id)
+      : null;
+    const result = activeMaskId
+      ? await promptCacheGetOrFetch<T>(
+          options.name,
+          options.commit,
+          resolvedProjectName,
+          expectedStructure,
+          () => fetchFn(activeMaskId),
+          this.config.promptCacheTtlSeconds,
+          activeMaskId,
+          options.version
+        )
+      : unmasked;
+
+    if (result !== null) {
+      const ctx = getTrackContext();
+      if (ctx) {
+        if (!UpdateService.promptAlreadyInjected(ctx.trace.data.metadata, result.id, result.commit)) {
+          ctx.trace.update({ prompts: [result], appendPrompts: true });
+        }
+        if (!UpdateService.promptAlreadyInjected(ctx.span.data.metadata, result.id, result.commit)) {
+          ctx.span.update({ prompts: [result], appendPrompts: true });
+        }
+      }
+    }
+
+    return result;
+  };
+
+  /**
+   * Searches prompts with optional OQL filtering.
+   *
+   * @param filterString - Optional OQL filter string to narrow down search
+   *
+   * Supported OQL format: `<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*`
+   *
+   * Supported columns:
+   * - `id`, `name`, `description`: String fields
+   * - `created_by`, `last_updated_by`: String fields
+   * - `template_structure`: String field (e.g., "text" or "chat")
+   * - `created_at`, `last_updated_at`: Date/time fields (ISO 8601 format)
+   * - `tags`: List field (use "contains" operator only)
+   * - `version_count`: Number field
+   *
+   * Supported operators by column:
+   * - String fields (`id`, `name`, `description`, `created_by`, `last_updated_by`, `template_structure`): =, !=, contains, not_contains, starts_with, ends_with, >, <
+   * - Date/time fields (`created_at`, `last_updated_at`): =, >, <, >=, <=
+   * - Number fields (`version_count`): =, !=, >, <, >=, <=
+   * - List fields (`tags`): contains
+   *
+   * @returns Promise resolving to array of matching latest prompt versions
+   * @throws Error if OQL filter syntax is invalid
+   *
+   * @example
+   * ```typescript
+   * // Get all prompts
+   * const allPrompts = await client.searchPrompts();
+   *
+   * // Filter by tag
+   * const prompts = await client.searchPrompts('tags contains "alpha"');
+   *
+   * // Filter by multiple criteria
+   * const prompts = await client.searchPrompts(
+   *   'tags contains "alpha" AND name contains "summary"'
+   * );
+   *
+   * // Filter by creator
+   * const prompts = await client.searchPrompts('created_by = "user@example.com"');
+   *
+   * // Filter by template structure
+   * const chatPrompts = await client.searchPrompts('template_structure = "chat"');
+   *
+   * // Filter by date range
+   * const recentPrompts = await client.searchPrompts('created_at >= "2024-01-01T00:00:00Z"');
+   *
+   * // Filter by version count
+   * const multiVersion = await client.searchPrompts('version_count > 5');
+   * ```
+   */
+  public searchPrompts = async (
+    filterString?: string
+  ): Promise<(Prompt | ChatPrompt)[]> => {
+    logger.debug("Searching prompts", { filterString });
+
+    try {
+      // Parse OQL filter string to JSON
+      let filters: string | undefined;
+      if (filterString) {
+        const oql = OpikQueryLanguage.forPrompts(filterString);
+        const filterExpressions = oql.getFilterExpressions();
+        filters = filterExpressions
+          ? JSON.stringify(filterExpressions)
+          : undefined;
+      }
+
+      const response = await this.api.prompts.getPrompts(
+        {
+          filters,
+          size: 1000,
+        },
+        this.api.requestOptions
+      );
+
+      const prompts = response.content ?? [];
+
+      // Map each prompt to get its latest version and create appropriate instance
+      const promptsWithVersions = await Promise.all(
+        prompts.map(async (promptData: OpikApi.PromptPublic) => {
+          if (!promptData.name) {
+            return null;
+          }
+
+          try {
+            const versionResponse =
+              await this.api.prompts.retrievePromptVersion(
+                { name: promptData.name },
+                this.api.requestOptions
+              );
+
+            const templateStructure = versionResponse.templateStructure;
+
+            const searchProjectName = this.resolveProjectName();
+            // Default to text for backwards compatibility
+            if (!templateStructure || templateStructure === PromptTemplateStructure.Text) {
+              return Prompt.fromApiResponse(promptData, versionResponse, this, searchProjectName);
+            } else if (templateStructure === PromptTemplateStructure.Chat) {
+              return ChatPrompt.fromApiResponse(
+                promptData,
+                versionResponse,
+                this,
+                searchProjectName
+              );
+            }
+
+            return null;
+          } catch (error) {
+            logger.debug("Failed to get version for prompt", {
+              name: promptData.name,
+              error,
+            });
+            return null;
+          }
+        })
+      );
+
+      return promptsWithVersions.filter(
+        (p: Prompt | ChatPrompt | null): p is Prompt | ChatPrompt => p !== null
+      );
+    } catch (error) {
+      logger.error("Failed to search prompts", { error });
+      throw error;
+    }
+  };
+
+  /**
+   * Deletes multiple prompts and all their versions in batch.
+   * Performs synchronous deletion (no batching).
+   *
+   * @param ids - Array of prompt container IDs to delete
+   */
+  public deletePrompts = async (ids: string[]): Promise<void> => {
+    logger.debug("Deleting prompts in batch", { count: ids.length });
+
+    try {
+      await this.api.prompts.deletePromptsBatch(
+        { ids },
+        this.api.requestOptions
+      );
+
+      getGlobalCache().evictByIds(ids);
+      logger.info("Successfully deleted prompts", { count: ids.length });
+    } catch (error) {
+      logger.error("Failed to delete prompts", { count: ids.length, error });
+      throw error;
+    }
+  };
+
+  /**
+   * Assigns a prompt version to an environment, or clears the assignment.
+   *
+   * Replace the full set of environments owned by a prompt version. The
+   * provided list becomes the resolved version's complete set of environments.
+   * Pass an empty array to clear all environments. Any other version of the
+   * same prompt that previously owned one of the listed environments is
+   * cleared. Existing prompt objects already in memory are not mutated —
+   * re-fetch with `client.getPrompt(...)` to see the change.
+   *
+   * @param options.promptName - Name of the prompt
+   * @param options.environments - Environments to assign. Each must already be registered in the workspace. Pass `[]` to clear.
+   * @param options.version - Sequential version selector in the wire format `"v<N>"` (e.g. `"v3"`). Defaults to the latest version.
+   * @param options.projectName - Project the prompt belongs to. Defaults to the client's project.
+   *
+   * @throws {PromptNotFoundError} The prompt name (or the supplied `version`) does not exist in the resolved project.
+   * @throws {EnvironmentNotFoundError} One of `environments` is not registered in the workspace.
+   */
+  public setPromptEnvironments = async (
+    options: {
+      promptName: string;
+      environments: string[];
+      version?: string;
+      projectName?: string;
+    },
+  ): Promise<void> => {
+    let resolvedVersion;
+    try {
+      resolvedVersion = await this.api.prompts.retrievePromptVersion(
+        {
+          name: options.promptName,
+          versionNumber: options.version,
+          projectName: this.resolveProjectName(options.projectName),
+        },
+        this.api.requestOptions,
+      );
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        if (options.version !== undefined) {
+          throw new PromptNotFoundError(
+            `No version '${options.version}' found for prompt '${options.promptName}'.`,
+          );
+        }
+        throw new PromptNotFoundError(
+          `No prompt found with name '${options.promptName}'.`,
+        );
+      }
+      throw error;
+    }
+
+    const target = Array.from(new Set(options.environments));
+    try {
+      await this.api.prompts.setPromptVersionEnvironment(
+        resolvedVersion.id!,
+        { environments: target },
+        this.api.requestOptions,
+      );
+    } catch (error) {
+      if (error instanceof OpikApiError) {
+        // The backend reports unknown environments as 404 (not found) or 409
+        // (conflict, when the name collides with the workspace registry check).
+        if (error.statusCode === 404 || error.statusCode === 409) {
+          throw new EnvironmentNotFoundError(
+            `One or more environments in [${target.join(", ")}] are not registered in this workspace.`,
+          );
+        }
+}
+      throw error;
+    }
+
+    getGlobalCache().invalidateForPrompt(
+      options.promptName,
+      this.resolveProjectName(options.projectName),
+    );
+  };
+
+  /**
+   * Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
+   * to be found before returning within the specified timeout.
+   *
+   * @param projectName - The name of the project to search in. Defaults to the project configured on the Client.
+   * @param filterString - Filter using Opik Query Language (OQL). Format: `<COLUMN> <OPERATOR> <VALUE> [AND ...]`
+   *   Common columns: `id`, `name`, `start_time`, `end_time`, `input`, `output`, `status`, `tags`, `metadata.*`, `feedback_scores.*`, `usage.*`
+   *   Common operators: `=`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `not_contains`, `starts_with`, `ends_with`
+   *   Use ISO 8601 format for dates (e.g., "2024-01-01T00:00:00Z")
+   * @param maxResults - Maximum number of traces to return (default: 1000)
+   * @param truncate - Whether to truncate image data in input, output, or metadata (default: true)
+   * @param waitForAtLeast - Minimum number of traces to wait for before returning
+   * @param waitForTimeout - Timeout for waiting in seconds (default: 60)
+   *
+   * @returns Promise resolving to array of traces matching the search criteria
+   * @throws {SearchTimeoutError} If waitForAtLeast traces are not found within the specified timeout
+   *
+   * @example
+   * ```typescript
+   * // Get all traces in a project
+   * const traces = await client.searchTraces({ projectName: "My Project" });
+   *
+   * // Filter by date and metadata
+   * const filtered = await client.searchTraces({
+   *   projectName: "My Project",
+   *   filterString: 'start_time >= "2024-01-01T00:00:00Z" AND metadata.model = "gpt-4"'
+   * });
+   *
+   * // Wait for at least 10 traces
+   * const traces = await client.searchTraces({
+   *   projectName: "My Project",
+   *   waitForAtLeast: 10,
+   *   waitForTimeout: 30
+   * });
+   * ```
+   */
+  private async executeSearch<T, TFilter>(
+    resourceType: "traces" | "threads" | "spans",
+    options: {
+      projectName?: string;
+      filterString?: string;
+      maxResults?: number;
+      truncate?: boolean;
+      waitForAtLeast?: number;
+      waitForTimeout?: number;
+    },
+    parseFilters: (filterString?: string) => TFilter[] | null,
+    searchWithFilters: (
+      api: OpikApiClientTemp,
+      projectName: string,
+      filters: TFilter[] | null,
+      maxResults: number,
+      truncate: boolean
+    ) => Promise<T[]>
+  ): Promise<T[]> {
+    const {
+      projectName,
+      filterString,
+      maxResults = 1000,
+      truncate = true,
+      waitForAtLeast,
+      waitForTimeout = 60,
+    } = options;
+
+    logger.debug(`Searching ${resourceType}`, {
+      projectName,
+      filterString,
+      maxResults,
+      truncate,
+      waitForAtLeast,
+      waitForTimeout,
+    });
+
+    const filters = parseFilters(filterString);
+    const targetProject = projectName ?? this.config.projectName;
+
+    const searchFn = () =>
+      searchWithFilters(
+        this.api,
+        targetProject,
+        filters,
+        maxResults,
+        truncate
+      );
+
+    if (waitForAtLeast === undefined) {
+      return await searchFn();
+    }
+
+    const result = await searchAndWaitForDone(
+      searchFn,
+      waitForAtLeast,
+      waitForTimeout * 1000,
+      5000
+    );
+
+    if (result.length < waitForAtLeast) {
+      throw new SearchTimeoutError(
+        `Timeout after ${waitForTimeout} seconds: expected ${waitForAtLeast} ${resourceType}, but only ${result.length} were found.`
+      );
+    }
+
+    return result;
+  }
+
+  public searchTraces = async (options?: {
+    projectName?: string;
+    filterString?: string;
+    maxResults?: number;
+    truncate?: boolean;
+    exclude?: string[];
+    waitForAtLeast?: number;
+    waitForTimeout?: number;
+  }): Promise<OpikApi.TracePublic[]> => {
+    const { exclude, ...rest } = options ?? {};
+    return this.executeSearch<OpikApi.TracePublic, OpikApi.TraceFilterPublic>(
+      "traces",
+      rest,
+      parseFilterString,
+      (api, projectName, filters, maxResults, truncate) =>
+        searchTracesWithFilters(api, projectName, filters, maxResults, truncate,
+          exclude as OpikApi.TraceSearchStreamRequestPublicExcludeItem[] | undefined)
+    );
+  };
+
+  /**
+   * Search for threads in a project with optional filtering.
+   *
+   * Threads represent conversations or sessions that group related traces together.
+   * This method allows you to search and filter threads using Opik Query Language (OQL).
+   *
+   * @param options - Search options
+   * @param options.projectName - Name of the project to search in. Defaults to the client's configured project.
+   * @param options.filterString - Filter string using Opik Query Language (OQL).
+   *   Supports filtering by: id, status, feedback_scores, duration, number_of_messages, tags, metadata, etc.
+   *   Examples: 'status = "active"', 'feedback_scores.quality > 0.8', 'duration > 300'
+   * @param options.maxResults - Maximum number of threads to return (default: 1000)
+   * @param options.truncate - Whether to truncate large fields in the response (default: true)
+   * @param options.waitForAtLeast - If specified, polls until at least this many threads are found
+   * @param options.waitForTimeout - Timeout in seconds when using waitForAtLeast (default: 60)
+   * @returns Promise resolving to an array of threads
+   * @throws {SearchTimeoutError} If waitForAtLeast is specified and timeout is reached
+   *
+   * @example
+   * ```typescript
+   * // Get all threads in a project
+   * const threads = await client.searchThreads({ projectName: "My Project" });
+   *
+   * // Filter by status
+   * const activeThreads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   filterString: 'status = "active"'
+   * });
+   *
+   * // Filter by feedback score
+   * const highQualityThreads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   filterString: 'feedback_scores.quality > 0.8'
+   * });
+   *
+   * // Wait for at least 5 threads
+   * const threads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   waitForAtLeast: 5,
+   *   waitForTimeout: 30
+   * });
+   * ```
+   */
+  public searchThreads = async (options?: {
+    projectName?: string;
+    filterString?: string;
+    maxResults?: number;
+    truncate?: boolean;
+    waitForAtLeast?: number;
+    waitForTimeout?: number;
+  }): Promise<OpikApi.TraceThread[]> => {
+    return this.executeSearch<OpikApi.TraceThread, OpikApi.TraceThreadFilter>(
+      "threads",
+      options ?? {},
+      parseThreadFilterString,
+      searchThreadsWithFilters
+    );
+  };
+
+  /**
+   * Search for spans in a project with optional filtering.
+   *
+   * Spans represent individual operations or steps within traces, such as LLM calls or function executions.
+   * This method allows you to search and filter spans using Opik Query Language (OQL).
+   *
+   * @param options - Search options
+   * @param options.projectName - Name of the project to search in. Defaults to the client's configured project.
+   * @param options.filterString - Filter string using Opik Query Language (OQL).
+   *   Supports filtering by: model, provider, type, metadata, feedback_scores, usage, duration, etc.
+   *   Examples: 'model = "gpt-4"', 'provider = "openai"', 'type = "llm"', 'metadata.version = "1.0"'
+   * @param options.maxResults - Maximum number of spans to return (default: 1000)
+   * @param options.truncate - Whether to truncate large fields in the response (default: true)
+   * @param options.waitForAtLeast - If specified, polls until at least this many spans are found
+   * @param options.waitForTimeout - Timeout in seconds when using waitForAtLeast (default: 60)
+   * @returns Promise resolving to an array of spans
+   * @throws {SearchTimeoutError} If waitForAtLeast is specified and timeout is reached
+   *
+   * @example
+   * ```typescript
+   * // Get all spans in a project
+   * const spans = await client.searchSpans({ projectName: "My Project" });
+   *
+   * // Filter by model
+   * const gpt4Spans = await client.searchSpans({
+   *   projectName: "My Project",
+   *   filterString: 'model = "gpt-4"'
+   * });
+   *
+   * // Filter by provider and type
+   * const openaiLLMSpans = await client.searchSpans({
+   *   projectName: "My Project",
+   *   filterString: 'provider = "openai" and type = "llm"'
+   * });
+   *
+   * // Filter by metadata
+   * const prodSpans = await client.searchSpans({
+   *   projectName: "My Project",
+   *   filterString: 'metadata.environment = "production"'
+   * });
+   *
+   * // Wait for at least 5 spans
+   * const spans = await client.searchSpans({
+   *   projectName: "My Project",
+   *   waitForAtLeast: 5,
+   *   waitForTimeout: 30
+   * });
+   * ```
+   */
+  public searchSpans = async (options?: {
+    projectName?: string;
+    filterString?: string;
+    maxResults?: number;
+    truncate?: boolean;
+    exclude?: string[];
+    waitForAtLeast?: number;
+    waitForTimeout?: number;
+  }): Promise<OpikApi.SpanPublic[]> => {
+    const { exclude, ...rest } = options ?? {};
+    return this.executeSearch<OpikApi.SpanPublic, OpikApi.SpanFilterPublic>(
+      "spans",
+      rest,
+      parseSpanFilterString,
+      (api, projectName, filters, maxResults, truncate) =>
+        searchSpansWithFilters(api, projectName, filters, maxResults, truncate,
+          exclude as OpikApi.SpanSearchStreamRequestPublicExcludeItem[] | undefined)
+    );
+  };
+
+  private logFeedbackScores(
+    scores: FeedbackScoreData[],
+    batchQueue: TraceFeedbackScoresBatchQueue | SpanFeedbackScoresBatchQueue
+  ): void {
+    for (const score of scores) {
+      batchQueue.create({
+        ...score,
+        projectName: score.projectName ?? this.config.projectName,
+        source: FeedbackScoreBatchItemSource.Sdk,
+      });
+    }
+  }
+
+  /**
+   * Log feedback scores to existing traces in batch.
+   *
+   * @param scores - Array of feedback score data with trace IDs
+   *
+   * @example
+   * ```typescript
+   * client.logTracesFeedbackScores([
+   *   { id: "trace-id-1", name: "quality", value: 0.9, reason: "Good response" },
+   *   { id: "trace-id-2", name: "relevance", value: 0.8 }
+   * ]);
+   * await client.flush();
+   * ```
+   */
+  public logTracesFeedbackScores(scores: FeedbackScoreData[]): void {
+    this.logFeedbackScores(scores, this.traceFeedbackScoresBatchQueue);
+  }
+
+  /**
+   * Log feedback scores to existing spans in batch.
+   *
+   * @param scores - Array of feedback score data with span IDs
+   *
+   * @example
+   * ```typescript
+   * client.logSpansFeedbackScores([
+   *   { id: "span-id-1", name: "accuracy", value: 0.95 },
+   *   { id: "span-id-2", name: "completeness", value: 0.85, reason: "Missing details" }
+   * ]);
+   * await client.flush();
+   * ```
+   */
+  public logSpansFeedbackScores(scores: FeedbackScoreData[]): void {
+    this.logFeedbackScores(scores, this.spanFeedbackScoresBatchQueue);
+  }
+
+  public createEnvironment = async (
+    name: string,
+    options?: { description?: string; color?: string }
+  ): Promise<OpikApi.EnvironmentPublic> => {
+    const newId = generateId();
+    try {
+      await this.api.environments.createEnvironment({
+        id: newId,
+        name,
+        description: options?.description,
+        color: options?.color,
+      });
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 409) {
+        throw new EnvironmentAlreadyExistsError(name);
+      }
+      throw error;
+    }
+    return this.api.environments.getEnvironmentById(newId);
+  };
+
+  public getEnvironments = async (): Promise<OpikApi.EnvironmentPublic[]> => {
+    const page = await this.api.environments.findEnvironments();
+    return page.content ?? [];
+  };
+
+  private static readonly BUILTIN_ENVIRONMENT_NAMES = new Set([
+    "production",
+    "staging",
+    "development",
+  ]);
+
+  public updateEnvironment = async (
+    name: string,
+    options?: { description?: string; color?: string }
+  ): Promise<OpikApi.EnvironmentPublic> => {
+    if (
+      options?.color !== undefined &&
+      OpikClient.BUILTIN_ENVIRONMENT_NAMES.has(name)
+    ) {
+      throw new EnvironmentConfigurationError(
+        `Cannot change the colour of the built-in environment '${name}'. ` +
+          "Colour updates are not allowed for 'production', 'staging', or 'development'."
+      );
+    }
+    const existing = await this._findEnvironmentByName(name, true);
+    await this.api.environments.updateEnvironment(existing!.id!, {
+      description: options?.description,
+      color: options?.color,
+    });
+    return this.api.environments.getEnvironmentById(existing!.id!);
+  };
+
+  public deleteEnvironment = async (name: string): Promise<void> => {
+    const existing = await this._findEnvironmentByName(name, false);
+    if (!existing) {
+      return;
+    }
+    await this.api.environments.deleteEnvironmentsBatch({
+      ids: [existing.id!],
+    });
+  };
+
+  private _findEnvironmentByName = async (
+    name: string,
+    strict: boolean
+  ): Promise<OpikApi.EnvironmentPublic | undefined> => {
+    const envs = await this.getEnvironments();
+    const match = envs.find((env) => env.name === name);
+    if (!match && strict) {
+      throw new Error(`No environment found with name "${name}".`);
+    }
+    return match;
+  };
+
+  public flush = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     logger.debug("Starting flush operation");
     try {
       await this.traceBatchQueue.flush();
       await this.spanBatchQueue.flush();
       await this.traceFeedbackScoresBatchQueue.flush();
       await this.spanFeedbackScoresBatchQueue.flush();
-      logger.info("Successfully flushed all data to Opik");
+      await this.traceAssertionResultsBatchQueue.flush();
+      await this.datasetBatchQueue.flush();
+      // Note: Prompt operations are synchronous and don't use batching
+      if (!silent) logger.info("Successfully flushed all data to Opik");
     } catch (error) {
       logger.error("Error during flush operation:", {
         error: error instanceof Error ? error.message : error,
       });
+    }
+  };
+
+  /**
+   * Retrieves a typed config and returns it as a `Config<T>` object.
+   * Must be called inside a `track()` function.
+   *
+   * Selectors (mutually exclusive):
+   * - `options.version` — fetches the named version exactly
+   * - `options.env` — fetches the version pinned to that environment (default: `"prod"`)
+   * - neither — equivalent to `env="prod"`
+   *
+   * With `fallback`:
+   * - Backend errors return the fallback with `isFallback: true`
+   * - Empty project auto-creates from fallback values
+   * - T is inferred from the fallback type
+   *
+   * Without `fallback`:
+   * - Backend errors are re-thrown
+   * - Empty project throws ConfigNotFoundError
+   * - T defaults to `Record<string, unknown>`; use explicit type arg to assert a shape
+   */
+  public getOrCreateConfig<T extends Record<string, unknown>>(
+    options: {
+      fallback: T;
+      projectName?: string;
+      env?: string;
+      version?: string;
+    }
+  ): Promise<Config<T>>;
+
+  public getOrCreateConfig<T extends Record<string, unknown> = Record<string, unknown>>(
+    options?: {
+      projectName?: string;
+      env?: string;
+      version?: string;
+    }
+  ): Promise<Config<T>>;
+
+  public getOrCreateConfig<T extends Record<string, unknown> = Record<string, unknown>>(
+    options?: {
+      fallback?: T;
+      projectName?: string;
+      env?: string;
+      version?: string;
+    }
+  ): Promise<Config<T>> {
+    return this._getOrCreateConfigImpl(options);
+  }
+
+  /** Build a Config from a local fallback object (no backend involved). */
+  /**
+   * Validates that every BasePrompt value in `values` belongs to `projectName`.
+   * Prompts with an undefined projectName are skipped (cannot be validated).
+   * Throws ConfigMismatchError on the first mismatch found.
+   */
+  private _validatePromptProjects(
+    values: Record<string, unknown>,
+    projectName: string
+  ): void {
+    for (const [key, value] of Object.entries(values)) {
+      if (
+        value instanceof BasePrompt &&
+        value.projectName !== undefined &&
+        value.projectName !== projectName
+      ) {
+        throw new ConfigMismatchError(
+          `Field "${key}": prompt project "${value.projectName}" does not match ` +
+          `config project "${projectName}". All prompts referenced in a config must ` +
+          `belong to the same project as the config.`
+        );
+      }
+    }
+  }
+
+  /**
+   * Waits for all unsynced BasePrompt values in `values` to finish syncing,
+   * with a timeout. Returns true only when every prompt is synced.
+   */
+  private async _allPromptsSynced(values: Record<string, unknown>): Promise<boolean> {
+    const prompts = Object.values(values).filter(
+      (v): v is BasePrompt => v instanceof BasePrompt && !v.synced
+    );
+    if (prompts.length === 0) return true;
+
+    const TIMED_OUT = Symbol();
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        Promise.allSettled(prompts.map((v) => v.ready())).then(() => undefined),
+        new Promise<typeof TIMED_OUT>((resolve) => {
+          timerId = setTimeout(() => resolve(TIMED_OUT), AGENT_CONFIG_PROMPT_READY_TIMEOUT_MS);
+        }),
+      ]);
+      if (result === TIMED_OUT) {
+        logger.debug("Timed out waiting for prompt sync before creating config.");
+        return false;
+      }
+    } finally {
+      clearTimeout(timerId);
+    }
+
+    // ready() resolved, but some prompts may have failed to sync.
+    return prompts.every((v) => v.synced);
+  }
+
+  private _makeFallbackConfig<T extends Record<string, unknown>>(
+    fallback: T,
+    maskId: string | undefined
+  ): Config<T> {
+    return createTypedConfig<T>({
+      values: fallback,
+      fieldNames: new Set(Object.keys(fallback)),
+      blueprintId: undefined,
+      blueprintVersion: undefined,
+      isFallback: true,
+      maskId,
+    });
+  }
+
+  /**
+   * Fetches a blueprint from the backend (or returns the cached one).
+   * Returns null if the backend returned no result (not an error path).
+   * On network error, returns the fallback config if one is provided; otherwise re-throws.
+   */
+  private async _fetchBlueprintFromBackend<T extends Record<string, unknown>>(
+    manager: ConfigManager,
+    opts: {
+      blueprintName: string | undefined;
+      isLatest: boolean;
+      hasNamedVersion: boolean;
+      namedVersion: string | undefined;
+      effectiveEnv: string | null;
+      maskId: string | undefined;
+      projectName: string;
+      effectiveVersion: string | null;
+      fallback: T | undefined;
+    }
+  ): Promise<Blueprint | null | Config<T>> {
+    const {
+      blueprintName, isLatest, hasNamedVersion, namedVersion,
+      effectiveEnv, maskId, projectName, effectiveVersion, fallback,
+    } = opts;
+
+    const cacheEntry = getCachedBlueprint(projectName, effectiveEnv, maskId ?? null, effectiveVersion);
+
+    if (!cacheEntry.isStale()) {
+      return cacheEntry.getBlueprint();
+    }
+
+    let blueprint: Blueprint | null = null;
+    try {
+      if (blueprintName) {
+        blueprint = await manager.getBlueprint({ name: blueprintName, maskId });
+      } else if (isLatest) {
+        blueprint = await manager.getBlueprint({ maskId });
+      } else if (hasNamedVersion) {
+        blueprint = await manager.getBlueprint({ name: namedVersion!, maskId });
+      } else {
+        blueprint = await manager.getBlueprint({ env: effectiveEnv!, maskId });
+      }
+    } catch (error) {
+      if (fallback !== undefined) {
+        logger.debug("Failed to fetch config from backend, using fallback", { error });
+        return this._makeFallbackConfig(fallback, maskId);
+      }
+      throw error;
+    }
+
+    // Set a background refresh for env-based and "latest" lookups (not pinned versions or masks)
+    const refreshCallback =
+      maskId === undefined && !hasNamedVersion
+        ? isLatest
+          ? () => manager.getBlueprint({ maskId: undefined })
+          : () => manager.getBlueprint({ env: effectiveEnv!, maskId: undefined })
+        : null;
+
+    initBlueprintCacheEntry(projectName, effectiveEnv, maskId ?? null, blueprint, refreshCallback, effectiveVersion);
+    return blueprint;
+  }
+
+  /**
+   * Handles the case where a blueprint lookup returned null.
+   * - Explicit selector (named version / env / runner context) → throws ConfigNotFoundError.
+   * - Default path: probes project-wide to distinguish "no prod tag" from "empty project".
+   *   When version="latest" the initial fetch was already project-wide — skips the probe.
+   * - Empty project + fallback → auto-creates and returns the new blueprint.
+   * - Empty project + no fallback → throws ConfigNotFoundError.
+   */
+  private async _resolveNullBlueprint<T extends Record<string, unknown>>(
+    manager: ConfigManager,
+    opts: {
+      projectName: string;
+      effectiveEnv: string | null;
+      effectiveVersion: string | null;
+      maskId: string | undefined;
+      hasNamedVersion: boolean;
+      hasExplicitEnv: boolean;
+      isExplicitBlueprintFromContext: boolean;
+      isLatest: boolean;
+      fallback: T | undefined;
+    }
+  ): Promise<Blueprint | Config<T>> {
+    const {
+      projectName, effectiveEnv, effectiveVersion, maskId,
+      hasNamedVersion, hasExplicitEnv, isExplicitBlueprintFromContext,
+      isLatest, fallback,
+    } = opts;
+
+    if (hasNamedVersion || hasExplicitEnv || isExplicitBlueprintFromContext) {
+      throw new ConfigNotFoundError(
+        `No config found for project "${projectName}" with the specified selector`
+      );
+    }
+
+    // Default path (env="prod"): fetch latest to distinguish empty project vs prod tag missing.
+    // When version="latest", the initial fetch was already project-wide — skip the redundant round-trip.
+    if (!isLatest) {
+      let latestBlueprint: Blueprint | null = null;
+      try {
+        latestBlueprint = await manager.getBlueprint({ maskId: undefined });
+      } catch (error) {
+        if (fallback !== undefined) {
+          logger.debug("Failed to probe project-wide config, using fallback", { error });
+          return this._makeFallbackConfig(fallback, maskId);
+        }
+        throw error;
+      }
+
+      if (latestBlueprint !== null) {
+        throw new ConfigNotFoundError(
+          `No config tagged with env="prod" in project "${projectName}", but other configs exist. ` +
+          `Use setConfigEnv() to tag a version, or pass an explicit env/version.`
+        );
+      }
+    }
+
+    if (fallback === undefined) {
+      throw new ConfigNotFoundError(
+        `No config found in project "${projectName}". Pass a fallback to auto-create one.`
+      );
+    }
+
+    // Validate that all Prompt/ChatPrompt values in the fallback belong to this project.
+    this._validatePromptProjects(fallback as Record<string, unknown>, projectName);
+
+    // Before auto-creating from fallback, wait for any unsynced prompts to finish syncing.
+    // Unsynced prompts lack commit/id, which would produce broken blueprint values.
+    const allSynced = await this._allPromptsSynced(fallback as Record<string, unknown>);
+    if (!allSynced) {
+      return this._makeFallbackConfig(fallback, maskId);
+    }
+
+    // Auto-create from fallback (handle 409 race: another caller created it concurrently)
+    let blueprint: Blueprint;
+    try {
+      blueprint = await manager.createBlueprint({
+        values: serializeValuesRecord(fallback as Record<string, unknown>),
+      });
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 409) {
+        const refetched = await manager.getBlueprint({ maskId: undefined });
+        if (!refetched) {
+          throw new ConfigNotFoundError(`Failed to create or fetch config in project "${projectName}".`);
+        }
+        blueprint = refetched;
+      } else {
+        throw error;
+      }
+    }
+
+    initBlueprintCacheEntry(projectName, effectiveEnv, maskId ?? null, blueprint, null, effectiveVersion);
+    return blueprint;
+  }
+
+  /**
+   * Validates fallback keys against the blueprint, deserializes values, and returns a typed Config.
+   */
+  private _buildConfigFromBlueprint<T extends Record<string, unknown>>(
+    blueprint: Blueprint,
+    fallback: T | undefined,
+    maskId: string | undefined
+  ): Config<T> {
+    const rawValuesMap = Object.fromEntries(
+      blueprint.keys().map((key) => [key, blueprint.getRawEntry(key)!])
+    );
+
+    if (fallback !== undefined) {
+      const missingKeys = Object.keys(fallback).filter((k) => rawValuesMap[k] === undefined);
+      if (missingKeys.length > 0) {
+        const versionLabel = blueprint.name ?? blueprint.id;
+        throw new ConfigMismatchError(
+          `Config version "${versionLabel}" is missing expected field(s): ${missingKeys.join(", ")}. ` +
+          `The retrieved version does not contain all fields declared in the fallback.`
+        );
+      }
+    }
+
+    const resolvedValues = deserializeFromBlueprint(
+      rawValuesMap,
+      blueprint.values,
+      fallback !== undefined ? Object.keys(fallback) : undefined
+    );
+
+    return createTypedConfig<T>({
+      values: resolvedValues as T,
+      fieldNames: new Set(Object.keys(fallback ?? resolvedValues)),
+      blueprintId: blueprint.id,
+      blueprintVersion: blueprint.name,
+      isFallback: false,
+      maskId,
+    });
+  }
+
+  private async _getOrCreateConfigImpl<T extends Record<string, unknown>>(
+    options?: {
+      fallback?: T;
+      projectName?: string;
+      env?: string;
+      version?: string;
+    }
+  ): Promise<Config<T>> {
+    if (!trackStorage.getStore()) {
+      throw new Error("getOrCreateConfig() must be called inside a track() function");
+    }
+    if (options?.version !== undefined && options?.env !== undefined) {
+      throw new Error("Only one of 'version' or 'env' may be specified in getOrCreateConfig().");
+    }
+
+    const fallback = options?.fallback;
+    const projectName = options?.projectName ?? this.config.projectName;
+    const maskId = getActiveConfigMask() ?? undefined;
+
+    const blueprintName = getActiveConfigBlueprintName() ?? undefined;
+    // A runner context that pins a blueprint name is an explicit request — no auto-create.
+    const isExplicitBlueprintFromContext = blueprintName !== undefined;
+    const manager = new ConfigManager(projectName, this);
+
+    // "latest" fetches the most-recent blueprint (no name/env filter); allows auto-create.
+    const isLatest = options?.version === "latest";
+    const hasNamedVersion = options?.version !== undefined && !isLatest;
+    const effectiveEnv = options?.version ? null : (options?.env ?? "prod");
+    // Cache key: null for both "latest" and the default env path
+    const effectiveVersion = blueprintName ?? (hasNamedVersion ? options!.version! : null);
+
+    const fetchResult = await this._fetchBlueprintFromBackend<T>(manager, {
+      blueprintName, isLatest, hasNamedVersion,
+      namedVersion: options?.version,
+      effectiveEnv, maskId, projectName, effectiveVersion, fallback,
+    });
+
+    // _fetchBlueprintFromBackend may return a ready-made fallback Config on network error
+    if (fetchResult !== null && !(fetchResult instanceof Blueprint)) {
+      return fetchResult as Config<T>;
+    }
+
+    let blueprint = fetchResult as Blueprint | null;
+
+    if (!blueprint) {
+      const resolved = await this._resolveNullBlueprint<T>(manager, {
+        projectName, effectiveEnv, effectiveVersion, maskId,
+        hasNamedVersion, hasExplicitEnv: options?.env !== undefined,
+        isExplicitBlueprintFromContext, isLatest, fallback,
+      });
+
+      // _resolveNullBlueprint may return a ready-made fallback Config on network error
+      if (!(resolved instanceof Blueprint)) {
+        return resolved as Config<T>;
+      }
+      blueprint = resolved;
+    }
+
+    return this._buildConfigFromBlueprint<T>(blueprint, fallback, maskId);
+  }
+
+  /**
+   * Publishes a new config version unconditionally.
+   * Does NOT require a `track()` function.
+   *
+   * @param values - Config field values to publish
+   * @param options.projectName - Project to publish under (defaults to client's configured project)
+   * @param options.description - Optional human-readable description for this version
+   * @returns The version name (or ID) of the published config
+   */
+  public createConfig = async (
+    values: Record<string, SupportedValue>,
+    options?: { projectName?: string; description?: string }
+  ): Promise<string> => {
+    const projectName = options?.projectName ?? this.config.projectName;
+
+    this._validatePromptProjects(values as Record<string, unknown>, projectName);
+
+    const manager = new ConfigManager(projectName, this);
+    const serialized = serializeValuesRecord(values as Record<string, unknown>);
+
+    const latest = await manager.getBlueprint();
+    let blueprint: Blueprint;
+
+    if (latest) {
+      blueprint = await manager.updateBlueprint({ values: serialized, description: options?.description });
+    } else {
+      try {
+        blueprint = await manager.createBlueprint({ values: serialized, description: options?.description });
+      } catch (error) {
+        if (error instanceof OpikApiError && error.statusCode === 409) {
+          blueprint = await manager.updateBlueprint({ values: serialized, description: options?.description });
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    return blueprint.name ?? blueprint.id;
+  };
+
+  /**
+   * Tags a specific config version with an environment label.
+   * Does NOT require a `track()` function.
+   *
+   * @param options.version - The version name to tag
+   * @param options.env - The environment label (e.g. "prod", "staging")
+   * @param options.projectName - Project (defaults to client's configured project)
+   */
+  public setConfigEnv = async (options: {
+    version: string;
+    env: string;
+    projectName?: string;
+  }): Promise<void> => {
+    const projectName = options.projectName ?? this.config.projectName;
+    const manager = new ConfigManager(projectName, this);
+    const blueprint = await manager.getBlueprint({ name: options.version });
+    if (!blueprint) {
+      throw new ConfigNotFoundError(
+        `No config version "${options.version}" found in project "${projectName}".`
+      );
+    }
+    const projectResponse = await this.api.projects.retrieveProject({ name: projectName });
+    if (!projectResponse?.id) {
+      throw new Error(`Project "${projectName}" not found`);
+    }
+    await this.api.agentConfigs.createOrUpdateEnvs({
+      projectId: projectResponse.id,
+      envs: [{ envName: options.env, blueprintId: blueprint.id }],
+    });
+  };
+
+  /**
+   * Updates tags for one or more prompt versions in a single batch operation.
+   *
+   * @param versionIds - Array of prompt version IDs to update
+   * @param options - Update options
+   * @param options.tags - Tags to set or merge:
+   *   - `[]`: Clear all tags (when mergeTags is false or unspecified)
+   *   - `['tag1', 'tag2']`: Set or merge tags (based on mergeTags)
+   * @param options.mergeTags - If true, adds new tags to existing tags (union). If false, replaces all existing tags (default: false)
+   * @returns Promise that resolves when update is complete
+   * @throws OpikApiError if update fails
+   *
+   * @example
+   * ```typescript
+   * // Replace tags on multiple versions (default behavior)
+   * await client.updatePromptVersionTags(["version-id-1", "version-id-2"], {
+   *   tags: ["production", "v2"]
+   * });
+   *
+   * // Merge new tags with existing tags
+   * await client.updatePromptVersionTags(["version-id-1"], {
+   *   tags: ["hotfix"],
+   *   mergeTags: true
+   * });
+   *
+   * // Clear all tags
+   * await client.updatePromptVersionTags(["version-id-1"], {
+   *   tags: []
+   * });
+   * ```
+   */
+  public updatePromptVersionTags = async (
+    versionIds: string[],
+    options?: {
+      tags?: string[] | null;
+      mergeTags?: boolean;
+    }
+  ): Promise<void> => {
+    logger.debug("Updating prompt version tags", {
+      count: versionIds.length,
+      options,
+    });
+
+    try {
+      await this.api.prompts.updatePromptVersions(
+        {
+          ids: versionIds,
+          update: { tags: options?.tags ?? undefined },
+          mergeTags: options?.mergeTags,
+        },
+        this.api.requestOptions
+      );
+
+      logger.debug("Successfully updated prompt version tags", {
+        count: versionIds.length,
+      });
+    } catch (error) {
+      logger.error("Failed to update prompt version tags", {
+        count: versionIds.length,
+        error,
+      });
+      throw error;
     }
   };
 }

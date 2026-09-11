@@ -1,0 +1,550 @@
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  Blocks,
+  ChevronDown,
+  Clock,
+  ExternalLink,
+  FilePen,
+  LucideIcon,
+  Pencil,
+  Play,
+  Sparkles,
+  User,
+} from "lucide-react";
+import { Button } from "@/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
+import {
+  PromptWithLatestVersion,
+  PROMPT_TEMPLATE_STRUCTURE,
+  PROMPT_VERSION_TYPE,
+} from "@/types/prompts";
+import { Separator } from "@/ui/separator";
+import {
+  FormFieldCard,
+  FormFieldModeSelect,
+} from "@/v2/pages-shared/llm/FormFieldCard";
+import CodeBlockCopy from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/CodeBlock/CodeBlockCopy";
+import { Skeleton } from "@/ui/skeleton";
+import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
+import { SUPPORTED_LANGUAGE } from "@/constants/codeLanguage";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
+import EditPromptSheet from "@/v2/pages/PromptPage/PromptTab/EditPromptSheet";
+import VersionHistoryTimeline, {
+  VersionHistoryItem,
+} from "@/v2/pages-shared/version-history/VersionHistoryTimeline";
+import DiffVersionMenu from "@/v2/pages-shared/version-history/DiffVersionMenu";
+import StageTag from "@/v2/pages-shared/version-history/StageTag";
+import ComparePromptVersionDialog from "@/v2/pages/PromptPage/CommitsTab/ComparePromptVersionDialog";
+import { useFetchPromptVersion } from "@/api/prompts/usePromptVersionById";
+import usePromptVersionHistory from "@/v2/pages/PromptPage/PromptTab/usePromptVersionHistory";
+import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
+import ImproveInPlaygroundButton from "@/v2/pages/PromptPage/ImproveInPlaygroundButton";
+import useLoadPromptIntoPlayground from "@/v2/pages-shared/playground/useLoadPromptIntoPlayground";
+import { getTimeFromNow } from "@/lib/date";
+import { pickHighestStage } from "@/utils/version-stages";
+import DeployToEnvironmentMenu from "./DeployToEnvironmentMenu";
+import ChatPromptView from "./ChatPromptView";
+import TextPromptView from "./TextPromptView";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { buildDocsUrl, cn } from "@/lib/utils";
+
+type ViewMode = "pretty" | "json";
+
+const VIEW_MODE_OPTIONS: Array<{
+  value: ViewMode;
+  label: string;
+  icon?: LucideIcon;
+}> = [
+  { value: "pretty", label: "Pretty", icon: Sparkles },
+  { value: "json", label: "JSON" },
+];
+
+interface PromptTabInterface {
+  prompt?: PromptWithLatestVersion;
+}
+
+const PromptTab = ({ prompt }: PromptTabInterface) => {
+  const {
+    permissions: { canUsePlayground, canEditPrompts },
+  } = usePermissions();
+
+  const [openEditPrompt, setOpenEditPrompt] = useState(false);
+  const [openCompare, setOpenCompare] = useState(false);
+  const [openLoadConfirm, setOpenLoadConfirm] = useState(false);
+  const [compareAgainstVersionId, setCompareAgainstVersionId] = useState<
+    string | null
+  >(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("pretty");
+
+  const { loadPrompt, isPlaygroundEmpty, isPendingProviderKeys } =
+    useLoadPromptIntoPlayground();
+
+  const {
+    setActiveVersionId,
+    versions,
+    historyItems,
+    effectiveVersionId,
+    versionFromList,
+    fetchedActiveVersion,
+    activeVersion,
+    activeVersionLabel,
+    isVersionsLoading,
+    isActiveVersionLoading,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchingVersions,
+    isVersionsError,
+    fetchNextPage,
+    isDiffMenuOpen,
+    setIsDiffMenuOpen,
+    isDeployMenuOpen,
+    setIsDeployMenuOpen,
+  } = usePromptVersionHistory(prompt);
+
+  const activeStage = pickHighestStage(activeVersion?.tags);
+  const activeAuthor = activeVersion?.created_by ?? "";
+  const activeVersionEnvironments = useMemo(
+    () => activeVersion?.environments ?? [],
+    [activeVersion?.environments],
+  );
+
+  // While a deep-linked/active version's page hasn't loaded yet, it's
+  // missing from `versions` — passing that incomplete list to the compare
+  // dialog makes it silently fall back to whatever's newest loaded instead
+  // of the version the user actually asked to compare. `activeVersion` is
+  // already resolved independently (by id, not by pagination), so inject it
+  // whenever it isn't already present.
+  const versionsForCompare = useMemo(() => {
+    if (!versions) return activeVersion ? [activeVersion] : [];
+    if (!activeVersion || versions.some((v) => v.id === activeVersion.id)) {
+      return versions;
+    }
+    return [...versions, activeVersion];
+  }, [versions, activeVersion]);
+
+  const isChatPrompt =
+    prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
+  const template = activeVersion?.template ?? "";
+  const metadataJson = useMemo(
+    () =>
+      activeVersion?.metadata
+        ? JSON.stringify(activeVersion.metadata, null, 2)
+        : "",
+    [activeVersion?.metadata],
+  );
+
+  const fetchPromptVersion = useFetchPromptVersion();
+
+  const handleLoadIntoPlayground = useCallback(async () => {
+    if (!prompt?.id) return;
+    // activeVersion can hold stale data when switching versions because
+    // usePromptVersionById uses placeholderData: keepPreviousData — fall back
+    // to an imperative fetch so we always load the version actually selected.
+    // Not needed when the version came from `versionFromList`: that's always
+    // freshly derived from the current version list, never stale.
+    let version = activeVersion;
+    if (
+      !versionFromList &&
+      effectiveVersionId &&
+      fetchedActiveVersion?.id !== effectiveVersionId
+    ) {
+      try {
+        const fetched = await fetchPromptVersion({
+          versionId: effectiveVersionId,
+        });
+        // Guard against a stale/crafted activeVersionId pointing at a
+        // different prompt's version, or at a mask — never load that
+        // content into the playground.
+        version =
+          fetched.prompt_id === prompt.id &&
+          fetched.version_type !== PROMPT_VERSION_TYPE.MASK
+            ? fetched
+            : activeVersion;
+      } catch {
+        // Refetch failed — bail rather than ship stale `activeVersion`
+        // (placeholder from the previously-selected version) into the
+        // playground, which would silently load wrong content.
+        return;
+      }
+    }
+    loadPrompt({ prompt, version });
+  }, [
+    loadPrompt,
+    prompt,
+    activeVersion,
+    versionFromList,
+    fetchedActiveVersion,
+    effectiveVersionId,
+    fetchPromptVersion,
+  ]);
+
+  const handleOpenInPlaygroundClick = useCallback(() => {
+    if (isPlaygroundEmpty) {
+      handleLoadIntoPlayground();
+    } else {
+      setOpenLoadConfirm(true);
+    }
+  }, [isPlaygroundEmpty, handleLoadIntoPlayground]);
+
+  const handleSelectDiffVersion = useCallback((item: VersionHistoryItem) => {
+    setCompareAgainstVersionId(item.id);
+    setOpenCompare(true);
+  }, []);
+
+  // Gate skeleton on in-flight fetches only — once they settle, render even
+  // if `activeVersion` is undefined (e.g. version fetch 404'd) so the page
+  // doesn't get stuck on the skeleton; downstream sections handle the missing
+  // version by falling back to `prompt.latest_version` or rendering empty.
+  const isInitialLoading =
+    !prompt ||
+    isVersionsLoading ||
+    (!!effectiveVersionId && isActiveVersionLoading);
+
+  if (isInitialLoading) {
+    return (
+      <div className="grid grid-cols-1 gap-4 px-6 pt-2 xl:grid-cols-[7fr_3fr] xl:gap-6">
+        <div className="min-w-0">
+          <div className="rounded-md border bg-background">
+            <div className="flex items-center justify-between border-b p-4 py-3">
+              <Skeleton className="h-5 w-16" />
+              <Skeleton className="h-5 w-48" />
+            </div>
+            <div className="border-b p-4">
+              <Skeleton className="h-3 w-2/5" />
+            </div>
+            <div className="border-b p-4">
+              <Skeleton className="h-[140px] w-full" />
+            </div>
+            <div className="p-4">
+              <Skeleton className="h-[200px] w-full" />
+            </div>
+          </div>
+        </div>
+        <div className="hidden min-w-0 xl:block">
+          <p className="comet-body-s-accented mb-1 ml-3">Version history</p>
+          <div className="space-y-3 p-4">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 px-6 pt-2 xl:grid-cols-[7fr_3fr] xl:gap-6">
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className="xl:hidden">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-between font-normal"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="comet-body-s-accented shrink-0 text-foreground">
+                    {activeVersionLabel || "v—"}
+                  </span>
+                  <EnvironmentBadgeList
+                    names={activeVersionEnvironments}
+                    size="pill"
+                    withOverflow
+                    maxWidth={200}
+                  />
+                  <span className="comet-body-xs shrink-0 text-muted-slate">
+                    {activeVersion?.created_at &&
+                      getTimeFromNow(activeVersion.created_at)}
+                  </span>
+                </span>
+                <ChevronDown className="size-4 shrink-0 text-light-slate" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="max-h-[60vh] w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto"
+            >
+              {historyItems.map((item) => (
+                <DropdownMenuItem
+                  key={item.id}
+                  onSelect={() => setActiveVersionId(item.id)}
+                  className={cn(
+                    "flex flex-col items-start gap-1",
+                    item.id === activeVersion?.id &&
+                      "bg-muted text-foreground focus:bg-muted",
+                  )}
+                >
+                  <div className="flex w-full min-w-0 items-center gap-2">
+                    <span className="comet-body-s-accented shrink-0">
+                      {item.label}
+                    </span>
+                    <EnvironmentBadgeList
+                      names={item.environments}
+                      size="sm"
+                      withOverflow
+                      compact
+                      maxWidth={120}
+                    />
+                  </div>
+                  <span className="comet-body-xs text-muted-slate">
+                    {getTimeFromNow(item.created_at)}
+                    {item.created_by ? ` · ${item.created_by}` : ""}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className="rounded-md border bg-background">
+          {/* Toolbar */}
+          <div className="flex items-center gap-2 px-4 pb-1.5 pt-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span
+                data-testid="active-version-label"
+                className="comet-body-accented shrink-0 text-foreground"
+              >
+                {activeVersionLabel || "v—"}
+              </span>
+              {activeStage && <StageTag value={activeStage} size="sm" />}
+              <EnvironmentBadgeList
+                names={activeVersionEnvironments}
+                size="pill"
+                withOverflow
+                maxWidth={320}
+              />
+              {historyItems.length > 1 && (
+                <>
+                  <Separator
+                    orientation="vertical"
+                    className="mx-1 h-4 shrink-0"
+                  />
+                  <DiffVersionMenu
+                    currentItemId={activeVersion?.id ?? ""}
+                    versions={historyItems}
+                    onSelectVersion={handleSelectDiffVersion}
+                    triggerLabel="Diff"
+                    onOpenChange={setIsDiffMenuOpen}
+                    isLoadingMore={isDiffMenuOpen && isFetchingNextPage}
+                  />
+                </>
+              )}
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-1 md:ml-auto">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="px-0">
+                    <Play className="mr-1.5 size-3.5" />
+                    Use
+                    <ChevronDown className="ml-1 size-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {canUsePlayground && (
+                    <DropdownMenuItem
+                      disabled={!prompt || isPendingProviderKeys}
+                      onClick={handleOpenInPlaygroundClick}
+                      className="px-3"
+                    >
+                      <Blocks className="mr-2 size-3.5 shrink-0 text-light-slate" />
+                      Load in Prompt playground
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild className="px-3">
+                    <a
+                      href={buildDocsUrl(
+                        "/development/prompt-library/getting-started",
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Reference prompt in code
+                      <ExternalLink className="ml-2 size-3.5 shrink-0" />
+                    </a>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {canUsePlayground && canEditPrompts && !isChatPrompt && (
+                <>
+                  <Separator orientation="vertical" className="mx-1 h-4" />
+                  <ImproveInPlaygroundButton
+                    prompt={prompt}
+                    activeVersion={activeVersion}
+                  />
+                </>
+              )}
+
+              {canEditPrompts && (
+                <>
+                  <Separator orientation="vertical" className="mx-1 h-4" />
+                  <DeployToEnvironmentMenu
+                    promptId={prompt.id}
+                    versionId={activeVersion?.id ?? ""}
+                    versionLabel={activeVersionLabel}
+                    versions={versions}
+                    activeEnvironments={activeVersionEnvironments}
+                    onOpenChange={setIsDeployMenuOpen}
+                    isLoadingMore={isDeployMenuOpen && isFetchingNextPage}
+                  />
+
+                  <Separator orientation="vertical" className="mx-1 h-4" />
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="px-0"
+                    onClick={() => setOpenEditPrompt(true)}
+                  >
+                    <Pencil className="mr-1.5 size-3.5" />
+                    Edit
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Change description + meta */}
+          <div className="space-y-1 px-4 pb-3">
+            {activeVersion?.change_description && (
+              <div className="comet-body-s flex min-w-0 items-center gap-1.5 text-muted-slate">
+                <FilePen className="size-3.5 shrink-0 text-muted-slate" />
+                <TooltipWrapper content={activeVersion.change_description}>
+                  <span className="w-fit max-w-full truncate">
+                    {activeVersion.change_description}
+                  </span>
+                </TooltipWrapper>
+              </div>
+            )}
+            <div className="comet-body-s flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-slate">
+              {activeVersion?.created_at && (
+                <span className="flex items-center gap-1.5">
+                  <Clock className="size-3.5" />
+                  {getTimeFromNow(activeVersion.created_at)}
+                </span>
+              )}
+              {activeAuthor && (
+                <span className="flex items-center gap-1.5">
+                  <User className="size-3.5" />
+                  {activeAuthor}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Prompt section */}
+          <div className="px-4 pb-4">
+            <FormFieldCard
+              title="Prompt"
+              actions={
+                <>
+                  <FormFieldModeSelect
+                    value={viewMode}
+                    options={VIEW_MODE_OPTIONS}
+                    onChange={setViewMode}
+                  />
+                  <Separator orientation="vertical" className="-ml-2 h-3" />
+                  <CodeBlockCopy text={template} />
+                </>
+              }
+              bodyClassName={cn(
+                viewMode === "json" && isChatPrompt && "px-0 pt-2",
+              )}
+            >
+              {viewMode === "pretty" ? (
+                isChatPrompt ? (
+                  <ChatPromptView template={template} />
+                ) : (
+                  <TextPromptView template={template} />
+                )
+              ) : isChatPrompt ? (
+                <CodeHighlighter
+                  data={template}
+                  language={SUPPORTED_LANGUAGE.json}
+                  hideCopy
+                  transparent
+                />
+              ) : (
+                <pre className="comet-code whitespace-pre-wrap break-words text-foreground">
+                  {template}
+                </pre>
+              )}
+            </FormFieldCard>
+          </div>
+
+          {/* Metadata section */}
+          {metadataJson && (
+            <div className="px-4 pb-4">
+              <FormFieldCard
+                title="Metadata"
+                actions={<CodeBlockCopy text={metadataJson} />}
+                bodyClassName="px-0 pt-2"
+              >
+                <CodeHighlighter
+                  data={metadataJson}
+                  language={SUPPORTED_LANGUAGE.json}
+                  hideCopy
+                  transparent
+                />
+              </FormFieldCard>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Right sidebar (visible only on xl+ screens) */}
+      <div className="hidden min-w-0 xl:block">
+        <p className="comet-body-s-accented mb-1 ml-3">Version history</p>
+        <VersionHistoryTimeline
+          items={historyItems}
+          selectedId={activeVersion?.id}
+          onSelect={(item) => setActiveVersionId(item.id)}
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          isFetching={isFetchingVersions}
+          hasError={isVersionsError}
+          onLoadMore={fetchNextPage}
+        />
+      </div>
+
+      <EditPromptSheet
+        open={openEditPrompt}
+        setOpen={setOpenEditPrompt}
+        promptName={prompt.name}
+        template={activeVersion?.template || ""}
+        metadata={activeVersion?.metadata}
+        templateStructure={prompt.template_structure}
+        type={activeVersion?.type}
+        onSetActiveVersionId={setActiveVersionId}
+      />
+
+      <ComparePromptVersionDialog
+        open={openCompare}
+        setOpen={setOpenCompare}
+        versions={versionsForCompare}
+        initialBaseVersionId={compareAgainstVersionId ?? undefined}
+        initialDiffVersionId={effectiveVersionId || undefined}
+      />
+
+      <ConfirmDialog
+        open={openLoadConfirm}
+        setOpen={setOpenLoadConfirm}
+        onConfirm={handleLoadIntoPlayground}
+        title="Load prompt"
+        description="Loading this prompt into the Playground will replace any unsaved changes. This action cannot be undone."
+        confirmText="Load prompt"
+      />
+    </div>
+  );
+};
+
+export default PromptTab;

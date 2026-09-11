@@ -12,6 +12,7 @@ public class BatchOperationsConfig {
     @Data
     public static class DatasetsConfig {
         private @Valid @JsonProperty @Positive int maxExperimentInClauseSize;
+        private @Valid @JsonProperty @Positive int csvBatchSize;
     }
 
     @Valid @JsonProperty

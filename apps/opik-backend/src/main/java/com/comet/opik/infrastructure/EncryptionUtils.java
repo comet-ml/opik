@@ -8,18 +8,27 @@ import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.Base64;
 
 @UtilityClass
 public class EncryptionUtils {
 
     private static final String ALGO = "AES";
+    // AES-GCM for larger, structured payloads (e.g. auth_config JSON): the legacy no-IV mode is
+    // deterministic, which is acceptable for short random keys but not for predictable plaintext.
+    private static final String GCM_ALGO = "AES/GCM/NoPadding";
+    private static final int GCM_IV_LENGTH = 12;
+    private static final int GCM_TAG_BITS = 128;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final Base64.Encoder mimeEncoder = Base64.getMimeEncoder();
     private static final Base64.Decoder mimeDecoder = Base64.getMimeDecoder();
     private static Key key;
@@ -50,6 +59,34 @@ public class EncryptionUtils {
             return new String(decValue);
         } catch (BadPaddingException | NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException
                 | IllegalBlockSizeException ex) {
+            throw new SecurityException("Failed to decrypt. " + ex.getMessage(), ex);
+        }
+    }
+
+    public static String encryptGcm(@NonNull String data) {
+        try {
+            byte[] iv = new byte[GCM_IV_LENGTH];
+            SECURE_RANDOM.nextBytes(iv);
+            Cipher cipher = Cipher.getInstance(GCM_ALGO);
+            cipher.init(Cipher.ENCRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_BITS, iv));
+            byte[] encrypted = cipher.doFinal(data.getBytes(StandardCharsets.UTF_8));
+            byte[] payload = new byte[iv.length + encrypted.length];
+            System.arraycopy(iv, 0, payload, 0, iv.length);
+            System.arraycopy(encrypted, 0, payload, iv.length, encrypted.length);
+            return Base64.getEncoder().encodeToString(payload);
+        } catch (GeneralSecurityException ex) {
+            throw new SecurityException("Failed to encrypt. " + ex.getMessage(), ex);
+        }
+    }
+
+    public static String decryptGcm(@NonNull String encryptedData) {
+        try {
+            byte[] payload = Base64.getDecoder().decode(encryptedData);
+            Cipher cipher = Cipher.getInstance(GCM_ALGO);
+            cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_BITS, payload, 0, GCM_IV_LENGTH));
+            byte[] decrypted = cipher.doFinal(payload, GCM_IV_LENGTH, payload.length - GCM_IV_LENGTH);
+            return new String(decrypted, StandardCharsets.UTF_8);
+        } catch (GeneralSecurityException | IllegalArgumentException ex) {
             throw new SecurityException("Failed to decrypt. " + ex.getMessage(), ex);
         }
     }

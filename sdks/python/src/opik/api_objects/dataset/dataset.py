@@ -1,15 +1,41 @@
+import abc
+import datetime
 import logging
-import json
 import functools
-from typing import Optional, Any, List, Dict, Sequence, Set, TYPE_CHECKING
+import sys
+from concurrent import futures
+from typing import (
+    Optional,
+    Any,
+    List,
+    Dict,
+    Sequence,
+    Set,
+    TYPE_CHECKING,
+    Iterator,
+)
 
+from opik.api_objects import rest_helpers
 from opik.rest_api import client as rest_api_client
-from opik.rest_api.types import dataset_item_write as rest_dataset_item
+from opik.rest_api.core.api_error import ApiError
+from opik.rest_api.types import (
+    dataset_item_write as rest_dataset_item,
+    dataset_public as rest_dataset_public,
+    dataset_version_public,
+    evaluator_item_write as rest_evaluator_item,
+    execution_policy_write as rest_execution_policy,
+)
 from opik.message_processing.batching import sequence_splitter
-from opik import exceptions, config
-from opik.rest_client_configurator import retry_decorator
+from opik import id_helpers, semantic_version
+import opik.exceptions as exceptions
+import opik.config as config
 from .. import constants
-from . import dataset_item, converters
+from . import dataset_item, converters, rest_operations, execution_policy
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -17,12 +43,452 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class Dataset:
+class DatasetExportOperations(abc.ABC):
+    """
+    Abstract base class providing export operations for dataset items.
+
+    This class defines the common interface for exporting dataset items,
+    shared by both Dataset (current state) and DatasetVersion (specific version).
+    """
+
+    @abc.abstractmethod
+    def __internal_api__stream_items_as_dataclasses__(
+        self,
+        nb_samples: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        dataset_item_ids: Optional[List[str]] = None,
+        filter_string: Optional[str] = None,
+    ) -> Iterator[dataset_item.DatasetItem]:
+        """
+        Stream dataset items as DatasetItem objects.
+
+        Args:
+            nb_samples: Maximum number of items to retrieve.
+            batch_size: Maximum number of items to fetch per batch.
+            dataset_item_ids: Optional list of specific item IDs to retrieve.
+            filter_string: Optional OQL filter string to filter dataset items.
+
+        Yields:
+            DatasetItem objects one at a time.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def __internal_api__stream_item_chunks__(
+        self,
+        chunk_size: int,
+        num_threads: int,
+        nb_samples: Optional[int],
+        filter_string: Optional[str],
+    ) -> Iterator[List[Dict[str, Any]]]:
+        """
+        Stream dataset items as chunks of raw dictionaries.
+
+        Args:
+            chunk_size: Number of items per chunk.
+            num_threads: Number of chunks fetched concurrently.
+            nb_samples: Maximum number of items to retrieve.
+            filter_string: Optional OQL filter string to filter dataset items.
+
+        Yields:
+            Lists of dictionaries representing the dataset items.
+        """
+        raise NotImplementedError
+
+    def to_pandas(self) -> "pd.DataFrame":
+        """
+        Convert the dataset items to a pandas DataFrame.
+
+        Requires the `pandas` library to be installed.
+
+        Returns:
+            A pandas DataFrame containing all items.
+        """
+        dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
+        return converters.to_pandas(dataset_items, keys_mapping={})
+
+    def to_json(self) -> str:
+        """
+        Convert the dataset items to a JSON string.
+
+        Returns:
+            A JSON string representation of all items.
+        """
+        dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
+        return converters.to_json(dataset_items, keys_mapping={})
+
+    def get_items(
+        self,
+        nb_samples: Optional[int] = None,
+        filter_string: Optional[str] = None,
+        num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
+        chunk_size: int = constants.DATASET_STREAM_BATCH_SIZE,
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve dataset items as a list of dictionaries.
+
+        Args:
+            nb_samples: Maximum number of items to retrieve. Must be a positive
+                integer; omit it or pass ``None`` to return all items. Zero and
+                negative values raise rather than being treated as a limit.
+            num_threads: Number of item pages fetched concurrently. Must be a
+                positive integer, defaults to 4; pass ``1`` to fetch
+                sequentially. Raising it speeds up large reads at the cost of
+                more load on the backend. Capped at
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``. Use
+                :meth:`stream_items` instead when the dataset is too large to
+                hold in memory all at once.
+            chunk_size: Number of items fetched per request. See
+                :meth:`stream_items` for how to pick it; the whole result is
+                materialized either way, so this only trades request count
+                against per-request size.
+            filter_string: Optional OQL filter string to filter dataset items.
+                Supports filtering by tags, data fields, metadata, etc.
+
+                Supported columns include:
+                - `id`, `source`, `trace_id`, `span_id`: String fields
+                - `data`: Dictionary field (use dot notation, e.g., "data.category")
+                - `tags`: List field (use "contains" operator)
+                - `created_at`, `last_updated_at`: DateTime fields (ISO 8601 format)
+                - `created_by`, `last_updated_by`: String fields
+
+                Examples:
+                - `tags contains "failed"` - Items with 'failed' tag
+                - `data.category = "test"` - Items with specific data field value
+                - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
+
+        Returns:
+            A list of dictionaries representing the dataset items.
+
+        Raises:
+            ValueError: If ``num_threads`` is not a positive integer, if
+                ``chunk_size`` is not a positive integer or exceeds
+                ``constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE``, or if
+                ``nb_samples`` is not a positive integer.
+        """
+        return [
+            item
+            for chunk in self.stream_items(
+                chunk_size=chunk_size,
+                filter_string=filter_string,
+                nb_samples=nb_samples,
+                num_threads=num_threads,
+            )
+            for item in chunk
+        ]
+
+    def stream_items(
+        self,
+        chunk_size: int = constants.DATASET_STREAM_BATCH_SIZE,
+        num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
+        filter_string: Optional[str] = None,
+        nb_samples: Optional[int] = None,
+    ) -> Iterator[List[Dict[str, Any]]]:
+        """
+        Read dataset items in chunks, fetching the chunks concurrently.
+
+        The chunked counterpart to :meth:`get_items`, which is itself built on
+        this method: chunks are fetched in parallel and are handed back as
+        plain dictionaries without going through the typed REST layer. Prefer
+        it over :meth:`get_items` when you want to start processing before the
+        whole dataset has been downloaded, or when the dataset is too large to
+        hold in memory all at once.
+
+        Items have exactly the shape :meth:`get_items` returns: the item's
+        data plus its ``id``.
+
+        The read is pinned to a single dataset version, so items inserted or
+        deleted while it is in progress do not affect it. On backends where
+        dataset versioning is unavailable there is no version to pin to and the
+        live state is read instead; a concurrent insert can then shift the
+        remaining pages, returning one item twice and skipping another. Read a
+        :class:`DatasetVersion` explicitly if you need that guarantee there.
+
+        Args:
+            chunk_size: Number of items per chunk, defaulting to and capped at
+                the same batch size the typed item stream reads with
+                (``constants.DATASET_STREAM_BATCH_SIZE``). Fetching a chunk
+                costs a fixed overhead whatever its size, so lowering this
+                makes the whole read slower; lower it when the items are
+                individually large, bearing in mind that up to
+                ``2 * num_threads`` chunks are held in memory at once.
+            num_threads: Number of chunks fetched concurrently. Must be a
+                positive integer, defaults to 4; pass ``1`` to fetch
+                sequentially. Capped at
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``.
+            filter_string: Optional OQL filter string to filter dataset items.
+                Accepts the same expressions as :meth:`get_items`.
+            nb_samples: Maximum number of items to read. Must be a positive
+                integer; omit it or pass ``None`` to read the whole dataset.
+                Zero and negative values raise rather than being treated as a
+                limit.
+
+        Yields:
+            Lists of dictionaries representing the dataset items, in dataset
+            order. The last chunk may be shorter than ``chunk_size``; empty
+            chunks are never yielded.
+
+        Raises:
+            ValueError: If ``num_threads`` is not a positive integer, if
+                ``chunk_size`` is not a positive integer or exceeds
+                ``constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE``, or if
+                ``nb_samples`` is not a positive integer.
+
+        Example:
+            >>> for chunk in dataset.stream_items(chunk_size=2000, num_threads=8):
+            ...     process(chunk)
+
+        Note:
+            ``nb_samples`` items are read starting from the beginning of the
+            dataset, so the same call reads the same items whatever the thread
+            count.
+        """
+        if isinstance(chunk_size, bool) or not isinstance(chunk_size, int):
+            raise ValueError("chunk_size must be a positive integer")
+        if chunk_size < 1:
+            raise ValueError("chunk_size must be a positive integer")
+        if chunk_size > constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE:
+            raise ValueError(
+                "chunk_size must not exceed "
+                f"{constants.DATASET_ITEMS_READ_MAX_CHUNK_SIZE}, got {chunk_size}"
+            )
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
+        if nb_samples is not None and (
+            isinstance(nb_samples, bool)
+            or not isinstance(nb_samples, int)
+            or nb_samples < 1
+        ):
+            raise ValueError("nb_samples must be a positive integer")
+
+        return self.__internal_api__stream_item_chunks__(
+            chunk_size=chunk_size,
+            num_threads=min(num_threads, constants.DATASET_ITEMS_READ_MAX_THREADS),
+            nb_samples=nb_samples,
+            filter_string=filter_string,
+        )
+
+    @abc.abstractmethod
+    def get_version_info(
+        self,
+    ) -> Optional[dataset_version_public.DatasetVersionPublic]:
+        """
+        Get version information for experiment association.
+
+        Returns:
+            DatasetVersionPublic containing version metadata (id, version_name, etc.).
+            For Dataset, returns info about the current/latest version, or None if no version exists.
+            For DatasetVersion, returns info about this specific version.
+        """
+        raise NotImplementedError
+
+
+class DatasetVersion(DatasetExportOperations):
+    """
+    A read-only view of a specific dataset version.
+
+    This class provides access to dataset items at a specific version point in time.
+    It supports reading version metadata and retrieving items, but does not allow
+    mutations to the dataset.
+
+    This object should not be created directly. Use :meth:`Dataset.get_dataset_version`
+    to obtain an instance.
+    """
+
+    def __init__(
+        self,
+        dataset_name: str,
+        dataset_id: str,
+        rest_client: rest_api_client.OpikApi,
+        version_info: dataset_version_public.DatasetVersionPublic,
+        project_name: Optional[str],
+        client: Optional[Any] = None,
+    ) -> None:
+        self._dataset_name = dataset_name
+        self._dataset_id = dataset_id
+        self._rest_client = rest_client
+        self._version_info = version_info
+        self._project_name = project_name
+        self.client = client
+
+    @property
+    def dataset_name(self) -> str:
+        """The name of the dataset this version belongs to."""
+        return self._dataset_name
+
+    @property
+    def project_name(self) -> Optional[str]:
+        """The name of the project this dataset belongs to."""
+        return self._project_name
+
+    @property
+    def name(self) -> str:
+        """The name of the dataset this version belongs to (alias for dataset_name)."""
+        return self._dataset_name
+
+    @property
+    def dataset_id(self) -> str:
+        """The unique identifier of the dataset this version belongs to."""
+        return self._dataset_id
+
+    @property
+    def id(self) -> str:
+        """The unique identifier of the dataset this version belongs to (alias for dataset_id)."""
+        return self._dataset_id
+
+    @property
+    def version_id(self) -> Optional[str]:
+        """The unique identifier of this specific version."""
+        return self._version_info.id
+
+    @property
+    def dataset_items_count(self) -> Optional[int]:
+        """Total number of items in this version (alias for items_total)."""
+        return self._version_info.items_total
+
+    @property
+    def version_hash(self) -> Optional[str]:
+        """The unique hash identifier of this version."""
+        return self._version_info.version_hash
+
+    @property
+    def version_name(self) -> Optional[str]:
+        """The sequential version name (e.g., 'v1', 'v2')."""
+        return self._version_info.version_name
+
+    @property
+    def tags(self) -> Optional[List[str]]:
+        """Tags associated with this version."""
+        return self._version_info.tags
+
+    @property
+    def is_latest(self) -> Optional[bool]:
+        """Whether this is the latest version of the dataset."""
+        return self._version_info.is_latest
+
+    @property
+    def items_total(self) -> Optional[int]:
+        """Total number of items in this version."""
+        return self._version_info.items_total
+
+    @property
+    def items_added(self) -> Optional[int]:
+        """Number of items added since the previous version."""
+        return self._version_info.items_added
+
+    @property
+    def items_modified(self) -> Optional[int]:
+        """Number of items modified since the previous version."""
+        return self._version_info.items_modified
+
+    @property
+    def items_deleted(self) -> Optional[int]:
+        """Number of items deleted since the previous version."""
+        return self._version_info.items_deleted
+
+    @property
+    def change_description(self) -> Optional[str]:
+        """Description of changes in this version."""
+        return self._version_info.change_description
+
+    @property
+    def created_at(self) -> Optional[datetime.datetime]:
+        """Timestamp when this version was created."""
+        return self._version_info.created_at
+
+    @property
+    def created_by(self) -> Optional[str]:
+        """User who created this version."""
+        return self._version_info.created_by
+
+    @override
+    def __internal_api__stream_items_as_dataclasses__(
+        self,
+        nb_samples: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        dataset_item_ids: Optional[List[str]] = None,
+        filter_string: Optional[str] = None,
+    ) -> Iterator[dataset_item.DatasetItem]:
+        return rest_operations.stream_dataset_items(
+            rest_client=self._rest_client,
+            dataset_name=self._dataset_name,
+            project_name=self._project_name,
+            nb_samples=nb_samples,
+            batch_size=batch_size,
+            dataset_item_ids=dataset_item_ids,
+            filter_string=filter_string,
+            dataset_version=self._version_info.version_hash,
+        )
+
+    @override
+    def __internal_api__stream_item_chunks__(
+        self,
+        chunk_size: int,
+        num_threads: int,
+        nb_samples: Optional[int],
+        filter_string: Optional[str],
+    ) -> Iterator[List[Dict[str, Any]]]:
+        return rest_operations.stream_dataset_item_chunks(
+            rest_client=self._rest_client,
+            dataset_id=self._dataset_id,
+            chunk_size=chunk_size,
+            num_threads=num_threads,
+            nb_samples=nb_samples,
+            filter_string=filter_string,
+            dataset_version=self._version_info.version_hash,
+        )
+
+    @override
+    def get_version_info(
+        self,
+    ) -> Optional[dataset_version_public.DatasetVersionPublic]:
+        """
+        Get version information for this specific dataset version.
+
+        Returns:
+            DatasetVersionPublic containing this version's metadata.
+        """
+        return self._version_info
+
+    def get_evaluators(
+        self,
+        evaluator_model: Optional[str] = None,
+    ) -> List[Any]:
+        """
+        Get suite-level evaluators for this dataset version.
+
+        DatasetVersion does not support suite-level evaluators, so this always
+        returns an empty list.
+
+        Returns:
+            Empty list.
+        """
+        return []
+
+    def get_execution_policy(self) -> execution_policy.ExecutionPolicy:
+        """
+        Get the execution policy for this dataset version.
+
+        DatasetVersion does not support suite-level execution policy, so this
+        returns the default execution policy.
+
+        Returns:
+            Default execution policy.
+        """
+        return execution_policy.DEFAULT_EXECUTION_POLICY.copy()
+
+
+class Dataset(DatasetExportOperations):
     def __init__(
         self,
         name: str,
         description: Optional[str],
+        project_name: Optional[str],
         rest_client: rest_api_client.OpikApi,
+        dataset_items_count: Optional[int] = None,
+        client: Optional[Any] = None,
     ) -> None:
         """
         A Dataset object. This object should not be created directly, instead use :meth:`opik.Opik.create_dataset` or :meth:`opik.Opik.get_dataset`.
@@ -30,15 +496,70 @@ class Dataset:
         self._name = name
         self._description = description
         self._rest_client = rest_client
+        self._dataset_items_count = dataset_items_count
+        self._project_name = project_name
+        self.client = client
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
+        # True when the local hash cache is consistent with the backend.
+        # Directly-constructed Datasets (create_dataset, test-suite helpers,
+        # unit tests) start synced — there's nothing on the backend we haven't
+        # seen locally. The backend-fetch factories (`from_public`,
+        # `rest_operations.get_datasets`) flip this to False so dedup does a
+        # one-shot sync on the first `insert()` instead of paying an N+1
+        # sync at list time.
+        self._hashes_synced: bool = True
+        # None until the backend version has actually been determined. Only a
+        # conclusive answer is stored, so a probe that failed to reach the
+        # backend is retried instead of pinning this dataset to sequential
+        # uploads for the rest of the session.
+        self._parallel_insert_supported_cache: Optional[bool] = None
+
+    @classmethod
+    def from_public(
+        cls,
+        dataset_fern: rest_dataset_public.DatasetPublic,
+        project_name: str,
+        rest_client: rest_api_client.OpikApi,
+        client: Optional[Any] = None,
+    ) -> "Dataset":
+        """Build a Dataset from a backend response, resolving the actual project.
+
+        The backend may find the dataset via workspace-wide fallback even when
+        the caller's project_name doesn't match the dataset's actual project.
+        This method uses project_id from the response to resolve the real
+        project name, so downstream calls target the correct project.
+        """
+        actual_project_name: Optional[str] = None
+        if dataset_fern.project_id is not None:
+            actual_project_name = rest_client.projects.get_project_by_id(
+                dataset_fern.project_id
+            ).name
+
+        dataset_ = cls(
+            name=dataset_fern.name,
+            description=dataset_fern.description,
+            project_name=actual_project_name or project_name,
+            rest_client=rest_client,
+            dataset_items_count=dataset_fern.dataset_items_count,
+            client=client,
+        )
+        # Backend may already hold items we haven't seen; lazy-sync on first
+        # insert so content-hash dedup still works without paying a sync now.
+        dataset_.__internal_api__hashes_synced__ = False
+        # The response already carries the id, so seed the cached_property
+        # rather than paying a get-dataset-by-name round trip the first time
+        # something (a read, an item delete) needs it.
+        if dataset_fern.id is not None:
+            dataset_.__dict__["id"] = dataset_fern.id
+        return dataset_
 
     @functools.cached_property
     def id(self) -> str:
         """The id of the dataset"""
         return self._rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=self._name
+            dataset_name=self._name, project_name=self._project_name
         ).id
 
     @property
@@ -47,14 +568,316 @@ class Dataset:
         return self._name
 
     @property
+    def project_name(self) -> Optional[str]:
+        """The name of the project this dataset belongs to."""
+        return self._project_name
+
+    @property
     def description(self) -> Optional[str]:
         """The description of the dataset."""
         return self._description
 
-    def __internal_api__insert_items_as_dataclasses__(
-        self, items: List[dataset_item.DatasetItem]
+    @property
+    def dataset_items_count(self) -> Optional[int]:
+        """
+        The total number of items in the dataset.
+
+        If the count is not cached locally, it will be fetched from the backend.
+        """
+        if self._dataset_items_count is None:
+            dataset_info = self._rest_client.datasets.get_dataset_by_id(id=self.id)
+            self._dataset_items_count = dataset_info.dataset_items_count
+
+        return self._dataset_items_count
+
+    def get_current_version_name(self) -> Optional[str]:
+        """
+        Get the current version name of the dataset.
+
+        The version name is fetched from the backend and reflects the latest
+        committed version after any mutation operations (insert, update, delete).
+
+        Returns:
+            The current version name (e.g., 'v1', 'v2'), or None if no version exists.
+        """
+        version_info = self.get_version_info()
+        return version_info.version_name if version_info else None
+
+    @override
+    def get_version_info(
+        self,
+    ) -> Optional[dataset_version_public.DatasetVersionPublic]:
+        """
+        Get version information for the current (latest) dataset version.
+
+        Returns:
+            DatasetVersionPublic containing the current version's metadata,
+            or None if no version exists yet.
+        """
+        versions_response = None
+        try:
+            versions_response = self._rest_client.datasets.list_dataset_versions(
+                id=self.id,
+                page=1,
+                size=1,
+            )
+        except ApiError as e:
+            if e.status_code == 403:
+                LOGGER.debug(
+                    "Versioning is not enabled for datasets get version info returning None"
+                )
+            else:
+                raise
+        if not versions_response or not versions_response.content:
+            return None
+        return versions_response.content[0]
+
+    def get_evaluators(
+        self,
+        evaluator_model: Optional[str] = None,
+    ) -> List[Any]:
+        """
+        Get suite-level evaluators from the current dataset version.
+
+        Converts EvaluatorItemPublic objects from the BE into LLMJudge instances.
+
+        Args:
+            evaluator_model: Optional model name to use for LLMJudge evaluators.
+
+        Returns:
+            List of LLMJudge instances extracted from the version.
+        """
+        from opik.evaluation.suite_evaluators import llm_judge
+        from opik.evaluation.suite_evaluators.llm_judge import (
+            config as llm_judge_config,
+        )
+
+        version_info = self.get_version_info()
+        if version_info is None or not version_info.evaluators:
+            return []
+
+        evaluators: List[Any] = []
+        for evaluator_item in version_info.evaluators:
+            try:
+                if evaluator_item.type == "llm_judge":
+                    cfg = llm_judge_config.LLMJudgeConfig(**evaluator_item.config)
+                    evaluator = llm_judge.LLMJudge.from_config(
+                        cfg, init_kwargs={"model": evaluator_model}
+                    )
+                    evaluators.append(evaluator)
+                else:
+                    LOGGER.warning(
+                        "Unsupported evaluator type in version: %s. Only 'llm_judge' is supported.",
+                        evaluator_item.type,
+                    )
+            except Exception:
+                LOGGER.error(
+                    "Failed to instantiate evaluator from version config: %s",
+                    evaluator_item.config,
+                    exc_info=True,
+                )
+                raise
+
+        return evaluators
+
+    def get_execution_policy(
+        self,
+    ) -> execution_policy.ExecutionPolicy:
+        """
+        Get suite-level execution policy from the current dataset version.
+
+        Returns:
+            ExecutionPolicy dict with runs_per_item and pass_threshold.
+        """
+        version_info = self.get_version_info()
+        if version_info is not None and version_info.execution_policy is not None:
+            ep = version_info.execution_policy
+            return {
+                "runs_per_item": ep.runs_per_item
+                if ep.runs_per_item is not None
+                else 1,
+                "pass_threshold": ep.pass_threshold
+                if ep.pass_threshold is not None
+                else 1,
+            }
+
+        return execution_policy.DEFAULT_EXECUTION_POLICY.copy()
+
+    def get_tags(self) -> List[str]:
+        """
+        Get the tags for this dataset.
+
+        Returns:
+            List of tag strings.
+        """
+        dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=self._name, project_name=self._project_name
+        )
+        return dataset_fern.tags or []
+
+    def _convert_to_rest_item(
+        self, item: dataset_item.DatasetItem
+    ) -> rest_dataset_item.DatasetItemWrite:
+        """Convert a DatasetItem to REST API format.
+
+        Args:
+            item: The DatasetItem to convert.
+
+        Returns:
+            DatasetItemWrite object ready for REST API.
+        """
+        evaluators = None
+        if item.evaluators:
+            evaluators = [
+                rest_evaluator_item.EvaluatorItemWrite(
+                    name=e.name,
+                    type=e.type,  # type: ignore
+                    config=e.config,
+                )
+                for e in item.evaluators
+            ]
+
+        execution_policy = None
+        if item.execution_policy:
+            execution_policy = rest_execution_policy.ExecutionPolicyWrite(
+                runs_per_item=item.execution_policy.runs_per_item,
+                pass_threshold=item.execution_policy.pass_threshold,
+            )
+
+        return rest_dataset_item.DatasetItemWrite(
+            id=item.id,  # type: ignore
+            trace_id=item.trace_id,  # type: ignore
+            span_id=item.span_id,  # type: ignore
+            source=item.source,  # type: ignore
+            data=item.get_content(),
+            description=item.description,
+            evaluators=evaluators,
+            execution_policy=execution_policy,
+        )
+
+    def _insert_batch_with_retry(
+        self,
+        batch: List[rest_dataset_item.DatasetItemWrite],
+        batch_group_id: str,
     ) -> None:
-        # Remove duplicates if they already exist
+        """Insert a batch of dataset items with automatic retry on rate limit errors.
+
+        Args:
+            batch: List of dataset items to insert.
+            batch_group_id: UUIDv7 identifier that groups all batches from a single
+                user operation together. All batches sent as part of one insert/update
+                call share the same batch_group_id.
+        """
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: self._rest_client.datasets.create_or_update_dataset_items(
+                dataset_name=self._name,
+                items=batch,
+                batch_group_id=batch_group_id,
+                project_name=self._project_name,
+            )
+        )
+        LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
+
+    @property
+    def _parallel_insert_supported(self) -> bool:
+        """Whether the backend tolerates concurrent batches sharing a batch_group_id.
+
+        Older backends race on them, so parallelism is only safe from
+        ``constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT`` onwards. When the
+        version cannot be determined we report unsupported rather than risk the
+        race.
+
+        The answer is cached because the backend cannot change version
+        mid-session and parallel upload is the default: probing per ``insert``
+        would add a round trip to every call in a loop. Only a conclusive
+        answer is cached — an unreachable backend is re-probed on the next
+        insert so parallel upload resumes once it recovers.
+        """
+        if self._parallel_insert_supported_cache is not None:
+            return self._parallel_insert_supported_cache
+
+        try:
+            backend_version = self._rest_client.version()["version"]
+        except Exception:
+            LOGGER.warning(
+                "Could not reach the Opik backend to determine its version, "
+                "falling back to a sequential dataset upload for this insert.",
+                exc_info=True,
+            )
+            return False
+
+        try:
+            supported = (
+                semantic_version.SemanticVersion.parse(backend_version)
+                >= constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
+            )
+        except Exception:
+            LOGGER.warning(
+                "Could not parse the Opik backend version %s, falling back to a "
+                "sequential dataset upload. Parallel upload requires backend %s "
+                "or newer.",
+                backend_version,
+                constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+                exc_info=True,
+            )
+            supported = False
+        else:
+            if not supported:
+                LOGGER.warning(
+                    "Opik backend %s does not support parallel dataset upload, "
+                    "falling back to a sequential upload. Upgrade to backend %s or "
+                    "newer to use num_threads.",
+                    backend_version,
+                    constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT,
+                )
+
+        self._parallel_insert_supported_cache = supported
+        return supported
+
+    def _send_batches(
+        self,
+        batches: List[List[rest_dataset_item.DatasetItemWrite]],
+        batch_group_id: str,
+        num_threads: int,
+    ) -> None:
+        """Send batches to the backend, optionally in parallel.
+
+        All batches share ``batch_group_id`` so they fold into a single
+        dataset version regardless of how many workers send them. With
+        ``num_threads <= 1`` batches are sent sequentially in the caller
+        thread. With ``num_threads > 1`` they are fanned out across a thread
+        pool; the first batch that fails re-raises to the caller. There is no
+        rollback, so batches that already succeeded before the failure remain
+        persisted.
+        """
+        if num_threads <= 1:
+            for batch in batches:
+                self._insert_batch_with_retry(batch, batch_group_id=batch_group_id)
+            return
+
+        with futures.ThreadPoolExecutor(max_workers=num_threads) as pool:
+            submitted = [
+                pool.submit(
+                    self._insert_batch_with_retry,
+                    batch,
+                    batch_group_id=batch_group_id,
+                )
+                for batch in batches
+            ]
+            for future in futures.as_completed(submitted):
+                future.result()
+
+    def _deduplicate(
+        self, items: List[dataset_item.DatasetItem]
+    ) -> List[dataset_item.DatasetItem]:
+        """Drop items whose content hash was already seen locally or on the backend."""
+        # Lazy-sync against the backend the first time we insert into a
+        # dataset that was fetched from the backend (list or get-by-name
+        # factory), so content-hash dedup still works without paying an
+        # N+1 sync at list time.
+        if not self._hashes_synced:
+            self.__internal_api__sync_hashes__()
+
         deduplicated_items: List[dataset_item.DatasetItem] = []
         for item in items:
             item_hash = item.content_hash()
@@ -70,16 +893,42 @@ class Dataset:
             self._hashes.add(item_hash)
             self._id_to_hash[item.id] = item_hash
 
-        rest_items = [
-            rest_dataset_item.DatasetItemWrite(
-                id=item.id,  # type: ignore
-                trace_id=item.trace_id,  # type: ignore
-                span_id=item.span_id,  # type: ignore
-                source=item.source,  # type: ignore
-                data=item.get_content(),
-            )
-            for item in deduplicated_items
-        ]
+        return deduplicated_items
+
+    def __internal_api__insert_items_as_dataclasses__(
+        self,
+        items: List[dataset_item.DatasetItem],
+        num_threads: int = 1,
+        deduplication: bool = True,
+    ) -> None:
+        # Validated here rather than in each public entry point: every insert
+        # path funnels through this method. A truthy string or None would
+        # otherwise silently pick the wrong duplicate-checking behaviour, and
+        # a non-integer worker count would fail on the comparison below with a
+        # TypeError instead of naming the offending argument.
+        if not isinstance(deduplication, bool):
+            raise ValueError("deduplication must be a bool")
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
+
+        # Gated here rather than in `insert` so every caller of this funnel is
+        # covered: older backends race on concurrent batches that share a
+        # batch_group_id, and a direct caller asking for workers must not be
+        # able to skip that check.
+        if num_threads > 1 and not self._parallel_insert_supported:
+            num_threads = 1
+
+        if deduplication:
+            items_to_send = self._deduplicate(items)
+        else:
+            # Nothing was hashed, so the local cache no longer describes the
+            # backend; force a re-sync before the next deduplicated insert.
+            items_to_send = items
+            self._hashes_synced = False
+
+        rest_items = [self._convert_to_rest_item(item) for item in items_to_send]
 
         batches = sequence_splitter.split_into_batches(
             rest_items,
@@ -87,47 +936,98 @@ class Dataset:
             max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
         )
 
-        for batch in batches:
-            LOGGER.debug("Sending dataset items batch of size %d", len(batch))
-            self._rest_client.datasets.create_or_update_dataset_items(
-                dataset_name=self._name, items=batch
-            )
+        batch_group_id = id_helpers.generate_id()
 
-    def insert(self, items: Sequence[Dict[str, Any]]) -> None:
+        self._send_batches(batches, batch_group_id, num_threads)
+
+        # Invalidate the cached count so it will be fetched from backend on next access
+        self._dataset_items_count = None
+
+    def insert(
+        self,
+        items: Sequence[Dict[str, Any]],
+        num_threads: int = 4,
+        deduplication: bool = True,
+    ) -> None:
         """
-        Insert new items into the dataset.
+        Insert new items into the dataset. A new dataset version will be created.
 
         Args:
             items: List of dicts (which will be converted to dataset items)
                 to add to the dataset.
+            deduplication: Whether to skip items whose content already exists
+                in the dataset. Pass ``False`` to insert every item as-is
+                without any duplicate checking, which is significantly faster
+                on large datasets. The next insert that does deduplicate has to
+                re-read the dataset's items to account for what was skipped.
+            num_threads: Number of worker threads used to upload the item
+                batches. Must be a positive integer, defaults to ``4``; pass
+                ``1`` to upload sequentially. All batches land in a single
+                dataset version. If a batch fails the call raises, and the
+                batches that already succeeded stay persisted. Older Opik
+                backends do not support parallel upload and fall back to a
+                sequential one.
+
+        Raises:
+            ValueError: If ``num_threads`` is not a positive integer, or
+                ``deduplication`` is not a bool.
         """
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
+        # Checked here too so bad input raises before any item is converted.
+        if not isinstance(deduplication, bool):
+            raise ValueError("deduplication must be a bool")
+
         dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
             for item in items
         ]
-        self.__internal_api__insert_items_as_dataclasses__(dataset_items)
+        self.__internal_api__insert_items_as_dataclasses__(
+            dataset_items, num_threads=num_threads, deduplication=deduplication
+        )
+
+    @property
+    def __internal_api__hashes_synced__(self) -> bool:
+        """Whether the local hash cache is in sync with the backend.
+
+        `__init__` defaults this to True (a freshly constructed Dataset
+        has no backend state to sync). Factory paths that construct a
+        Dataset from an existing backend state (`from_public`,
+        `rest_operations.get_datasets`) flip it to False so the first
+        :meth:`insert` triggers a one-shot sync instead of paying an
+        N+1 sync at list time.
+        """
+        return self._hashes_synced
+
+    @__internal_api__hashes_synced__.setter
+    def __internal_api__hashes_synced__(self, value: bool) -> None:
+        self._hashes_synced = value
 
     def __internal_api__sync_hashes__(self) -> None:
         """Updates all the hashes in the dataset"""
         LOGGER.debug("Start hash sync in dataset")
-        all_items = self.__internal_api__get_items_as_dataclasses__()
 
         self._id_to_hash = {}
         self._hashes = set()
 
-        for item in all_items:
+        for item in self.__internal_api__stream_items_as_dataclasses__():
             item_hash = item.content_hash()
             self._id_to_hash[item.id] = item_hash  # type: ignore
             self._hashes.add(item_hash)
 
+        self._hashes_synced = True
         LOGGER.debug("Finish hash sync in dataset")
 
-    def update(self, items: List[Dict[str, Any]]) -> None:
+    def update(self, items: List[Dict[str, Any]], deduplication: bool = True) -> None:
         """
         Update existing items in the dataset.
 
         Args:
             items: List of DatasetItem objects to update in the dataset. You need to provide the full item object as it will override what has been supplied previously.
+            deduplication: Whether to skip items whose content already exists in
+                the dataset. See :meth:`insert` for details.
 
         Raises:
             DatasetItemUpdateOperationRequiresItemId: If any item in the list is missing an id.
@@ -138,11 +1038,31 @@ class Dataset:
                     "Missing id for dataset item to update: %s", item
                 )
 
-        self.insert(items)
+        self.insert(items, deduplication=deduplication)
+
+    def _delete_batch_with_retry(
+        self,
+        batch: List[str],
+        batch_group_id: str,
+    ) -> None:
+        """Delete a batch of dataset items with automatic retry on rate limit errors.
+
+        Args:
+            batch: List of item IDs to delete.
+            batch_group_id: UUIDv7 identifier that groups all batches from a single
+                user operation together. All batches sent as part of one delete
+                call share the same batch_group_id.
+        """
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: self._rest_client.datasets.delete_dataset_items(
+                item_ids=batch, batch_group_id=batch_group_id
+            )
+        )
+        LOGGER.debug("Successfully deleted dataset items batch of size %d", len(batch))
 
     def delete(self, items_ids: List[str]) -> None:
         """
-        Delete items from the dataset.
+        Delete items from the dataset. A new dataset version will be created.
 
         Args:
             items_ids: List of item ids to delete.
@@ -151,9 +1071,11 @@ class Dataset:
             items_ids, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
         )
 
+        batch_group_id = id_helpers.generate_id()
+
         for batch in batches:
             LOGGER.debug("Deleting dataset items batch: %s", batch)
-            self._rest_client.datasets.delete_dataset_items(item_ids=batch)
+            self._delete_batch_with_retry(batch, batch_group_id=batch_group_id)
 
             for item_id in batch:
                 if item_id in self._id_to_hash:
@@ -161,131 +1083,113 @@ class Dataset:
                     self._hashes.discard(hash)
                     del self._id_to_hash[item_id]
 
+        # Invalidate the cached count so it will be fetched from backend on next access
+        self._dataset_items_count = None
+
     def clear(self) -> None:
         """
-        Delete all items from the given dataset.
+        Delete all items from the given dataset. A new dataset version will be created.
         """
-        all_items = self.__internal_api__get_items_as_dataclasses__()
-        item_ids = [item.id for item in all_items if item.id is not None]
+        item_ids = [
+            item.id
+            for item in self.__internal_api__stream_items_as_dataclasses__()
+            if item.id is not None
+        ]
 
         self.delete(item_ids)
 
-    def to_pandas(self) -> "pd.DataFrame":
-        """
-        Requires: `pandas` library to be installed.
-
-        Convert the dataset to a pandas DataFrame.
-
-        Returns:
-            A pandas DataFrame containing all items in the dataset.
-        """
-        dataset_items = self.__internal_api__get_items_as_dataclasses__()
-
-        return converters.to_pandas(dataset_items, keys_mapping={})
-
-    def to_json(self) -> str:
-        """
-        Convert the dataset to a JSON string.
-
-        Returns:
-            A JSON string representation of all items in the dataset.
-        """
-        dataset_items = self.__internal_api__get_items_as_dataclasses__()
-
-        return converters.to_json(dataset_items, keys_mapping={})
-
-    def get_items(self, nb_samples: Optional[int] = None) -> List[Dict[str, Any]]:
-        """
-        Retrieve a fixed set number of dataset items dictionaries.
-
-        Args:
-            nb_samples: The number of samples to retrieve. If not set - all items are returned.
-
-        Returns:
-            A list of dictionaries objects representing the samples.
-        """
-        dataset_items_as_dataclasses = self.__internal_api__get_items_as_dataclasses__(
-            nb_samples
-        )
-        dataset_items_as_dicts = [
-            {"id": item.id, **item.get_content()}
-            for item in dataset_items_as_dataclasses
-        ]
-
-        return dataset_items_as_dicts
-
-    @retry_decorator.opik_rest_retry
-    def __internal_api__get_items_as_dataclasses__(
+    @override
+    def __internal_api__stream_items_as_dataclasses__(
         self,
         nb_samples: Optional[int] = None,
+        batch_size: Optional[int] = None,
         dataset_item_ids: Optional[List[str]] = None,
-    ) -> List[dataset_item.DatasetItem]:
-        results: List[dataset_item.DatasetItem] = []
+        filter_string: Optional[str] = None,
+    ) -> Iterator[dataset_item.DatasetItem]:
+        """
+        Stream dataset items as a generator instead of loading all at once.
 
-        if dataset_item_ids is not None:
-            dataset_item_ids = set(dataset_item_ids)  # type: ignore
+        This method yields dataset items one at a time, enabling evaluation to start
+        processing items before the entire dataset is downloaded. This is particularly
+        useful for large datasets with heavy payloads (images, videos, audio).
 
-        while True:
-            stream = self._rest_client.datasets.stream_dataset_items(
-                dataset_name=self._name,
-                last_retrieved_id=results[-1].id if len(results) > 0 else None,
+        Args:
+            nb_samples: Maximum number of items to retrieve. If None, all items are streamed.
+            batch_size: Maximum number of items to fetch per batch from the backend.
+                        If None, uses the default value from constants.DATASET_STREAM_BATCH_SIZE.
+            dataset_item_ids: Optional list of specific item IDs to retrieve. If provided,
+                            only items with matching IDs will be yielded.
+            filter_string: Optional OQL filter string to filter dataset items.
+
+        Yields:
+            DatasetItem objects one at a time
+        """
+        return rest_operations.stream_dataset_items(
+            rest_client=self._rest_client,
+            dataset_name=self._name,
+            project_name=self._project_name,
+            nb_samples=nb_samples,
+            batch_size=batch_size,
+            dataset_item_ids=dataset_item_ids,
+            filter_string=filter_string,
+            dataset_version=None,
+        )
+
+    @override
+    def __internal_api__stream_item_chunks__(
+        self,
+        chunk_size: int,
+        num_threads: int,
+        nb_samples: Optional[int],
+        filter_string: Optional[str],
+    ) -> Iterator[List[Dict[str, Any]]]:
+        # A generator, so `self.id` -- which resolves the dataset by name over
+        # REST when it hasn't been seeded -- is not touched until the caller
+        # actually starts iterating. Keeps `stream_items()` free of I/O.
+        yield from rest_operations.stream_dataset_item_chunks(
+            rest_client=self._rest_client,
+            dataset_id=self.id,
+            chunk_size=chunk_size,
+            num_threads=num_threads,
+            nb_samples=nb_samples,
+            filter_string=filter_string,
+            dataset_version=self._resolve_read_version(),
+        )
+
+    def _resolve_read_version(self) -> Optional[str]:
+        """The version hash every page of one read is pinned to, if there is one.
+
+        Pages are addressed by offset, and the backend sorts newest id first, so
+        an item inserted mid-read lands at offset 0 and shifts every page that
+        has not been fetched yet -- returning one item twice and skipping
+        another. Reading a single version instead makes the whole read a
+        snapshot, which is what the cursor-based stream got for free from its
+        ``id < last_retrieved_id`` seek.
+
+        Returns None when the backend has no version to pin to (versioning
+        disabled, or a dataset with no versions yet); the read then falls back
+        to the live state and stays vulnerable to that shift, which is called
+        out on :meth:`stream_items`.
+        """
+        version_info = self.get_version_info()
+        version_hash = version_info.version_hash if version_info else None
+
+        if version_hash is None:
+            LOGGER.debug(
+                "No dataset version to pin the read of dataset %s to; reading "
+                "the live state, which may return an item twice or skip one if "
+                "items are inserted or deleted while the read is in progress.",
+                self._name,
             )
 
-            previous_results_size = len(results)
-            if nb_samples is not None and len(results) == nb_samples:
-                break
-
-            item_bytes = b"".join(stream)
-            for line in item_bytes.split(b"\n"):
-                if len(line) == 0:
-                    continue
-
-                full_item_content: Dict[str, Any] = json.loads(
-                    line.decode("utf-8").strip()
-                )
-                data_item_content = (
-                    full_item_content["data"] if "data" in full_item_content else {}
-                )
-
-                dataset_item_id = full_item_content.get("id")
-
-                if dataset_item_ids is not None:
-                    if dataset_item_id not in dataset_item_ids:
-                        continue
-                    else:
-                        dataset_item_ids.remove(dataset_item_id)
-
-                item = dataset_item.DatasetItem(
-                    id=full_item_content.get("id"),  # type: ignore
-                    trace_id=full_item_content.get("trace_id"),  # type: ignore
-                    span_id=full_item_content.get("span_id"),  # type: ignore
-                    source=full_item_content.get("source"),  # type: ignore
-                    **data_item_content,
-                )
-
-                results.append(item)
-
-                # Break the loop if we have enough samples
-                if nb_samples is not None and len(results) == nb_samples:
-                    break
-
-            # Break the loop if we have not received any new samples
-            if len(results) == previous_results_size:
-                break
-
-        if dataset_item_ids and len(dataset_item_ids) > 0:
-            LOGGER.warning(
-                "The following dataset items were not found in the dataset: %s",
-                dataset_item_ids,
-            )
-
-        return results
+        return version_hash
 
     def insert_from_json(
         self,
         json_array: str,
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
+        deduplication: bool = True,
     ) -> None:
         """
         Args:
@@ -295,6 +1199,8 @@ class Dataset:
                 Example: {'Expected output': 'expected_output'}
             ignore_keys: if your json dicts contain keys that are not needed for DatasetItem
                 construction - pass them as ignore_keys argument
+            deduplication: Whether to skip items whose content already exists in
+                the dataset. See :meth:`insert` for details.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
@@ -303,13 +1209,14 @@ class Dataset:
             json_array, keys_mapping=keys_mapping, ignore_keys=ignore_keys
         )
 
-        self.insert(new_items)
+        self.insert(new_items, deduplication=deduplication)
 
     def read_jsonl_from_file(
         self,
         file_path: str,
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
+        deduplication: bool = True,
     ) -> None:
         """
         Read JSONL from a file and insert it into the dataset.
@@ -320,17 +1227,20 @@ class Dataset:
                 Example: {'Expected output': 'expected_output'}
             ignore_keys: if your json dicts contain keys that are not needed for DatasetItem
                 construction - pass them as ignore_keys argument
+            deduplication: Whether to skip items whose content already exists in
+                the dataset. See :meth:`insert` for details.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
         new_items = converters.from_jsonl_file(file_path, keys_mapping, ignore_keys)
-        self.insert(new_items)
+        self.insert(new_items, deduplication=deduplication)
 
     def insert_from_pandas(
         self,
         dataframe: "pd.DataFrame",
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
+        deduplication: bool = True,
     ) -> None:
         """
         Requires: `pandas` library to be installed.
@@ -341,10 +1251,54 @@ class Dataset:
                 Example: {'Expected output': 'expected_output'}
             ignore_keys: if your dataframe contains columns that are not needed for DatasetItem
                 construction - pass them as ignore_keys argument
+            deduplication: Whether to skip items whose content already exists in
+                the dataset. See :meth:`insert` for details.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
 
         new_items = converters.from_pandas(dataframe, keys_mapping, ignore_keys)
 
-        self.insert(new_items)
+        self.insert(new_items, deduplication=deduplication)
+
+    def get_version_view(self, version_name: str) -> DatasetVersion:
+        """
+        Get a read-only view of a specific dataset version.
+
+        The returned DatasetVersion object allows reading version metadata and
+        retrieving items via :meth:`DatasetVersion.get_items`, but does not support
+        mutations.
+
+        Args:
+            version_name: The version name (e.g., 'v1', 'v2').
+
+        Returns:
+            A read-only DatasetVersion object for accessing the specified version.
+
+        Raises:
+            opik.exceptions.DatasetVersionNotFound: If the specified version does not exist.
+
+        Example:
+            >>> dataset = client.get_dataset("my_dataset")
+            >>> version = dataset.get_version_view("v1")
+            >>> items = version.get_items()
+        """
+        version_info = rest_operations.find_version_by_name(
+            rest_client=self._rest_client,
+            dataset_id=self.id,
+            version_name=version_name,
+        )
+
+        if version_info is None:
+            raise exceptions.DatasetVersionNotFound(
+                f"Dataset version '{version_name}' not found in dataset '{self._name}'"
+            )
+
+        return DatasetVersion(
+            dataset_name=self._name,
+            dataset_id=self.id,
+            rest_client=self._rest_client,
+            version_info=version_info,
+            project_name=self._project_name,
+            client=self.client,
+        )

@@ -2,8 +2,8 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Dataset.DatasetPage;
+import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
-import com.comet.opik.api.ExperimentsDelete;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -22,7 +23,7 @@ import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
-import org.jdbi.v3.core.Jdbi;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -31,9 +32,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -44,7 +45,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -58,22 +58,26 @@ class DatasetExperimentE2ETest {
     private static final String EXPERIMENT_RESOURCE_URI = "%s/v1/private/experiments";
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
     private final WireMockUtils.WireMockRuntime wireMock;
 
     @RegisterApp
-    private final TestDropwizardAppExtension app;
+    private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
+        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
 
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
+
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
     }
 
@@ -84,16 +88,9 @@ class DatasetExperimentE2ETest {
     private ExperimentResourceClient experimentResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
+    void setUpAll(ClientSupport client) throws Exception {
 
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
 
         ClientSupportUtils.config(client);
@@ -178,7 +175,7 @@ class DatasetExperimentE2ETest {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new ExperimentsDelete(ids)))) {
+                .post(Entity.json(new DeleteIdsHolder(ids)))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
         }
@@ -214,13 +211,13 @@ class DatasetExperimentE2ETest {
 
             mockTargetWorkspace(apiKey, testWorkspace, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, testWorkspace);
 
-            var dataset2 = factory.manufacturePojo(Dataset.class);
+            var dataset2 = buildDataset();
             createAndAssert(dataset2, apiKey, testWorkspace);
 
-            var dataset3 = factory.manufacturePojo(Dataset.class);
+            var dataset3 = buildDataset();
             var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
 
             var expectedExperiment = generateExperiment(dataset);
@@ -247,13 +244,13 @@ class DatasetExperimentE2ETest {
 
             mockTargetWorkspace(apiKey, testWorkspace, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, testWorkspace);
 
-            var dataset2 = factory.manufacturePojo(Dataset.class);
+            var dataset2 = buildDataset();
             createAndAssert(dataset2, apiKey, testWorkspace);
 
-            var dataset3 = factory.manufacturePojo(Dataset.class);
+            var dataset3 = buildDataset();
             var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
 
             var expectedExperiment = generateExperiment(dataset);
@@ -285,13 +282,13 @@ class DatasetExperimentE2ETest {
 
             mockTargetWorkspace(apiKey, testWorkspace, workspaceId);
 
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, apiKey, testWorkspace);
 
-            var dataset2 = factory.manufacturePojo(Dataset.class);
+            var dataset2 = buildDataset();
             var datasetId2 = createAndAssert(dataset2, apiKey, testWorkspace);
 
-            var dataset3 = factory.manufacturePojo(Dataset.class);
+            var dataset3 = buildDataset();
             var datasetId3 = createAndAssert(dataset3, apiKey, testWorkspace);
 
             var experiment = generateExperiment(dataset);
@@ -328,6 +325,10 @@ class DatasetExperimentE2ETest {
 
             assertPage(datasets, List.of(datasetId3, datasetId2, datasetId));
         }
+    }
+
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(factory);
     }
 
     private Experiment generateExperiment(Dataset dataset) {

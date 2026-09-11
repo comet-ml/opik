@@ -1,14 +1,9 @@
-import json
-import logging
 from typing import Union, Optional, Any
 import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
 
-from . import template
-from opik.exceptions import MetricComputationError
-
-LOGGER = logging.getLogger(__name__)
+from . import template, parser
 
 
 class UsefulnessResponseFormat(pydantic.BaseModel):
@@ -29,6 +24,10 @@ class Usefulness(base_metric.BaseMetric):
             `opik.evaluation.models.LiteLLMChatModel` is used by default.
         name: The name of the metric. Defaults to "UsefulnessMetric".
         track: Whether to track the metric. Defaults to True.
+        project_name: Optional project name to track the metric in for the cases when
+            there are no parent span/trace to inherit project name from.
+        seed: Optional seed value for reproducible model generation. If provided, this seed will be passed to the model for deterministic outputs.
+        temperature: Optional temperature value for model generation. If provided, this temperature will be passed to the model. If not provided, the model's default temperature will be used.
 
     Example:
         >>> from opik.evaluation.metrics import Usefulness
@@ -43,21 +42,35 @@ class Usefulness(base_metric.BaseMetric):
         model: Optional[Union[str, base_model.OpikBaseModel]] = None,
         name: str = "UsefulnessMetric",
         track: bool = True,
+        project_name: Optional[str] = None,
+        seed: Optional[int] = None,
+        temperature: Optional[float] = None,
     ):
         super().__init__(
             name=name,
             track=track,
+            project_name=project_name,
         )
-
-        self._init_model(model)
+        self._seed = seed
+        self._init_model(model, temperature=temperature)
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]]
+        self,
+        model: Optional[Union[str, base_model.OpikBaseModel]],
+        temperature: Optional[float],
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            self._model = models_factory.get(model_name=model)
+            model_kwargs = {}
+            if temperature is not None:
+                model_kwargs["temperature"] = temperature
+            if self._seed is not None:
+                model_kwargs["seed"] = self._seed
+
+            self._model = models_factory.get(
+                model_name=model, track=self.track, **model_kwargs
+            )
 
     def score(
         self, input: str, output: str, **ignored_kwargs: Any
@@ -74,15 +87,12 @@ class Usefulness(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object containing the usefulness score
             (between 0.0 and 1.0) and a reason for the score.
         """
-        llm_query = template.generate_query(
-            input=input,
-            output=output,
-        )
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=UsefulnessResponseFormat
+        messages = template.build_messages(input=input, output=output)
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=UsefulnessResponseFormat
         )
 
-        return self._parse_model_output(model_output)
+        return parser.parse_model_output(content=message["content"], name=self.name)
 
     async def ascore(
         self, input: str, output: str, **ignored_kwargs: Any
@@ -99,32 +109,9 @@ class Usefulness(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object containing the usefulness score
             (between 0.0 and 1.0) and a reason for the score.
         """
-        llm_query = template.generate_query(
-            input=input,
-            output=output,
-        )
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=UsefulnessResponseFormat
+        messages = template.build_messages(input=input, output=output)
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=UsefulnessResponseFormat
         )
 
-        return self._parse_model_output(model_output)
-
-    def _parse_model_output(self, content: str) -> score_result.ScoreResult:
-        """Parse the model output string into a ScoreResult."""
-        try:
-            dict_content = json.loads(content)
-            score: float = float(dict_content["score"])
-
-            if not (0.0 <= score <= 1.0):
-                raise MetricComputationError(
-                    f"Usefulness score must be between 0.0 and 1.0, got {score}"
-                )
-
-            return score_result.ScoreResult(
-                name=self.name, value=score, reason=dict_content["reason"]
-            )
-        except Exception as e:
-            LOGGER.error(f"Failed to parse model output: {e}", exc_info=True)
-            raise MetricComputationError(
-                f"Failed to parse usefulness score from model output: {repr(e)}"
-            )
+        return parser.parse_model_output(content=message["content"], name=self.name)

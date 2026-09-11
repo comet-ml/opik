@@ -1,39 +1,381 @@
 """
 This file contains the OQL parser and validator. It is currently limited in scope to only support
-simple filters without "and" or "or" operators.
+simple filters without "or" operators.
 """
 
 import json
+from abc import ABC, abstractmethod
+from typing import Any, Dict, Optional, Tuple, List
 
-from typing import Any, Dict, Optional, Tuple
+STRING_OPERATORS = [
+    "=",
+    "!=",
+    "contains",
+    "not_contains",
+    "starts_with",
+    "ends_with",
+    ">",
+    "<",
+]
+# Operators supported by backend FieldType.STRING_STATE_DB. Mirrors
+# ANALYTICS_DB_OPERATOR_MAP in FilterQueryBuilder.java: STRING_STATE_DB has
+# entries only for CONTAINS, NOT_CONTAINS, STARTS_WITH, ENDS_WITH, EQUAL and
+# NOT_EQUAL — > and < resolve to a null operator and produce a 400.
+STRING_STATE_DB_OPERATORS = [
+    "=",
+    "!=",
+    "contains",
+    "not_contains",
+    "starts_with",
+    "ends_with",
+]
+DATE_TIME_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
+NUMBER_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
+FEEDBACK_SCORES_OPERATORS = [
+    "=",
+    "!=",
+    ">",
+    ">=",
+    "<",
+    "<=",
+    "is_empty",
+    "is_not_empty",
+]
+LIST_OPERATORS = [
+    "=",
+    "!=",
+    "contains",
+    "not_contains",
+    "is_empty",
+    "is_not_empty",
+]
+DICTIONARY_OPERATORS = [
+    "=",
+    "!=",
+    "contains",
+    "not_contains",
+    "starts_with",
+    "ends_with",
+    ">",
+    ">=",
+    "<",
+    "<=",
+]
+ENUM_OPERATORS = ["=", "!=", "in", "not_in"]
 
-COLUMNS = {
-    "name": "string",
-    "start_time": "date_time",
-    "end_time": "date_time",
-    "input": "string",
-    "output": "string",
-    "metadata": "dictionary",
-    "feedback_scores": "feedback_scores_number",
-    "tags": "list",
-    "usage.total_tokens": "number",
-    "usage.prompt_tokens": "number",
-    "usage.completion_tokens": "number",
-}
 
-SUPPORTED_OPERATORS = {
-    "name": ["=", "contains", "not_contains"],
-    "start_time": ["=", ">", "<", ">=", "<="],
-    "end_time": ["=", ">", "<", ">=", "<="],
-    "input": ["=", "contains", "not_contains"],
-    "output": ["=", "contains", "not_contains"],
-    "metadata": ["=", "contains", ">", "<"],
-    "feedback_scores": ["=", ">", "<", ">=", "<="],
-    "tags": ["contains"],
-    "usage.total_tokens": ["=", ">", "<", ">=", "<="],
-    "usage.prompt_tokens": ["=", ">", "<", ">=", "<="],
-    "usage.completion_tokens": ["=", ">", "<", ">=", "<="],
-}
+class OQLConfig(ABC):
+    """Abstract base class for OQL configuration."""
+
+    @property
+    @abstractmethod
+    def columns(self) -> Dict[str, str]:
+        """Return the supported columns and their types."""
+        pass
+
+    @property
+    @abstractmethod
+    def supported_operators(self) -> Dict[str, List[str]]:
+        """Return the supported operators for each column."""
+        pass
+
+    @property
+    def dictionary_fields(self) -> List[str]:
+        """Return fields that support nested key access via dot notation."""
+        return ["usage", "feedback_scores", "metadata"]
+
+
+class TraceOQLConfig(OQLConfig):
+    """OQL configuration for trace filtering.
+
+    Based on backend's TraceField enum.
+    See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/TraceField.java
+    """
+
+    @property
+    def columns(self) -> Dict[str, str]:
+        return {
+            "id": "string",
+            "name": "string",
+            "start_time": "date_time",
+            "end_time": "date_time",
+            "input": "string",
+            "output": "string",
+            "input_json": "dictionary",
+            "output_json": "dictionary",
+            "metadata": "dictionary",
+            "total_estimated_cost": "number",
+            "llm_span_count": "number",
+            "tags": "list",
+            "usage.total_tokens": "number",
+            "usage.prompt_tokens": "number",
+            "usage.completion_tokens": "number",
+            "feedback_scores": "feedback_scores_number",
+            "span_feedback_scores": "feedback_scores_number",
+            "duration": "number",
+            "thread_id": "string",
+            "guardrails": "string",
+            "error_info": "error_container",
+            "created_at": "date_time",
+            "last_updated_at": "date_time",
+            "annotation_queue_ids": "list",
+            "experiment_id": "string",
+            "environment": "enum",
+        }
+
+    @property
+    def supported_operators(self) -> Dict[str, List[str]]:
+        return {
+            "id": STRING_OPERATORS,
+            "name": STRING_OPERATORS,
+            "input": STRING_OPERATORS,
+            "output": STRING_OPERATORS,
+            "thread_id": STRING_OPERATORS,
+            "guardrails": STRING_OPERATORS,
+            "experiment_id": STRING_OPERATORS,
+            "environment": ENUM_OPERATORS,
+            "start_time": DATE_TIME_OPERATORS,
+            "end_time": DATE_TIME_OPERATORS,
+            "created_at": DATE_TIME_OPERATORS,
+            "last_updated_at": DATE_TIME_OPERATORS,
+            "total_estimated_cost": NUMBER_OPERATORS,
+            "llm_span_count": NUMBER_OPERATORS,
+            "usage.total_tokens": NUMBER_OPERATORS,
+            "usage.prompt_tokens": NUMBER_OPERATORS,
+            "usage.completion_tokens": NUMBER_OPERATORS,
+            "duration": NUMBER_OPERATORS,
+            "input_json": DICTIONARY_OPERATORS,
+            "output_json": DICTIONARY_OPERATORS,
+            "metadata": DICTIONARY_OPERATORS,
+            "feedback_scores": FEEDBACK_SCORES_OPERATORS,
+            "span_feedback_scores": FEEDBACK_SCORES_OPERATORS,
+            "tags": LIST_OPERATORS,
+            "annotation_queue_ids": LIST_OPERATORS,
+            "error_info": ["is_empty", "is_not_empty"],
+            "default": STRING_OPERATORS,
+        }
+
+    @property
+    def dictionary_fields(self) -> List[str]:
+        return [
+            "metadata",
+            "input_json",
+            "output_json",
+            "feedback_scores",
+            "span_feedback_scores",
+        ]
+
+
+class SpanOQLConfig(OQLConfig):
+    """OQL configuration for span filtering.
+
+    Based on backend's SpanField enum.
+    See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/SpanField.java
+    """
+
+    @property
+    def columns(self) -> Dict[str, str]:
+        return {
+            "id": "string",
+            "name": "string",
+            "start_time": "date_time",
+            "end_time": "date_time",
+            "input": "string",
+            "output": "string",
+            "input_json": "dictionary",
+            "output_json": "dictionary",
+            "metadata": "dictionary",
+            "model": "string",
+            "provider": "string",
+            "total_estimated_cost": "number",
+            "tags": "list",
+            "usage.total_tokens": "number",
+            "usage.prompt_tokens": "number",
+            "usage.completion_tokens": "number",
+            "feedback_scores": "feedback_scores_number",
+            "duration": "number",
+            "error_info": "error_container",
+            "type": "enum",
+            "trace_id": "string",
+            "environment": "enum",
+        }
+
+    @property
+    def supported_operators(self) -> Dict[str, List[str]]:
+        return {
+            "id": STRING_OPERATORS,
+            "name": STRING_OPERATORS,
+            "input": STRING_OPERATORS,
+            "output": STRING_OPERATORS,
+            "model": STRING_OPERATORS,
+            "provider": STRING_OPERATORS,
+            "trace_id": STRING_OPERATORS,
+            "type": ENUM_OPERATORS,
+            "environment": ENUM_OPERATORS,
+            "start_time": DATE_TIME_OPERATORS,
+            "end_time": DATE_TIME_OPERATORS,
+            "total_estimated_cost": NUMBER_OPERATORS,
+            "usage.total_tokens": NUMBER_OPERATORS,
+            "usage.prompt_tokens": NUMBER_OPERATORS,
+            "usage.completion_tokens": NUMBER_OPERATORS,
+            "duration": NUMBER_OPERATORS,
+            "input_json": DICTIONARY_OPERATORS,
+            "output_json": DICTIONARY_OPERATORS,
+            "metadata": DICTIONARY_OPERATORS,
+            "feedback_scores": FEEDBACK_SCORES_OPERATORS,
+            "tags": LIST_OPERATORS,
+            "error_info": ["is_empty", "is_not_empty"],
+            "default": STRING_OPERATORS,
+        }
+
+    @property
+    def dictionary_fields(self) -> List[str]:
+        return ["metadata", "input_json", "output_json", "feedback_scores"]
+
+
+class ThreadOQLConfig(OQLConfig):
+    """OQL configuration for thread filtering.
+
+    Based on backend's TraceThreadField enum.
+    See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/TraceThreadField.java
+    """
+
+    @property
+    def columns(self) -> Dict[str, str]:
+        return {
+            "id": "string",
+            "first_message": "string",
+            "last_message": "string",
+            "number_of_messages": "number",
+            "duration": "number",
+            "created_at": "date_time",
+            "last_updated_at": "date_time",
+            "start_time": "date_time",
+            "end_time": "date_time",
+            "feedback_scores": "feedback_scores_number",
+            "status": "enum",
+            "tags": "list",
+            "annotation_queue_ids": "list",
+            "environment": "enum",
+        }
+
+    @property
+    def supported_operators(self) -> Dict[str, List[str]]:
+        return {
+            "id": STRING_OPERATORS,
+            "first_message": STRING_OPERATORS,
+            "last_message": STRING_OPERATORS,
+            "number_of_messages": NUMBER_OPERATORS,
+            "duration": NUMBER_OPERATORS,
+            "created_at": DATE_TIME_OPERATORS,
+            "last_updated_at": DATE_TIME_OPERATORS,
+            "start_time": DATE_TIME_OPERATORS,
+            "end_time": DATE_TIME_OPERATORS,
+            "feedback_scores": FEEDBACK_SCORES_OPERATORS,
+            "status": ENUM_OPERATORS,
+            "tags": LIST_OPERATORS,
+            "annotation_queue_ids": LIST_OPERATORS,
+            "environment": ENUM_OPERATORS,
+            "default": STRING_OPERATORS,
+        }
+
+    @property
+    def dictionary_fields(self) -> List[str]:
+        return ["feedback_scores"]
+
+
+class DatasetItemOQLConfig(OQLConfig):
+    """OQL configuration for dataset item filtering.
+
+    Based on backend's DatasetItemField enum and FilterQueryBuilder.
+    See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/DatasetItemField.java
+    """
+
+    @property
+    def columns(self) -> Dict[str, str]:
+        # Maps to DatasetItemField enum values and their FieldType
+        return {
+            "id": "string",  # FieldType.STRING
+            "data": "map",  # FieldType.MAP - supports nested key access
+            "full_data": "string",  # FieldType.STRING - toString(data)
+            "source": "string",  # FieldType.STRING
+            "trace_id": "string",  # FieldType.STRING
+            "span_id": "string",  # FieldType.STRING
+            "tags": "list",  # FieldType.LIST
+            "created_at": "date_time",  # FieldType.DATE_TIME
+            "last_updated_at": "date_time",  # FieldType.DATE_TIME
+            "created_by": "string",  # FieldType.STRING
+            "last_updated_by": "string",  # FieldType.STRING
+        }
+
+    @property
+    def supported_operators(self) -> Dict[str, List[str]]:
+        return {
+            "id": STRING_OPERATORS,
+            "full_data": STRING_OPERATORS,
+            "source": STRING_OPERATORS,
+            "trace_id": STRING_OPERATORS,
+            "span_id": STRING_OPERATORS,
+            "created_by": STRING_OPERATORS,
+            "last_updated_by": STRING_OPERATORS,
+            "data": ["=", "!=", "contains", "not_contains", "starts_with", "ends_with"],
+            "tags": LIST_OPERATORS,
+            "created_at": DATE_TIME_OPERATORS,
+            "last_updated_at": DATE_TIME_OPERATORS,
+            "default": STRING_OPERATORS,
+        }
+
+    @property
+    def dictionary_fields(self) -> List[str]:
+        # Fields that support nested key access via dot notation (data.key_name)
+        return ["data"]
+
+
+class PromptVersionOQLConfig(OQLConfig):
+    """OQL configuration for prompt version filtering."""
+
+    @property
+    def columns(self) -> Dict[str, str]:
+        return {
+            "id": "string",
+            "commit": "string",
+            "version_number": "string",
+            "template": "string",
+            "change_description": "string",
+            "metadata": "dictionary",
+            "type": "string",
+            "tags": "list",
+            "created_at": "date_time",
+            "created_by": "string",
+        }
+
+    @property
+    def supported_operators(self) -> Dict[str, List[str]]:
+        # All string-typed fields here are backend FieldType.STRING_STATE_DB,
+        # which does not support > / < — see STRING_STATE_DB_OPERATORS.
+        return {
+            "id": STRING_STATE_DB_OPERATORS,
+            "commit": STRING_STATE_DB_OPERATORS,
+            "version_number": STRING_STATE_DB_OPERATORS,
+            "template": STRING_STATE_DB_OPERATORS,
+            "change_description": STRING_STATE_DB_OPERATORS,
+            "metadata": DICTIONARY_OPERATORS,
+            "type": ["=", "!="],
+            "tags": LIST_OPERATORS,
+            "created_at": DATE_TIME_OPERATORS,
+            "created_by": STRING_STATE_DB_OPERATORS,
+            "default": STRING_STATE_DB_OPERATORS,
+        }
+
+    @property
+    def dictionary_fields(self) -> List[str]:
+        return ["metadata"]
+
+
+OPERATORS_WITHOUT_VALUES = {"is_empty", "is_not_empty"}
+ARRAY_VALUE_OPERATORS = {"in", "not_in"}
+
+_DEFAULT_CONFIG = TraceOQLConfig()
 
 
 class OpikQueryLanguage:
@@ -45,20 +387,79 @@ class OpikQueryLanguage:
 
     When converting a query string into another format, a common approach is:
     1. First convert the string into a series of tokens using a tokenizer
-    2. Convert the list of tokens into a Abstract Syntax Tree (AST) using a parser
+    2. Convert the list of tokens into an Abstract Syntax Tree (AST) using a parser
     3. Traverse the AST and convert it into the desired format using a formatter
 
-    Due to the simple nature of the queries we currently support (no support for and/or operators, etc), we have have
+    Due to the simple nature of the queries we currently support (no support for and/or operators, etc.), we have
     combined the tokenizer and formatter steps into a single parse method.
 
     The parse method works by iterating over the string character by character and extracting / validating the tokens.
     """
 
-    def __init__(self, query_string: Optional[str]):
+    def __init__(self, query_string: Optional[str], config: Optional[OQLConfig] = None):
         self.query_string = query_string or ""
+        self._config = config or _DEFAULT_CONFIG
 
         self._cursor = 0
-        self.parsed_filters = self._parse()
+        self._filter_expressions = self._parse_expressions()
+        self.parsed_filters = None
+        if self._filter_expressions is not None:
+            self.parsed_filters = json.dumps(self._filter_expressions)
+
+    @classmethod
+    def for_traces(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
+        """
+        Creates a parser for filtering traces using OQL syntax. Returns an
+        OpikQueryLanguage instance preconfigured with TraceOQLConfig that validates
+        trace-specific fields. Empty or None query_string yields no filters;
+        malformed queries raise ValueError during parsing.
+        """
+        return cls(query_string, TraceOQLConfig())
+
+    @classmethod
+    def for_spans(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
+        """
+        Creates a parser for filtering spans using OQL syntax. Returns an
+        OpikQueryLanguage instance preconfigured with SpanOQLConfig that validates
+        span-specific fields. Empty or None query_string yields no filters;
+        malformed queries raise ValueError during parsing.
+        """
+        return cls(query_string, SpanOQLConfig())
+
+    @classmethod
+    def for_threads(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
+        """
+        Creates a parser for filtering trace threads using OQL syntax. Returns an
+        OpikQueryLanguage instance preconfigured with ThreadOQLConfig that validates
+        thread-specific fields. Empty or None query_string yields no filters;
+        malformed queries raise ValueError during parsing.
+        """
+        return cls(query_string, ThreadOQLConfig())
+
+    @classmethod
+    def for_dataset_items(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
+        """
+        Creates a parser for filtering dataset items using OQL syntax. Use this when working with
+        dataset views or filtering items within a dataset. Returns an OpikQueryLanguage instance
+        preconfigured with DatasetItemOQLConfig that validates dataset-specific fields like input,
+        expected_output, and item metadata. Empty or None query_string yields no filters; malformed
+        queries raise ValueError during parsing.
+        """
+        return cls(query_string, DatasetItemOQLConfig())
+
+    @classmethod
+    def for_prompt_versions(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
+        """
+        Creates a parser for filtering prompt versions using OQL syntax. Use this when searching
+        or filtering prompt version history. Returns an OpikQueryLanguage instance preconfigured
+        with PromptVersionOQLConfig that validates prompt version fields like tags, template,
+        commit, metadata, and created_at. Empty or None query_string yields no filters; malformed
+        queries raise ValueError during parsing.
+        """
+        return cls(query_string, PromptVersionOQLConfig())
+
+    def get_filter_expressions(self) -> Optional[List[Dict[str, Any]]]:
+        return self._filter_expressions
 
     def _is_valid_field_char(self, char: str) -> bool:
         return char.isalnum() or char == "_"
@@ -86,8 +487,9 @@ class OpikQueryLanguage:
 
     def _is_valid_escaped_key_char(self, quote_type: str, start: int) -> bool:
         if self.query_string[self._cursor] != quote_type:
-            # Check this isn't the end of the string (means we missed the closing quote)
-            if self._cursor + 2 >= len(self.query_string):
+            # Need at least the closing quote still ahead; otherwise unclosed.
+            # Use +1 (not +2) so quoted values at end-of-string work too.
+            if self._cursor + 1 >= len(self.query_string):
                 raise ValueError(
                     "Missing closing quote for: " + self.query_string[start - 1 :]
                 )
@@ -105,6 +507,35 @@ class OpikQueryLanguage:
 
         return False
 
+    def _parse_quoted_string(self, *, kind: str = "value") -> str:
+        """Parse a double-quoted string at the current cursor (opening quote consumed).
+
+        Reuses ``_is_valid_escaped_key_char`` so value and key quote handling stay
+        in sync (doubled-quote escapes, missing-close errors). Advances past the
+        closing quote.
+        """
+        quote_type = '"'
+        start = self._cursor
+        while self._cursor < len(self.query_string):
+            # False when current char is the closing quote (not an escaped pair).
+            if not self._is_valid_escaped_key_char(quote_type, start):
+                break
+            self._cursor += 1
+
+        if (
+            self._cursor >= len(self.query_string)
+            or self.query_string[self._cursor] != quote_type
+        ):
+            label = "value" if kind == "value" else "key"
+            raise ValueError(
+                f'Missing closing quote for {label}: "{self.query_string[start:]}"'
+            )
+
+        value = self.query_string[start : self._cursor]
+        value = value.replace(quote_type * 2, quote_type)
+        self._cursor += 1  # skip closing quote
+        return value
+
     def _parse_connector(self) -> str:
         start = self._cursor
         while self._cursor < len(self.query_string) and self._is_valid_connector_char(
@@ -118,6 +549,9 @@ class OpikQueryLanguage:
         # Skip whitespace
         self._skip_whitespace()
 
+        columns = self._config.columns
+        dictionary_fields = self._config.dictionary_fields
+
         # Parse the field name
         start = self._cursor
         while self._cursor < len(self.query_string) and self._is_valid_field_char(
@@ -127,7 +561,10 @@ class OpikQueryLanguage:
         field = self.query_string[start : self._cursor]
 
         # Parse the key if it exists
-        if self.query_string[self._cursor] == ".":
+        if (
+            self._cursor < len(self.query_string)
+            and self.query_string[self._cursor] == "."
+        ):
             # Skip the "."
             self._cursor += 1
 
@@ -147,54 +584,89 @@ class OpikQueryLanguage:
 
             # If escaped key, skip the closing quote
             if is_quoted_key:
+                # An alnum char at the very end of the string can satisfy the
+                # loop's field-char branch without ever reaching the closing
+                # quote check, so verify it explicitly here.
+                if (
+                    self._cursor >= len(self.query_string)
+                    or self.query_string[self._cursor] != quote_type
+                ):
+                    raise ValueError(
+                        "Missing closing quote for: " + self.query_string[start - 1 :]
+                    )
                 key = key.replace(
                     quote_type * 2, quote_type
                 )  # Replace doubled quotes with single quotes
                 self._cursor += 1
 
-            # Keys are only supported for usage, feedback_scores and metadata
-            if field not in ["usage", "feedback_scores", "metadata"]:
-                raise ValueError(
-                    f"Field {field}.{key} is not supported, only the fields {COLUMNS.keys()} are supported."
-                )
-            elif field == "usage":
-                if key not in ["total_tokens", "prompt_tokens", "completion_tokens"]:
+            # Special handling for usage.X fields (trace/span specific)
+            # These are treated as flat fields, not dictionary access
+            if field == "usage":
+                composite_field = f"usage.{key}"
+                if composite_field in columns:
+                    return {
+                        "field": composite_field,
+                        "key": "",
+                        "type": columns[composite_field],
+                    }
+                else:
                     raise ValueError(
                         f"When querying usage, {key} is not supported, only usage.total_tokens, usage.prompt_tokens and usage.completion_tokens are supported."
                     )
-                else:
-                    return {
-                        "field": f"usage.{key}",
-                        "key": "",
-                        "type": COLUMNS[f"usage.{key}"],
-                    }
-            else:
-                return {"field": field, "key": key, "type": COLUMNS[field]}
 
+            # Keys are only supported for dictionary fields
+            if field not in dictionary_fields:
+                raise ValueError(
+                    f"Field {field}.{key} is not supported, only the fields {list(columns.keys())} are supported."
+                )
+            elif field in columns:
+                return {"field": field, "key": key, "type": columns[field]}
+            else:
+                # defaults to string
+                return {"field": field, "key": key, "type": "string"}
+
+        elif field in columns:
+            return {"field": field, "key": "", "type": columns[field]}
         else:
-            return {"field": field, "key": "", "type": COLUMNS[field]}
+            # defaults to string
+            return {"field": field, "key": "", "type": "string"}
 
     def _parse_operator(self, parsed_field: str) -> Dict[str, Any]:
         # Skip whitespace
         self._skip_whitespace()
 
+        supported_operators = self._config.supported_operators
+
+        if parsed_field not in supported_operators:
+            parsed_field = "default"
+
+        if self._cursor >= len(self.query_string):
+            raise ValueError("Incomplete filter string: unexpected end of input")
+
         # Parse the operator
         if self.query_string[self._cursor] == "=":
             operator = "="
             self._cursor += 1
+            if operator not in supported_operators[parsed_field]:
+                raise ValueError(
+                    f"Operator {operator} is not supported for field {parsed_field}, only the operators {supported_operators[parsed_field]} are supported."
+                )
             return {"operator": operator}
 
         elif self.query_string[self._cursor] in ["<", ">"]:
-            if self.query_string[self._cursor + 1] == "=":
+            if (
+                self._cursor + 1 < len(self.query_string)
+                and self.query_string[self._cursor + 1] == "="
+            ):
                 operator = f"{self.query_string[self._cursor]}="
                 self._cursor += 2
             else:
                 operator = self.query_string[self._cursor]
                 self._cursor += 1
 
-            if operator not in SUPPORTED_OPERATORS[parsed_field]:
+            if operator not in supported_operators[parsed_field]:
                 raise ValueError(
-                    f"Operator {operator} is not supported for field {parsed_field}, only the operators {SUPPORTED_OPERATORS[parsed_field]} are supported."
+                    f"Operator {operator} is not supported for field {parsed_field}, only the operators {supported_operators[parsed_field]} are supported."
                 )
             return {"operator": operator}
         else:
@@ -206,9 +678,9 @@ class OpikQueryLanguage:
                 self._cursor += 1
 
             operator = self.query_string[start : self._cursor]
-            if operator not in ["contains", "not_contains"]:
+            if operator not in supported_operators[parsed_field]:
                 raise ValueError(
-                    f"Operator {operator} is not supported for field {parsed_field}, only the operators {SUPPORTED_OPERATORS[parsed_field]} are supported."
+                    f"Operator {operator} is not supported for field {parsed_field}, only the operators {supported_operators[parsed_field]} are supported."
                 )
             return {"operator": operator}
 
@@ -224,42 +696,92 @@ class OpikQueryLanguage:
     def _parse_value(self) -> Dict[str, Any]:
         self._skip_whitespace()
 
+        if self._cursor >= len(self.query_string):
+            raise ValueError("Incomplete filter string: unexpected end of input")
+
         start = self._cursor
         if self.query_string[self._cursor] == '"':
-            self._cursor += 1
-            start = self._cursor
-
-            # TODO: replace with new quote parser used in field parser
-            while (
-                self._cursor < len(self.query_string)
-                and self.query_string[self._cursor] != '"'
-            ):
-                self._cursor += 1
-
-            value = self.query_string[start : self._cursor]
-
-            # Add 1 to skip the closing quote and return the value
-            self._cursor += 1
+            self._cursor += 1  # skip opening quote
+            value = self._parse_quoted_string(kind="value")
             return {"value": value}
         elif (
             self.query_string[self._cursor].isdigit()
             or self.query_string[self._cursor] == "-"
         ):
-            value = self._get_number()
+            sign = ""
+            if self.query_string[self._cursor] == "-":
+                sign = "-"
+                self._cursor += 1
+            value = sign + self._get_number()
+            if value in ("", "-"):
+                raise ValueError(
+                    "Expected a number after '-' in filter value"
+                    if sign
+                    else "Expected a number in filter value"
+                )
             if (
                 self._cursor < len(self.query_string)
                 and self.query_string[self._cursor] == "."
             ):
                 self._cursor += 1
-                value += "." + self._get_number()
+                frac = self._get_number()
+                if not frac:
+                    raise ValueError(
+                        "Expected digits after decimal point in filter value"
+                    )
+                value += "." + frac
 
             return {"value": value}
         else:
             raise ValueError(
-                f'Invalid value {self.query_string[start:self._cursor]}, expected an string in double quotes("value") or a number'
+                f'Invalid value {self.query_string[start : self._cursor]}, expected an string in double quotes("value") or a number'
             )
 
-    def _parse(self) -> Optional[str]:
+    def _parse_array_value(self) -> Dict[str, Any]:
+        self._skip_whitespace()
+
+        if (
+            self._cursor >= len(self.query_string)
+            or self.query_string[self._cursor] != "("
+        ):
+            raise ValueError(
+                f"Expected array value starting with '(' for in/not_in operator, got: {self.query_string[self._cursor :]!r}"
+            )
+        self._cursor += 1  # skip '('
+
+        items: List[str] = []
+        while True:
+            self._skip_whitespace()
+            if self._cursor >= len(self.query_string):
+                raise ValueError("Unterminated array value, missing ')'")
+            if self.query_string[self._cursor] == ")":
+                if not items:
+                    raise ValueError(
+                        "Expected at least one item inside (...) for in/not_in operator"
+                    )
+                self._cursor += 1
+                break
+            if items:
+                if self.query_string[self._cursor] != ",":
+                    raise ValueError(
+                        f"Expected ',' between array elements, got: {self.query_string[self._cursor :]!r}"
+                    )
+                self._cursor += 1
+                self._skip_whitespace()
+
+            if (
+                self._cursor >= len(self.query_string)
+                or self.query_string[self._cursor] != '"'
+            ):
+                raise ValueError(
+                    f"Array elements must be quoted strings, got: {self.query_string[self._cursor :]!r}"
+                )
+            parsed = self._parse_value()
+            items.append(parsed["value"])
+
+        return {"value": ",".join(items)}
+
+    def _parse_expressions(self) -> Optional[List[Dict[str, Any]]]:
         if len(self.query_string) == 0:
             return None
 
@@ -272,8 +794,13 @@ class OpikQueryLanguage:
             # Parse operators
             parsed_operator = self._parse_operator(parsed_field["field"])
 
-            # Parse values
-            parsed_value = self._parse_value()
+            operator_name = parsed_operator.get("operator", "")
+            if operator_name in OPERATORS_WITHOUT_VALUES:
+                parsed_value = {"value": ""}
+            elif operator_name in ARRAY_VALUE_OPERATORS:
+                parsed_value = self._parse_array_value()
+            else:
+                parsed_value = self._parse_value()
 
             expressions.append({**parsed_field, **parsed_operator, **parsed_value})
 
@@ -296,4 +823,4 @@ class OpikQueryLanguage:
             else:
                 break
 
-        return json.dumps(expressions)
+        return expressions

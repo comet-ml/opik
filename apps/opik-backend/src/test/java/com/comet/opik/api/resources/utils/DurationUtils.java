@@ -12,7 +12,7 @@ public class DurationUtils {
     public static final Double TIME_UNIT = 1_000.0;
 
     public static Double getDurationInMillisWithSubMilliPrecision(@NonNull Instant startTime, Instant endTime) {
-        if (endTime == null) {
+        if (Instant.EPOCH.equals(startTime) || endTime == null) {
             return null;
         }
 

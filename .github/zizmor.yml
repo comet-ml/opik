@@ -1,0 +1,12 @@
+# zizmor configuration — GitHub Actions security scanner (OPIK-6366).
+# Auto-discovered by zizmor at .github/zizmor.yml, mirroring how actionlint
+# auto-discovers .github/actionlint.yaml. Runs via the `zizmor` pre-commit hook
+# in the unified 🐙 Code Quality workflow.
+rules:
+  # unpinned-uses fires on ~all of our workflows (every `uses:` not pinned to a
+  # commit SHA). Wholesale SHA-pinning is a large, mechanical migration tracked
+  # as a separate follow-up (see OPIK-6366's "defer the long-tail" note, mirroring
+  # the OPIK-3662 → OPIK-6323 split). Disabled here so it isn't PR-blocking; the
+  # follow-up's final step is to re-enable this rule once every action is pinned.
+  unpinned-uses:
+    disable: true

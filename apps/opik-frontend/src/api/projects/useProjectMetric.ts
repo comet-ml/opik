@@ -1,32 +1,78 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { ProjectMetricTrace } from "@/types/projects";
+import { Filter } from "@/types/filters";
+import { generateLogsSourceFilter, processFiltersArray } from "@/lib/filters";
+import { LOGS_SOURCE } from "@/types/traces";
+import { BreakdownConfig, BREAKDOWN_FIELD } from "@/types/dashboard";
 
 export enum METRIC_NAME_TYPE {
   FEEDBACK_SCORES = "FEEDBACK_SCORES",
   TRACE_COUNT = "TRACE_COUNT",
-  DURATION = "DURATION",
+  TRACE_DURATION = "DURATION",
   TOKEN_USAGE = "TOKEN_USAGE",
   COST = "COST",
+  FAILED_GUARDRAILS = "GUARDRAILS_FAILED_COUNT",
+  THREAD_COUNT = "THREAD_COUNT",
+  THREAD_DURATION = "THREAD_DURATION",
+  THREAD_FEEDBACK_SCORES = "THREAD_FEEDBACK_SCORES",
+  SPAN_COUNT = "SPAN_COUNT",
+  SPAN_DURATION = "SPAN_DURATION",
+  SPAN_FEEDBACK_SCORES = "SPAN_FEEDBACK_SCORES",
+  SPAN_TOKEN_USAGE = "SPAN_TOKEN_USAGE",
+  TRACE_AVERAGE_DURATION = "TRACE_AVERAGE_DURATION",
+  SPAN_AVERAGE_DURATION = "SPAN_AVERAGE_DURATION",
+  THREAD_AVERAGE_DURATION = "THREAD_AVERAGE_DURATION",
+  TRACE_ERROR_RATE = "TRACE_ERROR_RATE",
+  SPAN_ERROR_RATE = "SPAN_ERROR_RATE",
 }
 
 export enum INTERVAL_TYPE {
   HOURLY = "HOURLY",
   DAILY = "DAILY",
   WEEKLY = "WEEKLY",
+  TOTAL = "TOTAL",
 }
 
 type UseProjectMetricsParams = {
   projectId: string;
   metricName: METRIC_NAME_TYPE;
   interval: INTERVAL_TYPE;
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
+  traceFilters?: Filter[];
+  threadFilters?: Filter[];
+  spanFilters?: Filter[];
+  breakdown?: BreakdownConfig;
+  logsSource?: LOGS_SOURCE;
 };
 
-interface ProjectMetricsResponse {
+export interface ProjectMetricResult {
+  name: string;
+  data: Array<{
+    time: string;
+    value: number;
+  }>;
+}
+
+export interface ProjectMetricsResponse {
+  project_id: string;
+  metric_type: METRIC_NAME_TYPE;
+  interval: INTERVAL_TYPE;
   results: ProjectMetricTrace[];
 }
+
+const processBreakdownConfig = (breakdown?: BreakdownConfig) => {
+  if (!breakdown || breakdown.field === BREAKDOWN_FIELD.NONE) {
+    return undefined;
+  }
+
+  return {
+    field: breakdown.field,
+    ...(breakdown.metadataKey && { metadata_key: breakdown.metadataKey }),
+    ...(breakdown.subMetric && { sub_metric: breakdown.subMetric }),
+  };
+};
 
 const getProjectMetric = async (
   { signal }: QueryFunctionContext,
@@ -36,27 +82,47 @@ const getProjectMetric = async (
     interval,
     intervalStart,
     intervalEnd,
+    traceFilters,
+    threadFilters,
+    spanFilters,
+    breakdown,
+    logsSource,
   }: UseProjectMetricsParams,
 ) => {
+  const sourceFilter = logsSource ? generateLogsSourceFilter(logsSource) : [];
+
   const { data } = await api.post<ProjectMetricsResponse>(
     `${PROJECTS_REST_ENDPOINT}${projectId}/metrics`,
     {
       metric_type: metricName,
       interval,
-      interval_start: intervalStart,
-      interval_end: intervalEnd,
+      ...(intervalStart && { interval_start: intervalStart }),
+      ...(intervalEnd && { interval_end: intervalEnd }),
+      trace_filters: processFiltersArray([
+        ...(traceFilters ?? []),
+        ...sourceFilter,
+      ]),
+      thread_filters: processFiltersArray([
+        ...(threadFilters ?? []),
+        ...sourceFilter,
+      ]),
+      span_filters: processFiltersArray([
+        ...(spanFilters ?? []),
+        ...sourceFilter,
+      ]),
+      breakdown: processBreakdownConfig(breakdown),
     },
     {
       signal,
     },
   );
 
-  return data?.results;
+  return data;
 };
 
 const useProjectMetric = (
   params: UseProjectMetricsParams,
-  config?: QueryConfig<ProjectMetricTrace[]>,
+  config?: QueryConfig<ProjectMetricsResponse>,
 ) => {
   return useQuery({
     queryKey: ["projectMetrics", params],

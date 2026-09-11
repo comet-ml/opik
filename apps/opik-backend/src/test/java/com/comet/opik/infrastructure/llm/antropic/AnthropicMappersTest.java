@@ -1,21 +1,34 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.podam.PodamFactoryUtils;
-import dev.ai4j.openai4j.chat.AssistantMessage;
-import dev.ai4j.openai4j.chat.ChatCompletionChoice;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
-import dev.ai4j.openai4j.chat.Role;
-import dev.ai4j.openai4j.shared.Usage;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageResponse;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicMessage;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicRole;
+import dev.langchain4j.model.anthropic.internal.api.AnthropicTextContent;
+import dev.langchain4j.model.anthropic.internal.client.AnthropicClient;
+import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.Role;
+import dev.langchain4j.model.openai.internal.shared.Usage;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.Mockito;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 public class AnthropicMappersTest {
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
@@ -55,7 +68,11 @@ public class AnthropicMappersTest {
             assertThat(actual.model).isEqualTo(request.model());
             assertThat(actual.stream).isEqualTo(request.stream());
             assertThat(actual.temperature).isEqualTo(request.temperature());
-            assertThat(actual.topP).isEqualTo(request.topP());
+            if (request.temperature() != null) {
+                assertThat(actual.topP).isNull();
+            } else {
+                assertThat(actual.topP).isEqualTo(request.topP());
+            }
             assertThat(actual.stopSequences).isEqualTo(request.stop());
             assertThat(actual.messages).usingRecursiveComparison().ignoringCollectionOrder().isEqualTo(
                     request.messages().stream()
@@ -68,6 +85,163 @@ public class AnthropicMappersTest {
                             .map(LlmProviderAnthropicMapper.INSTANCE::mapToSystemMessage)
                             .toList());
         }
+
+        @Test
+        void toCreateMessage_appliesDefaultMaxTokens_whenNull() {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .stream(false)
+                    .addUserMessage("hi")
+                    .build();
+
+            AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
+                    .toCreateMessageRequest(request);
+
+            assertThat(actual.maxTokens).isEqualTo(LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS);
+        }
+
+        @Test
+        void toCreateMessage_preservesExplicitMaxTokens() {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .stream(false)
+                    .addUserMessage("hi")
+                    .maxCompletionTokens(123)
+                    .build();
+
+            AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
+                    .toCreateMessageRequest(request);
+
+            assertThat(actual.maxTokens).isEqualTo(123);
+        }
+
+        @ParameterizedTest
+        @MethodSource("streamValues")
+        void toCreateMessage_mapsStreamWithNullDefaultingToFalse(Boolean input, boolean expected) {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .stream(input)
+                    .addUserMessage("hi")
+                    .build();
+
+            AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
+                    .toCreateMessageRequest(request);
+
+            assertThat(actual.stream).isEqualTo(expected);
+        }
+
+        static Stream<Arguments> streamValues() {
+            return Stream.of(
+                    Arguments.of(Boolean.TRUE, true),
+                    Arguments.of(Boolean.FALSE, false),
+                    Arguments.of(null, false));
+        }
     }
 
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Sampling params gating")
+    class SamplingParamsGating {
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("samplingGatingCases")
+        void gatesSamplingParams(String description, ChatCompletionRequest request, Double expectedTemperature,
+                Double expectedTopP) {
+            var actual = LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request);
+
+            // Build the expected payload independently of the mapper (not by re-calling it), so a regression in
+            // any collateral field — model, messages, max_tokens, etc. — can't hide by changing actual and
+            // expected identically. Every case uses the same fixture: one "hi" user message, no system, no
+            // explicit max_tokens (defaults to 4096) and no stream/stop. Only temperature/top_p vary per the gate.
+            var expected = AnthropicCreateMessageRequest.builder()
+                    .model(request.model())
+                    .stream(false)
+                    .temperature(expectedTemperature)
+                    .topP(expectedTopP)
+                    .maxTokens(LlmProviderAnthropicMapper.DEFAULT_MAX_COMPLETION_TOKENS)
+                    .messages(List.of(AnthropicMessage.builder()
+                            .role(AnthropicRole.USER)
+                            .content(List.of(new AnthropicTextContent("hi")))
+                            .build()))
+                    .system(List.of())
+                    .build();
+
+            assertThat(actual).usingRecursiveComparison().isEqualTo(expected);
+        }
+
+        Stream<Arguments> samplingGatingCases() {
+            return Stream.of(
+                    // Adaptive-thinking models drop both sampling params regardless of what was requested.
+                    adaptiveDropsBoth("claude-sonnet-5"),
+                    adaptiveDropsBoth("claude-opus-4-7"),
+                    adaptiveDropsBoth("claude-opus-4-8"),
+                    // Sampling-capable model: params forwarded, with temperature winning over top_p.
+                    Arguments.of("sampling-capable forwards temperature",
+                            samplingCapable().temperature(0.7).build(), 0.7, null),
+                    Arguments.of("sampling-capable forwards top_p when temperature absent",
+                            samplingCapable().topP(0.9).build(), null, 0.9),
+                    Arguments.of("sampling-capable drops top_p when temperature also set",
+                            samplingCapable().temperature(0.7).topP(0.9).build(), 0.7, null),
+                    // Thinking enabled (any non-blank type other than "disabled", case-insensitive) drops both.
+                    thinkingDropsBoth("enabled"),
+                    thinkingDropsBoth("ENABLED"),
+                    thinkingDropsBoth("adaptive"),
+                    thinkingDropsBoth("some-future-mode"),
+                    // Thinking disabled / blank / null / absent leaves sampling params untouched.
+                    thinkingForwards("thinking disabled forwards", Map.of("thinking", Map.of("type", "disabled"))),
+                    thinkingForwards("thinking DISABLED (case-insensitive) forwards",
+                            Map.of("thinking", Map.of("type", "DISABLED"))),
+                    thinkingForwards("thinking blank type forwards", Map.of("thinking", Map.of("type", " "))),
+                    thinkingForwards("thinking null type forwards", nullThinkingTypeParameters()),
+                    thinkingForwards("thinking block absent forwards", Map.of("max_tokens", 2048)));
+        }
+
+        private Arguments adaptiveDropsBoth(String model) {
+            return Arguments.of("adaptive model %s drops both".formatted(model),
+                    ChatCompletionRequest.builder().model(model).addUserMessage("hi")
+                            .temperature(0.7).topP(0.9).build(),
+                    null, null);
+        }
+
+        private Arguments thinkingDropsBoth(String thinkingType) {
+            return Arguments.of("thinking type '%s' drops both".formatted(thinkingType),
+                    samplingCapable().temperature(0.7).topP(0.9)
+                            .customParameters(Map.of("thinking", Map.of("type", thinkingType, "budget_tokens", 1024)))
+                            .build(),
+                    null, null);
+        }
+
+        private Arguments thinkingForwards(String description, Map<String, Object> customParameters) {
+            return Arguments.of(description,
+                    samplingCapable().temperature(0.7).customParameters(customParameters).build(), 0.7, null);
+        }
+
+        private ChatCompletionRequest.Builder samplingCapable() {
+            return ChatCompletionRequest.builder().model("claude-3-7-sonnet-20250219").addUserMessage("hi");
+        }
+
+        // Map.of rejects null values, so build the explicit null-type thinking block with a nested HashMap.
+        private Map<String, Object> nullThinkingTypeParameters() {
+            var thinking = new HashMap<String, Object>();
+            thinking.put("type", null);
+            return Map.of("thinking", thinking);
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ValidateRequest {
+        private final LlmProviderAnthropic provider = new LlmProviderAnthropic(Mockito.mock(AnthropicClient.class));
+
+        @Test
+        void acceptsNullMaxCompletionTokens() {
+            var request = ChatCompletionRequest.builder()
+                    .model("claude-sonnet-4-6")
+                    .stream(false)
+                    .addUserMessage("hi")
+                    .build();
+
+            assertThatCode(() -> provider.validateRequest(request)).doesNotThrowAnyException();
+        }
+    }
 }

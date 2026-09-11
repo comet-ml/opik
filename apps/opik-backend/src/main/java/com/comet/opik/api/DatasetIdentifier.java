@@ -9,5 +9,5 @@ import lombok.Builder;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record DatasetIdentifier(@NotBlank String datasetName) {
+public record DatasetIdentifier(@NotBlank String datasetName, String projectName) {
 }

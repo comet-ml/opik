@@ -1,6 +1,7 @@
 import pytest
-import os
 import asyncio
+
+import pydantic
 
 import opik
 from opik.integrations.anthropic import track_anthropic
@@ -14,6 +15,12 @@ from ...testlib import (
     ANY_STRING,
     ANY,
     assert_equal,
+)
+from ...llm_constants import (
+    ANTHROPIC_CLAUDE_SONNET,
+    ANTHROPIC_CLAUDE_SONNET_SHORT,
+    ANTHROPIC_CLAUDE_HAIKU,
+    ANTHROPIC_CLAUDE_HAIKU_SHORT,
 )
 
 import anthropic
@@ -41,18 +48,11 @@ EXPECTED_ANTHROPIC_USAGE_DICT = {
     "original_usage.output_tokens": ANY_BUT_NONE,
     "original_usage.cache_creation_input_tokens": ANY_BUT_NONE,
     "original_usage.cache_read_input_tokens": ANY_BUT_NONE,
+    "original_usage.cache_creation.ephemeral_5m_input_tokens": ANY_BUT_NONE,
+    "original_usage.cache_creation.ephemeral_1h_input_tokens": ANY_BUT_NONE,
 }
 
-MODEL_FOR_TESTS_FULL = "claude-3-5-haiku-latest"
-MODEL_FOR_TESTS_SHORT = "claude-3-5-haiku"
-
-
-@pytest.fixture(autouse=True)
-def ensure_anthropic_configured():
-    # don't use assertion here to prevent printing os.environ with all env variables
-
-    if "ANTHROPIC_API_KEY" not in os.environ:
-        raise Exception("Anthropic not configured!")
+pytestmark = pytest.mark.usefixtures("ensure_anthropic_configured")
 
 
 @pytest.mark.parametrize(
@@ -74,7 +74,7 @@ def test_anthropic_messages_create__happyflow(
     messages = [{"role": "user", "content": "Tell a short fact"}]
 
     response = wrapped_client.messages.create(
-        model=MODEL_FOR_TESTS_FULL,
+        model=ANTHROPIC_CLAUDE_SONNET,
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -91,6 +91,7 @@ def test_anthropic_messages_create__happyflow(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=expected_project_name,
         spans=[
             SpanModel(
@@ -108,11 +109,13 @@ def test_anthropic_messages_create__happyflow(
                 project_name=expected_project_name,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -144,11 +147,12 @@ def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finis
         metadata={"created_from": "anthropic", "model": None, "base_url": ANY},
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=ANY_BUT_NONE,
         error_info={
-            "exception_type": ANY_STRING(),
-            "message": ANY_STRING(),
-            "traceback": ANY_STRING(),
+            "exception_type": ANY_STRING,
+            "message": ANY_STRING,
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -168,14 +172,16 @@ def test_anthropic_messages_create__create_raises_an_error__span_and_trace_finis
                 end_time=ANY_BUT_NONE,
                 project_name=ANY_BUT_NONE,
                 error_info={
-                    "exception_type": ANY_STRING(),
-                    "message": ANY_STRING(),
-                    "traceback": ANY_STRING(),
+                    "exception_type": ANY_STRING,
+                    "message": ANY_STRING,
+                    "traceback": ANY_STRING,
                 },
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -206,7 +212,7 @@ def test_anthropic_messages_create__create_call_made_in_another_tracked_function
         ]
 
         _ = wrapped_client.messages.create(
-            model=MODEL_FOR_TESTS_FULL,
+            model=ANTHROPIC_CLAUDE_SONNET,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -223,6 +229,7 @@ def test_anthropic_messages_create__create_call_made_in_another_tracked_function
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name="anthropic-integration-test",
         spans=[
             SpanModel(
@@ -249,13 +256,16 @@ def test_anthropic_messages_create__create_call_made_in_another_tracked_function
                         project_name="anthropic-integration-test",
                         type="llm",
                         usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                        model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                         provider="anthropic",
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -276,7 +286,7 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
         client = anthropic.AsyncAnthropic()
         wrapped_client = track_anthropic(client)
         _ = await wrapped_client.messages.create(
-            model=MODEL_FOR_TESTS_FULL,
+            model=ANTHROPIC_CLAUDE_SONNET,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -293,6 +303,7 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=ANY_BUT_NONE,
         spans=[
             SpanModel(
@@ -319,13 +330,16 @@ def test_async_anthropic_messages_create_call_made_in_another_tracked_async_func
                         project_name=ANY_BUT_NONE,
                         type="llm",
                         usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                        model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                        model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                         provider="anthropic",
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -347,7 +361,7 @@ def test_anthropic_messages_stream__generator_tracked_correctly(
     ]
 
     message_stream_manager = wrapped_client.messages.stream(
-        model=MODEL_FOR_TESTS_FULL,
+        model=ANTHROPIC_CLAUDE_SONNET,
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -367,6 +381,7 @@ def test_anthropic_messages_stream__generator_tracked_correctly(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -382,11 +397,13 @@ def test_anthropic_messages_stream__generator_tracked_correctly(
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -400,7 +417,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
 ):
     def run_stream(client, messages):
         message_stream_manager = wrapped_client.messages.stream(
-            model=MODEL_FOR_TESTS_FULL,
+            model=ANTHROPIC_CLAUDE_SONNET,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -441,6 +458,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -456,11 +474,13 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     EXPECTED_TRACE_TREE_WITH_JOKE = TraceModel(
         id=ANY_BUT_NONE,
@@ -471,6 +491,7 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -486,11 +507,13 @@ def test_anthropic_messages_stream__stream_called_2_times__generator_tracked_cor
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 2
@@ -513,7 +536,7 @@ def test_anthropic_messages_stream__get_final_message_called__generator_tracked_
     ]
 
     message_stream_manager = wrapped_client.messages.stream(
-        model=MODEL_FOR_TESTS_FULL,
+        model=ANTHROPIC_CLAUDE_SONNET,
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -532,6 +555,7 @@ def test_anthropic_messages_stream__get_final_message_called__generator_tracked_
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -547,11 +571,13 @@ def test_anthropic_messages_stream__get_final_message_called__generator_tracked_
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -573,7 +599,7 @@ def test_anthropic_messages_stream__get_final_message_called_after_stream_iterat
     ]
 
     message_stream_manager = wrapped_client.messages.stream(
-        model=MODEL_FOR_TESTS_FULL,
+        model=ANTHROPIC_CLAUDE_SONNET,
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -594,6 +620,7 @@ def test_anthropic_messages_stream__get_final_message_called_after_stream_iterat
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -609,11 +636,13 @@ def test_anthropic_messages_stream__get_final_message_called_after_stream_iterat
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -636,7 +665,7 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
 
     async def async_f():
         message_stream_manager = wrapped_client.messages.stream(
-            model=MODEL_FOR_TESTS_FULL,
+            model=ANTHROPIC_CLAUDE_SONNET,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -658,6 +687,7 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -673,11 +703,13 @@ def test_async_anthropic_messages_stream__data_tracked_correctly(
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -700,7 +732,7 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
 
     async def async_f():
         message_stream_manager = wrapped_client.messages.stream(
-            model=MODEL_FOR_TESTS_FULL,
+            model=ANTHROPIC_CLAUDE_SONNET,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -722,6 +754,7 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -737,11 +770,13 @@ def test_async_anthropic_messages_stream__get_final_message_called_twice__data_t
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -763,7 +798,7 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
     ]
 
     stream = wrapped_client.messages.create(
-        model=MODEL_FOR_TESTS_FULL,
+        model=ANTHROPIC_CLAUDE_SONNET,
         messages=messages,
         max_tokens=10,
         system="You are a helpful assistant",
@@ -783,6 +818,7 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -798,11 +834,13 @@ def test_anthropic_messages_create__stream_argument_is_True__Stream_object_retur
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -825,7 +863,7 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
         ]
 
         stream = await wrapped_client.messages.create(
-            model=MODEL_FOR_TESTS_FULL,
+            model=ANTHROPIC_CLAUDE_SONNET,
             messages=messages,
             max_tokens=10,
             system="You are a helpful assistant",
@@ -854,6 +892,7 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -874,13 +913,422 @@ def test_async_anthropic_messages_create__stream_argument_is_True__AsyncStream_o
                 end_time=ANY_BUT_NONE,
                 type="llm",
                 usage=EXPECTED_ANTHROPIC_USAGE_DICT,
-                model=ANY_STRING(startswith=MODEL_FOR_TESTS_SHORT),
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
                 provider="anthropic",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
 
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.parametrize(
+    "project_name, expected_project_name",
+    [
+        (None, OPIK_PROJECT_DEFAULT_NAME),
+        ("anthropic-integration-test", "anthropic-integration-test"),
+    ],
+)
+@retry_on_internal_server_errors
+def test_anthropic_messages_create__opik_args__happyflow(
+    fake_backend, project_name, expected_project_name
+):
+    client = anthropic.Anthropic()
+    wrapped_client = track_anthropic(
+        anthropic_client=client,
+        project_name=project_name,
+    )
+    messages = [{"role": "user", "content": "Tell a short fact"}]
+
+    args_dict = {
+        "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
+        "trace": {
+            "thread_id": "conversation-2",
+            "tags": ["trace_tag"],
+            "metadata": {"trace_key": "trace_value"},
+        },
+    }
+
+    response = wrapped_client.messages.create(
+        model=ANTHROPIC_CLAUDE_SONNET,
+        messages=messages,
+        max_tokens=10,
+        system="You are a helpful assistant",
+        opik_args=args_dict,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="anthropic_messages_create",
+        input={"messages": messages, "system": "You are a helpful assistant"},
+        output={"content": response.model_dump()["content"]},
+        tags=["anthropic", "span_tag", "trace_tag"],
+        metadata=ANY_DICT.containing({"trace_key": "trace_value"}),
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=expected_project_name,
+        thread_id="conversation-2",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="anthropic_messages_create",
+                input={
+                    "messages": messages,
+                    "system": "You are a helpful assistant",
+                },
+                output={"content": response.model_dump()["content"]},
+                tags=["anthropic", "span_tag"],
+                metadata=ANY_DICT.containing({"span_key": "span_value"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
+                type="llm",
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
+                provider="anthropic",
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+class _FactResponse(pydantic.BaseModel):
+    fact: str
+    confidence: float
+
+
+@retry_on_internal_server_errors
+def test_anthropic_messages_parse__happyflow(fake_backend):
+    client = anthropic.Anthropic()
+    wrapped_client = track_anthropic(anthropic_client=client)
+    messages = [{"role": "user", "content": "Tell a short fact about Paris"}]
+
+    response = wrapped_client.messages.parse(
+        model=ANTHROPIC_CLAUDE_HAIKU,
+        messages=messages,
+        max_tokens=200,
+        output_format=_FactResponse,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="anthropic_messages_parse",
+        input={"messages": messages, "output_format": ANY_BUT_NONE},
+        output={"content": response.model_dump()["content"]},
+        tags=["anthropic"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="anthropic_messages_parse",
+                input={"messages": messages, "output_format": ANY_BUT_NONE},
+                output={"content": response.model_dump()["content"]},
+                tags=["anthropic"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                type="llm",
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_HAIKU_SHORT),
+                provider="anthropic",
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@retry_on_internal_server_errors
+def test_async_anthropic_messages_parse__happyflow(fake_backend):
+    async def async_f():
+        client = anthropic.AsyncAnthropic()
+        wrapped_client = track_anthropic(anthropic_client=client)
+        messages = [{"role": "user", "content": "Tell a short fact about Paris"}]
+
+        response = await wrapped_client.messages.parse(
+            model=ANTHROPIC_CLAUDE_HAIKU,
+            messages=messages,
+            max_tokens=200,
+            output_format=_FactResponse,
+        )
+        return response, messages
+
+    response, messages = asyncio.run(async_f())
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="anthropic_messages_parse",
+        input={"messages": messages, "output_format": ANY_BUT_NONE},
+        output={"content": response.model_dump()["content"]},
+        tags=["anthropic"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="anthropic_messages_parse",
+                input={"messages": messages, "output_format": ANY_BUT_NONE},
+                output={"content": response.model_dump()["content"]},
+                tags=["anthropic"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                type="llm",
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_HAIKU_SHORT),
+                provider="anthropic",
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@retry_on_internal_server_errors
+def test_anthropic_beta_messages_create__happyflow(fake_backend):
+    client = anthropic.Anthropic()
+    wrapped_client = track_anthropic(client)
+    messages = [{"role": "user", "content": "Tell a short fact"}]
+
+    response = wrapped_client.beta.messages.create(
+        model=ANTHROPIC_CLAUDE_SONNET,
+        messages=messages,
+        max_tokens=10,
+        system="You are a helpful assistant",
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="anthropic_beta_messages_create",
+        input={"messages": messages, "system": "You are a helpful assistant"},
+        output={"content": response.model_dump()["content"]},
+        tags=["anthropic"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="anthropic_beta_messages_create",
+                input={"messages": messages, "system": "You are a helpful assistant"},
+                output={"content": response.model_dump()["content"]},
+                tags=["anthropic"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                type="llm",
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
+                provider="anthropic",
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@retry_on_internal_server_errors
+def test_anthropic_beta_messages_parse__happyflow(fake_backend):
+    client = anthropic.Anthropic()
+    wrapped_client = track_anthropic(client)
+    messages = [{"role": "user", "content": "Tell a short fact about Paris"}]
+
+    response = wrapped_client.beta.messages.parse(
+        model=ANTHROPIC_CLAUDE_HAIKU,
+        messages=messages,
+        max_tokens=200,
+        output_format=_FactResponse,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="anthropic_beta_messages_parse",
+        input={"messages": messages, "output_format": ANY_BUT_NONE},
+        output={"content": response.model_dump()["content"]},
+        tags=["anthropic"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="anthropic_beta_messages_parse",
+                input={"messages": messages, "output_format": ANY_BUT_NONE},
+                output={"content": response.model_dump()["content"]},
+                tags=["anthropic"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                type="llm",
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_HAIKU_SHORT),
+                provider="anthropic",
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@retry_on_internal_server_errors
+def test_anthropic_beta_messages_stream__generator_tracked_correctly(fake_backend):
+    client = anthropic.Anthropic()
+    wrapped_client = track_anthropic(client)
+    messages = [{"role": "user", "content": "Tell a short fact"}]
+
+    with wrapped_client.beta.messages.stream(
+        model=ANTHROPIC_CLAUDE_SONNET,
+        messages=messages,
+        max_tokens=10,
+        system="You are a helpful assistant",
+    ) as stream:
+        for _ in stream:
+            pass
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="anthropic_beta_messages_stream",
+        input={"messages": messages, "system": "You are a helpful assistant"},
+        output={"content": ANY_LIST},
+        tags=["anthropic"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="anthropic_beta_messages_stream",
+                input={"messages": messages, "system": "You are a helpful assistant"},
+                output={"content": ANY_LIST},
+                tags=["anthropic"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                type="llm",
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
+                provider="anthropic",
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@retry_on_internal_server_errors
+def test_async_anthropic_beta_messages_stream__data_tracked_correctly(fake_backend):
+    client = anthropic.AsyncAnthropic()
+    wrapped_client = track_anthropic(client)
+    messages = [{"role": "user", "content": "Tell a short fact"}]
+
+    async def async_f():
+        async with wrapped_client.beta.messages.stream(
+            model=ANTHROPIC_CLAUDE_SONNET,
+            messages=messages,
+            max_tokens=10,
+            system="You are a helpful assistant",
+        ) as stream:
+            async for _ in stream:
+                pass
+
+    asyncio.run(async_f())
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="anthropic_beta_messages_stream",
+        input={"messages": messages, "system": "You are a helpful assistant"},
+        output={"content": ANY_LIST},
+        tags=["anthropic"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="anthropic_beta_messages_stream",
+                input={"messages": messages, "system": "You are a helpful assistant"},
+                output={"content": ANY_LIST},
+                tags=["anthropic"],
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=ANY_BUT_NONE,
+                type="llm",
+                usage=EXPECTED_ANTHROPIC_USAGE_DICT,
+                model=ANY_STRING.starting_with(ANTHROPIC_CLAUDE_SONNET_SHORT),
+                provider="anthropic",
+                spans=[],
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

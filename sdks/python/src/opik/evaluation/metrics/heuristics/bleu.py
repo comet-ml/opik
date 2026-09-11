@@ -1,4 +1,6 @@
-from typing import Any, List, Optional, Tuple, Union
+import warnings
+from contextlib import contextmanager
+from typing import Any, Iterator, List, Optional, Tuple, Union
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
@@ -15,8 +17,12 @@ class BaseBLEU(base_metric.BaseMetric):
     and weights initialization. This class is not intended to be used directly.
 
     References:
-      - NLTK BLEU smoothing:
-        https://www.nltk.org/api/nltk.translate.bleu_score.html#nltk.translate.bleu_score.SmoothingFunction
+      - BLEU: Papineni et al., "BLEU: a Method for Automatic Evaluation of Machine Translation" (ACL 2002)
+        https://aclanthology.org/P02-1040/
+      - NLTK BLEU documentation
+        https://www.nltk.org/api/nltk.translate.bleu_score.html
+      - Hugging Face Evaluate: BLEU metric overview
+        https://huggingface.co/spaces/evaluate-metric/bleu
 
     Args:
         name: The name of the metric (e.g. "sentence_bleu_metric" or "corpus_bleu_metric").
@@ -25,6 +31,8 @@ class BaseBLEU(base_metric.BaseMetric):
         smoothing_method: One of NLTK's SmoothingFunction methods (e.g. "method0", "method1", etc.).
         weights: Optional custom weights for n-gram orders. Must sum to 1.0. If None,
                  defaults to uniform distribution across `n_grams`.
+        project_name: Optional project name to track the metric in for the cases when
+            there are no parent span/trace to inherit project name from.
     """
 
     def __init__(
@@ -34,8 +42,9 @@ class BaseBLEU(base_metric.BaseMetric):
         n_grams: int,
         smoothing_method: str,
         weights: Optional[List[float]],
+        project_name: Optional[str],
     ):
-        super().__init__(name=name, track=track)
+        super().__init__(name=name, track=track, project_name=project_name)
 
         if nltk_bleu_score is None:
             raise ImportError(
@@ -70,6 +79,18 @@ class BaseBLEU(base_metric.BaseMetric):
         return tuple(normalized)
 
 
+@contextmanager
+def _suppress_bleu_warnings() -> Iterator[None]:
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"The hypothesis contains 0 counts of 2-gram overlaps\.",
+            category=UserWarning,
+            module="nltk\\.translate\\.bleu_score",
+        )
+        yield
+
+
 class SentenceBLEU(BaseBLEU):
     """
     Computes sentence-level BLEU for a single candidate string vs. one or more references.
@@ -89,6 +110,7 @@ class SentenceBLEU(BaseBLEU):
         n_grams: int = 4,
         smoothing_method: str = "method1",
         weights: Optional[List[float]] = None,
+        project_name: Optional[str] = None,
     ):
         super().__init__(
             name=name,
@@ -96,6 +118,7 @@ class SentenceBLEU(BaseBLEU):
             n_grams=n_grams,
             smoothing_method=smoothing_method,
             weights=weights,
+            project_name=project_name,
         )
 
     def score(
@@ -146,12 +169,13 @@ class SentenceBLEU(BaseBLEU):
         smoothing_func = self._get_smoothing_func()
 
         try:
-            bleu_val = nltk_bleu_score.sentence_bleu(
-                ref_lists,
-                candidate_tokens,
-                weights=used_weights,
-                smoothing_function=smoothing_func,
-            )
+            with _suppress_bleu_warnings():
+                bleu_val = nltk_bleu_score.sentence_bleu(
+                    ref_lists,
+                    candidate_tokens,
+                    weights=used_weights,
+                    smoothing_function=smoothing_func,
+                )
         except ZeroDivisionError:
             bleu_val = 0.0
 
@@ -190,6 +214,7 @@ class CorpusBLEU(BaseBLEU):
         n_grams: int = 4,
         smoothing_method: str = "method1",
         weights: Optional[List[float]] = None,
+        project_name: Optional[str] = None,
     ):
         super().__init__(
             name=name,
@@ -197,6 +222,7 @@ class CorpusBLEU(BaseBLEU):
             n_grams=n_grams,
             smoothing_method=smoothing_method,
             weights=weights,
+            project_name=project_name,
         )
 
     def score(
@@ -261,12 +287,13 @@ class CorpusBLEU(BaseBLEU):
         smoothing_func = self._get_smoothing_func()
 
         try:
-            bleu_val = nltk_bleu_score.corpus_bleu(
-                all_references,
-                all_candidates,
-                weights=used_weights,
-                smoothing_function=smoothing_func,
-            )
+            with _suppress_bleu_warnings():
+                bleu_val = nltk_bleu_score.corpus_bleu(
+                    all_references,
+                    all_candidates,
+                    weights=used_weights,
+                    smoothing_function=smoothing_func,
+                )
         except ZeroDivisionError:
             bleu_val = 0.0
 

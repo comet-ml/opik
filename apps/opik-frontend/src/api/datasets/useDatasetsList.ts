@@ -1,22 +1,28 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import isBoolean from "lodash/isBoolean";
 import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { Dataset } from "@/types/datasets";
+import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
+import { Filters } from "@/types/filters";
+import { processFilters } from "@/lib/filters";
 
 type UseDatasetsListParams = {
   workspaceName: string;
+  projectId?: string | null;
   withExperimentsOnly?: boolean;
+  withOptimizationsOnly?: boolean;
   promptId?: string;
-  search?: string;
+  type?: DATASET_TYPE;
+  filters?: Filters;
   sorting?: Sorting;
+  search?: string;
   page: number;
   size: number;
 };
 
 export type UseDatasetsListResponse = {
   content: Dataset[];
+  sortable_by: string[];
   total: number;
 };
 
@@ -24,10 +30,14 @@ const getDatasetsList = async (
   { signal }: QueryFunctionContext,
   {
     workspaceName,
+    projectId,
     withExperimentsOnly,
+    withOptimizationsOnly,
     promptId,
-    search,
+    type,
+    filters,
     sorting,
+    search,
     size,
     page,
   }: UseDatasetsListParams,
@@ -36,12 +46,18 @@ const getDatasetsList = async (
     signal,
     params: {
       workspace_name: workspaceName,
-      ...(isBoolean(withExperimentsOnly) && {
+      ...(projectId && { project_id: projectId }),
+      ...(withExperimentsOnly && {
         with_experiments_only: withExperimentsOnly,
       }),
+      ...(withOptimizationsOnly && {
+        with_optimizations_only: withOptimizationsOnly,
+      }),
+      ...processFilters(filters),
       ...processSorting(sorting),
       ...(search && { name: search }),
       ...(promptId && { prompt_id: promptId }),
+      ...(type && { type }),
       size,
       page,
     },

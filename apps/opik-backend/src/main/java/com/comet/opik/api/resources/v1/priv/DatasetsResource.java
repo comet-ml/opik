@@ -2,30 +2,55 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
+import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
-import com.comet.opik.api.DatasetCriteria;
+import com.comet.opik.api.DatasetExpansion;
+import com.comet.opik.api.DatasetExpansionResponse;
+import com.comet.opik.api.DatasetExportJob;
+import com.comet.opik.api.DatasetExportStatus;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
-import com.comet.opik.api.DatasetItemSearchCriteria;
+import com.comet.opik.api.DatasetItemBatchUpdate;
+import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
+import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.JsonUploadFormat;
 import com.comet.opik.api.PageColumns;
+import com.comet.opik.api.Visibility;
+import com.comet.opik.api.filter.DatasetFilter;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.filter.FiltersFactory;
-import com.comet.opik.api.resources.v1.priv.validate.IdParamsValidator;
+import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.CsvDatasetExportService;
+import com.comet.opik.domain.CsvDatasetItemProcessor;
+import com.comet.opik.domain.DatasetCriteria;
+import com.comet.opik.domain.DatasetExpansionService;
+import com.comet.opik.domain.DatasetItemSearchCriteria;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
-import com.comet.opik.domain.FeedbackScoreDAO;
+import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.domain.DemoData;
+import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.JsonDatasetItemProcessor;
 import com.comet.opik.domain.Streamer;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
-import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.utils.FileNameUtils;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -39,14 +64,16 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -60,16 +87,23 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.media.multipart.ContentDisposition;
+import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.glassfish.jersey.server.ChunkedOutput;
+import reactor.core.publisher.Flux;
 
+import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+import static org.apache.commons.collections4.CollectionUtils.emptyIfNull;
 
 @Path("/v1/private/datasets")
 @Produces(MediaType.APPLICATION_JSON)
@@ -82,17 +116,25 @@ public class DatasetsResource {
 
     private final @NonNull DatasetService service;
     private final @NonNull DatasetItemService itemService;
+    private final @NonNull DatasetExpansionService expansionService;
+    private final @NonNull DatasetVersionService versionService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Streamer streamer;
     private final @NonNull SortingFactoryDatasets sortingFactory;
+    private final @NonNull CsvDatasetItemProcessor csvProcessor;
+    private final @NonNull JsonDatasetItemProcessor jsonProcessor;
+    private final @NonNull FeatureFlags featureFlags;
+    private final @NonNull CsvDatasetExportService csvExportService;
+    private final @NonNull AnalyticsService analyticsService;
 
     @GET
     @Path("/{id}")
     @Operation(operationId = "getDatasetById", summary = "Get dataset by id", description = "Get dataset by id", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset resource", content = @Content(schema = @Schema(implementation = Dataset.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(Dataset.View.Public.class)
     public Response getDatasetById(@PathParam("id") UUID id) {
 
@@ -109,19 +151,28 @@ public class DatasetsResource {
     @Operation(operationId = "findDatasets", summary = "Find datasets", description = "Find datasets", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset resource", content = @Content(schema = @Schema(implementation = DatasetPage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_VIEW)
     @JsonView(Dataset.View.Public.class)
     public Response findDatasets(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("with_experiments_only") boolean withExperimentsOnly,
+            @QueryParam("with_optimizations_only") boolean withOptimizationsOnly,
             @QueryParam("prompt_id") UUID promptId,
-            @QueryParam("name") String name,
-            @QueryParam("sorting") String sorting) {
+            @QueryParam("project_id") UUID projectId,
+            @QueryParam("name") @Schema(description = "Filter datasets by name (partial match, case insensitive)") String name,
+            @QueryParam("sorting") String sorting,
+            @QueryParam("filters") String filters) {
+
+        var queryFilters = filtersFactory.newFilters(filters, DatasetFilter.LIST_TYPE_REFERENCE);
 
         var criteria = DatasetCriteria.builder()
                 .name(name)
                 .withExperimentsOnly(withExperimentsOnly)
                 .promptId(promptId)
+                .projectId(projectId)
+                .withOptimizationsOnly(withOptimizationsOnly)
+                .filters(queryFilters)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -132,7 +183,8 @@ public class DatasetsResource {
         log.info("Found datasets by '{}', sorted with: {}, count '{}' on workspaceId '{}'", criteria, sorting,
                 datasetPage.size(), workspaceId);
 
-        return Response.ok(datasetPage).build();
+        var builder = Response.ok(datasetPage);
+        return builder.build();
     }
 
     @POST
@@ -141,6 +193,7 @@ public class DatasetsResource {
                     @Header(name = "Location", required = true, example = "${basePath}/api/v1/private/datasets/{id}", schema = @Schema(implementation = String.class))
             })
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_CREATE)
     @RateLimited
     public Response createDataset(
             @RequestBody(content = @Content(schema = @Schema(implementation = Dataset.class))) @JsonView(Dataset.View.Write.class) @NotNull @Valid Dataset dataset,
@@ -153,6 +206,14 @@ public class DatasetsResource {
         log.info("Created dataset with name '{}', id '{}', on workspace_id '{}'", savedDataset.name(),
                 savedDataset.id(), workspaceId);
 
+        if (savedDataset.type() == DatasetType.TEST_SUITE
+                && !DemoData.DATASETS.contains(savedDataset.name())) {
+            analyticsService.trackEvent("opik_eval_suite_created", Map.of(
+                    "eval_suite_id", savedDataset.id().toString(),
+                    "eval_suite_name", savedDataset.name(),
+                    "project_id", String.valueOf(savedDataset.projectId())));
+        }
+
         URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(savedDataset.id().toString())).build();
         return Response.created(uri).build();
     }
@@ -162,6 +223,7 @@ public class DatasetsResource {
     @Operation(operationId = "updateDataset", summary = "Update dataset by id", description = "Update dataset by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response updateDataset(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetUpdate.class))) @NotNull @Valid DatasetUpdate datasetUpdate) {
@@ -179,6 +241,7 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDataset", summary = "Delete dataset by id", description = "Delete dataset by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_DELETE)
     public Response deleteDataset(@PathParam("id") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -193,6 +256,7 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDatasetByName", summary = "Delete dataset by name", description = "Delete dataset by name", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_DELETE)
     public Response deleteDatasetByName(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
 
@@ -210,6 +274,7 @@ public class DatasetsResource {
     @Operation(operationId = "deleteDatasetsBatch", summary = "Delete datasets", description = "Delete datasets batch", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_DELETE)
     public Response deleteDatasetsBatch(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete batchDelete) {
 
@@ -232,13 +297,37 @@ public class DatasetsResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetIdentifier.class))) @NotNull @Valid DatasetIdentifier identifier) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        String name = identifier.datasetName();
+        Visibility visibility = requestContext.get().getVisibility();
 
-        log.info("Finding dataset by name '{}' on workspace_id '{}'", name, workspaceId);
-        Dataset dataset = service.findByName(workspaceId, name);
-        log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", name, dataset.id(), workspaceId);
+        log.info("Finding dataset by name '{}', projectName '{}' on workspace_id '{}'", identifier.datasetName(),
+                identifier.projectName(), workspaceId);
+        Dataset dataset = service.findByNameDetailed(identifier, visibility);
+        log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", identifier.datasetName(), dataset.id(),
+                workspaceId);
 
-        return Response.ok(dataset).build();
+        var responseBuilder = Response.ok(dataset);
+        String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+        if (fallbackMessage != null) {
+            responseBuilder.header(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+        }
+        return responseBuilder.build();
+    }
+
+    @POST
+    @Path("/{id}/expansions")
+    @Operation(operationId = "expandDataset", summary = "Expand dataset with synthetic samples", description = "Generate synthetic dataset samples using LLM based on existing data patterns", responses = {
+            @ApiResponse(responseCode = "200", description = "Generated synthetic samples", content = @Content(schema = @Schema(implementation = DatasetExpansionResponse.class)))
+    })
+    @RateLimited
+    public Response expandDataset(
+            @PathParam("id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetExpansion.class))) @JsonView(DatasetExpansion.View.Write.class) @NotNull @Valid DatasetExpansion request) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Expanding dataset with id '{}' on workspaceId '{}'", datasetId, workspaceId);
+        var response = expansionService.expandDataset(datasetId, request);
+        log.info("Expanded dataset with id '{}' on workspaceId '{}', total samples '{}'",
+                datasetId, workspaceId, response.totalGenerated());
+        return Response.ok(response).build();
     }
 
     // Dataset Item Resources
@@ -257,9 +346,64 @@ public class DatasetsResource {
         DatasetItem datasetItem = itemService.get(itemId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
         log.info("Found dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
 
         return Response.ok(datasetItem).build();
+    }
+
+    @PATCH
+    @Path("/items/batch")
+    @Operation(operationId = "batchUpdateDatasetItems", summary = "Batch update dataset items", description = "Update multiple dataset items", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    public Response batchUpdate(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatchUpdate.class))) @Valid @NotNull DatasetItemBatchUpdate batchUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        // Same validation gap as deleteDatasetItems: these filters reach the same query builder.
+        var validatedBatchUpdate = batchUpdate.toBuilder()
+                .filters(filtersFactory.validateFilter(batchUpdate.filters()))
+                .build();
+
+        log.info("Batch updating dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
+                emptyIfNull(validatedBatchUpdate.ids()).size(),
+                emptyIfNull(validatedBatchUpdate.filters()).size());
+
+        itemService.batchUpdate(validatedBatchUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Batch updated dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
+                emptyIfNull(validatedBatchUpdate.ids()).size(),
+                emptyIfNull(validatedBatchUpdate.filters()).size());
+
+        return Response.noContent().build();
+    }
+
+    @PATCH
+    @Path("/items/{itemId}")
+    @Operation(operationId = "patchDatasetItem", summary = "Partially update dataset item by id", description = "Partially update dataset item by id. Only provided fields will be updated.", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "404", description = "Dataset item not found")
+    })
+    @RateLimited
+    public Response patchDatasetItem(
+            @PathParam("itemId") @NotNull UUID itemId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItem.class))) @JsonView(DatasetItem.View.Write.class) @NotNull DatasetItem item) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Patching dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+        itemService.patch(itemId, item)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(RetryUtils.handleConnectionError())
+                .block();
+        log.info("Patched dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+
+        return Response.noContent().build();
     }
 
     @GET
@@ -272,15 +416,31 @@ public class DatasetsResource {
             @PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("version") @Schema(description = "Version hash or tag to fetch specific dataset version") String version,
+            @QueryParam("filters") String filters,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
+        var queryFilters = filtersFactory.newFilters(filters, DatasetItemFilter.LIST_TYPE_REFERENCE);
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Finding dataset items by id '{}', page '{}', size '{} on workspace_id '{}''", id, page, size,
-                workspaceId);
-        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(id, page, size, truncate)
+
+        log.info(
+                "Finding dataset items by id '{}', version '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'",
+                id, version, page, size, filters, workspaceId);
+
+        var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
+                .datasetId(id)
+                .experimentIds(Set.of()) // Empty set for regular dataset items
+                .filters(queryFilters)
+                .entityType(EntityType.TRACE)
+                .truncate(truncate)
+                .versionHashOrTag(version)
+                .build();
+
+        var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Found dataset items by id '{}', count '{}', page '{}', size '{} on workspace_id '{}''", id,
+
+        log.info("Found dataset items by id '{}', count '{}', page '{}', size '{}' on workspace_id '{}'", id,
                 datasetItemPage.content().size(), page, size, workspaceId);
 
         return Response.ok(datasetItemPage).build();
@@ -296,21 +456,63 @@ public class DatasetsResource {
             }), maxItems = 2000)))
     })
     public ChunkedOutput<JsonNode> streamDatasetItems(
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request) {
-        var workspaceId = requestContext.get().getWorkspaceId();
-        var userName = requestContext.get().getUserName();
-        log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-        var items = itemService.getItems(workspaceId, request)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId));
-        var outputStream = streamer.getOutputStream(items);
-        log.info("Streamed dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-        return outputStream;
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemStreamRequest.class))) @NotNull @Valid DatasetItemStreamRequest request,
+            @Context HttpServletResponse httpResponse) {
+        var ctxSnapshot = requestContext.get();
+        var workspaceId = ctxSnapshot.getWorkspaceId();
+
+        // Suppress unchecked cast warning since we already pass DatasetItemFilter reference to newFilters
+        @SuppressWarnings("unchecked")
+        List<DatasetItemFilter> queryFilters = Optional.ofNullable((List<DatasetItemFilter>) filtersFactory.newFilters(
+                request.filters(), DatasetItemFilter.LIST_TYPE_REFERENCE)).orElse(List.of());
+
+        log.info("Streaming dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
+                request.datasetName(), request.projectName(), workspaceId);
+
+        try {
+            service.resolveDatasetByName(DatasetIdentifier.builder()
+                    .datasetName(request.datasetName())
+                    .projectName(request.projectName())
+                    .build());
+
+            var items = itemService.getItems(request, queryFilters)
+                    .contextWrite(ctx -> setRequestContext(ctx, ctxSnapshot));
+
+            ChunkedOutput<JsonNode> outputStream = streamer.getOutputStream(items);
+
+            log.info("Streamed dataset items for dataset '{}', projectName '{}' on workspaceId '{}'",
+                    request.datasetName(), request.projectName(), workspaceId);
+
+            String fallbackMessage = requestContext.get().getWorkspaceFallbackMessage();
+            if (fallbackMessage != null) {
+                httpResponse.addHeader(RequestContext.WORKSPACE_FALLBACK_HEADER, fallbackMessage);
+            }
+
+            return outputStream;
+        } catch (NotFoundException ex) {
+            // The visibility check failed, return empty stream to avoid exposing existence of the dataset
+            log.info("Empty dataset items stream for dataset '{}', projectName '{}' on workspaceId '{}'",
+                    request.datasetName(), request.projectName(), workspaceId);
+
+            return streamer.getOutputStream(Flux.empty());
+        }
     }
 
+    /**
+     * OPIK-6696: the copy_from_* coordinates let callers pin the carry-forward read source to a
+     * specific (dataset, version) pair, avoiding the multi-replica read-after-write window when
+     * chaining version writes against a destination that may not have replicated yet.
+     */
     @PUT
     @Path("/items")
-    @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = "Create/update dataset items based on dataset item id", responses = {
+    @Operation(operationId = "createOrUpdateDatasetItems", summary = "Create/update dataset items", description = """
+            Create/update dataset items based on dataset item id.
+            Each item's 'id' field is the stable identifier and upsert key.
+            Provide it to update an existing item, or omit it to create a new one.
+
+            Set 'copy_from_dataset_id' and 'copy_from_version_id' together to read carry-forward rows
+            from the supplied (dataset, version) pair instead of the destination's prior version. When
+            the fields are null, carry-forward rows are read from the destination's prior version.""", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     @RateLimited
@@ -328,33 +530,240 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
-        itemService.save(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items))
+        log.info(
+                "Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}', batchGroupId '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetName(), batch.items().size(), batch.batchGroupId(), workspaceId);
+
+        DatasetItemBatch batchWithIds = batch.toBuilder()
+                .items(items)
+                .build();
+
+        itemService.save(batchWithIds)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .retryWhen(AsyncUtils.handleConnectionError())
+                .retryWhen(RetryUtils.handleConnectionError())
                 .block();
-        log.info("Created dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
-                batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
+        log.info(
+                "Saved dataset items batch by datasetId '{}', datasetName '{}', size '{}', batchGroupId '{}' on workspaceId '{}'",
+                batch.datasetId(), batch.datasetName(), batch.items().size(), batch.batchGroupId(), workspaceId);
 
         return Response.noContent().build();
     }
 
     @POST
-    @Path("/items/delete")
-    @Operation(operationId = "deleteDatasetItems", summary = "Delete dataset items", description = "Delete dataset items", responses = {
+    @Path("/{dataset_id}/items/from-traces")
+    @Operation(operationId = "createDatasetItemsFromTraces", summary = "Create dataset items from traces", description = "Create dataset items from traces with enriched metadata", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RateLimited
+    public Response createDatasetItemsFromTraces(
+            @PathParam("dataset_id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = CreateDatasetItemsFromTracesRequest.class))) @NotNull @Valid CreateDatasetItemsFromTracesRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating dataset items from traces for dataset '{}', trace count '{}' on workspaceId '{}'",
+                datasetId, request.traceIds().size(), workspaceId);
+
+        itemService.createFromTraces(datasetId, request.traceIds(), request.enrichmentOptions(),
+                request.evaluators(), request.executionPolicy())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(RetryUtils.handleConnectionError())
+                .block();
+
+        log.info("Created dataset items from traces for dataset '{}', trace count '{}' on workspaceId '{}'",
+                datasetId, request.traceIds().size(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/{dataset_id}/items/from-spans")
+    @Operation(operationId = "createDatasetItemsFromSpans", summary = "Create dataset items from spans", description = "Create dataset items from spans with enriched metadata", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+    })
+    @RateLimited
+    public Response createDatasetItemsFromSpans(
+            @PathParam("dataset_id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = CreateDatasetItemsFromSpansRequest.class))) @NotNull @Valid CreateDatasetItemsFromSpansRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating dataset items from spans for dataset '{}', span count '{}' on workspaceId '{}'",
+                datasetId, request.spanIds().size(), workspaceId);
+
+        itemService.createFromSpans(datasetId, request.spanIds(), request.enrichmentOptions(),
+                request.evaluators(), request.executionPolicy())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(RetryUtils.handleConnectionError())
+                .block();
+
+        log.info("Created dataset items from spans for dataset '{}', span count '{}' on workspaceId '{}'",
+                datasetId, request.spanIds().size(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/items/from-csv")
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
+    @Operation(operationId = "createDatasetItemsFromCsv", summary = "Create dataset items from CSV file", description = "Create dataset items from uploaded CSV file. CSV should have headers in the first row. Processing happens asynchronously in batches.", responses = {
+            @ApiResponse(responseCode = "202", description = "Accepted - CSV processing started"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @RateLimited
+    public Response createDatasetItemsFromCsv(
+            @FormDataParam("file") @NotNull InputStream fileInputStream,
+            @FormDataParam("dataset_id") @NotNull UUID datasetId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+        Visibility visibility = requestContext.get().getVisibility();
+
+        log.info("CSV upload request for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
+
+        csvProcessor.processUploadedCsv(fileInputStream, datasetId, workspaceId, userName, visibility);
+
+        log.info("CSV upload accepted for dataset '{}' on workspaceId '{}', processing asynchronously", datasetId,
+                workspaceId);
+
+        return Response.status(Response.Status.ACCEPTED).build();
+    }
+
+    @POST
+    @Path("/items/from-json")
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
+    @Operation(operationId = "createDatasetItemsFromJson", summary = "Create dataset items from JSON file", description = """
+            Create dataset items from an uploaded JSON or JSONL file. JSON files must contain a top-level array of objects.
+            JSONL files contain one JSON object per non-blank line; multi-line JSON objects are not supported.
+            Reserved keys (id, source, description, tags, evaluators, execution_policy) are extracted into the
+            corresponding DatasetItem fields; all remaining keys form the item's data map and preserve their JSON types.
+            To link dataset items to specific traces or spans use the dedicated /items/from-traces or /items/from-spans endpoints.
+            Processing happens asynchronously in batches. With dataset versioning enabled, a supplied id acts as an upsert key.""", responses = {
+            @ApiResponse(responseCode = "202", description = "Accepted - JSON processing started"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @RateLimited
+    public Response createDatasetItemsFromJson(
+            @FormDataParam("file") @NotNull InputStream fileInputStream,
+            @FormDataParam("dataset_id") @NotNull UUID datasetId,
+            @FormDataParam("format") @NotNull JsonUploadFormat format) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+        Visibility visibility = requestContext.get().getVisibility();
+
+        log.info("JSON upload request for dataset '{}' on workspaceId '{}', format '{}'",
+                datasetId, workspaceId, format);
+
+        jsonProcessor.processUploadedJson(fileInputStream, datasetId, workspaceId, userName, visibility, format);
+
+        log.info("JSON upload accepted for dataset '{}' on workspaceId '{}', processing asynchronously", datasetId,
+                workspaceId);
+
+        return Response.status(Response.Status.ACCEPTED).build();
+    }
+
+    /**
+     * OPIK-6696: the copy_from_* coordinates let callers pin the carry-forward (and edit-via-SELECT-INSERT)
+     * read source to a specific (dataset, version) pair, avoiding the multi-replica read-after-write window
+     * when chaining version writes against a destination that may not have replicated yet.
+     */
+    @POST
+    @Path("/{id}/items/changes")
+    @Operation(operationId = "applyDatasetItemChanges", summary = "Apply changes to dataset items", description = """
+            Apply delta changes (add, edit, delete) to a dataset version with conflict detection.
+
+            This endpoint:
+            - Creates a new version with the applied changes
+            - Validates that baseVersion matches the latest version (unless override=true)
+            - Returns 409 Conflict if baseVersion is stale and override is not set
+
+            Use `override=true` query parameter to force version creation even with stale baseVersion.
+
+            Set 'copy_from_dataset_id' and 'copy_from_version_id' together on the request body to read
+            carry-forward rows from the supplied (dataset, version) pair instead of the destination's
+            prior version. When the fields are null, carry-forward rows are read from the destination's
+            prior version.
+            """, responses = {
+            @ApiResponse(responseCode = "201", description = "Version created successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Dataset or version not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "409", description = "Version conflict - baseVersion is not the latest", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @RateLimited
+    @JsonView(DatasetVersion.View.Public.class)
+    public Response applyDatasetItemChanges(
+            @PathParam("id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemChanges.class))) @NotNull @Valid DatasetItemChanges changes,
+            @QueryParam("override") @DefaultValue("false") boolean override) {
+        featureFlags.checkDatasetVersioningEnabled();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Applying dataset item changes for dataset '{}', baseVersion '{}', override '{}' on workspaceId '{}'",
+                datasetId, changes.baseVersion(), override, workspaceId);
+
+        DatasetVersion newVersion = itemService.applyDeltaChanges(datasetId, changes, override)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .block();
+
+        log.info("Applied changes to dataset '{}', created version '{}' on workspaceId '{}'",
+                datasetId, newVersion.versionHash(), workspaceId);
+
+        // Build location header pointing to the newly created version
+        String location = String.format("/v1/private/datasets/%s/versions/%s",
+                datasetId, newVersion.id());
+
+        return Response.status(Response.Status.CREATED)
+                .entity(newVersion)
+                .header("Location", location)
+                .build();
+    }
+
+    @POST
+    @Path("/items/delete")
+    @Operation(operationId = "deleteDatasetItems", summary = "Delete dataset items", description = """
+            Delete dataset items using one of two modes:
+            1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+            2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+
+            When using filters, an empty 'filters' array will delete all items in the specified dataset.
+            """, responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "400", description = "Bad request - invalid parameters or conflicting fields"),
+    })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_DELETE)
     public Response deleteDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Deleting dataset items by size'{}' on workspaceId '{}'", request, workspaceId);
-        itemService.delete(request.itemIds())
+        // Body-supplied filters need the same validation the query-param paths get. Without it an operator the
+        // field's type does not support reaches the query builder with no template behind it and fails as a 500.
+        var queryFilters = filtersFactory.validateFilter(request.filters());
+
+        log.info(
+                "Deleting dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchGroupId='{}'",
+                workspaceId,
+                emptyIfNull(request.itemIds()).size(),
+                request.datasetId(),
+                emptyIfNull(request.filters()).size(),
+                request.batchGroupId());
+
+        itemService.delete(request.itemIds(), request.datasetId(), queryFilters, request.batchGroupId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted dataset items by size'{}' on workspaceId '{}'", request, workspaceId);
+
+        log.info(
+                "Deleted dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchGroupId='{}'",
+                workspaceId,
+                emptyIfNull(request.itemIds()).size(),
+                request.datasetId(),
+                emptyIfNull(request.filters()).size(),
+                request.batchGroupId());
 
         return Response.noContent().build();
     }
@@ -369,20 +778,34 @@ public class DatasetsResource {
             @PathParam("id") UUID datasetId,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("experiment_ids") @NotNull @NotBlank String experimentIdsQueryParam,
+            @QueryParam("experiment_ids") @NotNull String experimentIdsQueryParam,
             @QueryParam("filters") String filters,
+            @QueryParam("sorting") String sorting,
+            @QueryParam("search") String search,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
-        var experimentIds = IdParamsValidator.getIds(experimentIdsQueryParam);
+        var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
+
+        if (experimentIds.isEmpty()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(),
+                            "experiment_ids cannot be empty"))
+                    .build();
+        }
 
         var queryFilters = filtersFactory.newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
+
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
         var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
                 .datasetId(datasetId)
                 .experimentIds(experimentIds)
                 .filters(queryFilters)
-                .entityType(FeedbackScoreDAO.EntityType.TRACE)
+                .sortingFields(sortingFields)
+                .search(search)
+                .entityType(EntityType.TRACE)
                 .truncate(truncate)
+                .versionHashOrTag(null) // Service layer will resolve to experiment's version when experimentIds present
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -400,6 +823,42 @@ public class DatasetsResource {
         return Response.ok(datasetItemPage).build();
     }
 
+    @Timed
+    @GET
+    @Path("/{id}/items/experiments/items/stats")
+    @Operation(operationId = "getDatasetExperimentItemsStats", summary = "Get experiment items stats for dataset", description = "Get experiment items stats for dataset", responses = {
+            @ApiResponse(responseCode = "200", description = "Experiment items stats resource", content = @Content(schema = @Schema(implementation = com.comet.opik.api.ProjectStats.class)))
+    })
+    @JsonView({com.comet.opik.api.ProjectStats.ProjectStatItem.View.Public.class})
+    @SuppressWarnings("unchecked")
+    public Response getDatasetExperimentItemsStats(
+            @PathParam("id") UUID datasetId,
+            @QueryParam("experiment_ids") @NotNull String experimentIdsQueryParam,
+            @QueryParam("filters") String filters) {
+
+        var experimentIds = ParamsValidator.getIds(experimentIdsQueryParam);
+
+        if (experimentIds.isEmpty()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(),
+                            "experiment_ids cannot be empty"))
+                    .build();
+        }
+
+        List<ExperimentsComparisonFilter> queryFilters = (List<ExperimentsComparisonFilter>) filtersFactory
+                .newFilters(filters, ExperimentsComparisonFilter.LIST_TYPE_REFERENCE);
+
+        log.info("Getting experiment items stats for dataset '{}' and experiments '{}' with filters '{}'",
+                datasetId, experimentIds, filters);
+        var stats = itemService.getExperimentItemsStats(datasetId, experimentIds, queryFilters)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Got experiment items stats for dataset '{}' and experiments '{}', count '{}'", datasetId,
+                experimentIds, stats.stats().size());
+        return Response.ok(stats).build();
+    }
+
     @GET
     @Path("/{id}/items/experiments/items/output/columns")
     @Operation(operationId = "getDatasetItemsOutputColumns", summary = "Get dataset items output columns", description = "Get dataset items output columns", responses = {
@@ -411,7 +870,7 @@ public class DatasetsResource {
 
         var experimentIds = Optional.ofNullable(experimentIdsQueryParam)
                 .filter(Predicate.not(String::isEmpty))
-                .map(IdParamsValidator::getIds)
+                .map(ParamsValidator::getIds)
                 .orElse(null);
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -429,4 +888,152 @@ public class DatasetsResource {
         return Response.ok(columns).build();
     }
 
+    /**
+     * Sub-resource locator for dataset version operations.
+     * Delegates all requests under /{id}/versions to DatasetVersionsResource.
+     *
+     * @param datasetId the dataset ID from the path parameter
+     * @return a new instance of DatasetVersionsResource configured for this dataset
+     */
+    @Path("/{id}/versions")
+    public DatasetVersionsResource versions(@PathParam("id") UUID datasetId) {
+        return new DatasetVersionsResource(datasetId, versionService, requestContext, featureFlags);
+    }
+
+    // Dataset Export Resources
+
+    @POST
+    @Path("/{id}/export")
+    @Operation(operationId = "startDatasetExport", summary = "Start dataset CSV export", description = "Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling.", responses = {
+            @ApiResponse(responseCode = "202", description = "Export job created", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
+            @ApiResponse(responseCode = "200", description = "Existing export job in progress", content = @Content(schema = @Schema(implementation = DatasetExportJob.class)))
+    })
+    @JsonView(DatasetExportJob.View.Public.class)
+    @RateLimited
+    public Response startDatasetExport(@PathParam("id") @NotNull UUID datasetId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Starting CSV export for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
+
+        // Verify dataset exists
+        service.findById(datasetId);
+
+        DatasetExportJob job = csvExportService.startExport(datasetId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Export job '{}' created/found for dataset '{}' on workspaceId '{}'", job.id(), datasetId,
+                workspaceId);
+
+        // Return 202 if new job was created (PENDING status), 200 if existing job found
+        var status = job.status() == DatasetExportStatus.PENDING
+                ? Response.Status.ACCEPTED
+                : Response.Status.OK;
+
+        return Response.status(status).entity(job).build();
+    }
+
+    @GET
+    @Path("/export-jobs/{jobId}")
+    @Operation(operationId = "getDatasetExportJob", summary = "Get dataset export job status", description = "Retrieves the current status of a dataset export job", responses = {
+            @ApiResponse(responseCode = "200", description = "Export job details", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
+            @ApiResponse(responseCode = "404", description = "Export job not found")
+    })
+    @JsonView(DatasetExportJob.View.Public.class)
+    public Response getDatasetExportJob(@PathParam("jobId") @NotNull UUID jobId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting export job '{}' on workspaceId '{}'", jobId, workspaceId);
+
+        DatasetExportJob job = csvExportService.getJob(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found export job '{}' with status '{}' on workspaceId '{}'", jobId, job.status(), workspaceId);
+
+        return Response.ok(job).build();
+    }
+
+    @PUT
+    @Path("/export-jobs/{jobId}/mark-viewed")
+    @Operation(operationId = "markDatasetExportJobViewed", summary = "Mark dataset export job as viewed", description = "Marks a dataset export job as viewed by setting the viewed_at timestamp. This is used to track that a user has seen a failed job's error message. This operation is idempotent.", responses = {
+            @ApiResponse(responseCode = "204", description = "Job marked as viewed"),
+            @ApiResponse(responseCode = "404", description = "Export job not found")
+    })
+    public Response markDatasetExportJobViewed(@PathParam("jobId") @NotNull UUID jobId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Marking export job '{}' as viewed on workspaceId '{}'", jobId, workspaceId);
+
+        csvExportService.markJobAsViewed(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Marked export job '{}' as viewed on workspaceId '{}'", jobId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/export-jobs")
+    @Operation(operationId = "getDatasetExportJobs", summary = "Get all dataset export jobs", description = "Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.", responses = {
+            @ApiResponse(responseCode = "200", description = "List of export jobs", content = @Content(array = @ArraySchema(schema = @Schema(implementation = DatasetExportJob.class))))
+    })
+    @JsonView(DatasetExportJob.View.Public.class)
+    public Response getDatasetExportJobs() {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Getting export jobs for workspaceId '{}'", workspaceId);
+
+        var jobs = csvExportService.findAllJobs()
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found '{}' export job(s) for workspaceId '{}'", jobs.size(), workspaceId);
+
+        return Response.ok(jobs).build();
+    }
+
+    @GET
+    @Path("/export-jobs/{jobId}/download")
+    @Produces("text/csv")
+    @Operation(operationId = "downloadDatasetExport", summary = "Download dataset export file", description = "Downloads the exported CSV file for a completed export job. This endpoint proxies the file download to avoid exposing internal storage URLs.", responses = {
+            @ApiResponse(responseCode = "200", description = "CSV file content", content = @Content(schema = @Schema(type = "string", format = "binary"))),
+            @ApiResponse(responseCode = "400", description = "Export job is not ready for download"),
+            @ApiResponse(responseCode = "404", description = "Export job not found")
+    })
+    public Response downloadDatasetExport(@PathParam("jobId") @NotNull UUID jobId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Downloading export file for job '{}' on workspaceId '{}'", jobId, workspaceId);
+
+        // Get job to extract dataset name for filename
+        DatasetExportJob job = csvExportService.getJob(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        var inputStream = csvExportService.downloadExport(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        // Generate filename from dataset name or fallback to job ID
+        String filename = FileNameUtils.buildDatasetExportFilename(job.datasetName(), jobId);
+
+        log.info("Completed download for export job '{}' on workspaceId '{}'", jobId, workspaceId);
+
+        // Use Jersey's ContentDisposition to safely build the header (handles encoding)
+        ContentDisposition contentDisposition = ContentDisposition.type("attachment")
+                .fileName(filename)
+                .build();
+
+        return Response.ok(inputStream)
+                .header("Content-Disposition", contentDisposition.toString())
+                .header("Content-Type", "text/csv")
+                .build();
+    }
 }

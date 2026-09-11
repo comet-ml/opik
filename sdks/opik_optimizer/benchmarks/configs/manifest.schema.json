@@ -1,0 +1,180 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Opik Optimizer Benchmark Manifest",
+  "type": "object",
+  "properties": {
+    "seed": { "type": "integer" },
+    "test_mode": { "type": "boolean" },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["dataset", "optimizer", "model"],
+        "properties": {
+          "dataset": {
+            "oneOf": [
+              { "type": "string", "description": "Dataset name (e.g., hotpot_train, tiny_test)." },
+              {
+                "type": "object",
+                "description": "Single dataset loader kwargs applied to all splits (e.g., {\"loader\": \"hotpot\", \"count\": 50}).",
+                "required": ["loader"],
+                "additionalProperties": true
+              }
+            ]
+          },
+          "datasets": {
+            "type": "object",
+            "description": "Per-split dataset loader kwargs. Provide train (required when using this field) and optionally validation/test; missing splits reuse train.",
+            "properties": {
+              "train": { "type": "object" },
+              "validation": { "type": "object" },
+              "test": { "type": "object" }
+            },
+            "required": ["train"],
+            "additionalProperties": true
+          },
+          "optimizer": { "type": "string", "description": "Optimizer key from benchmark_config.OPTIMIZER_CONFIGS." },
+          "model": { "type": "string", "description": "Model identifier (e.g., openai/gpt-4o-mini)." },
+          "test_mode": { "type": "boolean", "description": "Override test_mode for this task." },
+          "model_parameters": { "type": "object", "description": "Model parameters forwarded to the optimizer constructor." },
+          "optimizer_params": { "type": "object", "description": "Constructor kwargs merged into the optimizer (per-task override)." },
+          "optimizer_prompt_params": { "type": "object", "description": "optimize_prompt kwargs (per-task override), e.g., max_trials, n_samples." },
+          "prompt": {
+            "type": "array",
+            "description": "Optional inline prompt messages to override dataset defaults.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": { "type": "string" },
+                "content": { "type": "string" }
+              },
+              "required": ["role", "content"],
+              "additionalProperties": false
+            }
+          },
+          "metrics": {
+            "type": "array",
+            "description": "Optional metrics overriding dataset defaults. String => module.attr callable; object => {path, args?, kwargs?}.",
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "required": ["path"],
+                  "properties": {
+                    "path": { "type": "string" },
+                    "args": { "type": "array" },
+                    "kwargs": { "type": "object" }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "generators": {
+      "type": "array",
+      "description": "Generator entries that expand into multiple tasks (datasets x models x optimizers).",
+      "items": {
+        "type": "object",
+        "required": ["datasets", "models", "optimizers"],
+        "properties": {
+          "datasets": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "dataset": {
+                  "oneOf": [
+                    { "type": "string" },
+                    { "type": "object", "required": ["loader"], "additionalProperties": true }
+                  ]
+                },
+                "datasets": {
+                  "type": "object",
+                  "properties": {
+                    "train": { "type": "object" },
+                    "validation": { "type": "object" },
+                    "test": { "type": "object" }
+                  },
+                  "required": ["train"],
+                  "additionalProperties": true
+                }
+              },
+              "required": ["dataset"]
+            }
+          },
+          "models": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "properties": {
+                "name": { "type": "string" },
+                "model_parameters": { "type": "object" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "optimizers": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "properties": {
+                "name": { "type": "string" },
+                "optimizer_params": { "type": "object" },
+                "optimizer_prompt_params": { "type": "object" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "prompt": {
+            "type": "array",
+            "description": "Optional inline prompt messages to override dataset defaults for all generated tasks.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": { "type": "string" },
+                "content": { "type": "string" }
+              },
+              "required": ["role", "content"],
+              "additionalProperties": false
+            }
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "required": ["path"],
+                  "properties": {
+                    "path": { "type": "string" },
+                    "args": { "type": "array" },
+                    "kwargs": { "type": "object" }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "test_mode": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "anyOf": [
+    { "required": ["tasks"] },
+    { "required": ["generators"] }
+  ],
+  "additionalProperties": false
+}

@@ -66,7 +66,7 @@ def test_raise_if_score_arguments_are_missing__with_mapping(
     # Check if the `unused_kwarg` is present in the exception message
     if unused_kwarg is not None:
         assert (
-            f"Some keys in `scoring_key_mapping` didn't match anything: {{'{unused_kwarg}'}}"
+            f"Some keys in `scoring_key_mapping` didn't match anything: ['{unused_kwarg}']"
             in str(exc_info.value)
         ), f"'unused_kwarg' ({unused_kwarg}) not found in exception message"
     else:

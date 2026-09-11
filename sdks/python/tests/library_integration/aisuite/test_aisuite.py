@@ -2,10 +2,10 @@ from typing import Any, Dict
 
 import aisuite
 import pytest
-from aisuite.provider import LLMError
 
 import opik
 from opik.integrations.aisuite import track_aisuite
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -36,10 +36,11 @@ EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
 
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
+    # max_tokens / max_completion_tokens is call-specific (OpenAI reasoning
+    # models reject max_tokens; Anthropic takes it) so don't assert on it.
     REQUIRED_METADATA_KEYS = [
         "usage",
         "model",
-        "max_tokens",
         "created_from",
         "type",
         "id",
@@ -63,9 +64,10 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
     ]
 
     _ = wrapped_client.chat.completions.create(
-        model="openai:gpt-3.5-turbo",
+        model=llm_constants.AISUITE_OPENAI_GPT_NANO,
         messages=messages,
-        max_tokens=10,
+        max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
 
     opik.flush_tracker()
@@ -79,6 +81,7 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=PROJECT_NAME,
         spans=[
             SpanModel(
@@ -94,10 +97,12 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
                 spans=[],
-                model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -123,7 +128,7 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
     ]
 
     _ = wrapped_client.chat.completions.create(
-        model="anthropic:claude-3-5-sonnet-latest",
+        model=llm_constants.AISUITE_ANTHROPIC_CLAUDE_SONNET,
         messages=messages,
         max_tokens=10,
     )
@@ -139,6 +144,7 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
         metadata=ANY_DICT,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=PROJECT_NAME,
         spans=[
             SpanModel(
@@ -154,10 +160,12 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
                 spans=[],
-                model=ANY_STRING(startswith="claude-3-5-sonnet"),
+                model=ANY_STRING.starting_with(llm_constants.ANTHROPIC_CLAUDE_SONNET),
                 provider="anthropic",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -175,10 +183,13 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
         project_name=PROJECT_NAME,
     )
 
-    with pytest.raises(LLMError):
+    # aisuite 0.1.3 stopped wrapping upstream errors in LLMError for the
+    # OpenAI provider — the raw openai.BadRequestError now bubbles up. We
+    # only care that Opik finishes the span gracefully on any failure.
+    with pytest.raises(Exception):
         _ = wrapped_client.chat.completions.create(
             messages=None,
-            model="openai:gpt-3.5-turbo",
+            model=llm_constants.AISUITE_OPENAI_GPT_NANO,
         )
 
     opik.flush_tracker()
@@ -192,15 +203,16 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
         metadata={
             "created_from": "aisuite",
             "type": "aisuite_chat",
-            "model": "openai:gpt-3.5-turbo",
+            "model": llm_constants.AISUITE_OPENAI_GPT_NANO,
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=PROJECT_NAME,
         error_info={
-            "exception_type": ANY_STRING(),
-            "message": ANY_STRING(),
-            "traceback": ANY_STRING(),
+            "exception_type": ANY_STRING,
+            "message": ANY_STRING,
+            "traceback": ANY_STRING,
         },
         spans=[
             SpanModel(
@@ -213,22 +225,24 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
                 metadata={
                     "created_from": "aisuite",
                     "type": "aisuite_chat",
-                    "model": "openai:gpt-3.5-turbo",
+                    "model": llm_constants.AISUITE_OPENAI_GPT_NANO,
                 },
                 usage=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
-                model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 provider="openai",
                 error_info={
-                    "exception_type": ANY_STRING(),
-                    "message": ANY_STRING(),
-                    "traceback": ANY_STRING(),
+                    "exception_type": ANY_STRING,
+                    "message": ANY_STRING,
+                    "traceback": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -255,9 +269,10 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
         )
 
         _ = wrapped_client.chat.completions.create(
-            model="openai:gpt-3.5-turbo",
+            model=llm_constants.AISUITE_OPENAI_GPT_NANO,
             messages=messages,
-            max_tokens=10,
+            max_completion_tokens=10,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         )
 
     f()
@@ -271,6 +286,7 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
         output=None,
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         project_name=PROJECT_NAME,
         spans=[
             SpanModel(
@@ -297,12 +313,15 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
                         end_time=ANY_BUT_NONE,
                         project_name=PROJECT_NAME,
                         spans=[],
-                        model=ANY_STRING(startswith="gpt-3.5-turbo"),
+                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                         provider="openai",
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -312,4 +331,79 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
     llm_span_metadata = trace_tree.spans[0].spans[0].metadata
+    _assert_metadata_contains_required_keys(llm_span_metadata)
+
+
+def test_aisuite__openai_provider__client_chat_completions_create__opik_args__happyflow(
+    fake_backend,
+):
+    client = aisuite.Client()
+    wrapped_client = track_aisuite(
+        aisuite_client=client,
+        project_name=PROJECT_NAME,
+    )
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Tell a fact"},
+    ]
+
+    args_dict = {
+        "span": {"tags": ["span_tag"], "metadata": {"span_key": "span_value"}},
+        "trace": {
+            "thread_id": "conversation-2",
+            "tags": ["trace_tag"],
+            "metadata": {"trace_key": "trace_value"},
+        },
+    }
+
+    _ = wrapped_client.chat.completions.create(
+        model=llm_constants.AISUITE_OPENAI_GPT_NANO,
+        messages=messages,
+        max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        opik_args=args_dict,
+    )
+
+    opik.flush_tracker()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="chat_completion_create",
+        input={"messages": messages},
+        output={"choices": ANY_BUT_NONE},
+        tags=["aisuite", "span_tag", "trace_tag"],
+        metadata=ANY_DICT.containing({"trace_key": "trace_value"}),
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=PROJECT_NAME,
+        thread_id="conversation-2",
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="chat_completion_create",
+                input={"messages": messages},
+                output={"choices": ANY_BUT_NONE},
+                tags=["aisuite", "span_tag"],
+                metadata=ANY_DICT.containing({"span_key": "span_value"}),
+                usage=EXPECTED_OPENAI_USAGE_LOGGED_FORMAT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=PROJECT_NAME,
+                spans=[],
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
+                provider="openai",
+                source="sdk",
+            )
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+    llm_span_metadata = trace_tree.spans[0].metadata
     _assert_metadata_contains_required_keys(llm_span_metadata)

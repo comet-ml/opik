@@ -17,7 +17,6 @@ import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
-import java.math.BigDecimal;
 import java.util.List;
 
 @Builder(toBuilder = true)
@@ -106,9 +105,6 @@ public record ProjectStats(List<ProjectStatItem<?>> stats) {
         public AvgValueStat(String name, Double value) {
             super(AvgValueStat.builder().value(value).name(name).type(StatsType.AVG));
         }
-    }
-
-    public record PercentageValues(BigDecimal p50, BigDecimal p90, BigDecimal p99) {
     }
 
     @ToString(callSuper = true)

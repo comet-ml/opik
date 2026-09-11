@@ -1,0 +1,104 @@
+import isArray from "lodash/isArray";
+import get from "lodash/get";
+
+import { OptimizationStudioConfig } from "@/types/optimizations";
+import { ConfigurationType } from "@/types/shared";
+import { isMessagesArray } from "@/lib/configuration-renderer";
+import { getMetricLabel, getOptimizerLabel } from "@/lib/optimizations";
+
+export const isRecord = (value: unknown): value is ConfigurationType =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+export const formatPrimitive = (value: unknown): string => {
+  if (value === null || value === undefined) return "-";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value);
+};
+
+export type MessageEntry = { role: string; content: string };
+
+const toEntries = (arr: unknown[]): MessageEntry[] =>
+  arr.map((m) => {
+    if (isRecord(m) && "content" in m) {
+      return {
+        role: String(get(m, "role", "")),
+        content: String(get(m, "content", "")),
+      };
+    }
+    return { role: "", content: JSON.stringify(m) };
+  });
+
+export const extractMessages = (value: unknown): MessageEntry[] | null => {
+  if (isArray(value)) return toEntries(value);
+  if (isRecord(value) && "messages" in value) {
+    const messages = get(value, "messages", []);
+    if (isArray(messages)) return toEntries(messages);
+  }
+  // Named prompts: {"chat-prompt": [{role, content}, ...]}
+  if (isRecord(value)) {
+    const vals = Object.values(value as Record<string, unknown>);
+    if (vals.length > 0 && vals.every((v) => isMessagesArray(v))) {
+      return vals.flatMap((v) => toEntries(v as unknown[]));
+    }
+  }
+  return null;
+};
+
+export const getMetricParamLabels = (
+  studioConfig: OptimizationStudioConfig,
+): string[] => {
+  const metric = studioConfig.evaluation?.metrics?.[0];
+  if (!metric?.parameters) return [];
+  return Object.entries(metric.parameters)
+    .filter(
+      ([, value]) =>
+        (typeof value === "string" && (value as string).trim()) ||
+        typeof value === "boolean",
+    )
+    .map(([key]) =>
+      key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    );
+};
+
+export const buildConfigFromStudioConfig = (
+  studioConfig: OptimizationStudioConfig,
+): ConfigurationType => {
+  const config: ConfigurationType = {};
+
+  if (studioConfig.dataset_name) {
+    config.Dataset = studioConfig.dataset_name;
+  }
+
+  if (studioConfig.llm_model?.model) {
+    config.Model = String(studioConfig.llm_model.model);
+  }
+
+  if (studioConfig.optimizer?.type) {
+    config.Algorithm = getOptimizerLabel(studioConfig.optimizer.type);
+  }
+
+  const metric = studioConfig.evaluation?.metrics?.[0];
+  if (metric?.type) {
+    config.Metric = getMetricLabel(metric.type);
+
+    if (metric.parameters) {
+      for (const [key, value] of Object.entries(metric.parameters)) {
+        if (
+          (typeof value === "string" && value.trim()) ||
+          typeof value === "boolean"
+        ) {
+          const label = key
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+          config[label] = value;
+        }
+      }
+    }
+  }
+
+  if (studioConfig.prompt?.messages) {
+    config["Initial prompt"] = studioConfig.prompt.messages;
+  }
+
+  return config;
+};

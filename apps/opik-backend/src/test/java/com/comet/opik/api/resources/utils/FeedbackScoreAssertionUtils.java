@@ -12,12 +12,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class FeedbackScoreAssertionUtils {
 
     public static void assertFeedbackScoreNames(FeedbackScoreNames actual, List<String> expectedNames) {
-        assertThat(actual.scores()).hasSize(expectedNames.size());
-        assertThat(actual
-                .scores()
-                .stream()
+        // Filter to only feedback_scores (exclude experiment_scores) since this test is about feedback score names
+        var actualNames = actual.scores().stream()
+                .filter(score -> score.type() == null || "feedback_scores".equals(score.type()))
                 .map(FeedbackScoreNames.ScoreName::name)
-                .toList()).containsExactlyInAnyOrderElementsOf(expectedNames);
+                .toList();
+        assertThat(actualNames).containsExactlyInAnyOrderElementsOf(expectedNames);
     }
 
     public static ExperimentItem assertFeedbackScoresIgnoredFieldsAndSetThemToNull(ExperimentItem actualExperimentItem,
@@ -39,6 +39,8 @@ public class FeedbackScoreAssertionUtils {
                                 .lastUpdatedBy(null)
                                 .createdAt(null)
                                 .lastUpdatedAt(null)
+                                .valueByAuthor(null)
+                                .sourceQueueId(null)
                                 .build())
                         .toList())
                 .build();

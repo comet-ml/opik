@@ -1,0 +1,205 @@
+name: Trigger Test Environment Deployment
+run-name: ${{ github.event.label.name == 'test-environment' && format('Trigger Test Environment Deployment for PR {0} by {1}', github.event.number, github.actor) || 'Test Environment Not Triggered' }}
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+
+jobs:
+
+  other-labels:
+    if: github.event_name == 'pull_request' && github.event.label.name != 'test-environment'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip
+        run: |
+          echo "Skipping deployment of test environment for this PR"
+
+  start:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment'
+    runs-on: ubuntu-latest
+    # Posts a "deployment started" PR comment; keep write off the default.
+    permissions:
+      contents: read
+      pull-requests: write
+    outputs:
+      version: ${{ steps.get-tag.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+      
+      - name: Get latest tag from main at merge-base
+        id: get-tag
+        run: |
+          # Fetch main branch
+          git fetch origin main
+          
+          # Find the merge-base (where this branch diverged from main)
+          MERGE_BASE=$(git merge-base HEAD origin/main)
+          echo "Merge base: $MERGE_BASE"
+          
+          # Get the tag at or before the merge-base
+          BASE_TAG=$(git describe --tags --abbrev=0 "$MERGE_BASE" 2>/dev/null || echo "")
+          
+          if [ -z "$BASE_TAG" ]; then
+            echo "❌ No tag found at merge-base"
+            exit 1
+          fi
+          
+          echo "The tag at merge-base: $BASE_TAG"
+          echo "version=${BASE_TAG}" | tee -a "$GITHUB_OUTPUT"
+          echo "**Base Version**: \`${BASE_TAG}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on PR - Deployment Started
+        uses: actions/github-script@v9
+        # HEAD_REF must be passed via env: — interpolating `${{ github.event.pull_request.head.ref }}`
+        # directly into the script body would let a crafted branch name break out of the string
+        # context. See: https://docs.github.com/en/actions/reference/security/secure-use#good-practices-for-mitigating-script-injection-attacks
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_VERSION: ${{ steps.get-tag.outputs.version }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: Number('${{ github.event.number }}'),
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🔄 **Test environment deployment process has started**
+
+              **Phase 1**: Deploying base version \`${process.env.BASE_VERSION}\` (from main branch) if environment doesn't exist
+              **Phase 2**: Building new images from PR branch \`${process.env.HEAD_REF}\`
+              **Phase 3**: Will deploy newly built version after build completes
+
+              You can monitor the progress [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).`
+            });
+
+  build-apps:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment'
+    needs:
+      - start
+    # build_apps.yml pushes images to GHCR, and with is_release: false its
+    # create-git-tag job pushes a tag; pass down both grants here (a called
+    # workflow's permissions can only be maintained or reduced from the
+    # caller's, never elevated).
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/build_apps.yml
+    secrets: inherit
+    with:
+      version: ""
+      is_release: false
+      is_adhoc: true
+      build_guardrails: false
+      ref: ${{ github.event.pull_request.head.ref }}
+
+  trigger-deploy-base-version:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment'
+    needs:
+      - start
+    runs-on: ubuntu-latest
+    # Posts a PR comment on trigger failure; keep write off the default.
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Trigger deployment with base version
+        uses: actions/github-script@v9
+        env:
+          VERSION_NAME: ${{ needs.start.outputs.version }}
+        with:
+          github-token: ${{ secrets.DEPLOYMENT_TRIGGER_TOKEN }}
+          script: |
+            const response = await github.rest.repos.createDispatchEvent({
+              owner: 'comet-ml',
+              repo: 'comet-deployment',
+              event_type: 'deploy-opik-test-env',
+              client_payload: {
+                pr_number: '${{ github.event.number }}',
+                version_name: process.env.VERSION_NAME,
+                is_base_version: true
+              }
+            });
+            
+            console.log('✅ Repository dispatch sent successfully:', response.status);
+            console.log('📦 Deploying base version:', process.env.VERSION_NAME);
+            console.log('⚠️  Will skip if namespace already exists');
+            console.log('📊 Monitor deployment progress: https://github.com/comet-ml/comet-deployment/actions/workflows/deploy_opik_adhoc_env.yaml');
+            console.log('🔗 Deployment will verify the version');
+
+      - name: Handle trigger failure
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: Number('${{ github.event.number }}'),
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `❌ **Failed to trigger base version deployment**
+              
+              Please check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for more details.`
+            });
+
+  trigger-deploy-new-version:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'test-environment'
+    needs:
+      - build-apps
+      - trigger-deploy-base-version
+    runs-on: ubuntu-latest
+    # Posts a PR comment on trigger failure; keep write off the default.
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Trigger deployment with new version
+        uses: actions/github-script@v9
+        env:
+          VERSION_NAME: ${{ needs.build-apps.outputs.version }}
+        with:
+          github-token: ${{ secrets.DEPLOYMENT_TRIGGER_TOKEN }}
+          script: |
+            const response = await github.rest.repos.createDispatchEvent({
+              owner: 'comet-ml',
+              repo: 'comet-deployment',
+              event_type: 'deploy-opik-test-env',
+              client_payload: {
+                pr_number: '${{ github.event.number }}',
+                version_name: process.env.VERSION_NAME,
+                is_base_version: false
+              }
+            });
+            
+            console.log('✅ Repository dispatch sent successfully:', response.status);
+            console.log('📦 Deploying new version:', process.env.VERSION_NAME);
+            console.log('🔄 This will update the existing environment');
+            console.log('📊 Monitor deployment progress: https://github.com/comet-ml/comet-deployment/actions/workflows/deploy_opik_adhoc_env.yaml');
+            console.log('🔗 Deployment will verify the version and post a comment on this PR when complete');
+
+      - name: Handle trigger failure
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: Number('${{ github.event.number }}'),
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `❌ **Failed to trigger deployment with new version**
+              
+              Please check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for more details.`
+            });

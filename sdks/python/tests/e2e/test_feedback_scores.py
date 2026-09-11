@@ -1,8 +1,12 @@
 from typing import List
 import opik
 from opik import opik_context
-from opik.types import FeedbackScoreDict
+from opik.types import BatchFeedbackScoreDict, FeedbackScoreDict
+import pytest
 from . import verifiers
+from ..testlib import generate_project_name
+
+_PROJECT_MANUAL = generate_project_name("manually-specified-project")
 
 
 def test_feedbacks_are_logged_via_trace_and_span__happyflow(opik_client: opik.Opik):
@@ -67,6 +71,7 @@ def test_feedbacks_are_logged_via_trace_and_span__happyflow(opik_client: opik.Op
         trace_id=trace.id,
         name="trace-name",
         feedback_scores=EXPECTED_TRACE_FEEDBACK_SCORES,
+        source="sdk",
     )
     verifiers.verify_span(
         opik_client=opik_client,
@@ -75,6 +80,7 @@ def test_feedbacks_are_logged_via_trace_and_span__happyflow(opik_client: opik.Op
         parent_span_id=None,
         name="span-name",
         feedback_scores=EXPECTED_SPAN_FEEDBACK_SCORES,
+        source="sdk",
     )
 
 
@@ -124,6 +130,7 @@ def test_feedbacks_are_logged_via_trace_and_span__and_deleted(opik_client: opik.
         trace_id=trace.id,
         name="trace-name",
         feedback_scores=EXPECTED_TRACE_FEEDBACK_SCORES,
+        source="sdk",
     )
     verifiers.verify_span(
         opik_client=opik_client,
@@ -132,6 +139,7 @@ def test_feedbacks_are_logged_via_trace_and_span__and_deleted(opik_client: opik.
         parent_span_id=None,
         name="span-name",
         feedback_scores=EXPECTED_SPAN_FEEDBACK_SCORES,
+        source="sdk",
     )
 
 
@@ -139,7 +147,7 @@ def test_feedbacks_are_logged_via_client__happyflow(opik_client: opik.Opik):
     trace = opik_client.trace(name="trace-name-1")
     span = trace.span(name="span-name-1")
 
-    EXPECTED_TRACE_FEEDBACK_SCORES: List[FeedbackScoreDict] = [
+    EXPECTED_TRACE_FEEDBACK_SCORES: List[BatchFeedbackScoreDict] = [
         {
             "id": trace.id,
             "name": "trace-metric-1",
@@ -156,7 +164,7 @@ def test_feedbacks_are_logged_via_client__happyflow(opik_client: opik.Opik):
         },
     ]
 
-    EXPECTED_SPAN_FEEDBACK_SCORES: List[FeedbackScoreDict] = [
+    EXPECTED_SPAN_FEEDBACK_SCORES: List[BatchFeedbackScoreDict] = [
         {
             "id": span.id,
             "name": "span-metric-1",
@@ -183,6 +191,8 @@ def test_feedbacks_are_logged_via_client__happyflow(opik_client: opik.Opik):
         trace_id=trace.id,
         name="trace-name-1",
         feedback_scores=EXPECTED_TRACE_FEEDBACK_SCORES,
+        project_name=opik_client.project_name,
+        source="sdk",
     )
     verifiers.verify_span(
         opik_client=opik_client,
@@ -191,6 +201,8 @@ def test_feedbacks_are_logged_via_client__happyflow(opik_client: opik.Opik):
         parent_span_id=None,
         name="span-name-1",
         feedback_scores=EXPECTED_SPAN_FEEDBACK_SCORES,
+        project_name=opik_client.project_name,
+        source="sdk",
     )
 
 
@@ -213,7 +225,7 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
             ]
         )
 
-    @opik.track(project_name="manually-specified-project")
+    @opik.track(project_name=_PROJECT_MANUAL)
     def f_outer():
         ID_STORAGE["f_outer-trace-id"] = opik_context.get_current_trace_data().id
         ID_STORAGE["f_outer-span-id"] = opik_context.get_current_span_data().id
@@ -270,6 +282,7 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
         trace_id=ID_STORAGE["f_outer-trace-id"],
         name="f_outer",
         feedback_scores=EXPECTED_TRACE_FEEDBACK_SCORES,
+        source="sdk",
     )
     verifiers.verify_span(
         opik_client=opik_client,
@@ -278,4 +291,142 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
         parent_span_id=ID_STORAGE["f_outer-span-id"],
         name="f_inner",
         feedback_scores=EXPECTED_INNER_SPAN_FEEDBACK_SCORES,
+        source="sdk",
+    )
+
+
+@pytest.mark.skip(
+    reason="Backend bug (OPIK-3630): If incorrect project_name is specified, the project gets created and the score is not attached to the correct thread."
+)
+def test_log_threads_feedback_scores__project_name_fallback_logic(
+    opik_client: opik.Opik,
+):
+    # Setup projects
+    project_1 = opik_client.project_name + "-1"
+    project_2 = opik_client.project_name + "-2"
+    project_default = opik_client.project_name
+
+    # Create threads in different projects
+    thread_id_p1 = "thread-p1"
+    thread_id_p2 = "thread-p2"
+    thread_id_default = "thread-default"
+
+    # Create traces with thread_ids to create threads
+    opik_client.trace(name="trace-p1", project_name=project_1, thread_id=thread_id_p1)
+    opik_client.trace(name="trace-p2", project_name=project_2, thread_id=thread_id_p2)
+    opik_client.trace(name="trace-default", thread_id=thread_id_default)
+
+    opik_client.flush()
+
+    # Close threads before logging scores - otherwise backend will return 409 error
+    opik_client.rest_client.traces.close_trace_thread(
+        project_name=project_1, thread_id=thread_id_p1
+    )
+    opik_client.rest_client.traces.close_trace_thread(
+        project_name=project_2, thread_id=thread_id_p2
+    )
+    opik_client.rest_client.traces.close_trace_thread(
+        project_name=project_default, thread_id=thread_id_default
+    )
+
+    # Wait for threads to be closed
+    from opik import synchronization
+
+    def check_threads_closed() -> bool:
+        threads_p1 = opik_client.search_threads(
+            project_name=project_1, filter_string=f'id = "{thread_id_p1}"'
+        )
+        threads_p2 = opik_client.search_threads(
+            project_name=project_2, filter_string=f'id = "{thread_id_p2}"'
+        )
+        threads_default = opik_client.search_threads(
+            project_name=project_default, filter_string=f'id = "{thread_id_default}"'
+        )
+        return (
+            len(threads_p1) > 0
+            and threads_p1[0].status == "closed"
+            and len(threads_p2) > 0
+            and threads_p2[0].status == "closed"
+            and len(threads_default) > 0
+            and threads_default[0].status == "closed"
+        )
+
+    synchronization.wait_for_done(lambda: check_threads_closed(), timeout=30)
+
+    # Define scores with different project_name combinations
+    scores: List[BatchFeedbackScoreDict] = [
+        # 1. Per-score project_name (highest priority) - should go to project_1
+        {
+            "id": thread_id_p1,
+            "name": "metric-p1",
+            "value": 1.0,
+            "project_name": project_1,
+            "reason": "reason-p1",
+        },
+        # 2. Function parameter fallback - should go to project_2
+        {
+            "id": thread_id_p2,
+            "name": "metric-p2",
+            "value": 0.5,
+            "reason": "reason-p2",
+        },
+        # 3. If no project_name is specified, the project gets created and
+        # the score is not attached to the correct thread.
+        {
+            "id": thread_id_default,
+            "name": "metric-default",
+            "value": 0.0,
+            "reason": "reason-default",
+        },
+    ]
+
+    # Log scores with project_2 as parameter fallback
+    opik_client.log_threads_feedback_scores(scores=scores, project_name=project_2)
+
+    opik_client.flush()
+
+    # Verifications
+    verifiers.verify_thread(
+        opik_client=opik_client,
+        thread_id=thread_id_p1,
+        project_name=project_1,
+        feedback_scores=[
+            {
+                "id": thread_id_p1,
+                "name": "metric-p1",
+                "value": 1.0,
+                "reason": "reason-p1",
+                "category_name": None,
+            },
+        ],
+    )
+
+    verifiers.verify_thread(
+        opik_client=opik_client,
+        thread_id=thread_id_p2,
+        project_name=project_2,
+        feedback_scores=[
+            {
+                "id": thread_id_p2,
+                "name": "metric-p2",
+                "value": 0.5,
+                "reason": "reason-p2",
+                "category_name": None,
+            },
+        ],
+    )
+
+    verifiers.verify_thread(  # TODO: This fails (OPIK-3630)
+        opik_client=opik_client,
+        thread_id=thread_id_default,
+        project_name=project_default,
+        feedback_scores=[
+            {
+                "id": thread_id_default,
+                "name": "metric-default",
+                "value": 0.0,
+                "reason": "reason-default",
+                "category_name": None,
+            },
+        ],
     )

@@ -5,23 +5,43 @@ import { LLMMessage, ProviderMessageType } from "@/types/llm";
 import {
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
+  COMPOSED_PROVIDER_TYPE,
 } from "@/types/providers";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { SPAN_TYPE } from "@/types/traces";
+import { EVALUATION_METHOD } from "@/types/datasets";
+
+export interface PromptLibraryMetadata {
+  name: string;
+  id: string;
+  template_structure?: PROMPT_TEMPLATE_STRUCTURE;
+  modified?: boolean;
+  version: {
+    template: unknown;
+    commit?: string;
+    id: string;
+    metadata?: object;
+  };
+}
 
 export interface PlaygroundPromptType {
   name: string;
   id: string;
   messages: LLMMessage[];
   model: PROVIDER_MODEL_TYPE | "";
-  provider: PROVIDER_TYPE | "";
+  provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
+  loadedChatPromptId?: string;
+  loadedChatPromptVersionId?: string;
+  skipInitialPromptLoad?: boolean;
 }
 
 export interface ChatCompletionMessageChoiceType {
   delta: {
     content: string;
   };
+  finish_reason?: string;
+  index?: number;
 }
 
 export interface ChatCompletionSuccessMessageType {
@@ -67,6 +87,8 @@ export interface LogTrace {
   endTime: string;
   input: { messages: ProviderMessageType[] };
   output: { output: string | null };
+  metadata?: Record<string, unknown>;
+  source?: string;
 }
 
 export interface LogSpan {
@@ -78,8 +100,13 @@ export interface LogSpan {
   startTime: string;
   endTime: string;
   input: { messages: ProviderMessageType[] };
-  output: { choices: ChatCompletionMessageChoiceType[] };
+  source?: string;
+  output:
+    | { choices: ChatCompletionMessageChoiceType[] }
+    | { output: string | null };
   usage?: UsageType | null;
+  model?: string;
+  provider?: string;
   metadata: {
     created_from: string;
     usage: UsageType | null;
@@ -88,11 +115,18 @@ export interface LogSpan {
   };
 }
 
+export interface LogExperimentPromptVersion {
+  id: string;
+}
+
 export interface LogExperiment {
   id: string;
   datasetName: string;
+  datasetVersionId?: string;
   name?: string;
   metadata?: object;
+  evaluationMethod?: EVALUATION_METHOD;
+  prompt_versions?: LogExperimentPromptVersion[];
 }
 
 export type LogExperimentItem = {

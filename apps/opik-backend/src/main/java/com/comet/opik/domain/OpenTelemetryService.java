@@ -1,7 +1,10 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.Project;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
+import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.infrastructure.OpenTelemetryConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
@@ -13,6 +16,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -21,8 +25,10 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -60,36 +66,34 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     public Mono<Long> parseAndStoreSpans(@NonNull ExportTraceServiceRequest traceRequest, @NonNull String projectName) {
 
         // make sure project exists before starting processing
-        return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
-            String userName = ctx.get(RequestContext.USER_NAME);
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            return projectService.getOrCreate(workspaceId, projectName, userName).id();
-        })).flatMap(projectId -> Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+        return projectService.getOrCreate(projectName)
+                .map(Project::id)
+                .flatMap(projectId -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            // extracts all otel spans in the batch, sorted by start time
-            var otelSpans = traceRequest.getResourceSpansList().stream()
-                    .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
-                    .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
-                    .toList();
+                    // extracts all otel spans in the batch, sorted by start time
+                    var otelSpans = traceRequest.getResourceSpansList().stream()
+                            .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
+                            .flatMap(scopeSpans -> scopeSpans.getSpansList().stream())
+                            .toList();
 
-            // find out whats the name of the integration library
-            var integrationName = traceRequest.getResourceSpansList().stream()
-                    .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
-                    .map(scopeSpans -> scopeSpans.getScope().getName())
-                    .distinct()
-                    .filter(OpenTelemetryMappingRule::isValidInstrumentation)
-                    .findFirst()
-                    .orElse(null);
+                    // find out whats the name of the integration library
+                    var integrationName = traceRequest.getResourceSpansList().stream()
+                            .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
+                            .map(scopeSpans -> scopeSpans.getScope().getName())
+                            .distinct()
+                            .filter(OpenTelemetryMappingRuleFactory::isValidInstrumentation)
+                            .findFirst()
+                            .orElse(null);
 
-            // otelTraceId -> minimum timestamp seen with that traceId
-            var otelTracesAndMinTimestamp = otelSpans.stream()
-                    .collect(Collectors.toMap(Span::getTraceId, Span::getStartTimeUnixNano, Math::min));
+                    // otelTraceId -> minimum timestamp seen with that traceId
+                    var otelTracesAndMinTimestamp = otelSpans.stream()
+                            .collect(Collectors.toMap(Span::getTraceId, Span::getStartTimeUnixNano, Math::min));
 
-            // get or create a mapping of otel trace id -> opik trace id
-            return otelToOpikTraceIdMapper(otelTracesAndMinTimestamp, projectId, workspaceId)
-                    .flatMap(traceMapper -> doStoreSpans(otelSpans, traceMapper, projectName, integrationName));
-        })).subscribeOn(Schedulers.boundedElastic());
+                    // get or create a mapping of otel trace id -> opik trace id
+                    return otelToOpikTraceIdMapper(otelTracesAndMinTimestamp, projectId, workspaceId)
+                            .flatMap(traceMapper -> doStoreSpans(otelSpans, traceMapper, projectName, integrationName));
+                })).subscribeOn(Schedulers.boundedElastic());
     }
 
     private String base64OtelId(ByteString idBytes) {
@@ -103,12 +107,19 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     private Mono<Long> doStoreSpans(List<Span> otelSpans, Map<String, UUID> traceIdMapper, String projectName,
             String integrationName) {
 
+        // Track trace IDs that came from opik.trace_id attribute overrides.
+        // These spans connect to existing OPIK traces, so we must not create new traces for them.
+        Set<UUID> overriddenTraceIds = new HashSet<>();
+
         // converts otel spans into opik spans, using the mapped opik trace id
         var opikSpans = otelSpans.stream()
                 .map(otelSpan -> {
                     var otelTraceIdBase64 = base64OtelId(otelSpan.getTraceId());
 
                     var opikTraceId = traceIdMapper.get(otelTraceIdBase64);
+
+                    OpenTelemetryMapper.extractOpikTraceId(otelSpan)
+                            .ifPresent(overriddenTraceIds::add);
 
                     return OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, integrationName);
                 })
@@ -117,10 +128,46 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                         .build())
                 .toList();
 
-        // check if there spans without parentId: we will use them as a Trace too
-        return Flux.fromStream(opikSpans.stream().filter(span -> span.parentSpanId() == null))
+        // Some integrations (e.g. PydanticAI/Logfire) put cumulative usage tokens on parent/agent spans
+        // that already represent the sum of all child LLM call spans. Including both the parent and children
+        // in sumMap() aggregation would double-count tokens. Clear usage from parent spans whose children
+        // also carry usage, so only the leaf LLM spans contribute to the aggregated token counts.
+        var parentIdsWithChildrenHavingUsage = opikSpans.stream()
+                .filter(span -> span.parentSpanId() != null
+                        && span.usage() != null
+                        && !span.usage().isEmpty())
+                .map(com.comet.opik.api.Span::parentSpanId)
+                .collect(Collectors.toSet());
+
+        var dedupedSpans = parentIdsWithChildrenHavingUsage.isEmpty()
+                ? opikSpans
+                : opikSpans.stream()
+                        .map(span -> parentIdsWithChildrenHavingUsage.contains(span.id())
+                                && span.usage() != null
+                                && !span.usage().isEmpty()
+                                        ? span.toBuilder().usage(null).build()
+                                        : span)
+                        .toList();
+
+        // Use spans without parentId as Trace roots. Skip opik.trace_id overrides (they attach to
+        // existing traces). Multiple roots can share one traceId (e.g. when parent_span_id==trace_id
+        // is nulled in the mapper), so dedup by traceId to create only one trace per id. First
+        // root in encounter order wins.
+        var seenTraceIds = new HashSet<UUID>();
+        var rootSpansByTraceId = dedupedSpans.stream()
+                .filter(span -> span.parentSpanId() == null)
+                .filter(span -> !overriddenTraceIds.contains(span.traceId()))
+                .filter(span -> seenTraceIds.add(span.traceId()))
+                .toList();
+        return Flux.fromStream(rootSpansByTraceId.stream())
                 .flatMap(rootSpan -> {
-                    var trace = Trace.builder()
+                    // Extract thread_id from root span metadata if present
+                    String threadId = null;
+                    if (rootSpan.metadata() != null && rootSpan.metadata().has("thread_id")) {
+                        threadId = rootSpan.metadata().get("thread_id").asText();
+                    }
+
+                    var traceBuilder = Trace.builder()
                             .id(rootSpan.traceId())
                             .name(rootSpan.name())
                             .projectName(rootSpan.projectName())
@@ -130,16 +177,22 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             .input(rootSpan.input())
                             .output(rootSpan.output())
                             .metadata(rootSpan.metadata())
-                            .build();
+                            .tags(rootSpan.tags())
+                            .errorInfo(rootSpan.errorInfo())
+                            .source(Source.SDK);
 
-                    return traceService.create(trace);
+                    if (StringUtils.isNotBlank(threadId)) {
+                        traceBuilder.threadId(threadId);
+                    }
+
+                    return traceService.create(traceBuilder.build());
                 })
                 .doOnNext(traceId -> log.info("TraceId '{}' created", traceId))
                 .then(Mono.defer(() -> {
-                    var spanBatch = SpanBatch.builder().spans(opikSpans).build();
+                    var spanBatch = SpanBatch.builder().spans(dedupedSpans).build();
 
                     log.info("Parsed OpenTelemetry span batch for project '{}' into {} spans", projectName,
-                            opikSpans.size());
+                            dedupedSpans.size());
 
                     return spanService.create(spanBatch);
                 }));

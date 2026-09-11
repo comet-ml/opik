@@ -3,7 +3,7 @@ import get from "lodash/get";
 
 import axios, { AxiosError } from "axios";
 
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { APP_VERSION } from "@/constants/app";
 import { STATS_ANONYMOUS_ID, STATS_COMET_ENDPOINT } from "@/api/api";
 

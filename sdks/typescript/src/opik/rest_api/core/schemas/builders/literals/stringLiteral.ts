@@ -1,6 +1,6 @@
-import { Schema, SchemaType } from "../../Schema";
-import { createIdentitySchemaCreator } from "../../utils/createIdentitySchemaCreator";
-import { getErrorMessageForIncorrectType } from "../../utils/getErrorMessageForIncorrectType";
+import { type Schema, SchemaType } from "../../Schema.js";
+import { createIdentitySchemaCreator } from "../../utils/createIdentitySchemaCreator.js";
+import { getErrorMessageForIncorrectType } from "../../utils/getErrorMessageForIncorrectType.js";
 
 export function stringLiteral<V extends string>(literal: V): Schema<V, V> {
     const schemaCreator = createIdentitySchemaCreator(

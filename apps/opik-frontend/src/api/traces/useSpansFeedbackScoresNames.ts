@@ -17,7 +17,7 @@ const getFeedbackScoresNames = async (
   { projectId, type }: UseSpansFeedbackScoresNamesParams,
 ) => {
   const { data } = await api.get<FeedbackScoresNamesResponse>(
-    `${SPANS_REST_ENDPOINT}/feedback-scores/names`,
+    `${SPANS_REST_ENDPOINT}feedback-scores/names`,
     {
       signal,
       params: {

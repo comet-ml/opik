@@ -1,0 +1,64 @@
+suite: ingress
+
+# Baseline render assertions for the per-component Ingress (templates/ingress.yaml).
+# Ingress renders only when both the component and its ingress are enabled.
+templates:
+  - templates/ingress.yaml
+
+tests:
+  - it: no ingress is rendered with default values (ingress disabled)
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: frontend ingress renders host and service-backed paths when enabled
+    set:
+      component.frontend.ingress.enabled: true
+      component.frontend.ingress.ingressClassName: nginx
+      component.frontend.ingress.hosts:
+        - host: opik.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+              port: 5173
+    documentSelector:
+      path: metadata.name
+      value: opik-frontend
+    asserts:
+      - isKind:
+          of: Ingress
+      - equal:
+          path: spec.ingressClassName
+          value: nginx
+      - equal:
+          path: spec.rules[0].host
+          value: opik.example.com
+      - equal:
+          path: spec.rules[0].http.paths[0].path
+          value: /
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: Prefix
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.name
+          value: opik-frontend
+      - equal:
+          path: spec.rules[0].http.paths[0].backend.service.port.number
+          value: 5173
+
+  - it: ingressClassName defaults to alb when unset
+    set:
+      component.frontend.ingress.enabled: true
+      component.frontend.ingress.hosts:
+        - host: opik.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+              port: 5173
+    documentSelector:
+      path: metadata.name
+      value: opik-frontend
+    asserts:
+      - equal:
+          path: spec.ingressClassName
+          value: alb

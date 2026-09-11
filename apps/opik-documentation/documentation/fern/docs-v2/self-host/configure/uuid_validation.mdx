@@ -1,0 +1,200 @@
+---
+title: UUIDv7 ingestion validation
+headline: UUIDv7 ingestion validation | Opik Documentation
+og:title: UUIDv7 ingestion validation — Opik
+og:description: Turn on UUIDv7 ingestion validation in Opik — the window, audit
+  (shadow) mode, and the kill-switch — and check your clients before enabling it.
+og:site_name: Opik Documentation
+subtitle: Bound the timestamp a client may embed in a trace or span id
+---
+
+Opik lets a client choose the `id` of a trace or span it creates. That `id` must be a UUIDv7, and
+the timestamp embedded in its top 48 bits is what ClickHouse uses to place the row in a partition.
+UUIDv7 ingestion validation bounds that timestamp at write time, so a client embedding wrong
+timestamps fails loudly instead of quietly degrading the partition layout.
+
+<Note>
+  Validation is **off by default** on self-hosted deployments — it is opt-in, and turning it on is a
+  deliberate step. Opik Cloud is managed by Comet and has it on. Work through
+  [Before you turn it on](#before-you-turn-it-on) first: the check only ever rejects ids your own
+  clients chose, so what matters is which of them embed their own timestamps.
+</Note>
+
+## Why it exists
+
+A client that embeds a wrong timestamp does more than mislabel one row. An `id` claiming a date
+years in the future lands in a partition that retention never reaches, and one claiming a date years
+in the past lands in a partition that has already been retained away. Either way the partition
+layout degrades, silently, and the row is hard to find again.
+
+Bounding the timestamp at ingestion turns that into an **HTTP 400** on the offending write, so a
+broken client surfaces as a failed request rather than as partition corruption discovered months
+later.
+
+## What is validated
+
+Two separate checks run on a client-supplied `id`.
+
+**The version check.** The `id` must be a version 7 UUID, or the write is rejected with
+`reason: not_v7`. This check is always on and none of the settings below affect it.
+
+**The window check.** This is the configurable part, and it applies in two forms:
+
+- **Both bounds** — when a trace or span is created with a caller-chosen `id`. An embedded timestamp
+  further than the window into either the past (`too_old`) or the future (`too_far_future`) is
+  rejected.
+- **The future bound only** — when a single trace or span is updated by id, and wherever an existing
+  id is referenced: a span's `traceId` and `parentSpanId`, and ids referenced by dataset items,
+  feedback scores, comments, attachments and guardrails. Old ids are legitimate on those paths — a
+  late span on a month-old trace is normal — so only future-dating is rejected.
+
+### Where the ids come from
+
+The checks live in the backend's service layer, so the creation paths are covered alike: the REST
+API, the batch ingestion endpoints, and the OpenTelemetry endpoint.
+
+Worth knowing if you only send OTel: the OpenTelemetry endpoint does not carry Opik ids, so the
+backend derives them — but it derives them from **your spans' start timestamps**, not from the
+current time, so that a trace and its spans share one reference point. An exporter replaying spans
+whose start times are outside the window is therefore rejected too, even though it never set an `id`
+itself. Backfilling historical traces over OTel needs a window wide enough to cover them.
+
+## Before you turn it on
+
+<Steps>
+  <Step title="Upgrade the LiteLLM Opik integration if you use it">
+    LiteLLM's native Opik integration emitted out-of-window ids until
+    [BerriAI/litellm#31294](https://github.com/BerriAI/litellm/pull/31294). If you send traces to
+    Opik through that integration, upgrade LiteLLM to **`v1.94.0-rc.1` or newer** before enabling
+    validation. On an older LiteLLM, ingestion through it starts returning 400 as soon as the check
+    is on.
+  </Step>
+  <Step title="Check your own instrumentation">
+    If your code passes an explicit `id` to Opik, confirm the value is a UUIDv7 built from the
+    current time. The Opik SDKs do this for you; hand-rolled ids, ids replayed from an archive, and
+    ids derived from another system's identifiers are the cases that fail.
+  </Step>
+  <Step title="Find offenders without breaking them">
+    Turn validation on in [audit mode](#audit-shadow-mode) first. Out-of-window ids are then counted
+    and logged, but still ingested, so you can identify every offending client before anything
+    starts failing.
+  </Step>
+</Steps>
+
+## Configuration
+
+| Environment variable | Helm value (`databaseAnalytics.*`) | Default | Description |
+| -------------------- | ---------------------------------- | ------- | ----------- |
+| `UUID_VALIDATION_ENABLED` | `uuidV7ValidationEnabled` | `false` | Master switch for the window check. While `false`, no timestamp check runs at ingestion. |
+| `UUID_VALIDATION_AUDIT_ONLY` | `uuidV7ValidationAuditOnly` | `false` | Count and log out-of-window ids instead of rejecting them. Only has an effect while `UUID_VALIDATION_ENABLED` is `true`. |
+| `UUID_VALIDATION_WINDOW` | `uuidV7ValidationWindow` | `24h` | How far from now an embedded timestamp may be, in either direction. Must be between `12h` and `45d`. |
+
+<Warning>
+  The window is validated at **startup, whatever `UUID_VALIDATION_ENABLED` is set to**. A value
+  outside `12h`–`45d` stops the backend from starting even when validation is switched off — so
+  turning the check off does not make an out-of-range window safe to leave behind.
+</Warning>
+
+Together the first two settings give three modes:
+
+| `UUID_VALIDATION_ENABLED` | `UUID_VALIDATION_AUDIT_ONLY` | Effective mode |
+| ------------------------- | ---------------------------- | -------------- |
+| `false` | *(ignored)* | **Disabled** — no timestamp check at ingestion. The default. |
+| `true` | `true` | **Audit** — count and log, still ingest |
+| `true` | `false` | **Reject** — HTTP 400 |
+
+### Docker Compose
+
+The Compose file reads all three from the environment, so exporting them before starting Opik is
+enough:
+
+```bash
+export UUID_VALIDATION_ENABLED=true
+export UUID_VALIDATION_AUDIT_ONLY=false
+export UUID_VALIDATION_WINDOW=24h
+
+./opik.sh
+```
+
+### Helm
+
+```yaml
+databaseAnalytics:
+  uuidV7ValidationEnabled: true
+  uuidV7ValidationAuditOnly: false
+  uuidV7ValidationWindow: 24h
+```
+
+## Audit (shadow) mode
+
+Audit mode is the safe way to introduce validation on a deployment whose clients you do not fully
+control. Out-of-window ids are counted and logged, but the write still goes through:
+
+```yaml
+databaseAnalytics:
+  uuidV7ValidationEnabled: true
+  uuidV7ValidationAuditOnly: true
+```
+
+Each detection is logged at `INFO` with a fixed, searchable prefix:
+
+```
+UUIDv7 audit: would-reject id, embedded timestamp '...' outside window '...', reason '...', resource '...', workspace '...'
+```
+
+Once no new detections are arriving for the clients you care about, set
+`uuidV7ValidationAuditOnly` back to `false` to start enforcing. Query the counter's **rate**, not
+its value, when deciding that — see below.
+
+## Monitoring
+
+Both modes increment the `opik.ingestion.uuid_v7.rejected` counter, so one query covers the whole
+rollout:
+
+| Label | Values |
+| ----- | ------ |
+| `mode` | `audit` (counted, still ingested) or `reject` (HTTP 400) |
+| `reason` | `too_old` and `too_far_future` on either path. `not_v7` only ever appears with `mode=reject` — the version check is unconditional and runs before the window check, so it never reaches the audit path. |
+| `resource` | Audit path only. The entity whose id failed: `Trace`, `Span`, `Span trace`, `Span parent`, and the referenced-id names used by the other endpoints (`dataset_item trace`, `project`, `annotation queue`, and so on). |
+| `workspace_id` | Audit path only. `unknown` on the paths that do not carry the request workspace. |
+| `http_route` | Reject path only. The matched route, for example `/v1/private/traces/batch`. |
+
+`opik.ingestion.uuid_v7.rejected` is a **cumulative, monotonic counter**: it only ever increases, so
+its value never returns to zero once a single id has failed. Gate the rollout on an interval delta
+or rate — `increase(...[1h])` or `rate(...[5m])` in PromQL, with the labels you care about — rather
+than on the raw total.
+
+Watch it for a full traffic cycle before switching from audit to reject, not just the first hours: a
+client that only runs nightly will not show up in a one-hour sample.
+
+## Turning it back off
+
+If legitimate traffic starts being rejected, you have three options, in order of preference:
+
+1. **Drop to audit mode** — keeps the signal, stops the 400s:
+   ```yaml
+   databaseAnalytics:
+     uuidV7ValidationAuditOnly: true
+   ```
+2. **Widen the window** — if the rejected ids are legitimate but just outside `24h`. The accepted
+   range is `12h`–`45d`:
+   ```yaml
+   databaseAnalytics:
+     uuidV7ValidationWindow: 48h
+   ```
+3. **Turn the check off entirely**:
+   ```yaml
+   databaseAnalytics:
+     uuidV7ValidationEnabled: false
+   ```
+
+All three take effect once the backend has restarted. Nothing is migrated and no data is rewritten,
+so any of them is safe to do at any time — writes that were rejected while the check was on are not
+recovered, though, so the client has to send them again.
+
+Note that none of these switch off the version check: a non-UUIDv7 `id` is rejected regardless.
+
+## Next steps
+
+- [Self-host troubleshooting](/self-host/troubleshooting) — other ingestion and startup failures
+- [Self-hosting overview](/self-host/overview) — how the backend picks up configuration

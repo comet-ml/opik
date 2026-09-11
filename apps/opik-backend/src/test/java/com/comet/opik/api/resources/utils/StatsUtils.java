@@ -1,16 +1,22 @@
 package com.comet.opik.api.resources.utils;
 
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.FeedbackScoreItem;
+import com.comet.opik.api.GuardrailsValidation;
+import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.ProjectStats.ProjectStatItem;
 import com.comet.opik.api.ProjectStats.SingleValueStat;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.math.Quantiles;
+import org.apache.commons.collections4.CollectionUtils;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.junit.platform.commons.util.StringUtils;
 
@@ -18,7 +24,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -30,14 +35,15 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.ProjectStats.AvgValueStat;
 import static com.comet.opik.api.ProjectStats.CountValueStat;
 import static com.comet.opik.api.ProjectStats.PercentageValueStat;
-import static com.comet.opik.api.ProjectStats.PercentageValues;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class StatsUtils {
 
@@ -62,9 +68,10 @@ public class StatsUtils {
     }
 
     public static List<ProjectStatItem<?>> getProjectTraceStatItems(List<Trace> expectedTraces) {
-        return getProjectStatItems(expectedTraces,
+        var stats = getProjectStatItems(expectedTraces,
                 expectedTraces.stream().map(Trace::usage).toList(),
                 expectedTraces.stream().map(Trace::feedbackScores).toList(),
+                expectedTraces.stream().map(Trace::spanFeedbackScores).toList(),
                 Trace::input,
                 Trace::output,
                 Trace::metadata,
@@ -72,7 +79,17 @@ public class StatsUtils {
                 Trace::startTime,
                 Trace::endTime,
                 Trace::totalEstimatedCost,
+                Trace::llmSpanCount,
+                Trace::spanCount,
+                Trace::guardrailsValidations,
+                Trace::errorInfo,
                 "trace_count");
+
+        if (CollectionUtils.isNotEmpty(expectedTraces)) {
+            stats.add(new CountValueStat(StatsMapper.THREAD_COUNT, calculateExpectedThreadCount(expectedTraces)));
+        }
+
+        return stats;
     }
 
     public static List<ProjectStatItem<?>> getProjectSpanStatItems(List<Span> expectedSpans) {
@@ -87,6 +104,7 @@ public class StatsUtils {
         return getProjectStatItems(expectedSpans,
                 list,
                 expectedSpans.stream().map(Span::feedbackScores).toList(),
+                null, // Spans don't have span feedback scores
                 Span::input,
                 Span::output,
                 Span::metadata,
@@ -107,18 +125,32 @@ public class StatsUtils {
                                 .stream()
                                 .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().intValue()));
 
-                        return CostService.calculateCost(span.model(), span.provider(), usage);
+                        return CostService.calculateCost(span.model(), span.provider(), usage, null);
                     }
 
                     return BigDecimal.ZERO;
                 },
+                null,
+                null,
+                null,
+                Span::errorInfo,
                 "span_count");
+    }
+
+    private static long calculateExpectedThreadCount(List<Trace> traces) {
+        return traces.stream()
+                .map(Trace::threadId)
+                .filter(Objects::nonNull)
+                .filter(threadId -> !threadId.isEmpty())
+                .distinct()
+                .count();
     }
 
     private static <T> List<ProjectStatItem<?>> getProjectStatItems(
             List<T> expectedEntities,
             List<Map<String, Long>> usages,
             List<List<FeedbackScore>> feedbacks,
+            List<List<FeedbackScore>> spanFeedbacks,
             Function<T, JsonNode> inputProvider,
             Function<T, JsonNode> outputProvider,
             Function<T, JsonNode> metadataProvider,
@@ -126,6 +158,10 @@ public class StatsUtils {
             Function<T, Instant> startProvider,
             Function<T, Instant> endProvider,
             Function<T, BigDecimal> totalEstimatedCostProvider,
+            Function<T, Integer> llmSpanCountProvider,
+            Function<T, Integer> spanCountProvider,
+            Function<T, List<GuardrailsValidation>> guardrailsProvider,
+            Function<T, ErrorInfo> errorProvider,
             String countLabel) {
 
         if (expectedEntities.isEmpty()) {
@@ -140,12 +176,22 @@ public class StatsUtils {
         double tags = 0;
         BigDecimal totalEstimatedCost = BigDecimal.ZERO;
         int countEstimatedCost = 0;
+        int llmSpanCount = 0;
+        int spanCount = 0;
+        long errorCount = 0;
 
         for (T entity : expectedEntities) {
             input += inputProvider.apply(entity) != null ? 1 : 0;
             output += outputProvider.apply(entity) != null ? 1 : 0;
             metadata += metadataProvider.apply(entity) != null ? 1 : 0;
             tags += tagsProvider.apply(entity) != null ? tagsProvider.apply(entity).size() : 0;
+            errorCount += errorProvider.apply(entity) != null ? 1 : 0;
+
+            llmSpanCount += llmSpanCountProvider != null &&
+                    llmSpanCountProvider.apply(entity) != null ? llmSpanCountProvider.apply(entity) : 0;
+
+            spanCount += spanCountProvider != null &&
+                    spanCountProvider.apply(entity) != null ? spanCountProvider.apply(entity) : 0;
 
             BigDecimal cost = totalEstimatedCostProvider.apply(entity) != null
                     ? totalEstimatedCostProvider.apply(entity)
@@ -168,6 +214,9 @@ public class StatsUtils {
 
         Map<String, Double> usage = calculateUsageAverage(usages);
         Map<String, Double> feedback = calculateFeedbackAverage(feedbacks);
+        Map<String, Double> spanFeedback = spanFeedbacks != null
+                ? calculateFeedbackAverage(spanFeedbacks)
+                : Map.of();
 
         stats.add(new CountValueStat(countLabel, input));
         if (!quantities.isEmpty()) {
@@ -183,17 +232,42 @@ public class StatsUtils {
                 : totalEstimatedCost.divide(BigDecimal.valueOf(countEstimatedCost), ValidationUtils.SCALE,
                         RoundingMode.HALF_UP);
 
+        Long failedGuardrails = guardrailsProvider == null
+                ? null
+                : expectedEntities.stream()
+                        .map(guardrailsProvider)
+                        .filter(Objects::nonNull)
+                        .flatMap(List::stream)
+                        .map(GuardrailsValidation::checks)
+                        .flatMap(List::stream)
+                        .filter(guardrail -> guardrail.result() == GuardrailResult.FAILED)
+                        .count();
+
         stats.add(new CountValueStat(StatsMapper.INPUT, input));
         stats.add(new CountValueStat(StatsMapper.OUTPUT, output));
         stats.add(new CountValueStat(StatsMapper.METADATA, metadata));
         stats.add(new AvgValueStat(StatsMapper.TAGS, (tags / expectedEntities.size())));
+
+        if (llmSpanCountProvider != null) {
+            var avgLlmSpanCount = llmSpanCount == 0 ? 0 : (double) llmSpanCount / expectedEntities.size();
+            stats.add(new AvgValueStat(StatsMapper.LLM_SPAN_COUNT, avgLlmSpanCount));
+        }
+
+        if (spanCountProvider != null) {
+            var avgSpanCount = spanCount == 0 ? 0 : (double) spanCount / expectedEntities.size();
+            stats.add(new AvgValueStat(StatsMapper.SPAN_COUNT, avgSpanCount));
+        }
+
         stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, totalEstimatedCostValue.doubleValue()));
+        stats.add(new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST_SUM, totalEstimatedCost.doubleValue()));
 
         usage.keySet()
                 .stream()
                 .sorted()
                 .forEach(key -> stats
                         .add(new AvgValueStat("%s.%s".formatted(StatsMapper.USAGE, key), usage.get(key))));
+
+        stats.addAll(calculateUsageSum(usages));
 
         feedback.keySet()
                 .stream()
@@ -202,10 +276,44 @@ public class StatsUtils {
                         .add(new AvgValueStat("%s.%s".formatted(StatsMapper.FEEDBACK_SCORE, key),
                                 feedback.get(key))));
 
+        // Only add span feedback scores statistics for traces (not spans) when there are actual values
+        if (spanFeedbacks != null && countLabel.equals("trace_count") && !spanFeedback.isEmpty()) {
+            spanFeedback.keySet()
+                    .stream()
+                    .sorted()
+                    .forEach(key -> stats
+                            .add(new AvgValueStat("%s.%s".formatted(StatsMapper.SPAN_FEEDBACK_SCORE, key),
+                                    spanFeedback.get(key))));
+        }
+
+        Optional.ofNullable(failedGuardrails).ifPresent(failedGuardrailCount -> stats
+                .add(new CountValueStat(StatsMapper.GUARDRAILS_FAILED_COUNT, failedGuardrailCount)));
+
+        stats.add(new CountValueStat(StatsMapper.ERROR_COUNT, errorCount));
+
         return stats;
     }
 
-    private static Map<String, Double> calculateUsageAverage(List<Map<String, Long>> data) {
+    public static List<AvgValueStat> calculateUsageSum(List<Map<String, Long>> data) {
+        return data.stream()
+                .filter(Objects::nonNull)
+                .map(Map::entrySet)
+                .flatMap(Collection::stream)
+                .collect(groupingBy(
+                        Map.Entry::getKey,
+                        mapping(Map.Entry::getValue, toList())))
+                .entrySet()
+                .stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> (AvgValueStat) AvgValueStat.builder()
+                        .name("%s.%s".formatted(StatsMapper.USAGE_SUM, e.getKey()))
+                        .value(e.getValue().stream().mapToDouble(Long::doubleValue).sum())
+                        .type(ProjectStats.StatsType.AVG)
+                        .build())
+                .toList();
+    }
+
+    public static Map<String, Double> calculateUsageAverage(List<Map<String, Long>> data) {
         return data.stream()
                 .filter(Objects::nonNull)
                 .map(Map::entrySet)
@@ -218,6 +326,20 @@ public class StatsUtils {
                 .map(e -> Map.entry(e.getKey(),
                         avgFromDoubleList(e.getValue().stream().map(Double::valueOf).toList())))
                 .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public static Map<String, Long> calculateUsage(List<Map<String, Long>> data) {
+        return data.stream()
+                .filter(Objects::nonNull)
+                .map(Map::entrySet)
+                .flatMap(Collection::stream)
+                .collect(groupingBy(
+                        Map.Entry::getKey,
+                        mapping(Map.Entry::getValue, toList())))
+                .entrySet()
+                .stream()
+                .map(e -> Map.entry(e.getKey(), e.getValue().stream().mapToLong(Long::longValue).average()))
+                .collect(toMap(Map.Entry::getKey, e -> (long) e.getValue().orElseThrow()));
     }
 
     private static Map<String, Double> calculateFeedbackAverage(List<List<FeedbackScore>> data) {
@@ -239,7 +361,7 @@ public class StatsUtils {
                 .reduce(0.0, Double::sum) / values.size();
     }
 
-    private static Double avgFromList(List<BigDecimal> values) {
+    public static Double avgFromList(List<BigDecimal> values) {
         return values.stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .doubleValue() / values.size();
@@ -279,6 +401,23 @@ public class StatsUtils {
 
             return 1;
         };
+    }
+
+    public static int compareDoubles(Double d1, Double d2) {
+        if (d1 == null && d2 == null) return 0;
+        if (d1 == null) return -1;
+        if (d2 == null) return 1;
+        return Math.abs(d1 - d2) < 1e-6 ? 0 : Double.compare(d1, d2);
+    }
+
+    /**
+     * Asserts two BigDecimals are equal, tolerating the scale differences that come back from ClickHouse.
+     * Both values must be present - a null on either side is a failure rather than a match.
+     */
+    public static void assertBigDecimalEquals(BigDecimal actual, BigDecimal expected) {
+        assertThat(actual).isNotNull();
+        assertThat(expected).isNotNull();
+        assertThat(bigDecimalComparator(actual, expected)).isZero();
     }
 
     public static int bigDecimalComparator(BigDecimal v1, BigDecimal v2) {
@@ -352,10 +491,14 @@ public class StatsUtils {
         double epsilon = .00001;
 
         // Calculate the absolute difference
-        double difference = Math.abs(numv1.doubleValue() - numv2.doubleValue());
+        BigDecimal difference = BigDecimal.valueOf(numv1.doubleValue())
+                .subtract(BigDecimal.valueOf(numv2.doubleValue())).abs();
 
         // If the difference is within the tolerance, consider them equal
-        if (difference <= epsilon) {
+        if (difference.doubleValue() <= epsilon) {
+            return 0;
+        } else if (difference.toString().replace("0", "").equals(".1")) {
+            // This is a special case where the difference is exactly 1, which should also be considered equal
             return 0;
         }
 
@@ -366,13 +509,26 @@ public class StatsUtils {
     public static Map<String, Long> aggregateSpansUsage(List<Span> spans) {
         return spans.stream()
                 .flatMap(span -> span.usage().entrySet().stream())
-                .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), Long.valueOf(entry.getValue())))
+                .map(entry -> Map.entry(entry.getKey(), Long.valueOf(entry.getValue())))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
     }
 
     public static BigDecimal aggregateSpansCost(List<Span> spans) {
         return spans.stream()
-                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage()))
+                .map(span -> CostService.calculateCost(span.model(), span.provider(), span.usage(), null))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public static Map<String, Double> calculateFeedbackBatchAverage(List<FeedbackScoreBatchItem> data) {
+        return data
+                .stream()
+                .filter(Objects::nonNull)
+                .collect(groupingBy(
+                        FeedbackScoreItem::name,
+                        mapping(FeedbackScoreItem::value, toList())))
+                .entrySet()
+                .stream()
+                .map(e -> Map.entry(e.getKey(), avgFromList(e.getValue())))
+                .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 }

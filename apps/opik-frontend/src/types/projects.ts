@@ -1,10 +1,10 @@
-import { AverageFeedbackScore, UsageData } from "@/types/shared";
+import {
+  AggregatedDuration,
+  AggregatedFeedbackScore,
+  UsageData,
+} from "@/types/shared";
 
-export interface ProjectDuration {
-  p50: number;
-  p90: number;
-  p99: number;
-}
+export const DEFAULT_PROJECT_NAME = "Default Project";
 
 export interface Project {
   id: string;
@@ -17,24 +17,35 @@ export interface Project {
   last_updated_trace_at?: string;
 }
 
+export type ProjectErrorCount = {
+  count: number;
+  deviation: number;
+  deviation_percentage: number;
+};
+
 export interface ProjectStatistic {
   project_id?: string;
   usage?: UsageData;
-  feedback_scores?: AverageFeedbackScore[];
-  total_estimated_cost?: number;
-  duration?: ProjectDuration;
+  feedback_scores?: AggregatedFeedbackScore[];
+  total_estimated_cost_sum?: number;
+  duration?: AggregatedDuration;
+  guardrails_failed_count?: number;
+  error_count?: ProjectErrorCount;
+  trace_count?: number;
+  thread_count?: number;
 }
 
 export type ProjectWithStatistic = Project & ProjectStatistic;
 
-export type ProjectMetricValue = number | null;
-
 export interface ProjectMetricDataPoint {
   time: string;
-  value: ProjectMetricValue;
+  value: number | null;
 }
 
 export interface ProjectMetricTrace {
   name: string;
   data: ProjectMetricDataPoint[];
 }
+
+export type TransformedDataValueType = null | number | string;
+export type TransformedData = { [key: string]: TransformedDataValueType };

@@ -1,3 +1,23 @@
-from .evaluator import evaluate, evaluate_prompt, evaluate_experiment
+from .evaluator import (
+    evaluate,
+    evaluate_prompt,
+    evaluate_experiment,
+    evaluate_on_dict_items,
+    evaluate_optimization_trial,
+    evaluate_resume,
+    run_tests,
+)
+from .threads.evaluator import evaluate_threads
+from .types import ErrorTolerance
 
-__all__ = ["evaluate", "evaluate_prompt", "evaluate_experiment"]
+__all__ = [
+    "ErrorTolerance",
+    "evaluate",
+    "evaluate_prompt",
+    "evaluate_experiment",
+    "evaluate_on_dict_items",
+    "evaluate_optimization_trial",
+    "evaluate_resume",
+    "evaluate_threads",
+    "run_tests",
+]

@@ -1,13 +1,16 @@
-import { trackOpikClient } from "@/decorators/track";
-import { getTrackContext, track } from "opik";
+import { getTrackOpikClient } from "@/decorators/track";
+import {
+  getTrackContext,
+  resetTracingToConfigDefault,
+  setTracingActive,
+  track,
+} from "opik";
 import { MockInstance } from "vitest";
 import { advanceToDelay } from "./utils";
-
-async function mockAPIPromise<T>() {
-  return {} as T;
-}
+import { mockAPIFunction } from "./mockUtils";
 
 describe("Track decorator", () => {
+  let trackOpikClient: ReturnType<typeof getTrackOpikClient>;
   let createSpansSpy: MockInstance<
     typeof trackOpikClient.api.spans.createSpans
   >;
@@ -20,21 +23,23 @@ describe("Track decorator", () => {
   >;
 
   beforeEach(() => {
+    trackOpikClient = getTrackOpikClient();
+
     createSpansSpy = vi
       .spyOn(trackOpikClient.api.spans, "createSpans")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateSpansSpy = vi
       .spyOn(trackOpikClient.api.spans, "updateSpan")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     createTracesSpy = vi
       .spyOn(trackOpikClient.api.traces, "createTraces")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     updateTracesSpy = vi
       .spyOn(trackOpikClient.api.traces, "updateTrace")
-      .mockImplementation(mockAPIPromise);
+      .mockImplementation(mockAPIFunction);
 
     vi.useFakeTimers();
   });
@@ -98,6 +103,74 @@ describe("Track decorator", () => {
       name: "innerf111",
       parentSpanId: spans[1]?.id,
     });
+  });
+
+  it("should run the bare function without tracing when tracking is disabled", async () => {
+    setTracingActive(false);
+
+    try {
+      let contextInsideTrack: ReturnType<typeof getTrackContext>;
+      const inner = track({ name: "inner" }, () => {
+        contextInsideTrack = getTrackContext();
+        return "inner-result";
+      });
+      const outer = track(async function outer() {
+        return inner();
+      });
+
+      const result = await outer();
+      await trackOpikClient.flush();
+
+      // The wrapped function still runs, but the decorator does not create any
+      // trace/span context and sends nothing to the backend (matches Python).
+      expect(result).toBe("inner-result");
+      expect(contextInsideTrack).toBeUndefined();
+      expect(createTracesSpy).not.toHaveBeenCalled();
+      expect(createSpansSpy).not.toHaveBeenCalled();
+      expect(updateTracesSpy).not.toHaveBeenCalled();
+      expect(updateSpansSpy).not.toHaveBeenCalled();
+    } finally {
+      resetTracingToConfigDefault();
+    }
+  });
+
+  it("should resume tracing after setTracingActive(true)", async () => {
+    setTracingActive(false);
+
+    try {
+      const disabled = track(() => "x");
+      await disabled();
+
+      setTracingActive(true);
+
+      const enabled = track({ name: "enabled" }, () => "y");
+      await enabled();
+      await trackOpikClient.flush();
+
+      expect(createTracesSpy).toHaveBeenCalledTimes(1);
+      expect(createSpansSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      resetTracingToConfigDefault();
+    }
+  });
+
+  it("should not send data for client.trace()/span() when tracking is disabled", async () => {
+    setTracingActive(false);
+
+    try {
+      const trace = trackOpikClient.trace({ name: "direct" });
+      const span = trace.span({ name: "direct-span" });
+      span.end();
+      trace.end();
+      await trackOpikClient.flush();
+
+      // The gate lives in the core primitives, so every tracing path (the
+      // decorator, integrations, and direct client calls) stops sending.
+      expect(createTracesSpy).not.toHaveBeenCalled();
+      expect(createSpansSpy).not.toHaveBeenCalled();
+    } finally {
+      resetTracingToConfigDefault();
+    }
   });
 
   it("track decorator (class methods)", async () => {

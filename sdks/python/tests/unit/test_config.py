@@ -75,3 +75,59 @@ def test_save_to_file_without_api_key(mock_expanduser, mock_open_file):
     assert parsed_config["opik"]["url_override"] == "http://test-url"
     assert parsed_config["opik"]["workspace"] == "test_workspace"
     assert "api_key" not in parsed_config["opik"]
+
+
+def test_default_llm_loaded_from_env(monkeypatch):
+    monkeypatch.setenv("OPIK_DEFAULT_LLM", "gpt-4.1-mini")
+
+    config = OpikConfig()
+
+    assert config.default_llm == "gpt-4.1-mini"
+
+
+def test_environment_loaded_from_env(monkeypatch):
+    monkeypatch.setenv("OPIK_ENVIRONMENT", "production")
+
+    config = OpikConfig()
+
+    assert config.environment == "production"
+
+
+def test_environment_defaults_to_none():
+    config = OpikConfig()
+
+    assert config.environment is None
+
+
+def test_runner_poll_interval_defaults_to_half_second():
+    config = OpikConfig()
+
+    assert config.runner_poll_interval == 0.5
+
+
+def test_runner_poll_interval_loaded_from_env(monkeypatch):
+    monkeypatch.setenv("OPIK_RUNNER_POLL_INTERVAL", "2.5")
+
+    config = OpikConfig()
+
+    assert config.runner_poll_interval == 2.5
+
+
+@patch("builtins.open", new_callable=mock_open)
+@patch("pathlib.Path.expanduser", return_value=Path("/fake/path/config.ini"))
+def test_save_to_file_does_not_persist_environment(mock_expanduser, mock_open_file):
+    config = OpikConfig(
+        url_override="http://test-url",
+        workspace="test_workspace",
+        environment="production",
+    )
+
+    config.save_to_file()
+
+    handle = mock_open_file()
+    written_content = "".join(call.args[0] for call in handle.write.call_args_list)
+
+    parsed_config = configparser.ConfigParser()
+    parsed_config.read_string(written_content)
+
+    assert "environment" not in parsed_config["opik"]

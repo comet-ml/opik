@@ -1,0 +1,217 @@
+"""Integration test for the agentic-judge tool-call loop.
+
+Drives the loop with a stub ChatModel that returns a canned tool-call
+sequence: first turn -> `read(...)`, second turn (after tool result) ->
+structured JSON verdict (no separate wrap-up round-trip).
+
+Confirms:
+- `tool_choice="auto"` on the first turn (overview is pre-seeded into
+  the user message, so the loop no longer forces a tool call).
+- `response_format` is set on every turn so the model can finalize as
+  soon as it stops calling tools.
+- The wrap-up call is skipped when the last response already carries
+  the structured verdict.
+- Verdict JSON is parsed into ScoreResult.
+"""
+
+import datetime
+import json
+from typing import Any, List, Optional, Type
+
+import pydantic
+
+from opik.evaluation.models import base_model
+from opik.evaluation.suite_evaluators.agentic.context import TraceToolContext
+from opik.evaluation.suite_evaluators.agentic.judge import AgenticLLMJudge
+from opik.message_processing.emulation import (
+    local_emulator_message_processor,
+    models,
+)
+
+
+class _StubChatModel(base_model.OpikBaseModel):
+    """Records every call and returns canned responses in order."""
+
+    def __init__(self, responses: List[base_model.ConversationDict]) -> None:
+        super().__init__(model_name="stub-model")
+        self._responses = list(responses)
+        self.calls: List[dict] = []
+
+    def generate_string(
+        self,
+        input: str,
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
+        raise NotImplementedError
+
+    def generate_provider_response(self, messages: List[dict], **kwargs: Any) -> Any:
+        raise NotImplementedError
+
+    def generate_chat_completion(
+        self,
+        messages: List[base_model.ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> base_model.ConversationDict:
+        self.calls.append(
+            {
+                "messages": list(messages),
+                "tools": kwargs.get("tools"),
+                "tool_choice": kwargs.get("tool_choice"),
+                "response_format": response_format,
+            }
+        )
+        return self._responses.pop(0)
+
+
+def _build_ctx() -> TraceToolContext:
+    start = datetime.datetime(2026, 5, 13, 12, 0, 0)
+    trace = models.TraceModel(
+        id="t-1",
+        start_time=start,
+        name="trace",
+        project_name="default",
+        source="sdk",
+        input={"q": "hi"},
+        output={"a": "hello"},
+        end_time=start + datetime.timedelta(seconds=1),
+    )
+    span = models.SpanModel(
+        id="s-1",
+        start_time=start,
+        source="sdk",
+        name="tool_call",
+        type="tool",
+    )
+    emulator = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+        active=True
+    )
+    return TraceToolContext(
+        trace=trace,
+        spans=[span],
+        parent_by_child={"s-1": None},
+        emulator=emulator,
+    )
+
+
+def test_score__full_loop__calls_read_and_produces_verdict():
+    verdict = json.dumps(
+        {
+            "assertion_1": {
+                "score": True,
+                "reason": "tool_call span found",
+                "confidence": 0.9,
+            }
+        }
+    )
+    responses: List[base_model.ConversationDict] = [
+        # Turn 1 (auto): model decides to drill in via read
+        {
+            "role": "assistant",
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {
+                        "name": "read",
+                        "arguments": '{"type": "span", "id": "s-1"}',
+                    },
+                }
+            ],
+        },
+        # Turn 2 (auto): model produces the structured verdict directly —
+        # `response_format` is set on every turn, so when no tool call is
+        # requested the content is already JSON and the loop skips the
+        # wrap-up round-trip.
+        {"role": "assistant", "content": verdict},
+    ]
+    model = _StubChatModel(responses)
+    judge = AgenticLLMJudge(assertions=["agent called the tool_call span"], model=model)
+
+    results = judge.score(_build_ctx())
+
+    assert len(results) == 1
+    assert results[0].value is True
+    assert results[0].reason == "tool_call span found"
+
+    # Inspect what the loop sent the model — two calls, no wrap-up.
+    assert len(model.calls) == 2
+    first, second = model.calls
+    assert first["tool_choice"] == "auto"
+    assert first["response_format"] is not None
+    assert first["tools"] and any(
+        spec["function"]["name"] == "read" for spec in first["tools"]
+    )
+    # `get_trace_spans` is no longer in the default registry.
+    assert not any(
+        spec["function"]["name"] == "get_trace_spans" for spec in first["tools"]
+    )
+    # Second (finalizing) turn carries both tools and response_format —
+    # the model elected to skip tools and emit the verdict directly.
+    assert second["tool_choice"] == "auto"
+    assert second["response_format"] is not None
+
+
+def test_score__model_loops_forever__terminates_within_max_rounds():
+    """If the model keeps emitting tool calls, the loop bounds at MAX_TOOL_CALL_ROUNDS."""
+    verdict = json.dumps(
+        {
+            "assertion_1": {
+                "score": False,
+                "reason": "max rounds reached",
+                "confidence": 0.5,
+            }
+        }
+    )
+    looping_call: base_model.ConversationDict = {
+        "role": "assistant",
+        "tool_calls": [
+            {
+                "id": "c",
+                "type": "function",
+                "function": {
+                    "name": "read",
+                    "arguments": '{"type": "trace", "id": "t-1"}',
+                },
+            }
+        ],
+    }
+    # 1 first turn + 10 follow-up turns (the loop body runs
+    # MAX_TOOL_CALL_ROUNDS=10 times) + 1 wrap-up == 12 responses.
+    responses: List[base_model.ConversationDict] = [looping_call] * 11 + [
+        {"role": "assistant", "content": verdict}
+    ]
+    model = _StubChatModel(responses)
+    judge = AgenticLLMJudge(assertions=["x"], model=model)
+
+    results = judge.score(_build_ctx())
+
+    assert results[0].value is False
+    # Verify the loop didn't run away — exactly the budget was used.
+    assert len(model.calls) == 12
+
+    # Regression: the loop must synthesize tool replies for the unanswered
+    # tool_calls left on the final assistant turn before sending the
+    # wrap-up. Otherwise OpenAI rejects the wrap-up with "must be followed
+    # by tool messages." Verify the wrap-up call's `messages` is
+    # well-formed: every assistant `tool_calls` block is followed by a
+    # tool message per `tool_call_id`.
+    wrapup_messages = model.calls[-1]["messages"]
+    pending_assistant_calls = None
+    for message in wrapup_messages:
+        if pending_assistant_calls is not None:
+            assert message.get("role") == "tool", (
+                "Wrap-up conversation is malformed: assistant tool_calls "
+                "must be followed immediately by tool replies."
+            )
+            assert message["tool_call_id"] in pending_assistant_calls
+            pending_assistant_calls.discard(message["tool_call_id"])
+            if not pending_assistant_calls:
+                pending_assistant_calls = None
+        elif message.get("role") == "assistant" and message.get("tool_calls"):
+            pending_assistant_calls = {c["id"] for c in message["tool_calls"]}
+    assert pending_assistant_calls is None, (
+        "Wrap-up conversation ends with unanswered tool_calls; OpenAI "
+        "would reject this with a 400."
+    )

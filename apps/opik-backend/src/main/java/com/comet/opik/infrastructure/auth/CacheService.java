@@ -1,32 +1,41 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.infrastructure.usagelimit.Quota;
 import lombok.Builder;
 
+import java.util.List;
 import java.util.Optional;
 
 interface CacheService {
 
     @Builder(toBuilder = true)
-    record AuthCredentials(String userName, String workspaceId, String workspaceName) {
+    record AuthCredentials(
+            String userName,
+            String workspaceId,
+            String workspaceName,
+            List<Quota> quotas,
+            List<String> permissions,
+            String deviceId) {
     }
 
-    void cache(String apiKey, String requestWorkspaceName, String userName, String workspaceId,
-            String resolvedWorkspaceName);
+    void cache(
+            String apiKey, String requestWorkspaceName, List<String> requiredPermissions, AuthCredentials credentials);
 
-    Optional<AuthCredentials> resolveApiKeyUserAndWorkspaceIdFromCache(String apiKey, String workspaceName);
+    Optional<AuthCredentials> resolveApiKeyUserAndWorkspaceIdFromCache(
+            String apiKey, String workspaceName, List<String> requiredPermissions);
 }
 
 class NoopCacheService implements CacheService {
 
     @Override
-    public void cache(String apiKey, String requestWorkspaceName, String userName, String workspaceId,
-            String resolvedWorkspaceName) {
+    public void cache(
+            String apiKey, String requestWorkspaceName, List<String> requiredPermissions, AuthCredentials credentials) {
         // no-op
     }
 
     @Override
-    public Optional<AuthCredentialsCacheService.AuthCredentials> resolveApiKeyUserAndWorkspaceIdFromCache(
-            String apiKey, String workspaceName) {
+    public Optional<CacheService.AuthCredentials> resolveApiKeyUserAndWorkspaceIdFromCache(
+            String apiKey, String workspaceName, List<String> requiredPermissions) {
         return Optional.empty();
     }
 }

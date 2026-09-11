@@ -1,9 +1,10 @@
 import langchain_google_vertexai
 import pytest
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
-from typing import Dict, Any
 from opik.integrations.langchain.opik_tracer import OpikTracer
+from . import google_helpers
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -11,24 +12,15 @@ from ...testlib import (
     SpanModel,
     TraceModel,
     assert_equal,
-    assert_dict_has_keys,
 )
 
 
-pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
-
-
-def _assert_usage_validity(usage: Dict[str, Any]):
-    REQUIRED_USAGE_KEYS = [
-        "completion_tokens",
-        "prompt_tokens",
-        "total_tokens",
-        "original_usage.total_token_count",
-        "original_usage.candidates_token_count",
-        "original_usage.prompt_token_count",
-    ]
-
-    assert_dict_has_keys(usage, REQUIRED_USAGE_KEYS)
+pytestmark = [
+    pytest.mark.usefixtures("ensure_vertexai_configured"),
+    pytest.mark.skip(
+        reason="Temporarily disabled: Vertex AI 429 RESOURCE_EXHAUSTED quota failures in CI"
+    ),
+]
 
 
 @pytest.mark.parametrize(
@@ -40,18 +32,16 @@ def _assert_usage_validity(usage: Dict[str, Any]):
         ),
         (
             langchain_google_vertexai.ChatVertexAI,
-            "Human: Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
         ),
     ],
 )
 def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflow(
-    fake_backend,
-    llm_model,
-    expected_input_prompt,
+    fake_backend, llm_model, expected_input_prompt
 ):
     llm = llm_model(
         max_tokens=10,
-        model_name="gemini-1.5-flash",
+        model_name=llm_constants.GEMINI_FLASH,
         name="custom-google-vertexai-llm-name",
     )
 
@@ -67,6 +57,22 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
 
     callback.flush()
 
+    if llm_model == langchain_google_vertexai.VertexAI:
+        expected_llm_span_input = {"prompts": [expected_input_prompt]}
+    else:
+        expected_llm_span_input = {
+            "messages": [
+                [
+                    ANY_DICT.containing(
+                        {
+                            "content": expected_input_prompt,
+                            "type": "human",
+                        }
+                    ),
+                ]
+            ]
+        }
+
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         name="RunnableSequence",
@@ -79,62 +85,147 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="RunnableSequence",
+                type="tool",
+                name="PromptTemplate",
                 input={"title": "Documentary about Bigfoot in Paris"},
-                output=ANY_BUT_NONE,
-                tags=["tag1", "tag2"],
+                output={"output": ANY_BUT_NONE},
                 metadata={
-                    "a": "b",
                     "created_from": "langchain",
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="tool",
-                        name="PromptTemplate",
-                        input={"title": "Documentary about Bigfoot in Paris"},
-                        output={"output": ANY_BUT_NONE},
-                        metadata={
-                            "created_from": "langchain",
-                        },
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        spans=[],
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="llm",
-                        name="custom-google-vertexai-llm-name",
-                        input={"prompts": [expected_input_prompt]},
-                        output=ANY_BUT_NONE,
-                        metadata={
-                            "batch_size": ANY_BUT_NONE,
-                            "invocation_params": ANY_DICT,
-                            "metadata": ANY_DICT,
-                            "options": ANY_DICT,
-                            "usage": ANY_DICT,
-                            "created_from": "langchain",
-                        },
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        usage=ANY_DICT,
-                        spans=[],
-                        provider="google_vertexai",
-                        model=ANY_STRING(startswith="gemini-1.5-flash"),
-                    ),
-                ],
-            )
+                source="sdk",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="custom-google-vertexai-llm-name",
+                input=expected_llm_span_input,
+                output=ANY_BUT_NONE,
+                metadata=ANY_DICT.containing(
+                    {"created_from": "langchain", "usage": ANY_DICT}
+                ),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                usage=google_helpers.EXPECTED_USAGE_GOOGLE,
+                provider="google_vertexai",
+                model=ANY_STRING.starting_with(llm_constants.GEMINI_FLASH),
+                source="sdk",
+            ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
-    llm_call_span = fake_backend.trace_trees[0].spans[0].spans[-1]
 
-    _assert_usage_validity(llm_call_span.usage)
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.parametrize(
+    "llm_model, expected_input_prompt",
+    [
+        (
+            langchain_google_vertexai.VertexAI,
+            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+        ),
+        (
+            langchain_google_vertexai.ChatVertexAI,
+            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
+        ),
+    ],
+)
+def test_langchain__google_vertexai_llm_is_used__streaming__token_usage_is_logged__happyflow(
+    fake_backend, llm_model, expected_input_prompt
+):
+    llm = llm_model(
+        max_tokens=10,
+        model_name=llm_constants.GEMINI_FLASH,
+        name="custom-google-vertexai-llm-name",
+        streaming=True,
+        stream_usage=True,
+    )
+
+    template = "Given the title of play, write a synopsys for that. Title: {title}."
+
+    prompt_template = PromptTemplate(input_variables=["title"], template=template)
+
+    synopsis_chain = prompt_template | llm
+    test_prompts = {"title": "Documentary about Bigfoot in Paris"}
+
+    callback = OpikTracer(tags=["tag1", "tag2"], metadata={"a": "b"})
+    synopsis_chain.invoke(input=test_prompts, config={"callbacks": [callback]})
+
+    callback.flush()
+
+    if llm_model == langchain_google_vertexai.VertexAI:
+        expected_llm_span_input = {"prompts": [expected_input_prompt]}
+    else:
+        expected_llm_span_input = {
+            "messages": [
+                [
+                    ANY_DICT.containing(
+                        {
+                            "content": expected_input_prompt,
+                            "type": "human",
+                        }
+                    ),
+                ]
+            ]
+        }
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="RunnableSequence",
+        input={"title": "Documentary about Bigfoot in Paris"},
+        output=ANY_BUT_NONE,
+        tags=["tag1", "tag2"],
+        metadata={
+            "a": "b",
+            "created_from": "langchain",
+        },
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="tool",
+                name="PromptTemplate",
+                input={"title": "Documentary about Bigfoot in Paris"},
+                output={"output": ANY_BUT_NONE},
+                metadata={
+                    "created_from": "langchain",
+                },
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                source="sdk",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="custom-google-vertexai-llm-name",
+                input=expected_llm_span_input,
+                output=ANY_BUT_NONE,
+                metadata=ANY_DICT.containing(
+                    {"created_from": "langchain", "usage": ANY_DICT}
+                ),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                usage=google_helpers.EXPECTED_USAGE_GOOGLE,
+                provider="google_vertexai",
+                model=ANY_STRING.starting_with(llm_constants.GEMINI_FLASH),
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert len(callback.created_traces()) == 1
+
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

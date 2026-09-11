@@ -1,5 +1,8 @@
 import { UsageData } from "@/types/shared";
+import { PROVIDER_TYPE } from "@/types/providers";
 import { CommentItems } from "./comment";
+import { GuardrailValidation } from "./guardrails";
+import { ThreadStatus } from "./thread";
 
 export enum USER_FEEDBACK_SCORE {
   dislike,
@@ -12,15 +15,48 @@ export enum FEEDBACK_SCORE_TYPE {
   online_scoring = "online_scoring",
 }
 
-export interface TraceFeedbackScore {
+export enum TRACE_VISIBILITY_MODE {
+  default = "default",
+  hidden = "hidden",
+  // Sentinel for entity-scoped views (experiment/playground/trial logs): show traces of every
+  // visibility. Never sent to the backend — it maps to "no visibility filter" (see generateVisibilityFilters).
+  all = "all",
+}
+
+export enum LOGS_SOURCE {
+  sdk = "sdk",
+  experiment = "experiment",
+  playground = "playground",
+  optimization = "optimization",
+  evaluator = "evaluator",
+}
+
+export type FeedbackScoreValueByAuthorMap = Record<
+  string,
+  {
+    value: number;
+    reason?: string;
+    category_name?: string;
+    source: FEEDBACK_SCORE_TYPE;
+    last_updated_at: string;
+    span_type?: string;
+    span_id?: string;
+    source_queue_id?: string;
+    author?: string;
+  }
+>;
+
+export type TraceFeedbackScore = {
   category_name?: string;
   reason?: string;
   name: string;
   source: FEEDBACK_SCORE_TYPE;
-  value: number;
+  created_by?: string;
   last_updated_by?: string;
   last_updated_at?: string;
-}
+  value: number;
+  value_by_author?: FeedbackScoreValueByAuthorMap;
+};
 
 export interface BaseTraceDataErrorInfo {
   exception_type: string;
@@ -42,21 +78,39 @@ export interface BaseTraceData {
   feedback_scores?: TraceFeedbackScore[];
   comments: CommentItems;
   tags: string[];
+  environment?: string;
   usage?: UsageData;
   total_estimated_cost?: number;
   error_info?: BaseTraceDataErrorInfo;
+  guardrails_validations?: GuardrailValidation[];
+}
+
+export interface ExperimentItemReference {
+  id: string;
+  name: string;
+  dataset_id: string;
+  dataset_item_id: string;
 }
 
 export interface Trace extends BaseTraceData {
+  span_count?: number;
+  llm_span_count?: number;
+  has_tool_spans?: boolean;
+  providers?: PROVIDER_TYPE[];
   thread_id?: string;
   project_id: string;
   workspace_name?: string;
+  visibility_mode?: TRACE_VISIBILITY_MODE;
+  span_feedback_scores?: TraceFeedbackScore[];
+  experiment?: ExperimentItemReference;
+  source?: LOGS_SOURCE;
 }
 
 export enum SPAN_TYPE {
   llm = "llm",
   general = "general",
   tool = "tool",
+  guardrail = "guardrail",
 }
 
 export interface Span extends BaseTraceData {
@@ -65,6 +119,8 @@ export interface Span extends BaseTraceData {
   trace_id: string;
   project_id: string;
   workspace_name?: string;
+  model?: string;
+  provider?: string;
 }
 
 export type BASE_TRACE_DATA_TYPE = SPAN_TYPE | "trace";
@@ -76,6 +132,7 @@ export interface AgentGraphData {
 
 export interface Thread {
   id: string;
+  thread_model_id: string;
   project_id: string;
   start_time: string;
   end_time: string;
@@ -83,7 +140,13 @@ export interface Thread {
   first_message: object;
   last_message: object;
   number_of_messages: number;
+  usage?: UsageData;
+  total_estimated_cost?: number;
   last_updated_at: string;
   created_by: string;
   created_at: string;
+  status: ThreadStatus;
+  feedback_scores?: TraceFeedbackScore[];
+  comments?: CommentItems;
+  tags?: string[];
 }

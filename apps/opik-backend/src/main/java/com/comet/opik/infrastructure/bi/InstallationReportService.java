@@ -5,10 +5,6 @@ import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,10 +13,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.lifecycle.GuiceyLifecycle;
 
-import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 @ImplementedBy(InstallationReportServiceImpl.class)
@@ -38,7 +32,7 @@ class InstallationReportServiceImpl implements InstallationReportService {
     private final @NonNull LockService lockService;
     private final @NonNull UsageReportService usageReport;
     private final @NonNull OpikConfiguration config;
-    private final @NonNull Client client;
+    private final @NonNull BiEventService biEventService;
 
     public void reportInstallation() {
 
@@ -77,58 +71,32 @@ class InstallationReportServiceImpl implements InstallationReportService {
                 return null;
             }
 
-            reportEvent(anonymousId, eventType);
-            return null;
-        });
+            return biEventService.reportEvent(anonymousId,
+                    eventType,
+                    NOTIFICATION_EVENT_TYPE,
+                    Map.of("opik_app_version", config.getMetadata().getVersion()));
+        }).flatMap(future -> future != null ? Mono.fromFuture(future).then() : Mono.empty());
     }
 
     private String getAnonymousId() {
-        var anonymousId = usageReport.getAnonymousId();
 
-        if (anonymousId.isEmpty()) {
-            log.info("Anonymous ID not found, generating a new one");
-            var newId = UUID.randomUUID().toString();
-            log.info("Generated new ID: {}", newId);
-
-            // Save the new ID
-            usageReport.saveAnonymousId(newId);
-
-            anonymousId = Optional.of(newId);
+        var storedId = usageReport.getAnonymousId();
+        if (storedId.isPresent()) {
+            return storedId.get();
         }
 
-        return anonymousId.get();
-    }
+        var anonymousId = config.getUsageReport().getAnonymousId();
 
-    private void reportEvent(String anonymousId, String eventType) {
-
-        var startupEvent = new BiEvent(
-                anonymousId,
-                NOTIFICATION_EVENT_TYPE,
-                Map.of("opik_app_version", config.getMetadata().getVersion()));
-
-        try (Response response = client.target(URI.create(config.getUsageReport().getUrl()))
-                .request()
-                .accept(MediaType.APPLICATION_JSON_TYPE)
-                .post(Entity.json(startupEvent))) {
-
-            if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL && response.hasEntity()) {
-
-                var notificationEventResponse = response.readEntity(NotificationEventResponse.class);
-
-                if (notificationEventResponse.success()) {
-                    usageReport.markEventAsReported(eventType);
-                    log.info("Event reported successfully: {}", notificationEventResponse.message());
-                } else {
-                    log.warn("Failed to report event: {}", notificationEventResponse.message());
-                }
-
-                return;
-            }
-
-            log.warn("Failed to report event: {}", response.getStatusInfo());
-            if (response.hasEntity()) {
-                log.warn("Response: {}", response.readEntity(String.class));
-            }
+        if (StringUtils.isNotBlank(anonymousId)) {
+            usageReport.saveAnonymousId(anonymousId);
+            return anonymousId;
         }
+
+        log.info("Anonymous ID not found, generating a new one");
+        var newId = UUID.randomUUID().toString();
+        log.info("Generated new ID: {}", newId);
+        usageReport.saveAnonymousId(newId);
+        return newId;
     }
+
 }

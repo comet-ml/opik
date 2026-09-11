@@ -1,13 +1,13 @@
 import { clients } from "@/client/Client";
 import { logger } from "@/utils/logger";
-import { trackOpikClient } from "@/decorators/track";
+import { getTrackOpikClient } from "@/decorators/track";
 
 export const flushAll = async () => {
   logger.debug("Starting flushAll operation");
   try {
     await Promise.all([
-      trackOpikClient.flush(),
-      ...clients.map((c) => c.flush()),
+      getTrackOpikClient().flush({ silent: true }),
+      ...clients.map((c) => c.flush({ silent: true })),
     ]);
     logger.debug("flushAll operation completed successfully");
   } catch (error) {

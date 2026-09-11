@@ -1,0 +1,38 @@
+name: Scout Issue Triage
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Issue number to triage
+        required: true
+        type: number
+
+# One Scout run per issue at a time
+concurrency:
+  group: scout-issue-${{ github.event.issue.number || github.event.inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Run Scout
+        uses: comet-ml/scout-repo-agent@main
+        with:
+          anthropic_api_key: ${{ secrets.SCOUT_ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+        env:
+          SCOUT_ESCALATION_TAG: ${{ vars.SCOUT_ESCALATION_TAG }}
+          SCOUT_GITHUB_REPO_OWNER: ${{ vars.SCOUT_GITHUB_REPO_OWNER }}
+          SCOUT_GITHUB_REPO_NAME: ${{ vars.SCOUT_GITHUB_REPO_NAME }}
+          OPIK_API_KEY: ${{ secrets.SCOUT_OPIK_API_KEY }}
+          OPIK_WORKSPACE: ${{ vars.SCOUT_OPIK_WORKSPACE }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}

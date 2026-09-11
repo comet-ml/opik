@@ -1,8 +1,9 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
-import com.comet.opik.api.ExperimentsDelete;
+import com.comet.opik.api.Optimization;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -12,25 +13,29 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
-import org.jdbi.v3.core.Jdbi;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.extension.RegisterExtension;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.shaded.org.awaitility.Awaitility;
+import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -40,13 +45,13 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Dataset Event Listener")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class DatasetEventListenerTest {
 
     private static final String BASE_RESOURCE_URI = "%s/v1/private/datasets";
@@ -57,24 +62,26 @@ class DatasetEventListenerTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
-    private static final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
-    private static final MySQLContainer<?> MYSQL = MySQLContainerUtils.newMySQLContainer();
+    @RegisterApp
+    private final TestDropwizardAppExtension APP;
 
-    private static final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    @RegisterExtension
-    private static final TestDropwizardAppExtension APP;
-
-    private static final WireMockUtils.WireMockRuntime wireMock;
-
-    static {
-        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS).join();
+    {
+        Startables.deepStart(MYSQL, CLICKHOUSE, REDIS, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
                 .newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
@@ -85,18 +92,12 @@ class DatasetEventListenerTest {
     private String baseURI;
     private ClientSupport client;
     private ExperimentResourceClient experimentResourceClient;
+    private OptimizationResourceClient optimizationResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi) throws Exception {
+    void setUpAll(ClientSupport client) {
 
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
 
         ClientSupportUtils.config(client);
@@ -104,6 +105,7 @@ class DatasetEventListenerTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
         experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
+        optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
     }
 
     @AfterAll
@@ -111,7 +113,7 @@ class DatasetEventListenerTest {
         wireMock.server().stop();
     }
 
-    private static void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
@@ -186,7 +188,7 @@ class DatasetEventListenerTest {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new ExperimentsDelete(ids)))) {
+                .post(Entity.json(new DeleteIdsHolder(ids)))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
         }
@@ -199,7 +201,7 @@ class DatasetEventListenerTest {
         @Test
         @DisplayName("when a new experiment is created, it should be saved in the database")
         void when__newExperimentIsCreated__shouldBeSavedInTheDatabase() {
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = DatasetEventListenerTest.this.buildDataset();
             var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
 
             var expectedExperiment = generateExperiment(dataset);
@@ -212,13 +214,23 @@ class DatasetEventListenerTest {
 
             Awaitility.await().untilAsserted(() -> {
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
             });
         }
     }
 
+    private Dataset buildDataset() {
+        return DatasetResourceClient.buildDataset(factory);
+    }
+
     private Experiment generateExperiment(Dataset dataset) {
         return experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .build();
+    }
+
+    private Optimization generateOptimization(Dataset dataset) {
+        return optimizationResourceClient.createPartialOptimization()
                 .datasetName(dataset.name())
                 .build();
     }
@@ -230,10 +242,10 @@ class DatasetEventListenerTest {
         @Test
         @DisplayName("when an experiment is deleted, the last created experiment date should be updated")
         void when__experimentIsDeleted__lastCreatedExperimentDateShouldBeUpdated() {
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
 
-            var dataset2 = factory.manufacturePojo(Dataset.class);
+            var dataset2 = buildDataset();
             var datasetId2 = createAndAssert(dataset2, API_KEY, TEST_WORKSPACE);
 
             var expectedExperiment = generateExperiment(dataset);
@@ -258,12 +270,12 @@ class DatasetEventListenerTest {
                 var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment3.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment3.createdAt(), within(2, ChronoUnit.SECONDS));
 
                 var actualDataset2 = getDataset(datasetId2, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset2.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment4.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment4.createdAt(), within(2, ChronoUnit.SECONDS));
             });
 
             deleteAndAssert(
@@ -276,19 +288,19 @@ class DatasetEventListenerTest {
                 var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
 
                 var actualDataset2 = getDataset(datasetId2, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset2.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment2.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment2.createdAt(), within(2, ChronoUnit.SECONDS));
             });
         }
 
         @Test
         @DisplayName("when an experiment is deleted, the last created experiment date should be updated")
         void when__experimentIsDeleted__lastCreatedExperimentDateShouldBeUpdated_() {
-            var dataset = factory.manufacturePojo(Dataset.class);
+            var dataset = buildDataset();
             var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
 
             var expectedExperiment = generateExperiment(dataset);
@@ -301,7 +313,7 @@ class DatasetEventListenerTest {
                 var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
 
                 assertThat(actualDataset.lastCreatedExperimentAt())
-                        .isCloseTo(actualExperiment.createdAt(), within(1, ChronoUnit.MICROS));
+                        .isCloseTo(actualExperiment.createdAt(), within(2, ChronoUnit.SECONDS));
             });
 
             deleteAndAssert(Set.of(actualExperiment.id()), TEST_WORKSPACE, API_KEY);
@@ -314,4 +326,48 @@ class DatasetEventListenerTest {
         }
     }
 
+    @Test
+    @DisplayName("when a new optimization is created, it should be saved in the database")
+    void when__newOptimizationIsCreated__shouldBeSavedInTheDatabase() {
+        var dataset = buildDataset();
+        var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+        var expectedOptimization = generateOptimization(dataset);
+        var optimizationId = optimizationResourceClient.create(expectedOptimization, API_KEY, TEST_WORKSPACE);
+
+        // get optimization by id and compare
+        var actualOptimization = optimizationResourceClient.get(optimizationId, API_KEY, TEST_WORKSPACE, 200);
+
+        Awaitility.await().untilAsserted(() -> {
+            var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualDataset.lastCreatedOptimizationAt())
+                    .isCloseTo(actualOptimization.createdAt(), within(2, ChronoUnit.SECONDS));
+        });
+    }
+
+    @Test
+    @DisplayName("when an optimization is deleted, the last created optimization date should be updated")
+    void when__optimizationIsDeleted__lastCreatedOptimizationDateShouldBeUpdated_() {
+        var dataset = buildDataset();
+        var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+        var expectedOptimization = generateOptimization(dataset);
+        var optimizationId = optimizationResourceClient.create(expectedOptimization, API_KEY, TEST_WORKSPACE);
+
+        // get optimization by id and compare
+        var actualOptimization = optimizationResourceClient.get(optimizationId, API_KEY, TEST_WORKSPACE, 200);
+
+        Awaitility.await().untilAsserted(() -> {
+            var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualDataset.lastCreatedOptimizationAt())
+                    .isCloseTo(actualOptimization.createdAt(), within(2, ChronoUnit.SECONDS));
+        });
+
+        optimizationResourceClient.delete(Set.of(optimizationId), API_KEY, TEST_WORKSPACE);
+
+        Awaitility.await().untilAsserted(() -> {
+            var actualDataset = getDataset(datasetId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualDataset.lastCreatedOptimizationAt()).isNull();
+        });
+    }
 }

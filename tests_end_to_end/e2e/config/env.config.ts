@@ -1,0 +1,186 @@
+export type Deployment = 'cloud' | 'oss' | 'self-hosted';
+
+export interface EnvConfig {
+  deployment: Deployment;
+  baseUrl: string;
+  apiBaseUrl: string;
+  workspace: string;
+
+  userEmail: string | null;
+  userPassword: string | null;
+  userName: string | null;
+  apiKey: string | null;
+
+  // Org-admin credentials for workspace-role permission tests (Configuration →
+  // Members, assigning Manage/Write/Annotate/Read). Deliberately isolated from
+  // userEmail/userPassword/workspace above: those belong to the baseline
+  // session's own org, this is a separate org's admin — the two must never be
+  // required to share an org/workspace, so the workspace-role fixture targets
+  // adminWorkspace, never `workspace`. deleteUserApiKey is the superuser
+  // admin-API-key used for disposable-user cleanup only, against
+  // deleteUserBaseUrl; unrelated to adminEmail/adminPassword's org-admin
+  // session (and to AdminCtx.adminApiKey, the org-admin's own Opik API key
+  // used for workspace-scoped seeding/cleanup — a different credential that
+  // happens to share the word "admin").
+  adminEmail: string | null;
+  adminPassword: string | null;
+  deleteUserApiKey: string | null;
+  deleteUserBaseUrl: string | null;
+  adminWorkspace: string | null;
+
+  features: {
+    ollie: boolean;
+    opikConnect: boolean;
+    llmJudges: boolean;
+  };
+
+  runId: string;
+  cujPrefix: string;
+
+  leaveFailures: boolean;
+  skipLlmJudges: boolean;
+
+  scratchRoot: string;
+  artifactsRoot: string;
+
+  productionReadOnly: null;
+}
+
+function stampRunId(): string {
+  const now = new Date();
+  const pad = (n: number, w: number) => String(n).padStart(w, '0');
+  return `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1, 2)}${pad(now.getUTCDate(), 2)}-${pad(now.getUTCHours(), 2)}${pad(now.getUTCMinutes(), 2)}${pad(now.getUTCSeconds(), 2)}-${pad(now.getUTCMilliseconds(), 3)}`;
+}
+
+function resolveRunId(envOverride: string | undefined): string {
+  // Honour an explicit OPIK_RUN_ID first (lets globalSetup propagate the same id to
+  // worker processes via env). Otherwise cache a single per-process stamp so the
+  // setup → tests → teardown chain inside one node process agrees on cujPrefix.
+  if (envOverride) return envOverride;
+  if (processRunId === null) processRunId = stampRunId();
+  return processRunId;
+}
+
+let processRunId: string | null = null;
+
+function boolFromEnv(v: string | undefined, fallback: boolean): boolean {
+  if (v === undefined) return fallback;
+  return v.toLowerCase() === 'true' || v === '1';
+}
+
+type DeploymentDefaults = {
+  baseUrl: string;
+  workspace: string;
+  ollie: boolean;
+  opikConnect: boolean;
+};
+
+const DEPLOYMENT_DEFAULTS: Record<Deployment, DeploymentDefaults> = {
+  cloud: { baseUrl: '', workspace: '', ollie: true, opikConnect: true },
+  oss: { baseUrl: 'http://localhost:5173', workspace: 'default', ollie: false, opikConnect: false },
+  'self-hosted': { baseUrl: '', workspace: '', ollie: false, opikConnect: true },
+};
+
+export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
+  const deployment = (env.OPIK_DEPLOYMENT ?? 'oss') as Deployment;
+  if (!['cloud', 'oss', 'self-hosted'].includes(deployment)) {
+    throw new Error(`Invalid OPIK_DEPLOYMENT: ${deployment}`);
+  }
+
+  const defaults = DEPLOYMENT_DEFAULTS[deployment];
+
+  const userEmail = env.OPIK_TEST_USER_EMAIL ?? null;
+  const userPassword = env.OPIK_TEST_USER_PASSWORD ?? null;
+  const userName = env.OPIK_TEST_USER_NAME ?? null;
+
+  const apiKey = env.OPIK_API_KEY ?? null;
+
+  // Org-admin session for the workspace-role permission suite — dedicated
+  // OPIK_PERM_-prefixed vars (own account, own org) rather than reusing
+  // comet-automation-tests' generic USER_EMAIL/PASSWORD, so it's unambiguous
+  // this identity belongs to the permission tests specifically. deleteUserBaseUrl
+  // has no established default (it's a distinct internal admin host, not
+  // necessarily rootBase) — leave null until wired for real in CI; consumers
+  // must treat a missing deleteUserBaseUrl/deleteUserApiKey as "cleanup
+  // unavailable", not throw.
+  const adminEmail = env.OPIK_PERM_USER_EMAIL ?? null;
+  const adminPassword = env.OPIK_PERM_USER_PASSWORD ?? null;
+  const deleteUserApiKey = env.ADMIN_API_KEY ?? null;
+  // Trailing slash guaranteed: deleteCometUser builds `${deleteUserBaseUrl}delete-user`
+  // with no separator, so a misconfigured value without one would silently
+  // concatenate into a malformed URL rather than fail loudly.
+  const rawDeleteUserBaseUrl = env.ADMIN_BASE_URL ?? null;
+  const deleteUserBaseUrl = rawDeleteUserBaseUrl && !rawDeleteUserBaseUrl.endsWith('/') ? `${rawDeleteUserBaseUrl}/` : rawDeleteUserBaseUrl;
+  // The workspace-role admin's own org/workspace — deliberately a separate
+  // var from OPIK_WORKSPACE so the two credential sets never have to share an
+  // org. Not defaulted to `workspace`: an unset value should hard-skip the
+  // workspace-role suite (see hasWorkspaceRoleTestCredentials), not silently
+  // fall back to the baseline org.
+  const adminWorkspace = env.WORKSPACE_ROLES_WORKSPACE ?? null;
+
+  // For cloud/self-hosted we always need a way to mint a browser session,
+  // because the UI sits behind an auth wall. Two paths:
+  //   1. (Canonical CI path) OPIK_TEST_USER_EMAIL + OPIK_TEST_USER_PASSWORD —
+  //      globalSetup logs in once per run and persists .auth/user.json.
+  //   2. (Power-user debug path) OPIK_API_KEY + a pre-captured .auth/user.json
+  //      on disk — globalSetup detects the file and skips the login round-trip.
+  // The presence of .auth/user.json can't be checked here (this module is
+  // imported from many places, some before global-setup runs), so we accept
+  // either signal and let globalSetup throw a specific error if neither path
+  // can produce a usable storage state.
+  if (deployment !== 'oss' && !apiKey && (!userEmail || !userPassword)) {
+    throw new Error(
+      `${deployment} deployment requires OPIK_TEST_USER_EMAIL + OPIK_TEST_USER_PASSWORD ` +
+        '(canonical CI path) — or OPIK_API_KEY plus a pre-captured .auth/user.json ' +
+        '(local debug path). None provided.',
+    );
+  }
+
+  const rawBaseUrl = env.OPIK_BASE_URL ?? defaults.baseUrl;
+  if (!rawBaseUrl) {
+    throw new Error(`OPIK_BASE_URL is required for deployment=${deployment}`);
+  }
+  const trimmed = rawBaseUrl.replace(/\/+$/, '');
+  const baseUrl = trimmed.endsWith('/api') ? trimmed.slice(0, -'/api'.length) : trimmed;
+
+  const workspace = env.OPIK_WORKSPACE ?? (deployment === 'oss' ? 'default' : (userName ?? ''));
+  if (deployment !== 'oss' && !workspace) {
+    throw new Error(
+      `${deployment} deployment requires a workspace — set OPIK_WORKSPACE or OPIK_TEST_USER_NAME (Comet-Workspace header must be present for private REST calls)`,
+    );
+  }
+
+  const skipLlmJudges = boolFromEnv(env.SKIP_LLM_JUDGES, false);
+  const hasAnthropicKey = !!env.ANTHROPIC_API_KEY;
+
+  const runId = resolveRunId(env.OPIK_RUN_ID);
+
+  return {
+    deployment,
+    baseUrl,
+    apiBaseUrl: `${baseUrl}/api`,
+    workspace,
+    userEmail,
+    userPassword,
+    userName,
+    apiKey,
+    adminEmail,
+    adminPassword,
+    deleteUserApiKey,
+    deleteUserBaseUrl,
+    adminWorkspace,
+    features: {
+      ollie: boolFromEnv(env.OLLIE_ENABLED, defaults.ollie),
+      opikConnect: boolFromEnv(env.OPIK_CONNECT_ENABLED, defaults.opikConnect),
+      llmJudges: hasAnthropicKey && !skipLlmJudges,
+    },
+    runId,
+    cujPrefix: `cuj-${runId}`,
+    leaveFailures: boolFromEnv(env.OPIK_LEAVE_FAILURES, false),
+    skipLlmJudges,
+    scratchRoot: env.OPIK_SCRATCH_ROOT ?? './.test-scratch',
+    artifactsRoot: env.OPIK_ARTIFACTS_ROOT ?? './test-results',
+    productionReadOnly: null,
+  };
+}
+

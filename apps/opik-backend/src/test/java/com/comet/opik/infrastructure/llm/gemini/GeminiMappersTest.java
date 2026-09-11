@@ -1,17 +1,18 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
+import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
 import com.comet.opik.podam.PodamFactoryUtils;
-import dev.ai4j.openai4j.chat.AssistantMessage;
-import dev.ai4j.openai4j.chat.ChatCompletionChoice;
-import dev.ai4j.openai4j.chat.ChatCompletionRequest;
-import dev.ai4j.openai4j.chat.Message;
-import dev.ai4j.openai4j.shared.Usage;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionChoice;
+import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
+import dev.langchain4j.model.openai.internal.chat.Message;
+import dev.langchain4j.model.openai.internal.shared.Usage;
 import dev.langchain4j.model.output.FinishReason;
-import dev.langchain4j.model.output.Response;
 import dev.langchain4j.model.output.TokenUsage;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -37,15 +38,17 @@ public class GeminiMappersTest {
         @Test
         void testToResponse() {
             var request = ChatCompletionRequest.builder().model(podamFactory.manufacturePojo(String.class)).build();
-            var response = new Response<>(aiMessage(podamFactory.manufacturePojo(String.class)),
-                    new TokenUsage(podamFactory.manufacturePojo(Integer.class),
-                            podamFactory.manufacturePojo(Integer.class)),
-                    FinishReason.STOP);
-            var actual = LlmProviderGeminiMapper.INSTANCE.toChatCompletionResponse(request, response);
+            var response = ChatResponse.builder()
+                    .aiMessage(aiMessage(podamFactory.manufacturePojo(String.class)))
+                    .tokenUsage(new TokenUsage(podamFactory.manufacturePojo(Integer.class),
+                            podamFactory.manufacturePojo(Integer.class)))
+                    .finishReason(FinishReason.STOP)
+                    .build();
+            var actual = LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
             assertThat(actual).isNotNull();
             assertThat(actual.model()).isEqualTo(request.model());
             assertThat(actual.choices()).isEqualTo(List.of(ChatCompletionChoice.builder()
-                    .message(AssistantMessage.builder().content(response.content().text()).build())
+                    .message(AssistantMessage.builder().content(response.aiMessage().text()).build())
                     .build()));
             assertThat(actual.usage()).isEqualTo(Usage.builder()
                     .promptTokens(response.tokenUsage().inputTokenCount())
@@ -57,7 +60,7 @@ public class GeminiMappersTest {
         @ParameterizedTest
         @MethodSource
         void testToChatMessage(Message message, ChatMessage expected) {
-            ChatMessage actual = LlmProviderGeminiMapper.INSTANCE.toChatMessage(message);
+            ChatMessage actual = LlmProviderLangChainMapper.INSTANCE.toChatMessage(message);
             assertThat(actual).isEqualTo(expected);
         }
 
@@ -65,9 +68,10 @@ public class GeminiMappersTest {
             var content = podamFactory.manufacturePojo(String.class);
             return Stream.of(
                     arguments(AssistantMessage.builder().content(content).build(), AiMessage.from(content)),
-                    arguments(dev.ai4j.openai4j.chat.UserMessage.builder().content(content).build(),
+                    arguments(dev.langchain4j.model.openai.internal.chat.UserMessage.builder().content(content).build(),
                             UserMessage.from(content)),
-                    arguments(dev.ai4j.openai4j.chat.SystemMessage.builder().content(content).build(),
+                    arguments(
+                            dev.langchain4j.model.openai.internal.chat.SystemMessage.builder().content(content).build(),
                             SystemMessage.from(content)));
         }
     }

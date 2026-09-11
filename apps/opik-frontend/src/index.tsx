@@ -3,15 +3,20 @@ import * as Sentry from "@sentry/react";
 
 import "tailwindcss/tailwind.css";
 
-import App from "@/components/App";
+import React, { Suspense } from "react";
 import usePluginsStore from "@/store/PluginsStore";
+import Loader from "@/shared/Loader/Loader";
 import { APP_VERSION } from "@/constants/app";
+import { runLocalStorageMigrations } from "@/lib/ls-migrations";
 
 import "./main.scss";
 import { IS_SENTRY_ENABLED, SENTRY_DSN, SENTRY_MODE } from "@/config";
 
 // other styles
 import "react18-json-view/src/style.css";
+import "react18-json-view/src/dark.css";
+
+const V2App = React.lazy(() => import("@/v2/App"));
 
 const container = document.getElementById("root") as HTMLDivElement;
 const root = createRoot(container);
@@ -26,5 +31,14 @@ if (IS_SENTRY_ENABLED) {
   });
 }
 
-usePluginsStore.getState().setupPlugins(import.meta.env.MODE);
-root.render(<App />);
+async function bootstrap() {
+  await usePluginsStore.getState().setupPlugins();
+  runLocalStorageMigrations();
+  root.render(
+    <Suspense fallback={<Loader />}>
+      <V2App />
+    </Suspense>,
+  );
+}
+
+void bootstrap();

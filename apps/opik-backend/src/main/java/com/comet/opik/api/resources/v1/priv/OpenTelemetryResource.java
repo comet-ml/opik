@@ -5,7 +5,9 @@ import com.comet.opik.domain.OpenTelemetryService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.AsyncUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -33,14 +35,16 @@ public class OpenTelemetryResource {
     @Path("/traces")
     @POST
     @Consumes("application/x-protobuf")
-    public Response receiveProtobufTraces(ExportTraceServiceRequest request) {
+    public Response receiveProtobufTraces(
+            @Schema(implementation = JsonNode.class, ref = "JsonNode") ExportTraceServiceRequest request) {
         return handleOtelTraceRequest(request);
     }
 
     @Path("/traces")
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
-    public Response receiveJsonTraces(ExportTraceServiceRequest request) {
+    public Response receiveJsonTraces(
+            @Schema(implementation = JsonNode.class, ref = "JsonNode") ExportTraceServiceRequest request) {
         return handleOtelTraceRequest(request);
     }
 

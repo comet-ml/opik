@@ -1,0 +1,80 @@
+# Test prompt + model configuration for Prompt Playground provider sanity tests.
+#
+# `options` is the model-config knob exercised by the test (in addition to the
+# baseline prompt run). Each test sets these options on the variant before
+# clicking Run. Keep values conservative — don't set max_tokens: 1.
+providers:
+  openai:
+    display_name: "OpenAI"
+    provider_name: "OpenAI"
+    api_key_env_var: "OPENAI_API_KEY"
+    models:
+      - name: "GPT 4o Mini"
+        ui_selector: "GPT 4o Mini"
+        enabled: true
+        options:
+          temperature: 0
+          max_tokens: 128
+  anthropic:
+    display_name: "Anthropic"
+    provider_name: "Anthropic"
+    api_key_env_var: "ANTHROPIC_API_KEY"
+    models:
+      - name: "Claude Haiku 4.5"
+        ui_selector: "Claude Haiku 4.5"
+        enabled: true
+        options:
+          temperature: 0
+          max_tokens: 128
+  gemini:
+    display_name: "Gemini"
+    provider_name: "Gemini"
+    api_key_env_var: "GEMINI_API_KEY"
+    models:
+      - name: "Gemini 2.5 Flash"
+        ui_selector: "Gemini 2.5 Flash"
+        enabled: true
+        options:
+          temperature: 0
+  openrouter-custom:
+    display_name: "OpenRouter (Custom)"
+    provider_type: "custom"
+    provider_name: "openrouter"
+    base_url: "https://openrouter.ai/api/v1"
+    api_key_env_var: "OPENROUTER_API_KEY"
+    models:
+      - name: "openai/gpt-4o-mini"
+        ui_selector: "openai/gpt-4o-mini"
+        enabled: true
+        options:
+          temperature: 0
+          max_tokens: 128
+  # Hermetic entries against the suite's mock gateway (services/mock-token-auth/,
+  # spawned by Playwright's webServer). No external keys: `api_key`/`auth` are the
+  # mock's fixed identities. The oauth entry covers OPIK-7940 dynamic token auth.
+  mock-custom-static:
+    display_name: "Mock gateway (Custom, static key)"
+    provider_type: "custom"
+    provider_name: "mock-static"
+    base_url: "http://localhost:9878/v1"
+    api_key: "mock-static-key"
+    models:
+      - name: "mock-model-static"
+        ui_selector: "mock-model-static"
+        enabled: true
+  mock-custom-oauth:
+    display_name: "Mock gateway (Custom, OAuth2 token auth)"
+    provider_type: "custom"
+    provider_name: "mock-oauth-sanity"
+    base_url: "http://localhost:9878/v1"
+    auth:
+      token_url: "http://localhost:9878/oauth/token"
+      client_id: "opik-test"
+      client_secret: "opik-secret"
+    models:
+      - name: "mock-model-oauth"
+        ui_selector: "mock-model-oauth"
+        enabled: true
+test_config:
+  test_prompt: "Explain what is an LLM in one paragraph."
+  response_timeout_seconds: 60

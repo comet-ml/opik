@@ -1,0 +1,7 @@
+# Requirements for the Python SDK load-test suite.
+# Install the Opik SDK separately (e.g. `pip install -e sdks/python` from
+# the repo root, or `pip install opik` for the published package) — this
+# file only pins the suite's runtime dependencies.
+pytest
+pytest-timeout
+pytest-xdist

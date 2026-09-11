@@ -1,7 +1,8 @@
-from .. import test_result
-from typing import Protocol
+from typing import Protocol, TypeVar
+
+T = TypeVar("T", covariant=True)
 
 
-class EvaluationTask(Protocol):
-    def __call__(self) -> test_result.TestResult:
+class EvaluationTask(Protocol[T]):
+    def __call__(self) -> T:
         pass

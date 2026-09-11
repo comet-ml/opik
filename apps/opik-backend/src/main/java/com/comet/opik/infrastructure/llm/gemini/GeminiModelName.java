@@ -1,22 +1,78 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
+import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+import java.util.Arrays;
+import java.util.Optional;
 
 /**
- * Langchain4j doesn't provide gemini models enum.
  * This information is taken from <a href="https://ai.google.dev/gemini-api/docs/models/gemini">gemini docs</a>
  */
+@Slf4j
+@Getter
 @RequiredArgsConstructor
-public enum GeminiModelName {
-    GEMINI_2_0_FLASH("gemini-2.0-flash-exp"),
-    GEMINI_1_5_FLASH("gemini-1.5-flash"),
-    GEMINI_1_5_FLASH_8B("gemini-1.5-flash-8b"),
-    GEMINI_1_5_PRO("gemini-1.5-pro"),
-    GEMINI_1_0_PRO("gemini-1.0-pro"),
-    TEXT_EMBEDDING("text-embedding-004"),
-    AQA("aqa");
+public enum GeminiModelName implements StructuredOutputSupported {
+    AQA("aqa", false),
+    GEMINI_1_0_PRO("gemini-1.0-pro", false),
+    GEMINI_1_5_FLASH_LATEST("gemini-1.5-flash-latest", true),
+    GEMINI_1_5_PRO_LATEST("gemini-1.5-pro-latest", true),
+    GEMINI_2_0_FLASH("gemini-2.0-flash", true),
+    GEMINI_2_0_FLASH_LITE("gemini-2.0-flash-lite", true),
+    GEMINI_2_5_FLASH("gemini-2.5-flash", true),
+    GEMINI_2_5_FLASH_IMAGE("gemini-2.5-flash-image", true),
+    GEMINI_2_5_FLASH_LITE("gemini-2.5-flash-lite", true),
+    GEMINI_2_5_PRO("gemini-2.5-pro", true),
+    GEMINI_3_FLASH("gemini-3-flash-preview", true),
+    GEMINI_3_PRO_IMAGE("gemini-3-pro-image", false),
+    GEMINI_3_PRO_IMAGE_PREVIEW("gemini-3-pro-image-preview", true),
+    GEMINI_3_PRO("gemini-3-pro-preview", true),
+    GEMINI_3_1_FLASH_IMAGE("gemini-3.1-flash-image", false),
+    GEMINI_3_1_FLASH_IMAGE_PREVIEW("gemini-3.1-flash-image-preview", true),
+    GEMINI_3_1_FLASH_LITE("gemini-3.1-flash-lite", false),
+    GEMINI_3_1_FLASH_LITE_IMAGE("gemini-3.1-flash-lite-image", false),
+    GEMINI_3_1_FLASH_LITE_PREVIEW("gemini-3.1-flash-lite-preview", true),
+    GEMINI_3_1_FLASH_TTS_PREVIEW("gemini-3.1-flash-tts-preview", false),
+    GEMINI_3_1_PRO("gemini-3.1-pro-preview", true),
+    GEMINI_3_5_FLASH("gemini-3.5-flash", false),
+    GEMINI_3_5_FLASH_LITE("gemini-3.5-flash-lite", false),
+    GEMINI_3_5_TRANSCRIBE("gemini-3.5-transcribe", false),
+    GEMINI_3_6_FLASH("gemini-3.6-flash", false),
+    GEMINI_3_7_FLASH("gemini-3.7-flash", false),
+    GEMINI_3_8_FLASH("gemini-3.8-flash", false),
+    GEMINI_FLASH_LATEST_HIGH_RES_EXP("gemini-flash-latest-high-res-exp", false),
+    GEMINI_OMNI_1_1_FLASH("gemini-omni-1.1-flash", false),
+    GEMINI_OMNI_FLASH_PREVIEW("gemini-omni-flash-preview", false),
+    GEMINI_PRO_VISION("gemini-pro-vision", false),
+    GEMMA_4_26B_A4B_IT("gemma-4-26b-a4b-it", false),
+    GEMMA_4_31B_IT("gemma-4-31b-it", false),
+    LYRIA_3_CLIP_PREVIEW("lyria-3-clip-preview", false),
+    LYRIA_3_PRO_PREVIEW("lyria-3-pro-preview", false),
+    LYRIA_3_5("lyria-3.5", false),
+    NANO_BANANA_PRO_PREVIEW("nano-banana-pro-preview", false),
+    TEXT_EMBEDDING("text-embedding-004", false);
+
+    private static final String WARNING_UNKNOWN_MODEL = "could not find GeminiModelName with value '{}'";
 
     private final String value;
+    private final boolean structuredOutputSupported;
+
+    @Override
+    public boolean isStructuredOutputSupported() {
+        return this.structuredOutputSupported;
+    }
+
+    public static Optional<GeminiModelName> byValue(String value) {
+        var response = Arrays.stream(GeminiModelName.values())
+                .filter(modelName -> modelName.value.equals(value))
+                .findFirst();
+        if (response.isEmpty()) {
+            log.warn(WARNING_UNKNOWN_MODEL, value);
+        }
+        return response;
+    }
 
     @Override
     public String toString() {

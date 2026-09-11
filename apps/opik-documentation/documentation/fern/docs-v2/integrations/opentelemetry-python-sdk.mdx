@@ -1,0 +1,191 @@
+---
+headline: OpenTelemetry Python SDK
+og:description: Learn to instrument your Python applications with OpenTelemetry SDK
+  to effectively send trace data to Opik for better observability.
+og:site_name: Opik Documentation
+og:title: Instrument Your Python Apps with OpenTelemetry - Opik
+subtitle: How to send data to Opik using the OpenTelemetry Python SDK
+title: OpenTelemetry Python SDK
+toc_max_heading_level: 4
+---
+
+# Using the OpenTelemetry Python SDK
+
+This guide shows you how to directly instrument your Python applications with the OpenTelemetry SDK to send trace data to Opik.
+
+## Installation
+
+First, install the required OpenTelemetry packages:
+
+```bash
+pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+```
+
+## Full Example
+
+Here's a complete example that demonstrates how to instrument a chatbot application with OpenTelemetry and send the traces to Opik:
+
+```python
+# Dependencies: opentelemetry-exporter-otlp
+
+import os
+import time
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.semconv.resource import ResourceAttributes
+
+
+# Configure OpenTelemetry
+
+# For comet.com
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "https://www.comet.com/opik/api/v1/private/otel"
+os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = "Authorization=<your-api-key>,Comet-Workspace=<your-workspace-name>,projectName=<your-project-name>"
+
+# Configure the tracer provider
+resource = Resource.create({
+    ResourceAttributes.SERVICE_NAME: "opentelemetry-example"
+})
+
+# Create a tracer provider
+tracer_provider = TracerProvider(resource=resource)
+
+# Set up the OTLP HTTP exporter
+otlp_exporter = OTLPSpanExporter()
+
+# Add the exporter to the tracer provider
+tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+
+# Set the tracer provider
+trace.set_tracer_provider(tracer_provider)
+
+# Get a tracer
+tracer = trace.get_tracer("example-tracer")
+
+def main():
+    # Simulate user request
+    user_request = "What's the weather like today?"
+
+    # Create a parent span representing the entire chatbot conversation
+    with tracer.start_as_current_span("chatbot_conversation") as conversation_span:
+        print(f"User request: {user_request}")
+
+        # Add user request as an attribute to the parent span
+        conversation_span.set_attribute("input", user_request)
+        conversation_span.set_attribute("conversation.id", "conv_12345")
+        conversation_span.set_attribute("conversation.type", "weather_inquiry")
+
+        # Add thread ID as an attribute to the parent span to group related spans into
+        # a single conversational thread
+        conversation_span.set_attribute("thread_id", "user_12345")
+
+        # Process the user request
+
+        # Simulate initial processing
+        time.sleep(0.2)
+
+        # Create a child span for LLM generation using GenAI conventions
+        with tracer.start_as_current_span("llm_completion") as llm_span:
+            print("Generating LLM response...")
+
+            # Create a prompt for the LLM
+            llm_prompt = f"User question: {user_request}\n\nProvide a concise answer about the weather."
+
+            # Add GenAI semantic convention attributes
+            llm_span.set_attribute("gen_ai.operation.name", "completion")
+            llm_span.set_attribute("gen_ai.system", "gpt")
+            llm_span.set_attribute("gen_ai.request.model", "gpt-4")
+            llm_span.set_attribute("gen_ai.response.model", "gpt-4")
+            llm_span.set_attribute("gen_ai.request.input", llm_prompt)  # Add the prompt
+            llm_span.set_attribute("gen_ai.usage.input_tokens", 10)  # Example token count
+            llm_span.set_attribute("gen_ai.usage.output_tokens", 25)  # Example token count
+            llm_span.set_attribute("gen_ai.usage.total_tokens", 35)   # Example token count
+            llm_span.set_attribute("gen_ai.request.temperature", 0.7)
+            llm_span.set_attribute("gen_ai.request.max_tokens", 100)
+
+            # Simulate LLM thinking time
+            time.sleep(0.5)
+
+            # Generate chatbot response
+            chatbot_response = "It's sunny with a high of 75°F in your area today!"
+
+            # Set response in the LLM span
+            llm_span.set_attribute("gen_ai.response.output", chatbot_response)
+
+            print("LLM generation completed")
+
+        # Back in parent span context
+        conversation_span.set_attribute("output", chatbot_response)
+        # Response has been generated
+
+        print(f"Chatbot response: {chatbot_response}")
+
+if __name__ == "__main__":
+    main()
+
+    # Ensure all spans are flushed before the program exits
+    tracer_provider.shutdown()
+
+    print("\nSpans have been sent to OpenTelemetry collector.")
+    print("If you configured Comet.com, you can view the traces in your Comet project.")
+```
+
+Using `thread_id` as a span attribute allows you to group related spans into a single conversational thread.
+Created threads can be used to evaluate multi-turn conversations as described in the [Multi-turn conversations](/evaluation/evaluate_threads) guide.
+
+## Linking OpenTelemetry spans to an existing Opik trace
+
+If a service instrumented with OpenTelemetry is invoked by another service that is already producing an Opik trace (via the Opik SDK or `@track`), you can link the OpenTelemetry spans to the existing Opik trace and parent span by propagating two HTTP headers (`opik_trace_id`, `opik_parent_span_id`) and calling the Opik bridging helper on the receiving side. The helper sets the `opik.trace_id` / `opik.parent_span_id` attributes on the OpenTelemetry boundary span so the Opik OTLP ingest endpoint attaches the span to the right parent.
+
+### Recommended setup: register `OpikSpanProcessor`
+
+`distributed_trace.attach_to_parent` only sets the Opik attributes on the *boundary* span. Children created inside that span via `start_as_current_span` inherit OTel context but not those attributes — without extra wiring they end up orphaned in a synthetic Opik trace. Register `OpikSpanProcessor` on the same `TracerProvider` as your OTLP exporter to propagate the Opik IDs down the entire attached subtree:
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opik.integrations.otel import OpikSpanProcessor
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+
+# Mints opik.span_id and threads opik.trace_id / opik.parent_span_id onto every
+# descendant of a span that was attached via distributed_trace.attach_to_parent.
+provider.add_span_processor(OpikSpanProcessor())
+
+trace.set_tracer_provider(provider)
+```
+
+The processor stamps Opik IDs onto a span when any of the following holds, in order of precedence:
+
+1. the parent span already carries Opik attributes (set by `attach_to_parent` on the boundary, or by an earlier processor pass);
+2. they are inherited from upstream W3C `baggage` (cross-process);
+3. an `@track` span is active in the current process (see below).
+
+Spans that match none of these are left untouched, so OpenTelemetry-only traces are unaffected.
+
+### Same-process: OpenTelemetry spans inside an `@track` function
+
+When an OpenTelemetry-instrumented library (for example logfire / PydanticAI) emits spans from inside an `@track`-decorated function, there is no boundary span and no `baggage` to inherit from — `@track` keeps its own context, not an OpenTelemetry one. With `OpikSpanProcessor` registered, those spans are attached to the active `@track` span automatically, producing a single trace instead of a separate synthetic one. No `attach_to_parent` call or header propagation is needed:
+
+```python
+import opik
+from opentelemetry import trace
+
+tracer = trace.get_tracer("my-service")
+
+@opik.track
+def handler(question: str) -> str:
+    # Spans started here nest under the `handler` span automatically.
+    with tracer.start_as_current_span("retrieve"):
+        ...
+    return "answer"
+```
+
+This is an in-process bridge. The cross-process case (service A → service B) still requires header propagation via `attach_to_parent`, since there is no shared context to read from.
+
+For the full client/server pattern with Python and TypeScript examples, see [Distributed Traces with a Remote Service Using OpenTelemetry](/tracing/advanced/log_distributed_traces#distributed-traces-with-a-remote-service-using-opentelemetry).

@@ -4,10 +4,10 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
-import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
@@ -20,11 +20,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
-import java.sql.SQLException;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -39,7 +39,7 @@ class MysqlRdsIamE2eTest {
 
     /// See PR: https://github.com/comet-ml/opik/pull/306
     // RDS DB endpoint, port, and database name
-    // JDBC URL format: jdbc:aws-wrapper:mysql://<rds-endpoint>:<port>/<db-name>?createDatabaseIfNotExist=true&rewriteBatchedStatements=true
+    // JDBC URL format: jdbc:aws-wrapper:mysql://<rds-endpoint>:<port>/<db-name>?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
     // DB endpoint: <rds-instance>.<region>.rds.amazonaws.com
     // AWS Driver only supports rds.amazonaws.com endpoints, not custom endpoints
     private static final String MYSQL_TEMPLATE_URL = "jdbc:aws-wrapper:mysql://%s";
@@ -48,19 +48,20 @@ class MysqlRdsIamE2eTest {
     private static final String AWS_JDBC_DRIVER = "software.amazon.jdbc.Driver";
     private static final String TEST_WORKSPACE = "default";
 
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(ZOOKEEPER_CONTAINER);
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
 
     {
-        Startables.deepStart(CLICKHOUSE, REDIS).join();
+        Startables.deepStart(CLICKHOUSE, REDIS, ZOOKEEPER_CONTAINER).join();
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE,
                 ClickHouseContainerUtils.DATABASE_NAME);
 
-        String rdsEndpoint = "<rds-instance>.<aws-region>.rds.amazonaws.com:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true";
+        String rdsEndpoint = "<rds-instance>.<aws-region>.rds.amazonaws.com:3306/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true";
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 AppContextConfig.builder()
@@ -77,15 +78,12 @@ class MysqlRdsIamE2eTest {
     private ClientSupport client;
 
     @BeforeAll
-    void beforeAll(ClientSupport client, Jdbi jdbi) throws SQLException {
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
+    void beforeAll(ClientSupport client, Jdbi jdbi) {
 
-        try (var connection = CLICKHOUSE.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, MigrationUtils.CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
+        MigrationUtils.runMysqlDbMigration(jdbi);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
-        baseURI = "http://localhost:%d".formatted(client.getPort());
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
 
         ClientSupportUtils.config(client);

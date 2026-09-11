@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Optional, Dict
 
-import mock
+from unittest import mock
 
 
 class AnyButNone:
@@ -22,8 +22,17 @@ class AnyButNone:
 class AnyDict:
     """A helper object that compares equal to all dicts."""
 
+    def __init__(self, containing: Optional[Dict] = None):
+        self.containing_items = containing
+
     def __eq__(self, other):
-        if isinstance(other, dict):
+        if not isinstance(other, dict):
+            return False
+
+        if self.containing_items is None:
+            return True
+
+        if other.items() >= self.containing_items.items():
             return True
 
         return False
@@ -32,7 +41,12 @@ class AnyDict:
         return not self.__eq__(other)
 
     def __repr__(self):
-        return "<ANY_DICT>"
+        if self.containing_items is None:
+            return "<ANY_DICT>"
+        return "<ANY_DICT_WITH_CONTAIN_CONDITION>"
+
+    def containing(self, containing: Dict):
+        return AnyDict(containing)
 
 
 class AnyList:
@@ -54,27 +68,48 @@ class AnyList:
 class AnyString:
     """A helper object that provides partial equality check to strings."""
 
-    def __init__(self, startswith: Optional[str] = None):
-        self.startswith = startswith
+    def __init__(
+        self, startswith: Optional[str] = None, containing: Optional[str] = None
+    ):
+        self._startswith = startswith
+        self._containing = containing
 
     def __eq__(self, other):
         if not isinstance(other, str):
             return False
 
-        if self.startswith is None:
+        if self._startswith is None and self._containing is None:
             return True
 
-        if other.startswith(self.startswith):
-            return True
+        if self._startswith is not None and not other.startswith(self._startswith):
+            return False
 
-        return False
+        if self._containing is not None and self._containing not in other:
+            return False
+
+        return True
 
     def __repr__(self):
-        return "<ANY_STRING>"
+        conditions = []
+        if self._startswith is not None:
+            conditions.append(f"startswith='{self._startswith}'")
+        if self._containing is not None:
+            conditions.append(f"containing='{self._containing}'")
+
+        if not conditions:
+            return "<ANY_STRING>"
+
+        return f"<ANY_STRING({', '.join(conditions)})>"
+
+    def starting_with(self, startswith: str):
+        return AnyString(startswith=startswith, containing=self._containing)
+
+    def containing(self, containing: str):
+        return AnyString(startswith=self._startswith, containing=containing)
 
 
 ANY = mock.ANY
 ANY_BUT_NONE = AnyButNone()
 ANY_DICT = AnyDict()
 ANY_LIST = AnyList()
-ANY_STRING = AnyString
+ANY_STRING = AnyString()

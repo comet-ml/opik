@@ -1,0 +1,179 @@
+package com.comet.opik.domain;
+
+import com.comet.opik.api.Dashboard;
+import com.comet.opik.api.DashboardUpdate;
+import com.comet.opik.infrastructure.db.DashboardScopeMapper;
+import com.comet.opik.infrastructure.db.DashboardTypeMapper;
+import com.comet.opik.infrastructure.db.JsonNodeArgumentFactory;
+import com.comet.opik.infrastructure.db.JsonNodeColumnMapper;
+import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
+import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
+import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
+import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
+import org.jdbi.v3.sqlobject.customizer.BindMap;
+import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.customizer.Define;
+import org.jdbi.v3.sqlobject.statement.SqlQuery;
+import org.jdbi.v3.sqlobject.statement.SqlUpdate;
+import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+@RegisterArgumentFactory(UUIDArgumentFactory.class)
+@RegisterArgumentFactory(JsonNodeArgumentFactory.class)
+@RegisterArgumentFactory(DashboardTypeMapper.class)
+@RegisterArgumentFactory(DashboardScopeMapper.class)
+@RegisterColumnMapper(JsonNodeColumnMapper.class)
+@RegisterColumnMapper(DashboardTypeMapper.class)
+@RegisterColumnMapper(DashboardScopeMapper.class)
+@RegisterConstructorMapper(Dashboard.class)
+public interface DashboardDAO {
+
+    @SqlUpdate("INSERT INTO dashboards(id, workspace_id, project_id, name, slug, description, config, type, scope, created_by, last_updated_by) "
+            +
+            "VALUES (:dashboard.id, :workspaceId, :dashboard.projectId, :dashboard.name, :dashboard.slug, :dashboard.description, :dashboard.config, :dashboard.type, :dashboard.scope, :dashboard.createdBy, :dashboard.lastUpdatedBy)")
+    void save(@BindMethods("dashboard") Dashboard dashboard, @Bind("workspaceId") String workspaceId);
+
+    @SqlUpdate("""
+            UPDATE dashboards SET
+                name = COALESCE(:dashboard.name, name),
+                slug = COALESCE(:slug, slug),
+                description = COALESCE(:dashboard.description, description),
+                config = COALESCE(:dashboard.config, config),
+                type = COALESCE(:dashboard.type, type),
+                last_updated_by = :lastUpdatedBy
+            WHERE id = :id AND workspace_id = :workspaceId
+            <if(scope)> AND scope = :scope <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    int update(@Bind("workspaceId") String workspaceId,
+            @Bind("id") UUID id,
+            @BindMethods("dashboard") DashboardUpdate dashboard,
+            @Bind("slug") String slug,
+            @Bind("lastUpdatedBy") String lastUpdatedBy,
+            @Define("scope") @Bind("scope") String scope);
+
+    @SqlQuery("""
+            SELECT * FROM dashboards WHERE id = :id AND workspace_id = :workspaceId
+            <if(scope)> AND scope = :scope <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Optional<Dashboard> findById(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
+            @Define("scope") @Bind("scope") String scope);
+
+    @SqlQuery("""
+            SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND name = :name
+            <if(project_id)> AND project_id = :projectId <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    Optional<Dashboard> findByName(@Bind("workspaceId") String workspaceId, @Bind("name") String name,
+            @Define("project_id") @Bind("projectId") UUID projectId);
+
+    @SqlUpdate("""
+            DELETE FROM dashboards WHERE id = :id AND workspace_id = :workspaceId
+            <if(scope)> AND scope = :scope <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    int delete(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
+            @Define("scope") @Bind("scope") String scope);
+
+    /**
+     * An insights request also matches rows with no project, because project dashboards created before
+     * project scoping have none and hiding them would lose access to them. A workspace dashboard is
+     * project-less by design, so a workspace request stays strict.
+     */
+    @SqlQuery("SELECT COUNT(id) FROM dashboards " +
+            "WHERE workspace_id = :workspaceId " +
+            "<if(search)> AND name like concat('%', :search, '%') <endif>" +
+            "<if(project_id)>" +
+            "<if(insights_scope)> AND (project_id = :projectId OR project_id IS NULL) " +
+            "<else> AND project_id = :projectId " +
+            "<endif>" +
+            "<endif>" +
+            "<if(scope)> AND scope = :scope <endif>" +
+            "<if(filters)> AND <filters> <endif>")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    long findCount(@Bind("workspaceId") String workspaceId,
+            @Define("search") @Bind("search") String search,
+            @Define("project_id") @Bind("projectId") UUID projectId,
+            @Define("insights_scope") boolean insightsScope,
+            @Define("scope") @Bind("scope") String scope,
+            @Define("filters") String filters,
+            @BindMap Map<String, Object> filterMapping);
+
+    /**
+     * Returns the ordered ids for a single page, selecting only {@code id} so the sort stays narrow.
+     * <p>
+     * Part of the two-step page fetch (OPIK-6482): this query does the ordering and pagination, then
+     * {@link #findByIds(Collection, String)} loads the row bodies. Selecting the large JSON
+     * {@code config} column here would make MySQL 8.0.20+ pack it into the filesort addon and raise
+     * {@code ER_OUT_OF_SORTMEMORY} (HTTP 500) once a single {@code config} exceeds
+     * {@code sort_buffer_size}; selecting only {@code id} keeps the sort buffer narrow regardless of
+     * config size.
+     *
+     * @return the page's ids in the requested order; the caller must preserve this order when
+     *         assembling the result
+     */
+    @SqlQuery("SELECT id FROM dashboards " +
+            "WHERE workspace_id = :workspaceId " +
+            "<if(search)> AND name like concat('%', :search, '%') <endif> " +
+            "<if(project_id)>" +
+            "<if(insights_scope)> AND (project_id = :projectId OR project_id IS NULL) " +
+            "<else> AND project_id = :projectId " +
+            "<endif>" +
+            "<endif>" +
+            "<if(scope)> AND scope = :scope <endif>" +
+            "<if(filters)> AND <filters> <endif> " +
+            "ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
+            "LIMIT :limit OFFSET :offset")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<UUID> findPageIdsSorted(@Bind("workspaceId") String workspaceId,
+            @Define("search") @Bind("search") String search,
+            @Define("project_id") @Bind("projectId") UUID projectId,
+            @Define("insights_scope") boolean insightsScope,
+            @Define("scope") @Bind("scope") String scope,
+            @Define("filters") String filters,
+            @BindMap Map<String, Object> filterMapping,
+            @Define("sort_fields") String sortingFields,
+            @Bind("limit") int limit,
+            @Bind("offset") int offset);
+
+    /**
+     * Loads the full row bodies for a page of ids, without an {@code ORDER BY}.
+     * <p>
+     * The caller re-orders the result by the id list from
+     * {@link #findPageIdsSorted(String, String, UUID, String, String, Map, String, int, int)}, so the
+     * JSON {@code config} column never passes through a sort. Callers must skip this call when
+     * {@code ids} is empty, as {@code IN ()} is invalid SQL.
+     */
+    @SqlQuery("SELECT * FROM dashboards WHERE workspace_id = :workspaceId AND id IN (<ids>)")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<Dashboard> findByIds(@BindList("ids") Collection<UUID> ids, @Bind("workspaceId") String workspaceId);
+
+    @SqlQuery("SELECT COUNT(*) FROM dashboards WHERE workspace_id = :workspaceId AND slug LIKE concat(:slugPrefix, '%')")
+    long countBySlugPrefix(@Bind("workspaceId") String workspaceId, @Bind("slugPrefix") String slugPrefix);
+
+    @SqlUpdate("""
+            DELETE FROM dashboards WHERE id IN (<ids>) AND workspace_id = :workspaceId
+            <if(scope)> AND scope = :scope <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId,
+            @Define("scope") @Bind("scope") String scope);
+}

@@ -1,46 +1,88 @@
-FROM maven:3.9.9-amazoncorretto-21-al2023 AS build
+FROM maven:3.9.16-amazoncorretto-25-al2023 AS build
 
 WORKDIR /opt/opik-backend
 
+# Copy parent POM first for dependency caching
 COPY pom.xml spotless.xml ./
+RUN mvn dependency:go-offline
+
+# Copy source code
 COPY src ./src
 
-ENV MAVEN_OPTS="-Xmx1G -XX:MaxMetaspaceSize=265m"
-
+# Build artifact
 ARG OPIK_VERSION
+ENV MAVEN_OPTS="-Xmx1G -XX:MaxMetaspaceSize=265m"
+# The image only needs the shaded main jar. maven.test.skip drops test
+# compilation (nothing consumes a test-jar), and source/javadoc skip drops
+# artifacts the runtime image never uses — trimming the package stage without
+# changing what ships. (-T is a no-op here: single-module build, no reactor.)
 RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
-    mvn clean package -DskipTests
+    mvn clean package -Dmaven.test.skip=true -Dmaven.source.skip=true -Dmaven.javadoc.skip=true -Dspotless.skip=true
 
 ###############################
-FROM amazoncorretto:21.0.6-al2023
+FROM amazoncorretto:25.0.3-al2023
 
-RUN yum update -y && yum install -y shadow ca-certificates openssl perl \
-    && yum clean all
-VOLUME /tmp
-# Add bundle URL from https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html
-ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /tmp/certs/global-bundle.pem
-ADD install_rds_cert.sh .
+# Add metadata labels
+LABEL org.opencontainers.image.title="Opik Backend"
+LABEL org.opencontainers.image.description="Opik Backend Service"
+LABEL org.opencontainers.image.vendor="Comet ML"
 
-# A Truststore password needs to be configured and passed as build-arg
+# Install dependencies, download and verify AWS RDS certificate bundle
+# SHA256 checksum must match the official AWS RDS global bundle
+# Update this checksum when AWS updates the bundle: https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+ARG RDS_CERT_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
+# Not a secret: `changeit` is the stock JDK truststore password, and this truststore holds only
+# public AWS RDS CA certificates. Flagged because the variable name matches hadolint's heuristic.
+# hadolint ignore=DL3064
 ARG STORE_PASSWORD=changeit
+COPY install_rds_cert.sh /tmp/install_rds_cert.sh
+# perl is intentionally not installed: it pulls in perl-Archive-Tar, which is
+# affected by CVE-2026-9538 (ALAS2023-2026-1805) and has no patched AL2023 RPM.
+# install_rds_cert.sh uses sed/openssl instead of perl to extract the cert CN.
+# pipefail so the `sha256sum -c` failing inside the piped RUN below aborts the build.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# DL3033: AL2023 core packages track a rolling security channel; pinning exact
+# RPM versions here would rot as AWS updates the base image's repos.
+# hadolint ignore=DL3033
+RUN yum update -y && \
+    yum install -y --allowerasing shadow ca-certificates openssl dos2unix curl && \
+    yum clean all && \
+    rm -rf /var/cache/yum && \
+    mkdir -p /tmp/certs && \
+    curl -fsSL -o /tmp/certs/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
+    echo "${RDS_CERT_SHA256}  /tmp/certs/global-bundle.pem" | sha256sum -c - && \
+    dos2unix /tmp/install_rds_cert.sh && \
+    chmod 700 /tmp/install_rds_cert.sh && \
+    /tmp/install_rds_cert.sh /tmp/certs/global-bundle.pem $STORE_PASSWORD && \
+    rm -f /tmp/install_rds_cert.sh /tmp/certs/global-bundle.pem && \
+    rmdir /tmp/certs
 
-# install RDS certificates
-RUN chmod 700 install_rds_cert.sh \
-    && ./install_rds_cert.sh /tmp/certs/global-bundle.pem $STORE_PASSWORD \
-    && rm install_rds_cert.sh /tmp/certs/global-bundle.pem
-
+# Set up application directory
 WORKDIR /opt/opik
-COPY config.yml lombok.config entrypoint.sh run_db_migrations.sh ./
-COPY redoc/ redoc/
 
-RUN chmod +x ./*.sh
-COPY --from=build /opt/opik-backend/target/openapi.yaml redoc/
-COPY --from=build /opt/opik-backend/target/*.jar ./
+# Copy application files
+COPY --chown=1001:1001 config.yml lombok.config entrypoint.sh run_db_migrations.sh rebaseline_db_changelog.sh provision_agent_insights_readonly_user.sh opik-otel-views.yaml ./
+COPY --chown=1001:1001 redoc/ redoc/
 
+# Prepare shell scripts
+RUN dos2unix ./*.sh && chmod +x ./*.sh
+
+# Copy built artifacts from build stage
+COPY --from=build --chown=1001:1001 /opt/opik-backend/target/openapi.yaml redoc/
+COPY --from=build --chown=1001:1001 /opt/opik-backend/target/*.jar ./
+
+# Set environment variables
+ARG OPIK_VERSION
+ENV OPIK_VERSION=${OPIK_VERSION}
+
+# Expose ports
 EXPOSE 8080
 EXPOSE 3003
 
-ARG OPIK_VERSION
-ENV OPIK_VERSION=${OPIK_VERSION}
+# Set /tmp permissions with sticky bit (more secure than 777)
+RUN chmod 1777 /tmp
+
+# Switch to non-root user
+USER 1001:1001
 
 CMD ["./entrypoint.sh"]

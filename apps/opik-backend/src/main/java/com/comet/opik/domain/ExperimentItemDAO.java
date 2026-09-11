@@ -1,7 +1,12 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentItem;
-import com.comet.opik.api.ExperimentItemSearchCriteria;
+import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts;
+import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCriteria;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -15,23 +20,22 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.reactivestreams.Publisher;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.TemplateUtils.QueryItem;
-import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static com.comet.opik.utils.template.TemplateUtils.QueryItem;
+import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -45,8 +49,25 @@ class ExperimentItemDAO {
     }
 
     /**
-     * The query validates if already exists with this id. Failing if so.
-     * That way only insert is allowed, but not update.
+     * Plain multi-row insert. Duplicate ids are tolerated rather than rejected: {@code experiment_items} is
+     * a {@code ReplicatedReplacingMergeTree(last_updated_at)} (migration 000017), so re-posting an existing
+     * id appends a new version that wins dedup — which is why {@link #SELECT} carries
+     * {@code ORDER BY last_updated_at DESC LIMIT 1} and {@link #STREAM} carries {@code LIMIT 1 BY id}.
+     * {@code ExperimentItemService} only validates the UUID version of client-supplied ids, not their
+     * existence.
+     *
+     * <p>{@code created_at} is deliberately absent from the column list, so the column DEFAULT
+     * ({@code now64}) stamps it server-side. Keep it that way: the stalled-run reaper reads it as its
+     * item-level liveness signal ({@code OptimizationDAO#FIND_STALLED_STUDIO_OPTIMIZATIONS}, OPIK-7459),
+     * and binding it from the client, or adding a path that rewrites an existing row's value, would let a
+     * dead run look alive or a live one look dead.
+     *
+     * <p>The invariant is per physical row — nothing rewrites a row's {@code created_at} — not per item id.
+     * A client re-posting an old trial's item id publishes a NEW version dated now, which the reaper reads
+     * as fresh progress. The other paths in this class that affect the signal are the two lightweight
+     * deletes ({@link #DELETE}, {@link #DELETE_BY_EXPERIMENT_IDS}): the reaper's probes read raw rows with
+     * no {@code FINAL}, so deleting a running trial's items removes the liveness rows and makes a live run
+     * read as silent.
      */
     private static final String INSERT = """
             INSERT INTO experiment_items (
@@ -55,10 +76,13 @@ class ExperimentItemDAO {
                 dataset_item_id,
                 trace_id,
                 workspace_id,
+                project_id,
                 created_by,
-                last_updated_by
+                last_updated_by,
+                execution_policy
             )
-            VALUES
+            SETTINGS log_comment = '<log_comment>'
+            FORMAT Values
                   <items:{item |
                      (
                         :id<item.index>,
@@ -66,8 +90,10 @@ class ExperimentItemDAO {
                         :dataset_item_id<item.index>,
                         :trace_id<item.index>,
                         :workspace_id,
+                        :project_id<item.index>,
                         :created_by<item.index>,
-                        :last_updated_by<item.index>
+                        :last_updated_by<item.index>,
+                        :execution_policy<item.index>
                     )
                      <if(item.hasNext)>
                         ,
@@ -84,102 +110,400 @@ class ExperimentItemDAO {
             AND workspace_id = :workspace_id
             ORDER BY last_updated_at DESC
             LIMIT 1
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SELECT_TARGET_PROJECTS = """
+            WITH experiment_items_trace_scope AS (
+                SELECT DISTINCT trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN :experiment_ids
+            )
+            SELECT DISTINCT project_id
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
     private static final String STREAM = """
-            WITH experiment_items_scope as (
+            WITH experiment_aggregated_scope_ids AS (
+                SELECT
+                    id
+                FROM experiment_aggregates
+                WHERE workspace_id = :workspace_id
+                AND id IN :experiment_ids
+            ), experiment_items_ids AS (
+                SELECT
+                    DISTINCT id, trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN :experiment_ids
+                AND experiment_id NOT IN (SELECT id FROM experiment_aggregated_scope_ids)
+                <if(project_id)> AND project_id = :project_id <endif>
+                <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
+                ORDER BY id DESC, last_updated_at DESC
+                LIMIT 1 BY id
+                <if(has_raw && !has_aggregated)>LIMIT :limit<endif>
+            ), experiment_item_aggregates_final AS (
+                SELECT
+                    *
+                FROM experiment_item_aggregates AS eia
+                WHERE eia.workspace_id = :workspace_id
+                AND eia.experiment_id IN :experiment_ids
+                AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
+                <if(project_id)> AND eia.project_id = :project_id <endif>
+                <if(lastRetrievedId)> AND eia.id \\< :lastRetrievedId <endif>
+                ORDER BY eia.id DESC, eia.last_updated_at DESC
+                LIMIT 1 BY eia.id
+                <if(has_aggregated && !has_raw)>LIMIT :limit<endif>
+            ), experiment_items_scope AS (
                 SELECT
                     *
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN :experiment_ids
-                <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
+                AND id IN (SELECT id FROM experiment_items_ids)
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
-                LIMIT :limit
+            ), feedback_scores_deduped AS (
+                  SELECT
+                      workspace_id,
+                      project_id,
+                      entity_id,
+                      name,
+                      category_name,
+                      value,
+                      reason,
+                      source,
+                      created_by,
+                      last_updated_by,
+                      created_at,
+                      last_updated_at,
+                      author,
+                      source_queue_id
+                  FROM (
+                      SELECT
+                          workspace_id,
+                          project_id,
+                          entity_id,
+                          name,
+                          category_name,
+                          value,
+                          reason,
+                          source,
+                          created_by,
+                          last_updated_by,
+                          created_at,
+                          last_updated_at,
+                          feedback_scores.last_updated_by AS author,
+                          CAST('' AS FixedString(36)) AS source_queue_id
+                      FROM feedback_scores
+                      WHERE entity_type = 'trace'
+                        AND workspace_id = :workspace_id
+                        <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                        AND entity_id IN (SELECT trace_id FROM experiment_items_ids)
+                      UNION ALL
+                      SELECT
+                          workspace_id,
+                          project_id,
+                          entity_id,
+                          name,
+                          category_name,
+                          value,
+                          reason,
+                          source,
+                          created_by,
+                          last_updated_by,
+                          created_at,
+                          last_updated_at,
+                          author,
+                          source_queue_id
+                      FROM authored_feedback_scores
+                      WHERE entity_type = 'trace'
+                        AND workspace_id = :workspace_id
+                        <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                        AND entity_id IN (SELECT trace_id FROM experiment_items_ids)
+                  )
+                  ORDER BY last_updated_at DESC
+                  LIMIT 1 BY workspace_id, project_id, entity_id, name, author, source_queue_id
+            ), feedback_scores_grouped AS (
+                  SELECT
+                      workspace_id,
+                      project_id,
+                      entity_id,
+                      name,
+                      groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at, source_queue_id)) AS entries
+                  FROM feedback_scores_deduped
+                  GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
-            	SELECT
-                	entity_id,
-                    name,
-                    category_name,
-                    value,
-                    reason,
-                    source,
-                    created_at,
-                    last_updated_at,
-                    created_by,
-                    last_updated_by
-                FROM feedback_scores
-                WHERE workspace_id = :workspace_id
-                AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                LIMIT 1 BY entity_id, name
+                  SELECT
+                      workspace_id,
+                      project_id,
+                      entity_id,
+                      name,
+                      arrayStringConcat(arrayMap(e -> e.3, entries), ', ') AS category_name,
+                      IF(length(entries) = 1, arrayElement(entries, 1).1, toDecimal64(arrayAvg(arrayMap(e -> e.1, entries)), 9)) AS value,
+                      arrayStringConcat(arrayMap(e -> e.2, entries), ', ') AS reason,
+                      arrayElement(entries, 1).4 AS source,
+                      mapFromArrays(
+                          arrayMap(e -> if(e.10 = '', e.5, concat(e.5, '_', toString(e.10))), entries),
+                          arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9, '', '', e.10, e.5), entries)
+                      ) AS value_by_author,
+                      arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
+                      arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
+                      arrayMin(arrayMap(e -> e.8, entries)) AS created_at,
+                      arrayMax(arrayMap(e -> e.9, entries)) AS last_updated_at
+                  FROM feedback_scores_grouped
             ), comments_final AS (
-                SELECT
-                    id AS comment_id,
-                    text,
-                    created_at AS comment_created_at,
-                    last_updated_at AS comment_last_updated_at,
-                    created_by AS comment_created_by,
-                    last_updated_by AS comment_last_updated_by,
-                    entity_id
-                FROM comments
-                WHERE workspace_id = :workspace_id
-                AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
-                ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                  SELECT
+                      id AS comment_id,
+                      text,
+                      created_at AS comment_created_at,
+                      last_updated_at AS comment_last_updated_at,
+                      created_by AS comment_created_by,
+                      last_updated_by AS comment_last_updated_by,
+                      entity_id
+                  FROM comments
+                  WHERE workspace_id = :workspace_id
+                  <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_ids)
+                  ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                  LIMIT 1 BY id
+            ), feedback_scores_per_trace AS (
+                  SELECT
+                      entity_id,
+                      toJSONString(
+                          groupUniqArray(
+                              CAST(
+                                  (
+                                      name,
+                                      category_name,
+                                      value,
+                                      reason,
+                                      toString(source),
+                                      concat(replaceOne(toString(created_at), ' ', 'T'), 'Z'),
+                                      concat(replaceOne(toString(last_updated_at), ' ', 'T'), 'Z'),
+                                      created_by,
+                                      last_updated_by,
+                                      mapFromArrays(
+                                      mapKeys(value_by_author),
+                                      arrayMap(
+                                          v -> CAST(
+                                              (
+                                                  v.1,
+                                                  v.2,
+                                                  v.3,
+                                                  toString(v.4),
+                                                  concat(replaceOne(toString(v.5), ' ', 'T'), 'Z'),
+                                                  v.6,
+                                                  v.7,
+                                                  v.8,
+                                                  v.9
+                                              ),
+                                              'Tuple(
+                                                  value Decimal(18,9),
+                                                  reason String,
+                                                  category_name String,
+                                                  source String,
+                                                  last_updated_at String,
+                                                  span_type String,
+                                                  span_id String,
+                                                  source_queue_id String,
+                                                  author String
+                                              )'
+                                          ),
+                                          mapValues(value_by_author)
+                                      )
+                                  )
+                                  ),
+                                  'Tuple(
+                                      name String,
+                                      category_name String,
+                                      value Decimal(18,9),
+                                      reason String,
+                                      source String,
+                                      created_at String,
+                                      last_updated_at String,
+                                      created_by String,
+                                      last_updated_by String,
+                                      value_by_author Map(
+                                          String,
+                                          Tuple(
+                                              value Decimal(18,9),
+                                              reason String,
+                                              category_name String,
+                                              source String,
+                                              last_updated_at String,
+                                              span_type String,
+                                              span_id String,
+                                              source_queue_id String,
+                                              author String
+                                          )
+                                      )
+                                  )'
+                              )
+                          )
+                      ) AS feedback_scores_array
+                  FROM feedback_scores_final
+                  GROUP BY entity_id
+            ), comments_per_trace AS (
+                  SELECT
+                      entity_id,
+                      toJSONString(groupUniqArray(CAST(
+                          (comment_id, text,
+                           concat(replaceOne(toString(comment_created_at), ' ', 'T'), 'Z'),
+                           concat(replaceOne(toString(comment_last_updated_at), ' ', 'T'), 'Z'),
+                           comment_created_by, comment_last_updated_by, entity_id),
+                          'Tuple(
+                              id FixedString(36),
+                              text String,
+                              created_at String,
+                              last_updated_at String,
+                              created_by String,
+                              last_updated_by String,
+                              entity_id FixedString(36)
+                          )'
+                      ))) AS comments_array_agg
+                  FROM comments_final
+                  GROUP BY entity_id
+            ), assertion_results_per_trace AS (
+                  SELECT
+                      entity_id,
+                      toJSONString(
+                          groupArray(
+                              CAST(
+                                  (name, toString(passed), reason),
+                                  'Tuple(value String, passed String, reason String)'
+                              )
+                          )
+                      ) AS assertions_array
+                  FROM assertion_results
+                  WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                    AND entity_id IN (SELECT trace_id FROM experiment_items_ids)
+                  GROUP BY entity_id
             )
-            SELECT
-                ei.id,
-                ei.experiment_id,
-                ei.dataset_item_id,
-                ei.trace_id,
-                tfs.input,
-                tfs.output,
-                tfs.feedback_scores_array,
-                tfs.comments_array_agg,
-                ei.created_at,
-                ei.last_updated_at,
-                ei.created_by,
-                ei.last_updated_by
-            FROM experiment_items_scope AS ei
-            LEFT JOIN (
-                SELECT
-                    t.id,
-                    t.input,
-                    t.output,
-                    groupUniqArray(tuple(fs.*)) AS feedback_scores_array,
-                    groupUniqArray(tuple(c.*)) AS comments_array_agg
-                FROM (
-                    SELECT
-                        id,
-                        <if(truncate)> replaceRegexpAll(input, '<truncate>', '"[image]"') as input <else> input <endif>,
-                        <if(truncate)> replaceRegexpAll(output, '<truncate>', '"[image]"') as output <else> output <endif>
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_items_scope)
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS t
-                LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
-                LEFT JOIN comments_final AS c ON t.id = c.entity_id
-                GROUP BY
-                    t.id,
-                    t.input,
-                    t.output
-            ) AS tfs ON ei.trace_id = tfs.id
-            ORDER BY ei.experiment_id DESC
-            ;
-            """;
+              SELECT
+                  *
+              FROM (
+                  <if(has_aggregated)>
+                  -- Branch 1: pre-computed values from experiment_item_aggregates (COMPLETED/CANCELLED experiments)
+                  SELECT
+                      ei.id AS id,
+                      ei.experiment_id  AS experiment_id,
+                      ei.dataset_item_id AS dataset_item_id,
+                      ei.trace_id   AS trace_id,
+                      ei.project_id AS project_id,
+                      <if(truncate)> replaceRegexpAll(if(notEmpty(ei.input_slim), ei.input_slim, ei.input), '<truncate>', '"[image]"') <else> ei.input <endif> AS input,
+                      <if(truncate)> replaceRegexpAll(if(notEmpty(ei.output_slim), ei.output_slim, ei.output), '<truncate>', '"[image]"') <else> ei.output <endif> AS output,
+                      ei.feedback_scores_array AS feedback_scores_array,
+                      ei.comments_array_agg AS comments_array_agg,
+                      ei.total_estimated_cost AS total_estimated_cost,
+                      ei.usage AS usage,
+                      ei.duration AS duration,
+                      ei.created_at AS created_at,
+                      ei.last_updated_at AS last_updated_at,
+                      ei.created_by AS created_by,
+                      ei.last_updated_by AS last_updated_by,
+                      ei.visibility_mode AS trace_visibility_mode,
+                      ei.execution_policy,
+                      ei.assertions_array AS assertions_array
+                  FROM experiment_item_aggregates_final AS ei
+                  <endif>
+
+                  <if(has_aggregated)><if(has_raw)>UNION ALL<endif><endif>
+
+                  <if(has_raw)>
+                  -- Branch 2: on-the-fly computation via JOINs for experiments not in aggregates
+                  SELECT
+                      ei.id AS id,
+                      ei.experiment_id AS experiment_id,
+                      ei.dataset_item_id AS dataset_item_id,
+                      ei.trace_id AS trace_id,
+                      ei.project_id AS project_id,
+                      tfs.input AS input,
+                      tfs.output AS output,
+                      fsp.feedback_scores_array AS feedback_scores_array,
+                      cp.comments_array_agg AS comments_array_agg,
+                      tfs.total_estimated_cost AS total_estimated_cost,
+                      tfs.usage AS usage,
+                      tfs.duration AS duration,
+                      ei.created_at AS created_at,
+                      ei.last_updated_at AS last_updated_at,
+                      ei.created_by AS created_by,
+                      ei.last_updated_by AS last_updated_by,
+                      tfs.visibility_mode AS trace_visibility_mode,
+                      ei.execution_policy,
+                      nullIf(arp.assertions_array, '') AS assertions_array
+                  FROM experiment_items_scope AS ei
+                  LEFT JOIN (
+                      SELECT
+                          t.id,
+                          t.input,
+                          t.output,
+                          t.duration,
+                          t.visibility_mode,
+                          s.total_estimated_cost,
+                          s.usage
+                      FROM (
+                          SELECT
+                              id,
+                              if(isNaN(duration), NULL, duration) AS duration,
+                              <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
+                              <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
+                              visibility_mode
+                          FROM traces
+                          WHERE workspace_id = :workspace_id
+                          <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                          AND id IN (SELECT trace_id FROM experiment_items_ids)
+                          ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                          LIMIT 1 BY id
+                      ) AS t
+                      LEFT JOIN (
+                          SELECT
+                              trace_id,
+                              sum(total_estimated_cost) AS total_estimated_cost,
+                              sumMap(usage) AS usage
+                          FROM spans final
+                          WHERE workspace_id = :workspace_id
+                          <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                          AND trace_id IN (SELECT trace_id FROM experiment_items_ids)
+                          GROUP BY workspace_id, project_id, trace_id
+                      ) s ON s.trace_id = t.id
+                  ) AS tfs ON ei.trace_id = tfs.id
+                  LEFT JOIN feedback_scores_per_trace AS fsp ON ei.trace_id = fsp.entity_id
+                  LEFT JOIN comments_per_trace AS cp ON ei.trace_id = cp.entity_id
+                  LEFT JOIN assertion_results_per_trace AS arp ON ei.trace_id = arp.entity_id
+                  <endif>
+              )  as final_result
+              ORDER BY id DESC, last_updated_at DESC
+              LIMIT :limit
+              SETTINGS log_comment = '<log_comment>', output_format_json_named_tuples_as_objects = true
+              ;
+              """;
 
     private static final String DELETE = """
             DELETE FROM experiment_items
             WHERE id IN :ids
+            AND experiment_id = :experiment_id
             AND workspace_id = :workspace_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
+    /**
+     * The 'experiment_id IN (...)' predicate is what restricts the 'experiment_items' scan. Without it, the only
+     * predicate on the large table is 'workspace_id': 'experiment_items' has no 'dataset_id' column, so a
+     * 'dataset_id' filter on the joined side can only discard rows after they have been read, making the cost scale
+     * with total workspace experiment volume rather than with the requested datasets. 'experiment_id' is the second
+     * column of the sort key '(workspace_id, experiment_id, dataset_item_id, trace_id, id)', so filtering on it
+     * directly lets ClickHouse prune granules. The join is retained solely to project 'dataset_id' for the grouping.
+     */
     private static final String FIND_EXPERIMENT_SUMMARY_BY_DATASET_IDS = """
             SELECT
                 e.dataset_id,
@@ -187,10 +511,17 @@ class ExperimentItemDAO {
                 max(ei.last_updated_at) as most_recent_experiment_at
             FROM experiment_items ei
             JOIN experiments e ON ei.experiment_id = e.id AND e.workspace_id = ei.workspace_id
-            WHERE e.dataset_id in :dataset_ids
-            AND ei.workspace_id = :workspace_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.experiment_id IN (
+                SELECT id
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND dataset_id IN :dataset_ids
+            )
+            AND e.dataset_id in :dataset_ids
             GROUP BY
                 e.dataset_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -198,10 +529,77 @@ class ExperimentItemDAO {
             DELETE FROM experiment_items
             WHERE experiment_id IN :experiment_ids
             AND workspace_id = :workspace_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String GET_EXPERIMENT_REFS_BY_TRACE_IDS = """
+            SELECT ei.experiment_id, ei.trace_id
+            FROM experiment_items AS ei FINAL
+            INNER JOIN experiments AS ea FINAL
+                ON ea.id = ei.experiment_id
+                AND ea.workspace_id = ei.workspace_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.trace_id IN :trace_ids
+            <if(project_id)> AND ei.project_id = :project_id <endif>
+            AND ea.status IN :statuses
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String GET_EXPERIMENT_REFS_BY_ITEM_IDS = """
+            SELECT ei.experiment_id, ei.trace_id
+            FROM experiment_items AS ei FINAL
+            INNER JOIN experiments AS ea FINAL
+                ON ea.id = ei.experiment_id
+                AND ea.workspace_id = ei.workspace_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.id IN :item_ids
+            AND ea.status IN :statuses
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SELECT_EXPERIMENT_ITEM_REFS_BY_ITEM_IDS = """
+            SELECT DISTINCT ei.experiment_id, ei.id AS item_id
+            FROM experiment_items AS ei
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.id IN :item_ids
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String GET_EXPERIMENT_REFS_BY_SPAN_IDS = """
+            SELECT ei.experiment_id, ei.trace_id
+            FROM experiment_items AS ei FINAL
+            INNER JOIN experiments AS ea FINAL
+                ON ea.id = ei.experiment_id
+                AND ea.workspace_id = ei.workspace_id
+            WHERE ei.workspace_id = :workspace_id
+            <if(project_id)> AND ei.project_id = :project_id <endif>
+            AND ei.trace_id IN (
+                SELECT DISTINCT trace_id FROM spans
+                WHERE id IN :span_ids AND workspace_id = :workspace_id
+                <if(project_id)> AND project_id = :project_id <endif>
+            )
+            AND ea.status IN :statuses
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String FILTER_EXPERIMENT_IDS_BY_STATUS = """
+            SELECT id
+            FROM experiments FINAL
+            WHERE workspace_id = :workspace_id
+            AND id IN :experiment_ids
+            AND status IN :statuses
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull OpikConfiguration configuration;
+    private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
 
     @WithSpan
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Set<UUID> datasetIds) {
@@ -241,16 +639,16 @@ class ExperimentItemDAO {
 
     private Mono<Long> insert(Collection<ExperimentItem> experimentItems, Connection connection) {
 
-        List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems.size());
-
-        var template = new ST(INSERT)
-                .add("items", queryItems);
-
-        String sql = template.render();
-
-        var statement = connection.createStatement(sql);
-
         return makeMonoContextAware((userName, workspaceId) -> {
+            List<QueryItem> queryItems = getQueryItemPlaceHolder(experimentItems.size());
+
+            var template = getSTWithLogComment(INSERT, "insert_experiment_items", workspaceId, userName,
+                    experimentItems.size())
+                    .add("items", queryItems);
+
+            String sql = template.render();
+
+            var statement = connection.createStatement(sql);
 
             statement.bind("workspace_id", workspaceId);
 
@@ -260,8 +658,16 @@ class ExperimentItemDAO {
                 statement.bind("experiment_id" + index, item.experimentId());
                 statement.bind("dataset_item_id" + index, item.datasetItemId());
                 statement.bind("trace_id" + index, item.traceId());
+
+                if (item.projectId() != null) {
+                    statement.bind("project_id" + index, item.projectId().toString());
+                } else {
+                    statement.bindNull("project_id" + index, String.class);
+                }
+
                 statement.bind("created_by" + index, userName);
                 statement.bind("last_updated_by" + index, userName);
+                statement.bind("execution_policy" + index, ExecutionPolicyMapper.serialize(item.executionPolicy()));
                 index++;
             }
 
@@ -295,13 +701,45 @@ class ExperimentItemDAO {
                     criteria.limit(), criteria.lastRetrievedId());
             return Flux.empty();
         }
+        var aggregationCriteria = AggregationBranchCountsCriteria.builder()
+                .experimentIds(experimentIds)
+                .build();
+
+        return Mono.zip(getAggregationBranchCounts(aggregationCriteria),
+                getTargetProjectIds(experimentIds))
+                .flatMapMany(tuple -> {
+                    var counts = tuple.getT1();
+                    var targetProjectIds = tuple.getT2();
+                    return Mono.from(connectionFactory.create())
+                            .flatMapMany(connection -> getItems(experimentIds, criteria, connection, counts,
+                                    targetProjectIds))
+                            .flatMap(ExperimentItemMapper::mapToExperimentItemFullContent);
+                });
+    }
+
+    private Mono<AggregatedExperimentCounts> getAggregationBranchCounts(
+            @NonNull AggregationBranchCountsCriteria criteria) {
+        return experimentAggregatesDAO.getAggregationBranchCounts(criteria);
+    }
+
+    private Mono<List<UUID>> getTargetProjectIds(Set<UUID> experimentIds) {
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> getItems(experimentIds, criteria, connection))
-                .flatMap(ExperimentItemMapper::mapToExperimentItemFullContent);
+                .flatMap(connection -> {
+                    var template = TemplateUtils.newST(SELECT_TARGET_PROJECTS);
+                    template.add("log_comment", "get_target_project_ids_experiment_items");
+
+                    var statement = connection.createStatement(template.render())
+                            .bind("experiment_ids", experimentIds.toArray(UUID[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                            .flatMap(result -> result.map((row, metadata) -> row.get("project_id", UUID.class)))
+                            .collectList();
+                });
     }
 
     private Publisher<? extends Result> getItems(
-            Set<UUID> experimentIds, ExperimentItemSearchCriteria criteria, Connection connection) {
+            Set<UUID> experimentIds, ExperimentItemSearchCriteria criteria, Connection connection,
+            AggregatedExperimentCounts counts, List<UUID> targetProjectIds) {
 
         int limit = criteria.limit();
         UUID lastRetrievedId = criteria.lastRetrievedId();
@@ -309,36 +747,56 @@ class ExperimentItemDAO {
         log.info("Getting experiment items by experimentIds count '{}', limit '{}', lastRetrievedId '{}'",
                 experimentIds.size(), limit, lastRetrievedId);
 
-        var template = new ST(STREAM);
-        if (lastRetrievedId != null) {
-            template.add("lastRetrievedId", lastRetrievedId);
-        }
-        template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-        var statement = connection.createStatement(template.render())
-                .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
-                .bind("limit", limit);
-        if (lastRetrievedId != null) {
-            statement.bind("lastRetrievedId", lastRetrievedId);
-        }
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+        return makeFluxContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(STREAM, "get_experiment_items_stream", workspaceId, userName,
+                    experimentIds.size());
+            if (lastRetrievedId != null) {
+                template.add("lastRetrievedId", lastRetrievedId);
+            }
+            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+            template = template.add("truncationSize", configuration.getResponseFormatting().getTruncationSize());
+            template.add("has_aggregated", counts.hasAggregated());
+            template.add("has_raw", counts.hasRaw());
+            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                template.add("has_target_projects", true);
+            }
+            if (criteria.projectId() != null) {
+                template.add("project_id", true);
+            }
+            var statement = connection.createStatement(template.render())
+                    .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
+                    .bind("limit", limit)
+                    .bind("workspace_id", workspaceId);
+            if (lastRetrievedId != null) {
+                statement.bind("lastRetrievedId", lastRetrievedId);
+            }
+            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+            }
+            if (criteria.projectId() != null) {
+                statement.bind("project_id", criteria.projectId());
+            }
+            return Flux.from(statement.execute());
+        });
     }
 
     @WithSpan
-    public Mono<Long> delete(Set<UUID> ids) {
+    public Mono<Long> delete(@NonNull UUID experimentId, Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids),
                 "Argument 'ids' must not be empty");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> delete(ids, connection))
+                .flatMapMany(connection -> delete(experimentId, ids, connection))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
     }
 
-    private Publisher<? extends Result> delete(Set<UUID> ids, Connection connection) {
-        log.info("Deleting experiment items, count '{}'", ids.size());
+    private Publisher<? extends Result> delete(UUID experimentId, Set<UUID> ids, Connection connection) {
+        log.info("Deleting experiment items, experimentId '{}', count '{}'", experimentId, ids.size());
 
         Statement statement = connection.createStatement(DELETE)
-                .bind("ids", ids.stream().map(UUID::toString).toArray(String[]::new));
+                .bind("ids", ids.stream().map(UUID::toString).toArray(String[]::new))
+                .bind("experiment_id", experimentId);
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
@@ -349,7 +807,7 @@ class ExperimentItemDAO {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentIds),
                 "Argument 'experimentIds' must not be empty");
 
-        log.info("Deleting experiment items by experiment ids [{}]", Arrays.toString(experimentIds.toArray()));
+        log.info("Deleting experiment items by experiment ids, size '{}'", experimentIds.size());
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> deleteByExperimentIds(experimentIds, connection))
@@ -357,8 +815,7 @@ class ExperimentItemDAO {
                 .reduce(0L, Long::sum)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Deleted experiment items by experiment ids [{}]",
-                                Arrays.toString(experimentIds.toArray()));
+                        log.info("Deleted experiment items by experiment ids, size '{}'", experimentIds.size());
                     }
                 });
     }
@@ -368,5 +825,95 @@ class ExperimentItemDAO {
                 .bind("experiment_ids", ids.toArray(UUID[]::new));
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+    }
+
+    @WithSpan
+    public Flux<ExperimentTraceRef> getExperimentRefsByTraceIds(@NonNull Set<UUID> traceIds,
+            @NonNull Set<ExperimentStatus> statuses, UUID projectId) {
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_TRACE_IDS, "get_experiment_refs_by_trace_ids",
+                "trace_ids", traceIds, statuses, projectId);
+    }
+
+    @WithSpan
+    public Flux<ExperimentTraceRef> getExperimentRefsByItemIds(@NonNull Set<UUID> itemIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_ITEM_IDS, "get_experiment_refs_by_item_ids",
+                "item_ids", itemIds, statuses, null);
+    }
+
+    @WithSpan
+    public Flux<ExperimentItemRef> findExperimentItemRefsByItemIds(Set<UUID> itemIds) {
+        if (CollectionUtils.isEmpty(itemIds)) {
+            return Flux.empty();
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    Statement statement = connection.createStatement(SELECT_EXPERIMENT_ITEM_REFS_BY_ITEM_IDS)
+                            .bind("item_ids", itemIds.stream().map(UUID::toString).toArray(String[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentItemRef(
+                        row.get("experiment_id", UUID.class),
+                        row.get("item_id", UUID.class))));
+    }
+
+    @WithSpan
+    public Flux<ExperimentTraceRef> getExperimentRefsBySpanIds(@NonNull Set<UUID> spanIds,
+            @NonNull Set<ExperimentStatus> statuses, UUID projectId) {
+        return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_SPAN_IDS, "get_experiment_refs_by_span_ids",
+                "span_ids", spanIds, statuses, projectId);
+    }
+
+    private Flux<ExperimentTraceRef> getExperimentRefsByIds(@NonNull String sql, @NonNull String queryName,
+            @NonNull String idParamName, @NonNull Set<UUID> ids, @NonNull Set<ExperimentStatus> statuses,
+            UUID projectId) {
+        if (ids.isEmpty() || statuses.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(sql, queryName, workspaceId, userName, ids.size());
+
+                    if (projectId != null) {
+                        template.add("project_id", projectId.toString());
+                    }
+
+                    Statement statement = connection.createStatement(template.render())
+                            .bind(idParamName, ids.stream().map(UUID::toString).toArray(String[]::new))
+                            .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
+
+                    if (projectId != null) {
+                        statement.bind("project_id", projectId.toString());
+                    }
+
+                    statement.bind("workspace_id", workspaceId);
+
+                    return Flux.from(statement.execute());
+                }))
+                .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentTraceRef(
+                        row.get("experiment_id", UUID.class),
+                        row.get("trace_id", UUID.class))));
+    }
+
+    @WithSpan
+    public Flux<UUID> filterExperimentIdsByStatus(@NonNull Set<UUID> experimentIds,
+            @NonNull Set<ExperimentStatus> statuses) {
+        if (experimentIds.isEmpty() || statuses.isEmpty()) {
+            return Flux.empty();
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    Statement statement = connection.createStatement(FILTER_EXPERIMENT_IDS_BY_STATUS)
+                            .bind("experiment_ids",
+                                    experimentIds.stream().map(UUID::toString).toArray(String[]::new))
+                            .bind("statuses", statuses.stream().map(ExperimentStatus::getValue).toArray(String[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)));
     }
 }

@@ -3,31 +3,39 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.CreateCommentResponse;
 import com.comet.opik.api.DeleteFeedbackScore;
+import com.comet.opik.api.ExistenceResponse;
 import com.comet.opik.api.FeedbackDefinition;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.FeedbackScoreBatch;
+import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
-import com.comet.opik.api.SpanSearchCriteria;
+import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanSearchStreamRequest;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SpanSortingFactory;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.SpanSearchCriteria;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.Streamer;
-import com.comet.opik.domain.workspaces.WorkspaceMetadata;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
-import com.comet.opik.utils.AsyncUtils;
+import com.comet.opik.infrastructure.usagelimit.UsageLimited;
+import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -45,7 +53,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.BadRequestException;
-import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -64,15 +71,21 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
+import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
+import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
+import static com.comet.opik.api.Span.View;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+import static com.comet.opik.utils.ValidationUtils.parseLogsSource;
 import static com.comet.opik.utils.ValidationUtils.validateProjectNameAndProjectId;
+import static com.comet.opik.utils.ValidationUtils.validateTimeRangeParameters;
 
 @Path("/v1/private/spans")
 @Produces(MediaType.APPLICATION_JSON)
@@ -89,6 +102,8 @@ public class SpansResource {
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull SpanSortingFactory sortingFactory;
+    private final @NonNull ProjectService projectService;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull Streamer streamer;
@@ -96,7 +111,7 @@ public class SpansResource {
     @GET
     @Operation(operationId = "getSpansByProject", summary = "Get spans by project_name or project_id and optionally by trace_id and/or type", description = "Get spans by project_name or project_id and optionally by trace_id and/or type", responses = {
             @ApiResponse(responseCode = "200", description = "Spans resource", content = @Content(schema = @Schema(implementation = SpanPage.class)))})
-    @JsonView(Span.View.Public.class)
+    @JsonView(View.Public.class)
     @RateLimited(value = "getSpans:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getSpansByProject(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -106,18 +121,28 @@ public class SpansResource {
             @QueryParam("trace_id") UUID traceId,
             @QueryParam("type") SpanType type,
             @QueryParam("filters") String filters,
-            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate,
-            @QueryParam("sorting") String sorting) {
+            @QueryParam("truncate") @DefaultValue("false") @Schema(description = "Truncate input, output and metadata to slim payloads") boolean truncate,
+            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
+            @QueryParam("sorting") String sorting,
+            @QueryParam("exclude") String exclude,
+            @QueryParam("search") @Schema(description = "Full-text search across span fields") String search,
+            @QueryParam("from_time") @Schema(description = "Filter spans created from this time (ISO-8601 format).") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter spans created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
+        validateTimeRangeParameters(startTime, endTime);
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
         var sortingFields = sortingFactory.newSorting(sorting);
 
-        WorkspaceMetadata workspaceMetadata = workspaceMetadataService
-                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
+        var workspaceId = requestContext.get().getWorkspaceId();
+
+        var workspaceMetadata = workspaceMetadataService
+                .getProjectMetadata(workspaceId, projectId, projectName)
+                // Context is required for resolving project ID
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        if (!sortingFields.isEmpty() && !workspaceMetadata.canUseDynamicSorting()) {
+        if (!sortingFields.isEmpty() && workspaceMetadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -128,16 +153,19 @@ public class SpansResource {
                 .type(type)
                 .filters(spanFilters)
                 .truncate(truncate)
+                .stripAttachments(stripAttachments)
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .sortingFields(sortingFields)
+                .exclude(ParamsValidator.get(exclude, SpanField.class, "exclude"))
+                .searchText(StringUtils.trimToNull(search))
                 .build();
-
-        String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Get spans by '{}' on workspaceId '{}'", spanSearchCriteria, workspaceId);
         SpanPage spans = spanService.find(page, size, spanSearchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
-                    if (!workspaceMetadata.canUseDynamicSorting()) {
+                    if (workspaceMetadata.cannotUseDynamicSorting()) {
                         return it.toBuilder().sortableBy(List.of()).build();
                     }
                     return it;
@@ -153,18 +181,22 @@ public class SpansResource {
     @Operation(operationId = "getSpanById", summary = "Get span by id", description = "Get span by id", responses = {
             @ApiResponse(responseCode = "200", description = "Span resource", content = @Content(schema = @Schema(implementation = Span.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = Span.class)))})
-    @JsonView(Span.View.Public.class)
+    @JsonView(View.Public.class)
     @RateLimited(value = "getSpanById:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
-    public Response getById(@PathParam("id") @NotNull UUID id) {
-
+    public Response getById(@PathParam("id") @NotNull UUID id,
+            @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects attachment content from S3 (default: false for backward compatibility)") boolean stripAttachments) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting span by id '{}' on workspace_id '{}'", id, workspaceId);
-        var span = spanService.getById(id)
+        log.info("Getting span by id '{}' on workspace_id '{}' with stripAttachments={}", id, workspaceId,
+                stripAttachments);
+
+        var span = spanService.getById(id, stripAttachments)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Got span by id '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}'", span.id(), span.traceId(),
-                span.parentSpanId(), workspaceId);
+        log.info(
+                "Got span by id '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}' with stripAttachments={}",
+                span.id(), span.traceId(),
+                span.parentSpanId(), workspaceId, stripAttachments);
 
         return Response.ok().entity(span).build();
     }
@@ -172,22 +204,23 @@ public class SpansResource {
     @POST
     @Operation(operationId = "createSpan", summary = "Create span", description = "Create span", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/spans/{spanId}", schema = @Schema(implementation = String.class))})})
-    @RateLimited
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/spans/{spanId}", schema = @Schema(implementation = String.class))}),
+            @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class)))})
+    @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
+            + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @UsageLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response create(
-            @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(Span.View.Write.class) @NotNull @Valid Span span,
+            @RequestBody(content = @Content(schema = @Schema(implementation = Span.class))) @JsonView(View.Write.class) @NotNull @Valid Span span,
             @Context UriInfo uriInfo) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Creating span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}' on workspace_id '{}'",
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Creating span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}', workspaceId '{}'",
                 span.id(), span.projectName(), span.traceId(), span.parentSpanId(), workspaceId);
-
         var id = spanService.create(span)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();
-        log.info("Created span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}' on workspaceId '{}'",
+        log.info("Created span with id '{}', projectName '{}', traceId '{}', parentSpanId '{}', workspaceId '{}'",
                 id, span.projectName(), span.traceId(), span.parentSpanId(), workspaceId);
         return Response.created(uri).build();
     }
@@ -197,28 +230,38 @@ public class SpansResource {
     @Operation(operationId = "createSpans", summary = "Create spans", description = "Create spans", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
+    @UsageLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response createSpans(
-            @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(Span.View.Write.class) @NotNull @Valid SpanBatch spans) {
-
-        spans.spans()
-                .stream()
-                .filter(span -> span.id() != null) // Filter out spans with null IDs
-                .collect(Collectors.groupingBy(Span::id))
-                .forEach((id, spanGroup) -> {
-                    if (spanGroup.size() > 1) {
-                        throw new ClientErrorException("Duplicate span id '%s'".formatted(id), 422);
-                    }
-                });
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
+            @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatch.class))) @JsonView(View.Write.class) @NotNull @Valid SpanBatch spans) {
+        var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating spans batch with size '{}' on workspaceId '{}'", spans.spans().size(), workspaceId);
-
         spanService.create(spans)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-
         log.info("Created spans batch with size '{}' on workspaceId '{}'", spans.spans().size(), workspaceId);
+        return Response.noContent().build();
+    }
+
+    @PATCH
+    @Path("/batch")
+    @Operation(operationId = "batchUpdateSpans", summary = "Batch update spans", description = "Update multiple spans", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
+    public Response batchUpdate(
+            @RequestBody(content = @Content(schema = @Schema(implementation = SpanBatchUpdate.class))) @Valid @NotNull SpanBatchUpdate batchUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Batch updating '{}' spans on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
+        spanService.batchUpdate(batchUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Batch updated '{}' spans on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
 
         return Response.noContent().build();
     }
@@ -228,7 +271,9 @@ public class SpansResource {
     @Operation(operationId = "updateSpan", summary = "Update span by id", description = "Update span by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found")})
-    @RateLimited
+    @RateLimited(value = RateLimited.SINGLE_TRACING_OPS
+            + ":{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG)
     public Response update(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanUpdate.class))) @NotNull @Valid SpanUpdate spanUpdate) {
 
@@ -258,6 +303,7 @@ public class SpansResource {
     @Operation(operationId = "addSpanFeedbackScore", summary = "Add span feedback score", description = "Add span feedback score", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response addSpanFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScore.class))) @NotNull @Valid FeedbackScore score) {
 
@@ -276,16 +322,19 @@ public class SpansResource {
     @Path("/{id}/feedback-scores/delete")
     @Operation(operationId = "deleteSpanFeedbackScore", summary = "Delete span feedback score", description = "Delete span feedback score", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response deleteSpanFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteFeedbackScore.class))) @NotNull @Valid DeleteFeedbackScore score) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Delete span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
-        feedbackScoreService.deleteSpanScore(id, score.name())
+        log.info("Delete span feedback score '{}' for id '{}', author '{}' on workspaceId '{}'", score.name(), id,
+                score.author(), workspaceId);
+        feedbackScoreService.deleteSpanScore(id, score)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted span feedback score '{}' for id '{}' on workspaceId '{}'", score.name(), id, workspaceId);
+        log.info("Deleted span feedback score '{}' for id '{}', author '{}' on workspaceId '{}'", score.name(), id,
+                score.author(), workspaceId);
         return Response.noContent().build();
     }
 
@@ -294,15 +343,16 @@ public class SpansResource {
     @Operation(operationId = "scoreBatchOfSpans", summary = "Batch feedback scoring for spans", description = "Batch feedback scoring for spans", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response scoreBatchOfSpans(
-            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatch batch) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatchContainer.FeedbackScoreBatch batch) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Feedback scores batch for spans, size {} on  workspaceId '{}'", batch.scores().size(), workspaceId);
         feedbackScoreService.scoreBatchOfSpans(batch.scores())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .retryWhen(AsyncUtils.handleConnectionError())
+                .retryWhen(RetryUtils.handleConnectionError())
                 .block();
         log.info("Scored batch for spans, size {} on workspaceId '{}'", batch.scores().size(), workspaceId);
         return Response.noContent().build();
@@ -314,13 +364,18 @@ public class SpansResource {
             @ApiResponse(responseCode = "200", description = "Span stats resource", content = @Content(schema = @Schema(implementation = ProjectStats.class)))
     })
     @JsonView({ProjectStats.ProjectStatItem.View.Public.class})
+    @RateLimited(value = "getSpanStats:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("trace_id") UUID traceId,
             @QueryParam("type") SpanType type,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("search") @Schema(description = "Full-text search across span fields") String search,
+            @QueryParam("from_time") @Schema(description = "Filter spans created from this time (ISO-8601 format).") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter spans created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
+        validateTimeRangeParameters(startTime, endTime);
         var spanFilters = filtersFactory.newFilters(filters, SpanFilter.LIST_TYPE_REFERENCE);
         var searchCriteria = SpanSearchCriteria.builder()
                 .projectName(projectName)
@@ -328,7 +383,10 @@ public class SpansResource {
                 .filters(spanFilters)
                 .traceId(traceId)
                 .type(type)
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
                 .sortingFields(List.of())
+                .searchText(StringUtils.trimToNull(search))
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -346,9 +404,41 @@ public class SpansResource {
     }
 
     @GET
+    @Path("/exists")
+    @Operation(operationId = "spansExist", summary = "Check whether a project has spans", description = "Returns whether the project has at least one span matching the given scope. Cheap existence probe (LIMIT 1) used to drive empty-state decisions without scanning or aggregating the whole project.", responses = {
+            @ApiResponse(responseCode = "200", description = "Span existence", content = @Content(schema = @Schema(implementation = ExistenceResponse.class)))
+    })
+    @RateLimited(value = "spansExist:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
+    public Response spansExist(@QueryParam("project_id") UUID projectId,
+            @QueryParam("project_name") String projectName,
+            @QueryParam("source") @Schema(description = "Restrict the probe to a single ingestion source (e.g. 'sdk' for the Logs empty state), matching the rendered list's logs-source scope. Omit to probe any source.") String source) {
+
+        validateProjectNameAndProjectId(projectName, projectId);
+        var searchCriteria = SpanSearchCriteria.builder()
+                .projectName(projectName)
+                .projectId(projectId)
+                .source(parseLogsSource(source))
+                .sortingFields(List.of())
+                .build();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Check spans existence by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
+
+        boolean exists = spanService.existsByProjectId(searchCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Checked spans existence by '{}', exists '{}' on workspaceId '{}'", searchCriteria, exists,
+                workspaceId);
+
+        return Response.ok(ExistenceResponse.builder().exists(exists).build()).build();
+    }
+
+    @GET
     @Path("/feedback-scores/names")
     @Operation(operationId = "findFeedbackScoreNames", summary = "Find Feedback Score names", description = "Find Feedback Score names", responses = {
-            @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(array = @ArraySchema(schema = @Schema(implementation = String.class))))
+            @ApiResponse(responseCode = "200", description = "Feedback Scores resource", content = @Content(schema = @Schema(implementation = FeedbackScoreNames.class)))
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(@QueryParam("project_id") UUID projectId,
@@ -382,14 +472,16 @@ public class SpansResource {
             }), maxItems = 2000))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
-    @JsonView(Span.View.Public.class)
+    @JsonView(View.Public.class)
     @RateLimited(value = "search_spans:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public ChunkedOutput<JsonNode> searchSpans(
             @RequestBody(content = @Content(schema = @Schema(implementation = SpanSearchStreamRequest.class))) @NotNull @Valid SpanSearchStreamRequest request) {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
+        var visibility = requestContext.get().getVisibility();
 
         validateProjectNameAndProjectId(request.projectName(), request.projectId());
+        validateTimeRangeParameters(request.fromTime(), request.toTime());
 
         log.info("Streaming spans search results by '{}', workspaceId '{}'", request, workspaceId);
         var criteria = SpanSearchCriteria.builder()
@@ -400,12 +492,18 @@ public class SpansResource {
                 .projectName(request.projectName())
                 .projectId(request.projectId())
                 .filters(filtersFactory.validateFilter(request.filters()))
+                .exclude(request.exclude())
                 .sortingFields(List.of())
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(request.fromTime()))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(request.toTime()))
                 .build();
 
+        projectService.resolveProjectIdAndVerifyVisibility(request.projectId(), request.projectName())
+                .contextWrite(ctx -> setRequestContext(ctx, workspaceId, userName, visibility))
+                .block();
+
         var items = spanService.search(request.limit(), criteria)
-                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+                .contextWrite(ctx -> setRequestContext(ctx, workspaceId, userName, visibility));
 
         return streamer.getOutputStream(items,
                 () -> log.info("Streamed spans search results by '{}', workspaceId '{}'", request, workspaceId));
@@ -416,6 +514,7 @@ public class SpansResource {
     @Operation(operationId = "addSpanComment", summary = "Add span comment", description = "Add span comment", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/spans/{spanId}/comments/{commentId}", schema = @Schema(implementation = String.class))})})
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response addSpanComment(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment,
             @Context UriInfo uriInfo) {
@@ -432,7 +531,7 @@ public class SpansResource {
         log.info("Added comment with id '{}' for span with id '{}' on workspaceId '{}'", comment.id(), id,
                 workspaceId);
 
-        return Response.created(uri).build();
+        return Response.created(uri).entity(new CreateCommentResponse(commentId)).build();
     }
 
     @GET
@@ -461,6 +560,7 @@ public class SpansResource {
     @Operation(operationId = "updateSpanComment", summary = "Update span comment by id", description = "Update span comment by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found")})
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response updateSpanComment(@PathParam("commentId") UUID commentId,
             @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment) {
 
@@ -482,6 +582,7 @@ public class SpansResource {
     @Operation(operationId = "deleteSpanComments", summary = "Delete span comments", description = "Delete span comments", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response deleteSpanComments(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
 
@@ -497,4 +598,5 @@ public class SpansResource {
 
         return Response.noContent().build();
     }
+
 }

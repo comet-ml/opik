@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,7 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.function.Supplier;
 
-interface EntityConstraintHandler<T> {
+public interface EntityConstraintHandler<T> {
 
     Logger log = LoggerFactory.getLogger(EntityConstraintHandler.class);
 
@@ -23,11 +24,15 @@ interface EntityConstraintHandler<T> {
 
     EntityConstraintAction<T> wrappedAction();
 
+    private static boolean isConstraintViolation(Throwable cause) {
+        return Throwables.getRootCause(cause) instanceof SQLIntegrityConstraintViolationException;
+    }
+
     default T withError(Supplier<EntityAlreadyExistsException> errorProvider) {
         try {
             return wrappedAction().execute();
         } catch (UnableToExecuteStatementException e) {
-            if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
+            if (isConstraintViolation(e.getCause())) {
                 throw errorProvider.get();
             } else {
                 throw e;
@@ -39,7 +44,7 @@ interface EntityConstraintHandler<T> {
         try {
             return wrappedAction().execute();
         } catch (UnableToExecuteStatementException e) {
-            if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
+            if (isConstraintViolation(e.getCause())) {
                 return errorProvider.get();
             } else {
                 throw e;
@@ -57,9 +62,9 @@ interface EntityConstraintHandler<T> {
         try {
             return wrappedAction().execute();
         } catch (UnableToExecuteStatementException e) {
-            if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
+            if (isConstraintViolation(e.getCause())) {
                 if (times > 0) {
-                    log.warn("Retrying due to constraint violation, remaining attempts: {}", times);
+                    log.warn("Retrying due to constraint violation, remaining attempts: '{}'", times);
                     return internalRetry(times - 1, errorProvider);
                 }
                 throw errorProvider.get();

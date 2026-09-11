@@ -1,0 +1,193 @@
+name: Python SDK E2E Tests
+run-name: "Python SDK E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+  packages: read
+on:
+    workflow_dispatch:
+    pull_request:
+        paths:
+          - 'sdks/python/**'
+          - 'apps/opik-backend/**'
+          - '.github/workflows/python_sdk_e2e_tests.yml'
+    push:
+        branches:
+          - 'main'
+        paths:
+          - 'sdks/python/**'
+          - 'apps/opik-backend/**'
+          - '.github/workflows/python_sdk_e2e_tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
+  OPIK_URL_OVERRIDE: http://localhost:8080
+  OPIK_CONSOLE_LOGGING_LEVEL: INFO
+jobs:
+    select-matrix:
+        name: Select Python version matrix
+        # select-e2e-matrix lists changed files via the PR files API; without
+        # pull-requests: read that call 403s and fails every job needing this one.
+        permissions:
+            contents: read
+            pull-requests: read
+        runs-on: ubuntu-latest
+        timeout-minutes: 2
+        outputs:
+            python_versions: ${{ steps.pick.outputs.versions }}
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  sparse-checkout: .github/actions/select-e2e-matrix
+                  sparse-checkout-cone-mode: false
+            - uses: ./.github/actions/select-e2e-matrix
+              id: pick
+              with:
+                  all-versions: ${{ vars.PYTHON_VERSIONS }}
+                  match-regex: '^sdks/python/|^\.github/workflows/python_sdk_e2e_tests\.yml$'
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    build-opik:
+        # The reusable build workflow pushes images to GHCR; pass down the
+        # packages: write grant here rather than at the workflow level (a
+        # called workflow's permissions can only be maintained or reduced from
+        # the caller's, never elevated).
+        permissions:
+          contents: read
+          packages: write
+        uses: ./.github/workflows/build_e2e_docker.yaml
+        with:
+          include_guardrails: true
+
+    run-e2e:
+        needs: [select-matrix, build-opik]
+        name: Python SDK E2E Tests ${{matrix.python_version}}
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        # Only the "Publish Test Report" step needs these; keep them off the
+        # workflow-level default (least privilege).
+        permissions:
+          contents: read
+          packages: read
+          checks: write
+          pull-requests: write
+        strategy:
+            fail-fast: false
+            matrix:
+                python_version: ${{ fromJSON(needs.select-matrix.outputs.python_versions) }}
+
+        steps:
+        - name: Checkout
+          uses: actions/checkout@v7
+
+        - name: Login to GHCR
+          uses: docker/login-action@v4
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: Pull Docker images from GHCR
+          env:
+            TAG: ${{ needs.build-opik.outputs.image_tag }}
+          run: |
+            docker pull "ghcr.io/comet-ml/opik/opik-backend:$TAG"
+            docker pull "ghcr.io/comet-ml/opik/opik-python-backend:$TAG"
+            docker pull "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG"
+            docker tag "ghcr.io/comet-ml/opik/opik-backend:$TAG" ghcr.io/comet-ml/opik/opik-backend:latest
+            docker tag "ghcr.io/comet-ml/opik/opik-python-backend:$TAG" ghcr.io/comet-ml/opik/opik-python-backend:latest
+            docker tag "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG" ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
+
+        - name: Setup Python ${{matrix.python_version}}
+          uses: actions/setup-python@v7
+          with:
+            python-version: ${{matrix.python_version}}
+
+        - name: Set up uv
+          uses: astral-sh/setup-uv@v10.0.1
+
+        - name: Run latest Opik server
+          env:
+            OPIK_USAGE_REPORT_ENABLED: false
+            # Avoid Buildx Bake concurrent image export collisions in CI.
+            COMPOSE_BAKE: false
+            TOGGLE_RUNNERS_ENABLED: "true"
+            OPIK_BACKEND_PULL_POLICY: never
+            PYTHON_BACKEND_PULL_POLICY: never
+            OPIK_GUARDRAILS_BACKEND_PULL_POLICY: never
+          run: |
+            cd ${{ github.workspace }}
+            ./opik.sh --backend --port-mapping --guardrails
+
+        - name: Check Opik server availability
+          shell: bash
+          run: |
+            chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/*.sh
+            cd ${{ github.workspace }}/deployment/docker-compose
+            echo "Check Docker pods are up"
+            ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+            echo "Check backend health"
+            ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+        - name: Install opik SDK
+          run: |
+            cd ${{ github.workspace }}/sdks/python
+            uv pip install --system .
+
+        - name: Run smoke tests
+          run: |
+            cd ${{ github.workspace }}/sdks/python/tests/e2e_smoke
+            ./smoke_tests_runner.sh
+
+        - name: Install test requirements
+          run: |
+            cd ${{ github.workspace }}/sdks/python
+            uv pip install --system -r tests/test_requirements.txt
+            uv pip list --system
+
+        - name: Run tests
+          # -n 3 + --dist=loadfile distributes whole test files across three
+          # worker processes (one file per worker). Past ~3 the gains
+          # flatten — we become tail-bound on the slowest single file and
+          # the docker-compose backend on the same runner starts to thrash.
+          # E2E isolation hinges on --dist=loadfile: the per-module project
+          # name (generate_project_name("e2e", __name__)) is only collision-
+          # free if a single file is not split across workers.
+          # -p no:benchmark silences pytest-benchmark's auto-disable warning
+          # under xdist.
+          run: |
+            cd ${{ github.workspace }}/sdks/python
+            pytest tests/e2e --ignore=tests/e2e/test_guardrails.py --ignore=tests/e2e/compatibility_v1 -vv -n 3 --dist=loadfile -p no:benchmark --durations=20 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+
+        - name: Publish Test Report
+          uses: EnricoMi/publish-unit-test-result-action/linux@v2
+          if: always()
+          with:
+            action_fail: true
+            comment_mode: failures
+            check_name: Python SDK E2E Tests Results (Python ${{matrix.python_version}})
+            files: ${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+
+        - name: Keep BE log in case of failure
+          if: failure()
+          run: |
+            docker logs opik-backend-1 > ${{ github.workspace }}/opik-backend_p${{matrix.python_version}}.log
+
+        - name: Attach BE log
+          if: failure()
+          uses: actions/upload-artifact@v7
+          with:
+              name: opik-backend-log-p${{matrix.python_version}}
+              path: ${{ github.workspace }}/opik-backend_p${{matrix.python_version}}.log
+
+        - name: Stop opik server
+          if: always()
+          run: |
+            cd ${{ github.workspace }}
+            ./opik.sh --stop --guardrails

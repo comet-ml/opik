@@ -1,0 +1,52 @@
+---
+headline: Development Overview
+og:description: Configure, test, and deploy your AI agents with Opik — manage prompt versions, run your agent in the playground, and deploy new configurations from the UI
+og:site_name: Opik Documentation
+og:title: Development Overview — Opik
+title: Development Overview
+---
+
+Opik provides a complete workflow for developing your agent: manage your prompt and model configuration with version control, test changes in the Agent Playground with full tracing, and deploy new versions directly from the UI.
+
+## Manage your prompts and agent configuration
+
+Define your agent's system prompt, model, and parameters in the [Prompt Library](/development/prompt-library/overview). Every change is versioned automatically (`v1`, `v2`, `v3`, …), so you can compare configurations side-by-side and roll back if needed.
+
+<Frame>
+  <img src="/img/v2/development/agent_configuration.png" />
+</Frame>
+
+Your agent pulls the requested prompt version at runtime, so you can update prompts without redeploying code.
+
+## Test in the Agent Playground
+
+Connect your local agent to Opik with a single command:
+
+```bash
+opik endpoint --project <project-name> -- python3 my_agent.py
+```
+
+Then run your agent from the Opik UI. Enter inputs, hit **Run**, and see the full result with traces — every LLM call, tool invocation, and sub-step captured in real time.
+
+<Frame>
+  <img src="/img/v2/development/agent_sandbox.png" />
+</Frame>
+
+Switch to the **Configuration** tab to tweak prompts and parameters without changing code. The playground runs your agent against the unsaved configuration so you can test before committing changes.
+
+## Roll out new versions
+
+When you're happy with a configuration, save it as a new version in the Prompt Library and
+update your code to pin to it (or keep it on `"latest"`). Every change is versioned, so you can
+always roll back.
+
+## More tools
+
+<CardGroup cols={2}>
+  <Card title="Prompt Playground" href="/development/prompt-playground" icon="fa-regular fa-terminal">
+    Test and compare prompt variants side-by-side across models. Run against datasets for systematic evaluation.
+  </Card>
+  <Card title="Optimization Runs" href="/development/optimization-runs/overview" icon="fa-regular fa-chart-line">
+    Automatically optimize prompts and agent configurations using built-in optimization algorithms.
+  </Card>
+</CardGroup>

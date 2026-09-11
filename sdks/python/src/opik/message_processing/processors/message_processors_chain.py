@@ -1,0 +1,126 @@
+import logging
+from typing import Optional
+
+from opik.file_upload import base_upload_manager
+from opik.rest_api import client as rest_api_client
+
+from . import (
+    message_processors,
+    online_message_processor,
+)
+from .. import data_loss, permissions
+from ..emulation import local_emulator_message_processor
+from ..replay import replay_manager
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+def create_message_processors_chain(
+    rest_client: rest_api_client.OpikApi,
+    file_upload_manager: base_upload_manager.BaseFileUploadManager,
+    fallback_replay_manager: replay_manager.ReplayManager,
+    unauthorized_message_types_registry: permissions.UnauthorizedMessageTypeRegistry,
+    data_loss_tracker: data_loss.DataLossTracker,
+    max_payload_size_mb: Optional[float] = None,
+) -> message_processors.ChainedMessageProcessor:
+    """
+    Creates a chain of message processors by combining an online processor and a
+    local emulator processor. The chain is primarily useful for processing messages
+    in a sequence where each processor in the chain contributes its functionality.
+
+    The online processor is initialized using the provided REST API client. The local
+    emulator processor is included but remains inactive by default. The constructed
+    chain ensures combined and streamlined processing, accommodating both online
+    and local simulation needs based on evaluation activation.
+
+    Args:
+        rest_client: REST API client instance used to configure the online message
+            processor.
+        file_upload_manager: File upload manager instance used to configure the online message
+            processor.
+        fallback_replay_manager: Replay manager instance used to configure the online message
+            processor.
+        unauthorized_message_types_registry: Unauthorized message types registry instance used
+            to configure the online message processor.
+        max_payload_size_mb: Per-object size limit in MB for spans **and** traces, applied by the
+            online processor right before sending. An ``input``/``output`` field over the limit -
+            or the two together over it - is replaced with a truncation marker (a warning logged).
+            ``metadata`` is never truncated and is excluded from the measurement. ``None`` or a
+            value ``<= 0`` disables the check (no truncation).
+
+    Returns:
+        A chained message processor containing the online and local emulator processors.
+    """
+    online = online_message_processor.OpikMessageProcessor(
+        rest_client=rest_client,
+        file_upload_manager=file_upload_manager,
+        fallback_replay_manager=fallback_replay_manager,
+        unauthorized_message_types_registry=unauthorized_message_types_registry,
+        data_loss_tracker=data_loss_tracker,
+        max_payload_size_mb=max_payload_size_mb,
+    )
+    # is not active by default - will be activated during evaluation
+    local = local_emulator_message_processor.LocalEmulatorMessageProcessor(active=False)
+
+    return message_processors.ChainedMessageProcessor(processors=[online, local])
+
+
+def toggle_local_emulator_message_processor(
+    active: bool, chain: message_processors.ChainedMessageProcessor, reset: bool = True
+) -> None:
+    """
+    Toggles the state of the Local Emulator Message Processor within a given
+    ChainedMessageProcessor. This function either activates or deactivates the
+    processor based on the `active` parameter and resets its state if being
+    activated. Logs a warning if the Local Emulator Message Processor is not
+    found in the chain.
+
+    Args:
+        active: Determines whether to activate or deactivate the Local
+            Emulator Message Processor. If True, the processor is activated.
+        chain: The message processor
+            chain containing the Local Emulator Message Processor to be toggled.
+        reset: Determines whether to reset the Local Emulator Message Processor.
+            This can be used to clear the state of the Local Emulator before
+            evaluation. Also, it can be used to clean up the state of the Local Emulator
+            after evaluation to release system resources (memory).
+    """
+    local = chain.get_processor_by_type(
+        local_emulator_message_processor.LocalEmulatorMessageProcessor
+    )
+    if local is None:
+        LOGGER.warning("Local emulator message processor not found in the chain.")
+        return
+
+    # Ref-counted: the first acquire activates (and, with reset, clears stale
+    # state); the last release deactivates. This lets concurrent users of a
+    # shared processing chain coordinate instead of toggling it off under each
+    # other.
+    if active:
+        local.acquire(reset=reset)
+    else:
+        local.release(reset=reset)
+
+
+def get_local_emulator_message_processor(
+    chain: message_processors.ChainedMessageProcessor,
+) -> Optional[local_emulator_message_processor.LocalEmulatorMessageProcessor]:
+    """
+    Retrieves the local emulator message processor from a given chain of message processors.
+
+    This function searches through the provided chain and looks for a processor of type
+    LocalEmulatorMessageProcessor. If one is found, it is returned; otherwise, None is returned.
+
+    Args:
+        chain: A chain of message processors that may contain a
+            LocalEmulatorMessageProcessor.
+
+    Returns:
+        The LocalEmulatorMessageProcessor if found in the chain,
+        otherwise None.
+    """
+    local = chain.get_processor_by_type(
+        local_emulator_message_processor.LocalEmulatorMessageProcessor
+    )
+    return local

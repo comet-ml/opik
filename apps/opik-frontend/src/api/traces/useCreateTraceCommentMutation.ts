@@ -8,11 +8,12 @@ import api, {
   TRACES_KEY,
   TRACES_REST_ENDPOINT,
 } from "@/api/api";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseCreateTraceCommentMutationParams = {
   traceId: string;
   text: string;
+  sourceQueueId?: string;
 };
 
 const useCreateTraceCommentMutation = () => {
@@ -23,10 +24,11 @@ const useCreateTraceCommentMutation = () => {
     mutationFn: async ({
       text,
       traceId,
+      sourceQueueId,
     }: UseCreateTraceCommentMutationParams) => {
       const { data } = await api.post(
         `${TRACES_REST_ENDPOINT}${traceId}/comments`,
-        { text },
+        { text, source_queue_id: sourceQueueId },
       );
 
       return data;

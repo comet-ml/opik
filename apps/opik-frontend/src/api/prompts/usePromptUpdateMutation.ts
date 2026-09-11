@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import get from "lodash/get";
 
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 import { Prompt } from "@/types/prompts";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 type UsePromptUpdateMutationParams = {
   prompt: Partial<Prompt>;
@@ -27,19 +27,17 @@ const usePromptUpdateMutation = () => {
     },
 
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
-
       toast({
         title: "Error",
-        description: message,
+        description: getApiErrorMessage(error),
         variant: "destructive",
       });
     },
-    onSettled: () => {
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["prompt", { promptId: variables.prompt.id }],
+      });
+      queryClient.invalidateQueries({ queryKey: ["project-prompts"] });
       return queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
   });

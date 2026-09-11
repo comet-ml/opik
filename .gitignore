@@ -1,9 +1,21 @@
 # Mac
 .DS_Store
 
+# Load-test suite runtime output (one JSON file per scenario per run)
+.last_run/
+
+# Environment variables
+.env.local
+.env
+
 # IntelliJ
 .idea/
 *.iml
+
+# Coverage artifacts
+.coverage
+coverage.xml
+htmlcov/
 
 # Maven
 target/
@@ -14,6 +26,18 @@ target/
 
 # Python BE related
 /apps/opik-python-backend/images/
+
+# Test suite reports
+opik_evaluation_suite_reports/
+opik_test_suite_reports/
+allure-results/
+
+# Opik opimizer related
+/sdks/opik_optimizer/artifacts
+/sdks/opik_optimizer/benchmark_results/
+/sdks/opik_optimizer/node_modules
+/sdks/opik_optimizer/*prof*
+/sdks/opik_optimizer/.coverage*
 
 # FE related
 /apps/opik-frontend/dist
@@ -27,6 +51,10 @@ target/
 
 # testing
 /apps/opik-frontend/coverage
+**/.mypy_cache
+**/.ruff_cache
+**/.pytest_cache
+**/.litellm_cache
 
 # Vagrant
 **/.vagrant
@@ -53,17 +81,62 @@ __pycache__
 pip-log.txt
 .venv*
 .ipynb_checkpoints
-.python-version
+sdks/python/uv.lock
+# Track Python version pin to avoid accidental environment drift.
+# Remove this exclusion so changes to the version file are committed.
 
 # VS Code
 .vscode
 
+# Claude Code
+.claude/
+.mcp.json
+CLAUDE.md
+.codex
+AGENTS.override.md
+.agents/generated/
+
+# Cursor
+.cursor
+!tests_end_to_end/.cursor/
+
 # charts
 deployment/helm_chart/opik/charts
-deployment/helm_chart/opik/values-cloud-test.yaml
-deployment/helm_chart/opik/values-test.yaml
+deployment/helm_chart/opik/values-*.yaml
 temp
 opik-sandbox-executor-python.tar.gz
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
+
+# init
+.opik_install_reported
+
+# Update span cost workflow
+response.txt
+*.log
+
+# Playwright
+.playwright-mcp/
+tests_end_to_end/visual-tests/node_modules/
+tests_end_to_end/visual-tests/test-results/
+tests_end_to_end/visual-tests/visual-report/
+tests_end_to_end/visual-tests/.auth/
+tests_end_to_end/visual-tests/.test-state.json
+tests_end_to_end/visual-tests/screenshots/
+*~
+
+# Generated diagrams (local artifacts from /share-diagram command)
+/diagrams/
+
+# Figma screenshots (local reference images)
+/figma_screenshots/
+
+# `opik migrate` audit logs (runtime artifacts written to CWD by default)
+opik-migrate-*.json
+
+# traces cutover backfill anchor (runtime artifact written to CWD by backfill.sh)
+traces_cutover_backfill_start
+
+# private opik plugin
+apps/opik-frontend/src/plugins/ai-spend

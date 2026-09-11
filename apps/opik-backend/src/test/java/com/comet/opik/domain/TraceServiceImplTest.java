@@ -1,19 +1,22 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
-import com.comet.opik.api.TraceSearchCriteria;
-import com.comet.opik.api.error.EntityAlreadyExistsException;
-import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.api.error.InvalidUUIDVersionException;
-import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.error.InvalidUUIDException;
+import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.sorting.TraceSortingFactory;
+import com.comet.opik.domain.attachment.AttachmentReinjectorService;
+import com.comet.opik.domain.attachment.AttachmentService;
+import com.comet.opik.domain.attachment.AttachmentStripperService;
+import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.lock.LockService;
-import com.fasterxml.uuid.Generators;
+import com.comet.opik.utils.ErrorUtils;
 import com.google.common.eventbus.EventBus;
 import io.r2dbc.spi.Connection;
+import jakarta.ws.rs.NotFoundException;
+import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,16 +32,24 @@ import uk.co.jemos.podam.api.PodamFactoryImpl;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -52,13 +63,7 @@ class TraceServiceImplTest {
     private TraceDAO traceDao;
 
     @Mock
-    private SpanService spanService;
-
-    @Mock
-    private FeedbackScoreDAO feedbackScoreDAO;
-
-    @Mock
-    private CommentDAO commentDAO;
+    private DeletionEventDAO deletionEventDAO;
 
     @Mock
     private TransactionTemplateAsync template;
@@ -69,21 +74,48 @@ class TraceServiceImplTest {
     @Mock
     private EventBus eventBus;
 
+    @Mock
+    private AttachmentStripperService attachmentStripperService;
+
+    @Mock
+    private AttachmentService attachmentService;
+
+    @Mock
+    private AttachmentReinjectorService attachmentReinjectorService;
+
+    private final DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModelConfig = DatabaseAnalyticsDataModelConfig
+            .builder()
+            .build();
+
     private final PodamFactory factory = new PodamFactoryImpl();
     private final TraceSortingFactory traceSortingFactory = new TraceSortingFactory();
+    private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     @BeforeEach
     void setUp() {
-        traceService = new TraceServiceImpl(
+        // Mock AttachmentStripperService to return JsonNode unchanged (no stripping for tests)
+        lenient().when(attachmentStripperService.stripAttachments(any(), any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> invocation.getArgument(0)); // Return first argument (JsonNode) unchanged
+
+        traceService = newTraceService(databaseAnalyticsDataModelConfig);
+    }
+
+    private TraceServiceImpl newTraceService(DatabaseAnalyticsDataModelConfig databaseAnalyticsDataModelConfig) {
+        var opikConfiguration = new OpikConfiguration();
+        opikConfiguration.setDatabaseAnalyticsDataModel(databaseAnalyticsDataModelConfig);
+        return new TraceServiceImpl(
                 traceDao,
-                spanService,
-                feedbackScoreDAO,
-                commentDAO,
+                deletionEventDAO,
                 template,
                 projectService,
-                () -> Generators.timeBasedEpochGenerator().generate(),
+                idGenerator,
                 DUMMY_LOCK_SERVICE,
-                eventBus);
+                eventBus,
+                traceSortingFactory,
+                attachmentStripperService,
+                attachmentService,
+                attachmentReinjectorService,
+                opikConfiguration);
     }
 
     @Nested
@@ -91,67 +123,21 @@ class TraceServiceImplTest {
     class CreateTrace {
 
         @Test
-        @DisplayName("when concurrent trace creations with same project name conflict, then handle project already exists exception and create trace")
-        void create__whenConcurrentTraceCreationsWithSameProjectNameConflict__thenHandleProjectAlreadyExistsExceptionAndCreateTrace() {
-
-            // given
-            var projectName = "projectName";
-            var projectId = UUID.randomUUID();
-            var traceId = Generators.timeBasedEpochGenerator().generate();
-            var connection = mock(Connection.class);
-            String workspaceId = UUID.randomUUID().toString();
-            ArgumentCaptor<TracesCreated> eventCaptor = ArgumentCaptor.forClass(TracesCreated.class);
-
-            // when
-            when(projectService.getOrCreate(workspaceId, projectName, DEFAULT_USER))
-                    .thenThrow(new EntityAlreadyExistsException(new ErrorMessage(List.of("Project already exists"))));
-
-            when(projectService.findByNames(workspaceId, List.of(projectName)))
-                    .thenReturn(List.of(Project.builder().id(projectId).name(projectName).build())); // simulate project was already created
-
-            doNothing().when(eventBus).post(eventCaptor.capture());
-
-            when(template.nonTransaction(any()))
-                    .thenAnswer(invocation -> {
-                        TransactionTemplateAsync.TransactionCallback<String> trace = invocation.getArgument(0);
-
-                        return trace.execute(connection);
-                    });
-
-            when(traceDao.findById(any(), any()))
-                    .thenReturn(Mono.empty());
-
-            when(traceDao.insert(any(), any()))
-                    .thenReturn(Mono.just(traceId));
-
-            var actualResult = traceService.create(Trace.builder()
-                    .projectId(projectId)
-                    .projectName(projectName)
-                    .startTime(Instant.now())
-                    .build())
-                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
-                            .put(RequestContext.WORKSPACE_ID, workspaceId))
-                    .block();
-
-            // then
-            assertThat(actualResult).isEqualTo(traceId);
-            assertThat(eventCaptor.getValue().projectIds()).isEqualTo(Set.of(projectId));
-        }
-
-        @Test
         @DisplayName("when creating traces with uuid version not 7, then return invalid uuid version exception")
-        void create__whenCreatingTracesWithUUIDVersionNot7__thenReturnInvalidUUIDVersionException() {
+        void create__whenCreatingTracesWithUUIDVersionNot7__thenThrowException() {
 
             // given
             var projectName = "projectName";
             var traceId = UUID.randomUUID();
 
             // then
-            Assertions.assertThrows(InvalidUUIDVersionException.class, () -> traceService.create(Trace.builder()
+            assertThrows(InvalidUUIDException.class, () -> traceService.create(Trace.builder()
                     .id(traceId)
                     .projectName(projectName)
                     .startTime(Instant.now())
                     .build())
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, UUID.randomUUID().toString()))
                     .block());
         }
 
@@ -163,7 +149,7 @@ class TraceServiceImplTest {
 
         @Test
         @DisplayName("when project name is not found, then return empty page")
-        void find__whenProjectNameIsNotFound__thenReturnEmptyPage() {
+        void find__whenProjectNameIsNotFound__thenReturnNotFoundException() {
 
             // given
             var projectName = "projectName";
@@ -171,24 +157,18 @@ class TraceServiceImplTest {
             int size = 10;
             String workspaceId = UUID.randomUUID().toString();
 
-            // when
-            when(projectService.findByNames(workspaceId, List.of(projectName)))
-                    .thenReturn(List.of());
+            when(projectService.resolveProjectIdAndVerifyVisibility(null, projectName))
+                    .thenReturn(Mono.error(ErrorUtils.failWithNotFoundName("Project", projectName)));
 
-            var actualResult = traceService
+            Exception exception = assertThrows(NotFoundException.class, () -> traceService
                     .find(page, size, TraceSearchCriteria.builder()
                             .projectName(projectName)
                             .build())
                     .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
                             .put(RequestContext.WORKSPACE_ID, workspaceId))
-                    .block();
+                    .block());
 
-            // then
-            Assertions.assertNotNull(actualResult);
-            assertThat(actualResult.page()).isEqualTo(page);
-            assertThat(actualResult.size()).isZero();
-            assertThat(actualResult.total()).isZero();
-            assertThat(actualResult.content()).isEmpty();
+            assertThat(exception.getMessage()).isEqualTo("Project name: %s not found".formatted(projectName));
         }
 
         @Test
@@ -219,6 +199,13 @@ class TraceServiceImplTest {
                         return callback.execute(connection);
                     });
 
+            when(projectService.resolveProjectIdAndVerifyVisibility(projectId, null))
+                    .thenReturn(Mono.just(projectId));
+
+            // Mock AttachmentReinjectorService to return trace unchanged (no reinjection needed for this test)
+            when(attachmentReinjectorService.reinjectAttachments(any(Trace.class), any(Boolean.class)))
+                    .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
             var actualResult = traceService
                     .find(page, size, TraceSearchCriteria.builder().projectId(projectId).build())
                     .block();
@@ -232,4 +219,173 @@ class TraceServiceImplTest {
         }
     }
 
+    @Nested
+    @DisplayName("Delete Traces:")
+    class DeleteTraces {
+
+        @Test
+        @DisplayName("when capture is disabled, then delete records no deletion events")
+        void delete__whenCaptureDisabled__thenRecordsNoDeletionEvents() {
+            var ids = Set.of(idGenerator.generateId(), idGenerator.generateId());
+            var projectId = idGenerator.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            when(traceDao.delete(pairs(projectId, ids), connection)).thenReturn(Mono.empty());
+
+            // traceService is built with capture disabled (default config)
+            assertDoesNotThrow(() -> traceService
+                    .delete(ids, projectId)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao).delete(pairs(projectId, ids), connection);
+            verifyTracesDeletedPosted(ids, projectId, workspaceId);
+            verifyNoInteractions(deletionEventDAO);
+        }
+
+        @Test
+        @DisplayName("when capture is enabled and recording fails, then the delete still succeeds")
+        void delete__whenCaptureEnabledAndRecordingFails__thenDeleteSucceeds() {
+            var ids = Set.of(idGenerator.generateId(), idGenerator.generateId());
+            var projectId = idGenerator.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            when(traceDao.delete(pairs(projectId, ids), connection)).thenReturn(Mono.empty());
+            when(deletionEventDAO.insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER))
+                    .thenReturn(Mono.error(new RuntimeException("Error inserting deletion events")));
+
+            var traceService = newTraceService(DatabaseAnalyticsDataModelConfig.builder()
+                    .traceDeletionEventsCaptureEnabled(true)
+                    .build());
+            // Capture is best-effort: its failure is swallowed and must not fail the deletion.
+            assertDoesNotThrow(() -> traceService
+                    .delete(ids, projectId)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao).delete(pairs(projectId, ids), connection);
+            verifyTracesDeletedPosted(ids, projectId, workspaceId);
+            verify(deletionEventDAO).insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER);
+        }
+
+        @Test
+        @DisplayName("when the delete fails, then the deletion events are still recorded and the error propagates")
+        void delete__whenDeleteFails__thenStillRecordsDeletionEventsAndPropagates() {
+            var ids = Set.of(idGenerator.generateId(), idGenerator.generateId());
+            var projectId = idGenerator.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+            when(traceDao.delete(pairs(projectId, ids), connection))
+                    .thenReturn(Mono.error(new RuntimeException("Error deleting traces")));
+            when(deletionEventDAO.insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER))
+                    .thenReturn(Mono.empty());
+
+            var traceService = newTraceService(DatabaseAnalyticsDataModelConfig.builder()
+                    .traceDeletionEventsCaptureEnabled(true)
+                    .build());
+            // OPIK-8141: capture runs before the delete, so a failed delete is recorded anyway - including one whose
+            // statement errored on the client while its server-side mutation applied, the case that lost the event.
+            assertThatThrownBy(() -> traceService
+                    .delete(ids, projectId)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block())
+                    .isInstanceOf(RuntimeException.class)
+                    .hasMessageContaining("Error deleting traces");
+
+            // The ordering is the fix, so assert it rather than infer it from both having happened.
+            var inOrder = inOrder(deletionEventDAO, traceDao);
+            inOrder.verify(deletionEventDAO).insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER);
+            inOrder.verify(traceDao).delete(pairs(projectId, ids), connection);
+            // A failed delete still skips the cascade: its children belong to traces that may well be live.
+            verifyNoInteractions(eventBus);
+        }
+
+        @Test
+        void deleteResolvesBoundedMissesViaUnboundedFallbackAcrossAllProjects() {
+            // The null-project path resolves owning projects in two passes: a bounded fast pass, then an unbounded
+            // pass over ONLY the ids the bounded pass misses (e.g. a wrapped id_at outside the week window). Integration
+            // can't reach this branch (a wrapped-id_at row can't be created through the API), so it's covered here:
+            // the bounded pass resolves one id, the miss set (a second id, reused across two projects) is resolved by
+            // the unbounded pass, and the delete runs over the merged (project_id, id) pairs.
+            var resolvedId = idGenerator.generateId();
+            var missedId = idGenerator.generateId();
+            var ids = Set.of(resolvedId, missedId);
+            var projectA = idGenerator.generateId();
+            var projectB = idGenerator.generateId();
+            var projectC = idGenerator.generateId();
+            var workspaceId = UUID.randomUUID().toString();
+            var connection = mockDeleteFlow();
+
+            when(traceDao.getAllProjectIdsByTraceIdsBounded(ids))
+                    .thenReturn(Mono.just(Map.of(resolvedId, Set.of(projectA))));
+            // Fallback runs over the miss set only, and resolves the reused id to both its owning projects.
+            when(traceDao.getAllProjectIdsByTraceIds(Set.of(missedId)))
+                    .thenReturn(Mono.just(Map.of(missedId, Set.of(projectB, projectC))));
+
+            var expectedPairs = Set.of(
+                    Pair.of(projectA, resolvedId),
+                    Pair.of(projectB, missedId),
+                    Pair.of(projectC, missedId));
+            when(traceDao.delete(expectedPairs, connection)).thenReturn(Mono.empty());
+
+            assertDoesNotThrow(() -> traceService
+                    .delete(ids, null)
+                    .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block());
+
+            verify(traceDao).getAllProjectIdsByTraceIdsBounded(ids);
+            // The unbounded fallback is narrowed to the miss set, never re-queried over the whole id set.
+            verify(traceDao).getAllProjectIdsByTraceIds(Set.of(missedId));
+            verify(traceDao).delete(expectedPairs, connection);
+        }
+
+        /**
+         * Mirrors {@code TraceServiceImpl}'s non-null-project path: one {@code (project_id, trace_id)} pair per id.
+         * Set equality is order-independent, so this matches whatever order the service iterates the ids in.
+         */
+        private Set<Pair<UUID, UUID>> pairs(UUID projectId, Set<UUID> ids) {
+            return ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet());
+        }
+
+        /**
+         * The bridge rows the delete is expected to record: one {@code traces} / {@code user_request} event per pair,
+         * with {@code eventTime} left null for ClickHouse to stamp. Matching the insert on this rather than on
+         * {@code any()} is what pins the recorded contents, so a wrong source table, reason or id fails the test.
+         */
+        private Set<DeletionEvent> deletionEvents(UUID projectId, Set<UUID> ids, String workspaceId) {
+            return ids.stream()
+                    .map(id -> DeletionEvent.builder()
+                            .sourceTable(SourceTable.TRACES)
+                            .workspaceId(workspaceId)
+                            .projectId(projectId)
+                            .deletedId(id.toString())
+                            .deletionReason(DeletionReason.USER_REQUEST)
+                            .build())
+                    .collect(Collectors.toUnmodifiableSet());
+        }
+
+        private Connection mockDeleteFlow() {
+            var connection = mock(Connection.class);
+            when(template.nonTransaction(any()))
+                    .thenAnswer(invocation -> {
+                        TransactionTemplateAsync.TransactionCallback<Void> callback = invocation.getArgument(0);
+                        return callback.execute(connection);
+                    });
+            return connection;
+        }
+
+        private void verifyTracesDeletedPosted(Set<UUID> ids, UUID projectId, String workspaceId) {
+            var eventCaptor = ArgumentCaptor.forClass(TracesDeleted.class);
+            verify(eventBus).post(eventCaptor.capture());
+            var event = eventCaptor.getValue();
+            assertThat(event.traceIds()).isEqualTo(ids);
+            assertThat(event.projectId()).isEqualTo(projectId);
+            assertThat(event.workspaceId()).isEqualTo(workspaceId);
+            assertThat(event.userName()).isEqualTo(DEFAULT_USER);
+        }
+    }
 }

@@ -1,23 +1,71 @@
-# Setting up a demo project
-#
-# Evaluation traces & spans
-# We start with evaluation so it shows up at the bottom.
-# The evaluation is going to be tracked into a separate project from the demo traces.
-# It was run using a simple context with 3 sentences, and 3 questions asking about it.
-
-import opik 
-import uuid6
+import opik
 import json
 import urllib.request
 import uuid6
 import logging
+import datetime
+import math
+import time
+import uuid
+import random
 
 import opik.rest_api
-from opik_backend.demo_data import evaluation_traces, evaluation_spans, demo_traces, demo_spans
+from opik.rest_api.types.trace_write import TraceWrite
+from opik.rest_api.types.span_write import SpanWrite
+from opik.rest_api.types.feedback_score_batch_item import FeedbackScoreBatchItem
+from opik.rest_api.types.experiment_item import ExperimentItem as RestExperimentItem
+from opik_backend.demo_data import (
+    demo_traces,
+    demo_spans,
+    demo_thread_feedback_scores,
+    demo_test_suite_items,
+    demo_test_suite_global_assertion,
+    demo_agent_config_blueprints,
+    demo_test_suite_experiments,
+    demo_agent_prompt_name,
+    demo_agent_prompt_v1,
+    demo_agent_prompt_v2,
+)
+from opentelemetry import trace
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
 
-UUID_MAP = {}
+# Upper bound on how far in the past any demo id's embedded UUIDv7 timestamp may sit.
+#
+# Ingestion validates every trace/span id against a window around now
+# (UuidValidationConfig.window, enforced by UuidV7TimestampValidator). Operators can tune
+# that window but not below 12h (@MinDuration(value = 12, unit = HOURS)), so a dataset
+# confined to the last 10h is accepted under *any* legal configuration — OSS Docker, Helm
+# and Comet cloud alike — leaving 2h of slack for clock skew between this seeder and the
+# backend. The demo ships to every deployment and seeds into each user's own workspace, so
+# it has to clear validation on its own; it cannot lean on an environment-specific bypass.
+DEMO_ID_MAX_AGE = datetime.timedelta(hours=10)
+
+# Smallest start_time difference that uuid7_from_datetime can actually encode.
+#
+# It spends 12 bits on the sub-millisecond part (int(micros * 4096 / 1_000_000)), so one step is
+# 1e6/4096 us. A tie-break smaller than this lands entirely below the id's resolution: the colliding
+# traces get byte-identical timestamp bits and their relative order in an id sort falls to the random
+# bits instead of their start_time. Rounded up so a step always crosses a boundary.
+UUID7_SUB_MS_STEP = datetime.timedelta(microseconds=math.ceil(1_000_000 / 4096))
+
+# Name of the project the demo seeds into.
+#
+# The frontend keys demo-specific behaviour off this exact string (DEMO_PROJECT_NAMES in
+# apps/opik-frontend/src/constants/shared.ts) — the demo banner, and the 24h chart range the
+# compressed timeline needs to render hourly. Renaming it here without adding the new name there
+# silently drops that behaviour, so tests/unit/test_demo_project_name.py pins the two together.
+DEMO_PROJECT_NAME = "Opik Demo Agent Observability"
+
+
+@dataclass
+class DemoDataContext:
+    """Context object to hold state for a single demo data creation invocation.
+    This prevents race conditions when multiple users sign up concurrently."""
+    uuid_map: dict = field(default_factory=dict)
+
 
 def make_http_request(base_url, message, workspace_name, comet_api_key):
     try:
@@ -29,7 +77,7 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
             headers["authorization"] = f"{comet_api_key}"
 
         url = base_url + message["url"]
-        data = json.dumps(message["payload"]).encode("utf-8")
+        data = json.dumps(message["payload"]).encode("utf-8") if "payload" in message else None
 
         req = urllib.request.Request(url, data=data, method=message["method"])
         for key, value in headers.items():
@@ -38,22 +86,49 @@ def make_http_request(base_url, message, workspace_name, comet_api_key):
 
         with urllib.request.urlopen(req) as response:
             status_code = response.getcode()
-            logger.info(status_code, message["method"], url)
-    except Exception as e:
-        logger.error(e)
+            logger.info("Got response status %s, from method %s on url %s", status_code, message["method"], url)
+            body = response.read()
+            if body:
+                data = json.loads(body)
+            else:
+                data = None
+            return data, status_code
+    except urllib.error.HTTPError as e:
+        if e.code >= 500:
+            raise e
+        logger.info("Got error %s, from method %s on url %s", e.code, message["method"], url)
+        return None, e.code
+
 
 def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
+    name = "User feedback"
+    params = {
+        "name": name
+    }
+    request = {
+        "url": f"/v1/private/feedback-definitions?{urllib.parse.urlencode(params)}",
+        "method": "GET"
+    }
+
+    data, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
+
+    if status_code == 200 and data["content"]:
+        for definition in data["content"]:
+            if definition["name"] == name:
+                logger.info("Feedback definition already exists")
+                return
+
     request = {
         "url": "/v1/private/feedback-definitions",
         "method": "POST",
         "payload": {
-            "name": "User feedback",
+            "name": name,
             "description": "Feedback provided by the user",
             "type": "categorical",
             "details": {
-                "categories":{ 
+                "categories": {
                     "👍": 1.0,
-                    "👎": 0.0 
+                    "👎": 0.0
                 }
             },
         },
@@ -61,159 +136,983 @@ def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
 
     make_http_request(base_url, request, workspace_name, comet_api_key)
 
-def get_new_uuid(old_id):
+
+def create_default_environments(base_url, workspace_name, comet_api_key):
+    defaults = [
+        {"name": "development", "position": 0, "color": "#945FCF"},
+        {"name": "staging", "position": 1, "color": "#12A4B4"},
+        {"name": "production", "position": 2, "color": "#19A979"},
+    ]
+    for payload in defaults:
+        request = {
+            "url": "/v1/private/environments",
+            "method": "POST",
+            "payload": payload,
+        }
+        make_http_request(base_url, request, workspace_name, comet_api_key)
+
+
+def create_project(base_url, workspace_name, comet_api_key, project_name):
+    request = {
+        "url": "/v1/private/projects",
+        "method": "POST",
+        "payload": {
+            "name": project_name,
+        },
+    }
+
+    _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
+    return status_code
+
+def demo_block_key(trace):
+    """
+    Group key for the unit whose internal timing must survive compression.
+
+    A thread is one chatbot conversation: its traces are near-simultaneous (a whole thread
+    spans under 6s) and the Threads tab derives thread duration from them, so the offsets
+    *inside* a thread have to come through untouched. Traces with no thread_id form their
+    own single-trace block.
+    """
+    thread_id = trace.get("thread_id")
+    if thread_id:
+        return ("thread", thread_id)
+    return ("trace", trace["id"])
+
+def rebase_span_tree(trace_spans, new_trace_start):
+    """
+    Anchor one trace's span tree to that trace's new start_time.
+
+    The tree moves as a rigid body — every span shifts by the same delta — so parent/child
+    containment, sibling ordering and every duration survive exactly.
+
+    The delta is measured from the tree's own root span rather than from the trace's old
+    start_time, because in the raw demo data the two disagree: spans are all bunched into a
+    few hours while traces spread across 30 days, leaving most spans dated up to 30 days
+    *after* the trace they belong to. Shifting spans by their trace's delta would carry that
+    skew along and push them past now, tripping the too_far_future check. Re-anchoring on the
+    root span drops the skew instead.
+
+    Only the root span is positioned; span durations are whatever the dataset already had, so
+    a tree filling its trace's window exactly is a property of the demo data (verified for all
+    116 trees by test_demo_timeline) rather than something enforced here.
+
+    Returns:
+    - dict: old span id -> (start_time, end_time)
+    """
+    if not trace_spans:
+        return {}
+
+    roots = [span for span in trace_spans if not span.get("parent_span_id")]
+    # Every demo trace has exactly one root span. Fall back to the earliest span if a tree
+    # ever arrives rootless, which still places the whole tree inside the window.
+    anchor = min(roots or trace_spans, key=lambda span: span["start_time"])["start_time"]
+    offset = new_trace_start - anchor
+
+    return {
+        span["id"]: (span["start_time"] + offset, span["end_time"] + offset)
+        for span in trace_spans
+    }
+
+def separate_trace_starts(trace_timings):
+    """
+    Space trace starts far enough apart that their minted ids order chronologically.
+
+    uuid7_from_datetime resolves only one UUID7_SUB_MS_STEP, so two traces closer than that get
+    identical timestamp bits and an id sort falls back to their random bits — ordering the traces
+    list by something other than when they happened.
+
+    Each trace is placed at the later of its own start and one step after its predecessor, walking in
+    chronological order. Every trace therefore lands strictly after the one before it whatever the
+    input looks like, and none moves further than needed. Expressed as a minimum separation rather
+    than a per-millisecond collision count because a count keyed on the original millisecond cannot
+    see a nudge that crosses into the next one, and could push a trace past a naturally later one.
+
+    Parameters:
+    - trace_timings: iterable of (start, trace_id, duration)
+
+    Returns:
+    - list: the same tuples, in chronological order, with starts separated
+    """
+    separated: list = []
+    previous_start = None
+
+    for raw_start, trace_id, duration in sorted(
+            trace_timings, key=lambda item: (item[0], item[1])):
+        start = raw_start
+        if previous_start is not None and start < previous_start + UUID7_SUB_MS_STEP:
+            start = previous_start + UUID7_SUB_MS_STEP
+        previous_start = start
+        separated.append((start, trace_id, duration))
+
+    return separated
+
+def compress_demo_timeline(traces, spans, now=None, max_age=DEMO_ID_MAX_AGE):
+    """
+    Map the demo dataset's ~30-day timeline onto the last `max_age` so that every
+    id-embedded timestamp clears the UUIDv7 ingestion window.
+
+    Demo ids are minted from start_time (uuid7_from_datetime), so the id timestamps inherit
+    the dataset's own 30-day spread. Under reject-mode validation that costs ~97% of traces
+    an HTTP 400 for too_old. Compression takes it out of the gaps *between* conversations,
+    which is where all the slack is:
+
+    - every trace keeps its exact duration, so latencies stay realistic;
+    - offsets inside a thread are preserved exactly, so thread durations stay realistic;
+    - block ordering is preserved, so the traces list and over-time chart keep their shape;
+    - inter-thread gaps (~12h on average) shrink to minutes, and that alone buys the whole
+      30d -> `max_age` reduction.
+
+    The newest trace ends at `now`, matching the previous behaviour.
+
+    Parameters:
+    - traces: List of trace dictionaries to lay out
+    - spans: List of span dictionaries, rebased onto their parent trace (see rebase_span_tree)
+    - now: Instant the newest trace should end at; defaults to datetime.datetime.now()
+    - max_age: Width of the target window. Must be positive. Only the gaps between blocks are
+      compressible, so when `max_age` is smaller than the blocks' own combined duration the gaps
+      collapse to zero and the result spans that combined duration instead.
+
+    Returns:
+    - tuple: (dict old trace id -> (start, end), dict old span id -> (start, end))
+    """
+    if max_age <= datetime.timedelta(0):
+        raise ValueError(f"max_age must be positive, got {max_age}")
+    if now is None:
+        now = datetime.datetime.now()
+    if not traces:
+        return {}, {}
+
+    spans_by_trace: dict = {}
+    for span in spans:
+        spans_by_trace.setdefault(span["trace_id"], []).append(span)
+
+    blocks: dict = {}
+    for original_trace in traces:
+        blocks.setdefault(demo_block_key(original_trace), []).append(original_trace)
+
+    # Chronological, tie-broken on the block's lowest trace id so a given dataset always
+    # produces the same layout regardless of iteration order.
+    ordered_blocks = sorted(
+        blocks.values(),
+        key=lambda block: (
+            min(item["start_time"] for item in block),
+            min(item["id"] for item in block),
+        ),
+    )
+
+    block_starts = [min(item["start_time"] for item in block) for block in ordered_blocks]
+    block_ends = [max(item["end_time"] for item in block) for block in ordered_blocks]
+    block_durations = [end - start for start, end in zip(block_starts, block_ends)]
+
+    # Blocks overlap in the raw data (27 of 59 overlap the next one). Clamping a negative
+    # gap at zero gives up the overlap but keeps block order, which is what the traces list
+    # and the over-time chart actually read.
+    gaps = [
+        max(next_start - prev_end, datetime.timedelta(0))
+        for prev_end, next_start in zip(block_ends, block_starts[1:])
+    ]
+
+    total_duration = sum(block_durations, datetime.timedelta(0))
+    total_gap = sum(gaps, datetime.timedelta(0))
+
+    # Block durations are never scaled, so only the space between blocks can absorb the
+    # reduction.
+    gap_budget = max_age - total_duration
+    if gap_budget <= datetime.timedelta(0):
+        # The shipped dataset is ~7min of trace time against a 10h target, so this needs a
+        # drastically different demo dataset to trigger. Collapse the gaps rather than
+        # scaling by a negative factor, and say so loudly.
+        logger.warning(
+            "Demo trace durations (%s) exceed the target window (%s); collapsing all gaps",
+            total_duration, max_age)
+        gap_scale = 0.0
+    elif total_gap > gap_budget:
+        gap_scale = gap_budget / total_gap
+    else:
+        # Already inside the window — keep the timeline as-is and only move it to `now`.
+        gap_scale = 1.0
+
+    raw_trace_timings: list = []
+
+    cursor = now - max_age
+    for idx, block in enumerate(ordered_blocks):
+        # Sorted, not input order: reordering the dataset must not change the layout, and the
+        # separation pass below walks in this order. Tie-broken on id to make the sort total.
+        for original_trace in sorted(
+                block, key=lambda item: (item["start_time"], item["id"])):
+            raw_trace_timings.append((
+                cursor + (original_trace["start_time"] - block_starts[idx]),
+                original_trace["id"],
+                original_trace["end_time"] - original_trace["start_time"],
+            ))
+
+        cursor = cursor + block_durations[idx]
+        if idx < len(gaps):
+            cursor = cursor + gaps[idx] * gap_scale
+
+    # Separation lives in its own function so the uuid7 ordering rule can be read and tested without
+    # going through the whole compressor.
+    trace_times: dict = {}
+    span_times: dict = {}
+
+    for new_start, trace_id, duration in separate_trace_starts(raw_trace_timings):
+        trace_times[trace_id] = (new_start, new_start + duration)
+        # Rebased from the final start so the span tree tracks the separation and stays aligned with
+        # its trace.
+        span_times.update(rebase_span_tree(spans_by_trace.get(trace_id, []), new_start))
+
+    # The walk above lands a little short of `now` — clamped overlaps and gap_scale rounding
+    # leave a residue — so close the gap and pin the newest trace's end to `now`. The shift is
+    # uniform, and it is backwards by at most a few microseconds when a millisecond tie-break
+    # nudged the last trace past `now`, so the oldest id can sit a hair beyond `max_age`. The
+    # 2h of margin `max_age` keeps below the 12h configuration minimum absorbs that easily.
+    correction = now - max(end for _, end in trace_times.values())
+    if correction:
+        trace_times = {
+            key: (start + correction, end + correction)
+            for key, (start, end) in trace_times.items()
+        }
+        span_times = {
+            key: (start + correction, end + correction)
+            for key, (start, end) in span_times.items()
+        }
+
+    return trace_times, span_times
+
+def build_trace_writes(traces, trace_times, context: DemoDataContext, project_name: str):
+    """
+    Turn demo trace dictionaries into TraceWrite objects ready for a single synchronous
+    POST /v1/private/traces/batch call, using the timeline from compress_demo_timeline.
+
+    Parameters:
+    - traces: List of trace dictionaries to process
+    - trace_times: dict old trace id -> (start_time, end_time)
+    - context: DemoDataContext object holding state
+    - project_name: Project name to attach to every TraceWrite
+
+    Returns:
+    - list[TraceWrite]: Traces ready to POST
+    """
+    trace_writes: list = []
+
+    for original_trace in sorted(traces, key=lambda x: x["id"]):
+        # Create a copy to avoid mutating the original demo_data
+        trace = dict(original_trace)
+        # Store the old ID before modification
+        old_trace_id = trace["id"]
+        trace["start_time"], trace["end_time"] = trace_times[old_trace_id]
+        trace["id"] = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
+        # Attach project_name directly so the TraceWrite targets the right project.
+        trace["project_name"] = project_name
+        # Remove fields that shouldn't be in the trace payload
+        trace.pop("project_id", None)
+        trace.pop("workspace_id", None)
+        trace_writes.append(TraceWrite(**trace))
+
+    return trace_writes
+
+def build_span_writes(spans, span_times, context: DemoDataContext, project_name: str):
+    """
+    Turn demo span dictionaries into SpanWrite objects ready for a single synchronous
+    POST /v1/private/spans/batch call, using the timeline from compress_demo_timeline.
+
+    First pass mints every span's time-based UUID so parent_span_id references resolve in the
+    second pass. Second pass builds the SpanWrite objects.
+
+    Parameters:
+    - spans: List of span dictionaries to process
+    - span_times: dict old span id -> (start_time, end_time)
+    - context: DemoDataContext object holding state
+    - project_name: Project name to attach to every SpanWrite
+
+    Returns:
+    - list[SpanWrite]: Spans ready to POST
+    """
+    # compress_demo_timeline only lays out spans whose trace it was given, so a span pointing at an
+    # absent trace has no entry here. Say so explicitly: the alternative is a bare KeyError that the
+    # caller's broad `except Exception` turns into "demo data creation failed" with no indication
+    # that the dataset is the problem. Unreachable on the shipped data (0 orphans of 906) — this is
+    # for whoever next edits demo_data.py.
+    orphans = sorted(span["id"] for span in spans if span["id"] not in span_times)
+    if orphans:
+        raise ValueError(
+            f"{len(orphans)} demo span(s) reference a trace that is not in demo_traces, so they "
+            f"have no place on the compressed timeline: {orphans[:5]}")
+
+    # First pass: mint all time-based UUIDs so every parent span id is mapped before we
+    # reference it.
+    for original_span in sorted(spans, key=lambda x: x["id"]):
+        start_time, _ = span_times[original_span["id"]]
+        get_new_uuid_by_time(context, original_span["id"], start_time)
+
+    # Second pass: build SpanWrite objects with the new times and remapped ids
+    span_writes: list = []
+    for original_span in sorted(spans, key=lambda x: x["id"]):
+        # Create a copy to avoid mutating the original demo_data
+        span = dict(original_span)
+        old_span_id = original_span["id"]
+        span["start_time"], span["end_time"] = span_times[old_span_id]
+        # Use the mapped UUIDs from context
+        span["id"] = get_new_uuid(context, old_span_id)
+        span["trace_id"] = get_new_uuid(context, original_span["trace_id"])
+        # Remap only a real parent id. Testing for the key alone would also match a present-but-
+        # empty value, and get_new_uuid would happily mint a parent for it — turning a root span
+        # into a child of a span that does not exist. This also keeps root detection identical to
+        # rebase_span_tree, so the two can't disagree about which spans are roots.
+        if span.get("parent_span_id"):
+            span["parent_span_id"] = get_new_uuid(context, span["parent_span_id"])
+        # Attach project_name directly so the SpanWrite targets the right project.
+        span["project_name"] = project_name
+        # Remove fields that shouldn't be in the span payload
+        span.pop("project_id", None)
+        span.pop("workspace_id", None)
+        span_writes.append(SpanWrite(**span))
+
+    return span_writes
+
+def uuid7_from_datetime(dt: datetime.datetime) -> uuid.UUID:
+
+    # 1. Get timestamp in milliseconds and microseconds
+    timestamp_ms = int(dt.timestamp() * 1000)  # 48 bits
+    micros = dt.microsecond  # 0–999999
+
+    # 2. Use 12 bits for sub-millisecond part: scale microseconds (0–999999) to 0–4095
+    sub_ms_bits = int(micros * 4096 / 1_000_000)  # 12 bits
+
+    # 3. Split 48-bit timestamp into time fields
+    time_low = (timestamp_ms >> 16) & 0xFFFFFFFF
+    time_mid = timestamp_ms & 0xFFFF
+    time_hi = (sub_ms_bits & 0x0FFF)  # 12-bit sub-millisecond precision
+    time_hi_and_version = (0x7 << 12) | time_hi  # version (4 bits) + sub-ms (12 bits)
+
+    # 4. 14 random bits for clock sequence
+    clock_seq = random.getrandbits(14)
+    clock_seq_low = clock_seq & 0xFF
+    clock_seq_hi_variant = 0x80 | ((clock_seq >> 8) & 0x3F)  # variant '10xxxxxx'
+
+    # 5. 48 random bits for node
+    node = random.getrandbits(48)
+
+    # 6. Construct UUID
+    return uuid.UUID(fields=(
+        time_low,
+        time_mid,
+        time_hi_and_version,
+        clock_seq_hi_variant,
+        clock_seq_low,
+        node
+    ))
+
+def get_new_uuid(context: DemoDataContext, old_id):
     """
     The demo_data has the IDs hardcoded in, to preserve the relationships between the traces and spans.
     However, we need to generate unique ones before logging them.
     """
-    if old_id in UUID_MAP:
-        new_id = UUID_MAP[old_id]
+    if old_id in context.uuid_map:
+        new_id = context.uuid_map[old_id]
     else:
         new_id = str(uuid6.uuid7())
-        UUID_MAP[old_id] = new_id
+        context.uuid_map[old_id] = new_id
     return new_id
 
-def create_demo_data(base_url: str, workspace_name, comet_api_key):
-    client: opik.Opik = None
+def get_new_uuid_by_time(context: DemoDataContext, old_id, datetime):
+    """
+    The demo_data has the IDs hardcoded in, to preserve the relationships between the traces and spans.
+    However, we need to generate unique ones before logging them based on start_time.
+    """
+    if old_id in context.uuid_map:
+        new_id = context.uuid_map[old_id]
+    else:
+        new_id = str(uuid7_from_datetime(datetime))
+        context.uuid_map[old_id] = new_id
+    return new_id
 
-    try:
-        client = opik.Opik(
-            project_name="Demo evaluation",
-            workspace=workspace_name,
-            host=base_url,
-            api_key=comet_api_key,
-            _use_batching=True,
-        )
+def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspace_name, comet_api_key):
+    """Seed the demo chatbot project. Returns True when fresh data was written,
+    False when the project already existed (409) and the seed was skipped."""
+    with tracer.start_as_current_span("create_demo_chatbot_project"):
+        client: opik.Opik = None
 
-        for trace in sorted(evaluation_traces, key=lambda x: x["start_time"]):
-            new_id = get_new_uuid(trace["id"])
-            trace["id"] = new_id
-            client.trace(**trace)
+        try:
+            project_name = DEMO_PROJECT_NAME
 
-        for span in sorted(evaluation_spans, key=lambda x: x["start_time"]):
-            new_id = get_new_uuid(span["id"])
-            span["id"] = new_id
-            new_trace_id = get_new_uuid(span["trace_id"])
-            span["trace_id"] = new_trace_id
-            if "parent_span_id" in span:
-                new_parent_span_id = get_new_uuid(span["parent_span_id"])
-                span["parent_span_id"] = new_parent_span_id
-            client.span(**span)
+            # Create the project explicitly before sending traces.
+            # This is the single source of truth for whether demo data creation proceeds:
+            # - 201: project created, continue
+            # - 409: project already exists (signup hook re-run), skip entirely — idempotent
+            # - other: likely API key not yet propagated on fresh signup, retry with backoff
+            # We can't rely on implicit project creation via the SDK's batch trace endpoint because
+            # it silently swallows 4xx errors (flush() returns True even when backend rejects traces).
+            max_retries = 5
+            status_code = None
+            for attempt in range(max_retries):
+                status_code = create_project(base_url, workspace_name, comet_api_key, project_name)
+                if status_code == 201 or status_code == 409:
+                    break
+                if attempt == max_retries - 1:
+                    logger.error("Failed to create project %s for workspace %s after %d retries (last status=%s), aborting demo data creation", project_name, workspace_name, max_retries, status_code)
+                    return False
+                time.sleep(2 ** attempt)
 
-        client.flush()
-        client.end()
+            if status_code == 409:
+                logger.info("%s project already exists for workspace %s, skipping demo data creation", project_name, workspace_name)
+                return False
 
-        # Demo traces and spans
-        # We have a simple chatbot application built using llama-index.
-        # We gave it the content of Opik documentation as context, and then asked it a few questions.
+            client = opik.Opik(
+                project_name=project_name,
+                workspace=workspace_name,
+                host=base_url,
+                api_key=comet_api_key,
+                _use_batching=True,
+            )
 
-        client = opik.Opik(
-            project_name="Demo chatbot 🤖",
-            workspace=workspace_name,
-            host=base_url,
-            api_key=comet_api_key,
-            _use_batching=True,
-        )
+            # Sanity check: warn if the demo dataset itself contains duplicate trace IDs
+            # (these would collapse to a single row on ingest).
+            trace_ids = [t["id"] for t in demo_traces]
+            seen_trace_ids: set = set()
+            for tid in trace_ids:
+                if tid in seen_trace_ids:
+                    logger.warning("Duplicate trace id found in demo data: %s", tid)
+                seen_trace_ids.add(tid)
+            logger.info("Found %d unique trace IDs in demo data", len(seen_trace_ids))
 
-        for trace in sorted(demo_traces, key=lambda x: x["start_time"]):
-            new_id = get_new_uuid(trace["id"])
-            trace["id"] = new_id
-            client.trace(**trace)
+            # Extract unique thread IDs before processing traces
+            threads = list({trace["thread_id"] for trace in demo_traces if "thread_id" in trace and trace["thread_id"] is not None})
 
-        for span in sorted(demo_spans, key=lambda x: x["start_time"]):
-            new_id = get_new_uuid(span["id"])
-            span["id"] = new_id
-            new_trace_id = get_new_uuid(span["trace_id"])
-            span["trace_id"] = new_trace_id
-            if "parent_span_id" in span:
-                new_parent_span_id = get_new_uuid(span["parent_span_id"])
-                span["parent_span_id"] = new_parent_span_id
-            client.span(**span)
+            logger.info("Creating %d threads, %d traces, %d spans for workspace %s",
+                        len(threads), len(demo_traces), len(demo_spans), workspace_name)
 
-        # Prompts
-        # We now create 3 versions of a Q&A prompt. The final version is from llama-index.
+            # Build the full TraceWrite / SpanWrite payloads up-front, then POST them
+            # synchronously via the REST client. This deliberately bypasses the SDK's
+            # batch queue because:
+            #   - batch queue silently swallows 401s via the unauthorized-message
+            #     registry (10s block), so client.flush() can return True even when
+            #     nothing landed on the backend;
+            #   - the raw REST call returns a real HTTP status and raises ApiError on
+            #     non-2xx, which propagates up to our outer except as a loud failure;
+            #   - no ClickHouse read is needed for verification, so we avoid false
+            #     positives from CH replica lag.
+            # Lay traces and spans out on a single compressed timeline first: the ids are
+            # minted from start_time, so every id has to land inside the UUIDv7 ingestion
+            # window or the backend rejects the write with a 400.
+            trace_times, span_times = compress_demo_timeline(demo_traces, demo_spans)
 
-        client.create_prompt(
-            name="Q&A Prompt",
-            prompt="""Answer the query using your prior knowledge.
-        Query: {{query_str}}
-        Answer:
-        """,
-        )
+            trace_writes = build_trace_writes(demo_traces, trace_times, context, project_name)
+            logger.info("Posting %d traces synchronously via REST for workspace %s", len(trace_writes), workspace_name)
+            client.rest_client.traces.create_traces(traces=trace_writes)
 
-        client.create_prompt(
-            name="Q&A Prompt",
-            prompt="""Here is the context information.
-        -----------------
-        {{context_str}}
-        -----------------
-        Answer the query using the given context and not prior knowledge.
+            span_writes = build_span_writes(demo_spans, span_times, context, project_name)
+            logger.info("Posting %d spans synchronously via REST for workspace %s", len(span_writes), workspace_name)
+            client.rest_client.spans.create_spans(spans=span_writes)
 
-        Query: {{query_str}}
-        Answer:
-        """,
-        )
+            done = False
+            max_attempts = 10
+            attempts = 0
 
-        client.create_prompt(
-            name="Q&A Prompt",
-            prompt="""You are an expert Q&A system that is trusted around the world.
-        Always answer the query using the provided context information, and not prior knowledge.
-        Some rules to follow:
-        1. Never directly reference the given context in your answer.
-        2. Avoid statements like 'Based on the context, ...' or 'The context information ...' or anything along those lines.
+            while not done and attempts < max_attempts:
+                try:
+                    client.rest_client.traces.close_trace_thread(project_name=project_name, thread_ids=threads)
+                    done = True
+                    attempts = 0
+                except Exception as e:
+                    logger.error("Error closing threads for workspace %s attempt %d: status=%s, body=%s", workspace_name, attempts, getattr(e, 'status_code', 'unknown'), getattr(e, 'body', str(e)))
+                    attempts += 1
+                    time.sleep(0.5)
 
-        Context information is below.
-        ---------------------
-        {{context_str}}
-        ---------------------
-        Given the context information and not prior knowledge, answer the query.
-        Query: {{query_str}}
-        Answer:
-        """,
-        )
+            all_scores = []
 
-        # Dataset
+            for thread, items in demo_thread_feedback_scores.items():
+                if not items:  # skip empty lists
+                    logger.info("No feedback scores for thread %s", thread)
+                    continue
 
-        dataset = client.get_or_create_dataset(name="Demo dataset")
-        dataset.insert(
-            [
-                {"input": "What is the best LLM evaluation tool?"},
-                {"input": "What is the easiest way to start with Opik?"},
-                {"input": "Is Opik open source?"},
-            ]
-        )
-
-        # In addition to creating the dataset, we also create a mapping from the dataset items to the traces. This will be handy for creating the experiment.
-
-        items = dataset.get_items()
-        dataset_id_map = {item["input"]: item["id"] for item in items}
-
-        # Experiment
-        # The experiment is constructed by joining the traces with the dataset items.
-
-        experiment = client.create_experiment(
-            name="Demo experiment", dataset_name="Demo dataset"
-        )
-        experiment_items = []
-
-        for trace in evaluation_traces:
-            trace_id = trace["id"]
-            dataset_item_id = dataset_id_map.get(trace.get("input", {}).get("input", " "))
-            if dataset_item_id is not None:
-                experiment_items.append(
-                    opik.api_objects.experiment.experiment_item.ExperimentItemReferences(
-                        dataset_item_id=dataset_item_id, trace_id=trace_id
+                all_scores.extend(
+                    opik.rest_api.types.FeedbackScoreBatchItemThread(
+                        thread_id=thread,
+                        project_name=project_name,
+                        name=item['name'],
+                        category_name=item.get('category_name'),
+                        value=item['value'],
+                        reason=item.get('reason'),
+                        source=item.get('source', 'sdk')
                     )
+                    for item in items
                 )
 
-        experiment.insert(experiment_items)
+            if all_scores:
+                done = False
+                max_attempts = 10
+                attempts = 0
+                while not done and attempts < max_attempts:
+                    try:
+                        client.rest_client.traces.score_batch_of_threads(scores=all_scores)
+                        done = True
+                        attempts = 0
+                    except Exception as e:
+                        logger.error("Error scoring batch of threads for workspace %s attempt %d: status=%s, body=%s", workspace_name, attempts, getattr(e, 'status_code', 'unknown'), getattr(e, 'body', str(e)))
+                        attempts += 1
+                        time.sleep(0.5)
+                if not done:
+                    logger.error("Failed to score batch of threads for workspace %s after %d attempts", workspace_name, max_attempts)
 
-        create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
+            return True
+        except Exception as e:
+            logger.error("Error creating demo chatbot project for workspace %s: %s", workspace_name, e, exc_info=True)
+            return False
+        finally:
+            # Close the client
+            if client:
+                client.flush()
+                client.end()
 
-    except Exception as e:
-        logger.error(e)
-    finally:
-        # Close the client
-        if client:
+def retrieve_project_id_by_name(base_url, workspace_name, comet_api_key, project_name):
+    request = {
+        "url": "/v1/private/projects/retrieve",
+        "method": "POST",
+        "payload": {"name": project_name},
+    }
+    data, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
+    if status_code == 200 and data and "id" in data:
+        return data["id"]
+    return None
+
+
+def create_agent_config_blueprint(base_url, workspace_name, comet_api_key, project_id, blueprint_values, description):
+    """Create or patch an agent config blueprint and return its id+name.
+
+    Checks GET /latest to decide between POST (no config yet) and PATCH
+    (adding another blueprint to existing config). POST fails with 409 when
+    a config already exists, which is why we dispatch explicitly instead of
+    always using POST.
+
+    The POST response uses the Write JsonView which omits the auto-generated
+    name, and PATCH returns no body at all. We fetch via GET /latest
+    afterwards (Public view) to obtain the name.
+    """
+    latest_request = {
+        "url": f"/v1/private/agent-configs/blueprints/latest/projects/{project_id}",
+        "method": "GET",
+    }
+    _, latest_status = make_http_request(base_url, latest_request, workspace_name, comet_api_key)
+    method = "POST" if latest_status == 404 else "PATCH"
+    create_request = {
+        "url": "/v1/private/agent-configs/blueprints",
+        "method": method,
+        "payload": {
+            "project_id": project_id,
+            "blueprint": {
+                "type": "blueprint",
+                "description": description,
+                "values": blueprint_values,
+            },
+        },
+    }
+    data, status_code = make_http_request(base_url, create_request, workspace_name, comet_api_key)
+    if status_code not in (200, 201):
+        logger.error("Failed to create blueprint: status=%s, data=%s", status_code, data)
+        return None, None
+
+    # Response omits name (Write view). Re-fetch as Public view to get the name.
+    latest_request = {
+        "url": f"/v1/private/agent-configs/blueprints/latest/projects/{project_id}",
+        "method": "GET",
+    }
+    latest_data, latest_status = make_http_request(base_url, latest_request, workspace_name, comet_api_key)
+    if latest_status != 200 or not latest_data:
+        logger.error("Failed to fetch latest blueprint after create: status=%s", latest_status)
+        return None, None
+    return latest_data.get("id"), latest_data.get("name")
+
+
+def tag_agent_config_env(base_url, workspace_name, comet_api_key, project_id, env_name, blueprint_name):
+    request = {
+        "url": f"/v1/private/agent-configs/blueprints/environments/{env_name}/projects/{project_id}",
+        "method": "PUT",
+        "payload": {"blueprint_name": blueprint_name},
+    }
+    _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
+    if status_code != 204:
+        logger.error("Failed to tag env '%s' → '%s': status=%s", env_name, blueprint_name, status_code)
+
+
+def _build_suite_span_tree(trace_id, question, answer, trace_start, trace_end,
+                           project_name, model, env):
+    """Build an 8-span agent tree mirroring the existing chatbot demo structure.
+
+    Structure:
+      handle_query (root, general)
+      ├── classify_query (general)
+      │   └── chat_completion_create (llm)
+      ├── contact_insight_tool (tool)
+      │   ├── retrieve_documents_rag (general)
+      │   └── chat_completion_create (llm)
+      └── format_response (general)
+          └── chat_completion_create (llm)
+    """
+    total = (trace_end - trace_start).total_seconds()
+    # Divide the trace into 6 sequential segments (3 main stages × 2 sub-stages).
+    seg = datetime.timedelta(seconds=total / 6.0)
+
+    s0, s1, s2, s3, s4, s5, s6 = [trace_start + i * seg for i in range(7)]
+    # s0..s1: classify_query | s1..s3: contact_insight_tool | s3..s5: format_response
+
+    root_id = str(uuid6.uuid7())
+    classify_id = str(uuid6.uuid7())
+    classify_llm_id = str(uuid6.uuid7())
+    tool_id = str(uuid6.uuid7())
+    retrieve_id = str(uuid6.uuid7())
+    tool_llm_id = str(uuid6.uuid7())
+    format_id = str(uuid6.uuid7())
+    format_llm_id = str(uuid6.uuid7())
+
+    def llm_span(span_id, parent_id, start, end, user_prompt, assistant_output,
+                 prompt_tokens, completion_tokens):
+        return SpanWrite(
+            id=span_id, trace_id=trace_id, parent_span_id=parent_id,
+            project_name=project_name, name="chat_completion_create", type="llm",
+            start_time=start, end_time=end,
+            input={"messages": [
+                {"role": "system", "content": "You are a helpful support agent."},
+                {"role": "user", "content": user_prompt},
+            ]},
+            output={"choices": [
+                {"index": 0, "finish_reason": "stop",
+                 "message": {"role": "assistant", "content": assistant_output}}
+            ]},
+            model=model, provider="openai",
+            usage={
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+            },
+            tags=[env],
+            source="experiment",
+        )
+
+    return [
+        SpanWrite(
+            id=root_id, trace_id=trace_id, parent_span_id=None,
+            project_name=project_name, name="handle_query", type="general",
+            start_time=trace_start, end_time=trace_end,
+            input={"question": question},
+            output={"answer": answer},
+            tags=[env],
+            source="experiment",
+        ),
+        SpanWrite(
+            id=classify_id, trace_id=trace_id, parent_span_id=root_id,
+            project_name=project_name, name="classify_query", type="general",
+            start_time=s0, end_time=s1,
+            input={"query": question, "model": model},
+            output={"category": "support"},
+            tags=[env],
+            source="experiment",
+        ),
+        llm_span(classify_llm_id, classify_id, s0, s1,
+                 user_prompt=f"Classify the following user query into a support category: {question}",
+                 assistant_output="support",
+                 prompt_tokens=65, completion_tokens=3),
+        SpanWrite(
+            id=tool_id, trace_id=trace_id, parent_span_id=root_id,
+            project_name=project_name, name="contact_insight_tool", type="tool",
+            start_time=s1, end_time=s3,
+            input={"query": question, "model": model},
+            output={"documents_found": 3, "context_preview": answer[:120]},
+            tags=[env],
+            source="experiment",
+        ),
+        SpanWrite(
+            id=retrieve_id, trace_id=trace_id, parent_span_id=tool_id,
+            project_name=project_name, name="retrieve_documents_rag", type="general",
+            start_time=s1, end_time=s2,
+            input={"category": "support"},
+            output={"documents": [{"title": "Opik docs excerpt", "snippet": answer[:160]}]},
+            tags=[env],
+            source="experiment",
+        ),
+        llm_span(tool_llm_id, tool_id, s2, s3,
+                 user_prompt=(f"Given the retrieved context about Opik, answer the user's question: "
+                              f"{question}"),
+                 assistant_output=answer,
+                 prompt_tokens=180, completion_tokens=max(32, len(answer.split()) * 2)),
+        SpanWrite(
+            id=format_id, trace_id=trace_id, parent_span_id=root_id,
+            project_name=project_name, name="format_response", type="general",
+            start_time=s3, end_time=s5,
+            input={"user_query": question, "raw_tool_output": answer, "model": model},
+            output={"answer": answer},
+            tags=[env],
+            source="experiment",
+        ),
+        llm_span(format_llm_id, format_id, s3, s5,
+                 user_prompt=(f"Format the following answer as a clear, concise reply: {answer}"),
+                 assistant_output=answer,
+                 prompt_tokens=120, completion_tokens=max(24, len(answer.split()) * 2)),
+    ]
+
+
+def create_demo_test_suite_and_experiments(base_url: str, workspace_name, comet_api_key, project_name):
+    """Seed a test suite, agent-config blueprints, and two experiments.
+
+    Assumes the demo project was just created. Uses the existing feedback-score
+    batch endpoint with category_name='suite_assertion' to route scores to the
+    assertion_results table (ScoreDestination.ASSERTION_RESULTS).
+    """
+    with tracer.start_as_current_span("create_demo_test_suite_and_experiments"):
+        client: opik.Opik = None
+        try:
+            project_id = retrieve_project_id_by_name(base_url, workspace_name, comet_api_key, project_name)
+            if project_id is None:
+                logger.error("Demo project '%s' not found, skipping test suite creation", project_name)
+                return
+
+            client = opik.Opik(
+                project_name=project_name,
+                workspace=workspace_name,
+                host=base_url,
+                api_key=comet_api_key,
+                _use_batching=True,
+            )
+
+            # Step 1 — evaluation suite (renamed to "test suite" on main, but this
+            # codepath uses the 1.10.56 SDK naming for evaluation suites).
+            suite_name = "Customer support regression suite"
+            suite = client.get_or_create_evaluation_suite(
+                name=suite_name,
+                description="Demo regression tests for the support agent.",
+                assertions=[demo_test_suite_global_assertion],
+                project_name=project_name,
+            )
+            if suite.get_items():
+                logger.info("Evaluation suite '%s' already populated, skipping", suite_name)
+                return
+
+            suite.add_items([
+                {
+                    "data": {"question": template["question"]},
+                    "assertions": template["assertions"],
+                }
+                for template in demo_test_suite_items
+            ])
             client.flush()
-            client.end()
+
+            # After insert, map back: question text → backend-assigned item id.
+            inserted_items = suite.get_items()
+            item_id_by_question = {item["data"]["question"]: item["id"] for item in inserted_items}
+            logger.info("Inserted %d evaluation suite items for workspace %s",
+                        len(inserted_items), workspace_name)
+
+            # Step 2a — create the support agent system prompt with two commits.
+            # Each blueprint pins the `system_prompt` key to the commit matching
+            # its prompt_version so the UI shows a real prompt link, not a raw string.
+            prompt_v1 = client.create_prompt(
+                name=demo_agent_prompt_name,
+                prompt=demo_agent_prompt_v1,
+                description="Support agent system prompt used by the demo project.",
+                project_name=project_name,
+            )
+            prompt_v2 = client.create_prompt(
+                name=demo_agent_prompt_name,
+                prompt=demo_agent_prompt_v2,
+                change_description="Ground answers in retrieved context and enforce 120-word cap.",
+                project_name=project_name,
+            )
+            prompt_commit_by_version = {"v1": prompt_v1.commit, "v2": prompt_v2.commit}
+            logger.info("Created prompt '%s' with commits v1=%s v2=%s",
+                        demo_agent_prompt_name, prompt_v1.commit, prompt_v2.commit)
+
+            # Step 2b — agent config blueprints. The helper auto-detects POST vs PATCH.
+            blueprint_by_env = {}
+            for bp in demo_agent_config_blueprints:
+                values_with_prompt = list(bp["values"]) + [{
+                    "key": "system_prompt",
+                    "type": "prompt",
+                    "value": prompt_commit_by_version[bp["prompt_version"]],
+                    "description": f"System prompt pinned to {bp['prompt_version']}",
+                }]
+                bp_id, bp_name = create_agent_config_blueprint(
+                    base_url, workspace_name, comet_api_key, project_id,
+                    values_with_prompt, bp["description"],
+                )
+                if bp_id is None:
+                    logger.error("Aborting test suite seed — blueprint creation failed for env %s", bp["env"])
+                    return
+                blueprint_by_env[bp["env"]] = {"id": bp_id, "name": bp_name}
+                tag_agent_config_env(base_url, workspace_name, comet_api_key, project_id, bp["env"], bp_name)
+
+            # Step 3 — experiments + traces + scores.
+            suite_dataset_name = suite.dataset.name
+            now = datetime.datetime.now()
+
+            for exp_cfg in demo_test_suite_experiments:
+                env = exp_cfg["tag"]
+                blueprint = blueprint_by_env[env]
+                # Resolve the model value from the blueprint for realistic LLM span metadata.
+                model_value = next(
+                    (v["value"] for v in next(
+                        bp["values"] for bp in demo_agent_config_blueprints if bp["env"] == env
+                    ) if v["key"] == "model"),
+                    "gpt-4o-mini",
+                )
+
+                experiment = client.create_experiment(
+                    name=exp_cfg["name"],
+                    dataset_name=suite_dataset_name,
+                    evaluation_method="evaluation_suite",
+                    tags=[env],
+                    project_name=project_name,
+                    experiment_config={
+                        "agent_configuration": {
+                            "_blueprint_id": blueprint["id"],
+                            "blueprint_version": blueprint["name"],
+                        }
+                    },
+                )
+
+                # For each suite item: one trace (with full span tree), one experiment_item,
+                # per-item + global assertion scores.
+                traces_to_create = []
+                spans_to_create = []
+                experiment_refs = []
+                score_items = []
+
+                for i, template in enumerate(demo_test_suite_items):
+                    trace_id = str(uuid6.uuid7())
+                    dataset_item_id = item_id_by_question[template["question"]]
+
+                    # Per-env answer: prod may have a weaker variant that legitimately
+                    # fails the assertions marked False in pass_mask_prod; staging
+                    # always uses the "good" answer that satisfies every assertion.
+                    # Items without an answer_prod override use the same answer in both.
+                    if env == "prod":
+                        answer = template.get("answer_prod") or template["answer_staging"]
+                    else:
+                        answer = template["answer_staging"]
+
+                    # Spread traces across the last ~30 minutes in reverse order.
+                    start = now - datetime.timedelta(minutes=len(demo_test_suite_items) - i)
+                    end = start + datetime.timedelta(seconds=random.randint(4, 12))
+
+                    traces_to_create.append(TraceWrite(
+                        id=trace_id,
+                        name="handle_query",
+                        project_name=project_name,
+                        start_time=start,
+                        end_time=end,
+                        input={"question": template["question"]},
+                        output={"answer": answer},
+                        tags=[env],
+                        source="experiment",
+                    ))
+
+                    spans_to_create.extend(_build_suite_span_tree(
+                        trace_id=trace_id,
+                        question=template["question"],
+                        answer=answer,
+                        trace_start=start,
+                        trace_end=end,
+                        project_name=project_name,
+                        model=model_value,
+                        env=env,
+                    ))
+
+                    experiment_refs.append(RestExperimentItem(
+                        experiment_id=experiment.id,
+                        dataset_item_id=dataset_item_id,
+                        trace_id=trace_id,
+                        # Pin project_name so the backend resolves project_id
+                        # deterministically via projectService.retrieveByNamesOrCreate
+                        # instead of falling back to a trace lookup — that lookup
+                        # races with ClickHouse ingestion of the traces we just
+                        # POSTed and can return null in prod.
+                        project_name=project_name,
+                    ))
+
+                    # Assertion scores. Pass mode drives fail patterns. Name = full
+                    # assertion text (matching real LLM-judge output after
+                    # scoreNameMapping), reason = why it passed or failed.
+                    pass_mode = exp_cfg["pass_mode"]
+                    assertions = template["assertions"]
+                    mask = (template["pass_mask_prod"]
+                            if pass_mode == "prod"
+                            else [True] * len(assertions))
+                    fail_reasons = (template.get("fail_reasons_prod") or {}) if pass_mode == "prod" else {}
+
+                    # Global suite-level assertion — always passes in the demo.
+                    score_items.append(FeedbackScoreBatchItem(
+                        id=trace_id,
+                        project_name=project_name,
+                        name=demo_test_suite_global_assertion,
+                        category_name="suite_assertion",
+                        value=1.0,
+                        reason="The response is written entirely in clear, fluent English.",
+                        source="online_scoring",
+                    ))
+
+                    for idx, (assertion_text, passed) in enumerate(zip(assertions, mask)):
+                        if passed:
+                            reason = (f"The response satisfies the assertion: "
+                                      f"it clearly {assertion_text[0].lower() + assertion_text[1:]}.")
+                        else:
+                            reason = fail_reasons.get(
+                                idx,
+                                f"The response does not satisfy the assertion: "
+                                f"it fails to {assertion_text[0].lower() + assertion_text[1:]}.",
+                            )
+                        score_items.append(FeedbackScoreBatchItem(
+                            id=trace_id,
+                            project_name=project_name,
+                            name=assertion_text,
+                            category_name="suite_assertion",
+                            value=1.0 if passed else 0.0,
+                            reason=reason,
+                            source="online_scoring",
+                        ))
+
+                # Use synchronous REST for every write. The SDK's async streamer
+                # (experiment.insert / client.flush) silently drops messages on
+                # timeout in production — client.flush() returns True even when
+                # it couldn't drain the queue before the signup handler exits,
+                # which leaves the experiment with zero items in the UI even
+                # though the "Seeded experiment" log fires. Posting directly to
+                # the REST endpoint guarantees a 2xx-or-raise before we log.
+                client.rest_client.traces.create_traces(traces=traces_to_create)
+                client.rest_client.spans.create_spans(spans=spans_to_create)
+                client.rest_client.experiments.create_experiment_items(
+                    experiment_items=experiment_refs,
+                )
+                client.rest_client.traces.score_batch_of_traces(scores=score_items)
+
+                logger.info("Seeded experiment '%s' with %d traces / %d spans / %d items / %d assertion scores",
+                            exp_cfg["name"], len(traces_to_create), len(spans_to_create),
+                            len(experiment_refs), len(score_items))
+
+        except Exception as e:
+            logger.error("Error creating demo test suite for workspace %s: %s",
+                         workspace_name, e, exc_info=True)
+        finally:
+            if client:
+                client.flush()
+                client.end()
+
+
+def create_demo_data(base_url: str, workspace_name, comet_api_key):
+    with tracer.start_as_current_span("create_demo_data"):
+        # Create a fresh context for this invocation to prevent race conditions
+        # when multiple users sign up concurrently
+        context = DemoDataContext()
+        project_name = DEMO_PROJECT_NAME
+
+        try:
+            chatbot_seeded = create_demo_chatbot_project(context, base_url, workspace_name, comet_api_key)
+            create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
+            create_default_environments(base_url, workspace_name, comet_api_key)
+            # Only run the test-suite seed when the chatbot project was freshly created.
+            # If the chatbot flow short-circuited on 409 (project already exists), the
+            # suite/prompt/blueprints/experiments were seeded on the prior run too —
+            # a second pass must be a no-op to stay idempotent under signup retries.
+            if chatbot_seeded:
+                create_demo_test_suite_and_experiments(base_url, workspace_name, comet_api_key, project_name)
+            logger.info("Demo data created successfully")
+        except Exception as e:
+            logger.error(e)

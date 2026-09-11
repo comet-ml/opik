@@ -19,51 +19,68 @@ on:
           type: string
           required: true
           description: Version
-          default: ""
         is_release:
           type: boolean
           required: false
           default: false
 
     push:
-        branches: 
+        branches:
         - 'main'
-        paths: 
+        paths:
           - "sdks/python/**"
-        
+
 jobs:
     build-and-publish:
         runs-on: ubuntu-latest
+        timeout-minutes: 5
         steps:
         - name: Setup
           id: setup
+          env:
+            INPUT_VERSION: ${{ inputs.version }}
+            REF_NAME: ${{ github.ref_name }}
           run: |
-            if [[ "${{inputs.version}}" == ""  ]]; then
-              echo "build_from=${{github.ref_name}}" | tee -a $GITHUB_OUTPUT
+            if [[ "${INPUT_VERSION}" == ""  ]]; then
+              echo "build_from=${REF_NAME}" | tee -a "$GITHUB_OUTPUT"
             else
-              echo "build_from=${{inputs.version}}" | tee -a $GITHUB_OUTPUT
+              echo "build_from=${INPUT_VERSION}" | tee -a "$GITHUB_OUTPUT"
             fi
         - name: Checkout
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v7
           with:
             ref: ${{steps.setup.outputs.build_from}}
             fetch-tags: true
 
-        - name: Set up Python 3.9
-          uses: actions/setup-python@v3
+        - name: Set up Python 3.10
+          uses: actions/setup-python@v7
           with:
-                python-version: 3.9
+                python-version: "3.10"
+
+        - name: PyPI token preflight
+          if: inputs.is_release
+          uses: ./.github/actions/pypi-token-preflight
+          with:
+            pypi_token: ${{ secrets.PYPI_API_TOKEN }}
+            package_name: opik
 
         - name: Build pip package
+          env:
+            INPUT_VERSION: ${{ inputs.version }}
           run: |
                 cd sdks/python
                 pip3 install -U pip build
-                if [[ "${{inputs.version}}" != "" ]]; then export VERSION=${{inputs.version}};fi
+                if [[ "${INPUT_VERSION}" != "" ]]; then export VERSION="${INPUT_VERSION}";fi
                 python3 -m build --sdist --wheel --outdir dist/ .
-                
+
         - name: Publish package distributions to PyPI
           if: inputs.is_release
-          uses: pypa/gh-action-pypi-publish@v1.9.0
+          uses: pypa/gh-action-pypi-publish@v1.14.2
           with:
             password: ${{ secrets.PYPI_API_TOKEN }}
             packages-dir: sdks/python/dist
+            # Symmetric to OPIK-6624's npm publish 403-skip: replays / races where
+            # the version is already on PyPI should not fail the release. PyPI returns
+            # `400 Bad Request` (filename already exists) — `skip-existing: true`
+            # makes twine treat it as a no-op success.
+            skip-existing: true

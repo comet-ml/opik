@@ -3,7 +3,7 @@ import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { DatasetItem } from "@/types/datasets";
 import { AxiosError } from "axios";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/ui/use-toast";
 
 type UseDatasetItemBatchMutationParams = {
   datasetId: string;
@@ -11,22 +11,30 @@ type UseDatasetItemBatchMutationParams = {
   workspaceName: string;
 };
 
+type MutationContext = {
+  queryKey: [string, { datasetId: string }];
+};
+
 const useDatasetItemBatchMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  return useMutation({
+  return useMutation<
+    void,
+    AxiosError,
+    UseDatasetItemBatchMutationParams,
+    MutationContext
+  >({
     mutationFn: async ({
       datasetId,
       datasetItems,
       workspaceName,
     }: UseDatasetItemBatchMutationParams) => {
-      const { data } = await api.put(`${DATASETS_REST_ENDPOINT}items`, {
+      await api.put(`${DATASETS_REST_ENDPOINT}items`, {
         dataset_id: datasetId,
         items: datasetItems,
         workspace_name: workspaceName,
       });
-      return data;
     },
     onMutate: async (params: UseDatasetItemBatchMutationParams) => {
       return {
@@ -48,8 +56,17 @@ const useDatasetItemBatchMutation = () => {
     },
     onSettled: (data, error, variables, context) => {
       if (context) {
-        return queryClient.invalidateQueries({ queryKey: context.queryKey });
+        queryClient.invalidateQueries({ queryKey: context.queryKey });
       }
+      // Inserting items may create the first dataset version (latest_version),
+      // which the POST /changes flow needs as base_version.
+      queryClient.invalidateQueries({
+        queryKey: ["dataset", { datasetId: variables.datasetId }],
+      });
+      queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
+      return queryClient.invalidateQueries({
+        queryKey: ["datasets"],
+      });
     },
   });
 };

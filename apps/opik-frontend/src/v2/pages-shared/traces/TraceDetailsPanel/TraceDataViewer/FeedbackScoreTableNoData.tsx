@@ -1,0 +1,96 @@
+import { Button } from "@/ui/button";
+import { Book, PenLine } from "lucide-react";
+import React from "react";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import { buildDocsUrl } from "@/v2/lib/utils";
+const entityCopy = {
+  thread: "threads",
+  trace: "traces/LLM calls",
+  experiment: "experiments",
+  span: "traces/LLM calls",
+};
+
+type FeedbackScoreTableNoDataProps = {
+  onAddHumanReview: () => void;
+  entityType: "trace" | "thread" | "span" | "experiment";
+};
+const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
+  onAddHumanReview,
+  entityType,
+}) => {
+  const {
+    permissions: { canUpdateOnlineEvaluationRules, canAnnotateTraceSpanThread },
+  } = usePermissions();
+
+  const evaluationDocsLink = buildDocsUrl(
+    entityType === "experiment"
+      ? "/evaluation/overview"
+      : "/production/online-evaluation/rules",
+  );
+
+  const evaluationDocsLabel =
+    entityType === "experiment"
+      ? "Learn about experiment scoring"
+      : "Learn about online evaluation";
+
+  const getDescription = () => {
+    if (entityType === "experiment") {
+      if (canAnnotateTraceSpanThread) {
+        return "Use the SDK to automatically score your experiments, or manually annotate them with human review.";
+      }
+      return "Use the SDK to automatically score your experiments.";
+    }
+
+    if (canUpdateOnlineEvaluationRules && canAnnotateTraceSpanThread) {
+      return `Use the SDK or Online evaluation rules to automatically score your ${entityCopy[entityType]}, or manually annotate your ${entityCopy[entityType]} with human review.`;
+    }
+
+    if (canAnnotateTraceSpanThread) {
+      return `Use the SDK to automatically score your ${entityCopy[entityType]}, or manually annotate your ${entityCopy[entityType]} with human review.`;
+    }
+
+    if (canUpdateOnlineEvaluationRules) {
+      return `Use Online evaluation rules to automatically score your ${entityCopy[entityType]}.`;
+    }
+
+    return "";
+  };
+
+  return (
+    <div className="flex min-h-48 flex-col items-center justify-center gap-2 bg-background p-6">
+      <div>No feedback scores yet</div>
+      {(canAnnotateTraceSpanThread ||
+        canUpdateOnlineEvaluationRules ||
+        entityType === "experiment") && (
+        <>
+          <span className="max-w-[500px] whitespace-pre-wrap break-words text-center text-muted-slate">
+            {getDescription()}
+          </span>
+          <div className="flex flex-wrap justify-center gap-2 pt-3">
+            {canAnnotateTraceSpanThread && (
+              <Button variant="outline" size="sm" onClick={onAddHumanReview}>
+                <PenLine className="mr-2 size-4" />
+                Add human review
+              </Button>
+            )}
+            {(entityType === "experiment" ||
+              canUpdateOnlineEvaluationRules) && (
+              <Button variant="secondary" size="sm" asChild>
+                <a
+                  href={evaluationDocsLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Book className="mr-2 size-4" />
+                  {evaluationDocsLabel}
+                </a>
+              </Button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default FeedbackScoreTableNoData;

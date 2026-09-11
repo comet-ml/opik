@@ -17,6 +17,9 @@ def test_messages__all_fields_are_serializable():
         "tags": None,
         "error_info": None,
         "thread_id": None,
+        "last_updated_at": datetime.now(),
+        "source": "sdk",
+        "environment": None,
     }
 
     message = messages.CreateTraceMessage(**payload_dict)
@@ -48,6 +51,9 @@ def test_messages__not_all_fields_are_serializable():
         "tags": None,
         "error_info": None,
         "thread_id": None,
+        "last_updated_at": datetime.now(),
+        "source": "sdk",
+        "environment": None,
     }
 
     message = messages.CreateTraceMessage(**payload_dict)

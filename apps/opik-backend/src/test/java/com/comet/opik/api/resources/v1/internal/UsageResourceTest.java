@@ -1,11 +1,11 @@
 package com.comet.opik.api.resources.v1.internal;
 
 import com.comet.opik.api.BiInformationResponse;
-import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceCountResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -13,8 +13,11 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.domain.DemoData;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -24,7 +27,6 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -33,15 +35,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
-import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -49,12 +51,11 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
-import static com.comet.opik.api.resources.utils.MigrationUtils.CLICKHOUSE_CHANGELOG_FILE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
+import static org.awaitility.Awaitility.await;
 
 @DisplayName("Usage Resource Test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -71,11 +72,10 @@ class UsageResourceTest {
     private final String USER = UUID.randomUUID().toString();
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-
-    private final MySQLContainer<?> MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
-
+    private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer CLICK_HOUSE_CONTAINER = ClickHouseContainerUtils
-            .newClickHouseContainer();
+            .newClickHouseContainer(ZOOKEEPER_CONTAINER);
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -83,12 +83,15 @@ class UsageResourceTest {
     private final WireMockUtils.WireMockRuntime wireMock;
 
     {
-        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER).join();
+        Startables.deepStart(REDIS, MYSQL_CONTAINER, CLICK_HOUSE_CONTAINER, ZOOKEEPER_CONTAINER).join();
 
         wireMock = WireMockUtils.startWireMock();
 
         var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 CLICK_HOUSE_CONTAINER, DATABASE_NAME);
+
+        MigrationUtils.runMysqlDbMigration(MYSQL_CONTAINER);
+        MigrationUtils.runClickhouseDbMigration(CLICK_HOUSE_CONTAINER);
 
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 MYSQL_CONTAINER.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
@@ -103,17 +106,9 @@ class UsageResourceTest {
     private ExperimentResourceClient experimentResourceClient;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, Jdbi jdbi, TransactionTemplateAsync clickHouseTemplate,
-            TransactionTemplate mySqlTemplate) throws SQLException {
-
-        MigrationUtils.runDbMigration(jdbi, MySQLContainerUtils.migrationParameters());
-
-        try (var connection = CLICK_HOUSE_CONTAINER.createConnection("")) {
-            MigrationUtils.runClickhouseDbMigration(connection, CLICKHOUSE_CHANGELOG_FILE,
-                    ClickHouseContainerUtils.migrationParameters());
-        }
-
-        this.baseURI = "http://localhost:%d".formatted(client.getPort());
+    void setUpAll(ClientSupport client, TransactionTemplateAsync clickHouseTemplate,
+            TransactionTemplate mySqlTemplate) {
+        this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
         this.clickHouseTemplate = clickHouseTemplate;
         this.mySqlTemplate = mySqlTemplate;
@@ -231,6 +226,49 @@ class UsageResourceTest {
         }
 
         @Test
+        @DisplayName("Get span usage breakdown by workspace, project and user for previous day")
+        void spanBreakdownForWorkspace() {
+            var projectName = "breakdown-%s".formatted(UUID.randomUUID());
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder().id(null).projectName(projectName).build())
+                    .toList();
+
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            int spansCount = setupEntitiesForWorkspace(workspaceId, apiKey, spans, SPANS_RESOURCE_URL_TEMPLATE);
+            // Backdate to the previous day so the rows land in the yesterday window of the count query
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            // Spans left at today in another workspace must be excluded
+            var workspaceIdForToday = UUID.randomUUID().toString();
+            setupEntitiesForWorkspace(workspaceIdForToday, UUID.randomUUID().toString(), spans,
+                    SPANS_RESOURCE_URL_TEMPLATE);
+
+            try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                    .path("/workspace-span-counts-breakdown")
+                    .request()
+                    .get()) {
+
+                var response = validateResponse(actualResponse, UsageByWorkspaceProjectUserResponse.class);
+
+                var rows = response.breakdown().stream()
+                        .filter(row -> row.workspaceId().equals(workspaceId))
+                        .toList();
+
+                // All spans share one project and one user, so a single breakdown row is expected
+                assertThat(rows).hasSize(1);
+                var row = rows.get(0);
+                assertThat(row.user()).isEqualTo(USER);
+                assertThat(row.count()).isEqualTo(spansCount);
+                assertThat(row.projectId()).isNotNull();
+
+                assertThat(response.breakdown())
+                        .noneMatch(r -> r.workspaceId().equals(workspaceIdForToday));
+            }
+        }
+
+        @Test
         @DisplayName("Get traces daily info for BI events, no Auth")
         void traceBiInfoTest() {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
@@ -244,6 +282,19 @@ class UsageResourceTest {
         }
 
         @Test
+        @DisplayName("Get spans daily info for BI events, no Auth")
+        void spanBiInfoTest() {
+            var spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .build())
+                    .toList();
+            biInfoTest(spans, SPANS_RESOURCE_URL_TEMPLATE, "spans",
+                    subtractClickHouseTableRecordsCreatedAtOneDay("spans"));
+        }
+
+        @Test
         @DisplayName("Get experiments daily info for BI events, no Auth")
         void experimentBiInfoTest() {
             var experiments = experimentResourceClient.generateExperimentList();
@@ -254,8 +305,7 @@ class UsageResourceTest {
         @Test
         @DisplayName("Get datasets daily info for BI events, no Auth")
         void datasetBiInfoTest() {
-            var datasets = PodamFactoryUtils.manufacturePojoList(factory, Dataset.class)
-                    .stream()
+            var datasets = DatasetResourceClient.buildDatasetList(factory).stream()
                     .map(e -> e.toBuilder()
                             .id(null)
                             .build())
@@ -292,6 +342,237 @@ class UsageResourceTest {
                                             .user(USER)
                                             .count(entitiesCount)
                                             .build()))
+                            .orElse(false);
+                }
+            });
+        }
+
+        @Test
+        @DisplayName("Get traces count excluding demo data projects")
+        void tracesCountExcludingDemoData() {
+            var regularTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName("Regular Project") // Non-demo project
+                            .build())
+                    .toList();
+
+            var demoTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName(DemoData.PROJECTS.get(0)) // Demo project name
+                            .build())
+                    .toList();
+
+            // Setup workspace with both regular and demo traces
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create both regular and demo traces
+            regularTraces.forEach(trace -> createEntity(trace, apiKey, workspaceName, TRACE_RESOURCE_URL_TEMPLATE));
+            demoTraces.forEach(trace -> createEntity(trace, apiKey, workspaceName, TRACE_RESOURCE_URL_TEMPLATE));
+
+            // Change created_at to the previous day to capture in usage query
+            subtractClickHouseTableRecordsCreatedAtOneDay("traces").accept(workspaceId);
+
+            await().atMost(10, SECONDS).until(() -> {
+                try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                        .path("workspace-trace-counts")
+                        .request()
+                        .get()) {
+
+                    var response = validateResponse(actualResponse, TraceCountResponse.class);
+                    var traceCount = getMatch(response.workspacesTracesCount(),
+                            traceInfo -> traceInfo.workspace().equals(workspaceId));
+
+                    // Should only count regular traces, not demo traces
+                    return traceCount
+                            .map(info -> info.traceCount() == regularTraces.size())
+                            .orElse(false);
+                }
+            });
+        }
+
+        @Test
+        @DisplayName("Get spans count excluding demo data projects")
+        void spansCountExcludingDemoData() {
+            var regularSpans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName("Regular Project") // Non-demo project
+                            .build())
+                    .toList();
+
+            var demoSpans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName(DemoData.PROJECTS.get(1)) // Demo project name
+                            .build())
+                    .toList();
+
+            // Setup workspace with both regular and demo spans
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create both regular and demo spans
+            regularSpans.forEach(span -> createEntity(span, apiKey, workspaceName, SPANS_RESOURCE_URL_TEMPLATE));
+            demoSpans.forEach(span -> createEntity(span, apiKey, workspaceName, SPANS_RESOURCE_URL_TEMPLATE));
+
+            // Change created_at to the previous day to capture in usage query
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            await().atMost(10, SECONDS).until(() -> {
+                try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                        .path("workspace-span-counts")
+                        .request()
+                        .get()) {
+
+                    var response = validateResponse(actualResponse, SpansCountResponse.class);
+                    var spanCount = getMatch(response.workspacesSpansCount(),
+                            spanInfo -> spanInfo.workspace().equals(workspaceId));
+
+                    // Should only count regular spans, not demo spans
+                    return spanCount
+                            .map(info -> info.spanCount() == regularSpans.size())
+                            .orElse(false);
+                }
+            });
+        }
+
+        @Test
+        @DisplayName("Span count includes activity in demo projects created after the demo cutoff")
+        void spansCountIncludesPostCutoffActivityInDemoProjects() {
+            var demoSpans = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName(DemoData.PROJECTS.get(0))
+                            .build())
+                    .toList();
+
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            demoSpans.forEach(span -> createEntity(span, apiKey, workspaceName, SPANS_RESOURCE_URL_TEMPLATE));
+
+            // Project created today → cutoff = today + 1 min, in the future. Push the project two days back so
+            // cutoff lands ~2 days ago, then move spans to yesterday — they end up post-cutoff and must be counted.
+            backdateDemoProjectsCreatedAtTwoDays();
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            await().atMost(10, SECONDS).until(() -> {
+                try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                        .path("workspace-span-counts")
+                        .request()
+                        .get()) {
+
+                    var response = validateResponse(actualResponse, SpansCountResponse.class);
+                    var spanCount = getMatch(response.workspacesSpansCount(),
+                            spanInfo -> spanInfo.workspace().equals(workspaceId));
+
+                    return spanCount
+                            .map(info -> info.spanCount() == demoSpans.size())
+                            .orElse(false);
+                }
+            });
+        }
+
+        @Test
+        @DisplayName("Trace count includes activity in demo projects created after the demo cutoff")
+        void tracesCountIncludesPostCutoffActivityInDemoProjects() {
+            var demoTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName(DemoData.PROJECTS.get(0))
+                            .build())
+                    .toList();
+
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            demoTraces.forEach(trace -> createEntity(trace, apiKey, workspaceName, TRACE_RESOURCE_URL_TEMPLATE));
+
+            backdateDemoProjectsCreatedAtTwoDays();
+            subtractClickHouseTableRecordsCreatedAtOneDay("traces").accept(workspaceId);
+
+            await().atMost(10, SECONDS).until(() -> {
+                try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                        .path("workspace-trace-counts")
+                        .request()
+                        .get()) {
+
+                    var response = validateResponse(actualResponse, TraceCountResponse.class);
+                    var traceCount = getMatch(response.workspacesTracesCount(),
+                            traceInfo -> traceInfo.workspace().equals(workspaceId));
+
+                    return traceCount
+                            .map(info -> info.traceCount() == demoTraces.size())
+                            .orElse(false);
+                }
+            });
+        }
+
+        @Test
+        @DisplayName("Mixed workspace with demo and regular data - only regular data counted")
+        void mixedWorkspaceExcludesDemoData() {
+            var regularTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .limit(3)
+                    .map(e -> e.toBuilder()
+                            .id(null)
+                            .projectName("Production Project")
+                            .build())
+                    .toList();
+
+            var multiDemoTraces = DemoData.PROJECTS.stream()
+                    .flatMap(projectName -> PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                            .stream()
+                            .limit(2)
+                            .map(e -> e.toBuilder()
+                                    .id(null)
+                                    .projectName(projectName)
+                                    .build()))
+                    .toList();
+
+            // Setup workspace
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create all traces (regular + demo)
+            regularTraces.forEach(trace -> createEntity(trace, apiKey, workspaceName, TRACE_RESOURCE_URL_TEMPLATE));
+            multiDemoTraces.forEach(trace -> createEntity(trace, apiKey, workspaceName, TRACE_RESOURCE_URL_TEMPLATE));
+
+            // Change created_at to the previous day to capture in usage query
+            subtractClickHouseTableRecordsCreatedAtOneDay("traces").accept(workspaceId);
+
+            await().atMost(10, SECONDS).until(() -> {
+                try (var actualResponse = client.target(USAGE_RESOURCE_URL_TEMPLATE.formatted(baseURI))
+                        .path("workspace-trace-counts")
+                        .request()
+                        .get()) {
+
+                    var response = validateResponse(actualResponse, TraceCountResponse.class);
+                    var traceCount = getMatch(response.workspacesTracesCount(),
+                            traceInfo -> traceInfo.workspace().equals(workspaceId));
+
+                    // Should only count regular traces (3), not demo traces (10 total from 5 projects * 2 traces each)
+                    return traceCount
+                            .map(info -> info.traceCount() == regularTraces.size())
                             .orElse(false);
                 }
             });
@@ -358,5 +639,21 @@ class UsageResourceTest {
                 return null;
             });
         };
+    }
+
+    private void backdateDemoProjectsCreatedAtTwoDays() {
+        // Push demo-named project creation timestamps far enough into the past that the
+        // computed demoDataCreatedAt cutoff (= max(project.created_at) + 1 min) precedes
+        // spans/traces backdated to yesterday — exercising the `OR created_at > cutoff`
+        // branch of the rewritten exclusion predicate. The service resolves demo projects
+        // by global name across all workspaces, so the update must span workspaces too.
+        mySqlTemplate.inTransaction(WRITE, handle -> {
+            handle.createUpdate(
+                    "UPDATE projects SET created_at = TIMESTAMPADD(DAY, -2, created_at) WHERE name IN (<names>)")
+                    .bindList("names", DemoData.PROJECTS)
+                    .execute();
+
+            return null;
+        });
     }
 }

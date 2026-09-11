@@ -1,29 +1,48 @@
 package com.comet.opik.domain.filter;
 
+import com.comet.opik.api.filter.AlertField;
+import com.comet.opik.api.filter.AnnotationQueueField;
+import com.comet.opik.api.filter.AutomationRuleEvaluatorField;
+import com.comet.opik.api.filter.DashboardField;
+import com.comet.opik.api.filter.DatasetField;
+import com.comet.opik.api.filter.DatasetItemField;
+import com.comet.opik.api.filter.ExperimentField;
 import com.comet.opik.api.filter.ExperimentsComparisonValidKnownField;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.OptimizationField;
+import com.comet.opik.api.filter.PromptField;
+import com.comet.opik.api.filter.PromptVersionField;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceThreadField;
+import com.comet.opik.api.sorting.SortingField;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import io.r2dbc.spi.Statement;
 import lombok.NonNull;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.stringtemplate.v4.ST;
+import ru.yandex.clickhouse.ClickHouseUtil;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.filter.Operator.NO_VALUE_OPERATORS;
+import static com.comet.opik.api.sorting.SortingFactoryPromptVersions.PROMPT_VERSIONS_FIELDS_PATTERN;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
 import static java.util.stream.Collectors.toList;
@@ -32,205 +51,771 @@ public class FilterQueryBuilder {
 
     private static final String ANALYTICS_DB_AND_OPERATOR = "AND";
 
-    static final String JSONPATH_ROOT = "$";
+    public static final String JSONPATH_ROOT = "$";
 
-    private static final String ID_ANALYTICS_DB = "id";
-    private static final String NAME_ANALYTICS_DB = "name";
+    // The JSON key is passed as a bound query parameter (:sorting_param_xxx) rather than interpolated,
+    // consistent with the data.* sort path and robust to keys containing special characters.
+    // See buildDatasetItemFieldMapping.
+    private static final String JSON_EXTRACT_RAW_TEMPLATE = "JSONExtractRaw(%s, :%s)";
+    public static final String OUTPUT_FIELD_PREFIX = "output.";
+    public static final String INPUT_FIELD_PREFIX = "input.";
+    public static final String METADATA_FIELD_PREFIX = "metadata.";
+
+    private static final String ID_DB = "id";
+    private static final String NAME_DB = "name";
+    private static final String DESCRIPTION_DB = "description";
     private static final String START_TIME_ANALYTICS_DB = "start_time";
     private static final String END_TIME_ANALYTICS_DB = "end_time";
+    /**
+     * Sentinel-aware {@code end_time} for trace/thread/span filtering once the column is non-nullable: {@code nullIf}
+     * collapses the epoch sentinel to {@code NULL} so range/inequality comparisons exclude an absent value. Applied
+     * only under {@code columnsNonNullable} — while the column is Nullable a client-supplied epoch is a
+     * legitimate value that must keep matching.
+     */
+    private static final String END_TIME_NON_NULLABLE_ANALYTICS_DB = "nullIf(end_time, toDateTime64('1970-01-01 00:00:00.000', 9))";
+    /**
+     * The {@code end_time} fields whose filter resolves to {@link #END_TIME_NON_NULLABLE_ANALYTICS_DB} under the
+     * caller's cutover flag — one per entity that migrated ({@code traceColumnsNonNullable} for traces/threads,
+     * {@code spanColumnsNonNullable} for spans).
+     */
+    private static final Set<Field> END_TIME_SENTINEL_FIELDS = Set.of(
+            TraceField.END_TIME, TraceThreadField.END_TIME, SpanField.END_TIME);
     private static final String INPUT_ANALYTICS_DB = "input";
     private static final String OUTPUT_ANALYTICS_DB = "output";
     private static final String METADATA_ANALYTICS_DB = "metadata";
     private static final String MODEL_ANALYTICS_DB = "model";
     private static final String PROVIDER_ANALYTICS_DB = "provider";
     private static final String TOTAL_ESTIMATED_COST_ANALYTICS_DB = "total_estimated_cost";
-    private static final String TAGS_ANALYTICS_DB = "tags";
+    private static final String LLM_SPAN_COUNT_ANALYTICS_DB = "llm_span_count";
+    private static final String TYPE_ANALYTICS_DB = "type";
+    private static final String TAGS_DB = "tags";
+    private static final String VERSION_COUNT_DB = "version_count";
+    private static final String TEMPLATE_STRUCTURE_DB = "template_structure";
     private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
     private static final String VALUE_ANALYTICS_DB = "value";
-    private static final String DURATION_ANALYTICS_DB = "duration";
+    /**
+     * Duration (ms) derived from {@code start_time}/{@code end_time}. The {@code notEquals(end_time, epoch)} guard, as
+     * in every other duration calc, keeps an absent (epoch-sentinel) {@code end_time} from yielding a garbage negative
+     * duration once the column is non-nullable. No-op while it is Nullable (an absent value reads as {@code NULL}).
+     */
+    private static final String DURATION_ANALYTICS_DB = "if(end_time IS NOT NULL AND notEquals(end_time, toDateTime64('1970-01-01 00:00:00.000', 9)) AND start_time IS NOT NULL AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)), (dateDiff('microsecond', start_time, end_time) / 1000.0), 0)";
+    /**
+     * Sentinel-aware {@code duration} for the materialized column (experiment-comparison filtering): {@code isNaN}
+     * collapses the {@code NaN} sentinel to {@code NULL} so comparisons exclude an absent value — notably {@code !=},
+     * since {@code NaN != x} is true. Unconditional (mirrors {@code TTFT_ANALYTICS_DB}); a no-op while the column is
+     * Nullable since {@code NaN} cannot occur yet.
+     */
+    private static final String NEW_DURATION_ANALYTICS_DB = "if(isNaN(duration), NULL, duration)";
+    /**
+     * Sentinel-aware {@code ttft} for filtering: {@code isNaN} collapses the {@code NaN} sentinel to {@code NULL} so
+     * comparisons exclude an absent value — notably {@code !=}, since {@code NaN != x} is true. Unconditional, not
+     * flag-gated: {@code NaN} cannot occur while the column is Nullable, so it is a no-op today.
+     */
+    private static final String TTFT_ANALYTICS_DB = "if(isNaN(ttft), NULL, ttft)";
     private static final String THREAD_ID_ANALYTICS_DB = "thread_id";
+    private static final String DATASET_ID_ANALYTICS_DB = "dataset_id";
+    private static final String PROMPT_IDS_ANALYTICS_DB = "prompt_ids";
     private static final String FIRST_MESSAGE_ANALYTICS_DB = "first_message";
     private static final String LAST_MESSAGE_ANALYTICS_DB = "last_message";
-    private static final String CREATED_AT_ANALYTICS_DB = "created_at";
-    private static final String LAST_UPDATED_AT_ANALYTICS_DB = "last_updated_at";
+    private static final String CREATED_AT_DB = "created_at";
+    private static final String LAST_UPDATED_AT_DB = "last_updated_at";
+    private static final String CREATED_BY_DB = "created_by";
+    private static final String LAST_UPDATED_BY_DB = "last_updated_by";
+    private static final String LAST_CREATED_EXPERIMENT_AT_DB = "last_created_experiment_at";
+    private static final String LAST_CREATED_OPTIMIZATION_AT_DB = "last_created_optimization_at";
+    private static final String PROJECT_ID_DB = "project_id";
+    private static final String INSTRUCTIONS_DB = "instructions";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
+    private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
+    private static final String SPAN_FEEDBACK_SCORE_COUNT_DB = "sfsc.span_feedback_scores_count";
+    private static final String EXPERIMENT_SCORE_COUNT_DB = "esc.experiment_scores_count";
+    private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
+    private static final String VISIBILITY_MODE_DB = "visibility_mode";
+    private static final String ERROR_INFO_DB = "error_info";
+    private static final String ERROR_TYPE_DB = "simpleJSONExtractString(error_info, 'exception_type')";
+    private static final String STATUS_DB = "status";
+    public static final String FEEDBACK_DEFINITIONS_DB = "feedback_definitions";
+    public static final String SCOPE_DB = "scope";
+    private static final String DATA_ANALYTICS_DB = "data";
+    private static final String FULL_DATA_ANALYTICS_DB = "toString(data)";
+    private static final String SOURCE_DB = "source";
+    private static final String ENVIRONMENT_DB = "environment";
+    private static final String TRACE_ID_DB = "trace_id";
+    private static final String SPAN_ID_DB = "span_id";
+    public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
+    public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
+    private static final String EXPERIMENT_ID_DB = "experiment_id";
+    private static final String WEBHOOK_URL_DB = "webhook_url";
+    private static final String ALERT_TYPE_DB = "alert_type";
+    private static final String ENABLED_DB = "enabled";
+    private static final String SAMPLING_RATE_DB = "sampling_rate";
+    private static final String TYPE_DB = "type";
+    private static final String COMMIT_DB = "commit";
+    private static final String TEMPLATE_DB = "template";
+    private static final String CHANGE_DESCRIPTION_DB = "change_description";
+    private static final String VERSION_NUMBER_DB = "version_number";
+
+    /**
+     * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, Experiment, etc.).
+     * Used to identify feedback score filters that require special handling in query building.
+     */
+    private static final Set<Field> FEEDBACK_SCORE_FIELDS = Set.of(
+            TraceField.FEEDBACK_SCORES,
+            TraceField.SPAN_FEEDBACK_SCORES,
+            SpanField.FEEDBACK_SCORES,
+            TraceThreadField.FEEDBACK_SCORES,
+            ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
+            ExperimentField.FEEDBACK_SCORES,
+            ExperimentField.EXPERIMENT_SCORES);
+
+    // Table alias prefixes for AutomationRuleEvaluator queries
+    private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
+    private static final String AUTOMATION_EVALUATOR_TABLE_ALIAS = "evaluator.%s";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
                     .put(Operator.CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "ilike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.STRING_EXACT, "%1$s LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d ,'%%')",
                             FieldType.LIST,
                             "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 1",
                             FieldType.DICTIONARY,
-                            "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
+                            "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))",
+                            // MAP values are stored as JSON strings (e.g., "hello" with quotes), so we use the raw value
+                            // CONTAINS works because the pattern is found inside the value regardless of surrounding quotes
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.MAP,
+                            "ilike(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
-                            FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))")))
+                            FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.STRING_EXACT, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.LIST,
+                            "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 0",
+                            // MAP values are stored as JSON strings, NOT_CONTAINS works with raw value
+                            FieldType.MAP,
+                            "notILike(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.DICTIONARY,
+                            "notILike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) NOT LIKE CONCAT('%%', :filter%2$d ,'%%')")))
                     .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
-                            FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))")))
+                            FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))",
+                            FieldType.STRING_EXACT, "startsWith(%1$s, :filter%2$d)",
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')",
+                            // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
+                            // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
+                            FieldType.MAP,
+                            "startsWith(lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')), lower(:filter%2$d))",
+                            FieldType.DICTIONARY,
+                            "startsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) LIKE CONCAT(:filter%2$d ,'%%')")))
                     .put(Operator.ENDS_WITH, new EnumMap<>(Map.of(
-                            FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))")))
-                    .put(Operator.EQUAL, new EnumMap<>(Map.of(
-                            FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)",
-                            FieldType.DATE_TIME, "%1$s = parseDateTime64BestEffort(:filter%2$d, 9)",
-                            FieldType.NUMBER, "%1$s = :filter%2$d",
-                            FieldType.FEEDBACK_SCORES_NUMBER,
-                            "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1",
+                            FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))",
+                            FieldType.STRING_EXACT, "endsWith(%1$s, :filter%2$d)",
+                            FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)",
+                            // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
+                            // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
+                            FieldType.MAP,
+                            "endsWith(lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')), lower(:filter%2$d))",
                             FieldType.DICTIONARY,
-                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)")))
-                    .put(Operator.NOT_EQUAL, new EnumMap<>(Map.of(
-                            FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)",
-                            FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)",
-                            FieldType.NUMBER, "%1$s != :filter%2$d",
-                            FieldType.FEEDBACK_SCORES_NUMBER,
-                            "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0",
-                            FieldType.DICTIONARY,
-                            "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)")))
-                    .put(Operator.GREATER_THAN, new EnumMap<>(Map.of(
-                            FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)",
-                            FieldType.NUMBER, "%1$s > :filter%2$d",
-                            FieldType.FEEDBACK_SCORES_NUMBER,
-                            "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 > toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1",
-                            FieldType.DICTIONARY,
-                            "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) > toFloat64OrNull(:filter%2$d)")))
-                    .put(Operator.GREATER_THAN_EQUAL, new EnumMap<>(Map.of(
-                            FieldType.DATE_TIME, "%1$s >= parseDateTime64BestEffort(:filter%2$d, 9)",
-                            FieldType.NUMBER, "%1$s >= :filter%2$d",
-                            FieldType.FEEDBACK_SCORES_NUMBER,
-                            "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
-                    .put(Operator.LESS_THAN, new EnumMap<>(Map.of(
-                            FieldType.DATE_TIME, "%1$s < parseDateTime64BestEffort(:filter%2$d, 9)",
-                            FieldType.NUMBER, "%1$s < :filter%2$d",
-                            FieldType.FEEDBACK_SCORES_NUMBER,
-                            "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 < toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1",
-                            FieldType.DICTIONARY,
-                            "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) < toFloat64OrNull(:filter%2$d)")))
-                    .put(Operator.LESS_THAN_EQUAL, new EnumMap<>(Map.of(
-                            FieldType.DATE_TIME, "%1$s <= parseDateTime64BestEffort(:filter%2$d, 9)",
-                            FieldType.NUMBER, "%1$s <= :filter%2$d",
-                            FieldType.FEEDBACK_SCORES_NUMBER,
-                            "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1")))
+                            "endsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "JSON_VALUE(%1$s, :filterKey%2$d) LIKE CONCAT('%%', :filter%2$d)")))
+                    .put(Operator.EQUAL, new EnumMap<>(Map.ofEntries(
+                            Map.entry(FieldType.STRING, "lower(%1$s) = lower(:filter%2$d)"),
+                            Map.entry(FieldType.STRING_EXACT, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.STRING_STATE_DB, "lower(%1$s) = lower(:filter%2$d)"),
+                            Map.entry(FieldType.DATE_TIME, "%1$s = parseDateTime64BestEffort(:filter%2$d, 9)"),
+                            Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.NUMBER, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.DURATION, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.LIST, "has(%1$s, :filter%2$d)"),
+                            Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
+                                    "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1"),
+                            Map.entry(FieldType.DICTIONARY,
+                                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)"),
+                            // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
+                            // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
+                            Map.entry(FieldType.MAP,
+                                    "lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')) = lower(:filter%2$d)"),
+                            Map.entry(FieldType.ENUM, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.ENUM_LEGACY, "(%1$s = :filter%2$d OR %1$s = '%3$s')"))))
+                    .put(Operator.NOT_EQUAL, new EnumMap<>(Map.ofEntries(
+                            Map.entry(FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)"),
+                            Map.entry(FieldType.STRING_EXACT, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.STRING_STATE_DB, "lower(%1$s) != lower(:filter%2$d)"),
+                            Map.entry(FieldType.DATE_TIME, "%1$s != parseDateTime64BestEffort(:filter%2$d, 9)"),
+                            Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.NUMBER, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.DURATION, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.LIST, "NOT has(%1$s, :filter%2$d)"),
+                            Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
+                                    "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0"),
+                            Map.entry(FieldType.DICTIONARY,
+                                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)"),
+                            // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
+                            // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
+                            Map.entry(FieldType.MAP,
+                                    "lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')) != lower(:filter%2$d)"),
+                            Map.entry(FieldType.ENUM, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.ENUM_LEGACY, "(%1$s != :filter%2$d AND %1$s != '%3$s')"))))
+                    .put(Operator.GREATER_THAN, new EnumMap<>(Map.ofEntries(
+                            Map.entry(FieldType.STRING, "lower(%1$s) > lower(:filter%2$d)"),
+                            Map.entry(FieldType.STRING_EXACT, "%1$s > :filter%2$d"),
+                            Map.entry(FieldType.DATE_TIME, "%1$s > parseDateTime64BestEffort(:filter%2$d, 9)"),
+                            Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s > :filter%2$d"),
+                            Map.entry(FieldType.NUMBER, "%1$s > :filter%2$d"),
+                            Map.entry(FieldType.DURATION, "%1$s > :filter%2$d"),
+                            Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
+                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 > toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
+                            Map.entry(FieldType.DICTIONARY,
+                                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) > toFloat64OrNull(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "JSON_VALUE(%1$s, :filterKey%2$d RETURNING DOUBLE NULL ON EMPTY NULL ON ERROR) > CAST(:filter%2$d AS DOUBLE)"))))
+                    .put(Operator.GREATER_THAN_EQUAL, new EnumMap<>(Map.ofEntries(
+                            Map.entry(FieldType.DATE_TIME, "%1$s >= parseDateTime64BestEffort(:filter%2$d, 9)"),
+                            Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s >= :filter%2$d"),
+                            Map.entry(FieldType.NUMBER, "%1$s >= :filter%2$d"),
+                            Map.entry(FieldType.DURATION, "%1$s >= :filter%2$d"),
+                            Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
+                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 >= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "JSON_VALUE(%1$s, :filterKey%2$d RETURNING DOUBLE NULL ON EMPTY NULL ON ERROR) >= CAST(:filter%2$d AS DOUBLE)"))))
+                    .put(Operator.LESS_THAN, new EnumMap<>(Map.ofEntries(
+                            Map.entry(FieldType.STRING, "lower(%1$s) < lower(:filter%2$d)"),
+                            Map.entry(FieldType.STRING_EXACT, "%1$s < :filter%2$d"),
+                            Map.entry(FieldType.DATE_TIME, "%1$s < parseDateTime64BestEffort(:filter%2$d, 9)"),
+                            Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s < :filter%2$d"),
+                            Map.entry(FieldType.NUMBER, "%1$s < :filter%2$d"),
+                            Map.entry(FieldType.DURATION, "%1$s < :filter%2$d"),
+                            Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
+                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 < toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
+                            Map.entry(FieldType.DICTIONARY,
+                                    "toFloat64OrNull(JSON_VALUE(%1$s, :filterKey%2$d)) < toFloat64OrNull(:filter%2$d)"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "JSON_VALUE(%1$s, :filterKey%2$d RETURNING DOUBLE NULL ON EMPTY NULL ON ERROR) < CAST(:filter%2$d AS DOUBLE)"))))
+                    .put(Operator.LESS_THAN_EQUAL, new EnumMap<>(Map.ofEntries(
+                            Map.entry(FieldType.DATE_TIME, "%1$s <= parseDateTime64BestEffort(:filter%2$d, 9)"),
+                            Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s <= :filter%2$d"),
+                            Map.entry(FieldType.NUMBER, "%1$s <= :filter%2$d"),
+                            Map.entry(FieldType.DURATION, "%1$s <= :filter%2$d"),
+                            Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
+                                    "arrayExists(element -> (element.1 = lower(:filterKey%2$d) AND element.2 <= toDecimal64(:filter%2$d, 9)), groupArray(tuple(lower(name), %1$s))) = 1"),
+                            Map.entry(FieldType.DICTIONARY_STATE_DB,
+                                    "JSON_VALUE(%1$s, :filterKey%2$d RETURNING DOUBLE NULL ON EMPTY NULL ON ERROR) <= CAST(:filter%2$d AS DOUBLE)"))))
                     .put(Operator.IS_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
-                            "empty(arrayFilter(element -> (element.1 = lower(:filterKey%2$d)), groupArray(tuple(lower(name), %1$s)))) = 1")))
+                            "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
+                            FieldType.ERROR_CONTAINER,
+                            "empty(%1$s)",
+                            FieldType.LIST,
+                            "empty(%1$s)",
+                            FieldType.DICTIONARY,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = false OR JSON_VALUE(%1$s, :filterKey%2$d) = '' OR JSON_VALUE(%1$s, :filterKey%2$d) = 'null')",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = false OR JSON_VALUE(%1$s, :filterKey%2$d) = '' OR JSON_VALUE(%1$s, :filterKey%2$d) = 'null')",
+                            FieldType.ENUM,
+                            "empty(%1$s)")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
-                            "empty(arrayFilter(element -> (element.1 = lower(:filterKey%2$d)), groupArray(tuple(lower(name), %1$s)))) = 0")))
+                            "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
+                            FieldType.ERROR_CONTAINER,
+                            "notEmpty(%1$s)",
+                            FieldType.LIST,
+                            "notEmpty(%1$s)",
+                            FieldType.DICTIONARY,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = true AND JSON_VALUE(%1$s, :filterKey%2$d) != '' AND JSON_VALUE(%1$s, :filterKey%2$d) != 'null')",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = true AND JSON_VALUE(%1$s, :filterKey%2$d) != '' AND JSON_VALUE(%1$s, :filterKey%2$d) != 'null')",
+                            FieldType.ENUM,
+                            "notEmpty(%1$s)")))
+                    .put(Operator.IN, new EnumMap<>(Map.of(
+                            FieldType.ENUM, "%1$s IN :filter%2$d",
+                            FieldType.STRING_LIST, "%1$s IN :filter%2$d")))
+                    .put(Operator.NOT_IN, new EnumMap<>(Map.of(
+                            FieldType.ENUM, "%1$s NOT IN :filter%2$d",
+                            FieldType.STRING_LIST, "%1$s NOT IN :filter%2$d")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<TraceField, String>builder()
-                    .put(TraceField.ID, ID_ANALYTICS_DB)
-                    .put(TraceField.NAME, NAME_ANALYTICS_DB)
+                    .put(TraceField.ID, ID_DB)
+                    .put(TraceField.NAME, NAME_DB)
                     .put(TraceField.START_TIME, START_TIME_ANALYTICS_DB)
                     .put(TraceField.END_TIME, END_TIME_ANALYTICS_DB)
                     .put(TraceField.INPUT, INPUT_ANALYTICS_DB)
                     .put(TraceField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(TraceField.INPUT_JSON, INPUT_ANALYTICS_DB)
+                    .put(TraceField.OUTPUT_JSON, OUTPUT_ANALYTICS_DB)
                     .put(TraceField.METADATA, METADATA_ANALYTICS_DB)
                     .put(TraceField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
-                    .put(TraceField.TAGS, TAGS_ANALYTICS_DB)
+                    .put(TraceField.LLM_SPAN_COUNT, LLM_SPAN_COUNT_ANALYTICS_DB)
+                    .put(TraceField.TAGS, TAGS_DB)
                     .put(TraceField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
                     .put(TraceField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
                     .put(TraceField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(TraceField.SPAN_FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
+                    .put(TraceField.TTFT, TTFT_ANALYTICS_DB)
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
+                    .put(TraceField.GUARDRAILS, GUARDRAILS_RESULT_DB)
+                    .put(TraceField.VISIBILITY_MODE, VISIBILITY_MODE_DB)
+                    .put(TraceField.ERROR_INFO, ERROR_INFO_DB)
+                    .put(TraceField.ERROR_TYPE, ERROR_TYPE_DB)
+                    .put(TraceField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
+                    .put(TraceField.EXPERIMENT_ID, EXPERIMENT_ID_DB)
+                    .put(TraceField.EXPERIMENT_IDS, EXPERIMENT_ID_DB)
+                    .put(TraceField.CREATED_AT, CREATED_AT_DB)
+                    .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(TraceField.SOURCE, SOURCE_DB)
+                    .put(TraceField.ENVIRONMENT, ENVIRONMENT_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<TraceThreadField, String>builder()
-                    .put(TraceThreadField.ID, ID_ANALYTICS_DB)
+                    .put(TraceThreadField.ID, ID_DB)
                     .put(TraceThreadField.NUMBER_OF_MESSAGES, NUMBER_OF_MESSAGES_ANALYTICS_DB)
                     .put(TraceThreadField.FIRST_MESSAGE, FIRST_MESSAGE_ANALYTICS_DB)
                     .put(TraceThreadField.LAST_MESSAGE, LAST_MESSAGE_ANALYTICS_DB)
                     .put(TraceThreadField.DURATION, DURATION_ANALYTICS_DB)
-                    .put(TraceThreadField.CREATED_AT, CREATED_AT_ANALYTICS_DB)
-                    .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_ANALYTICS_DB)
+                    .put(TraceThreadField.CREATED_AT, CREATED_AT_DB)
+                    .put(TraceThreadField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(TraceThreadField.START_TIME, START_TIME_ANALYTICS_DB)
+                    .put(TraceThreadField.END_TIME, END_TIME_ANALYTICS_DB)
+                    .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(TraceThreadField.STATUS, STATUS_DB)
+                    .put(TraceThreadField.TAGS, TAGS_DB)
+                    .put(TraceThreadField.ANNOTATION_QUEUE_IDS, THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
+                    .put(TraceThreadField.SOURCE, SOURCE_DB)
+                    .put(TraceThreadField.ENVIRONMENT, ENVIRONMENT_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<SpanField, String>builder()
-                    .put(SpanField.ID, ID_ANALYTICS_DB)
-                    .put(SpanField.NAME, NAME_ANALYTICS_DB)
+                    .put(SpanField.ID, ID_DB)
+                    .put(SpanField.NAME, NAME_DB)
                     .put(SpanField.START_TIME, START_TIME_ANALYTICS_DB)
                     .put(SpanField.END_TIME, END_TIME_ANALYTICS_DB)
+                    .put(SpanField.CREATED_AT, CREATED_AT_DB)
+                    .put(SpanField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(SpanField.INPUT, INPUT_ANALYTICS_DB)
                     .put(SpanField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(SpanField.INPUT_JSON, INPUT_ANALYTICS_DB)
+                    .put(SpanField.OUTPUT_JSON, OUTPUT_ANALYTICS_DB)
                     .put(SpanField.METADATA, METADATA_ANALYTICS_DB)
                     .put(SpanField.MODEL, MODEL_ANALYTICS_DB)
                     .put(SpanField.PROVIDER, PROVIDER_ANALYTICS_DB)
                     .put(SpanField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
-                    .put(SpanField.TAGS, TAGS_ANALYTICS_DB)
+                    .put(SpanField.TAGS, TAGS_DB)
                     .put(SpanField.USAGE_COMPLETION_TOKENS, USAGE_COMPLETION_TOKENS_ANALYTICS_DB)
                     .put(SpanField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
                     .put(SpanField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(SpanField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(SpanField.DURATION, DURATION_ANALYTICS_DB)
+                    .put(SpanField.TTFT, TTFT_ANALYTICS_DB)
+                    .put(SpanField.ERROR_INFO, ERROR_INFO_DB)
+                    .put(SpanField.ERROR_TYPE, ERROR_TYPE_DB)
+                    .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
+                    .put(SpanField.TRACE_ID, TRACE_ID_DB)
+                    .put(SpanField.SOURCE, SOURCE_DB)
+                    .put(SpanField.ENVIRONMENT, ENVIRONMENT_DB)
+                    .build());
+
+    private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<ExperimentField, String>builder()
+                    .put(ExperimentField.METADATA, METADATA_ANALYTICS_DB)
+                    .put(ExperimentField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
+                    .put(ExperimentField.PROMPT_IDS, PROMPT_IDS_ANALYTICS_DB)
+                    .put(ExperimentField.TAGS, TAGS_DB)
+                    .put(ExperimentField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(ExperimentField.EXPERIMENT_SCORES, VALUE_ANALYTICS_DB)
+                    .build());
+
+    private static final Map<OptimizationField, String> OPTIMIZATION_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<OptimizationField, String>builder()
+                    .put(OptimizationField.METADATA, METADATA_ANALYTICS_DB)
+                    .put(OptimizationField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
+                    .put(OptimizationField.PROJECT_ID, PROJECT_ID_DB)
+                    .put(OptimizationField.STATUS, STATUS_DB)
+                    .build());
+
+    private static final Map<PromptField, String> PROMPT_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<PromptField, String>builder()
+                    .put(PromptField.ID, ID_DB)
+                    .put(PromptField.NAME, NAME_DB)
+                    .put(PromptField.DESCRIPTION, DESCRIPTION_DB)
+                    .put(PromptField.CREATED_AT, CREATED_AT_DB)
+                    .put(PromptField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(PromptField.CREATED_BY, CREATED_BY_DB)
+                    .put(PromptField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .put(PromptField.TAGS, TAGS_DB)
+                    .put(PromptField.VERSION_COUNT, VERSION_COUNT_DB)
+                    .put(PromptField.TEMPLATE_STRUCTURE, TEMPLATE_STRUCTURE_DB)
+                    .build());
+
+    private static final Map<PromptVersionField, String> PROMPT_VERSION_FIELDS_MAP = Map.ofEntries(
+            Map.entry(PromptVersionField.ID, ID_DB),
+            Map.entry(PromptVersionField.COMMIT, COMMIT_DB),
+            Map.entry(PromptVersionField.VERSION_NUMBER, VERSION_NUMBER_DB),
+            Map.entry(PromptVersionField.TEMPLATE, TEMPLATE_DB),
+            Map.entry(PromptVersionField.CHANGE_DESCRIPTION, CHANGE_DESCRIPTION_DB),
+            Map.entry(PromptVersionField.METADATA, METADATA_ANALYTICS_DB),
+            Map.entry(PromptVersionField.TYPE, TYPE_DB),
+            Map.entry(PromptVersionField.TAGS, TAGS_DB),
+            Map.entry(PromptVersionField.CREATED_AT, CREATED_AT_DB),
+            Map.entry(PromptVersionField.CREATED_BY, CREATED_BY_DB)).entrySet().stream()
+            .collect(Collectors.toUnmodifiableMap(
+                    Map.Entry::getKey,
+                    // Add the table alias as prefix to the db field name
+                    entry -> PROMPT_VERSIONS_FIELDS_PATTERN.formatted(entry.getValue())));
+
+    private static final Map<DatasetField, String> DATASET_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<DatasetField, String>builder()
+                    .put(DatasetField.ID, ID_DB)
+                    .put(DatasetField.NAME, NAME_DB)
+                    .put(DatasetField.DESCRIPTION, DESCRIPTION_DB)
+                    .put(DatasetField.TAGS, TAGS_DB)
+                    .put(DatasetField.CREATED_AT, CREATED_AT_DB)
+                    .put(DatasetField.CREATED_BY, CREATED_BY_DB)
+                    .put(DatasetField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(DatasetField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .put(DatasetField.LAST_CREATED_EXPERIMENT_AT, LAST_CREATED_EXPERIMENT_AT_DB)
+                    .put(DatasetField.LAST_CREATED_OPTIMIZATION_AT, LAST_CREATED_OPTIMIZATION_AT_DB)
+                    .put(DatasetField.TYPE, TYPE_DB)
+                    .build());
+
+    private static final Map<DatasetItemField, String> DATASET_ITEM_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<DatasetItemField, String>builder()
+                    .put(DatasetItemField.ID, ID_DB)
+                    .put(DatasetItemField.DATA, DATA_ANALYTICS_DB)
+                    .put(DatasetItemField.FULL_DATA, FULL_DATA_ANALYTICS_DB)
+                    .put(DatasetItemField.SOURCE, SOURCE_DB)
+                    .put(DatasetItemField.TRACE_ID, TRACE_ID_DB)
+                    .put(DatasetItemField.SPAN_ID, SPAN_ID_DB)
+                    .put(DatasetItemField.TAGS, TAGS_DB)
+                    .put(DatasetItemField.CREATED_AT, CREATED_AT_DB)
+                    .put(DatasetItemField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(DatasetItemField.CREATED_BY, CREATED_BY_DB)
+                    .put(DatasetItemField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .build());
+
+    private static final Map<AnnotationQueueField, String> ANNOTATION_QUEUE_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<AnnotationQueueField, String>builder()
+                    .put(AnnotationQueueField.ID, ID_DB)
+                    .put(AnnotationQueueField.PROJECT_ID, PROJECT_ID_DB)
+                    .put(AnnotationQueueField.NAME, NAME_DB)
+                    .put(AnnotationQueueField.DESCRIPTION, DESCRIPTION_DB)
+                    .put(AnnotationQueueField.INSTRUCTIONS, INSTRUCTIONS_DB)
+                    .put(AnnotationQueueField.FEEDBACK_DEFINITION_NAMES, FEEDBACK_DEFINITIONS_DB)
+                    .put(AnnotationQueueField.SCOPE, SCOPE_DB)
+                    .put(AnnotationQueueField.CREATED_AT, CREATED_AT_DB)
+                    .put(AnnotationQueueField.CREATED_BY, CREATED_BY_DB)
+                    .put(AnnotationQueueField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(AnnotationQueueField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .build());
+
+    private static final Map<AlertField, String> ALERT_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<AlertField, String>builder()
+                    .put(AlertField.ID, ID_DB)
+                    .put(AlertField.NAME, NAME_DB)
+                    .put(AlertField.ALERT_TYPE, ALERT_TYPE_DB)
+                    .put(AlertField.WEBHOOK_URL, WEBHOOK_URL_DB)
+                    .put(AlertField.CREATED_AT, CREATED_AT_DB)
+                    .put(AlertField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(AlertField.CREATED_BY, CREATED_BY_DB)
+                    .put(AlertField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .build());
+
+    private static final Map<DashboardField, String> DASHBOARD_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<DashboardField, String>builder()
+                    .put(DashboardField.ID, ID_DB)
+                    .put(DashboardField.NAME, NAME_DB)
+                    .put(DashboardField.DESCRIPTION, DESCRIPTION_DB)
+                    .put(DashboardField.TYPE, TYPE_DB)
+                    .put(DashboardField.SCOPE, SCOPE_DB)
+                    .put(DashboardField.CREATED_AT, CREATED_AT_DB)
+                    .put(DashboardField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(DashboardField.CREATED_BY, CREATED_BY_DB)
+                    .put(DashboardField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .build());
+
+    private static final Map<AutomationRuleEvaluatorField, String> AUTOMATION_RULE_EVALUATOR_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<AutomationRuleEvaluatorField, String>builder()
+                    .put(AutomationRuleEvaluatorField.ID, String.format(AUTOMATION_RULE_TABLE_ALIAS, ID_DB))
+                    .put(AutomationRuleEvaluatorField.NAME, String.format(AUTOMATION_RULE_TABLE_ALIAS, NAME_DB))
+                    .put(AutomationRuleEvaluatorField.TYPE, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, TYPE_DB))
+                    .put(AutomationRuleEvaluatorField.ENABLED, String.format(AUTOMATION_RULE_TABLE_ALIAS, ENABLED_DB))
+                    .put(AutomationRuleEvaluatorField.SAMPLING_RATE,
+                            String.format(AUTOMATION_RULE_TABLE_ALIAS, SAMPLING_RATE_DB))
+                    .put(AutomationRuleEvaluatorField.CREATED_AT,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, CREATED_AT_DB))
+                    .put(AutomationRuleEvaluatorField.LAST_UPDATED_AT,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, LAST_UPDATED_AT_DB))
+                    .put(AutomationRuleEvaluatorField.CREATED_BY,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, CREATED_BY_DB))
+                    .put(AutomationRuleEvaluatorField.LAST_UPDATED_BY,
+                            String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, LAST_UPDATED_BY_DB))
                     .build());
 
     private static final Map<ExperimentsComparisonValidKnownField, String> EXPERIMENTS_COMPARISON_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<ExperimentsComparisonValidKnownField, String>builder()
+                    .put(ExperimentsComparisonValidKnownField.ID, ID_DB)
+                    .put(ExperimentsComparisonValidKnownField.SOURCE, SOURCE_DB)
+                    .put(ExperimentsComparisonValidKnownField.TRACE_ID, TRACE_ID_DB)
+                    .put(ExperimentsComparisonValidKnownField.SPAN_ID, SPAN_ID_DB)
+                    .put(ExperimentsComparisonValidKnownField.CREATED_AT, CREATED_AT_DB)
+                    .put(ExperimentsComparisonValidKnownField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(ExperimentsComparisonValidKnownField.CREATED_BY, CREATED_BY_DB)
+                    .put(ExperimentsComparisonValidKnownField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
+                    .put(ExperimentsComparisonValidKnownField.DURATION, NEW_DURATION_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(ExperimentsComparisonValidKnownField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
+                    .put(ExperimentsComparisonValidKnownField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .build());
 
-    private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = new EnumMap<>(Map.of(
-            FilterStrategy.TRACE, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
-                    .add(TraceField.ID)
-                    .add(TraceField.NAME)
-                    .add(TraceField.START_TIME)
-                    .add(TraceField.END_TIME)
-                    .add(TraceField.INPUT)
-                    .add(TraceField.OUTPUT)
-                    .add(TraceField.METADATA)
-                    .add(TraceField.TAGS)
-                    .add(TraceField.DURATION)
-                    .add(TraceField.THREAD_ID)
-                    .build()),
-            FilterStrategy.TRACE_AGGREGATION, EnumSet.copyOf(ImmutableSet.<TraceField>builder()
-                    .add(TraceField.USAGE_COMPLETION_TOKENS)
-                    .add(TraceField.USAGE_PROMPT_TOKENS)
-                    .add(TraceField.USAGE_TOTAL_TOKENS)
-                    .add(TraceField.TOTAL_ESTIMATED_COST)
-                    .build()),
-            FilterStrategy.SPAN, EnumSet.copyOf(ImmutableSet.<SpanField>builder()
-                    .add(SpanField.ID)
-                    .add(SpanField.NAME)
-                    .add(SpanField.START_TIME)
-                    .add(SpanField.END_TIME)
-                    .add(SpanField.INPUT)
-                    .add(SpanField.OUTPUT)
-                    .add(SpanField.METADATA)
-                    .add(SpanField.MODEL)
-                    .add(SpanField.PROVIDER)
-                    .add(SpanField.TOTAL_ESTIMATED_COST)
-                    .add(SpanField.TAGS)
-                    .add(SpanField.USAGE_COMPLETION_TOKENS)
-                    .add(SpanField.USAGE_PROMPT_TOKENS)
-                    .add(SpanField.USAGE_TOTAL_TOKENS)
-                    .add(SpanField.DURATION)
-                    .build()),
-            FilterStrategy.FEEDBACK_SCORES, ImmutableSet.<Field>builder()
-                    .add(TraceField.FEEDBACK_SCORES)
-                    .add(SpanField.FEEDBACK_SCORES)
-                    .add(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES)
-                    .build(),
-            FilterStrategy.EXPERIMENT_ITEM, EnumSet.copyOf(ImmutableSet.<ExperimentsComparisonValidKnownField>builder()
-                    .add(ExperimentsComparisonValidKnownField.OUTPUT)
-                    .build()),
-            FilterStrategy.TRACE_THREAD, EnumSet.copyOf(ImmutableSet.<TraceThreadField>builder()
-                    .add(TraceThreadField.ID)
-                    .add(TraceThreadField.NUMBER_OF_MESSAGES)
-                    .add(TraceThreadField.FIRST_MESSAGE)
-                    .add(TraceThreadField.LAST_MESSAGE)
-                    .add(TraceThreadField.DURATION)
-                    .add(TraceThreadField.CREATED_AT)
-                    .add(TraceThreadField.LAST_UPDATED_AT)
-                    .build())));
+    private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = createFilterStrategyMap();
+
+    private static Map<FilterStrategy, Set<? extends Field>> createFilterStrategyMap() {
+        Map<FilterStrategy, Set<? extends Field>> map = new EnumMap<>(FilterStrategy.class);
+
+        map.put(FilterStrategy.TRACE, Set.of(
+                TraceField.ID,
+                TraceField.NAME,
+                TraceField.START_TIME,
+                TraceField.END_TIME,
+                TraceField.CREATED_AT,
+                TraceField.LAST_UPDATED_AT,
+                TraceField.INPUT,
+                TraceField.OUTPUT,
+                TraceField.INPUT_JSON,
+                TraceField.OUTPUT_JSON,
+                TraceField.METADATA,
+                TraceField.TAGS,
+                TraceField.DURATION,
+                TraceField.TTFT,
+                TraceField.THREAD_ID,
+                TraceField.GUARDRAILS,
+                TraceField.VISIBILITY_MODE,
+                TraceField.ERROR_INFO,
+                TraceField.ERROR_TYPE,
+                TraceField.SOURCE,
+                TraceField.ENVIRONMENT,
+                TraceThreadField.SOURCE,
+                TraceThreadField.ENVIRONMENT));
+
+        map.put(FilterStrategy.EXPERIMENT_AGGREGATION, Set.of(
+                TraceField.EXPERIMENT_ID,
+                TraceField.EXPERIMENT_IDS));
+
+        map.put(FilterStrategy.TRACE_AGGREGATION, Set.of(
+                TraceField.USAGE_COMPLETION_TOKENS,
+                TraceField.USAGE_PROMPT_TOKENS,
+                TraceField.USAGE_TOTAL_TOKENS,
+                TraceField.TOTAL_ESTIMATED_COST,
+                TraceField.LLM_SPAN_COUNT));
+
+        map.put(FilterStrategy.ANNOTATION_AGGREGATION, Set.of(
+                TraceField.ANNOTATION_QUEUE_IDS,
+                TraceThreadField.ANNOTATION_QUEUE_IDS));
+
+        map.put(FilterStrategy.SPAN, Set.of(
+                SpanField.ID,
+                SpanField.NAME,
+                SpanField.START_TIME,
+                SpanField.END_TIME,
+                SpanField.CREATED_AT,
+                SpanField.LAST_UPDATED_AT,
+                SpanField.INPUT,
+                SpanField.OUTPUT,
+                SpanField.INPUT_JSON,
+                SpanField.OUTPUT_JSON,
+                SpanField.METADATA,
+                SpanField.MODEL,
+                SpanField.PROVIDER,
+                SpanField.TOTAL_ESTIMATED_COST,
+                SpanField.TAGS,
+                SpanField.USAGE_COMPLETION_TOKENS,
+                SpanField.USAGE_PROMPT_TOKENS,
+                SpanField.USAGE_TOTAL_TOKENS,
+                SpanField.DURATION,
+                SpanField.TTFT,
+                SpanField.ERROR_INFO,
+                SpanField.ERROR_TYPE,
+                SpanField.TYPE,
+                SpanField.TRACE_ID,
+                SpanField.SOURCE,
+                SpanField.ENVIRONMENT));
+
+        map.put(FilterStrategy.FEEDBACK_SCORES, Set.of(
+                TraceField.FEEDBACK_SCORES,
+                SpanField.FEEDBACK_SCORES,
+                ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
+                TraceThreadField.FEEDBACK_SCORES,
+                ExperimentField.FEEDBACK_SCORES));
+
+        map.put(FilterStrategy.FEEDBACK_SCORES_AGGREGATED, Set.of(
+                ExperimentField.FEEDBACK_SCORES,
+                ExperimentsComparisonValidKnownField.FEEDBACK_SCORES));
+
+        map.put(FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES, Set.of(TraceField.SPAN_FEEDBACK_SCORES));
+
+        map.put(FilterStrategy.SPAN_FEEDBACK_SCORES, Set.of(SpanField.FEEDBACK_SCORES));
+
+        map.put(FilterStrategy.EXPERIMENT_SCORES, Set.of(ExperimentField.EXPERIMENT_SCORES));
+
+        map.put(FilterStrategy.EXPERIMENT_SCORES_AGGREGATED, Set.of(ExperimentField.EXPERIMENT_SCORES));
+
+        map.put(FilterStrategy.EXPERIMENT_ITEM, Set.of(
+                ExperimentsComparisonValidKnownField.OUTPUT,
+                ExperimentsComparisonValidKnownField.DURATION));
+
+        map.put(FilterStrategy.EXPERIMENT, Set.of(
+                ExperimentField.METADATA,
+                ExperimentField.DATASET_ID,
+                ExperimentField.PROMPT_IDS,
+                ExperimentField.TAGS));
+
+        map.put(FilterStrategy.PROMPT, Set.of(
+                PromptField.ID,
+                PromptField.NAME,
+                PromptField.DESCRIPTION,
+                PromptField.CREATED_AT,
+                PromptField.LAST_UPDATED_AT,
+                PromptField.CREATED_BY,
+                PromptField.LAST_UPDATED_BY,
+                PromptField.TAGS,
+                PromptField.VERSION_COUNT,
+                PromptField.TEMPLATE_STRUCTURE));
+
+        map.put(FilterStrategy.PROMPT_VERSION, Set.of(
+                PromptVersionField.ID,
+                PromptVersionField.COMMIT,
+                PromptVersionField.VERSION_NUMBER,
+                PromptVersionField.TEMPLATE,
+                PromptVersionField.CHANGE_DESCRIPTION,
+                PromptVersionField.TYPE,
+                PromptVersionField.TAGS,
+                PromptVersionField.CREATED_AT,
+                PromptVersionField.CREATED_BY));
+
+        map.put(FilterStrategy.DATASET, Set.of(
+                DatasetField.ID,
+                DatasetField.NAME,
+                DatasetField.DESCRIPTION,
+                DatasetField.TAGS,
+                DatasetField.CREATED_AT,
+                DatasetField.CREATED_BY,
+                DatasetField.LAST_UPDATED_AT,
+                DatasetField.LAST_UPDATED_BY,
+                DatasetField.LAST_CREATED_EXPERIMENT_AT,
+                DatasetField.LAST_CREATED_OPTIMIZATION_AT,
+                DatasetField.TYPE));
+
+        map.put(FilterStrategy.ANNOTATION_QUEUE, Set.of(
+                AnnotationQueueField.ID,
+                AnnotationQueueField.PROJECT_ID,
+                AnnotationQueueField.NAME,
+                AnnotationQueueField.DESCRIPTION,
+                AnnotationQueueField.INSTRUCTIONS,
+                AnnotationQueueField.FEEDBACK_DEFINITION_NAMES,
+                AnnotationQueueField.SCOPE,
+                AnnotationQueueField.CREATED_AT,
+                AnnotationQueueField.CREATED_BY,
+                AnnotationQueueField.LAST_UPDATED_AT,
+                AnnotationQueueField.LAST_UPDATED_BY));
+
+        map.put(FilterStrategy.TRACE_THREAD, Set.of(
+                TraceThreadField.ID,
+                TraceThreadField.NUMBER_OF_MESSAGES,
+                TraceThreadField.FIRST_MESSAGE,
+                TraceThreadField.LAST_MESSAGE,
+                TraceThreadField.DURATION,
+                TraceThreadField.CREATED_AT,
+                TraceThreadField.LAST_UPDATED_AT,
+                TraceThreadField.START_TIME,
+                TraceThreadField.END_TIME,
+                TraceThreadField.STATUS,
+                TraceThreadField.TAGS));
+
+        map.put(FilterStrategy.DATASET_ITEM, Set.of(
+                DatasetItemField.ID,
+                DatasetItemField.DATA,
+                DatasetItemField.FULL_DATA,
+                DatasetItemField.SOURCE,
+                DatasetItemField.TRACE_ID,
+                DatasetItemField.SPAN_ID,
+                DatasetItemField.TAGS,
+                DatasetItemField.CREATED_AT,
+                DatasetItemField.LAST_UPDATED_AT,
+                DatasetItemField.CREATED_BY,
+                DatasetItemField.LAST_UPDATED_BY,
+                // Also include ExperimentsComparisonValidKnownField variants for experiment items
+                ExperimentsComparisonValidKnownField.ID,
+                ExperimentsComparisonValidKnownField.SOURCE,
+                ExperimentsComparisonValidKnownField.TRACE_ID,
+                ExperimentsComparisonValidKnownField.SPAN_ID,
+                ExperimentsComparisonValidKnownField.CREATED_AT,
+                ExperimentsComparisonValidKnownField.LAST_UPDATED_AT,
+                ExperimentsComparisonValidKnownField.CREATED_BY,
+                ExperimentsComparisonValidKnownField.LAST_UPDATED_BY));
+
+        map.put(FilterStrategy.ALERT, Set.of(
+                AlertField.ID,
+                AlertField.NAME,
+                AlertField.ALERT_TYPE,
+                AlertField.WEBHOOK_URL,
+                AlertField.CREATED_AT,
+                AlertField.LAST_UPDATED_AT,
+                AlertField.CREATED_BY,
+                AlertField.LAST_UPDATED_BY));
+
+        map.put(FilterStrategy.AUTOMATION_RULE_EVALUATOR, Set.of(
+                AutomationRuleEvaluatorField.ID,
+                AutomationRuleEvaluatorField.NAME,
+                AutomationRuleEvaluatorField.TYPE,
+                AutomationRuleEvaluatorField.ENABLED,
+                AutomationRuleEvaluatorField.SAMPLING_RATE,
+                AutomationRuleEvaluatorField.CREATED_AT,
+                AutomationRuleEvaluatorField.LAST_UPDATED_AT,
+                AutomationRuleEvaluatorField.CREATED_BY,
+                AutomationRuleEvaluatorField.LAST_UPDATED_BY));
+
+        map.put(FilterStrategy.OPTIMIZATION, Set.of(
+                OptimizationField.METADATA,
+                OptimizationField.DATASET_ID,
+                OptimizationField.PROJECT_ID,
+                OptimizationField.STATUS));
+
+        map.put(FilterStrategy.DASHBOARD, Set.of(
+                DashboardField.ID,
+                DashboardField.NAME,
+                DashboardField.DESCRIPTION,
+                DashboardField.TYPE,
+                DashboardField.SCOPE,
+                DashboardField.CREATED_AT,
+                DashboardField.LAST_UPDATED_AT,
+                DashboardField.CREATED_BY,
+                DashboardField.LAST_UPDATED_BY));
+
+        return map;
+    }
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,
+            FieldType.DICTIONARY_STATE_DB,
+            FieldType.MAP,
             FieldType.FEEDBACK_SCORES_NUMBER);
 
     public Map<Field, List<Operator>> getUnSupportedOperators(@NonNull Field... fields) {
@@ -249,19 +834,90 @@ public class FilterQueryBuilder {
                 .collect(groupingBy(Map.Entry::getKey, mapping(Map.Entry::getValue, toList())));
     }
 
-    public String toAnalyticsDbOperator(@NonNull Filter filter) {
+    public static String toAnalyticsDbOperator(@NonNull Filter filter) {
         return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
     }
 
-    public Optional<String> toAnalyticsDbFilters(
+    private static String toAnalyticsDbOperator(@NonNull Filter filter, @NonNull FilterStrategy filterStrategy) {
+        // For aggregated feedback scores, use map access patterns instead of groupArray patterns
+        if ((filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED
+                || filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)
+                && filter.field().getType() == FieldType.FEEDBACK_SCORES_NUMBER) {
+            return getAggregatedFeedbackScoresTemplate(filter.operator());
+        }
+
+        // For aggregated experiment scores (Map(String, Float64)), use Float64-based map access patterns
+        if ((filterStrategy == FilterStrategy.EXPERIMENT_SCORES_AGGREGATED
+                || filterStrategy == FilterStrategy.EXPERIMENT_SCORES_AGGREGATED_IS_EMPTY)
+                && filter.field().getType() == FieldType.FEEDBACK_SCORES_NUMBER) {
+            return getAggregatedExperimentScoresTemplate(filter.operator());
+        }
+
+        return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
+    }
+
+    private static String getAggregatedMapScoresTemplate(Operator operator, String valueCast) {
+        return switch (operator) {
+            case EQUAL ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] = " + valueCast + ", mapKeys(%1$s))";
+            case NOT_EQUAL ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] != " + valueCast + ", mapKeys(%1$s))";
+            case GREATER_THAN ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] > " + valueCast + ", mapKeys(%1$s))";
+            case GREATER_THAN_EQUAL ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] >= " + valueCast + ", mapKeys(%1$s))";
+            case LESS_THAN ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] < " + valueCast + ", mapKeys(%1$s))";
+            case LESS_THAN_EQUAL ->
+                "arrayExists(k -> lower(k) = lower(:filterKey%2$d) AND %1$s[k] <= " + valueCast + ", mapKeys(%1$s))";
+            case IS_EMPTY -> "NOT arrayExists(k -> lower(k) = lower(:filterKey%2$d), mapKeys(%1$s))";
+            case IS_NOT_EMPTY -> "arrayExists(k -> lower(k) = lower(:filterKey%2$d), mapKeys(%1$s))";
+            default -> throw new IllegalArgumentException(
+                    "Unsupported operator for aggregated map scores: '%s'".formatted(operator));
+        };
+    }
+
+    private static String getAggregatedFeedbackScoresTemplate(Operator operator) {
+        return getAggregatedMapScoresTemplate(operator, "toDecimal64(:filter%2$d, 9)");
+    }
+
+    private static String getAggregatedExperimentScoresTemplate(Operator operator) {
+        return getAggregatedMapScoresTemplate(operator, "toFloat64(:filter%2$d)");
+    }
+
+    public static Optional<Boolean> hasGuardrailsFilter(@NonNull List<? extends Filter> filters) {
+        return hasField(filters, TraceField.GUARDRAILS);
+    }
+
+    public static Optional<Boolean> hasField(@NonNull List<? extends Filter> filters, @NonNull Field field) {
+        return filters.stream()
+                .filter(filter -> filter.field() == field)
+                .findFirst()
+                .map(filter -> true);
+    }
+
+    public static Optional<String> toAnalyticsDbFilters(
             @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy) {
+        return toAnalyticsDbFilters(filters, filterStrategy, false);
+    }
+
+    /**
+     * @param columnsNonNullable when {@code true}, filters use the sentinel-aware
+     *                                expression so an absent (epoch) value is excluded like a {@code NULL}; pass the
+     *                                target entity's cutover flag from callers (traceColumnsNonNullable for
+     *                                traces/threads, spanColumnsNonNullable for spans), {@code false} elsewhere.
+     */
+    public static Optional<String> toAnalyticsDbFilters(
+            @NonNull List<? extends Filter> filters,
+            @NonNull FilterStrategy filterStrategy,
+            boolean columnsNonNullable) {
         var stringJoiner = new StringJoiner(" %s ".formatted(ANALYTICS_DB_AND_OPERATOR));
         stringJoiner.setEmptyValue("");
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
-            if (FILTER_STRATEGY_MAP.getOrDefault(filterStrategy, Set.of()).contains(filter.field())
+            if (getFieldsByStrategy(filterStrategy, filter).orElse(Set.of()).contains(filter.field())
                     || filter.field().isDynamic(filterStrategy)) {
-                stringJoiner.add(toAnalyticsDbFilter(filter, i, filterStrategy));
+                stringJoiner.add(toAnalyticsDbFilter(filter, i, filterStrategy, columnsNonNullable));
             }
         }
         var analyticsDbFilters = stringJoiner.toString();
@@ -270,20 +926,193 @@ public class FilterQueryBuilder {
                 : Optional.of("(%s)".formatted(analyticsDbFilters));
     }
 
-    private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
-        var template = toAnalyticsDbOperator(filter);
-        var formattedTemplate = template.formatted(getAnalyticsDbField(filter.field(), filterStrategy, i), i);
-        return "(%s)".formatted(formattedTemplate);
+    /**
+     * V2-client entry point that mirrors {@link #toAnalyticsDbFilters} but emits placeholders
+     * in the v2 ClickHouse client's {@code {name:Type}} form instead of the r2dbc {@code :name}
+     * form. Pair with {@link #populateV2ClientParams} for the matching parameter binding.
+     */
+    public static Optional<String> toAnalyticsDbFiltersV2Client(
+            @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy) {
+        return toAnalyticsDbFiltersV2Client(filters, filterStrategy, false);
     }
 
-    private String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {
+    /**
+     * @param columnsNonNullable threaded through so a v2-client caller can opt into sentinel-aware {@code end_time}
+     *                                just like the r2dbc path; without it this entry point could never enable the flag.
+     */
+    public static Optional<String> toAnalyticsDbFiltersV2Client(
+            @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy,
+            boolean columnsNonNullable) {
+        return toAnalyticsDbFilters(filters, filterStrategy, columnsNonNullable)
+                .map(sql -> rewritePlaceholdersForV2Client(sql, filters));
+    }
+
+    private static Optional<Set<? extends Field>> getFieldsByStrategy(FilterStrategy filterStrategy, Filter filter) {
+        // we want to apply the is empty filter only in the case below
+        if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
+        }
+
+        if (filter.operator() == Operator.IS_EMPTY
+                && filterStrategy == FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES));
+        }
+
+        if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.SPAN_FEEDBACK_SCORES));
+        }
+
+        if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.EXPERIMENT_SCORES));
+        }
+
+        if (filter.operator() == Operator.IS_EMPTY
+                && filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES_AGGREGATED));
+        }
+
+        if (filter.operator() == Operator.IS_NOT_EMPTY
+                && filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES_AGGREGATED));
+        }
+
+        if (filter.operator() == Operator.IS_EMPTY
+                && filterStrategy == FilterStrategy.EXPERIMENT_SCORES_AGGREGATED_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.EXPERIMENT_SCORES_AGGREGATED));
+        }
+
+        if (filter.operator() == Operator.IS_NOT_EMPTY
+                && filterStrategy == FilterStrategy.EXPERIMENT_SCORES_AGGREGATED_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.EXPERIMENT_SCORES_AGGREGATED));
+        }
+
+        // Skip IS_NOT_EMPTY for FEEDBACK_SCORES_AGGREGATED — it is handled by FEEDBACK_SCORES_AGGREGATED_IS_EMPTY
+        if (filter.operator() == Operator.IS_NOT_EMPTY && isFeedbackScore(filter)
+                && filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED) {
+            return Optional.empty();
+        }
+
+        // Skip IS_NOT_EMPTY for EXPERIMENT_SCORES_AGGREGATED — it is handled by EXPERIMENT_SCORES_AGGREGATED_IS_EMPTY
+        if (filter.operator() == Operator.IS_NOT_EMPTY && isFeedbackScore(filter)
+                && filterStrategy == FilterStrategy.EXPERIMENT_SCORES_AGGREGATED) {
+            return Optional.empty();
+        }
+
+        // Skip numerical operators for FEEDBACK_SCORES_AGGREGATED_IS_EMPTY — only IS_EMPTY/IS_NOT_EMPTY are handled there
+        if (filter.operator() != Operator.IS_EMPTY && filter.operator() != Operator.IS_NOT_EMPTY
+                && isFeedbackScore(filter)
+                && filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY) {
+            return Optional.empty();
+        }
+
+        // Skip numerical operators for EXPERIMENT_SCORES_AGGREGATED_IS_EMPTY — only IS_EMPTY/IS_NOT_EMPTY are handled there
+        if (filter.operator() != Operator.IS_EMPTY && filter.operator() != Operator.IS_NOT_EMPTY
+                && isFeedbackScore(filter)
+                && filterStrategy == FilterStrategy.EXPERIMENT_SCORES_AGGREGATED_IS_EMPTY) {
+            return Optional.empty();
+        }
+
+        if (isNotEmptyScoresFilter(filterStrategy, filter)) {
+            return Optional.empty();
+        }
+
+        // Only allow IS_EMPTY for _IS_EMPTY strategies (not for regular AGGREGATED strategy)
+        if (filter.operator() == Operator.IS_EMPTY && isFeedbackScore(filter)
+                && filterStrategy != FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY
+                && filterStrategy != FilterStrategy.EXPERIMENT_SCORES_AGGREGATED_IS_EMPTY) {
+            return Optional.empty();
+        }
+
+        return Optional.ofNullable(FILTER_STRATEGY_MAP.get(filterStrategy));
+    }
+
+    private static boolean isNotEmptyScoresFilter(FilterStrategy filterStrategy, Filter filter) {
+        return filter.operator() == Operator.IS_NOT_EMPTY
+                && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY,
+                        FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY)
+                        .contains(filterStrategy);
+    }
+
+    private static boolean isFeedbackScore(Filter filter) {
+        return FEEDBACK_SCORE_FIELDS.contains(filter.field());
+    }
+
+    private static String toAnalyticsDbFilter(
+            Filter filter, int i, FilterStrategy filterStrategy, boolean columnsNonNullable) {
+        var template = toAnalyticsDbOperator(filter, filterStrategy);
+        var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i, columnsNonNullable);
+        var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
+        return filter.field().getType().buildFilter(template, dbField, i, filter.value(), enumFallbackTemplate);
+    }
+
+    private static String getAnalyticsDbField(
+            Field field, FilterStrategy filterStrategy, int i, boolean columnsNonNullable) {
+        // Resolve end_time to the sentinel-aware expression so an absent (epoch) value is excluded like a
+        // NULL. Flag-gated (epoch is legitimate while the column is Nullable); the caller passes its entity's
+        // cutover flag (traceColumnsNonNullable for traces/threads, spanColumnsNonNullable for spans).
+        if (columnsNonNullable && END_TIME_SENTINEL_FIELDS.contains(field)) {
+            return END_TIME_NON_NULLABLE_ANALYTICS_DB;
+        }
+
+        // this is a special case where the DB field is determined by the filter strategy rather than the filter field
+        if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
+            return FEEDBACK_SCORE_COUNT_DB;
+        }
+
+        if (filterStrategy == FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+            return SPAN_FEEDBACK_SCORE_COUNT_DB;
+        }
+
+        if (filterStrategy == FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY) {
+            return EXPERIMENT_SCORE_COUNT_DB;
+        }
+
+        // For aggregated feedback scores, use the appropriate column based on context
+        // ExperimentField.FEEDBACK_SCORES -> experiment_aggregates table uses feedback_scores_avg
+        if ((filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED
+                || filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)
+                && field == ExperimentField.FEEDBACK_SCORES) {
+            return "feedback_scores_avg";
+        }
+
+        // ExperimentsComparisonValidKnownField.FEEDBACK_SCORES -> experiment_item_aggregates table uses feedback_scores
+        if ((filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED
+                || filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)
+                && field == ExperimentsComparisonValidKnownField.FEEDBACK_SCORES) {
+            return "feedback_scores";
+        }
+
+        if ((filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED
+                || filterStrategy == FilterStrategy.FEEDBACK_SCORES_AGGREGATED_IS_EMPTY)
+                && field == ExperimentField.EXPERIMENT_SCORES) {
+            return "experiment_scores";
+        }
+
+        // experiment_aggregates.experiment_scores is Map(String, Float64); qualify with alias to avoid
+        // ambiguity with experiments.experiment_scores (JSON blob) in the same FROM clause
+        if ((filterStrategy == FilterStrategy.EXPERIMENT_SCORES_AGGREGATED
+                || filterStrategy == FilterStrategy.EXPERIMENT_SCORES_AGGREGATED_IS_EMPTY)
+                && field == ExperimentField.EXPERIMENT_SCORES) {
+            return "agg.experiment_scores";
+        }
 
         return switch (field) {
             case TraceField traceField -> TRACE_FIELDS_MAP.get(traceField);
             case SpanField spanField -> SPAN_FIELDS_MAP.get(spanField);
+            case ExperimentField experimentField -> EXPERIMENT_FIELDS_MAP.get(experimentField);
             case ExperimentsComparisonValidKnownField experimentsComparisonValidKnownField ->
                 EXPERIMENTS_COMPARISON_FIELDS_MAP.get(experimentsComparisonValidKnownField);
             case TraceThreadField traceThreadField -> TRACE_THREAD_FIELDS_MAP.get(traceThreadField);
+            case PromptField promptField -> PROMPT_FIELDS_MAP.get(promptField);
+            case PromptVersionField promptVersionField -> PROMPT_VERSION_FIELDS_MAP.get(promptVersionField);
+            case DatasetField datasetField -> DATASET_FIELDS_MAP.get(datasetField);
+            case DatasetItemField datasetItemField -> DATASET_ITEM_FIELDS_MAP.get(datasetItemField);
+            case AnnotationQueueField annotationQueueField -> ANNOTATION_QUEUE_FIELDS_MAP.get(annotationQueueField);
+            case AlertField alertField -> ALERT_FIELDS_MAP.get(alertField);
+            case AutomationRuleEvaluatorField automationRuleEvaluatorField ->
+                AUTOMATION_RULE_EVALUATOR_FIELDS_MAP.get(automationRuleEvaluatorField);
+            case OptimizationField optimizationField -> OPTIMIZATION_FIELDS_MAP.get(optimizationField);
+            case DashboardField dashboardField -> DASHBOARD_FIELDS_MAP.get(dashboardField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {
@@ -296,36 +1125,268 @@ public class FilterQueryBuilder {
         };
     }
 
-    public Statement bind(
+    public static Statement bind(
             @NonNull Statement statement,
+            @NonNull List<? extends Filter> filters,
+            @NonNull FilterStrategy filterStrategy) {
+        bindUsing(statement::bind, filters, filterStrategy);
+        return statement;
+    }
+
+    /**
+     * V2-client entry point: produces the same filter parameters as
+     * {@link #bind(Statement, List, FilterStrategy)} but populates a {@code Map<String, Object>}
+     * for the v2 ClickHouse client's {@code query(sql, params, settings)} API instead of binding
+     * to a {@link Statement}.
+     *
+     * <p>Multi-value operator values are pre-rendered as a ClickHouse array literal string
+     * (e.g. {@code ['a','b']}) because the v2 client serialises Map values via
+     * {@code String.valueOf}, which would otherwise emit an unquoted Java array {@code [a, b]}.
+     *
+     * <p>Pair with {@link #toAnalyticsDbFiltersV2Client} for the matching SQL fragment.
+     */
+    public static void populateV2ClientParams(
+            @NonNull Map<String, Object> params,
+            @NonNull List<? extends Filter> filters,
+            @NonNull FilterStrategy filterStrategy) {
+        bindUsing((name, value) -> {
+            if (value instanceof String[] arr) {
+                params.put(name, formatStringArrayLiteral(Arrays.asList(arr)));
+            } else {
+                params.put(name, value);
+            }
+        }, filters, filterStrategy);
+    }
+
+    /**
+     * Core binding logic shared by the r2dbc {@link Statement} and the v2-client
+     * {@code Map<String, Object>} entry points above. Iterates filters and emits param
+     * (name, value) pairs through the supplied {@code binder}.
+     */
+    private static void bindUsing(
+            @NonNull BiConsumer<String, Object> binder,
             @NonNull List<? extends Filter> filters,
             @NonNull FilterStrategy filterStrategy) {
         for (var i = 0; i < filters.size(); i++) {
             var filter = filters.get(i);
-            if (FILTER_STRATEGY_MAP.getOrDefault(filterStrategy, Set.of()).contains(filter.field())
+            if (getFieldsByStrategy(filterStrategy, filter).orElse(Set.of()).contains(filter.field())
                     || filter.field().isDynamic(filterStrategy)) {
 
                 if (filter.field().isDynamic(filterStrategy)) {
-                    statement = statement.bind("dynamicField%d".formatted(i), filter.field().getQueryParamField());
+                    String fieldName = filter.field().getQueryParamField();
+
+                    // For EXPERIMENT_ITEM, split fields like "output.some_field" into column name and JSON path
+                    // Only bind the JSON path (column name is embedded in SQL template)
+                    if (filterStrategy == FilterStrategy.EXPERIMENT_ITEM && fieldName.contains(".")) {
+                        int firstDot = fieldName.indexOf('.');
+                        String jsonKey = fieldName.substring(firstDot + 1);
+                        String jsonPath = JSONPATH_ROOT + "." + jsonKey;
+
+                        binder.accept("dynamicJsonPath%d".formatted(i), jsonPath);
+                    } else if (filterStrategy == FilterStrategy.DATASET_ITEM && fieldName.contains(".")) {
+                        // For DATASET_ITEM, fields like "data.expected_answer" map to data['expected_answer']
+                        // Extract the key name (the part after the first dot) and bind it
+                        int firstDot = fieldName.indexOf('.');
+                        String keyName = fieldName.substring(firstDot + 1);
+
+                        binder.accept("dynamicField%d".formatted(i), keyName);
+                    } else if (filterStrategy == FilterStrategy.PROMPT_VERSION && fieldName.contains(".")) {
+                        var jsonPath = getStateSQLJsonPath(fieldName);
+                        binder.accept("dynamicJsonPath%d".formatted(i), jsonPath);
+                    } else {
+                        // Default dynamic field binding for other strategies
+                        binder.accept("dynamicField%d".formatted(i), fieldName);
+                    }
                 }
 
                 if (!NO_VALUE_OPERATORS.contains(filter.operator())) {
-                    statement.bind("filter%d".formatted(i), filter.value());
+                    if (Operator.MULTI_VALUE_OPERATORS.contains(filter.operator())) {
+                        // Comma-separated values for IN/NOT_IN (ENUM, STRING_LIST); bind as String[].
+                        // Trim and drop empty tokens defensively against stray whitespace
+                        // or trailing commas in client input.
+                        binder.accept("filter%d".formatted(i),
+                                Arrays.stream(filter.value().split(","))
+                                        .map(String::trim)
+                                        .filter(StringUtils::isNotEmpty)
+                                        .toArray(String[]::new));
+                    } else {
+                        binder.accept("filter%d".formatted(i), filter.value());
+                    }
                 }
 
                 if (StringUtils.isNotBlank(filter.key())
                         && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
                     var key = getKey(filter);
-                    statement = statement.bind("filterKey%d".formatted(i), key);
+                    binder.accept("filterKey%d".formatted(i), key);
                 }
             }
+        }
+    }
+
+    /**
+     * Rewrites the r2dbc-style {@code :name} placeholders emitted by
+     * {@link #toAnalyticsDbFilters} into the v2 ClickHouse client's {@code {name:Type}}
+     * form. Multi-value operators ({@code IN}, {@code NOT_IN}) are typed as
+     * {@code Array(String)}; everything else as {@code String}.
+     *
+     * <p>Iteration order goes from the highest filter index to the lowest so that
+     * substring overlaps like {@code :filter1} inside {@code :filter12} resolve to the
+     * longer name first.
+     *
+     * <p>{@link #toAnalyticsDbFiltersV2Client} is the public entry point that bundles this
+     * rewrite with the SQL generation; this method is exposed only for direct unit testing.
+     *
+     * @param sql     SQL fragment containing {@code :name} placeholders
+     * @param filters filters that were used to build {@code sql}; their order determines
+     *                the param indices ({@code :filter0}, {@code :filter1}, …)
+     */
+    @VisibleForTesting
+    static String rewritePlaceholdersForV2Client(@NonNull String sql, @NonNull List<? extends Filter> filters) {
+        String out = sql;
+        for (int i = filters.size() - 1; i >= 0; i--) {
+            Filter filter = filters.get(i);
+            String filterType = Operator.MULTI_VALUE_OPERATORS.contains(filter.operator())
+                    ? "Array(String)"
+                    : "String";
+            out = out.replace(":dynamicJsonPath" + i, "{dynamicJsonPath" + i + ":String}");
+            out = out.replace(":dynamicField" + i, "{dynamicField" + i + ":String}");
+            out = out.replace(":filterKey" + i, "{filterKey" + i + ":String}");
+            out = out.replace(":filter" + i, "{filter" + i + ":" + filterType + "}");
+        }
+        return out;
+    }
+
+    /**
+     * Renders a collection of strings as a ClickHouse array literal, e.g. {@code ['a','b']}.
+     * Use when binding an {@code Array(String)} parameter to the v2 ClickHouse client, which
+     * serialises Map values via {@code String.valueOf} and would otherwise emit an unquoted
+     * Java array {@code [a, b]} that the server rejects.
+     *
+     * <p>Per-element escaping delegates to {@link ClickHouseUtil#escape(String)}, the upstream
+     * ClickHouse JDBC helper that handles the full C-style escape set the server accepts
+     * (backslash, single-quote, backtick, newline, tab, etc.). This closes injection vectors
+     * like {@code x';DROP TABLE...} and {@code x\';...} by emitting {@code \'} and {@code \\}.
+     *
+     * @throws NullPointerException if {@code values} is null
+     */
+    public static String formatStringArrayLiteral(@NonNull Collection<@NonNull String> values) {
+        return values.stream()
+                .map(value -> "'" + ClickHouseUtil.escape(value) + "'")
+                .collect(Collectors.joining(",", "[", "]"));
+    }
+
+    /**
+     * Maps a {@link FilterStrategy} to the StringTemplate parameter name it populates.
+     */
+    public record FilterStrategyParam(FilterStrategy strategy, String templateParam) {
+    }
+
+    /**
+     * Applies a configurable list of filter strategies to a StringTemplate.
+     * For each entry whose strategy produces a non-empty SQL fragment, adds the fragment
+     * under the corresponding template parameter name.
+     *
+     * @param template       the ST template to populate
+     * @param filters        the caller-supplied filter list (may be null or empty)
+     * @param strategyParams ordered list of (strategy, templateParam) pairs to evaluate
+     */
+    public static void applyFiltersToTemplate(ST template, List<? extends Filter> filters,
+            List<FilterStrategyParam> strategyParams) {
+        if (CollectionUtils.isEmpty(filters)) {
+            return;
+        }
+        for (var entry : strategyParams) {
+            toAnalyticsDbFilters(filters, entry.strategy())
+                    .ifPresent(sql -> template.add(entry.templateParam(), sql));
+        }
+    }
+
+    /**
+     * Binds filter parameters for a configurable list of filter strategies to an R2DBC statement.
+     *
+     * @param statement  the statement to bind parameters to
+     * @param filters    the caller-supplied filter list (may be null or empty)
+     * @param strategies ordered list of strategies whose parameters should be bound
+     * @return the statement with all parameters bound
+     */
+    public static Statement bindFilters(Statement statement, List<? extends Filter> filters,
+            List<FilterStrategy> strategies) {
+        if (CollectionUtils.isEmpty(filters)) {
+            return statement;
+        }
+        for (var strategy : strategies) {
+            statement = bind(statement, filters, strategy);
         }
         return statement;
     }
 
-    private String getKey(Filter filter) {
+    public Map<String, Object> toStateSQLMapping(@NonNull List<? extends Filter> filters) {
+        return toStateSQLMapping(filters, null);
+    }
 
-        if (filter.key().startsWith(JSONPATH_ROOT) || filter.field().getType() != FieldType.DICTIONARY) {
+    public Map<String, Object> toStateSQLMapping(
+            @NonNull List<? extends Filter> filters, FilterStrategy filterStrategy) {
+        Map<String, Object> stateSQLMapping = new HashMap<>();
+        for (var i = 0; i < filters.size(); i++) {
+            var filter = filters.get(i);
+            stateSQLMapping.put("filter%d".formatted(i), filter.value());
+
+            // Handle dynamic fields
+            if (filterStrategy != null && filter.field().isDynamic(filterStrategy)) {
+                var fieldName = filter.field().getQueryParamField();
+                if (filterStrategy == FilterStrategy.PROMPT_VERSION && fieldName.contains(".")) {
+                    var jsonPath = getStateSQLJsonPath(fieldName);
+                    stateSQLMapping.put("dynamicJsonPath%d".formatted(i), jsonPath);
+                }
+            }
+
+            // Handle filter keys for DICTIONARY fields
+            if (StringUtils.isNotBlank(filter.key())
+                    && KEY_SUPPORTED_FIELDS_SET.contains(filter.field().getType())) {
+                var key = getKey(filter);
+                stateSQLMapping.put("filterKey%d".formatted(i), key);
+            }
+        }
+
+        return stateSQLMapping;
+    }
+
+    /**
+     * Generates a JSON path for dynamic fields, typically metadata, for the state DB (MySQL) SQL.
+     * Splits fields, e.g: "metadata.environment" into JSON path format: $."environment"
+     * Uses quoted dot notation to handle keys with spaces and special characters.
+     *
+     * @param fieldName Full field name like "metadata.environment"
+     * @return JSON path in format $."key" e.g: $."environment"
+     */
+    private static String getStateSQLJsonPath(String fieldName) {
+        var jsonKey = fieldName.substring(fieldName.indexOf('.') + 1);
+        return getSQLJsonPath(jsonKey);
+    }
+
+    private static String getSQLJsonPath(String jsonKey) {
+        return "%s.\"%s\"".formatted(JSONPATH_ROOT, jsonKey);
+    }
+
+    /**
+     * Resolves the key bound as {@code :filterKey} for a filter.
+     * <p>
+     * The analytics DB path is delegated to {@link JsonPathUtils#toAnalyticsDbJsonPath(String)} so that
+     * a key holding characters unquoted dot notation cannot express resolves normally instead of
+     * aborting the query. The state DB path is unchanged.
+     */
+    private static String getKey(Filter filter) {
+
+        if (filter.field().getType() != FieldType.DICTIONARY
+                && filter.field().getType() != FieldType.DICTIONARY_STATE_DB) {
+            return filter.key();
+        }
+
+        if (filter.field().getType() == FieldType.DICTIONARY) {
+            return JsonPathUtils.toAnalyticsDbJsonPath(filter.key());
+        }
+
+        if (filter.key().startsWith(JSONPATH_ROOT)) {
             return filter.key();
         }
 
@@ -333,6 +1394,71 @@ public class FilterQueryBuilder {
             return "%s%s".formatted(JSONPATH_ROOT, filter.key());
         }
 
-        return "%s.%s".formatted(JSONPATH_ROOT, filter.key());
+        return getSQLJsonPath(filter.key());
+    }
+
+    /**
+     * Builds field mapping for DatasetItem JSON fields (output, input, metadata).
+     * These fields are stored as JSON strings in ClickHouse, so we need to use JSONExtractRaw
+     * instead of bracket notation. The JSON key is bound as a query parameter rather than
+     * interpolated, consistent with the data.* sort path.
+     * <p>
+     * This is used for sorting DatasetItem fields.
+     *
+     * @param sortingFields the sorting fields from the request
+     * @return a map from field name to ClickHouse SQL expression
+     */
+    public Map<String, String> buildDatasetItemFieldMapping(@NonNull List<SortingField> sortingFields) {
+        Map<String, String> fieldMapping = new HashMap<>();
+
+        for (SortingField field : sortingFields) {
+            String fieldName = field.field();
+
+            // Check if this is a JSON field (output, input, or metadata).
+            // The JSON key is bound as a query parameter (field.bindKey() -> :sorting_param_xxx) rather
+            // than interpolated into the SQL. The key VALUE (field.dynamicKey()) is bound later in
+            // SortingQueryBuilder.bindDynamicKeys(), consistent with the data.* path, so keys containing
+            // special characters are handled correctly.
+            // Note: dynamicKey() is everything after the first dot, i.e. a single top-level JSON key
+            // ("output.a.b" looks up the key "a.b"); nested traversal is not performed. This matches the
+            // previous behavior.
+            if (fieldName.startsWith(OUTPUT_FIELD_PREFIX)) {
+                fieldMapping.put(fieldName,
+                        JSON_EXTRACT_RAW_TEMPLATE.formatted("output", field.bindKey()));
+            } else if (fieldName.startsWith(INPUT_FIELD_PREFIX)) {
+                fieldMapping.put(fieldName,
+                        JSON_EXTRACT_RAW_TEMPLATE.formatted("input", field.bindKey()));
+            } else if (fieldName.startsWith(METADATA_FIELD_PREFIX)) {
+                fieldMapping.put(fieldName,
+                        JSON_EXTRACT_RAW_TEMPLATE.formatted("metadata", field.bindKey()));
+            }
+            // For other fields (including feedback_scores, data, etc.), use default dbField()
+        }
+
+        return fieldMapping;
+    }
+
+    /**
+     * Builds a search filter SQL condition for DatasetItem search.
+     * Uses multiSearchAnyCaseInsensitive to search within the data field.
+     *
+     * @param searchText the search text (non-blank)
+     * @return SQL filter condition string
+     */
+    public String buildDatasetItemSearchFilter(@NonNull String searchText) {
+        return "multiSearchAnyCaseInsensitive(toString(data), :searchTerms) > 0";
+    }
+
+    /**
+     * Binds search terms to a statement.
+     * Splits the search text by whitespace and binds as an array.
+     *
+     * @param statement the R2DBC statement
+     * @param searchText the search text to split and bind
+     * @return the statement with bound search terms
+     */
+    public Statement bindSearchTerms(@NonNull Statement statement, @NonNull String searchText) {
+        String[] searchTerms = searchText.split("\\s+");
+        return statement.bind("searchTerms", searchTerms);
     }
 }

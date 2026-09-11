@@ -1,0 +1,245 @@
+import { describe, it, expect } from "vitest";
+import {
+  hasPythonSyntaxError,
+  CodeMetricParamsSchema,
+  OptimizationConfigSchema,
+  OptimizationConfigFormType,
+  convertFormDataToStudioConfig,
+  convertOptimizationStudioToFormData,
+} from "./schema";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { METRIC_TYPE, OPTIMIZER_TYPE } from "@/types/optimizations";
+import { LLM_MESSAGE_ROLE } from "@/types/llm";
+
+const VALID_CODE_METRIC = `
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+
+class LabelMatch(BaseMetric):
+    def __init__(self, name: str = "label_match"):
+        super().__init__(name=name)
+
+    def score(self, output: str, **kwargs) -> ScoreResult:
+        label = str(kwargs.get("label", "")).strip().lower()
+        return ScoreResult(name=self.name, value=1.0 if label else 0.0)
+`;
+
+// Missing the colon after the class definition — a plain syntax error, not a
+// semantic/runtime one, so the Lezer-based check must flag it.
+const SYNTAX_ERROR_CODE_METRIC = `
+from opik.evaluation.metrics import BaseMetric
+
+
+class BrokenMetric(BaseMetric)
+    def __init__(self, name: str = "broken"):
+        super().__init__(name=name)
+`;
+
+describe("hasPythonSyntaxError", () => {
+  it("returns false for valid Python", () => {
+    expect(hasPythonSyntaxError(VALID_CODE_METRIC)).toBe(false);
+  });
+
+  it("returns true for a missing colon", () => {
+    expect(hasPythonSyntaxError(SYNTAX_ERROR_CODE_METRIC)).toBe(true);
+  });
+
+  it("returns false for valid code that reads a required kwarg (no false positive)", () => {
+    // Regression guard: the syntax check must never flag a semantically
+    // dynamic (but syntactically valid) access like kwargs["x"] — only real
+    // syntax errors are in scope (OPIK-7172).
+    const code = `
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+
+class StrictKwargMetric(BaseMetric):
+    def score(self, output, **kwargs):
+        expected = kwargs["expected_value"]
+        return ScoreResult(name=self.name, value=1.0 if output == expected else 0.0)
+`;
+    expect(hasPythonSyntaxError(code)).toBe(false);
+  });
+
+  it("flags empty code as a parse error (callers guard on `code &&` instead)", () => {
+    // The Lezer parser reports an empty program as an error node, so this
+    // function alone would flag "" too. `CodeMetricParamsSchema` below never
+    // hits that path in practice: it only calls this once `.min(1)` has
+    // already confirmed `code` is non-empty (`params.code && ...`).
+    expect(hasPythonSyntaxError("")).toBe(true);
+  });
+});
+
+describe("CodeMetricParamsSchema", () => {
+  it("accepts valid Python code", () => {
+    const result = CodeMetricParamsSchema.safeParse({
+      code: VALID_CODE_METRIC,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects code with a syntax error and anchors the issue to the 'code' field", () => {
+    const result = CodeMetricParamsSchema.safeParse({
+      code: SYNTAX_ERROR_CODE_METRIC,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const codeIssue = result.error.issues.find(
+        (issue) => issue.path.join(".") === "code",
+      );
+      expect(codeIssue).toBeDefined();
+      expect(codeIssue?.message).toMatch(/syntax error/i);
+    }
+  });
+
+  it("accepts an optional rename-capable arguments map", () => {
+    const result = CodeMetricParamsSchema.safeParse({
+      code: VALID_CODE_METRIC,
+      arguments: { reference: "expected_answer" },
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("OptimizationConfigSchema — code metric syntax-error submission block", () => {
+  const baseConfig: Omit<
+    OptimizationConfigFormType,
+    "metricType" | "metricParams"
+  > = {
+    name: "",
+    datasetId: "dataset-1",
+    optimizerType: OPTIMIZER_TYPE.GEPA,
+    optimizerParams: {},
+    messages: [
+      {
+        id: "1",
+        role: LLM_MESSAGE_ROLE.user,
+        content: "Classify: {{text}}",
+      },
+    ],
+    modelName: "anthropic/claude-haiku",
+    modelConfig: {},
+  };
+
+  it("passes end-to-end validation for a valid code metric", () => {
+    const result = OptimizationConfigSchema.safeParse({
+      ...baseConfig,
+      metricType: METRIC_TYPE.CODE,
+      metricParams: { code: VALID_CODE_METRIC },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("blocks submission end-to-end when the code metric has a syntax error", () => {
+    // This is the exact resolver (`zodResolver(OptimizationConfigSchema)`)
+    // NewRunSidebar wires up, so a failing parse here is what stops RHF's
+    // `handleSubmit` from ever invoking the submit callback in the real form.
+    const result = OptimizationConfigSchema.safeParse({
+      ...baseConfig,
+      metricType: METRIC_TYPE.CODE,
+      metricParams: { code: SYNTAX_ERROR_CODE_METRIC },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("convertOptimizationStudioToFormData — seeded prompt shape", () => {
+  // A new run must start as system + user: the system message holds the
+  // instructions (the only role a Studio run optimizes) and the user message
+  // holds the template variables, so the optimizer cannot rewrite the message
+  // carrying them (OPIK-7510). Seeding a lone user message did the opposite.
+  it("seeds a system and a user message for a new run", () => {
+    const { messages } = convertOptimizationStudioToFormData(undefined, [
+      "gpt-4o-mini",
+    ]);
+
+    expect(messages.map((m) => m.role)).toEqual([
+      LLM_MESSAGE_ROLE.system,
+      LLM_MESSAGE_ROLE.user,
+    ]);
+    expect(messages.every((m) => m.content === "")).toBe(true);
+    expect(new Set(messages.map((m) => m.id)).size).toBe(2);
+  });
+
+  it("keeps an existing run's messages untouched", () => {
+    const { messages } = convertOptimizationStudioToFormData(
+      {
+        studio_config: {
+          prompt: {
+            messages: [{ role: "user", content: "Answer {question}" }],
+          },
+          // optimizer/evaluation are read unconditionally by the converter, so
+          // a rerun payload always carries them.
+          optimizer: { type: OPTIMIZER_TYPE.GEPA },
+          evaluation: { metrics: [{ type: METRIC_TYPE.EQUALS }] },
+        },
+      } as never,
+      ["gpt-4o-mini"],
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe(LLM_MESSAGE_ROLE.user);
+    expect(messages[0].content).toBe("Answer {question}");
+  });
+});
+
+describe("convertFormDataToStudioConfig — Gemini thinking level", () => {
+  const formData = (modelConfig: Record<string, unknown>) =>
+    ({
+      name: "run",
+      datasetId: "d",
+      optimizerType: OPTIMIZER_TYPE.GEPA,
+      optimizerParams: {},
+      metricType: METRIC_TYPE.EQUALS,
+      metricParams: {},
+      messages: [{ id: "1", role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      modelName: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      modelConfig,
+    }) as unknown as OptimizationConfigFormType;
+
+  // The optimizer renders the same Gemini config panel as the playground, so a level picked
+  // there has to survive serialization instead of being dropped as a flat field.
+  it("nests a selected thinking level under custom_parameters", () => {
+    const config = convertFormDataToStudioConfig(
+      formData({ temperature: 0.5, thinkingLevel: "off" }),
+      "my-dataset",
+    );
+
+    expect(config.llm_model.parameters).toMatchObject({
+      temperature: 0.5,
+      custom_parameters: { thinking: { level: "off" } },
+    });
+    expect(
+      (config.llm_model.parameters as Record<string, unknown>).thinkingLevel,
+    ).toBeUndefined();
+  });
+
+  // The control shows the model's default even when the config holds no level, so the request has
+  // to carry that same default rather than silently falling back to the provider's own.
+  it("sends the model's default when the config holds no level", () => {
+    const config = convertFormDataToStudioConfig(
+      formData({ temperature: 0.5 }),
+      "my-dataset",
+    );
+
+    expect(config.llm_model.parameters).toMatchObject({
+      custom_parameters: { thinking: { level: "off" } },
+    });
+  });
+
+  it("adds nothing for a model without thinking support", () => {
+    const config = convertFormDataToStudioConfig(
+      {
+        ...formData({ temperature: 0.5 }),
+        modelName: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      } as unknown as OptimizationConfigFormType,
+      "my-dataset",
+    );
+
+    expect(
+      (config.llm_model.parameters as Record<string, unknown>)
+        .custom_parameters,
+    ).toBeUndefined();
+  });
+});

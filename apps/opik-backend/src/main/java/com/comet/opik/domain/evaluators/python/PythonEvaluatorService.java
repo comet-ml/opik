@@ -1,0 +1,130 @@
+package com.comet.opik.domain.evaluators.python;
+
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.RetriableHttpClient;
+import com.comet.opik.utils.RetryUtils;
+import com.google.common.base.Preconditions;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.InternalServerErrorException;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.Response;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.StringUtils;
+import reactor.core.publisher.Mono;
+
+import java.util.List;
+import java.util.Map;
+
+import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ChatMessage;
+
+@RequiredArgsConstructor(onConstructor_ = @Inject)
+@Slf4j
+public class PythonEvaluatorService {
+
+    private static final String URL_TEMPLATE = "%s/v1/private/evaluators/python";
+    private static final int MAX_ERROR_MESSAGE_LENGTH = 500;
+
+    private final @NonNull RetriableHttpClient client;
+    private final @NonNull OpikConfiguration config;
+
+    public Mono<List<PythonScoreResult>> evaluate(@NonNull String code, Map<String, Object> data) {
+        Preconditions.checkArgument(MapUtils.isNotEmpty(data), "Argument 'data' must not be empty");
+        var request = PythonEvaluatorRequest.builder()
+                .code(code)
+                .data(data)
+                .build();
+
+        return executeWithRetry(Entity.json(request));
+    }
+
+    public Mono<List<PythonScoreResult>> evaluateThread(@NonNull String code, List<ChatMessage> context) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(context), "Argument 'context' must not be empty");
+        TraceThreadPythonEvaluatorRequest request = TraceThreadPythonEvaluatorRequest.builder()
+                .code(code)
+                .data(context)
+                .build();
+
+        return executeWithRetry(Entity.json(request));
+    }
+
+    private Mono<List<PythonScoreResult>> executeWithRetry(Entity<?> body) {
+        var pythonConfig = config.getPythonEvaluator();
+        var request = RetriableHttpClient.Request.<List<PythonScoreResult>>builder()
+                .requestFunction(client -> client.target(URL_TEMPLATE.formatted(pythonConfig.getUrl())))
+                .retryPolicy(RetryUtils.handleHttpErrors(pythonConfig.getMaxRetryAttempts(),
+                        pythonConfig.getMinRetryDelay().toJavaDuration(),
+                        pythonConfig.getMaxRetryDelay().toJavaDuration()))
+                .body(body)
+                .connectTimeout(pythonConfig.getConnectTimeout().toJavaDuration())
+                .readTimeout(pythonConfig.getReadTimeout().toJavaDuration())
+                .responseFunction(this::processResponse)
+                .build();
+        return client.executePostWithRetry(request);
+    }
+
+    private List<PythonScoreResult> processResponse(Response response) {
+        int statusCode = response.getStatus();
+        Response.StatusType statusInfo = response.getStatusInfo();
+
+        if (statusInfo.getFamily() == Response.Status.Family.SUCCESSFUL) {
+            // Buffer before reading: the response is consumed further down the reactive chain on a
+            // boundedElastic thread, after which the underlying connection can already be recycled and
+            // readEntity would yield null. A null body (or null scores) must surface as a clean error
+            // rather than a NullPointerException.
+            var body = response.hasEntity() && response.bufferEntity()
+                    ? response.readEntity(PythonEvaluatorResponse.class)
+                    : null;
+            if (body == null || body.scores() == null) {
+                throw new InternalServerErrorException(
+                        "Python evaluation returned HTTP '%s' with an empty or unparseable response body"
+                                .formatted(statusCode));
+            }
+            return body.scores();
+        }
+
+        String errorMessage = extractErrorMessage(response);
+
+        if (statusCode == 400) {
+            throw new BadRequestException(errorMessage);
+        }
+
+        throw new InternalServerErrorException(
+                "Python evaluation failed (HTTP '%s'): %s".formatted(statusCode, errorMessage));
+    }
+
+    private String extractErrorMessage(Response response) {
+        if (response.hasEntity() && response.bufferEntity()) {
+            try {
+                var errorResponse = response.readEntity(PythonEvaluatorErrorResponse.class);
+                if (errorResponse != null && StringUtils.isNotBlank(errorResponse.error())) {
+                    return StringUtils.truncate(errorResponse.error(), MAX_ERROR_MESSAGE_LENGTH);
+                }
+            } catch (RuntimeException parseErrorResponse) {
+                // Expected when the body is not the structured error shape; fall back to the raw body.
+                log.debug("Failed to parse structured error response, falling back to parsing string",
+                        parseErrorResponse);
+            }
+
+            // Fall back to the raw body when the structured error is absent/blank so the backend
+            // detail is not lost (e.g. python-backend "can't be evaluated:" with an empty message).
+            // The body is the evaluated user metric's own error, which we want to surface; bound its
+            // length so an oversized payload can't bloat the thrown exception message.
+            try {
+                var body = response.readEntity(String.class);
+                if (StringUtils.isNotBlank(body)) {
+                    return StringUtils.truncate(body, MAX_ERROR_MESSAGE_LENGTH);
+                }
+            } catch (RuntimeException parseStringResponse) {
+                log.warn("Failed to read error response body", parseStringResponse);
+            }
+        }
+
+        return "Unknown error during Python evaluation";
+    }
+
+}

@@ -1,6 +1,6 @@
 import { FeedbackScoreBatchItem } from "@/rest_api/api/types/FeedbackScoreBatchItem";
-import { OpikApiClient } from "@/rest_api/Client";
 import { BatchQueue } from "./BatchQueue";
+import { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 
 type FeedbackScoreId = {
   id: string;
@@ -12,12 +12,14 @@ export class SpanFeedbackScoresBatchQueue extends BatchQueue<
   FeedbackScoreId
 > {
   constructor(
-    private readonly api: OpikApiClient,
+    private readonly api: OpikApiClientTemp,
     delay?: number
   ) {
     super({
       delay,
-      enableDeleteBatch: false,
+      enableCreateBatch: true,
+      enableUpdateBatch: true,
+      enableDeleteBatch: true,
       name: "SpanFeedbackScoresBatchQueue",
     });
   }
@@ -27,7 +29,7 @@ export class SpanFeedbackScoresBatchQueue extends BatchQueue<
   }
 
   protected async createEntities(scores: FeedbackScoreBatchItem[]) {
-    await this.api.spans.scoreBatchOfSpans({ scores });
+    await this.api.spans.scoreBatchOfSpans({ scores }, this.api.requestOptions);
   }
 
   protected async getEntity(): Promise<FeedbackScoreBatchItem | undefined> {
@@ -40,9 +42,15 @@ export class SpanFeedbackScoresBatchQueue extends BatchQueue<
 
   protected async deleteEntities(scoreIds: FeedbackScoreId[]) {
     for (const scoreId of scoreIds) {
-      await this.api.spans.deleteSpanFeedbackScore(scoreId.id, {
-        name: scoreId.name,
-      });
+      await this.api.spans.deleteSpanFeedbackScore(
+        scoreId.id,
+        {
+          body: {
+            name: scoreId.name,
+          },
+        },
+        this.api.requestOptions
+      );
     }
   }
 }

@@ -2,6 +2,7 @@ import enum
 import sys
 from typing import Literal, Optional
 
+from pydantic import StrictStr
 from typing_extensions import TypedDict
 
 if sys.version_info < (3, 11):
@@ -9,9 +10,11 @@ if sys.version_info < (3, 11):
 else:
     from typing import NotRequired, Required
 
-SpanType = Literal["general", "tool", "llm"]
+SpanType = Literal["general", "tool", "llm", "guardrail"]
 FeedbackType = Literal["numerical", "categorical"]
 CreatedByType = Literal["evaluation"]
+AttachmentEntityType = Literal["trace", "span"]
+TraceSource = Literal["sdk", "experiment", "optimization"]
 
 
 class LLMProvider(str, enum.Enum):
@@ -26,6 +29,18 @@ class LLMProvider(str, enum.Enum):
 
     ANTHROPIC = "anthropic"
     """Used for models hosted by Anthropic. https://www.anthropic.com"""
+
+    ANTHROPIC_VERTEXAI = "anthropic_vertexai"
+    """Used for Anthropic models hosted by VertexAI. https://cloud.google.com/vertex-ai"""
+
+    GROQ = "groq"
+    """Used for models hosted by Groq. https://groq.com"""
+
+    BEDROCK = "bedrock"
+    """Used for models hosted by AWS Bedrock. https://aws.amazon.com/bedrock"""
+
+    MISTRALAI = "mistral"
+    """Used for models hosted by Mistral AI. https://mistral.ai"""
 
     @classmethod
     def has_value(cls, value: str) -> bool:
@@ -53,7 +68,7 @@ class FeedbackScoreDict(TypedDict):
     id: NotRequired[str]
     """
     A unique identifier for the object this score should be assigned to.
-    Refers to either the trace_id or span_id depending on how the score is logged.
+    Refers to either the trace_id, span_id or thread_id depending on how the score is logged.
     """
 
     name: Required[str]
@@ -67,6 +82,66 @@ class FeedbackScoreDict(TypedDict):
 
     reason: NotRequired[Optional[str]]
     """An optional explanation or justification for the given score."""
+
+
+class BatchFeedbackScoreDict(TypedDict):
+    """
+    A TypedDict representing a feedback score for batch operations.
+
+    This class defines the structure for feedback scores used in batch logging
+    operations, with a required id field and optional per-score project_name.
+    """
+
+    id: Required[str]
+    """
+    A unique identifier for the object this score should be assigned to.
+    Refers to either the trace_id, span_id or thread_id depending on how the score is logged.
+    Required for batch operations.
+    """
+
+    name: Required[str]
+    """The name of the feedback metric or criterion."""
+
+    value: Required[float]
+    """The numerical value of the feedback score."""
+
+    project_name: NotRequired[Optional[StrictStr]]
+    """
+    The name of the project for this specific score.
+    If not provided, falls back to the project_name parameter in the method call,
+    or the default project name configured in the Opik instance.
+    """
+
+    category_name: NotRequired[Optional[str]]
+    """An optional category name for the given score."""
+
+    reason: NotRequired[Optional[str]]
+    """An optional explanation or justification for the given score."""
+
+
+class BatchAssertionResultDict(TypedDict):
+    """
+    A TypedDict representing an assertion result for batch operations.
+    """
+
+    id: Required[str]
+    """The trace id this assertion is attached to."""
+
+    name: Required[str]
+    """The assertion text."""
+
+    status: Required[Literal["passed", "failed"]]
+    """Whether the assertion passed or failed."""
+
+    project_name: NotRequired[Optional[StrictStr]]
+    """
+    The name of the project for this specific assertion.
+    If not provided, falls back to the project_name parameter in the method call,
+    or the default project name configured in the Opik instance.
+    """
+
+    reason: NotRequired[Optional[str]]
+    """An optional explanation produced by the evaluator."""
 
 
 class ErrorInfoDict(TypedDict):

@@ -1,4 +1,5 @@
 import base64
+import json
 import urllib.parse
 from typing import Final
 
@@ -12,27 +13,30 @@ if TYPE_CHECKING:
 
 URL_ACCOUNT_DETAILS_POSTFIX: Final[str] = "api/rest/v2/account-details"
 URL_WORKSPACE_GET_LIST_POSTFIX: Final[str] = "api/rest/v2/workspaces"
-HEALTH_CHECK_URL_POSTFIX: Final[str] = "/is-alive/ping"
+HEALTH_CHECK_URL_POSTFIX: Final[str] = "is-alive/ping"
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
+
+
+def ensure_ending_slash(url: str) -> str:
+    return url.rstrip("/") + "/"
 
 
 def get_ui_url() -> str:
     config = opik.config.OpikConfig()
     opik_url_override = config.url_override
 
-    return opik_url_override.rstrip("/api") + "/"
+    return opik_url_override.rstrip("/").removesuffix("/api") + "/"
 
 
 def get_experiment_url_by_id(
-    dataset_id: str, experiment_id: str, url_override: str
+    dataset_id: str, experiment_id: str, base_url: str, workspace: str
 ) -> str:
-    encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
-
-    project_path = urllib.parse.quote(
-        f"v1/session/redirect/experiments/?experiment_id={experiment_id}&dataset_id={dataset_id}&path={encoded_opik_url}",
-        safe=ALLOWED_URL_CHARACTERS,
+    domain_root = get_base_url(base_url)
+    experiments = urllib.parse.quote(json.dumps([experiment_id]))
+    return (
+        f"{domain_root}opik/{workspace}/experiments/{dataset_id}/compare"
+        f"?experiments={experiments}"
     )
-    return urllib.parse.urljoin(url_override, project_path)
 
 
 def get_project_url_by_workspace(
@@ -53,17 +57,33 @@ def get_project_url_by_trace_id(trace_id: str, url_override: str) -> str:
         f"v1/session/redirect/projects/?trace_id={trace_id}&path={encoded_opik_url}",
         safe=ALLOWED_URL_CHARACTERS,
     )
-    return urllib.parse.urljoin(url_override, project_path)
+    return urllib.parse.urljoin(ensure_ending_slash(url_override), project_path)
 
 
-def get_dataset_url_by_id(dataset_id: str, url_override: str) -> str:
-    encoded_opik_url = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
+def get_dataset_url_by_id(
+    base_url: str, workspace: str, project_id: str, dataset_id: str
+) -> str:
+    domain_root = get_base_url(base_url)
+    return f"{domain_root}opik/{workspace}/projects/{project_id}/datasets/{dataset_id}/items"
 
-    project_path = urllib.parse.quote(
-        f"v1/session/redirect/datasets/?dataset_id={dataset_id}&path={encoded_opik_url}",
-        safe=ALLOWED_URL_CHARACTERS,
-    )
-    return urllib.parse.urljoin(url_override, project_path)
+
+def get_test_suite_url_by_id(
+    base_url: str, workspace: str, project_id: str, test_suite_id: str
+) -> str:
+    domain_root = get_base_url(base_url)
+    return f"{domain_root}opik/{workspace}/projects/{project_id}/test-suites/{test_suite_id}/items"
+
+
+def get_project_url_by_id(base_url: str, project_id: str, workspace: str) -> str:
+    domain_root = get_base_url(base_url)
+    return f"{domain_root}opik/{workspace}/projects/{project_id}/"
+
+
+def get_agent_playground_url_by_project_id(
+    base_url: str, project_id: str, workspace: str
+) -> str:
+    domain_root = get_base_url(base_url)
+    return f"{domain_root}opik/{workspace}/projects/{project_id}/agent-playground"
 
 
 def get_base_url(url: str) -> str:
@@ -82,4 +102,16 @@ def get_workspace_list_url(base_url: str) -> str:
 
 
 def get_is_alive_ping_url(base_url: str) -> str:
-    return urllib.parse.urljoin(base_url, HEALTH_CHECK_URL_POSTFIX)
+    return urllib.parse.urljoin(ensure_ending_slash(base_url), HEALTH_CHECK_URL_POSTFIX)
+
+
+def is_aws_presigned_url(url: str) -> bool:
+    return "X-Amz-Signature" in url or (
+        "Signature=" in url and "AWSAccessKeyId=" in url
+    )
+
+
+def get_user_permissions_url(url_override: str) -> str:
+    return urllib.parse.urljoin(
+        ensure_ending_slash(url_override), "v1/private/workspace-permissions"
+    )

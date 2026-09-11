@@ -45,4 +45,9 @@ You can learn more about each function in the following sections:
    update_current_trace
 
    get_distributed_trace_headers
+
+Related Documentation
+---------------------
+
+For creating new traces and spans, see the :doc:`context managers <../context_manager/index>` documentation.
    

@@ -2,4 +2,4 @@
 
 import typing
 
-PromptVersionPublicType = typing.Union[typing.Literal["mustache", "jinja2"], typing.Any]
+PromptVersionPublicType = typing.Union[typing.Literal["mustache", "jinja2", "python"], typing.Any]

@@ -1,2 +1,9 @@
 pandas
 nltk
+respx
+rouge-score
+scipy
+textstat
+opentelemetry-api
+opentelemetry-sdk
+botocore

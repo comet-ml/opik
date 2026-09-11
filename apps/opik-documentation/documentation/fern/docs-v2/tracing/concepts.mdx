@@ -1,0 +1,132 @@
+---
+description: Learn about the core concepts of Opik's tracing system, including traces,
+  spans, and threads, and how they work together to provide comprehensive observability
+  for your LLM applications.
+headline: Tracing Concepts
+og:description: Understand traces, spans, and threads — the building blocks of Opik's
+  observability system for LLM applications and agents.
+og:site_name: Opik Documentation
+og:title: Tracing Concepts in Opik - Traces, Spans & Threads
+subtitle: Understanding the fundamental concepts behind Opik's tracing platform
+title: Tracing Core Concepts
+---
+
+<Tip>
+  Ready to start logging? Head to [Log traces](/tracing/advanced/log_traces) or [Log agents](/tracing/advanced/log_agent_graphs).
+</Tip>
+
+Opik's tracing system gives you full visibility into what your LLM application or agent is doing — every call, every step, every intermediate result. There are three building blocks you need to understand:
+
+1. **Trace**: A complete execution path for a single interaction with an LLM or agent
+2. **Span**: An individual operation or step within a trace
+3. **Thread**: A collection of related traces that form a conversation or multi-turn workflow
+
+## Traces
+
+A **trace** represents a complete execution path for a single interaction with an LLM or agent. Think of it as a detailed record of everything that happened during one request-response cycle — inputs, outputs, timing, token usage, and any intermediate steps.
+
+### Key characteristics
+
+- **Unique identity**: Each trace has a unique identifier for tracking and referencing
+- **Complete context**: All information needed to understand what happened during the interaction
+- **Timing information**: When the interaction started, ended, and how long each part took
+- **Input/output data**: The exact prompts sent to the LLM and the responses received
+- **Metadata**: Model used, temperature settings, custom tags, and more
+
+### Common uses
+
+- **Debugging**: When an LLM produces unexpected output, examine the trace to understand what went wrong
+- **Performance analysis**: Identify slow operations by analyzing trace timing
+- **Cost tracking**: Monitor token usage and costs for each interaction
+- **Quality assurance**: Review traces to ensure expected behavior
+
+## Spans
+
+A **span** represents an individual operation or step within a trace. While a trace shows the complete picture, spans break it down into measurable components. Spans are hierarchical — they can contain other spans, creating a tree structure within the trace.
+
+### Key characteristics
+
+- **Hierarchical structure**: Spans can contain child spans, forming a tree within a trace
+- **Specific operations**: Each span represents a distinct action — an API call, a function, a data transformation
+- **Precise timing**: Start and end times for each operation
+- **Custom attributes**: Additional metadata specific to the operation
+
+### Common span types
+
+- **LLM Calls**: Individual requests to language models
+- **Function Calls**: Tool or function invocations within an agent
+- **Data Processing**: Transformations or manipulations of data
+- **External API Calls**: Requests to third-party services
+
+### Example span hierarchy
+
+```
+Trace: "Customer Support Chat"
+├── Span: "Parse User Intent"
+├── Span: "Query Knowledge Base"
+│   ├── Span: "Search Vector Database"
+│   └── Span: "Rank Results"
+├── Span: "Generate Response"
+│   ├── Span: "LLM Call: GPT-4"
+│   └── Span: "Post-process Response"
+└── Span: "Log Interaction"
+```
+
+## Threads
+
+A **thread** is a collection of related traces that form a coherent conversation or multi-turn workflow. Threads are essential for chat applications and agents where context evolves across multiple interactions.
+
+### Key characteristics
+
+- **Conversation context**: Maintains the flow of multi-turn interactions
+- **Trace grouping**: Organizes related traces under a single thread identifier
+- **Chronological ordering**: Traces within a thread are ordered by time
+- **Cross-trace analysis**: Enables analysis of patterns across related interactions
+
+### When to use threads
+
+- **Chat applications**: Group all messages in a conversation
+- **Multi-step workflows**: Track complex processes that span multiple LLM calls
+- **User sessions**: Organize all interactions from a single user session
+- **Agent conversations**: Follow the complete interaction between an agent and a user
+
+Threads are created by setting a `thread_id` on your traces:
+
+```python
+import opik
+
+client = opik.Opik()
+client.trace(
+    name="chat-turn-1",
+    thread_id="user-session-abc123",
+    input={"message": "Hello"},
+    output={"response": "Hi! How can I help?"},
+)
+```
+
+## Best practices
+
+<Steps>
+  <Step title="Define clear trace boundaries">
+    A trace should represent a complete user interaction or business operation — not a single function call and not an entire session.
+  </Step>
+  <Step title="Use meaningful span names">
+    Descriptive span names make debugging much easier. Name spans after what they do: `search_vector_db`, `call_gpt4`, `rank_results`.
+  </Step>
+  <Step title="Use thread IDs for conversations">
+    Assign a consistent `thread_id` to all traces from the same conversation or session. This is especially important for chat applications.
+  </Step>
+  <Step title="Add relevant metadata">
+    Include custom attributes that will be useful for analysis — user IDs, session context, model versions, experiment names.
+  </Step>
+  <Step title="Be careful with sensitive data">
+    Avoid logging personally identifiable information (PII) or sensitive business data in your traces. Use Opik's data filtering capabilities to protect sensitive information.
+  </Step>
+</Steps>
+
+## Next steps
+
+- [Log traces](/tracing/advanced/log_traces) — Capture traces in your application
+- [Log agent graphs](/tracing/advanced/log_agent_graphs) — Trace agent-based applications with full span trees
+- [Annotate traces](/tracing/advanced/annotate_traces) — Add scores and feedback to traces
+- [Cost tracking](/tracing/advanced/cost_tracking) — Monitor token usage and costs

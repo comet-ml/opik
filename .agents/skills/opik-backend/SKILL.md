@@ -1,0 +1,268 @@
+---
+name: opik-backend
+description: Java backend patterns for Opik. Use when working in apps/opik-backend, designing APIs, database operations, or services.
+---
+
+# Opik Backend
+
+## Architecture
+- **Layered**: Resource → Service → DAO (never skip layers)
+- **DI**: Guice modules, constructor injection with `@Inject`
+- **Databases**: MySQL (metadata, transactional) + ClickHouse (analytics, append-only)
+
+## Naming Conventions
+
+### Plural Names (Resources, Tests, URLs, DB Tables)
+- **Resource classes**: `TracesResource`, `SpansResource`, `DatasetsResource` (not `TraceResource`)
+- **Resource test classes**: `TracesResourceTest`, `SpansResourceTest`, `DatasetsResourceTest` (not `TraceResourceTest`)
+- **URL paths**: `/v1/private/traces`, `/v1/private/spans` (not `/v1/private/trace`)
+- **DB table names**: `traces`, `spans`, `feedback_scores` (not `trace`, `span`, `feedback_score`)
+
+### Singular Names (DAO, Service)
+- **DAO classes**: `TraceDAO`, `SpanDAO`, `DatasetDAO` (not `TracesDAO`)
+- **Service classes**: `TraceService`, `SpanService`, `DatasetService` (not `TracesService`)
+
+```java
+// ✅ GOOD
+@Path("/v1/private/traces")
+public class TracesResource { }
+
+// ✅ GOOD - DAO and Service use singular
+public class TraceDAO { }
+public class TraceService { }
+
+// ✅ GOOD - test classes match plural resource name
+public class TracesResourceTest { }
+
+// ❌ BAD - singular test class
+public class TraceResourceTest { }
+
+// ❌ BAD - singular resource/URL
+@Path("/v1/private/trace")
+public class TraceResource { }
+
+// ❌ BAD - plural DAO/Service
+public class TracesDAO { }
+public class TracesService { }
+```
+
+## Lombok Conventions
+
+### Records and DTOs
+- Always annotate records/DTOs with `@Builder(toBuilder = true)`
+- Use builders (not constructors) when instantiating records
+- For **internal records** (built programmatically, never validated by Bean Validation), use Lombok `@NonNull` on required fields — it generates a runtime null check at construction
+- For **request-body DTOs** validated via `@Valid` cascade (Jakarta validators like `@NotNull`/`@NotBlank`/`@Size`), use Jakarta annotations only — do **not** stack `@NonNull` on top. Bean Validation already enforces the contract at the API boundary; doubling up is redundant noise
+
+```java
+// ✅ GOOD - internal record, Lombok @NonNull
+@Builder(toBuilder = true)
+record MyData(@NonNull UUID id, @NonNull String name, String description) {}
+
+MyData data = MyData.builder()
+        .id(id)
+        .name(name)
+        .build();
+
+// ✅ GOOD - request-body DTO, Jakarta validators only
+@Builder(toBuilder = true)
+public record MyRequest(
+        @NotNull UUID id,
+        @NotBlank String name,
+        @NotNull @Size(min = 1, max = 1000) @Valid List<MyItem> items) {}
+
+// ❌ BAD - plain constructor (positional mistakes, less readable)
+new MyData(id, name, null);
+
+// ❌ BAD - @Builder without toBuilder
+@Builder
+record MyData(UUID id, String name) {}
+
+// ❌ BAD - stacking @NonNull and @NotNull on the same field
+public record MyRequest(@NonNull @NotNull UUID id) {}
+```
+
+### Dependency Injection
+- Use `@RequiredArgsConstructor(onConstructor_ = @Inject)` instead of manual constructors
+
+```java
+// ✅ GOOD
+@RequiredArgsConstructor(onConstructor_ = @Inject)
+public class MyService {
+    private final @NonNull DependencyA depA;
+    private final @NonNull DependencyB depB;
+}
+
+// ❌ BAD - boilerplate constructor
+public class MyService {
+    private final DependencyA depA;
+    @Inject
+    public MyService(DependencyA depA) {
+        this.depA = depA;
+    }
+}
+```
+
+### Interfaces
+- Don't put validation annotations (`@NonNull`) on interface method parameters
+- Keep interfaces free of implementation details
+
+```java
+// ✅ GOOD
+interface MyService {
+    void process(String workspaceId, UUID promptId);
+}
+
+// ❌ BAD - validation on interface
+interface MyService {
+    void process(@NonNull String workspaceId, @NonNull UUID promptId);
+}
+```
+
+## Critical Gotchas
+
+### StringTemplate Memory Leak
+```java
+// ✅ GOOD
+var template = TemplateUtils.newST(QUERY);
+
+// ❌ BAD - causes memory leak via STGroup singleton
+var template = new ST(QUERY);
+```
+
+### List Access
+```java
+// ✅ GOOD
+users.getFirst()
+users.getLast()
+
+// ❌ BAD
+users.get(0)
+users.get(users.size() - 1)
+```
+
+### SQL Query Construction
+
+**Never build a query out of Java string operations.** No `+`, no `String.format` /
+`.formatted(...)`, no `StringBuilder`, no `MessageFormat`, no `String.join` over clauses. A
+query is declared once as a text block, and everything that varies goes through exactly one of
+two mechanisms:
+
+| What varies | Mechanism |
+|-------------|-----------|
+| A **value** — id, name, timestamp, list of ids | `:placeholder` + `.bind("placeholder", value)` |
+| A **fragment** — predicate, sort clause, projected column, CTE | StringTemplate `<if(x)>…<endif>`, `<else>`, `<x>` + `template.add("x", …)` |
+
+Why: interpolating values is the SQL-injection surface, and interpolating fragments hides which
+query a DAO actually runs — the declaration site stops being readable, and callers drift apart
+over time.
+
+```java
+// ✅ GOOD - text block, values bound, structure via StringTemplate
+@SqlQuery("""
+        SELECT * FROM datasets
+        WHERE workspace_id = :workspace_id
+        <if(name)> AND name like concat('%', :name, '%') <endif>
+        """)
+
+// ❌ BAD - string concatenation
+@SqlQuery("SELECT * FROM datasets " +
+        "WHERE workspace_id = :workspace_id " +
+        "<if(name)> AND name like concat('%', :name, '%') <endif> ")
+```
+
+A predicate that differs between callers is a **fragment**, so it belongs in the template — not
+in a `%s` slot the caller fills in:
+
+```java
+// ❌ BAD - caller splices the predicate in
+private static final String TOKEN_USAGE_NAMES_TEMPLATE = """
+        SELECT DISTINCT name FROM (
+            SELECT usage FROM spans FINAL
+            WHERE workspace_id = :workspace_id
+            AND %s
+        ) ...
+        """;
+
+static String tokenUsageNames(String projectPredicate) {
+    return TOKEN_USAGE_NAMES_TEMPLATE.formatted(projectPredicate);
+}
+
+// caller: tokenUsageNames("project_id IN :project_ids")
+
+// ✅ GOOD - both shapes live in the template, the caller picks one
+private static final String TOKEN_USAGE_NAMES = """
+        SELECT DISTINCT name FROM (
+            SELECT usage FROM spans FINAL
+            WHERE workspace_id = :workspace_id
+            <if(project_ids)> AND project_id IN :project_ids <endif>
+            <if(project_id)> AND project_id = :project_id <endif>
+        ) ...
+        """;
+
+var template = TemplateUtils.newST(TOKEN_USAGE_NAMES);
+template.add("project_ids", true);
+...
+statement.bind("project_ids", projectIds.toArray(new UUID[0]));
+```
+
+A fragment that genuinely can't be enumerated in the template — a user-chosen sort field or
+filter clause — must be produced by the allow-listed builders (`SortingQueryBuilder`,
+`FilterQueryBuilder`), never assembled from raw request strings.
+
+`.formatted(...)` stays correct for log and exception messages. The rule is about SQL text only.
+
+Some `%s` query templates predate this rule. Don't copy them and don't add new ones.
+
+### Immutable Collections
+```java
+// ✅ GOOD
+Set.of("A", "B", "C")
+List.of(1, 2, 3)
+Map.of("key", "value")
+
+// ❌ BAD
+Arrays.asList("A", "B", "C")
+```
+
+## API Design
+- **Query parameters that accept lists**: Use plural names from the start (e.g., `exclude_category_names` not `exclude_category_name`). Starting with a singular name and later adding a plural variant results in two redundant query params on the same endpoint. Plural names are backward-compatible since they work for both single and multiple values.
+
+## Error Handling
+
+### Use Jakarta Exceptions
+```java
+throw new BadRequestException("Invalid input");
+throw new NotFoundException("User not found: '%s'".formatted(id));
+throw new ConflictException("Already exists");
+throw new InternalServerErrorException("System error", cause);
+```
+
+### Error Response Classes
+- Simple: `io.dropwizard.jersey.errors.ErrorMessage`
+- Complex: `com.comet.opik.api.error.ErrorMessage`
+- **Never create new error message classes**
+
+## Logging
+
+### Format Convention
+```java
+// ✅ GOOD - values in single quotes
+log.info("Created user: '{}'", userId);
+log.error("Failed for workspace: '{}'", workspaceId, exception);
+
+// ❌ BAD - no quotes
+log.info("Created user: {}", userId);
+```
+
+### Never Log
+- Emails, passwords, tokens, API keys
+- PII, personal identifiers
+- Database credentials
+
+## Reference Files
+- [clickhouse.md](clickhouse.md) - ClickHouse query patterns
+- [mysql.md](mysql.md) - TransactionTemplate patterns
+- [testing.md](testing.md) - PODAM, naming, assertion patterns
+- [migrations.md](migrations.md) - Liquibase format for MySQL/ClickHouse
+- [permissions.md](permissions.md) - `@RequiredPermissions` annotation guidance for endpoints

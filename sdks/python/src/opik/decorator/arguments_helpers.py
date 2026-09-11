@@ -2,8 +2,8 @@ import dataclasses
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from .. import datetime_helpers, llm_usage
-from ..api_objects import helpers, span
-from ..types import ErrorInfoDict, SpanType
+from ..api_objects import helpers, span, attachment
+from ..types import ErrorInfoDict, SpanType, DistributedTraceHeadersDict, TraceSource
 
 
 @dataclasses.dataclass
@@ -34,6 +34,8 @@ class EndSpanParameters(BaseArguments):
     model: Optional[str] = None
     provider: Optional[str] = None
     error_info: Optional[ErrorInfoDict] = None
+    total_cost: Optional[float] = None
+    attachments: Optional[List[attachment.Attachment]] = None
 
 
 @dataclasses.dataclass
@@ -51,6 +53,8 @@ class StartSpanParameters(BaseArguments):
     project_name: Optional[str] = None
     model: Optional[str] = None
     provider: Optional[str] = None
+    thread_id: Optional[str] = None  # used for traces only
+    environment: Optional[str] = None
 
 
 @dataclasses.dataclass
@@ -69,12 +73,16 @@ class TrackOptions(BaseArguments):
     generations_aggregator: Optional[Callable[[List[Any]], Any]]
     flush: bool
     project_name: Optional[str]
+    create_duplicate_root_span: bool
+    source: Optional[TraceSource]
+    environment: Optional[str] = None
 
 
 def create_span_data(
     start_span_arguments: StartSpanParameters,
     trace_id: str,
     parent_span_id: Optional[str] = None,
+    source: Optional[TraceSource] = None,
 ) -> span.SpanData:
     span_data = span.SpanData(
         id=helpers.generate_id(),
@@ -89,5 +97,13 @@ def create_span_data(
         project_name=start_span_arguments.project_name,
         model=start_span_arguments.model,
         provider=start_span_arguments.provider,
+        source=source if source is not None else "sdk",
+        environment=start_span_arguments.environment,
     )
     return span_data
+
+
+def extract_distributed_trace_headers(
+    kwargs: Dict[str, Any],
+) -> Optional[DistributedTraceHeadersDict]:
+    return kwargs.pop("opik_distributed_trace_headers", None)

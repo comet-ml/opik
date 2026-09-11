@@ -1,0 +1,59 @@
+name: Select E2E version matrix
+description: >
+  Emits the full version array or a reduced [min, max] array depending on whether
+  the event's changed files match the given SDK-touching regex. Full matrix on
+  workflow_dispatch and when any changed file matches the regex; min+max otherwise.
+
+inputs:
+  all-versions:
+    required: true
+    description: JSON array of all supported versions (e.g. '["3.10","3.14"]').
+  match-regex:
+    required: true
+    description: POSIX extended regex; any changed file matching it forces the full matrix.
+  github-token:
+    required: true
+    description: Token used to list PR/commit files via the GitHub API.
+
+outputs:
+  versions:
+    description: JSON array of versions the caller should feed into its strategy matrix.
+    value: ${{ steps.pick.outputs.versions }}
+
+runs:
+  using: composite
+  steps:
+    - id: pick
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        ALL: ${{ inputs.all-versions }}
+        REGEX: ${{ inputs.match-regex }}
+        REPO: ${{ github.repository }}
+        EVENT: ${{ github.event_name }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        BEFORE: ${{ github.event.before }}
+        SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+        if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "versions=$ALL" >> "$GITHUB_OUTPUT"
+            exit 0
+        fi
+        if [ "$EVENT" = "pull_request" ]; then
+            FILES=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[].filename')
+        elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            # Aggregate across the full push range so multi-commit pushes (rebase-merge, direct pushes)
+            # don't miss SDK-touching files landed in non-tip commits.
+            FILES=$(gh api "repos/$REPO/compare/$BEFORE...$SHA" --jq '.files[].filename')
+        else
+            # Branch creation / force-push: before is zero or missing; fall back to tip.
+            FILES=$(gh api "repos/$REPO/commits/$SHA" --jq '.files[].filename')
+        fi
+        # Default to full matrix on empty file list so a degenerate API response
+        # never silently under-tests.
+        if [ -z "$FILES" ] || echo "$FILES" | grep -Eq "$REGEX"; then
+            echo "versions=$ALL" >> "$GITHUB_OUTPUT"
+        else
+            echo "versions=$(echo "$ALL" | jq -c '[.[0], .[-1]]')" >> "$GITHUB_OUTPUT"
+        fi

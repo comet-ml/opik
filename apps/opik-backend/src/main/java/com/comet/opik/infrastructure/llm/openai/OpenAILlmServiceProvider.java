@@ -1,31 +1,39 @@
 package com.comet.opik.infrastructure.llm.openai;
 
-import com.comet.opik.api.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.LlmProvider;
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
-import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.chat.ChatModel;
 import jakarta.inject.Named;
+import lombok.NonNull;
 
 class OpenAILlmServiceProvider implements LlmServiceProvider {
 
     private final OpenAIClientGenerator clientGenerator;
 
     OpenAILlmServiceProvider(
-            @Named("openaiGenerator") OpenAIClientGenerator clientGenerator, LlmProviderFactory factory) {
+            @Named("openaiGenerator") OpenAIClientGenerator clientGenerator,
+            LlmProviderFactory factory) {
         this.clientGenerator = clientGenerator;
         factory.register(LlmProvider.OPEN_AI, this);
     }
 
     @Override
-    public LlmProviderService getService(String apiKey) {
-        return new LlmProviderOpenAi(clientGenerator.newOpenAiClient(apiKey));
+    public LlmProviderService getService(@NonNull LlmProviderClientApiConfig apiKey) {
+        return switch (clientGenerator.extractApiPipelineMode(apiKey)) {
+            case CHAT_COMPLETIONS_API -> new LlmProviderOpenAi(clientGenerator.newOpenAiClient(apiKey));
+            // LlmProviderOpenAiResponses builds its ChatModels per request — the per-request
+            // response_format.json_schema.strict flag has to be set at langchain4j build time.
+            case RESPONSES_API -> new LlmProviderOpenAiResponses(clientGenerator, apiKey);
+        };
     }
 
     @Override
-    public ChatLanguageModel getLanguageModel(String apiKey,
-            AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeModelParameters modelParameters) {
-        return clientGenerator.newOpenAiChatLanguageModel(apiKey, modelParameters);
+    public ChatModel getLanguageModel(@NonNull LlmProviderClientApiConfig config,
+            LlmAsJudgeModelParameters modelParameters) {
+        return clientGenerator.newOpenAiChatLanguageModel(config, modelParameters);
     }
 }

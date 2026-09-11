@@ -10,11 +10,13 @@ from typing import (
     Tuple,
     Union,
 )
+from typing_extensions import override
 
-from opik import llm_usage
 from opik.decorator import arguments_helpers, base_track_decorator
-from opik.types import SpanType, LLMProvider
+from opik.types import SpanType
 from opik.api_objects import span
+import opik.jsonable_encoder as jsonable_encoder
+import opik.dict_utils as dict_utils
 
 LOGGER = logging.getLogger(__name__)
 
@@ -78,6 +80,7 @@ TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT = [
 
 
 class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
+    @override
     def _start_span_inputs_preprocessor(
         self,
         func: Callable,
@@ -123,7 +126,9 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
             metadata["object_type"] = "agent"
             agent = args[0]
             input_dict = {"context": kwargs.get("context")}
-            agent_dict = agent.model_dump(include=AGENT_KWARGS_KEYS_TO_LOG_AS_INPUTS)
+            agent_dict = _encode_dict_and_keep_keys(
+                agent, AGENT_KWARGS_KEYS_TO_LOG_AS_INPUTS
+            )
             input_dict["agent"] = agent_dict
             name = agent.role.strip()
 
@@ -131,18 +136,16 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         elif name == "execute_sync":
             metadata["object_type"] = "task"
             input_dict = {}
-            task_dict = args[0].model_dump(include=TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS)
+            task = args[0]
+            task_dict = _encode_dict_and_keep_keys(
+                task, TASK_KWARGS_KEYS_TO_LOG_AS_INPUTS
+            )
             input_dict["task"] = task_dict
-            name = f"Task: {args[0].name}"
-
-        elif name == "completion":
-            metadata["object_type"] = "completion"
-            input_dict = {"messages": kwargs.get("messages")}
-            span_type = "llm"
-            name = "llm call"
+            name = f"Task: {task.name}"
 
         return input_dict, name, span_type
 
+    @override
     def _end_span_inputs_preprocessor(
         self,
         output: Any,
@@ -151,64 +154,30 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> arguments_helpers.EndSpanParameters:
         object_type = None
         metadata = {}
+        output_dict = {}
 
         if current_span_data and current_span_data.metadata:
             metadata = current_span_data.metadata
             object_type = metadata.pop("object_type")
 
-        model, provider, output_dict, usage = self._parse_outputs(object_type, output)
+        if object_type == "crew":
+            output_dict = jsonable_encoder.encode(output)
+            output_dict.pop("token_usage", None)
+        elif object_type == "agent":
+            output_dict = {"output": output}
+        elif object_type == "task":
+            output_dict = _encode_dict_and_keep_keys(
+                output, TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT
+            )
 
         result = arguments_helpers.EndSpanParameters(
             output=output_dict,
-            usage=usage,
             metadata=metadata,
-            model=model,
-            provider=provider,
         )
 
         return result
 
-    def _parse_outputs(
-        self,
-        object_type: Optional[str],
-        output: Any,
-    ) -> Tuple[
-        Optional[str],
-        Optional[str],
-        Dict[str, Any],
-        Optional[llm_usage.OpikUsage],
-    ]:
-        model = None
-        provider = None
-        usage = None
-        output_dict = {}
-
-        if object_type == "crew":
-            output_dict = output.model_dump()
-            _ = output_dict.pop("token_usage")
-        elif object_type == "agent":
-            output_dict = {"output": output}
-        elif object_type == "task":
-            output_dict = output.model_dump(include=TASK_KWARGS_KEYS_TO_LOG_AS_OUTPUT)
-        elif object_type == "completion":
-            output_dict = output.model_dump()
-            if output_dict.get("usage", None) is not None:
-                usage = llm_usage.try_build_opik_usage_or_log_error(
-                    provider=LLMProvider.OPENAI,  # even if it's not openai, we know the format is openai-like
-                    usage=output_dict["usage"],
-                    logger=LOGGER,
-                    error_message="Failed to log token usage from CrewAI LLM call",
-                )
-            else:
-                usage = None
-            model = output_dict.pop("model", None)
-            provider = (
-                "openai" if output_dict.get("object") == "chat.completion" else None
-            )
-            output_dict = {}
-
-        return model, provider, output_dict, usage
-
+    @override
     def _streams_handler(
         self,
         output: Any,
@@ -216,3 +185,12 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         generations_aggregator: Optional[Callable[[List[Any]], str]],
     ) -> Optional[Union[Generator, AsyncGenerator]]:
         return super()._streams_handler(output, capture_output, generations_aggregator)
+
+
+def _encode_dict_and_keep_keys(
+    dict: Dict[str, Any],
+    keys_to_keep: List[str],
+) -> Dict[str, Any]:
+    encoded_dict = jsonable_encoder.encode(dict)
+    encoded_dict, _ = dict_utils.split_dict_by_keys(encoded_dict, keys_to_keep)
+    return encoded_dict

@@ -1,10 +1,14 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Comment;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import io.r2dbc.spi.Result;
 import lombok.experimental.UtilityClass;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 
 import java.time.Instant;
@@ -15,8 +19,12 @@ import java.util.UUID;
 
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
+@Slf4j
 @UtilityClass
-class CommentResultMapper {
+public class CommentResultMapper {
+
+    private static final TypeReference<List<Comment>> COMMENT_LIST_TYPE = new TypeReference<>() {
+    };
 
     static Publisher<Comment> mapItem(Result results) {
         return results.map((row, rowMetadata) -> Comment.builder()
@@ -33,6 +41,9 @@ class CommentResultMapper {
         if (commentsRaw instanceof List[] commentsArray) {
             return getComments(commentsArray);
         }
+        if (commentsRaw instanceof String json) {
+            return parseCommentsFromJson(json);
+        }
         return null;
     }
 
@@ -44,17 +55,40 @@ class CommentResultMapper {
         var commentItems = Arrays.stream(commentsArrays)
                 .filter(commentItem -> CollectionUtils.isNotEmpty(commentItem) &&
                         !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(commentItem.get(0).toString()))
-                .map(commentItem -> Comment.builder()
-                        .id(UUID.fromString(commentItem.get(0).toString()))
-                        .text(commentItem.get(1).toString())
-                        .createdAt(Instant.parse(commentItem.get(2).toString()))
-                        .lastUpdatedAt(Instant.parse(commentItem.get(3).toString()))
-                        .createdBy(commentItem.get(4).toString())
-                        .lastUpdatedBy(commentItem.get(5).toString())
-                        .build())
+                .map(commentItem -> {
+                    var builder = Comment.builder()
+                            .id(UUID.fromString(commentItem.get(0).toString()))
+                            .text(commentItem.get(1).toString())
+                            .createdAt(Instant.parse(commentItem.get(2).toString()))
+                            .lastUpdatedAt(Instant.parse(commentItem.get(3).toString()))
+                            .createdBy(commentItem.get(4).toString())
+                            .lastUpdatedBy(commentItem.get(5).toString());
+                    if (commentItem.size() > 6 && commentItem.get(6) != null) {
+                        var sourceQueueId = commentItem.get(6).toString();
+                        if (StringUtils.isNotBlank(sourceQueueId)
+                                && !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(sourceQueueId)) {
+                            builder.sourceQueueId(UUID.fromString(sourceQueueId));
+                        }
+                    }
+                    return builder.build();
+                })
                 .sorted(Comparator.comparing(Comment::id))
                 .toList();
 
         return commentItems.isEmpty() ? null : commentItems;
+    }
+
+    public static List<Comment> parseCommentsFromJson(String json) {
+        if (StringUtils.isBlank(json) || "[]".equals(json)) {
+            return null;
+        }
+
+        List<Comment> comments = JsonUtils.readValue(json, COMMENT_LIST_TYPE);
+        return CollectionUtils.isEmpty(comments)
+                ? null
+                : comments
+                        .stream()
+                        .sorted(Comparator.comparing(Comment::id))
+                        .toList();
     }
 }

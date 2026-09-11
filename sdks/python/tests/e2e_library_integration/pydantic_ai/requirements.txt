@@ -1,0 +1,4 @@
+pydantic-ai
+logfire
+opentelemetry-sdk
+opentelemetry-exporter-otlp

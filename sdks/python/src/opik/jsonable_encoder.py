@@ -1,3 +1,4 @@
+import base64
 import dataclasses
 import datetime as dt
 import logging
@@ -45,8 +46,17 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             if isinstance(obj, type_):
                 return encode(encoder(obj), seen)
 
-        if dataclasses.is_dataclass(obj) or isinstance(obj, pydantic.BaseModel):
+        if dataclasses.is_dataclass(obj):
             obj_dict = obj.__dict__
+            return encode(obj_dict, seen)
+
+        if isinstance(obj, pydantic.BaseModel):
+            obj_dict = {**obj.__dict__}
+            obj_dict.update(
+                obj.__pydantic_extra__
+                if isinstance(obj.__pydantic_extra__, dict)
+                else {}
+            )
             return encode(obj_dict, seen)
 
         if isinstance(obj, Enum):
@@ -59,6 +69,8 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
             return datetime_utils.serialize_datetime(obj)
         if isinstance(obj, dt.date):
             return str(obj)
+        if isinstance(obj, bytes):
+            return base64.b64encode(obj).decode("utf-8")
         if isinstance(obj, dict):
             encoded_dict = {}
             allowed_keys = set(obj.keys())
@@ -68,6 +80,7 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
                     encoded_value = encode(value, seen)
                     encoded_dict[encoded_key] = encoded_value
             return encoded_dict
+
         if isinstance(obj, (list, set, frozenset, GeneratorType, tuple)):
             encoded_list = []
             for item in obj:
@@ -76,6 +89,9 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
 
         if np is not None and isinstance(obj, np.ndarray):
             return encode(obj.tolist(), seen)
+
+        if _is_pydantic_iterator_validator(obj):
+            return "<Pydantic ValidatorIterator serialization is not supported>"
 
     except Exception:
         LOGGER.debug("Failed to serialize object.", exc_info=True)
@@ -90,3 +106,15 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
     data = str(obj)
 
     return data
+
+
+def _is_pydantic_iterator_validator(obj: Any) -> bool:
+    if "ValidatorIterator" == obj.__class__.__name__ and "pydantic" in obj.__module__:
+        # ValidatorIterator is not defined in python code and is added to the pydantic-core
+        # namespace during the runtime.
+        # This class fully replaces the original generator object, so it is not possible
+        # to extract any extra information from the object.
+
+        return True
+
+    return False
