@@ -123,7 +123,8 @@ const hasOwn = (value: UnknownRecord, key: string) =>
 const parseIndex = (value: string): number | undefined => {
   if (!/^\d+$/.test(value)) return undefined;
   const index = Number(value);
-  return Number.isSafeInteger(index) ? index : undefined;
+  // Match the ingestion normalizer's signed 32-bit index range.
+  return Number.isSafeInteger(index) && index <= 2147483647 ? index : undefined;
 };
 
 const sortedValues = <T>(values: Map<number, T>): T[] =>
@@ -568,7 +569,7 @@ const extractFallback = (data: unknown): unknown => {
 };
 
 // A span-level instrumentation hint must not override an explicit message schema.
-const hasTypedMessages = (data: unknown): boolean =>
+const hasRolelessTypedMessages = (data: unknown): boolean =>
   isRecord(data) &&
   Array.isArray(data.messages) &&
   data.messages.some(
@@ -816,7 +817,7 @@ export const isOpenInferenceField = (
 ): boolean => {
   const hasLegacyAttributes = hasLegacyOpenInferenceAttributes(data);
   if (!hinted && !hasLegacyAttributes) return false;
-  if (hasTypedMessages(data)) return false;
+  if (hasRolelessTypedMessages(data)) return false;
 
   const parsed = parseOpenInferenceFields(
     fieldType === "input" ? data : undefined,
@@ -897,7 +898,7 @@ export const extractOpenInferencePrettyText = (
   data: unknown,
   fieldType: OpenInferenceFieldType,
 ): string | undefined => {
-  if (hasTypedMessages(data)) return undefined;
+  if (hasRolelessTypedMessages(data)) return undefined;
   const hasMessages = parseCanonicalMessages(data).some(hasRenderableMessage);
   const hasCompletionData =
     isRecord(data) &&

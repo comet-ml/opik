@@ -64,6 +64,7 @@ import DataTablePagination from "@/shared/DataTablePagination/DataTablePaginatio
 import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
+import { getThreadPrettifyConfig } from "@/lib/traces";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
@@ -139,6 +140,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "input",
+      getPrettifyConfig: getThreadPrettifyConfig,
       colorIndicator: true,
     },
   },
@@ -150,6 +152,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     cell: PrettyCell as never,
     customMeta: {
       fieldType: "output",
+      getPrettifyConfig: getThreadPrettifyConfig,
       colorIndicator: true,
     },
   },
