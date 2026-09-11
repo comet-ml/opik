@@ -1,3 +1,7 @@
 google-adk
 deprecated
 python-multipart; python_version < "3.10"
+# The proxy server (not just the litellm library, which arrives via opik) is needed
+# by test_opik_tracer_with_sample_agent__litellm_proxy__proxy_cost_reaches_the_span:
+# the cost it verifies only exists in a response a real proxy answered.
+litellm[proxy]
