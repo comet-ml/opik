@@ -424,6 +424,7 @@ areas:
     specs:
       - playground/playground-smoke.spec.ts
       - playground/playground-providers.spec.ts
+      - playground/playground-metric-selector-default.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
       - prompts/prompt-playground-save.spec.ts
       - prompts/prompt-playground-traces.spec.ts
@@ -652,6 +653,8 @@ areas:
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
+      - online-evaluation/online-evaluation-rule-filters-trigger-scope.spec.ts
+      - online-evaluation/online-evaluation-experiment-rule-selection.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
@@ -660,18 +663,19 @@ areas:
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
       list-rules:              { covered: false }
       rule-scope-thread-span:  { covered: false, note: "span/thread scope flags" }
-      # Scoped, and narrowly: what is covered is the filter CONFIGURATION
-      # surface, not a filter actually excluding a trace.
-      #   - the Filtering & Sampling section is offered at trigger scope
+      # Two specs, and they cover different halves — configuration and effect.
+      #   - CONFIGURATION (online-evaluation-rule-filters-trigger-scope.spec.ts):
+      #     the Filtering & Sampling section is offered at trigger scope
       #     Production traces and Both, and is absent at Experiment traces, in
-      #     both the create and the edit dialog;
-      #   - a rule carrying a filter and a 0% rate keeps BOTH when it is saved
-      #     at a scope that does not display them, asserted at the API and then
-      #     read back out of the re-opened dialog.
-      # A filter narrowing which production traces a rule scores is NOT covered
-      # by this spec — the only filter it configures is deliberately
-      # unmatchable, and it is asserted as a value that survived a save.
-      rule-filters:            { covered: true,  tier: t2-cuj, note: "online-evaluation-rule-filters-trigger-scope.spec.ts (t2): the filter/sampling SECTION vs the trigger-scope toggle — present at Production and Both, absent at Experiment, in create and edit; plus a seeded filter + 0% rate surviving a save made at Experiment scope, asserted over REST and then in the re-opened dialog. Does not cover a filter actually excluding a production trace from scoring" }
+      #     both the create and the edit dialog; and a rule carrying a filter
+      #     and a 0% rate keeps BOTH when it is saved at a scope that does not
+      #     display them.
+      #   - EFFECT (online-evaluation-experiment-rule-selection.spec.ts): a
+      #     filter actually excluding a production trace from scoring.
+      # Still NOT covered: a filter that matches SOME production traces and not
+      # others. Both specs filter on a name no seeded trace has, so what is
+      # pinned is the exclude branch, not the partition.
+      rule-filters:            { covered: true,  tier: t2-cuj, note: "two halves. Configuration (online-evaluation-rule-filters-trigger-scope.spec.ts, t2): the filter/sampling SECTION vs the trigger-scope toggle — present at Production and Both, absent at Experiment, in create and edit; plus a seeded filter + 0% rate surviving a save made at Experiment scope, asserted over REST and then in the re-opened dialog. Effect (online-evaluation-experiment-rule-selection.spec.ts, t2): a production rule carrying an unmatchable name filter does not score an SDK trace, and its rule log names the filter — not the sampling roll — as the reason, which is the order shouldSampleTrace checks them in. Not covered: a filter that admits some production traces and rejects others" }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones. Also the experiment-trace carve-out (online-evaluation-experiment-rule-selection.spec.ts, t2): a rule an experiment trace named in metadata.selected_rule_ids scores it past production scope, a 0% rate AND an unmatchable filter, while an unpicked production-scope rule does not — with an SDK control trace in the same project proving the engine ran, so the absences are real negatives rather than a slow queue" }
       clone-rule:              { covered: false }
       edit-rule:               { covered: false }

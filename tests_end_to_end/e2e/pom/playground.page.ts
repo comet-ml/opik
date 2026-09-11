@@ -309,7 +309,10 @@ export class PlaygroundPage {
         // provider configured. Nothing to dismiss.
         return;
       }
-      await this.page.getByRole('button', { name: 'Close' }).click();
+      // Scoped to the dialog, as `trace-panel` and `dataset-items` scope theirs:
+      // the Playground renders its own Close controls, so an unscoped lookup is
+      // a strict-mode violation waiting on whatever else happens to be open.
+      await setupDialog.getByRole('button', { name: 'Close' }).click();
       await expect(setupDialog).toBeHidden();
     });
   }

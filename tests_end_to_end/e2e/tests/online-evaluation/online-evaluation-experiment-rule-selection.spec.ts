@@ -31,7 +31,15 @@ const SEED_OUTPUT = 'seed output';
  * seeded traces must end up with a named, closed score set.
  */
 test.describe('Online Evaluation — experiment-trace rule selection', { tag: ['@t2-cuj', '@area:online-evaluation'] }, () => {
-  test('A picked rule scores an experiment trace past its scope, filters and rate; an unpicked production rule does not', { tag: ['@cap:online-evaluation.sampling-rate'] }, async ({
+  test('A picked rule scores an experiment trace past its scope, filters and rate; an unpicked production rule does not', {
+    // `rule-filters` as well as `sampling-rate`: the SDK half of this test is a
+    // filter actually excluding a production trace from scoring. `pickedProduction`
+    // carries an unmatchable name filter, does not score the SDK trace, and the
+    // rule-log assertion pins the filter — not the 0% rate — as the reason the
+    // engine gave. `shouldSampleTrace` tests `matchesAllFilters` before the
+    // sampling roll, so that log line is the filter branch and nothing else.
+    tag: ['@cap:online-evaluation.sampling-rate', '@cap:online-evaluation.rule-filters'],
+  }, async ({
     project,
     backendClient,
     testNamespace,
