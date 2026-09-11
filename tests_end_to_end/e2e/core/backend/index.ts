@@ -26,6 +26,7 @@ export {
   type TracePayload,
   type AutomationRuleRef,
   type AutomationRuleDetail,
+  type AutomationRuleFilter,
   type AutomationRuleLogRef,
   type TraceJsonSection,
   type AnnotationQueueDetail,

@@ -4,6 +4,11 @@ import { loadEnvConfig } from '../config/env.config';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
+/** Escape a run-namespaced entity name for use inside an anchored `hasText` regex. */
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export interface PlaygroundVariantConfig {
   /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
   systemPrompt?: string;
@@ -195,6 +200,118 @@ export class PlaygroundPage {
   /** Confirm the suite/dataset pill is showing with the expected entity name. */
   loadedSourcePill(): Locator {
     return this.page.getByTestId('playground-loaded-source-pill');
+  }
+
+  // ── metric selector (dataset runs only) ─────────────────────────────────
+  //
+  // Nothing in MetricSelector.tsx carries a data-testid, and the locators below
+  // are the most stable handles the rendered DOM offers: a role on the
+  // checkboxes, the popover's own `role="dialog"`, and static non-i18n copy for
+  // the summary row. They are deliberately NOT structural — no nth-child, no
+  // class selectors — but a `data-testid` per row would still be better, and
+  // adding one is the right follow-up.
+  //
+  // It is not done here because these specs are verified against a PREBUILT
+  // deployment (the PR's own environment), where a testid added to the source
+  // in this change would not exist in the served bundle — the spec would then
+  // be unrunnable until a rebuild, which is exactly how a generated spec gets
+  // merged and permanently skipped.
+
+  /**
+   * The metric-selector trigger inside the loaded-dataset pill. Reads
+   * "Select metrics" while nothing is picked, and "Metrics" plus a count badge
+   * once something is.
+   *
+   * `aria-haspopup="dialog"` is the popover trigger's own contract (Radix sets
+   * it), and the pill testid scopes it to this one control.
+   */
+  metricSelectorTrigger(): Locator {
+    return this.loadedSourcePill().locator('[aria-haspopup="dialog"]');
+  }
+
+  /**
+   * The open metric-selector popover.
+   *
+   * Identified by the summary row it always renders rather than by being "the
+   * dialog on the page": a keyless install opens the Add-provider dialog over
+   * the Playground, and the rule create/edit dialog opens from inside this
+   * popover — both are `role="dialog"` too.
+   */
+  metricSelectorPopover(): Locator {
+    return this.page
+      .getByRole('dialog')
+      .filter({ has: this.page.getByText(/^\d+ of \d+ selected$/) });
+  }
+
+  /**
+   * The summary row at the foot of the popover — "<selected> of <total>
+   * selected". Scoped to the popover so it cannot match stray copy elsewhere.
+   */
+  metricSelectionSummary(): Locator {
+    return this.metricSelectorPopover().getByText(/^\d+ of \d+ selected$/);
+  }
+
+  /**
+   * One metric row in the popover, addressed by the rule's name.
+   *
+   * Matched on the row's FULL text, anchored — a substring match would make
+   * `rule-1` also select `rule-10`. The `has: checkbox` filter is what picks
+   * the row itself out of the ancestors and the inner label span, which carry
+   * the same text; callers assert `toHaveCount(1)` so an ambiguous match fails
+   * loudly instead of silently testing the wrong row.
+   */
+  metricOption(ruleName: string): Locator {
+    return this.metricSelectorPopover()
+      .locator('div')
+      .filter({ has: this.page.getByRole('checkbox') })
+      .filter({ hasText: new RegExp(`^${escapeForRegExp(ruleName)}$`) });
+  }
+
+  /** The checkbox of one metric row. */
+  metricOptionCheckbox(ruleName: string): Locator {
+    return this.metricOption(ruleName).getByRole('checkbox');
+  }
+
+  /**
+   * Toggle one metric by name.
+   *
+   * Clicks the ROW, not the checkbox: `handleSelect` is bound to the row's
+   * onClick, and the Radix checkbox inside it is rendered from props with no
+   * handler of its own, so clicking the box only works by event bubbling.
+   */
+  async toggleMetric(ruleName: string): Promise<void> {
+    return test.step(`toggle metric "${ruleName}"`, async () => {
+      const option = this.metricOption(ruleName);
+      await expect(option, `exactly one metric row named "${ruleName}"`).toHaveCount(1);
+      await option.click();
+    });
+  }
+
+  /**
+   * Close the "Add provider configuration" dialog the Playground opens over
+   * itself on an install with no AI provider configured.
+   *
+   * It is onboarding, not part of any flow asserted here, and it is opened from
+   * a `useEffect` on `providerKeys.length === 0` — so whether it appears is a
+   * property of the deployment, not of the behaviour under test. Handled as
+   * "close it if it opened" for that reason; `waitForReady` is the real gate,
+   * and it cannot pass while this modal holds the page's aria tree.
+   */
+  async dismissProviderSetupDialog(): Promise<void> {
+    return test.step('dismiss the provider-setup dialog if this install opened one', async () => {
+      const setupDialog = this.page.getByRole('dialog').filter({
+        has: this.page.getByRole('heading', { name: 'Add provider configuration' }),
+      });
+      try {
+        await setupDialog.waitFor({ state: 'visible', timeout: 10_000 });
+      } catch {
+        // No provider-setup dialog on this deployment — it already has a
+        // provider configured. Nothing to dismiss.
+        return;
+      }
+      await this.page.getByRole('button', { name: 'Close' }).click();
+      await expect(setupDialog).toBeHidden();
+    });
   }
 
   /**
