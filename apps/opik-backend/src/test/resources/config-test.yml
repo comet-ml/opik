@@ -296,7 +296,7 @@ mcpOAuth:
   # Description: Refresh token idle lifetime. Sliding: every rotation issues the new refresh token with this much lifetime from now, so an actively used connector stays connected; one left unused for this long has to re-authorize
   refreshTokenTtl: P7D
   # Default: P30D
-  # Description: Absolute lifetime of a token family, measured from the authorization that created it. Caps the sliding refresh lifetime: no matter how actively a connector is used, it has to re-authorize once this has elapsed
+  # Description: Absolute lifetime of a token family, measured from the authorization that created it. Caps the sliding refresh lifetime: no matter how actively a connector is used, it has to re-authorize once this has elapsed. Never effectively shorter than refreshTokenTtl
   refreshTokenAbsoluteTtl: P30D
   # Default: PT60S
   # Description: Authorization code lifetime

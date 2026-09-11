@@ -97,7 +97,7 @@ public class McpOAuthService {
         String refreshToken = McpOAuthTokenUtils.generateRefreshToken();
 
         // The authorization fixes the family's absolute lifetime; every rotation carries it forward.
-        Instant absoluteExpiresAt = now.plus(config().getRefreshTokenAbsoluteTtl());
+        Instant absoluteExpiresAt = now.plus(config().effectiveRefreshTokenAbsoluteTtl());
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
@@ -145,7 +145,7 @@ public class McpOAuthService {
             throw new BadRequestException("refresh token expired at '%s'".formatted(row.expiresAt()));
         }
 
-        return underFamilyLock(row.familyId(), () -> rotate(row, now))
+        return underFamilyLock(row.familyId(), () -> rotate(row))
                 .orElseThrow(() -> new BadRequestException("refresh token reuse detected, family revoked"));
     }
 
@@ -155,12 +155,15 @@ public class McpOAuthService {
      * just been revoked. The decision and its writes share one transaction; the caller turns "empty" into
      * {@code invalid_grant} outside it so the revocation is never rolled back by the rejection.
      */
-    private Optional<TokenResponse> rotate(McpOAuthToken row, Instant now) {
+    private Optional<TokenResponse> rotate(McpOAuthToken row) {
         String accessToken = McpOAuthTokenUtils.generateAccessToken();
         String newRefreshToken = McpOAuthTokenUtils.generateRefreshToken();
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
+            // Taken after the lock was acquired: the grace check and every lifetime below must be measured from
+            // when this request actually gets to decide, not from when it arrived and queued behind others.
+            Instant now = Instant.now();
 
             List<McpOAuthToken> family = tokenDao.findFamily(row.familyId(), row.workspaceId());
             McpOAuthToken current = family.stream()
@@ -178,7 +181,7 @@ public class McpOAuthService {
                 throw new BadRequestException("refresh token family already revoked");
             }
             // Re-checked under the lock: the pre-lock check may have waited behind another rotation.
-            if (!current.expiresAt().isAfter(Instant.now())) {
+            if (!current.expiresAt().isAfter(now)) {
                 throw new BadRequestException("refresh token expired at '%s'".formatted(current.expiresAt()));
             }
 
@@ -195,7 +198,7 @@ public class McpOAuthService {
 
             // Rows minted before the column existed carry no absolute expiry; their cap starts counting now.
             Instant absoluteExpiresAt = Optional.ofNullable(current.absoluteExpiresAt())
-                    .orElseGet(() -> now.plus(config().getRefreshTokenAbsoluteTtl()));
+                    .orElseGet(() -> now.plus(config().effectiveRefreshTokenAbsoluteTtl()));
 
             tokenDao.save(McpOAuthMapper.INSTANCE.toRotatedToken(current, TYPE_ACCESS,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(accessToken),
@@ -310,9 +313,9 @@ public class McpOAuthService {
     }
 
     /**
-     * When a refresh token minted now expires: {@code refreshTokenTtl} from now (OAuth 2.1 §4.3.3 ties refresh
-     * expiry to inactivity, so an active connector stays connected), never past the family's absolute expiry, which
-     * the authorization fixed at {@code refreshTokenAbsoluteTtl} and every rotation carries forward.
+     * The expiry of a refresh token that is minted now: {@code refreshTokenTtl} from now (OAuth 2.1 §4.3.3 ties
+     * refresh expiry to inactivity, so an active connector stays connected), but never later than the family's
+     * absolute expiry, which the authorization fixed and every rotation carries forward.
      */
     private Instant refreshExpiry(Instant now, Instant absoluteExpiresAt) {
         Instant sliding = now.plus(config().getRefreshTokenTtl());

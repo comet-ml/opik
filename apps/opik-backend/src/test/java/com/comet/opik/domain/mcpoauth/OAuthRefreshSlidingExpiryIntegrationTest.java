@@ -130,6 +130,35 @@ class OAuthRefreshSlidingExpiryIntegrationTest {
                 .isBefore(afterSecond.issuedAt().plus(IDLE_TTL).minusSeconds(1));
     }
 
+    @Test
+    @DisplayName("a refresh token minted before the absolute expiry existed gets its cap at the next rotation")
+    void legacyTokenWithoutAbsoluteExpiry_capStartsAtNextRotation() {
+        var minted = oauthClient.mintArtifacts();
+        String clientId = minted.clientId();
+        clearAbsoluteExpiry(minted.tokens().refreshToken());
+        assertThat(fetchRefreshRow(minted.tokens().refreshToken()).absoluteExpiresAt()).isNull();
+
+        TokenResponse first = oauthClient.refreshOk(clientId, minted.tokens().refreshToken());
+        McpOAuthToken afterFirst = fetchRefreshRow(first.refreshToken());
+        assertThat(afterFirst.absoluteExpiresAt())
+                .as("the first rotation of a legacy token starts the family's absolute lifetime from that rotation")
+                .isNotNull()
+                .isCloseTo(afterFirst.issuedAt().plus(ABSOLUTE_TTL), within(TOLERANCE));
+
+        TokenResponse second = oauthClient.refreshOk(clientId, first.refreshToken());
+        assertThat(fetchRefreshRow(second.refreshToken()).absoluteExpiresAt())
+                .as("later rotations carry that cap forward unchanged")
+                .isEqualTo(afterFirst.absoluteExpiresAt());
+    }
+
+    /** Makes a token row look like one minted before {@code absolute_expires_at} existed. */
+    private void clearAbsoluteExpiry(String refreshToken) {
+        transactionTemplate.inTransaction(handle -> handle
+                .createUpdate("UPDATE mcp_oauth_tokens SET absolute_expires_at = NULL WHERE token_hash = :hash")
+                .bind("hash", McpOAuthTokenUtils.hash(refreshToken))
+                .execute());
+    }
+
     private McpOAuthToken fetchRefreshRow(String refreshToken) {
         return transactionTemplate.inTransaction(handle -> handle.attach(McpOAuthTokenDAO.class)
                 .fetch(McpOAuthTokenUtils.hash(refreshToken))

@@ -25,9 +25,14 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -51,6 +56,7 @@ class OAuthRefreshRotationIntegrationTest {
     private static final int PARALLEL_REFRESHES = 5;
     // One rotation plus this many in-grace retries may be served off a single refresh token.
     private static final int MAX_RETRIES = PARALLEL_REFRESHES - 1;
+    private static final Duration BURST_TIMEOUT = Duration.ofSeconds(30);
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -103,12 +109,28 @@ class OAuthRefreshRotationIntegrationTest {
         String clientId = minted.clientId();
         String refreshToken = minted.tokens().refreshToken();
 
-        List<OAuthResourceClient.RefreshOutcome> outcomes = IntStream.range(0, PARALLEL_REFRESHES)
-                .mapToObj(i -> CompletableFuture.supplyAsync(() -> oauthClient.refresh(clientId, refreshToken)))
-                .toList()
-                .stream()
-                .map(CompletableFuture::join)
-                .toList();
+        // One dedicated thread per request, all released by the same barrier, so the requests really are in
+        // flight together rather than trickling through a shared pool one at a time.
+        var barrier = new CyclicBarrier(PARALLEL_REFRESHES);
+        ExecutorService workers = Executors.newFixedThreadPool(PARALLEL_REFRESHES);
+        List<OAuthResourceClient.RefreshOutcome> outcomes;
+        try {
+            outcomes = IntStream.range(0, PARALLEL_REFRESHES)
+                    .mapToObj(i -> CompletableFuture.supplyAsync(() -> {
+                        try {
+                            barrier.await(BURST_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+                        } catch (Exception e) {
+                            throw new IllegalStateException("burst did not line up", e);
+                        }
+                        return oauthClient.refresh(clientId, refreshToken);
+                    }, workers))
+                    .toList()
+                    .stream()
+                    .map(future -> future.orTimeout(BURST_TIMEOUT.toSeconds(), TimeUnit.SECONDS).join())
+                    .toList();
+        } finally {
+            workers.shutdownNow();
+        }
 
         assertThat(outcomes)
                 .as("every parallel refresh with the same refresh token is answered with a token pair")

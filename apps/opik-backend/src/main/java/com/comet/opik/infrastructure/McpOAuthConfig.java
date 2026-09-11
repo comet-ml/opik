@@ -71,17 +71,29 @@ public class McpOAuthConfig {
     }
 
     /**
-     * A refresh token's absolute lifetime must be at least its idle lifetime, otherwise the cap would shorten
-     * every token from the first authorization on, and both must be positive.
+     * The absolute lifetime a token family actually gets: never shorter than the idle lifetime, otherwise the cap
+     * would shorten every refresh token from the first authorization on. Derived rather than validated so that
+     * raising {@code refreshTokenTtl} alone (e.g. via {@code MCP_OAUTH_REFRESH_TOKEN_TTL}) keeps a deployment
+     * bootable instead of tripping over the default absolute value.
      */
-    @AssertTrue(message = "mcpOAuth.refreshTokenAbsoluteTtl must be positive and not shorter than mcpOAuth.refreshTokenTtl") public boolean isRefreshTokenAbsoluteTtlValid() {
-        return refreshTokenTtl != null && refreshTokenAbsoluteTtl != null
-                && !refreshTokenTtl.isNegative() && !refreshTokenTtl.isZero()
-                && refreshTokenAbsoluteTtl.compareTo(refreshTokenTtl) >= 0;
+    public Duration effectiveRefreshTokenAbsoluteTtl() {
+        return refreshTokenAbsoluteTtl.compareTo(refreshTokenTtl) >= 0 ? refreshTokenAbsoluteTtl : refreshTokenTtl;
+    }
+
+    @AssertTrue(message = "mcpOAuth.refreshTokenTtl must be positive") public boolean isRefreshTokenTtlPositive() {
+        return isPositive(refreshTokenTtl);
+    }
+
+    @AssertTrue(message = "mcpOAuth.refreshTokenAbsoluteTtl must be positive") public boolean isRefreshTokenAbsoluteTtlPositive() {
+        return isPositive(refreshTokenAbsoluteTtl);
     }
 
     @AssertTrue(message = "mcpOAuth.refreshLockLease must be positive") public boolean isRefreshLockLeasePositive() {
-        return refreshLockLease != null && !refreshLockLease.isNegative() && !refreshLockLease.isZero();
+        return isPositive(refreshLockLease);
+    }
+
+    private static boolean isPositive(Duration duration) {
+        return duration != null && !duration.isNegative() && !duration.isZero();
     }
 
     /**
