@@ -210,6 +210,7 @@ export interface Dashboard {
   name: string;
   description?: string;
   workspace_id: string;
+  project_id?: string;
   config: DashboardState;
   type: DASHBOARD_TYPE;
   scope: DASHBOARD_SCOPE;
