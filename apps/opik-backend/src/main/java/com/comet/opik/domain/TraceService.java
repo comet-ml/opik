@@ -12,6 +12,7 @@ import com.comet.opik.api.TraceCountResponse;
 import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -26,6 +27,8 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -689,30 +692,46 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<TraceCountResponse> countTracesPerWorkspace() {
-
-        return projectService.getDemoProjectIdsWithTimestamps()
-                .switchIfEmpty(Mono.just(Map.of()))
-                .flatMapMany(dao::countTracesPerWorkspace)
-                .collectList()
-                .map(items -> TraceCountResponse.builder()
-                        .workspacesTracesCount(items)
-                        .build())
-                .switchIfEmpty(Mono.just(TraceCountResponse.empty()));
+        return countsByWorkspaceExcludingDemoProjects()
+                .map(countsByWorkspace -> TraceCountResponse.builder()
+                        .workspacesTracesCount(countsByWorkspace.entrySet()
+                                .stream()
+                                .map(entry -> TraceCountResponse.WorkspaceTraceCount.builder()
+                                        .workspace(entry.getKey())
+                                        .traceCount(Math.toIntExact(entry.getValue()))
+                                        .build())
+                                .toList())
+                        .build());
     }
 
     @Override
     @WithSpan
     public Mono<BiInformationResponse> getTraceBIInformation() {
         log.info("Getting trace BI events daily data");
-
-        return projectService.getDemoProjectIdsWithTimestamps()
-                .switchIfEmpty(Mono.just(Map.of()))
-                .flatMapMany(dao::getTraceBIInformation)
+        return dao.getTraceBIInformationPerProject()
                 .collectList()
-                .map(items -> BiInformationResponse.builder()
-                        .biInformation(items)
-                        .build())
-                .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
+                .flatMap(rows -> projectService
+                        .getDemoProjectIds(rows.stream()
+                                .map(WorkspaceProjectUserCount::projectId)
+                                .collect(Collectors.toSet()))
+                        .map(demoProjectIds -> DemoDataExclusionUtils.foldByWorkspaceAndUser(rows, demoProjectIds)))
+                .map(biInformation -> BiInformationResponse.builder()
+                        .biInformation(biInformation)
+                        .build());
+    }
+
+    /**
+     * Previous-day trace counts per workspace, with demo-project activity dropped. The demo lookup is scoped to the
+     * projects that actually had traces, which is what keeps it independent of how many demo projects exist.
+     */
+    private Mono<Map<String, Long>> countsByWorkspaceExcludingDemoProjects() {
+        return dao.countTracesPerWorkspaceProject()
+                .collectList()
+                .flatMap(rows -> projectService
+                        .getDemoProjectIds(rows.stream()
+                                .map(WorkspaceProjectCount::projectId)
+                                .collect(Collectors.toSet()))
+                        .map(demoProjectIds -> DemoDataExclusionUtils.foldByWorkspace(rows, demoProjectIds)));
     }
 
     @Override
@@ -726,8 +745,11 @@ class TraceServiceImpl implements TraceService {
     @Override
     @WithSpan
     public Mono<Long> getDailyCreatedCount() {
-        return projectService.getDemoProjectIdsWithTimestamps()
-                .switchIfEmpty(Mono.just(Map.of())).flatMap(dao::getDailyTraces);
+        return countsByWorkspaceExcludingDemoProjects()
+                .map(countsByWorkspace -> countsByWorkspace.values()
+                        .stream()
+                        .mapToLong(Long::longValue)
+                        .sum());
     }
 
     @Override

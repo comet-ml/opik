@@ -18,6 +18,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
+import com.google.common.collect.Lists;
 import com.google.inject.ImplementedBy;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
@@ -90,6 +91,8 @@ public interface ProjectService {
 
     Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps();
 
+    Mono<Set<UUID>> getDemoProjectIds(Set<UUID> candidateProjectIds);
+
     Mono<Project> getOrCreate(String projectName);
 
     Project getOrCreate(String workspaceId, String projectName, String userName);
@@ -138,6 +141,8 @@ class ProjectServiceImpl implements ProjectService {
     private static final String LAST_UPDATED_TRACE_AT_SORT = "COALESCE(last_updated_trace_at, last_updated_at)";
     private static final Map<String, String> SORTING_FIELD_MAPPING = Map.of(
             SortableFields.LAST_UPDATED_TRACE_AT, LAST_UPDATED_TRACE_AT_SORT);
+
+    private static final int DEMO_PROJECT_ID_CHUNK_SIZE = 1_000;
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
@@ -479,6 +484,29 @@ class ProjectServiceImpl implements ProjectService {
                 .map(projects -> projects.stream()
                         .collect(Collectors.toMap(Project::id, Project::createdAt)))
                 .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
+    }
+
+    /**
+     * Bounded demo-project lookup: which of {@code candidateProjectIds} are demo projects.
+     *
+     * <p>{@link #getDemoProjectIdsWithTimestamps()} is unscoped by design, so it grows with every signup and every
+     * caller pays for the whole demo population. Callers that only need to test ids they already hold use this
+     * instead, and lose nothing by it: a demo project outside the candidate set cannot change their answer. The
+     * candidates are chunked to keep each {@code IN} list bounded however many are passed.
+     */
+    @Override
+    public Mono<Set<UUID>> getDemoProjectIds(Set<UUID> candidateProjectIds) {
+        if (CollectionUtils.isEmpty(candidateProjectIds)) {
+            return Mono.just(Set.of());
+        }
+        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+            var repository = handle.attach(ProjectDAO.class);
+            return Lists.partition(List.copyOf(candidateProjectIds), DEMO_PROJECT_ID_CHUNK_SIZE)
+                    .stream()
+                    .flatMap(chunk -> repository.findByGlobalNames(DemoData.PROJECTS, Set.copyOf(chunk)).stream())
+                    .map(Project::id)
+                    .collect(Collectors.toUnmodifiableSet());
+        })).subscribeOn(Schedulers.boundedElastic());
     }
 
     private List<Project> findByGlobalNames(List<String> names) {

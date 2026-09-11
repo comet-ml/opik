@@ -45,6 +45,7 @@ import com.comet.opik.api.resources.utils.traces.TraceDBUtils;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.GuardrailResult;
@@ -3210,6 +3211,40 @@ class ProjectsResourceTest {
             var actualEntity = projectResourceClient.findTokenUsageNames(
                     nonExistentProjectId, apiKey, workspaceName, HttpStatus.SC_NOT_FOUND);
             assertThat(actualEntity).isNull();
+        }
+    }
+
+    /**
+     * The bounded demo-project lookup behind the daily usage counts. The scope is the point of it: without one the
+     * caller loads every demo project in the installation, which is what put a query literal large enough to time
+     * the usage queries out into the ClickHouse query text. Asserted here rather than against a mocked DAO because
+     * only the real query can show that the scope filters — a lookup that ignored it would return a superset, and
+     * the folds that consume it would still produce the right counts.
+     */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetDemoProjectIds {
+
+        @Test
+        void getDemoProjectIds__whenCandidatesAreGiven__thenReturnsOnlyTheDemoProjectsAmongThem() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var demoProjectId = projectResourceClient.createProject(DemoData.PROJECTS.getFirst(), apiKey,
+                    workspaceName);
+            var demoProjectOutOfScopeId = projectResourceClient.createProject(DemoData.PROJECTS.get(1), apiKey,
+                    workspaceName);
+            var regularProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
+                    workspaceName);
+
+            var actualIds = projectService.getDemoProjectIds(Set.of(demoProjectId, regularProjectId)).block();
+
+            assertThat(actualIds)
+                    .as("only the demo projects among the candidates: '%s' is not a demo project, and demo project "
+                            + "'%s' was not offered as a candidate", regularProjectId, demoProjectOutOfScopeId)
+                    .containsExactly(demoProjectId);
         }
     }
 

@@ -96,6 +96,25 @@ interface ProjectDAO {
     int[] recordLastUpdatedTrace(@Bind("workspace_id") String workspaceId,
             @BindMethods Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
-    @SqlQuery("SELECT * FROM projects WHERE name IN (<names>)")
-    List<Project> findByGlobalNames(@BindList("names") Collection<String> names);
+    /**
+     * Projects with the given names across all workspaces, optionally restricted to {@code ids}. Left unrestricted
+     * the result grows with the number of projects carrying those names, so callers that already hold the ids they
+     * care about pass them and keep the query bounded.
+     *
+     * <p>An empty {@code ids} reads as unrestricted rather than as "match nothing", so callers filtering a set they
+     * built must handle the empty case themselves.
+     */
+    @SqlQuery("""
+            SELECT * FROM projects
+            WHERE name IN (<names>)
+            <if(ids)> AND id IN (<ids>) <endif>
+            """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    List<Project> findByGlobalNames(@BindList("names") List<String> names,
+            @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids);
+
+    default List<Project> findByGlobalNames(List<String> names) {
+        return findByGlobalNames(names, null);
+    }
 }
