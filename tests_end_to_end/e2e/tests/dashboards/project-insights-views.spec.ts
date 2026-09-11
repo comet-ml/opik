@@ -199,6 +199,31 @@ test.describe(
           ).toBeVisible();
           expect(dashboardsA.currentDashboardId(), "the link A owns is kept").toBe(viewA.id);
         });
+
+        await test.step('The project-less view can also be opened from the selector, not only by link', async () => {
+          // Every assertion above arrives by URL. This one opens the view the way
+          // a user does — through the picker — so the capability is earned on the
+          // interaction and not only on link resolution.
+          //
+          // The legacy view is the target, and project A is where it happens,
+          // because the page is already on `viewA`: the selection therefore has
+          // to *change*, which no amount of persisted selector state could fake.
+          // Choosing a project-bound view this way is already covered by
+          // `project-dashboard-scoping.spec.ts`; choosing a project-less one is
+          // not, and it is the case that would break if scoping were tightened.
+          const dashboardsA = new ProjectDashboardsPage(page, projectA.id);
+          await dashboardsA.openViewPicker(viewA.name);
+          await dashboardsA.selectView(legacyView.name, legacyView.id);
+
+          await expect(
+            dashboardsA.viewPickerShowing(legacyView.name),
+            'the picker now shows the project-less view',
+          ).toBeVisible();
+          await expect(
+            dashboardsA.sectionTitle(sectionTitleOf(legacyView)),
+            'and that view is the dashboard on screen',
+          ).toBeVisible();
+        });
       },
     );
   },

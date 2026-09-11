@@ -53,6 +53,14 @@ export interface ProjectInsightsViewsFixtures {
  * them — an insights view outlives the project it was scoped to — and
  * `global-teardown`'s run-prefix sweep only knows about the workspace
  * `/dashboards` collection, which this one is not part of.
+ *
+ * Each resource is registered the moment it is created and released in a
+ * `finally`, the same lifecycle `id-aged-traces.fixture` documents. That
+ * matters more here than it does there: the ownership check below throws *by
+ * design*, and cleanup that only ran after a complete seed would turn every
+ * such throw into a permanent leak — an insights view no sweep in the estate
+ * recovers, and a project-less one is then offered by every project's selector
+ * for good.
  */
 export const test = baseTest.extend<ProjectInsightsViewsFixtures>({
   projectInsightsViews: async (
@@ -60,105 +68,114 @@ export const test = baseTest.extend<ProjectInsightsViewsFixtures>({
     use,
     testInfo,
   ) => {
-    const created = await sdkClient.python.createProject({ name: `${testNamespace}-proj-b` });
-    const projectB: ProjectRef = { id: created.id, name: created.name };
-
     const sections = new Map<string, string>();
-    const seed = async (suffix: string, projectId?: string): Promise<InsightsViewRef> => {
-      const title = `${testNamespace}-section-${suffix}`;
-      const view = await backendClient.createInsightsView({
-        name: `${testNamespace}-view-${suffix}`,
-        ...(projectId ? { projectId } : {}),
-        sections: [{ id: `${testNamespace}-section-id-${suffix}`, title, widgets: [] }],
-      });
-      sections.set(view.id, title);
-      return view;
-    };
+    const seededViews: InsightsViewRef[] = [];
+    let projectB: ProjectRef | null = null;
 
-    const viewA = await seed('a', project.id);
-    const viewB = await seed('b', projectB.id);
-    // No projectId: the legacy shape. Passing one and expecting the backend to
-    // ignore it would test the wrong thing.
-    const legacyView = await seed('legacy');
-
-    // The seed's whole value is which project each view carries, and that is a
-    // field the create call echoes back rather than one it proves. Read the
-    // views again, unscoped, and check the stored value: a backend that
-    // silently dropped `project_id` would otherwise leave every scoping
-    // assertion below trivially satisfiable, and the spec would read as
-    // coverage forever.
-    const stored = await backendClient.listInsightsViews();
-    const storedProjectId = (id: string): string | null => {
-      const found = stored.find((view) => view.id === id);
-      if (!found) {
-        throw new Error(
-          `[projectInsightsViews] seeded view ${id} is missing from the workspace's insights views`,
-        );
-      }
-      return found.projectId;
-    };
-    const expectedOwners: Array<[string, InsightsViewRef, string | null]> = [
-      ['view-a', viewA, project.id],
-      ['view-b', viewB, projectB.id],
-      ['view-legacy', legacyView, null],
-    ];
-    for (const [label, view, expected] of expectedOwners) {
-      const actual = storedProjectId(view.id);
-      if (actual !== expected) {
-        throw new Error(
-          `[projectInsightsViews] ${label} was stored with project_id ${actual}, expected ${expected}`,
-        );
-      }
-    }
-
-    const sectionTitleOf = (view: InsightsViewRef): string => {
-      const title = sections.get(view.id);
-      if (!title) {
-        throw new Error(`[projectInsightsViews] no seeded section for view ${view.id}`);
-      }
-      return title;
-    };
-
-    await testInfo.attach('opik.project-insights-views', {
-      body: JSON.stringify(
-        {
-          projectA: project,
-          projectB,
-          viewA,
-          viewB,
-          legacyView,
-          sections: Object.fromEntries(sections),
-        },
-        null,
-        2,
-      ),
-      contentType: 'application/json',
-    });
-
-    await use({ projectA: project, projectB, viewA, viewB, legacyView, sectionTitleOf });
-
-    if (shouldLeaveArtifacts(testInfo)) {
-      console.warn(
-        `[projectInsightsViews] leaving ${[viewA, viewB, legacyView]
-          .map((v) => v.name)
-          .join(', ')} and project ${projectB.name} for debugging`,
-      );
-      return;
-    }
-
-    for (const view of [viewA, viewB, legacyView]) {
-      try {
-        await backendClient.deleteInsightsView(view.id);
-      } catch (err) {
-        // A project-less view survives every other sweep in the estate, so say
-        // so loudly enough that a leak is traceable to this run.
-        console.warn(`[projectInsightsViews] delete warning for view ${view.name}:`, err);
-      }
-    }
     try {
-      await backendClient.deleteProject(projectB.id);
-    } catch (err) {
-      console.warn(`[projectInsightsViews] delete warning for ${projectB.name}:`, err);
+      const created = await sdkClient.python.createProject({ name: `${testNamespace}-proj-b` });
+      projectB = { id: created.id, name: created.name };
+
+      const seed = async (suffix: string, projectId?: string): Promise<InsightsViewRef> => {
+        const title = `${testNamespace}-section-${suffix}`;
+        const view = await backendClient.createInsightsView({
+          name: `${testNamespace}-view-${suffix}`,
+          ...(projectId ? { projectId } : {}),
+          sections: [{ id: `${testNamespace}-section-id-${suffix}`, title, widgets: [] }],
+        });
+        // Registered before anything else can throw, so a view that exists is
+        // always a view teardown knows about.
+        seededViews.push(view);
+        sections.set(view.id, title);
+        return view;
+      };
+
+      const viewA = await seed('a', project.id);
+      const viewB = await seed('b', projectB.id);
+      // No projectId: the legacy shape. Passing one and expecting the backend to
+      // ignore it would test the wrong thing.
+      const legacyView = await seed('legacy');
+
+      // The seed's whole value is which project each view carries, and that is a
+      // field the create call echoes back rather than one it proves. Read the
+      // views again, unscoped, and check the stored value: a backend that
+      // silently dropped `project_id` would otherwise leave every scoping
+      // assertion below trivially satisfiable, and the spec would read as
+      // coverage forever.
+      const stored = await backendClient.listInsightsViews();
+      const storedProjectId = (id: string): string | null => {
+        const found = stored.find((view) => view.id === id);
+        if (!found) {
+          throw new Error(
+            `[projectInsightsViews] seeded view ${id} is missing from the workspace's insights views`,
+          );
+        }
+        return found.projectId;
+      };
+      const expectedOwners: Array<[string, InsightsViewRef, string | null]> = [
+        ['view-a', viewA, project.id],
+        ['view-b', viewB, projectB.id],
+        ['view-legacy', legacyView, null],
+      ];
+      for (const [label, view, expected] of expectedOwners) {
+        const actual = storedProjectId(view.id);
+        if (actual !== expected) {
+          throw new Error(
+            `[projectInsightsViews] ${label} was stored with project_id ${actual}, expected ${expected}`,
+          );
+        }
+      }
+
+      const sectionTitleOf = (view: InsightsViewRef): string => {
+        const title = sections.get(view.id);
+        if (!title) {
+          throw new Error(`[projectInsightsViews] no seeded section for view ${view.id}`);
+        }
+        return title;
+      };
+
+      await testInfo.attach('opik.project-insights-views', {
+        body: JSON.stringify(
+          {
+            projectA: project,
+            projectB,
+            viewA,
+            viewB,
+            legacyView,
+            sections: Object.fromEntries(sections),
+          },
+          null,
+          2,
+        ),
+        contentType: 'application/json',
+      });
+
+      await use({ projectA: project, projectB, viewA, viewB, legacyView, sectionTitleOf });
+    } finally {
+      if (shouldLeaveArtifacts(testInfo)) {
+        console.warn(
+          `[projectInsightsViews] leaving ${
+            seededViews.map((v) => v.name).join(', ') || 'no views'
+          }${projectB ? ` and project ${projectB.name}` : ''} for debugging`,
+        );
+      } else {
+        for (const view of seededViews) {
+          try {
+            await backendClient.deleteInsightsView(view.id);
+          } catch (err) {
+            // A project-less view survives every other sweep in the estate, so
+            // say so loudly enough that a leak is traceable to this run.
+            console.warn(`[projectInsightsViews] delete warning for view ${view.name}:`, err);
+          }
+        }
+        if (projectB) {
+          try {
+            await backendClient.deleteProject(projectB.id);
+          } catch (err) {
+            console.warn(`[projectInsightsViews] delete warning for ${projectB.name}:`, err);
+          }
+        }
+      }
     }
   },
 });
