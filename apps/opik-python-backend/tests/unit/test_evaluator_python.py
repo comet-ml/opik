@@ -429,20 +429,15 @@ class ScoringFailedMetric(base_metric.BaseMetric):
 """
 
 
-@pytest.mark.parametrize("code, expected_detail", [
-    (VALUELESS_SCORE_METRIC, "'valueless_metric' returned no value"),
-    (SCORING_FAILED_METRIC, "'scoring_failed_metric' reported the scoring as failed"),
-])
-def test_wholly_unusable_scores_return_bad_request(client, code, expected_detail):
+@pytest.mark.parametrize("code", [VALUELESS_SCORE_METRIC, SCORING_FAILED_METRIC])
+def test_wholly_unusable_scores_return_bad_request(client, code):
     """Nothing usable came back, so the evaluation is a user error — reported like an empty result."""
     response = client.post(EVALUATORS_URL, json={
         "data": DATA,
         "code": code
     })
     assert response.status_code == 400
-    error = str(response.json["error"])
-    assert "didn't return any usable 'opik.evaluation.metrics.ScoreResult'" in error
-    assert expected_detail in error
+    assert "didn't return any usable 'opik.evaluation.metrics.ScoreResult'" in str(response.json["error"])
 
 
 def test_mixed_scores_are_passed_through(client):

@@ -6,7 +6,7 @@ from werkzeug.exceptions import HTTPException
 
 from opik_backend.executor import CodeExecutorBase
 from opik_backend.http_utils import build_error_response
-from opik_backend.score_validation import describe_unusable, unusable_scores
+from opik_backend.score_validation import has_usable_score
 
 # Environment variable to control execution strategy
 EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "process")
@@ -72,10 +72,9 @@ def execute_evaluator_python():
     # A mixed list is passed through on purpose: the usable scores still reach the backend, which drops
     # the rest and names them on the rule's log stream. Only a wholly unusable response is rejected,
     # which is the same class of user error as returning no ScoreResult at all, just above.
-    unusable = unusable_scores(scores)
-    if len(unusable) == len(scores):
+    if not has_usable_score(scores):
         current_app.logger.info("No usable ScoreResult in code '%s'", code)
         abort(400, "The provided 'code' field didn't return any usable "
-                   "'opik.evaluation.metrics.ScoreResult': %s" % describe_unusable(unusable))
+                   "'opik.evaluation.metrics.ScoreResult'")
 
     return jsonify({"scores": scores})
