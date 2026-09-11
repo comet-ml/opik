@@ -1,4 +1,4 @@
-import { test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { AlertEditorPage } from './alert-editor.page';
 
@@ -42,6 +42,31 @@ export class AlertsPage {
    */
   alertRow(alertId: string): Locator {
     return this.page.locator(`tbody tr[data-row-id="${alertId}"]`);
+  }
+
+  /**
+   * The id of the one row carrying `name`, for a spec that created an alert
+   * through the form and so never saw its id.
+   *
+   * Asserts the match is unique before reading it: a name that hit two rows
+   * would otherwise hand back whichever the table happened to render first,
+   * and every later assertion would be about an alert the spec never made.
+   *
+   * Matched on a whole name cell rather than `hasText`, which is a substring
+   * test: specs in this area name their alerts off a shared prefix, so
+   * `…-alert-fs` would also select `…-alert-fs-groups` and fail the uniqueness
+   * check on two alerts that are both correct. Same idiom as `cell()` below.
+   */
+  async alertIdByName(name: string): Promise<string> {
+    return test.step(`Resolve the alert id for "${name}"`, async () => {
+      const row = this.page
+        .locator('tbody tr[data-row-id]')
+        .filter({ has: this.page.getByRole('cell', { name, exact: true }) });
+      await expect(row).toHaveCount(1);
+      const id = await row.getAttribute('data-row-id');
+      expect(id, `the row for "${name}" must carry a data-row-id`).toBeTruthy();
+      return id!;
+    });
   }
 
   get emptyState(): Locator {

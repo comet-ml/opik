@@ -114,6 +114,7 @@ export type {
   AlertFixtures,
 } from './alert.fixture';
 export { ALERT_EVENT_TYPE, ALERT_EVENT_TITLE } from './alert.fixture';
+export type { ScoredTracesRef, ScoredTracesFixtures } from './scored-traces.fixture';
 export type {
   ModelCostSpanSeed,
   ModelCostSpansRef,

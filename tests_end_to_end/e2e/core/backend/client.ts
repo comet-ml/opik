@@ -160,6 +160,31 @@ export interface FeedbackScoreRef {
   source: string;
 }
 
+/** One `trigger_configs` entry of an alert trigger. */
+export interface AlertTriggerConfigRef {
+  type: string;
+  /**
+   * Which OR-group the config belongs to: equal indexes are AND-ed, different
+   * ones OR-ed. `null` for a legacy singleton group and for `scope:project`,
+   * which is why this is never collapsed into a number.
+   */
+  groupIndex: number | null;
+  configValue: Record<string, string>;
+}
+
+export interface AlertTriggerRef {
+  eventType: string;
+  configs: AlertTriggerConfigRef[];
+}
+
+/** One alert as `GET /v1/private/alerts/{id}` answers it. */
+export interface AlertDetail {
+  id: string;
+  name: string;
+  enabled: boolean;
+  triggers: AlertTriggerRef[];
+}
+
 /**
  * One commit of a prompt, as the versions endpoints answer.
  *
@@ -1054,6 +1079,36 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     async deleteAlertsBatch(ids: string[]): Promise<void> {
       if (ids.length === 0) return;
       await opik.api.alerts.deleteAlertBatch({ ids });
+    },
+
+    /**
+     * One alert with its triggers and their configs, as
+     * `GET /v1/private/alerts/{id}` answers it — the shape the editor form is
+     * hydrated from, and the only place a condition's operator, threshold,
+     * window and `group_index` are readable. The list endpoint renders none of
+     * them, so a form round-trip alone cannot say what was actually persisted.
+     *
+     * `configValue` stays a raw string map: the backend stores every value as a
+     * string (`"0.8"`, `"86400"`), and coercing here would let a spec that
+     * meant to pin the wire format compare equal to a changed one.
+     */
+    async getAlert(id: string): Promise<AlertDetail> {
+      const alert = await opik.api.alerts.getAlertById(id);
+      return {
+        id: String(alert.id ?? ''),
+        name: alert.name ?? '',
+        enabled: alert.enabled ?? false,
+        triggers: (alert.triggers ?? []).map((t) => ({
+          eventType: String(t.eventType),
+          configs: (t.triggerConfigs ?? []).map((c) => ({
+            type: String(c.type),
+            // Never defaulted to 0: the API sends null for a legacy singleton
+            // group, which is a different answer from "group 0".
+            groupIndex: c.groupIndex ?? null,
+            configValue: c.configValue ?? {},
+          })),
+        })),
+      };
     },
 
     async listOptimizationsWithPrefix(prefix: string): Promise<ProjectRef[]> {
@@ -2156,6 +2211,19 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       opts: PollFeedbackScoreOpts = {},
     ): Promise<FeedbackScoreRef> {
       return pollTraceForFeedbackScore(localGetTrace, traceId, scoreName, opts);
+    },
+
+    /**
+     * The distinct trace feedback-score names in a project, as
+     * `GET /v1/private/traces/feedback-scores/names` answers it.
+     *
+     * This is the aggregation the score selects are populated from, and it is
+     * eventually consistent with the trace write — so it, not the trace's own
+     * scores, is what a fixture must wait on before a spec opens the dropdown.
+     */
+    async listTraceFeedbackScoreNames(projectId: string): Promise<string[]> {
+      const res = await opik.api.traces.findFeedbackScoreNames2({ projectId });
+      return (res.scores ?? []).map((s) => String(s.name));
     },
 
     /** One span by id, or null while it is not yet readable. */

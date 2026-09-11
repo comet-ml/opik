@@ -11,6 +11,8 @@ export const ALERT_EVENT_TYPE = {
   traceCost: 'trace:cost',
   traceLatency: 'trace:latency',
   traceErrors: 'trace:errors',
+  traceFeedbackScore: 'trace:feedback_score',
+  threadFeedbackScore: 'trace_thread:feedback_score',
 } as const;
 
 export type AlertEventType = (typeof ALERT_EVENT_TYPE)[keyof typeof ALERT_EVENT_TYPE];
@@ -24,6 +26,8 @@ export const ALERT_EVENT_TITLE: Record<AlertEventType, string> = {
   [ALERT_EVENT_TYPE.traceCost]: 'Cost threshold',
   [ALERT_EVENT_TYPE.traceLatency]: 'Latency threshold',
   [ALERT_EVENT_TYPE.traceErrors]: 'Trace errors threshold',
+  [ALERT_EVENT_TYPE.traceFeedbackScore]: 'Trace feedback score threshold',
+  [ALERT_EVENT_TYPE.threadFeedbackScore]: 'Thread feedback score threshold',
 };
 
 export interface AlertSeed {
