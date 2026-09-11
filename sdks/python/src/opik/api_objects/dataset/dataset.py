@@ -729,6 +729,36 @@ class Dataset(DatasetExportOperations):
         )
         return dataset_fern.tags or []
 
+    def _deduplicating(
+        self, items: Iterable[dataset_item.DatasetItem], deduplication: bool
+    ) -> Iterator[dataset_item.DatasetItem]:
+        """Yield items, dropping ones whose content hash has already been seen.
+
+        The hash state spans the whole pass, so a duplicate is caught however far apart
+        the two copies are. Hashes always use the standard library, so item identity does
+        not depend on which serialiser writes the request body.
+        """
+        for item in items:
+            if deduplication:
+                try:
+                    item_hash = item.content_hash()
+                except TypeError as exception:
+                    # Hashing serialises too, so it reaches a bad value before the writer
+                    # does. Raise the same error either way, so the failure does not
+                    # depend on whether deduplication happens to be enabled.
+                    raise streaming_writer.ItemNotSerializableError(
+                        f"Dataset item is not JSON-serializable: {exception}"
+                    ) from exception
+                if item_hash in self._hashes:
+                    LOGGER.debug(
+                        "Duplicate item found with hash: %s - ignored the event",
+                        item_hash,
+                    )
+                    continue
+                self._hashes.add(item_hash)
+                self._id_to_hash[item.id] = item_hash
+            yield item
+
     def _item_payload(self, item: dataset_item.DatasetItem) -> Dict[str, Any]:
         """Wire form of one dataset item, without building an intermediate model."""
         evaluators = None
@@ -756,11 +786,16 @@ class Dataset(DatasetExportOperations):
             execution_policy=execution_policy_payload,
         )
 
-    def _upload_transport(self) -> Tuple[httpx.Client, str]:
+    def _upload_transport(self) -> Optional[Tuple[httpx.Client, str]]:
         """The HTTP client and base URL used to send prepared request bodies.
 
         Taken from the owning client rather than from the generated REST client, so a
         regeneration of the latter cannot silently change how uploads are sent.
+
+        Returns None when neither was supplied, which happens for a `Dataset` constructed
+        directly from a REST client alone. That construction works today, so it keeps
+        working: the caller falls back to uploading through the generated client, which is
+        slower but correct.
         """
         httpx_client_ = self._rest_httpx_client
         base_url = self._url_override
@@ -771,15 +806,14 @@ class Dataset(DatasetExportOperations):
             base_url = self.client.config.url_override
 
         if httpx_client_ is None or base_url is None:
-            raise ValueError(
-                "This Dataset was created without an HTTP client, so items cannot be "
-                "uploaded. Create it through opik.Opik rather than directly."
-            )
+            return None
         return httpx_client_, base_url
 
     def _send_prepared_body(self, body: bytes) -> None:
         """Send one already-serialised, already-compressed request body."""
-        httpx_client_, base_url = self._upload_transport()
+        transport = self._upload_transport()
+        assert transport is not None  # only reached on the streaming path
+        httpx_client_, base_url = transport
 
         def send() -> None:
             response = httpx_client.send_prepared_json(
@@ -793,6 +827,47 @@ class Dataset(DatasetExportOperations):
                 )
 
         rest_helpers.ensure_rest_api_call_respecting_rate_limit(send)
+
+    def _upload_via_rest_client(
+        self,
+        payloads: List[Dict[str, Any]],
+        batch_group_id: str,
+        num_threads: int,
+    ) -> None:
+        """Upload through the generated client, one batch per request.
+
+        Used when the Dataset has no HTTP client of its own, which is the case for one
+        constructed directly from a REST client. That construction predates the streaming
+        path and still works; it just does not get the single-pass serialisation.
+        """
+        items = [
+            rest_dataset_item.DatasetItemWrite(**payload) for payload in payloads
+        ]
+        batches = sequence_splitter.split_into_batches(
+            items,
+            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
+            max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
+        )
+
+        def send(batch: List[rest_dataset_item.DatasetItemWrite]) -> None:
+            rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                lambda: self._rest_client.datasets.create_or_update_dataset_items(
+                    dataset_name=self._name,
+                    items=batch,
+                    batch_group_id=batch_group_id,
+                    project_name=self._project_name,
+                )
+            )
+
+        if num_threads <= 1:
+            for batch in batches:
+                send(batch)
+            return
+
+        with futures.ThreadPoolExecutor(max_workers=num_threads) as pool:
+            submitted = [pool.submit(send, batch) for batch in batches]
+            for future in futures.as_completed(submitted):
+                future.result()
 
     def _open_send_pool(self, num_threads: int) -> streaming_writer.BoundedSendPool:
         """Upload sink for one insert. Split out so the worker count is observable."""
@@ -920,6 +995,19 @@ class Dataset(DatasetExportOperations):
 
         opik_config = config.OpikConfig()
         batch_group_id = id_helpers.generate_id()
+
+        if self._upload_transport() is None:
+            self._upload_via_rest_client(
+                [
+                    self._item_payload(item)
+                    for item in self._deduplicating(items, deduplication)
+                ],
+                batch_group_id,
+                num_threads,
+            )
+            self._dataset_items_count = None
+            return
+
         pool = self._open_send_pool(num_threads)
         writer = streaming_writer.StreamingBatchWriter(
             envelope={
@@ -936,18 +1024,7 @@ class Dataset(DatasetExportOperations):
         )
 
         try:
-            for item in items:
-                if deduplication:
-                    item_hash = item.content_hash()
-                    if item_hash in self._hashes:
-                        LOGGER.debug(
-                            "Duplicate item found with hash: %s - ignored the event",
-                            item_hash,
-                        )
-                        continue
-                    self._hashes.add(item_hash)
-                    self._id_to_hash[item.id] = item_hash
-
+            for item in self._deduplicating(items, deduplication):
                 writer.add(self._item_payload(item))
             writer.flush()
         finally:

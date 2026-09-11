@@ -571,13 +571,13 @@ def test_insert__version_probe_recovers__parallel_upload_resumes(monkeypatch):
     # actually reached it, so a gate that stops honouring the probe still fails
     # this test.
     workers_per_insert = []
-    original_send = Dataset._send_batches
+    original_send = Dataset._upload_via_rest_client
 
-    def spy_send_batches(self, batches, batch_group_id, num_threads):
+    def spy_upload(self, payloads, batch_group_id, num_threads):
         workers_per_insert.append(num_threads)
-        return original_send(self, batches, batch_group_id, num_threads)
+        return original_send(self, payloads, batch_group_id, num_threads)
 
-    monkeypatch.setattr(Dataset, "_send_batches", spy_send_batches)
+    monkeypatch.setattr(Dataset, "_upload_via_rest_client", spy_upload)
 
     dataset.insert(_make_items(4), deduplication=False)
     dataset.insert(_make_items(4), deduplication=False)
@@ -627,13 +627,13 @@ def test_internal_insert__old_backend__worker_count_still_gated(monkeypatch):
     # below cover the items actually reaching the backend, not just the
     # argument the gate computed.
     used_workers = []
-    original_send = Dataset._send_batches
+    original_send = Dataset._upload_via_rest_client
 
-    def spy_send_batches(self, batches, batch_group_id, num_threads):
+    def spy_upload(self, payloads, batch_group_id, num_threads):
         used_workers.append(num_threads)
-        return original_send(self, batches, batch_group_id, num_threads)
+        return original_send(self, payloads, batch_group_id, num_threads)
 
-    monkeypatch.setattr(Dataset, "_send_batches", spy_send_batches)
+    monkeypatch.setattr(Dataset, "_upload_via_rest_client", spy_upload)
 
     dataset.__internal_api__insert_items_as_dataclasses__(
         [dataset_item.DatasetItem(**item) for item in _make_items(4)],
