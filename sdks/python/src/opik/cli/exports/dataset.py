@@ -198,6 +198,7 @@ def export_experiment_datasets(
                 description=None,  # Description not available from experiment
                 project_name=project_name,
                 rest_client=client.rest_client,
+                client=client,
             )
             # File is keyed by dataset ID (the name lives inside the file).
             dataset_id = dataset_obj.id

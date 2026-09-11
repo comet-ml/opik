@@ -4,6 +4,8 @@ import datetime
 import functools
 import json
 import logging
+
+import httpx
 import threading
 import weakref
 from typing import (
@@ -1230,6 +1232,7 @@ class Opik:
             rest_client=self._rest_client,
             max_results=max_results,
             sync_items=sync_items,
+            client=self,
         )
 
         return datasets
@@ -2439,6 +2442,16 @@ class Opik:
             workspace_name=self._workspace,
             rest_httpx_client=self._httpx_client,
         )
+
+    @property
+    def rest_httpx_client(self) -> httpx.Client:
+        """The HTTP client the SDK sends REST requests through.
+
+        Exposed so components that build a request body themselves can reuse the
+        configured client, with its auth and workspace headers, instead of reaching into
+        the generated REST client.
+        """
+        return self._httpx_client
 
     def queue_attachment_upload(
         self,

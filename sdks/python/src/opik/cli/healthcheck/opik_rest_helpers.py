@@ -14,6 +14,7 @@ def _get_httpx_client(
         api_key=api_key,
         check_tls_certificate=config_.check_tls_certificate,
         compress_json_requests=config_.enable_json_request_compression,
+        compression_level=config_.request_compression_level,
     )
 
     return client

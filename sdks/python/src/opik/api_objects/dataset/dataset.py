@@ -1,18 +1,22 @@
 import abc
 import datetime
 import logging
+
+import httpx
 import functools
 import sys
 from concurrent import futures
 from typing import (
-    Optional,
     Any,
-    List,
     Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
     Sequence,
     Set,
     TYPE_CHECKING,
-    Iterator,
+    Tuple,
 )
 
 from opik.api_objects import rest_helpers
@@ -26,11 +30,17 @@ from opik.rest_api.types import (
     execution_policy_write as rest_execution_policy,
 )
 from opik.message_processing.batching import sequence_splitter
-from opik import id_helpers, semantic_version
+from opik import httpx_client, id_helpers, semantic_version
 import opik.exceptions as exceptions
 import opik.config as config
 from .. import constants
-from . import dataset_item, converters, rest_operations, execution_policy
+from . import (
+    dataset_item,
+    converters,
+    rest_operations,
+    execution_policy,
+    streaming_writer,
+)
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -489,6 +499,8 @@ class Dataset(DatasetExportOperations):
         rest_client: rest_api_client.OpikApi,
         dataset_items_count: Optional[int] = None,
         client: Optional[Any] = None,
+        rest_httpx_client: Optional[httpx.Client] = None,
+        url_override: Optional[str] = None,
     ) -> None:
         """
         A Dataset object. This object should not be created directly, instead use :meth:`opik.Opik.create_dataset` or :meth:`opik.Opik.get_dataset`.
@@ -499,6 +511,8 @@ class Dataset(DatasetExportOperations):
         self._dataset_items_count = dataset_items_count
         self._project_name = project_name
         self.client = client
+        self._rest_httpx_client = rest_httpx_client
+        self._url_override = url_override
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
@@ -715,68 +729,74 @@ class Dataset(DatasetExportOperations):
         )
         return dataset_fern.tags or []
 
-    def _convert_to_rest_item(
-        self, item: dataset_item.DatasetItem
-    ) -> rest_dataset_item.DatasetItemWrite:
-        """Convert a DatasetItem to REST API format.
-
-        Args:
-            item: The DatasetItem to convert.
-
-        Returns:
-            DatasetItemWrite object ready for REST API.
-        """
+    def _item_payload(self, item: dataset_item.DatasetItem) -> Dict[str, Any]:
+        """Wire form of one dataset item, without building an intermediate model."""
         evaluators = None
         if item.evaluators:
             evaluators = [
-                rest_evaluator_item.EvaluatorItemWrite(
-                    name=e.name,
-                    type=e.type,  # type: ignore
-                    config=e.config,
-                )
+                {"name": e.name, "type": e.type, "config": e.config}
                 for e in item.evaluators
             ]
 
-        execution_policy = None
+        execution_policy_payload = None
         if item.execution_policy:
-            execution_policy = rest_execution_policy.ExecutionPolicyWrite(
-                runs_per_item=item.execution_policy.runs_per_item,
-                pass_threshold=item.execution_policy.pass_threshold,
-            )
+            execution_policy_payload = {
+                "runs_per_item": item.execution_policy.runs_per_item,
+                "pass_threshold": item.execution_policy.pass_threshold,
+            }
 
-        return rest_dataset_item.DatasetItemWrite(
-            id=item.id,  # type: ignore
-            trace_id=item.trace_id,  # type: ignore
-            span_id=item.span_id,  # type: ignore
-            source=item.source,  # type: ignore
+        return streaming_writer.item_payload(
+            item_id=item.id,
+            trace_id=item.trace_id,
+            span_id=item.span_id,
+            source=item.source,
             data=item.get_content(),
             description=item.description,
             evaluators=evaluators,
-            execution_policy=execution_policy,
+            execution_policy=execution_policy_payload,
         )
 
-    def _insert_batch_with_retry(
-        self,
-        batch: List[rest_dataset_item.DatasetItemWrite],
-        batch_group_id: str,
-    ) -> None:
-        """Insert a batch of dataset items with automatic retry on rate limit errors.
+    def _upload_transport(self) -> Tuple[httpx.Client, str]:
+        """The HTTP client and base URL used to send prepared request bodies.
 
-        Args:
-            batch: List of dataset items to insert.
-            batch_group_id: UUIDv7 identifier that groups all batches from a single
-                user operation together. All batches sent as part of one insert/update
-                call share the same batch_group_id.
+        Taken from the owning client rather than from the generated REST client, so a
+        regeneration of the latter cannot silently change how uploads are sent.
         """
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: self._rest_client.datasets.create_or_update_dataset_items(
-                dataset_name=self._name,
-                items=batch,
-                batch_group_id=batch_group_id,
-                project_name=self._project_name,
+        httpx_client_ = self._rest_httpx_client
+        base_url = self._url_override
+
+        if httpx_client_ is None and self.client is not None:
+            httpx_client_ = self.client.rest_httpx_client
+        if base_url is None and self.client is not None:
+            base_url = self.client.config.url_override
+
+        if httpx_client_ is None or base_url is None:
+            raise ValueError(
+                "This Dataset was created without an HTTP client, so items cannot be "
+                "uploaded. Create it through opik.Opik rather than directly."
             )
-        )
-        LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
+        return httpx_client_, base_url
+
+    def _send_prepared_body(self, body: bytes) -> None:
+        """Send one already-serialised, already-compressed request body."""
+        httpx_client_, base_url = self._upload_transport()
+
+        def send() -> None:
+            response = httpx_client.send_prepared_json(
+                httpx_client_, base_url, "v1/private/datasets/items", body
+            )
+            if response.status_code >= 300:
+                raise ApiError(
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    body=response.text,
+                )
+
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(send)
+
+    def _open_send_pool(self, num_threads: int) -> streaming_writer.BoundedSendPool:
+        """Upload sink for one insert. Split out so the worker count is observable."""
+        return streaming_writer.BoundedSendPool(self._send_prepared_body, num_threads)
 
     @property
     def _parallel_insert_supported(self) -> bool:
@@ -834,39 +854,6 @@ class Dataset(DatasetExportOperations):
         self._parallel_insert_supported_cache = supported
         return supported
 
-    def _send_batches(
-        self,
-        batches: List[List[rest_dataset_item.DatasetItemWrite]],
-        batch_group_id: str,
-        num_threads: int,
-    ) -> None:
-        """Send batches to the backend, optionally in parallel.
-
-        All batches share ``batch_group_id`` so they fold into a single
-        dataset version regardless of how many workers send them. With
-        ``num_threads <= 1`` batches are sent sequentially in the caller
-        thread. With ``num_threads > 1`` they are fanned out across a thread
-        pool; the first batch that fails re-raises to the caller. There is no
-        rollback, so batches that already succeeded before the failure remain
-        persisted.
-        """
-        if num_threads <= 1:
-            for batch in batches:
-                self._insert_batch_with_retry(batch, batch_group_id=batch_group_id)
-            return
-
-        with futures.ThreadPoolExecutor(max_workers=num_threads) as pool:
-            submitted = [
-                pool.submit(
-                    self._insert_batch_with_retry,
-                    batch,
-                    batch_group_id=batch_group_id,
-                )
-                for batch in batches
-            ]
-            for future in futures.as_completed(submitted):
-                future.result()
-
     def _deduplicate(
         self, items: List[dataset_item.DatasetItem]
     ) -> List[dataset_item.DatasetItem]:
@@ -897,7 +884,7 @@ class Dataset(DatasetExportOperations):
 
     def __internal_api__insert_items_as_dataclasses__(
         self,
-        items: List[dataset_item.DatasetItem],
+        items: Iterable[dataset_item.DatasetItem],
         num_threads: int = 1,
         deduplication: bool = True,
     ) -> None:
@@ -921,31 +908,57 @@ class Dataset(DatasetExportOperations):
             num_threads = 1
 
         if deduplication:
-            items_to_send = self._deduplicate(items)
+            # Lazy-sync against the backend the first time we insert into a dataset that
+            # was fetched from it, so content-hash dedup still works without paying an
+            # N+1 sync at list time.
+            if not self._hashes_synced:
+                self.__internal_api__sync_hashes__()
         else:
-            # Nothing was hashed, so the local cache no longer describes the
-            # backend; force a re-sync before the next deduplicated insert.
-            items_to_send = items
+            # Nothing will be hashed, so the local cache no longer describes the backend;
+            # force a re-sync before the next deduplicated insert.
             self._hashes_synced = False
 
-        rest_items = [self._convert_to_rest_item(item) for item in items_to_send]
-
-        batches = sequence_splitter.split_into_batches(
-            rest_items,
-            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
-            max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
+        opik_config = config.OpikConfig()
+        batch_group_id = id_helpers.generate_id()
+        pool = self._open_send_pool(num_threads)
+        writer = streaming_writer.StreamingBatchWriter(
+            envelope={
+                "dataset_name": self._name,
+                "project_name": self._project_name,
+                "batch_group_id": batch_group_id,
+            },
+            flush_callback=pool.submit,
+            max_payload_bytes=int(config.MAX_BATCH_SIZE_MB * 1024 * 1024),
+            max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
+            flush_interval_seconds=constants.DATASET_ITEMS_FLUSH_INTERVAL_SECONDS,
+            gzip_level=opik_config.request_compression_level,
+            use_orjson=opik_config.enable_orjson_serialization,
         )
 
-        batch_group_id = id_helpers.generate_id()
+        try:
+            for item in items:
+                if deduplication:
+                    item_hash = item.content_hash()
+                    if item_hash in self._hashes:
+                        LOGGER.debug(
+                            "Duplicate item found with hash: %s - ignored the event",
+                            item_hash,
+                        )
+                        continue
+                    self._hashes.add(item_hash)
+                    self._id_to_hash[item.id] = item_hash
 
-        self._send_batches(batches, batch_group_id, num_threads)
+                writer.add(self._item_payload(item))
+            writer.flush()
+        finally:
+            pool.close()
 
         # Invalidate the cached count so it will be fetched from backend on next access
         self._dataset_items_count = None
 
     def insert(
         self,
-        items: Sequence[Dict[str, Any]],
+        items: Iterable[Dict[str, Any]],
         num_threads: int = 4,
         deduplication: bool = True,
     ) -> None:
@@ -953,8 +966,9 @@ class Dataset(DatasetExportOperations):
         Insert new items into the dataset. A new dataset version will be created.
 
         Args:
-            items: List of dicts (which will be converted to dataset items)
-                to add to the dataset.
+            items: Dicts (or ``DatasetItem`` objects) to add to the dataset. Any
+                iterable is accepted, including a generator, and it is consumed lazily so
+                the whole upload is never held in memory. A list keeps working as before.
             deduplication: Whether to skip items whose content already exists
                 in the dataset. Pass ``False`` to insert every item as-is
                 without any duplicate checking, which is significantly faster
@@ -980,10 +994,12 @@ class Dataset(DatasetExportOperations):
         if not isinstance(deduplication, bool):
             raise ValueError("deduplication must be a bool")
 
-        dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
+        # A generator rather than a list: converting lazily is what lets a generator
+        # argument stay un-materialised all the way to the wire.
+        dataset_items = (
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
             for item in items
-        ]
+        )
         self.__internal_api__insert_items_as_dataclasses__(
             dataset_items, num_threads=num_threads, deduplication=deduplication
         )
@@ -1020,25 +1036,36 @@ class Dataset(DatasetExportOperations):
         self._hashes_synced = True
         LOGGER.debug("Finish hash sync in dataset")
 
-    def update(self, items: List[Dict[str, Any]], deduplication: bool = True) -> None:
+    def update(self, items: Iterable[Dict[str, Any]], deduplication: bool = True) -> None:
         """
         Update existing items in the dataset.
 
         Args:
-            items: List of DatasetItem objects to update in the dataset. You need to provide the full item object as it will override what has been supplied previously.
+            items: Dicts to update in the dataset. You need to provide the full item
+                object as it will override what has been supplied previously. Any
+                iterable is accepted, including a generator.
             deduplication: Whether to skip items whose content already exists in
                 the dataset. See :meth:`insert` for details.
 
         Raises:
-            DatasetItemUpdateOperationRequiresItemId: If any item in the list is missing an id.
+            DatasetItemUpdateOperationRequiresItemId: If an item is missing an id. The
+                item's position in the input is included in the message. Because items
+                are streamed rather than scanned up front, earlier items may already have
+                been sent and persisted when this raises; there is no rollback.
         """
-        for item in items:
-            if "id" not in item:
-                raise exceptions.DatasetItemUpdateOperationRequiresItemId(
-                    "Missing id for dataset item to update: %s", item
-                )
 
-        self.insert(items, deduplication=deduplication)
+        def checked(
+            source: Iterable[Dict[str, Any]],
+        ) -> Iterator[Dict[str, Any]]:
+            for index, item in enumerate(source):
+                if "id" not in item:
+                    raise exceptions.DatasetItemUpdateOperationRequiresItemId(
+                        f"Missing id for dataset item at index {index}: {item}. "
+                        "Items before it may already have been persisted."
+                    )
+                yield item
+
+        self.insert(checked(items), deduplication=deduplication)
 
     def _delete_batch_with_retry(
         self,

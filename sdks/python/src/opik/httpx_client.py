@@ -3,6 +3,7 @@ import logging
 from typing import Optional, Dict, Any, Union, Iterable, AsyncIterable, Mapping
 import httpx
 import os
+import urllib.parse
 import json as jsonlib
 
 from . import hooks, package_version
@@ -21,12 +22,17 @@ READ_TIMEOUT_SECONDS = 100
 WRITE_TIMEOUT_SECONDS = 100
 POOL_TIMEOUT_SECONDS = 20
 
+# zlib's own default. Python's gzip.compress defaults to 9 instead, which costs several
+# times the CPU for well under 1% fewer bytes on Opik payloads.
+DEFAULT_COMPRESSION_LEVEL = 6
+
 
 def get(
     workspace: Optional[str],
     api_key: Optional[str],
     check_tls_certificate: bool,
     compress_json_requests: bool,
+    compression_level: int = DEFAULT_COMPRESSION_LEVEL,
 ) -> httpx.Client:
     limits = httpx.Limits(keepalive_expiry=KEEPALIVE_EXPIRY_SECONDS)
 
@@ -55,7 +61,11 @@ def get(
     }
     kwargs = hooks.httpx_client_hook.build_init_arguments(kwargs)
 
-    client = OpikHttpxClient(compress_json_requests=compress_json_requests, **kwargs)
+    client = OpikHttpxClient(
+        compress_json_requests=compress_json_requests,
+        compression_level=compression_level,
+        **kwargs,
+    )
 
     headers = _prepare_headers(workspace=workspace, api_key=api_key)
     client.headers.update(headers)
@@ -83,10 +93,41 @@ def _prepare_headers(
     return result
 
 
+def send_prepared_json(
+    client: httpx.Client,
+    base_url: str,
+    path: str,
+    body: bytes,
+) -> httpx.Response:
+    """PUT an already-serialised, already-gzipped JSON body.
+
+    Exists so a caller that has produced the request body itself can send it without a
+    second serialisation pass. Auth and workspace headers ride on `client`, which is the
+    same client the generated REST client sends through, so this does not depend on the
+    generated client's internals.
+    """
+    url = urllib.parse.urljoin(base_url if base_url.endswith("/") else base_url + "/", path)
+    return client.request(
+        "PUT",
+        url,
+        content=body,
+        headers={
+            "Content-Type": "application/json;charset=utf-8",
+            "Content-Encoding": "gzip",
+        },
+    )
+
+
 class OpikHttpxClient(httpx.Client):
-    def __init__(self, compress_json_requests: bool = True, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        compress_json_requests: bool = True,
+        compression_level: int = DEFAULT_COMPRESSION_LEVEL,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.compress_json_requests = compress_json_requests
+        self.compression_level = compression_level
         self.warnings: Dict[str, bool] = {}
 
     def build_request(
@@ -111,7 +152,7 @@ class OpikHttpxClient(httpx.Client):
         if self.compress_json_requests:
             if method in ("POST", "PUT", "PATCH") and json is not None:
                 json_data = jsonlib.dumps(json).encode("utf-8")
-                content = gzip.compress(json_data)
+                content = gzip.compress(json_data, self.compression_level)
                 json = None
                 if headers is None:
                     headers = {}

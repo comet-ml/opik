@@ -1,5 +1,7 @@
 from unittest.mock import Mock
 from opik.api_objects.dataset.dataset import Dataset
+
+from .upload_capture import UploadCapture
 from opik.rest_api.types.dataset_public import DatasetPublic
 
 
@@ -95,12 +97,15 @@ def test_delete__invalidates_cached_count():
 def test_update__invalidates_cached_count():
     """Test that update() invalidates the cached count."""
     mock_rest_client = Mock()
+    capture = UploadCapture()
 
     dataset = Dataset(
         name="test_dataset",
         description="Test description",
         project_name="Test project",
         rest_client=mock_rest_client,
+        rest_httpx_client=capture,
+        url_override=capture.base_url,
         dataset_items_count=5,
     )
 
@@ -125,12 +130,15 @@ def test_update__invalidates_cached_count():
 def test_insert__invalidates_cached_count():
     """Test that insert() invalidates the cached count."""
     mock_rest_client = Mock()
+    capture = UploadCapture()
 
     dataset = Dataset(
         name="test_dataset",
         description="Test description",
         project_name="Test project",
         rest_client=mock_rest_client,
+        rest_httpx_client=capture,
+        url_override=capture.base_url,
         dataset_items_count=5,
     )
 

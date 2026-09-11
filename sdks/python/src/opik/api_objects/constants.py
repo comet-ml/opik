@@ -16,6 +16,10 @@ EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB = 3.5
 # caller passing an arbitrarily large num_threads.
 EXPERIMENT_ITEMS_BULK_MAX_THREADS = 32
 DATASET_ITEMS_MAX_BATCH_SIZE = 1000
+
+# Upper bound on how long a partially filled batch waits before being sent. Only reachable
+# when items arrive slowly enough that neither the size nor the count threshold trips.
+DATASET_ITEMS_FLUSH_INTERVAL_SECONDS = 5.0
 ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE = 1000
 DELETE_TRACE_BATCH_SIZE = 1000
 
