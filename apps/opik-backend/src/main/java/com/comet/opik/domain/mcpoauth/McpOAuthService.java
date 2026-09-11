@@ -63,8 +63,8 @@ public class McpOAuthService {
      * Burns the code in its own committed transaction. Single-use consumption is committed
      * before the client/redirect/PKCE checks — a failed exchange attempt must not leave the code replayable.
      */
-    public TokenResponse exchangeCode(@NonNull String code, @NonNull String codeVerifier,
-            @NonNull String redirectUri, @NonNull String clientId) {
+    public CodeExchange exchangeCode(@NonNull String code, @NonNull String codeVerifier,
+            @NonNull String redirectUri, @NonNull McpOAuthClient client) {
         String codeHash = McpOAuthTokenUtils.hash(code);
         Instant now = Instant.now();
 
@@ -76,7 +76,7 @@ public class McpOAuthService {
             return codeDao.findByHash(codeHash);
         });
 
-        if (!matchesGrantRequest(row, clientId, redirectUri, codeVerifier)) {
+        if (!matchesGrantRequest(row, client.id(), redirectUri, codeVerifier)) {
             throw new BadRequestException(ERROR_INVALID_GRANT);
         }
 
@@ -86,6 +86,21 @@ public class McpOAuthService {
 
         return template.inTransaction(WRITE, handle -> {
             var tokenDao = handle.attach(McpOAuthTokenDAO.class);
+
+            // Recorded in the same transaction as the tokens, so a rolled-back exchange leaves no
+            // connection behind.
+            var connectionDao = handle.attach(McpClientConnectionDAO.class);
+            var connection = McpOAuthMapper.INSTANCE.toConnection(row, client, UUID.randomUUID().toString());
+            // One rule decides "new connection": nothing of this host was live for this user before now.
+            // Read before any write in this transaction, so neither the row nor the tokens about to land
+            // can be their own evidence. Whether the client_id is new does not enter into it — hosts that
+            // re-register per project (Codex) would otherwise count several times, and hosts that keep one
+            // registration for weeks (Claude Code) would never count again after the user dropped and
+            // re-adopted them.
+            boolean firstConnection = !connectionDao.existsActiveConnectionForHost(
+                    row.userName(), row.workspaceId(), connection.clientName());
+            connectionDao.upsert(connection);
+
             tokenDao.save(McpOAuthMapper.INSTANCE.toToken(row, TYPE_ACCESS,
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(accessToken),
                     familyId, now.plus(config().getAccessTokenTtl())));
@@ -93,7 +108,11 @@ public class McpOAuthService {
                     UUID.randomUUID().toString(), McpOAuthTokenUtils.hash(refreshToken),
                     familyId, now.plus(config().getRefreshTokenTtl())));
 
-            return buildTokenResponse(accessToken, refreshToken, row.workspaceId(), row.workspaceName());
+            return CodeExchange.builder()
+                    .tokens(buildTokenResponse(accessToken, refreshToken, row.workspaceId(), row.workspaceName()))
+                    .userName(row.userName())
+                    .firstConnection(firstConnection)
+                    .build();
         });
     }
 
@@ -150,6 +169,14 @@ public class McpOAuthService {
 
             if (TYPE_REFRESH.equals(row.type())) {
                 tokenDao.revokeFamily(row.familyId(), RevokedReason.CLIENT_REQUEST);
+                // Only the refresh token carries the grant, so only its revocation can be a disconnection.
+                // Revoking an access token leaves the client able to mint another one — still connected.
+                // And one client_id may hold several grants (re-authorizing while live starts a new family),
+                // so the connection goes only when the last live grant of that client_id does.
+                if (!tokenDao.existsLiveToken(row.userName(), row.workspaceId(), row.clientId())) {
+                    handle.attach(McpClientConnectionDAO.class)
+                            .delete(row.userName(), row.workspaceId(), row.clientId());
+                }
             } else {
                 tokenDao.revoke(row.tokenHash(), RevokedReason.CLIENT_REQUEST);
             }

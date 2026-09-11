@@ -37,4 +37,13 @@ interface McpOAuthMapper {
     @Mapping(target = "revokedAt", ignore = true)
     @Mapping(target = "revokedReason", ignore = true)
     McpOAuthToken toRotatedToken(McpOAuthToken source, String type, String id, String tokenHash, Instant expiresAt);
+
+    /** Identity and callback come from the burnt code; display metadata from the client registration. */
+    @Mapping(target = "id", source = "id")
+    @Mapping(target = "clientId", source = "client.id")
+    @Mapping(target = "clientName", source = "client.name")
+    @Mapping(target = "logoUri", source = "client.logoUri")
+    @Mapping(target = "firstConnectedAt", ignore = true)
+    @Mapping(target = "lastConnectedAt", ignore = true)
+    McpClientConnection toConnection(McpOAuthCode code, McpOAuthClient client, String id);
 }
