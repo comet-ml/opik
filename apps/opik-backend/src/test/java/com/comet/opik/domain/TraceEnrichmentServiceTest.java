@@ -288,5 +288,44 @@ class TraceEnrichmentServiceTest {
             assertThat(spanNode.has("feedback_scores")).isTrue();
             assertThat(spanNode.has("comments")).isTrue();
         }
+
+        @Test
+        @DisplayName("when ClickHouse returns duplicate trace rows, then handle gracefully without exception")
+        void enrichTraces__whenDuplicateTraceIdsReturned__thenHandleGracefully() {
+            // given
+            UUID traceId = UUID.randomUUID();
+
+            Trace trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .id(traceId)
+                    .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"response\": \"first response\"}"))
+                    .build();
+
+            // Simulate ClickHouse returning duplicate rows for the same trace ID
+            // (can happen due to data ingestion retries or concurrent writes)
+            Trace trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .id(traceId)
+                    .input(JsonUtils.getJsonNodeFromString("{\"prompt\": \"test prompt\"}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"response\": \"second response\"}"))
+                    .build();
+
+            when(traceService.getByIds(List.of(traceId))).thenReturn(Flux.just(trace1, trace2));
+            lenient().when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
+
+            var options = TraceEnrichmentOptions.builder().build();
+
+            // when - should not throw IllegalStateException: Duplicate key
+            Map<UUID, Map<String, JsonNode>> result = traceEnrichmentService.enrichTraces(Set.of(traceId), options)
+                    .block();
+
+            // then
+            assertThat(result).hasSize(1);
+            assertThat(result).containsKey(traceId);
+
+            // The last duplicate should win (replacement strategy)
+            Map<String, JsonNode> enrichedData = result.get(traceId);
+            assertThat(enrichedData).containsKey("input");
+            assertThat(enrichedData).containsKey("expected_output");
+        }
     }
 }
