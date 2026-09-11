@@ -11,6 +11,10 @@ import { ExperimentItem } from "@/types/datasets";
 import { Thread, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import { safelyParseJSON } from "@/lib/utils";
 import isEmpty from "lodash/isEmpty";
+import {
+  FEEDBACK_DEFINITION_TYPE,
+  FeedbackDefinition,
+} from "@/types/feedback-definitions";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 
@@ -32,6 +36,49 @@ export const isNumericFeedbackScoreValid = (
   { min, max }: { min: number; max: number },
   value?: number | "",
 ) => isNumber(value) && value >= min && value <= max;
+
+export const validateFeedbackScoreDefinitionValue = (
+  definition: FeedbackDefinition,
+  numValue: number,
+  categoryName?: string,
+): { isValid: boolean; errorMessage?: string } => {
+  if (definition.type === FEEDBACK_DEFINITION_TYPE.numerical) {
+    const details = definition.details as { min: number; max: number };
+    if (!isNumericFeedbackScoreValid(details, numValue)) {
+      return {
+        isValid: false,
+        errorMessage: `Value must be between ${details.min} and ${details.max}`,
+      };
+    }
+  } else if (definition.type === FEEDBACK_DEFINITION_TYPE.categorical) {
+    const categories = definition.details?.categories || {};
+    if (
+      categoryName === undefined ||
+      categoryName === null ||
+      !Object.prototype.hasOwnProperty.call(categories, categoryName) ||
+      categories[categoryName] === null ||
+      categories[categoryName] === undefined ||
+      categories[categoryName] !== numValue
+    ) {
+      return {
+        isValid: false,
+        errorMessage: "Please select a valid category",
+      };
+    }
+  } else if (definition.type === FEEDBACK_DEFINITION_TYPE.boolean) {
+    const isTrue =
+      categoryName === definition.details.true_label && numValue === 1;
+    const isFalse =
+      categoryName === definition.details.false_label && numValue === 0;
+    if (!isTrue && !isFalse) {
+      return {
+        isValid: false,
+        errorMessage: "Please select a boolean option",
+      };
+    }
+  }
+  return { isValid: true };
+};
 
 export const traceExist = (item: ExperimentItem) =>
   item.output || item.input || item.feedback_scores;
