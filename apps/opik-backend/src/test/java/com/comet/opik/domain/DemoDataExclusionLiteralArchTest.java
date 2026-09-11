@@ -74,7 +74,7 @@ class DemoDataExclusionLiteralArchTest {
      * selection means it was renamed or removed and the rule guards nothing. Failing then is the point.
      */
     @ArchTest
-    static final ArchRule the_unscoped_demo_project_fetch_is_read_only_by_the_span_usage_paths = methods()
+    static final ArchRule the_unscoped_demo_project_fetch_is_called_only_by_the_span_usage_paths = methods()
             .that().areDeclaredIn(ProjectService.class)
             .and().haveName(UNSCOPED_DEMO_PROJECT_FETCH)
             .should().onlyBeCalled().byCodeUnitsThat(DescribedPredicate.describe(SpanService.class.getSimpleName(),

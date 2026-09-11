@@ -100,12 +100,18 @@ public interface TraceService {
 
     Mono<Boolean> validateTraceWorkspace(String workspaceId, Set<UUID> traceIds);
 
+    /**
+     * Previous-day trace counts per workspace, excluding activity in demo projects — including demo projects
+     * created after install, which earlier counted. {@link DemoDataExclusionUtils} carries the why.
+     */
     Mono<TraceCountResponse> countTracesPerWorkspace();
 
+    /** The same window and exclusion as {@link #countTracesPerWorkspace()}, broken down by user for the BI events. */
     Mono<BiInformationResponse> getTraceBIInformation();
 
     Mono<ProjectStats> getStats(TraceSearchCriteria searchCriteria);
 
+    /** Previous-day traces across every workspace, under the same exclusion as {@link #countTracesPerWorkspace()}. */
     Mono<Long> getDailyCreatedCount();
 
     Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
