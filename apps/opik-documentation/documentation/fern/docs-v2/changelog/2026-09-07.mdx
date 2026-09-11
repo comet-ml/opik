@@ -2,22 +2,11 @@
 
 Custom AI provider integrations only accepted a single static API key, so any provider that rotates or expires credentials — an enterprise gateway sitting behind OAuth2, for example — had to be re-configured by hand every time a key expired.
 
-A custom provider can now be configured with `auth_config` instead of a static `api_key`:
+The provider configuration dialog now has an **Authentication** mode switch: choose **Static API key**, or **OAuth2 client credentials** and enter the token URL plus the `client_id` and `client_secret` rows (add more rows, such as `scope` or `audience`, if your auth service needs them). This applies to custom providers and to Bedrock.
 
-```json
-{
-  "auth_config": {
-    "token_url": "https://provider.example.com/oauth/token",
-    "send_as": "form",
-    "credentials": [{ "key": "client_id", "value": "..." }, { "key": "client_secret", "value": "...", "secret": true }],
-    "token_field": "access_token",
-    "expires_field": "expires_in",
-    "fallback_ttl_seconds": 3600
-  }
-}
-```
+Opik fetches the access token, attaches it as a `Bearer` token to every model call, and refreshes it before it expires. A **Test connection** button runs the token fetch on the backend and reports the token lifetime before you save. Credential values with secret-like names lock automatically: Opik encrypts them at rest and never reads them back.
 
-Opik fetches and refreshes the token automatically, using `fallback_ttl_seconds` when a provider doesn't return an expiry. A new "test connection" action in the provider dialog verifies the token exchange before you save.
+👉 [OAuth2 Client Credentials Authentication](/administration/workspace-settings/ai_providers#oauth2-client-credentials-authentication)
 
 ## Fine-Grained Thinking Controls for Gemini Models
 
