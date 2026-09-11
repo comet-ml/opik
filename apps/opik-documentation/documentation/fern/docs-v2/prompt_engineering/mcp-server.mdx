@@ -300,15 +300,15 @@ client's MCP settings:
 
 ### Hosted server (Opik Cloud)
 
-The server URL, which is what every client below asks for:
+Every client below asks for this URL:
 
 ```text title="Remote MCP server URL"
 https://www.comet.com/opik/api/v1/mcp
 ```
 
 On a self-hosted deployment it is your own Opik API base plus `/v1/mcp`. The
-server connects over HTTP and signs in through the browser on first use, so no API
-key is stored in the client config.
+server connects over HTTP and signs in through the browser on first use, so your
+client stores no API key.
 
 <Tabs>
     <Tab title="Claude Code">
@@ -386,25 +386,25 @@ key is stored in the client config.
     </Tab>
     <Tab title="Claude.ai and Claude Desktop">
 
-    Claude calls a remote MCP server a **custom connector**, and adds it through
-    the UI rather than a config file.
+    Claude calls a remote MCP server a **custom connector** and adds it through the
+    UI rather than a config file.
 
     - On a Pro or Max plan: **Customize → Connectors → + → Add custom connector**,
-      then paste the URL above. Leave Advanced settings empty; Opik registers your
+      then paste the URL above. Leave Advanced settings empty. Opik registers your
       client automatically.
     - On Team or Enterprise, an owner adds it in
       **Organization settings → Connectors → Add → Custom → Web**.
 
-    Claude then opens the Opik sign-in in your browser. Until you finish it, the
-    connector lists only the `authenticate` and `complete_authentication` tools;
-    the rest appear once you are signed in.
+    Claude then opens the Opik sign-in in your browser. Until you finish signing in,
+    the connector lists only the `authenticate` and `complete_authentication`
+    tools. The rest appear afterwards.
 
     <Note>
     Claude reaches the server from Anthropic's cloud, not from your machine, so
     this works with Opik Cloud and with any self-hosted deployment that is
     reachable on the public internet. A deployment behind a VPN or on `localhost`
-    is not: use the [local server](#local-server-uvx) with a desktop client
-    instead.
+    is out of reach. Use the [local server](#local-server-uvx) with a desktop
+    client instead.
     </Note>
 
     </Tab>
@@ -629,11 +629,11 @@ client. Most problems end there.
     - Sessions expire. When that happens, the client asks you to sign in again.
   </Accordion>
   <Accordion title="The client lists only `authenticate` and `complete_authentication`">
-    You are connected but not signed in. Those two tools are the sign-in itself.
+    You are connected but not signed in. Those two tools are how you sign in.
 
     - Ask your assistant to authenticate, or run the `authenticate` tool, and
       finish in the browser tab it opens.
-    - In Claude Code, `/mcp` and then Authenticate does the same.
+    - In Claude Code, run `/mcp` and choose Authenticate.
     - The other tools appear once the sign-in completes.
   </Accordion>
   <Accordion title="Opik does not show up in the client, or shows no tools">
@@ -722,12 +722,12 @@ client. Most problems end there.
     data, not as instructions.
   </Accordion>
   <Accordion title="Can I use Opik from Claude.ai, Claude Desktop or Cowork?">
-    Yes, as a custom connector. Add
-    `https://www.comet.com/opik/api/v1/mcp` under **Customize → Connectors → Add
-    custom connector**, or under **Organization settings → Connectors** on Team and
-    Enterprise, then sign in when Claude opens the browser. Details and the
-    self-hosted caveat are in [Manual setup](#hosted-server-opik-cloud). This gives
-    you the MCP server; the skill pack is for coding agents only.
+    Yes, as a custom connector. Add `https://www.comet.com/opik/api/v1/mcp` under
+    **Customize → Connectors → Add custom connector**, or under
+    **Organization settings → Connectors** on Team and Enterprise. Claude opens the
+    Opik sign-in in your browser. This gives you the MCP server; the skill pack is
+    for coding agents only. [Manual setup](#hosted-server-opik-cloud) has the steps
+    and the self-hosted caveat.
   </Accordion>
   <Accordion title="My client is not in the list. Can I still use it?">
     Yes. The CLI covers Claude Code, Cursor, VS Code Copilot, Codex and opencode.
