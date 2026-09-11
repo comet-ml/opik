@@ -13,7 +13,6 @@ from typing import (
     Iterator,
     List,
     Optional,
-    Sequence,
     Set,
     TYPE_CHECKING,
     Tuple,
@@ -26,8 +25,6 @@ from opik.rest_api.types import (
     dataset_item_write as rest_dataset_item,
     dataset_public as rest_dataset_public,
     dataset_version_public,
-    evaluator_item_write as rest_evaluator_item,
-    execution_policy_write as rest_execution_policy,
 )
 from opik.message_processing.batching import sequence_splitter
 from opik import httpx_client, id_helpers, semantic_version
@@ -840,9 +837,7 @@ class Dataset(DatasetExportOperations):
         constructed directly from a REST client. That construction predates the streaming
         path and still works; it just does not get the single-pass serialisation.
         """
-        items = [
-            rest_dataset_item.DatasetItemWrite(**payload) for payload in payloads
-        ]
+        items = [rest_dataset_item.DatasetItemWrite(**payload) for payload in payloads]
         batches = sequence_splitter.split_into_batches(
             items,
             max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
@@ -1113,7 +1108,9 @@ class Dataset(DatasetExportOperations):
         self._hashes_synced = True
         LOGGER.debug("Finish hash sync in dataset")
 
-    def update(self, items: Iterable[Dict[str, Any]], deduplication: bool = True) -> None:
+    def update(
+        self, items: Iterable[Dict[str, Any]], deduplication: bool = True
+    ) -> None:
         """
         Update existing items in the dataset.
 

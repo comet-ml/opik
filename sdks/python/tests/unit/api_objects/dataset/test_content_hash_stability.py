@@ -22,17 +22,19 @@ ITEM_SHAPES = [
     pytest.param({"input": "plain"}, id="flat-string"),
     pytest.param({"b": 2, "a": 1}, id="keys-out-of-order"),
     pytest.param({"input": {"nested": {"deep": [1, 2, {"x": "y"}]}}}, id="nested"),
-    pytest.param({"input": "héllo wörld 🙂", "expected_output": "ünïcode"}, id="non-ascii"),
-    pytest.param({"input": None, "expected_output": 0, "flag": False}, id="falsy-values"),
+    pytest.param(
+        {"input": "héllo wörld 🙂", "expected_output": "ünïcode"}, id="non-ascii"
+    ),
+    pytest.param(
+        {"input": None, "expected_output": 0, "flag": False}, id="falsy-values"
+    ),
     pytest.param({"input": {"a": 1.5, "b": [True, None]}}, id="mixed-scalars"),
 ]
 
 
 def _legacy_digest(content: dict) -> str:
     """Exactly how the digest was produced before this change."""
-    return hashlib.sha256(
-        json.dumps(content, sort_keys=True).encode()
-    ).hexdigest()
+    return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
 
 
 @pytest.mark.parametrize("content", ITEM_SHAPES)

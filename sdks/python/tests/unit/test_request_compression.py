@@ -59,7 +59,9 @@ def test_build_request__lower_level_sends_more_bytes():
         client = httpx_client.OpikHttpxClient(
             compress_json_requests=True, compression_level=level
         )
-        return len(client.build_request("PUT", "http://testserver/x", json=payload).read())
+        return len(
+            client.build_request("PUT", "http://testserver/x", json=payload).read()
+        )
 
     assert body_size(1) > body_size(9)
 

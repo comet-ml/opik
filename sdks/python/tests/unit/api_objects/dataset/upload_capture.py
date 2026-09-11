@@ -68,7 +68,9 @@ class UploadCapture:
         return [item for batch in self.batches for item in batch]
 
 
-def make_dataset(dataset_cls: Any, rest_client: Any, capture: UploadCapture, **kwargs: Any):
+def make_dataset(
+    dataset_cls: Any, rest_client: Any, capture: UploadCapture, **kwargs: Any
+):
     """Build a Dataset wired to a capture instead of a real HTTP client."""
     params = {
         "name": "test_dataset",

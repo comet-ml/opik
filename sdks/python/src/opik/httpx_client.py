@@ -106,7 +106,9 @@ def send_prepared_json(
     same client the generated REST client sends through, so this does not depend on the
     generated client's internals.
     """
-    url = urllib.parse.urljoin(base_url if base_url.endswith("/") else base_url + "/", path)
+    url = urllib.parse.urljoin(
+        base_url if base_url.endswith("/") else base_url + "/", path
+    )
     return client.request(
         "PUT",
         url,

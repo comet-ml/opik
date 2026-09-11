@@ -57,7 +57,9 @@ def stream_from_jsonl_file(
         for line in file:
             json_object = line.strip()
             if json_object:  # Skip empty lines
-                yield _item_from_dict(json.loads(json_object), keys_mapping, ignore_keys)
+                yield _item_from_dict(
+                    json.loads(json_object), keys_mapping, ignore_keys
+                )
 
 
 def from_jsonl_file(

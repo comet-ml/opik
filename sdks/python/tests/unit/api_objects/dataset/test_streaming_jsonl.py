@@ -62,7 +62,9 @@ def test_from_jsonl_file__still_returns_a_list(tmp_path):
 
 def test_stream_from_jsonl_file__is_lazy(tmp_path):
     """Creating the iterator must not read the file."""
-    file_path = _write_jsonl(tmp_path / "items.jsonl", [{"input": i} for i in range(100)])
+    file_path = _write_jsonl(
+        tmp_path / "items.jsonl", [{"input": i} for i in range(100)]
+    )
 
     iterator = converters.stream_from_jsonl_file(file_path, {}, [])
     first = next(iterator)

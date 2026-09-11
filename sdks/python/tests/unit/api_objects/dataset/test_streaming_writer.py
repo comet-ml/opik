@@ -149,7 +149,10 @@ def test_add__not_serializable_with_orjson__raises_the_same_error():
 
 
 def test_select_dumps__orjson_disabled__falls_back_to_the_standard_library():
-    assert streaming_writer.select_dumps(use_orjson=False) is streaming_writer._dumps_stdlib
+    assert (
+        streaming_writer.select_dumps(use_orjson=False)
+        is streaming_writer._dumps_stdlib
+    )
 
 
 def test_dumps__orjson_and_stdlib__decode_to_the_same_value():

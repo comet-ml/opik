@@ -85,7 +85,9 @@ class StreamingBatchWriter:
         self._start_buffer()
 
     def _start_buffer(self) -> None:
-        self._compressor = zlib.compressobj(self._gzip_level, zlib.DEFLATED, _GZIP_WBITS)
+        self._compressor = zlib.compressobj(
+            self._gzip_level, zlib.DEFLATED, _GZIP_WBITS
+        )
         self._chunks = [self._compressor.compress(self._prefix)]
         self._logical_bytes = 0
         self._items = 0
