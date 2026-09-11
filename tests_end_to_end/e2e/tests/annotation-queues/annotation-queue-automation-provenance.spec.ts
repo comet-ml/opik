@@ -28,7 +28,17 @@ test.describe(
   () => {
     test(
       'A queue created with automation collects only matching traces and shows how each item arrived',
-      { tag: ['@cap:annotation-queues.create-queue'] },
+      // add-traces-to-queue alongside create-queue: the membership assertions
+      // below are not incidental to the create. This test asserts that the
+      // automation pulled the matching trace in and left the non-matching one
+      // out — the same guarantee the routing spec covers from the engine side,
+      // asserted here through the form that configured it.
+      {
+        tag: [
+          '@cap:annotation-queues.create-queue',
+          '@cap:annotation-queues.add-traces-to-queue',
+        ],
+      },
       async ({
         automationRoutingSeed,
         registerAnnotationQueueCleanup,
