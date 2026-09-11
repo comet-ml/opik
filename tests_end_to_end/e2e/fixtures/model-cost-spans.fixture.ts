@@ -223,10 +223,11 @@ const CHARACTER_PRICE_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
 ];
 
 /**
- * Twelve LLM spans: five whose model ids each exercise one step of server-side
- * price resolution (with the two ways it could go wrong), five that cover
- * reasoning-token billing over a single model, and two over a model priced per
- * input character rather than per token.
+ * Twelve LLM spans: five that exercise server-side price resolution from the
+ * model id — three ids that must resolve, covering four normalisation steps
+ * between them, and two controls for the two ways it could go wrong — five
+ * that cover reasoning-token billing over a single model, and two over a model
+ * priced per input character rather than per token.
  *
  * Costs are the shipped price table's own numbers at 1M prompt + 1M completion
  * tokens (`model_prices_and_context_window.json` / `model_prices_overrides.json`):

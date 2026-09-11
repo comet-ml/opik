@@ -117,10 +117,13 @@ test.describe('Thread duration — panel formatting', { tag: ['@t2-cuj', '@area:
     });
 
     await test.step('The unrounded remainder appears nowhere in the panel', async () => {
-      // The whole panel, not just the chip. The header tooltip is the static
-      // string "Thread duration" and never carries the value, but the panel
-      // renders per-turn durations through the same formatter, so a leak is
-      // worth ruling out everywhere it could surface rather than in one chip.
+      // Scoped to the whole panel rather than the chip, but only as a
+      // belt-and-braces guard: today the header chip is the panel's ONLY
+      // caller of formatDuration — `TraceMessages`/`TraceMessage` render no
+      // per-turn duration, and the header's tooltip is the static string
+      // "Thread duration" — so this currently overlaps the assertion above.
+      // It earns its keep against a second copy of the value arriving later
+      // (a per-turn duration, a hover card) with the rounding left off.
       await expect(
         panel.root,
         'the raw float remainder (15.300000000000182) must not reach any duration the panel renders',

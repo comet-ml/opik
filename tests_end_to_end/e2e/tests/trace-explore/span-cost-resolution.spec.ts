@@ -16,10 +16,11 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  *
  * The fixture logs twelve LLM spans with `usage` and **no** `total_cost`:
  *
- *  - Five for id normalisation. Three exercise a step each (provider-prefix
- *    strip, dot-normalising, compact-date strip, and an alias); two are controls
- *    whose eight trailing digits are not dates and must not be stripped onto
- *    another model's row.
+ *  - Five for id normalisation. Three carry ids that must resolve, covering
+ *    four steps between them (provider-prefix strip, dot-normalising,
+ *    compact-date strip, and an alias — the first id needs three of them at
+ *    once); two are controls whose eight trailing digits are not dates and
+ *    must not be stripped onto another model's row.
  *  - Five for reasoning tokens, all on one model, differing only in the
  *    reasoning count and the usage key it arrives under.
  *  - Two for a model priced per input character rather than per token
