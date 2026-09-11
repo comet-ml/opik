@@ -112,9 +112,7 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
           variant="link"
           size="2xs"
           asChild
-          // Explicit rgba: `white` is a bare var(--white) with no <alpha-value>,
-          // so bg-white/15 is never generated.
-          className="shrink-0 rounded text-white underline underline-offset-2 hover:bg-[rgba(255,255,255,0.18)] hover:text-white hover:underline focus-visible:ring-white active:bg-[rgba(255,255,255,0.28)]"
+          className="shrink-0 text-white underline underline-offset-2 hover:text-white focus-visible:ring-white"
         >
           <a
             href={buildDocsUrl(MCP_BANNER_DOCS_PATH)}
@@ -133,7 +131,7 @@ const McpAnnouncementBanner: React.FC<McpAnnouncementBannerProps> = ({
           size="icon-2xs"
           aria-label="Dismiss announcement"
           onClick={handleDismiss}
-          className="shrink-0 text-white hover:bg-[rgba(255,255,255,0.18)] focus-visible:ring-white active:bg-[rgba(255,255,255,0.28)]"
+          className="shrink-0 text-white focus-visible:ring-white"
         >
           <X />
         </Button>
