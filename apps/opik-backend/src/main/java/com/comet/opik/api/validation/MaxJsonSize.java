@@ -10,7 +10,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * The annotated {@code com.fasterxml.jackson.databind.JsonNode} must serialize to at most {@code value} UTF-8 bytes.
+ * The annotated {@code com.fasterxml.jackson.databind.JsonNode} or {@code java.util.Map} must serialize to at most
+ * {@code value} UTF-8 bytes.
  *
  * <p>
  * {@code null} elements are considered valid.
@@ -18,7 +19,7 @@ import java.lang.annotation.Target;
 @Documented
 @Target({ElementType.FIELD, ElementType.PARAMETER})
 @Retention(RetentionPolicy.RUNTIME)
-@Constraint(validatedBy = MaxJsonSizeValidator.class)
+@Constraint(validatedBy = {MaxJsonSizeValidator.class, MaxJsonSizeMapValidator.class})
 public @interface MaxJsonSize {
 
     String message() default "exceeds the maximum allowed size of {value} bytes";

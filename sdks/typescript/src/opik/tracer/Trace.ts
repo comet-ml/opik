@@ -32,6 +32,7 @@ export class Trace {
     categoryName?: string;
     value: number;
     reason?: string;
+    metadata?: Record<string, unknown>;
   }) => {
     if (!isTracingActive()) {
       return;

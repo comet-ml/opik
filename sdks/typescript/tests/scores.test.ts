@@ -94,4 +94,23 @@ describe("Feedback scores", () => {
     expect(createTracesFeedbackScoresSpy).toHaveBeenCalledTimes(1);
     expect(createSpansFeedbackScoresSpy).toHaveBeenCalledTimes(1);
   });
+
+  it("propagates metadata through trace.score to the batch API", async () => {
+    const trace = client.trace({ name: "test" });
+
+    trace.score({
+      name: "correctness",
+      value: 0.83,
+      metadata: { evaluator_revision: "rubric-v3" },
+    });
+
+    trace.end();
+    await client.flush();
+
+    expect(createTracesFeedbackScoresSpy).toHaveBeenCalledTimes(1);
+    const sentScores =
+      createTracesFeedbackScoresSpy.mock.calls[0][0].scores;
+    expect(sentScores).toHaveLength(1);
+    expect(sentScores[0].metadata).toEqual({ evaluator_revision: "rubric-v3" });
+  });
 });

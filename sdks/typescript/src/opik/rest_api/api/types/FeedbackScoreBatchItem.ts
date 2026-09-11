@@ -14,4 +14,5 @@ export interface FeedbackScoreBatchItem {
     author?: string;
     sourceQueueId?: string;
     id: string;
+    metadata?: OpikApi.JsonNode;
 }

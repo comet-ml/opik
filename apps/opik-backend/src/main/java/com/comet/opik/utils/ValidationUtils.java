@@ -42,6 +42,15 @@ public class ValidationUtils {
     public static final int SCALE = 9;
 
     /**
+     * Per-score cap on serialized feedback score metadata. Scores arrive in batches of up to 1000 (see
+     * {@code FeedbackScoreBatchContainer}) and every item is serialized individually by
+     * {@code FeedbackScoreDAO.bindParameters}, so an unbounded per-item map is multiplied by the batch size.
+     * 8 KiB leaves generous headroom for the intended evaluator provenance payloads while capping a full
+     * batch at roughly 8 MB.
+     */
+    public static final long MAX_FEEDBACK_SCORE_METADATA_SIZE_IN_BYTES = 8 * 1024L;
+
+    /**
      * We're using FixedString(36) to store UUIDs in Clickhouse. This isn't a nullable field, but it can be null under
      * certain circumstances, mostly during LEFT JOIN statements when there are no matching records from the table on
      * the right.

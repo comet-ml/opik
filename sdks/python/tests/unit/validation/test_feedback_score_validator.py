@@ -110,6 +110,24 @@ from opik.validation import feedback_score
             },
             False,
         ),
+        (
+            {
+                "id": "some-id",
+                "name": "toxicity",
+                "value": 0.5,
+                "metadata": {"evaluator_revision": "rubric-v3"},
+            },
+            True,
+        ),
+        (
+            {
+                "id": "some-id",
+                "name": "toxicity",
+                "value": 0.5,
+                "metadata": "not-a-dict",  # Metadata must be a dict
+            },
+            False,
+        ),
     ],
 )
 def test_feedback_score_validator(feedback_score_dict, is_valid):

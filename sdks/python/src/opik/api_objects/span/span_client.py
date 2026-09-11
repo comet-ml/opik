@@ -11,6 +11,7 @@ from opik.message_processing import messages, streamer
 from ..attachment import converters as attachment_converters
 
 from opik.types import (
+    BatchFeedbackScoreDict,
     DistributedTraceHeadersDict,
     ErrorInfoDict,
     LLMProvider,
@@ -292,6 +293,7 @@ class Span:
         value: float,
         category_name: Optional[str] = None,
         reason: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Log a feedback score for the span.
@@ -301,10 +303,27 @@ class Span:
             value: The value of the feedback score.
             category_name: The category name for the feedback score.
             reason: The reason for the feedback score.
+            metadata: Optional metadata persisted with the score (e.g. evaluator provenance).
 
         Returns:
             None
         """
+        score_dict: BatchFeedbackScoreDict = {
+            "id": self.id,
+            "name": name,
+            "value": value,
+            "category_name": category_name,
+            "reason": reason,
+            "metadata": metadata,
+        }
+
+        # Validate here rather than in the background streamer: the batch entrypoints
+        # already run this check, and an invalid payload that reaches jsonable_encoder
+        # fails outside the handled ApiError/ValidationError cases and silently drops
+        # the score.
+        if validation_helpers.validate_feedback_score(score_dict, LOGGER) is None:
+            return
+
         add_span_feedback_batch_message = messages.AddSpanFeedbackScoresBatchMessage(
             batch=[
                 messages.FeedbackScoreMessage(
@@ -315,6 +334,7 @@ class Span:
                     reason=reason,
                     source=constants.FEEDBACK_SCORE_SOURCE_SDK,
                     project_name=self._project_name,
+                    metadata=metadata,
                 )
             ],
         )
