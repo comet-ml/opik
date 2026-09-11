@@ -572,3 +572,28 @@ def test_insert__numeric_item_id__sent_as_a_string_on_both_paths():
 
     sent = mock_rest_client.datasets.create_or_update_dataset_items.call_args.kwargs
     assert sent["items"][0].id == "123", "The fallback must agree, not reject it"
+
+
+def test_insert_delete_reinsert__numeric_id__the_item_is_not_skipped():
+    """One identity per item: the dedup cache must key on what was actually sent.
+
+    A numeric id is sent as `"123"`, so deleting `"123"` -- the form the backend hands
+    back -- has to drop the hash cached for it, or the re-insert is silently deduplicated
+    away and the item never reaches the dataset again.
+    """
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+    item = {"id": 123, "input": {"k": "v"}}
+
+    dataset.insert([item])
+    assert len(capture.items) == 1
+
+    dataset.delete(["123"])
+    assert dataset._id_to_hash == {}, "The delete must drop the hash it cached"
+    assert dataset._hashes == set()
+
+    dataset.insert([item], deduplication=True)
+
+    assert len(capture.items) == 2, (
+        "The re-inserted item was dropped as a duplicate of one that no longer exists"
+    )

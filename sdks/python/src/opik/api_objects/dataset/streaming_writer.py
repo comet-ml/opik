@@ -22,7 +22,7 @@ import threading
 import time
 import uuid
 import zlib
-from typing import Any, Callable, Dict, List, Mapping, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional, overload
 
 import pydantic
 
@@ -318,7 +318,22 @@ class BoundedSendPool:
             raise self._error
 
 
-def _as_optional_str(value: Any) -> Optional[str]:
+@overload
+def canonical_id(value: None) -> None: ...
+
+
+@overload
+def canonical_id(value: Any) -> str: ...
+
+
+def canonical_id(value: Any) -> Optional[str]:
+    """The one form of an item identifier, for the wire and for anything keyed by it.
+
+    `DatasetItem` declares its identifiers `SkipValidation[str]` and so passes through
+    whatever it was given. Everything that has to agree on what an item *is* -- the request
+    body, and the caches keyed by id -- goes through here, so a number and its string form
+    cannot end up as two identities for one item.
+    """
     return value if value is None or isinstance(value, str) else str(value)
 
 
@@ -340,16 +355,16 @@ def item_payload(
     client omits fields that were never set while serialising explicit `None`s as null.
     Anything added here that the generated client does not send would change the request.
 
-    The three identifiers are forced to strings because `DatasetItem` declares them
-    `SkipValidation[str]` and so passes whatever it was given straight through. Serialising
-    one of those as a JSON number would put an id on the wire that the REST contract does
-    not allow, and it is the same conversion pydantic did for these fields before it
-    stopped coercing, so callers that have always passed a number keep working.
+    The three identifiers go through `canonical_id`, because `DatasetItem` passes whatever
+    it was given straight through. Serialising one of those as a JSON number would put an
+    id on the wire that the REST contract does not allow, and it is the same conversion
+    pydantic did for these fields before it stopped coercing, so callers that have always
+    passed a number keep working.
     """
     return {
-        "id": _as_optional_str(item_id),
-        "trace_id": _as_optional_str(trace_id),
-        "span_id": _as_optional_str(span_id),
+        "id": canonical_id(item_id),
+        "trace_id": canonical_id(trace_id),
+        "span_id": canonical_id(span_id),
         "source": source,
         "data": data,
         "description": description,

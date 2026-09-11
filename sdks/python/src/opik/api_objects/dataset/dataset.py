@@ -755,7 +755,9 @@ class Dataset(DatasetExportOperations):
                     )
                     continue
                 self._hashes.add(item_hash)
-                self._id_to_hash[item.id] = item_hash
+                # Keyed the way the item is sent, so a later delete by the id the backend
+                # returns finds the hash this pass cached.
+                self._id_to_hash[streaming_writer.canonical_id(item.id)] = item_hash
             yield item
 
     def _item_payload(self, item: dataset_item.DatasetItem) -> Dict[str, Any]:
@@ -978,7 +980,7 @@ class Dataset(DatasetExportOperations):
 
             deduplicated_items.append(item)
             self._hashes.add(item_hash)
-            self._id_to_hash[item.id] = item_hash
+            self._id_to_hash[streaming_writer.canonical_id(item.id)] = item_hash
 
         return deduplicated_items
 
@@ -1154,7 +1156,7 @@ class Dataset(DatasetExportOperations):
 
         for item in self.__internal_api__stream_items_as_dataclasses__():
             item_hash = item.content_hash()
-            self._id_to_hash[item.id] = item_hash  # type: ignore
+            self._id_to_hash[streaming_writer.canonical_id(item.id)] = item_hash
             self._hashes.add(item_hash)
 
         self._hashes_synced = True
@@ -1220,8 +1222,11 @@ class Dataset(DatasetExportOperations):
         Args:
             items_ids: List of item ids to delete.
         """
+        # Through the same canonicalisation the upload used, so an id given here in a
+        # different form than it was inserted in still matches the cached hash.
+        canonical_ids = [streaming_writer.canonical_id(id_) for id_ in items_ids]
         batches = sequence_splitter.split_into_batches(
-            items_ids, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
+            canonical_ids, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
         )
 
         batch_group_id = id_helpers.generate_id()
