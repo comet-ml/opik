@@ -66,6 +66,30 @@ def test_build_request__lower_level_sends_more_bytes():
     assert body_size(1) > body_size(9)
 
 
+@pytest.mark.parametrize(
+    "padding, compressed",
+    [(0, False), (300, True)],
+)
+def test_build_request__entity_size_floor__matches_the_backend(padding, compressed):
+    """The backend will not gzip a response below 256 bytes; requests now agree.
+
+    Below the floor gzip can leave a body larger than it started, which is the reason
+    Dropwizard has one.
+    """
+    client = httpx_client.OpikHttpxClient(compress_json_requests=True)
+    payload = {"name": "accuracy", "value": 0.91, "pad": "x" * padding}
+    assert (
+        len(httpx_client.jsonlib.dumps(payload).encode("utf-8"))
+        >= httpx_client.MIN_COMPRESSED_ENTITY_BYTES
+    ) is compressed
+
+    request = client.build_request("POST", "http://testserver/x", json=payload)
+
+    assert ("Content-Encoding" in request.headers) is compressed
+    if not compressed:
+        assert httpx_client.jsonlib.loads(request.read()) == payload
+
+
 def test_build_request__compression_disabled__body_is_plain_json():
     client = httpx_client.OpikHttpxClient(compress_json_requests=False)
     request = client.build_request("PUT", "http://testserver/x", json={"a": 1})

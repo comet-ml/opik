@@ -2,6 +2,8 @@
 
 import json
 import tracemalloc
+
+import pytest
 from unittest.mock import Mock
 
 from opik.api_objects.dataset import converters
@@ -92,6 +94,32 @@ def test_stream_from_jsonl_file__peak_memory__flat_in_file_size(tmp_path):
     assert large < small * 2, (
         f"Streaming peak grew with file size: {small} -> {large} for 4x the rows"
     )
+
+
+@pytest.mark.parametrize(
+    "validate_before_upload, expected_requests",
+    [(True, 0), (False, 1)],
+)
+def test_read_jsonl_from_file__bad_id__flag_decides_when_it_is_caught(
+    tmp_path, validate_before_upload, expected_requests
+):
+    """The flag moves the check, it does not remove it: both arms raise, and only the
+    pre-pass arm raises before anything is persisted."""
+    rows = [
+        {"id": "0192f1a0-0000-7000-8000-00000000000a", "input": i} for i in range(1200)
+    ]
+    rows.append({"id": "not-a-uuid", "input": "bad"})
+    file_path = _write_jsonl(tmp_path / "items.jsonl", rows)
+
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    with pytest.raises(ValueError, match="not a UUID"):
+        dataset.read_jsonl_from_file(
+            file_path, validate_before_upload=validate_before_upload
+        )
+
+    assert capture.request_count == expected_requests
 
 
 def test_read_jsonl_from_file__uploads_every_item(tmp_path):

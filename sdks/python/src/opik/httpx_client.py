@@ -29,6 +29,11 @@ DEFAULT_COMPRESSION_LEVEL = 6
 # A gzip stream starts with these two bytes; JSON never does.
 _GZIP_MAGIC = b"\x1f\x8b"
 
+# What the backend uses for the same decision: Dropwizard's GzipHandlerFactory refuses to
+# compress an entity below this and Opik runs it at its default. Below it gzip's framing
+# can leave a body bigger than it started -- an 81-byte feedback score comes out at 93.
+MIN_COMPRESSED_ENTITY_BYTES = 256
+
 
 def get(
     workspace: Optional[str],
@@ -192,13 +197,20 @@ class OpikHttpxClient(httpx.Client):
         # by httpx.Client.request() as well as by httpx.Client.stream() (both used in the OPIK)
         if self.compress_json_requests:
             if method in ("POST", "PUT", "PATCH") and json is not None:
+                # Serialised here whatever the size, so only *whether it is gzipped*
+                # turns on the size. Handing a small body back to httpx instead would
+                # re-encode it with different settings -- compact separators, and
+                # `allow_nan=False`, which raises on a NaN this encoder writes -- and a
+                # body would then be accepted or rejected according to its length.
                 json_data = jsonlib.dumps(json).encode("utf-8")
-                content = gzip.compress(json_data, self.compression_level)
+                content = json_data
                 json = None
                 if headers is None:
                     headers = {}
+                if len(json_data) >= MIN_COMPRESSED_ENTITY_BYTES:
+                    content = gzip.compress(json_data, self.compression_level)
+                    headers["Content-Encoding"] = "gzip"
                 headers["Content-Length"] = str(len(content))
-                headers["Content-Encoding"] = "gzip"
                 if "content-type" not in headers:
                     # to avoid having it in headers two times with different cases in keys (e.g., streaming operations)
                     headers["Content-Type"] = "application/json;charset=utf-8"

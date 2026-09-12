@@ -2,6 +2,7 @@ import abc
 import collections.abc
 import datetime
 import logging
+import os
 
 import httpx
 import functools
@@ -742,9 +743,11 @@ class Dataset(DatasetExportOperations):
                     item_hash = item.content_hash()
                 except (TypeError, ValueError) as exception:
                     # Hashing serialises too, so it reaches a bad value before the writer
-                    # does. Raise the same error either way, so the failure does not
-                    # depend on whether deduplication happens to be enabled. `ValueError`
-                    # is how `json.dumps` reports a circular reference.
+                    # does, and raises the writer's error rather than a bare `TypeError`
+                    # from `json.dumps`. `ValueError` is how that reports a circular
+                    # reference. It does not make the two settings agree everywhere:
+                    # hashing sorts keys, so an item with keys of mixed type still fails
+                    # here and still uploads with `deduplication=False`.
                     raise streaming_writer.ItemNotSerializableError(
                         f"Dataset item is not JSON-serializable: {exception}"
                     ) from exception
@@ -1133,18 +1136,19 @@ class Dataset(DatasetExportOperations):
                 found when its item is reached, and the items before it stay persisted.
         """
 
-        def require_id(index: int, item: Dict[str, Any]) -> None:
+        def require_id(index: int, item: Dict[str, Any], consequence: str) -> None:
             if "id" not in item:
                 raise exceptions.DatasetItemUpdateOperationRequiresItemId(
-                    f"Missing id for dataset item at index {index}: {item}. "
-                    "Items before it may already have been persisted."
+                    f"Missing id for dataset item at index {index}: {item}. {consequence}"
                 )
 
         def checked(
             source: Iterable[Dict[str, Any]],
         ) -> Iterator[Dict[str, Any]]:
             for index, item in enumerate(source):
-                require_id(index, item)
+                require_id(
+                    index, item, "Items before it may already have been persisted."
+                )
                 yield item
 
         if isinstance(items, collections.abc.Sequence):
@@ -1152,7 +1156,7 @@ class Dataset(DatasetExportOperations):
             # atomicity `update` had before it streamed is kept where it is still
             # possible. A generator cannot be scanned without consuming it.
             for index, item in enumerate(items):
-                require_id(index, item)
+                require_id(index, item, "Nothing has been sent.")
             self.insert(items, deduplication=deduplication)
         else:
             self.insert(checked(items), deduplication=deduplication)
@@ -1361,13 +1365,21 @@ class Dataset(DatasetExportOperations):
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
         deduplication: bool = True,
+        validate_before_upload: bool = True,
     ) -> None:
         """
         Read JSONL from a file and insert it into the dataset.
 
         The file is parsed one line at a time and uploaded as it is read, so a file
-        larger than memory can be inserted. It is read twice: once to check every line
-        before anything is sent, once to upload.
+        larger than memory can be inserted whichever way ``validate_before_upload`` is
+        set: neither the file nor the items it holds are retained. Deduplication is the
+        exception and is unchanged -- with ``deduplication=True`` a digest and an id per
+        item are kept for the life of the ``Dataset``, around 0.3 KB each.
+
+        The file is read from the start twice when ``validate_before_upload`` is on, so
+        it has to be re-readable. A path that cannot be re-read -- a pipe or a character
+        device -- is uploaded in a single pass instead, and a warning says so, rather
+        than validating the stream and then finding nothing left to upload.
 
         Args:
             file_path: Path to the JSONL file
@@ -1377,13 +1389,22 @@ class Dataset(DatasetExportOperations):
                 construction - pass them as ignore_keys argument
             deduplication: Whether to skip items whose content already exists in
                 the dataset. See :meth:`insert` for details.
+            validate_before_upload: When the file is checked, not whether. Every item
+                is validated either way. ``True`` (the default) reads the file once
+                first, so a bad line raises before any request -- the check
+                :meth:`insert` runs on a list and cannot run on a generator -- at the
+                cost of a second parse, about 17% of wall time on a 228 MiB file and no
+                memory. ``False`` uploads in a single pass and validates each item as it
+                is sent, so a bad line raises when it is reached, with the items before
+                it persisted and no rollback.
 
         Raises:
             ValueError: If an item's ``id``, ``trace_id`` or ``span_id`` is not a UUID.
-                Raised before the first request, with the item's line position. A
-                malformed line, or a value pydantic rejects, is raised there too. A value
-                that cannot be serialised is still found when its item is reached, as it
-                is for a list.
+                With ``validate_before_upload`` it names the item's position among the
+                items read -- blank lines are skipped, so that is not a line number --
+                and nothing has been sent; a malformed line, or a value pydantic
+                rejects, is raised there too. A value that cannot be serialised is found when its
+                item is reached either way, as it is for a list.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
@@ -1393,17 +1414,26 @@ class Dataset(DatasetExportOperations):
                 file_path, keys_mapping, ignore_keys
             )
 
-        # A file can be read twice, so it gets the check a list gets and a generator
-        # cannot: one pass that parses every line and builds every item, keeping none of
-        # them, before a single request goes out. Without it a file would be the one
-        # input that could be validated up front and was not. It costs a second parse of
-        # the file and no retention -- unlike validating by materialising the items,
-        # which is ~1.3 KB each held until the upload ends.
-        for index, item in enumerate(items()):
-            for field in ("id", "trace_id", "span_id"):
-                streaming_writer.validate_identifier(
-                    getattr(item, field, None), field, index
-                )
+        if validate_before_upload and not os.path.isfile(file_path):
+            # Re-opening a pipe lands at EOF, so the check would pass over the whole
+            # stream and the upload would then send nothing at all and return happily.
+            LOGGER.warning(
+                "%s cannot be read twice, so its items are validated as they are sent "
+                "rather than before the first request.",
+                file_path,
+            )
+            validate_before_upload = False
+
+        if validate_before_upload:
+            # A file can be read twice, so it gets the check a list gets and a generator
+            # cannot: one pass that parses every line and builds every item, keeping
+            # none of them. Validating by materialising the items instead would hold
+            # ~1.3 KB each until the upload ends; this holds one line.
+            for index, item in enumerate(items()):
+                for field in ("id", "trace_id", "span_id"):
+                    streaming_writer.validate_identifier(
+                        getattr(item, field, None), field, index
+                    )
 
         self.insert(items(), deduplication=deduplication)
 

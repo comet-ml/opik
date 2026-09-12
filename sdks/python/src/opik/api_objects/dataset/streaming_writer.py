@@ -201,9 +201,14 @@ class StreamingBatchWriter:
         ):
             self.flush()
 
-        separator = b"" if self._items == 0 else b","
-        self._chunks.append(self._encode(separator + payload))
-        self._logical_bytes += len(payload) + len(separator)
+        # The comma goes into the stream on its own rather than being prepended to the
+        # payload: `b"," + payload` would copy the whole row to add one byte, which at
+        # this row size is a fresh buffer per item for nothing. Same bytes either way.
+        if self._items > 0:
+            self._chunks.append(self._encode(b","))
+            self._logical_bytes += 1
+        self._chunks.append(self._encode(payload))
+        self._logical_bytes += len(payload)
         self._items += 1
 
         if self._should_flush():

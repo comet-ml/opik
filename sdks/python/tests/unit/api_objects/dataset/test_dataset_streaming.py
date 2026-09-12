@@ -184,20 +184,31 @@ def test_insert__generator_items_are_not_kept_alive():
 # --------------------------------------------------------------------------- #
 # validation that changed
 # --------------------------------------------------------------------------- #
-def test_update__item_without_id__raises_with_the_index():
+@pytest.mark.parametrize("as_generator", [False, True])
+def test_update__item_without_id__raises_with_the_index(as_generator):
+    """The index is named either way; what differs is what the message can promise.
+
+    A list is scanned before anything is sent, so it can say so. A generator cannot be
+    scanned without consuming it, so earlier items may already be persisted by then.
+    """
     capture = UploadCapture()
     dataset = make_dataset(Dataset, Mock(), capture)
+    items = [{"id": "0192f1a0-0000-7000-8000-00000000000a", "input": 1}, {"input": 2}]
 
     with pytest.raises(exceptions.DatasetItemUpdateOperationRequiresItemId) as exc_info:
-        dataset.update(
-            [{"id": "0192f1a0-0000-7000-8000-00000000000a", "input": 1}, {"input": 2}]
-        )
+        dataset.update(iter(items) if as_generator else items)
 
     message = str(exc_info.value)
     assert "index 1" in message, "The failing item's position must be named"
-    assert "persisted" in message, (
-        "The message must warn that earlier items may already be persisted"
-    )
+    if as_generator:
+        assert "persisted" in message, (
+            "A streamed input must warn that earlier items may already be persisted"
+        )
+    else:
+        assert "Nothing has been sent" in message, (
+            "A list is scanned up front, so the message must not imply otherwise"
+        )
+        assert capture.request_count == 0, "A list must not be partly uploaded"
 
 
 def test_insert__value_not_json_serializable__raises_explicitly():
