@@ -1389,14 +1389,15 @@ class Dataset(DatasetExportOperations):
                 construction - pass them as ignore_keys argument
             deduplication: Whether to skip items whose content already exists in
                 the dataset. See :meth:`insert` for details.
-            validate_before_upload: When the file is checked, not whether. Every item
-                is validated either way. ``True`` (the default) reads the file once
-                first, so a bad line raises before any request -- the check
-                :meth:`insert` runs on a list and cannot run on a generator -- at the
-                cost of a second parse, about 17% of wall time on a 228 MiB file and no
-                memory. ``False`` uploads in a single pass and validates each item as it
-                is sent, so a bad line raises when it is reached, with the items before
-                it persisted and no rollback.
+            validate_before_upload: Whether the file is checked before the upload
+                starts, rather than as it goes. Every item is validated either way, so
+                this decides when a bad one is reported, not whether it is. ``True``
+                (the default) reads the file once first, so a bad line raises before any
+                request -- the check :meth:`insert` runs on a list and cannot run on a
+                generator -- at the cost of parsing the file twice and no extra memory.
+                ``False`` uploads in a single pass and validates each item as it is
+                sent, so a bad line raises when it is reached, with the items before it
+                persisted and no rollback.
 
         Raises:
             ValueError: If an item's ``id``, ``trace_id`` or ``span_id`` is not a UUID.
@@ -1429,11 +1430,27 @@ class Dataset(DatasetExportOperations):
             # cannot: one pass that parses every line and builds every item, keeping
             # none of them. Validating by materialising the items instead would hold
             # ~1.3 KB each until the upload ends; this holds one line.
+            before = os.stat(file_path)
             for index, item in enumerate(items()):
                 for field in ("id", "trace_id", "span_id"):
                     streaming_writer.validate_identifier(
                         getattr(item, field, None), field, index
                     )
+            # The upload re-opens the path, so a file rewritten in between would send
+            # rows the check never saw while the caller was told they were checked.
+            # Size and mtime, not a digest: a third pass over the file to hash it would
+            # cost more than the check itself, and this catches an edit rather than an
+            # adversary.
+            after = os.stat(file_path)
+            if (before.st_size, before.st_mtime_ns) != (
+                after.st_size,
+                after.st_mtime_ns,
+            ):
+                raise ValueError(
+                    f"{file_path} changed while it was being validated, so nothing was "
+                    f"uploaded. Retry, or pass validate_before_upload=False to upload "
+                    f"in a single pass."
+                )
 
         self.insert(items(), deduplication=deduplication)
 

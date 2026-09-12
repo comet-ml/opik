@@ -205,13 +205,22 @@ class OpikHttpxClient(httpx.Client):
                 json_data = jsonlib.dumps(json).encode("utf-8")
                 content = json_data
                 json = None
-                if headers is None:
-                    headers = {}
+                # Copied rather than mutated: the caller's dict is not ours to edit.
+                headers = {} if headers is None else dict(headers)
                 if len(json_data) >= MIN_COMPRESSED_ENTITY_BYTES:
                     content = gzip.compress(json_data, self.compression_level)
                     headers["Content-Encoding"] = "gzip"
+                else:
+                    # A caller's gzip label would otherwise outlive the body it described
+                    # and the server would try to inflate plain JSON. Only gzip is
+                    # dropped; any other encoding the caller set is theirs to keep.
+                    for name in [
+                        key for key in headers if key.lower() == "content-encoding"
+                    ]:
+                        if str(headers[name]).lower() == "gzip":
+                            del headers[name]
                 headers["Content-Length"] = str(len(content))
-                if "content-type" not in headers:
+                if not any(key.lower() == "content-type" for key in headers):
                     # to avoid having it in headers two times with different cases in keys (e.g., streaming operations)
                     headers["Content-Type"] = "application/json;charset=utf-8"
 
