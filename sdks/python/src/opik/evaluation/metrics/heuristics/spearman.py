@@ -36,7 +36,7 @@ class SpearmanRanking(BaseMetric):
         ...     reference=["a", "b", "c"],
         ... )
         >>> round(result.metadata["rho"], 2)  # doctest: +SKIP
-        -0.5
+        0.5
     """
 
     def __init__(
@@ -62,6 +62,8 @@ class SpearmanRanking(BaseMetric):
                 "Rankings cannot be empty for Spearman correlation."
             )
 
+        if len(set(output)) != len(output) or len(set(reference)) != len(reference):
+            raise MetricComputationError("Rankings must not contain duplicate items.")
         ref_ranks = {item: idx for idx, item in enumerate(reference)}
         if set(output) != set(reference):
             raise MetricComputationError("Rankings must contain the same items.")
