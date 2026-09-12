@@ -4,6 +4,7 @@ import {
   getRoutableProviderModelValue,
   getOpenAIReasoningEffortOptions,
   getThinkingLevelOptions,
+  isReasoningModel,
   sanitizeConfigForRequest,
   supportsGeminiThinkingLevel,
   supportsOpenAIReasoningEffort,
@@ -11,6 +12,7 @@ import {
   supportsVertexAIThinkingLevel,
   updateProviderConfig,
 } from "@/lib/modelUtils";
+import { getProviderFromModel } from "@/lib/provider";
 import {
   COMPOSED_PROVIDER_TYPE,
   GeminiThinkingLevel,
@@ -22,6 +24,7 @@ import {
 
 const ANTHROPIC = PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE;
 const OPEN_AI = PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE;
+const REQUESTY = PROVIDER_TYPE.REQUESTY as COMPOSED_PROVIDER_TYPE;
 
 describe("getRoutableProviderModelValue", () => {
   it("qualifies bare Vertex AI Gemini ids", () => {
@@ -537,6 +540,165 @@ describe("sanitizeConfigForRequest", () => {
       topP: 0.9,
     });
     expect(result.topP).toBe(0.9);
+  });
+});
+
+// Requesty is an OpenAI-compatible router served by the OpenAI client on the backend. Its
+// `requesty/openai/*` ids reach OpenAI unchanged, so they must follow the same reasoning rules as
+// the bare OpenAI ids, while the wire model id keeps its `requesty/` prefix.
+describe("Requesty models", () => {
+  it("resolves to the Requesty provider from the static registry seed", () => {
+    expect(
+      getProviderFromModel(PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5),
+    ).toBe(PROVIDER_TYPE.REQUESTY);
+    expect(
+      getProviderFromModel(
+        PROVIDER_MODEL_TYPE.REQUESTY_ANTHROPIC_CLAUDE_SONNET_4_5,
+      ),
+    ).toBe(PROVIDER_TYPE.REQUESTY);
+  });
+
+  it("treats requesty/openai/gpt-5 as a reasoning model with the gpt-5 effort options", () => {
+    expect(isReasoningModel(PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5)).toBe(
+      true,
+    );
+    expect(
+      supportsOpenAIReasoningEffort(PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5),
+    ).toBe(true);
+    expect(
+      getOpenAIReasoningEffortOptions(
+        PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5,
+      ).map((o) => o.value),
+    ).toEqual(
+      getOpenAIReasoningEffortOptions(PROVIDER_MODEL_TYPE.GPT_5).map(
+        (o) => o.value,
+      ),
+    );
+  });
+
+  it("does not treat requesty/openai/gpt-4o as a reasoning model", () => {
+    expect(isReasoningModel(PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4O)).toBe(
+      false,
+    );
+    expect(
+      supportsOpenAIReasoningEffort(PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4O),
+    ).toBe(false);
+    expect(
+      getOpenAIReasoningEffortOptions(
+        PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4O,
+      ),
+    ).toEqual([]);
+  });
+
+  it("offers no OpenAI reasoning effort for Requesty models of other vendors", () => {
+    expect(
+      isReasoningModel(
+        PROVIDER_MODEL_TYPE.REQUESTY_ANTHROPIC_CLAUDE_SONNET_4_5,
+      ),
+    ).toBe(false);
+    expect(
+      supportsOpenAIReasoningEffort(
+        PROVIDER_MODEL_TYPE.REQUESTY_ANTHROPIC_CLAUDE_SONNET_4_5,
+      ),
+    ).toBe(false);
+    expect(
+      getOpenAIReasoningEffortOptions(
+        PROVIDER_MODEL_TYPE.REQUESTY_ANTHROPIC_CLAUDE_SONNET_4_5,
+      ),
+    ).toEqual([]);
+  });
+
+  it("coerces temperature to 1 and drops topP when switching into requesty/openai/gpt-5", () => {
+    const config: LLMOpenAIConfigsType = {
+      temperature: 0,
+      maxCompletionTokens: 4000,
+      topP: 0.9,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5,
+      provider: REQUESTY,
+    });
+    expect(result?.temperature).toBe(1);
+    expect(result?.topP).toBeUndefined();
+  });
+
+  it("coerces an invalid reasoningEffort to high for requesty/openai/gpt-5", () => {
+    const config: LLMOpenAIConfigsType = {
+      temperature: 1,
+      maxCompletionTokens: 4000,
+      topP: 1,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      reasoningEffort: "xhigh", // gpt-5 does not accept xhigh
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5,
+      provider: REQUESTY,
+    });
+    expect(result?.reasoningEffort).toBe("high");
+  });
+
+  it("leaves a requesty/openai/gpt-4o config alone in the reconciler", () => {
+    const config: LLMOpenAIConfigsType = {
+      temperature: 0.7,
+      maxCompletionTokens: 4000,
+      topP: 0.9,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4O,
+      provider: REQUESTY,
+    });
+    expect(result).toBe(config);
+  });
+
+  it("strips an invalid reasoningEffort and topP from a requesty/openai/gpt-5 request", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5,
+      {
+        temperature: 1,
+        topP: 0.9,
+        reasoningEffort: "xhigh",
+      },
+    );
+    expect(result.topP).toBeUndefined();
+    expect(result.reasoningEffort).toBeUndefined();
+    expect(result.temperature).toBe(1);
+  });
+
+  it("keeps a valid reasoningEffort for a requesty/openai/gpt-5 request", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5,
+      { reasoningEffort: "minimal" },
+    );
+    expect(result.reasoningEffort).toBe("minimal");
+  });
+
+  it("leaves a requesty/openai/gpt-4o request alone apart from dropping reasoningEffort", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4O,
+      {
+        temperature: 0.7,
+        topP: 0.9,
+        reasoningEffort: "high",
+      },
+    );
+    expect(result.temperature).toBe(0.7);
+    expect(result.topP).toBe(0.9);
+    expect(result.reasoningEffort).toBeUndefined();
+  });
+
+  it("keeps sampling params for a requesty/openai/gpt-4o request", () => {
+    const configs = { temperature: 0.7, topP: 0.9 };
+    expect(
+      sanitizeConfigForRequest(
+        PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4O,
+        configs,
+      ),
+    ).toEqual(configs);
   });
 });
 
