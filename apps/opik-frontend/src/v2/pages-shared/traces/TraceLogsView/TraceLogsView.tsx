@@ -10,7 +10,6 @@ import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
   ColumnSort,
-  RowSelectionState,
 } from "@tanstack/react-table";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
@@ -50,7 +49,11 @@ import {
   LOGS_SOURCE,
   TRACE_VISIBILITY_MODE,
 } from "@/types/traces";
-import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  migrateSelectedColumns,
+} from "@/lib/table";
+import useRetainedRowSelection from "@/hooks/useRetainedRowSelection";
 import { getJSONPaths, cn } from "@/lib/utils";
 import {
   generateSelectColumDef,
@@ -606,8 +609,6 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     queryParamConfig: JsonParam,
   });
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storagePrefix}${SELECTED_COLUMNS_KEY_V2_SUFFIX}`,
     {
@@ -826,9 +827,19 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     }) as ColumnData<BaseTraceData>[];
   }, [dynamicMetadataColumns]);
 
-  const selectedRows: Array<Trace> = useMemo(() => {
-    return rows.filter((row) => rowSelection[row.id]);
-  }, [rowSelection, rows]);
+  const { rowSelection, setRowSelection, selectedRows, clearRowSelection } =
+    useRetainedRowSelection<Trace>({
+      rows,
+      scope: {
+        projectId,
+        search: trimmedSearch,
+        filters: effectiveFilters,
+        intervalStart,
+        intervalEnd,
+        logsSource,
+        visibilityMode: viewConfig.visibilityMode,
+      },
+    });
 
   const getDataForExport = useCallback(async (): Promise<Array<Trace>> => {
     const result = await refetchExportData();
@@ -1024,7 +1035,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
   const selectionBar = (
     <SelectionActionBar
       selectedCount={selectedRows.length}
-      onDeselectAll={() => setRowSelection({})}
+      onDeselectAll={clearRowSelection}
     >
       <TracesActionsPanel
         projectId={projectId}
@@ -1036,6 +1047,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
         hideEvaluate
         buttonVariant="ghostInverted"
         buttonSize="2xs"
+        onAfterDelete={clearRowSelection}
       />
     </SelectionActionBar>
   );

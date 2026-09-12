@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Tag, Trash } from "lucide-react";
+import { Tag, Trash, Pencil } from "lucide-react";
 import slugify from "slugify";
 import { cn } from "@/lib/utils";
 import { Button, ButtonProps } from "@/ui/button";
@@ -11,6 +11,7 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useTracesBatchDeleteMutation from "@/api/traces/useTraceBatchDeleteMutation";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
+import AnnotateTracesOrSpansDialog from "@/v2/pages-shared/traces/AnnotateTracesOrSpansDialog/AnnotateTracesOrSpansDialog";
 import AddTagDialog from "@/v2/pages-shared/traces/AddTagDialog/AddTagDialog";
 import EvaluateButton from "@/v2/pages-shared/automations/EvaluateButton/EvaluateButton";
 import RunEvaluationDialog from "@/v2/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
@@ -46,6 +47,8 @@ type TracesActionsPanelProps = {
   hideEvaluate?: boolean;
   buttonVariant?: "outline" | "ghost" | "ghostInverted";
   buttonSize?: ButtonProps["size"];
+  /** Clears retained selection after bulk delete so deleted IDs cannot remain targets. */
+  onAfterDelete?: () => void;
 };
 
 const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
@@ -58,6 +61,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   hideEvaluate = false,
   buttonVariant = "outline",
   buttonSize = "sm",
+  onAfterDelete,
 }) => {
   const { iconButtonSize, leadIconClassName } =
     (buttonSize && ACTIONS_BUTTON_STYLE_BY_SIZE[buttonSize]) ??
@@ -70,7 +74,11 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const {
-    permissions: { canDeleteTraces, canLogTraceSpanThread },
+    permissions: {
+      canDeleteTraces,
+      canLogTraceSpanThread,
+      canAnnotateTraceSpanThread,
+    },
   } = usePermissions();
 
   const showEvaluate =
@@ -87,11 +95,16 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   });
 
   const deleteTracesHandler = useCallback(() => {
-    mutate({
-      projectId,
-      ids: selectedRows.map((row) => row.id),
-    });
-  }, [projectId, selectedRows, mutate]);
+    mutate(
+      {
+        projectId,
+        ids: selectedRows.map((row) => row.id),
+      },
+      {
+        onSuccess: () => onAfterDelete?.(),
+      },
+    );
+  }, [projectId, selectedRows, mutate, onAfterDelete]);
 
   const mapRowData = useCallback(async () => {
     const rows = await getDataForExport();
@@ -131,6 +144,15 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           type={type}
         />
       )}
+      {canAnnotateTraceSpanThread && (
+        <AnnotateTracesOrSpansDialog
+          key={`annotate-${resetKeyRef.current}`}
+          rows={selectedRows}
+          open={open === 5}
+          setOpen={setOpen}
+          type={type}
+        />
+      )}
       {enableEvaluate && (
         <RunEvaluationDialog
           key={`evaluation-${resetKeyRef.current}`}
@@ -166,6 +188,20 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
             <span>Manage tags</span>
           </Button>
         </TooltipWrapper>
+      )}
+      {canAnnotateTraceSpanThread && (
+        <Button
+          variant={buttonVariant}
+          size={buttonSize}
+          disabled={disabled}
+          onClick={() => {
+            setOpen(5);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+        >
+          <Pencil className={leadIconClassName} />
+          <span>Annotate</span>
+        </Button>
       )}
       {enableEvaluate && (
         <EvaluateButton

@@ -126,7 +126,11 @@ export const setExperimentsCompareCache = async (
 
   queryClient.setQueryData(
     queryKey,
-    (originalData: UseCompareExperimentsListResponse) => {
+    (originalData: UseCompareExperimentsListResponse | undefined) => {
+      if (!originalData || !Array.isArray(originalData.content)) {
+        return originalData;
+      }
+
       return {
         ...originalData,
         content: originalData.content.map((experimentsCompare) => {
@@ -150,6 +154,44 @@ export const setExperimentsCompareCache = async (
   );
 };
 
+type FeedbackScoresListRow = {
+  id: string;
+  feedback_scores?: TraceFeedbackScore[];
+};
+
+type FeedbackScoresListResponse<T extends FeedbackScoresListRow> = {
+  content: T[];
+};
+
+/**
+ * Shared guarded content.map updater for list caches (traces/spans).
+ * Query lookup stays in each caller; this only updates matching row scores.
+ */
+const updateFeedbackScoresListCacheData = <T extends FeedbackScoresListRow>(
+  originalData: FeedbackScoresListResponse<T> | undefined,
+  rowId: string,
+  mutate: (
+    feedbackScores?: TraceFeedbackScore[],
+  ) => TraceFeedbackScore[] | undefined,
+): FeedbackScoresListResponse<T> | undefined => {
+  if (!originalData || !Array.isArray(originalData.content)) {
+    return originalData;
+  }
+
+  return {
+    ...originalData,
+    content: originalData.content.map((row) => {
+      if (row.id === rowId) {
+        return {
+          ...row,
+          feedback_scores: mutate(row.feedback_scores),
+        };
+      }
+      return row;
+    }),
+  };
+};
+
 export const setTracesCache = async (
   queryClient: QueryClient,
   params: { traceId: string },
@@ -166,27 +208,25 @@ export const setTracesCache = async (
       queryKey: [TRACES_KEY],
     }) ?? {};
 
-  query.map(async ({ queryKey }) => {
-    await queryClient.cancelQueries({ queryKey });
+  await Promise.all(
+    query.map(async ({ queryKey }) => {
+      try {
+        await queryClient.cancelQueries({ queryKey });
 
-    queryClient.setQueryData(
-      queryKey,
-      (originalData: UseTracesListResponse) => {
-        return {
-          ...originalData,
-          content: originalData.content.map((trace) => {
-            if (trace.id === params.traceId) {
-              return {
-                ...trace,
-                feedback_scores: mutate(trace.feedback_scores),
-              };
-            }
-            return trace;
-          }),
-        };
-      },
-    );
-  });
+        queryClient.setQueryData(
+          queryKey,
+          (originalData: UseTracesListResponse | undefined) =>
+            updateFeedbackScoresListCacheData(
+              originalData,
+              params.traceId,
+              mutate,
+            ) as UseTracesListResponse | undefined,
+        );
+      } catch {
+        // Isolate per-query failures so one bad query cannot reject Promise.all
+      }
+    }),
+  );
 };
 
 export const setSpansCache = async (
@@ -207,20 +247,15 @@ export const setSpansCache = async (
 
   await queryClient.cancelQueries({ queryKey });
 
-  queryClient.setQueryData(queryKey, (originalData: UseSpansListResponse) => {
-    return {
-      ...originalData,
-      content: originalData.content.map((span) => {
-        if (span.id === params.spanId) {
-          return {
-            ...span,
-            feedback_scores: mutate(span.feedback_scores),
-          };
-        }
-        return span;
-      }),
-    };
-  });
+  queryClient.setQueryData(
+    queryKey,
+    (originalData: UseSpansListResponse | undefined) =>
+      updateFeedbackScoresListCacheData(
+        originalData,
+        params.spanId,
+        mutate,
+      ) as UseSpansListResponse | undefined,
+  );
 };
 
 export const setTraceCache = async (
