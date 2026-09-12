@@ -740,10 +740,11 @@ class Dataset(DatasetExportOperations):
             if deduplication:
                 try:
                     item_hash = item.content_hash()
-                except TypeError as exception:
+                except (TypeError, ValueError) as exception:
                     # Hashing serialises too, so it reaches a bad value before the writer
                     # does. Raise the same error either way, so the failure does not
-                    # depend on whether deduplication happens to be enabled.
+                    # depend on whether deduplication happens to be enabled. `ValueError`
+                    # is how `json.dumps` reports a circular reference.
                     raise streaming_writer.ItemNotSerializableError(
                         f"Dataset item is not JSON-serializable: {exception}"
                     ) from exception
@@ -798,9 +799,8 @@ class Dataset(DatasetExportOperations):
         A `Dataset` always has a REST client, and the transport underneath it is the very
         `OpikHttpxClient` the owning client holds -- the same object, carrying the same
         auth, workspace headers and compression setting -- so a `Dataset` built from a REST
-        client alone resolves a transport like any other. The read side already reaches it
-        the same way (`parallel_items_reader`). The explicit arguments come first so a test
-        can substitute a transport without building a client.
+        client alone resolves a transport like any other, as the read side already does in
+        `parallel_items_reader`. The constructor arguments win where they were supplied.
         """
         httpx_client_ = self._rest_httpx_client
         base_url = self._url_override
@@ -1038,21 +1038,21 @@ class Dataset(DatasetExportOperations):
                 nor a ``DatasetItem``, or if an item's ``id``, ``trace_id`` or
                 ``span_id`` is not a UUID.
         """
+        # Repeated from the funnel so a bad argument raises before the shape pre-pass
+        # below walks the whole input.
         if isinstance(num_threads, bool) or not isinstance(num_threads, int):
             raise ValueError("num_threads must be a positive integer")
         if num_threads < 1:
             raise ValueError("num_threads must be a positive integer")
-        # Checked here too so bad input raises before any item is converted.
         if not isinstance(deduplication, bool):
             raise ValueError("deduplication must be a bool")
 
         if isinstance(items, collections.abc.Sequence):
-            # One isinstance per item and nothing retained, so it is worth running over
-            # the whole input before anything is sent: it turns the AttributeError an item
-            # of the wrong type raises part-way through the upload -- with earlier items
-            # already persisted -- back into an error raised before the first request, as
-            # it was when the upload was materialised. Shape only; a value that cannot be
-            # serialised is still found when it is reached.
+            # Cheap enough to run over the whole input before anything is sent -- one
+            # isinstance per item, nothing retained -- and it buys atomicity: an item of
+            # the wrong type raises before the first request rather than part-way through
+            # the upload with earlier items already persisted. Shape only; a value that
+            # cannot be serialised is still found when it is reached.
             for index, item in enumerate(items):
                 if not isinstance(item, (dict, dataset_item.DatasetItem)):
                     raise ValueError(
@@ -1070,8 +1070,7 @@ class Dataset(DatasetExportOperations):
                     streaming_writer.validate_identifier(supplied, field, index)
 
         # A generator rather than a list: converting lazily is what lets a generator
-        # argument stay un-materialised all the way to the wire. Whether it was one is
-        # passed along, because by here it no longer shows.
+        # argument stay un-materialised all the way to the wire.
         dataset_items = (
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
             for item in items
@@ -1129,23 +1128,34 @@ class Dataset(DatasetExportOperations):
 
         Raises:
             DatasetItemUpdateOperationRequiresItemId: If an item is missing an id. The
-                item's position in the input is included in the message. Because items
-                are streamed rather than scanned up front, earlier items may already have
-                been sent and persisted when this raises; there is no rollback.
+                item's position in the input is included in the message. A list is
+                scanned before anything is sent; from a generator the missing id is
+                found when its item is reached, and the items before it stay persisted.
         """
+
+        def require_id(index: int, item: Dict[str, Any]) -> None:
+            if "id" not in item:
+                raise exceptions.DatasetItemUpdateOperationRequiresItemId(
+                    f"Missing id for dataset item at index {index}: {item}. "
+                    "Items before it may already have been persisted."
+                )
 
         def checked(
             source: Iterable[Dict[str, Any]],
         ) -> Iterator[Dict[str, Any]]:
             for index, item in enumerate(source):
-                if "id" not in item:
-                    raise exceptions.DatasetItemUpdateOperationRequiresItemId(
-                        f"Missing id for dataset item at index {index}: {item}. "
-                        "Items before it may already have been persisted."
-                    )
+                require_id(index, item)
                 yield item
 
-        self.insert(checked(items), deduplication=deduplication)
+        if isinstance(items, collections.abc.Sequence):
+            # Scannable up front, the way `insert` scans a list for shape, so the
+            # atomicity `update` had before it streamed is kept where it is still
+            # possible. A generator cannot be scanned without consuming it.
+            for index, item in enumerate(items):
+                require_id(index, item)
+            self.insert(items, deduplication=deduplication)
+        else:
+            self.insert(checked(items), deduplication=deduplication)
 
     def _delete_batch_with_retry(
         self,
@@ -1355,6 +1365,12 @@ class Dataset(DatasetExportOperations):
         """
         Read JSONL from a file and insert it into the dataset.
 
+        The file is parsed one line at a time and uploaded as it is read, so a file
+        larger than memory can be inserted. Anything wrong with a line -- malformed JSON,
+        an id that is not a UUID, a value with no JSON form -- therefore surfaces when
+        that line is reached, with the items before it already persisted, rather than
+        before the first request. See :meth:`insert` on the same trade for generators.
+
         Args:
             file_path: Path to the JSONL file
             keys_mapping: dictionary that maps json keys to item fields names
@@ -1366,8 +1382,10 @@ class Dataset(DatasetExportOperations):
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
-        new_items = converters.from_jsonl_file(file_path, keys_mapping, ignore_keys)
-        self.insert(new_items, deduplication=deduplication)
+        self.insert(
+            converters.stream_from_jsonl_file(file_path, keys_mapping, ignore_keys),
+            deduplication=deduplication,
+        )
 
     def insert_from_pandas(
         self,

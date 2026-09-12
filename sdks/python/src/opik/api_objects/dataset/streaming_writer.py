@@ -1,11 +1,8 @@
 """Build dataset-item request bodies as rows arrive, instead of materialising the upload.
 
-The path this replaced accumulated every item, split the list into batches, then serialised
-and compressed each batch. That held the whole upload in memory and walked each item
-several times over. This writer serialises a row once as it is added, feeds the bytes straight into
-a zlib stream, and hands a finished request body to a callback when a threshold trips, so
-what it holds is one in-flight body rather than the upload. What the caller keeps around
-it -- deduplication digests, say -- is its own business.
+A row is serialised once as it is added and fed straight into a zlib stream; a finished
+body goes to a callback when a size, count or time threshold trips. What the writer holds
+is one body in flight, never the upload.
 
 Serialisation here is for the wire only. Content hashes are computed elsewhere, with the
 standard library, so item identity never depends on which serialiser is in use.
@@ -33,12 +30,9 @@ LOGGER = logging.getLogger(__name__)
 try:
     import orjson
 except ImportError:  # pragma: no cover
-    # Not dead code: orjson is declared for every platform that has a wheel, and
-    # deliberately not required on Windows ARM64 below Python 3.11, where none is
-    # published. The standard library is the supported serialiser there, so this branch
-    # is a real configuration rather than defensive coding -- do not delete it without
-    # revisiting that marker in setup.py. Turning the serialiser off on purpose is a
-    # separate thing, and is what `enable_orjson_serialization` is for.
+    # Reachable: setup.py deliberately does not require orjson on Windows ARM64 below
+    # Python 3.11, where no wheel is published. Do not delete without revisiting that
+    # marker. Turning the serialiser off on purpose is `enable_orjson_serialization`.
     orjson = None  # type: ignore[assignment]
 
 # gzip container rather than a raw deflate stream, matching what the server expects.
@@ -198,13 +192,10 @@ class StreamingBatchWriter:
     def add(self, item: Mapping[str, Any]) -> None:
         payload = self._serialize(item)
 
-        # Close the batch before an item that would take it past the cap rather than
-        # after, so an item at or over the cap ends up in a request of its own: a request
-        # rejected for its size then fails that one row instead of every row that shared
-        # its batch. The comparison is `sequence_splitter`'s, strictness included, so an
-        # input is grouped the way the splitter would have grouped it.
-        # The `+ 1` is the comma that would join this item to the batch; the check only
-        # runs when there is already an item for it to follow.
+        # Closing before the offending item, rather than after, is what puts an item at
+        # or over the cap alone in its own request: a request rejected for its size then
+        # fails that one row instead of every row that shared a batch with it. The `+ 1`
+        # is the comma that would join this item to the one before it.
         if self._items > 0 and self._logical_bytes + 1 + len(payload) > (
             self._max_payload_bytes
         ):
@@ -247,14 +238,12 @@ class BoundedSendPool:
 
     The bound is the point: without it a producer that serialises faster than the network
     drains would turn "never materialise the upload" back into "materialise it as queued
-    request bodies". `submit` blocks once `num_threads * 2` bodies are outstanding, so
-    memory stays bounded by the bodies in flight.
+    request bodies". `submit` blocks once `num_threads * 2` bodies are outstanding.
 
-    `ThreadPoolExecutor` does the thread handling: it grows a worker per submitted body up
-    to `num_threads` rather than starting them up front, and needs no shutdown protocol of
-    its own. With a single worker the body is sent inline, which keeps the common case free
-    of threads. The first failure is re-raised to the producer; as before there is no
-    rollback, so bodies already accepted stay persisted.
+    `ThreadPoolExecutor` grows a worker per submitted body up to `num_threads`, so a small
+    upload never starts the full ceiling; a single worker sends inline and starts no thread
+    at all. The first failure is re-raised to the producer. There is no rollback, so bodies
+    already accepted stay persisted.
     """
 
     def __init__(
