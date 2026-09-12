@@ -83,8 +83,8 @@ export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
     return OPENAI_MODEL_CAPABILITIES[model]?.reasoning ?? false;
   }
 
-  // Requesty: the OpenAI-hosted ids share the OpenAI capability map. Its other
-  // vendors' ids fall through to the registry handling below.
+  // Requesty: its OpenAI-route ids share the OpenAI capability map. Ids of its
+  // other routes fall through to the registry handling below.
   const requestyOpenAIModel = getRequestyOpenAIModel(model);
   if (requestyOpenAIModel) {
     return OPENAI_MODEL_CAPABILITIES[requestyOpenAIModel]?.reasoning ?? false;

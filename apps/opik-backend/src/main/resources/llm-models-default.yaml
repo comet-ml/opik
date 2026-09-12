@@ -2005,15 +2005,19 @@ requesty:
   - id: "requesty/openai/o1"
     label: "openai/o1"
     structuredOutput: true
+    reasoning: true
   - id: "requesty/openai/o3"
     label: "openai/o3"
     structuredOutput: true
+    reasoning: true
   - id: "requesty/openai/o3-mini"
     label: "openai/o3-mini"
     structuredOutput: true
+    reasoning: true
   - id: "requesty/openai/o4-mini"
     label: "openai/o4-mini"
     structuredOutput: true
+    reasoning: true
   - id: "requesty/anthropic/claude-haiku-4-5"
     label: "anthropic/claude-haiku-4-5"
     structuredOutput: true
@@ -2040,6 +2044,7 @@ requesty:
     structuredOutput: true
   - id: "requesty/deepseek/deepseek-reasoner"
     label: "deepseek/deepseek-reasoner"
+    reasoning: true
   - id: "requesty/google/gemini-2.5-flash"
     label: "google/gemini-2.5-flash"
     structuredOutput: true
