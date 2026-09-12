@@ -1,0 +1,192 @@
+---
+description: Log Claude Code sessions to Opik with the Opik plugin, or export Claude Code's native OpenTelemetry spans to Opik, and know which one to pick.
+headline: Claude Code
+og:description: Two ways to get Claude Code sessions into Opik, the Opik Claude Code plugin (recommended) or Claude Code's native OTel trace export, with content and endpoint caveats for each.
+og:site_name: Opik Documentation
+og:title: Claude Code Integration - Opik
+title: Observability for Claude Code with Opik
+---
+
+[Claude Code](https://claude.ai/code) sessions can be logged to Opik in two ways: with the
+**Opik Claude Code plugin**, which hooks into Claude Code directly and captures every turn, tool
+call and subagent with full content, or through Claude Code's **native OpenTelemetry export**,
+which sends spans to Opik's OTLP endpoint. Most teams should start with the plugin.
+
+## Quick start
+
+Inside Claude Code:
+
+```
+/plugin marketplace add comet-ml/opik-claude-code-plugin
+/plugin install opik
+```
+
+In a terminal, then restart Claude Code:
+
+```bash
+pip install opik && opik configure
+```
+
+Back inside Claude Code:
+
+```
+/opik:trace-claude-code start
+```
+
+Your next turn appears as a trace in the `claude-code` project in Opik. The rest of this page
+explains the two options in full, how to route traces to a project or workspace, and how to
+validate.
+
+## When this guide applies
+
+Use this guide if you want to **review Claude Code conversations in Opik**: what developers asked,
+what the model answered, which tools ran, how subagents nested, and what each turn cost.
+
+<Callout type="info">
+  This guide covers telemetry flowing **from Claude Code to Opik**. For the other direction,
+  letting Claude Code read your traces, score outputs and run evaluations from chat, register the
+  [Opik MCP server](/mcp-server) with it. One command, `uvx opik mcp configure`, installs the server
+  and the Opik skills. The two are independent, and you can use either or both.
+</Callout>
+
+<Tip title="Looking to reduce Claude Code spend rather than review sessions?">
+  Opik shows you **what Claude Code did**. If the question is **where the tokens went and how to
+  spend fewer of them**, that is [Cost Intelligence](/cost-intelligence/overview): every Claude
+  Code API call captured on the wire and attributed to system prompt, tool schemas, MCP servers,
+  skills, memory and user input, per user and per repository, with policy controls that typically
+  cut spend by 15% to 30%. Only counts and metadata leave the machine, never content. Claude Code
+  is Cost Intelligence's primary agent, and it runs side by side with the Opik plugin.
+</Tip>
+
+## Choose a path
+
+| | Opik plugin (recommended) | Native OTel export |
+| --- | --- | --- |
+| **Setup** | Two slash commands in Claude Code | Environment variables before every session |
+| **Prompt, response and tool content** | Captured by default | Redacted by default; response text needs a beta flag and only in non-interactive runs |
+| **Subagents** | Nested under the parent Task span | Flat `claude_code.*` spans |
+| **Project / workspace routing** | `OPIK_CC_PROJECT`, `OPIK_CC_WORKSPACE` | `projectName` and `Comet-Workspace` headers |
+| **Fleet rollout** | Plugin marketplace, or Claude managed settings | Managed settings can set the env vars |
+| **Status** | GA | Claude Code tracing is beta |
+
+## Option 1: Opik Claude Code plugin
+
+The [opik-claude-code-plugin](https://github.com/comet-ml/opik-claude-code-plugin) turns each
+conversation turn into an Opik trace. Tool calls, thoughts and responses become spans, and
+subagent invocations nest under their parent `Task` span.
+
+### Install
+
+From inside Claude Code:
+
+```
+/plugin marketplace add comet-ml/opik-claude-code-plugin
+/plugin install opik
+```
+
+Restart any running Claude Code session; hooks only load when a session starts.
+
+### Configure the connection
+
+```bash
+pip install opik
+opik configure
+```
+
+This writes `~/.opik.config` with your Opik URL, API key and workspace. Self-hosted and
+Enterprise deployments enter their own URL at the prompt.
+
+### Turn tracing on
+
+```
+/opik:trace-claude-code start            # this project
+/opik:trace-claude-code start --global   # every project on this machine
+/opik:trace-claude-code status
+```
+
+Traces land in the `claude-code` project by default. To route them elsewhere without touching
+the Opik SDK settings the rest of your code uses:
+
+```bash wordWrap
+export OPIK_CC_PROJECT="my-project"
+export OPIK_CC_WORKSPACE="my-workspace"
+```
+
+or add `cc_project_name` / `cc_workspace` under `[opik]` in `~/.opik.config`.
+
+### Embed Claude Code in a larger trace
+
+If Claude Code runs inside a workflow you already trace with Opik, attach its spans to that trace:
+
+```bash wordWrap
+export OPIK_CC_PARENT_TRACE_ID="<existing-trace-id>"
+export OPIK_CC_ROOT_SPAN_ID="<parent-span-id>"
+```
+
+### What you see in Opik
+
+Open the project and pick a trace: the user prompt is the trace input, the assistant's final
+answer is the output, and each tool call is a span with its input and result. The **Threads** tab
+groups turns from the same session. Token usage and cost are recorded on each LLM span.
+
+## Option 2: Native OpenTelemetry export
+
+Claude Code can emit OTel **metrics**, **events** and, in beta, **trace spans**. Opik ingests the
+trace spans only. Use this path when you already ship Claude Code telemetry to an OTel collector
+and want Opik as one more destination, or when you cannot install plugins.
+
+<Warning>
+  Without `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` Claude Code sends only metrics and events, and
+  nothing appears in Opik. Prompt, tool I/O and assistant output are **redacted by default**; the
+  flags in this section un-redact them. Assistant output on spans additionally requires the detailed-tracing
+  beta, which is available for the Claude Agent SDK and non-interactive `claude -p` runs but gated
+  in interactive sessions. If you need full content in interactive sessions, use the plugin.
+</Warning>
+
+Set these before starting Claude Code (Opik Cloud shown; swap the endpoint for your deployment,
+see the [Opik OpenTelemetry overview](/integrations/opentelemetry)):
+
+```bash wordWrap
+# 1. Enable telemetry and trace-span emission
+export CLAUDE_CODE_ENABLE_TELEMETRY=1
+export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1
+
+# 2. Export traces to Opik
+export OTEL_TRACES_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+
+# 3. Un-redact prompt and tool input/output
+export OTEL_LOG_USER_PROMPTS=1
+export OTEL_LOG_TOOL_DETAILS=1
+export OTEL_LOG_TOOL_CONTENT=1
+
+# 4. Assistant output on spans (detailed-tracing beta, non-interactive only)
+export ENABLE_BETA_TRACING_DETAILED=1
+export BETA_TRACING_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+```
+
+Spans arrive as `claude_code.interaction` (one per prompt) with nested `claude_code.llm_request`
+and `claude_code.tool` spans. Opik maps their content to trace and span input/output and
+calculates cost from the model and token attributes.
+
+For the full variable reference, endpoint modes and validation steps, see
+[Claude Agent SDK and Claude Code OpenTelemetry](/integrations/claude-agent-sdk).
+
+## Validation
+
+1. Run a short Claude Code turn that uses a tool, for example "list the files in this directory".
+2. Open the target project in Opik (`claude-code` for the plugin, your `projectName` for OTel).
+3. Confirm the trace carries content:
+   - **Plugin:** the trace input is your prompt and the trace output is the assistant's answer.
+   - **Native OTel:** the trace is named `claude_code.interaction`, its input is your prompt, and
+     the model's response is on the `claude_code.llm_request` spans (with model, tokens and cost).
+     The trace-level output stays empty on this path. Tool calls appear as `claude_code.tool` spans
+     with their input and result.
+
+## Source references
+
+- [opik-claude-code-plugin](https://github.com/comet-ml/opik-claude-code-plugin)
+- [Claude Code monitoring (official)](https://code.claude.com/docs/en/monitoring-usage)
+- [Opik OpenTelemetry overview](/integrations/opentelemetry)

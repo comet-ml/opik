@@ -1,0 +1,52 @@
+---
+description: How to get Claude Code, Cursor, GitHub Copilot and OpenAI Codex sessions into Opik, and when Cost Intelligence or the MCP server is the better fit.
+headline: Coding agents
+og:description: One page to pick the right path for each coding agent, log sessions to Opik for review and evaluation, use Cost Intelligence to attribute and reduce spend, or connect the agent to Opik over MCP.
+og:site_name: Opik Documentation
+og:title: Coding Agents - Opik
+title: Observability for coding agents
+---
+
+Teams adopting AI coding agents need three things: to see what the agent did, to spend less doing
+it, or to use the agent to add observability to their own app.
+
+| You want to… | Use | What you get |
+| --- | --- | --- |
+| **See what the agent did.** Read the conversation, check which tools ran, debug a bad run, share a session with a teammate. | [Opik tracing](#set-up-tracing-for-your-agent), set up per agent | Every prompt, response and tool call, grouped into threads you can score, annotate and share. |
+| **Spend less doing it.** Find where the tokens actually go, per user and per repo, then cut the waste. | [Cost Intelligence](/cost-intelligence/overview) | Token counts broken out across system prompt, tools, MCP servers, skills and memory, plus policy controls. Metadata only — never your code or conversations. |
+| **Add observability to your own app.** Instrument your code, score outputs and run experiments from your coding agent. | [Opik MCP server](/mcp-server) | `uvx opik mcp configure` registers the server and the Opik skills with your agent. |
+
+## Set up tracing for your agent
+
+Each agent has its own way of getting sessions out. The **Quick start** column is the single step
+that does most of the work; the linked page has the full setup, endpoint modes and validation.
+
+| Agent | Path into Opik | Quick start | Content captured | Cost Intelligence |
+| --- | --- | --- | --- | --- |
+| [Claude Code](/integrations/claude-code) | Opik plugin (recommended), or native OTel export (beta) | `/plugin install opik` inside Claude Code | Plugin: yes. OTel: redacted unless enabled | Supported |
+| [GitHub Copilot](/integrations/github-copilot) (VS Code, CLI) | Native OTel export | `github.copilot.chat.otel.enabled: true` plus the Opik endpoint | Off unless `captureContent` is enabled | Ask your account team |
+| [Cursor](/integrations/cursor) | Opik Cursor extension | Install the `Opik` extension and paste your API key | Yes | Supported |
+| [OpenAI Codex](/integrations/openai-codex) | Native OTel export | `trace_exporter = "otlp-http"` in `~/.codex/config.toml` | Off unless `log_user_prompt = true` | Supported |
+| Other agents (opencode, Gemini CLI, ...) | Native OTel export if the agent emits `gen_ai.*` spans | Point the agent's OTLP exporter at the [Opik OTel endpoint](/integrations/opentelemetry) | Depends on the agent | Not yet |
+
+<CardGroup cols={2}>
+  <Card title="Claude Code" href="/integrations/claude-code" icon="fa-regular fa-terminal">
+    Opik plugin (recommended) captures every turn with full content. Native OpenTelemetry export is available as a beta alternative.
+  </Card>
+  <Card title="GitHub Copilot" href="/integrations/github-copilot" icon="fa-brands fa-github">
+    Native OpenTelemetry export from Copilot Chat in VS Code and from Copilot CLI. Enterprise managed settings can mandate it fleet-wide.
+  </Card>
+  <Card title="Cursor" href="/integrations/cursor" icon="fa-regular fa-i-cursor">
+    Opik Cursor extension logs every conversation, with token usage and cost from your Cursor account.
+  </Card>
+  <Card title="OpenAI Codex" href="/integrations/openai-codex" icon="fa-regular fa-code">
+    Native OpenTelemetry export configured in `config.toml`.
+  </Card>
+</CardGroup>
+
+<Note>
+  Every native OpenTelemetry path (GitHub Copilot, OpenAI Codex, Claude Code OTel, other agents)
+  shares one property: **content is redacted by default** and has to
+  be switched on explicitly. Check your organization's policy before enabling prompt and response
+  export. Structure, timing and token counts are logged either way.
+</Note>

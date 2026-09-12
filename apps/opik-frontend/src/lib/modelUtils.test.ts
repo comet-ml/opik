@@ -577,6 +577,7 @@ describe("Gemini thinking level", () => {
 
   it("covers the newer Flash models on both providers", () => {
     for (const model of [
+      PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH,
       PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH,
       PROVIDER_MODEL_TYPE.GEMINI_3_6_FLASH,
       PROVIDER_MODEL_TYPE.GEMINI_3_5_FLASH,
@@ -588,6 +589,7 @@ describe("Gemini thinking level", () => {
     }
 
     for (const model of [
+      PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH,
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_7_FLASH,
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_6_FLASH,
       PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_5_FLASH,
@@ -605,7 +607,17 @@ describe("Gemini thinking level", () => {
     const values = (m: PROVIDER_MODEL_TYPE) =>
       getThinkingLevelOptions(m).map((o) => o.value);
 
-    // 3.7 Flash has no "minimal".
+    // 3.8 and 3.7 Flash have no "minimal".
+    expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH)).toEqual([
+      "low",
+      "medium",
+      "high",
+    ]);
+    expect(values(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH)).toEqual([
+      "low",
+      "medium",
+      "high",
+    ]);
     expect(values(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH)).toEqual([
       "low",
       "medium",
@@ -634,6 +646,12 @@ describe("Gemini thinking level", () => {
   });
 
   it("preselects each model's own documented default", () => {
+    expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH)).toBe(
+      "medium",
+    );
+    expect(
+      getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_8_FLASH),
+    ).toBe("medium");
     expect(getDefaultThinkingLevel(PROVIDER_MODEL_TYPE.GEMINI_3_7_FLASH)).toBe(
       "medium",
     );

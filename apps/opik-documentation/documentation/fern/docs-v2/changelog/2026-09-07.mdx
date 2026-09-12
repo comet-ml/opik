@@ -1,0 +1,65 @@
+## Custom AI Providers Can Use OAuth2 Token Auth
+
+Custom AI provider integrations only accepted a single static API key, so any provider that rotates or expires credentials — an enterprise gateway sitting behind OAuth2, for example — had to be re-configured by hand every time a key expired.
+
+The provider configuration dialog now has an **Authentication** mode switch: choose **Static API key**, or **OAuth2 client credentials** and enter the token URL plus the `client_id` and `client_secret` rows (add more rows, such as `scope` or `audience`, if your auth service needs them). This applies to custom providers and to Bedrock.
+
+Opik fetches the access token, attaches it as a `Bearer` token to every model call, and refreshes it before it expires. A **Test connection** button runs the token fetch on the backend and reports the token lifetime before you save. Credential values with secret-like names lock automatically: Opik encrypts them at rest and never reads them back.
+
+👉 [OAuth2 Client Credentials Authentication](/administration/workspace-settings/ai_providers#oauth2-client-credentials-authentication)
+
+## Fine-Grained Thinking Controls for Gemini Models
+
+Gemini models increasingly default to an internal "thinking" step before answering, which adds cost and latency that isn't always worth paying — Opik previously had no way to influence that.
+
+The Playground, Online Evaluation rules, and experiments can now set a thinking level per Gemini call, for both Vertex AI and Google AI Studio: Auto, None, Minimal, Low, Medium, or High (availability depends on the model — Gemini 2.5 Pro, for example, can't disable thinking). Vertex AI translates the level into the `thinking_budget` value it expects; Google AI Studio sends the level directly. A follow-up fix added the dedicated None level after Flash Lite models — which don't think by default — were found to have thinking silently re-enabled by a preselected Minimal level, adding several seconds of latency to every call.
+
+## Bug Fixes & Improvements
+
+- **Judge scoring no longer 500s or stalls on edge-case content** — A judge message whose content legitimately started with `[` (for example, a prompt beginning "[Source Text]...") could return a 500 for an entire project's list of evaluation rules and silently stop sampling for that project. A trace whose mapped input, output, or metadata was a bare JSON value instead of an object failed its whole evaluation instead of just skipping that field, and a Vertex AI evaluation using the tool-calling path failed outright because Vertex rejects a forced tool choice. All three now evaluate instead of failing.
+
+- **Online-scoring queues no longer get stuck behind one bad message** — A single oversized or undecodable message could wedge an entire scoring stream, blocking every other trace behind it (one recorded case reached tens of gigabytes of stuck messages), and a permanently failing provider error (like an invalid-credentials response) was retried repeatedly instead of being retired immediately. Both cases are now dropped or retired instead of stalling the queue.
+
+- **Online evaluation sampling now applies only to production traces** — The sampling rate is meant to thin a continuous production stream, but it was also being applied to traces from experiments, playground runs, and optimizations — one-off runs a user starts intentionally. Those are now always scored in full, regardless of the rule's sampling rate.
+
+- **Prompt version history now loads and labels every version correctly** — The Prompt tab's version history only ever loaded the first 25 versions, so older versions were unreachable and a deep link to one silently fell back to showing the latest version under a stale label. Version history, the Compare and Deploy menus, and version labels throughout the app (Playground, trace details, Optimizations, Agent Runner) now paginate through the full history and use each version's real, persistent number.
+
+- **Experiment items export no longer drops rows or loses sort order** — Exporting experiment items truncated long field values and could ignore the sorting and search filters applied in the table. Exports now include full field values and respect the same sort and search as the on-screen view.
+
+- **Dataset item and version data is more accurate** — A dataset version's reported item count came from the raw number of items submitted, not the number actually stored, so a batch with duplicate item ids showed an inflated count. Separately, filters on a dataset item listing weren't always applied consistently between the page and count queries, and page reads weren't bounded to the requested page size. All three are now correct.
+
+- **Annotation queue names can no longer cause lost form data** — A whitespace-only queue name passed client-side validation, was rejected by the API, and closed the create/edit dialog anyway — discarding everything entered in the form. Names are now trimmed and validated before submission, and the dialog stays open until the save actually succeeds.
+
+- **Dashboards can now be filtered by description** — Filtering the dashboards list by its description field returned "No matching results" for every operator, because the field wasn't registered as filterable on the backend. It's now supported like any other field, and a failed list request now shows an error instead of silently rendering as empty.
+
+- **Optimization runs list now shows the actual best trial** — The runs list reported the baseline trial's latency and cost as if it were the run's best result, with the cost/latency delta always showing 0%, while the run's own detail page correctly showed the genuine best trial. The list now matches the detail page.
+
+- **Cost tracking recognizes more providers and model naming schemes** — Calls through Cerebras, Snowflake Cortex, and DeepInfra weren't recognized as canonical providers, models identified by OpenTelemetry semantic-convention provider names weren't mapped to Opik's provider list, and models with compact `YYYYMMDD` date suffixes in their id weren't matched to a price. All of these now price and attribute correctly.
+
+- **Streaming SDK integrations no longer swallow errors** — The Anthropic, Bedrock, and Mistral stream wrappers' cleanup step could silently swallow an exception raised while finalizing a stream instead of surfacing it, and the LangChain integration stopped extracting token usage whenever a call's model metadata was absent. Both are fixed, and the Bedrock integration now correctly passes through Claude's cache-read/write token counts instead of undercounting them.
+
+- **Cursor extension reports accurate usage and structure** — The Opik extension for Cursor was logging zero-token spans after Cursor stopped populating the field it read from, one flat span per conversation turn instead of a span per model or tool call, and undercounted prompt and total tokens (by up to ~6x) whenever cache reads dominated a call. All three are fixed.
+
+- **MCP OAuth consent screen preselects your default workspace** — Approving an AI tool's access via MCP OAuth used to preselect whichever workspace the backend returned first; it now preselects your actual default workspace.
+
+- **`opik configure` can set up MCP and skill packs in one step** — Running `opik configure --install-mcp --install-skills` registers the Opik MCP server with detected AI coding tools (Claude Code, Cursor, VS Code, Codex, opencode) and installs the Opik skill pack that teaches the coding agent how to instrument your code, instead of setting each one up by hand.
+
+- **Dataset inserts can skip deduplication** — `Dataset.insert()` (and the batch, pandas, and JSONL variants) now accepts a `deduplication` argument; setting it to `False` skips downloading and hash-comparing existing items before insert, trading duplicate-safety for speed on large datasets.
+
+- **Python SDK reports anonymous feature usage** — The SDK now reports which integrations and features are used (for example, which LLM provider you're calling through) to help prioritize development; no trace, span, prompt, or dataset content is included. This is on by default and can be disabled by setting `OPIK_ANALYTICS_ENABLE=false`. Running `opik configure` or `opik mcp configure` additionally attaches an account identifier so a setup run can be tied to your workspace.
+
+- **Self-hosted online evaluation rules get the same tool-calling judge as Comet-managed workspaces** — LLM-as-judge rules that reference `{{trace}}`, `{{span}}`, or `{{spans}}` can let the judge model call tools to fetch large trace or span data on demand instead of inlining all of it into the prompt, avoiding context-window overflow. This previously only ran for Comet-managed workspaces; the feature toggle gating it off for self-hosted instances has been removed.
+
+## Performance Improvements
+
+- **Dataset writes and reads are significantly faster** — Inserting into a dataset serialized every batch behind a lock only needed for creating a new version, item-count updates cost three database round-trips instead of one, and the enrichment queries used when loading dataset details ran one after another instead of concurrently. A redundant item-count scan also ran even when a version already tracked its own total, and a per-dataset experiment summary query scanned the whole workspace's experiment items instead of just the requested dataset's. All of these are fixed, substantially reducing dataset save and read latency.
+
+- **Reading large datasets from the Python SDK is up to ~3x faster** — A new parallel, chunked `Dataset.stream_items()` reader (which `get_items()` now uses internally) measured 3.3x faster than the previous single-threaded read path at 8 threads, with no change to its output.
+
+- **Traces, trace logs, and experiment results tables render faster on large projects** — These tables now virtualize their rows and columns, so only what's visible on screen is rendered, instead of paying render cost for every column and row up front.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.36...2.2.52)
+
+_Releases_: `2.2.37`, `2.2.38`, `2.2.39`, `2.2.40`, `2.2.41`, `2.2.42`, `2.2.43`, `2.2.44`, `2.2.45`, `2.2.46`, `2.2.47`, `2.2.48`, `2.2.49`, `2.2.50`, `2.2.51`, `2.2.52`
