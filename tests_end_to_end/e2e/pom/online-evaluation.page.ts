@@ -10,6 +10,15 @@ export interface CreateRuleDialogLLMJudgeFields {
   modelDisplayName: string;
 }
 
+/**
+ * The three positions of the dialog's Trigger scope toggle, spelled as the
+ * accessible names the ToggleGroupItems carry. The API's own spelling
+ * (`production` / `experiment` / `both`) is deliberately NOT reused here — a
+ * spec that asserts the persisted value has to name both, and conflating them
+ * is how a test ends up passing because it compared a label to a label.
+ */
+export type TriggerScopeLabel = 'Production traces' | 'Experiment traces' | 'Both';
+
 export interface CreateRuleDialogPythonEqualsFields {
   name: string;
   /** The literal string the trace's output must equal to score 1.0. */
@@ -202,6 +211,101 @@ export class OnlineEvaluationPage {
       // Commit to the form explicitly, rather than relying on a later click.
       await input.blur();
       await expect(input).toHaveValue(String(percent));
+    });
+  }
+
+  /**
+   * The Trigger scope toggle group inside the add/edit dialog — `Production
+   * traces` / `Experiment traces` / `Both`.
+   *
+   * Absent for thread- and span-scope rules (AddEditRuleDialog renders it only
+   * for trace scope), so a caller that switched the rule scope must not assume
+   * it is there.
+   */
+  get triggerScopeToggle(): Locator {
+    return this.dialog.getByTestId('add-edit-rule-dialog-trigger-scope');
+  }
+
+  /** One position of the Trigger scope toggle, by its accessible name. */
+  triggerScopeOption(label: TriggerScopeLabel): Locator {
+    return this.triggerScopeToggle.getByRole('radio', { name: label, exact: true });
+  }
+
+  /**
+   * Select a Trigger scope, and wait until the toggle reports it.
+   *
+   * The wait matters: `RuleFilteringSection` mounts or unmounts off this value,
+   * so a caller that asserts on the Filtering & Sampling section immediately
+   * after clicking would be racing the re-render.
+   */
+  async setTriggerScope(label: TriggerScopeLabel): Promise<void> {
+    return test.step(`set trigger scope to "${label}"`, async () => {
+      await this.triggerScopeOption(label).click();
+      await expect(this.triggerScopeOption(label)).toHaveAttribute('aria-checked', 'true');
+    });
+  }
+
+  /**
+   * The explainer paragraph inside the expanded Filtering & Sampling accordion.
+   *
+   * Only in the DOM while the accordion is open — AccordionContent unmounts
+   * when collapsed, and flipping the trigger scope away and back re-mounts the
+   * whole section collapsed.
+   */
+  get filteringSamplingDescription(): Locator {
+    return this.dialog.getByText(/Use sampling rate to control how frequently/);
+  }
+
+  /**
+   * The rendered field / operator / value of the rule's first (and, for these
+   * specs, only) filter row.
+   *
+   * `filter-column` and `filter-operator` show the dialog's LABELS (`Name`,
+   * `=`), which are not the API's field spellings — see `TriggerScopeLabel` for
+   * the same trap on the scope toggle.
+   */
+  get filterColumnCell(): Locator {
+    return this.dialog.getByTestId('filter-column');
+  }
+
+  get filterOperatorCell(): Locator {
+    return this.dialog.getByTestId('filter-operator');
+  }
+
+  get filterValueInput(): Locator {
+    return this.dialog.getByTestId('filter-string-input');
+  }
+
+  /**
+   * Open a rule's Edit dialog through the row's kebab menu.
+   *
+   * Split out of `setRuleEnabledByName`, which drives the same gesture, because
+   * a spec that edits something other than the enabled switch needs the dialog
+   * open without any field being touched.
+   */
+  async openEditRuleDialog(name: string): Promise<void> {
+    return test.step(`open the edit dialog for rule "${name}"`, async () => {
+      const row = this.ruleRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Edit' }).click();
+      await this.dialog.waitFor({ state: 'visible' });
+    });
+  }
+
+  /** Submit the add/edit dialog and wait for it to close. */
+  async submitRuleDialog(): Promise<void> {
+    return test.step('submit the rule dialog', async () => {
+      await this.dialog.getByTestId('add-edit-rule-dialog-submit').click();
+      await this.dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /** Dismiss the add/edit dialog without saving. */
+  async cancelRuleDialog(): Promise<void> {
+    return test.step('close the rule dialog without saving', async () => {
+      await this.dialog.getByRole('button', { name: 'Cancel' }).click();
+      await this.dialog.waitFor({ state: 'hidden' });
     });
   }
 
