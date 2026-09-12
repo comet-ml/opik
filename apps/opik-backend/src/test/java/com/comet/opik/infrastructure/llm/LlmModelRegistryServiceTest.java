@@ -149,23 +149,19 @@ class LlmModelRegistryServiceTest {
         assertThat(registry.get("requesty")).isNotEmpty();
     }
 
-    @Test
-    void defaultResourceRequestyModelsCarryCapabilityFlags() {
+    @ParameterizedTest(name = "{0} reasoning={1}")
+    @CsvSource({"requesty/openai/o1,true", "requesty/openai/gpt-4o,false"})
+    void defaultResourceRequestyModelsCarryCapabilityFlags(String modelId, boolean expectedReasoning) {
         var config = new LlmModelRegistryConfig();
 
         var service = new LlmModelRegistryService(config);
 
-        var reasoningModel = service.findModel("requesty/openai/o1");
-        assertThat(reasoningModel).isPresent();
-        assertThat(reasoningModel.get().provider()).isEqualTo(LlmProvider.REQUESTY);
-        assertThat(reasoningModel.get().model().structuredOutput()).isTrue();
-        assertThat(reasoningModel.get().model().reasoning()).isTrue();
+        var result = service.findModel(modelId);
 
-        var plainModel = service.findModel("requesty/openai/gpt-4o");
-        assertThat(plainModel).isPresent();
-        assertThat(plainModel.get().provider()).isEqualTo(LlmProvider.REQUESTY);
-        assertThat(plainModel.get().model().structuredOutput()).isTrue();
-        assertThat(plainModel.get().model().reasoning()).isFalse();
+        assertThat(result).isPresent();
+        assertThat(result.get().provider()).isEqualTo(LlmProvider.REQUESTY);
+        assertThat(result.get().model().structuredOutput()).isTrue();
+        assertThat(result.get().model().reasoning()).isEqualTo(expectedReasoning);
     }
 
     @ParameterizedTest
