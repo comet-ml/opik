@@ -46,7 +46,7 @@ class TestSuiteEvaluatorMapperTest {
         @DisplayName("returns empty when only unsupported providers are connected")
         void returnsEmptyWhenOnlyUnsupportedProviders() {
             var result = SupportedJudgeProvider.resolveModel(
-                    Set.of(LlmProvider.OLLAMA, LlmProvider.BEDROCK, LlmProvider.OPEN_ROUTER));
+                    Set.of(LlmProvider.OLLAMA, LlmProvider.BEDROCK, LlmProvider.OPEN_ROUTER, LlmProvider.REQUESTY));
             assertThat(result).isEmpty();
         }
 

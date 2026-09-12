@@ -43,7 +43,12 @@ export const getDefaultConfigByProvider = (
 ): LLMPromptConfigsType => {
   const providerType = parseComposedProviderType(provider);
 
-  if (providerType === PROVIDER_TYPE.OPEN_AI) {
+  // Requesty is an OpenAI-compatible router: the backend reuses the OpenAI client for it,
+  // so it takes the same request parameters and the same default config.
+  if (
+    providerType === PROVIDER_TYPE.OPEN_AI ||
+    providerType === PROVIDER_TYPE.REQUESTY
+  ) {
     const config: LLMOpenAIConfigsType = {
       temperature: getDefaultTemperatureForModel(model),
       maxCompletionTokens: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,

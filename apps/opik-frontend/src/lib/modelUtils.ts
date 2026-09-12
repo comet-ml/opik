@@ -32,6 +32,33 @@ export const getRoutableProviderModelValue = (
   return modelValue as PROVIDER_MODEL_TYPE;
 };
 
+const REQUESTY_OPENAI_MODEL_PREFIX = "requesty/openai/";
+
+// Requesty forwards its `requesty/openai/<model>` ids to OpenAI unchanged (reasoning_effort
+// included), so such an id shares the OPENAI_MODEL_CAPABILITIES row of `<model>`. Only the lookup
+// key is rewritten here: the wire model id sent to the backend keeps its `requesty/` prefix.
+// Undefined for anything else, including Requesty ids of other vendors, so callers fall back to
+// their default handling.
+const getRequestyOpenAIModel = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): PROVIDER_MODEL_TYPE | undefined => {
+  if (!model || !model.startsWith(REQUESTY_OPENAI_MODEL_PREFIX)) {
+    return undefined;
+  }
+
+  const openAIModel = model.slice(
+    REQUESTY_OPENAI_MODEL_PREFIX.length,
+  ) as PROVIDER_MODEL_TYPE;
+
+  return openAIModel in OPENAI_MODEL_CAPABILITIES ? openAIModel : undefined;
+};
+
+// Capability row for an OpenAI model id, or for the OpenAI model behind a `requesty/openai/*` id.
+const getOpenAIModelCapabilities = (model?: PROVIDER_MODEL_TYPE | "") =>
+  OPENAI_MODEL_CAPABILITIES[
+    (getRequestyOpenAIModel(model) ?? model) as PROVIDER_MODEL_TYPE
+  ];
+
 /**
  * Checks if a model is a reasoning model that requires temperature = 1.0.
  *
@@ -54,6 +81,13 @@ export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
     getProviderFromModel(model as PROVIDER_MODEL_TYPE) === PROVIDER_TYPE.OPEN_AI
   ) {
     return OPENAI_MODEL_CAPABILITIES[model]?.reasoning ?? false;
+  }
+
+  // Requesty: its OpenAI-route ids share the OpenAI capability map. Ids of its
+  // other routes fall through to the registry handling below.
+  const requestyOpenAIModel = getRequestyOpenAIModel(model);
+  if (requestyOpenAIModel) {
+    return OPENAI_MODEL_CAPABILITIES[requestyOpenAIModel]?.reasoning ?? false;
   }
 
   // Other providers: BE flag wins; fall back to hardcoded REASONING_MODELS.
@@ -323,17 +357,14 @@ const OPENAI_EFFORT_LABELS: Record<ReasoningEffort, string> = {
 
 export const supportsOpenAIReasoningEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean =>
-  !!OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-    ?.reasoningEffortOptions;
+): boolean => !!getOpenAIModelCapabilities(model)?.reasoningEffortOptions;
 
 export const getOpenAIReasoningEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): Array<{ label: string; value: ReasoningEffort }> =>
-  (
-    OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-      ?.reasoningEffortOptions ?? []
-  ).map((value) => ({ label: OPENAI_EFFORT_LABELS[value], value }));
+  (getOpenAIModelCapabilities(model)?.reasoningEffortOptions ?? []).map(
+    (value) => ({ label: OPENAI_EFFORT_LABELS[value], value }),
+  );
 
 // Single reconciler called by every model-change handler (playground, judge
 // dialog). Keeping the rules here means the form state stays valid even when
@@ -359,7 +390,11 @@ export const updateProviderConfig = <
 
   const providerType = parseComposedProviderType(params.provider);
 
-  if (providerType === PROVIDER_TYPE.OPEN_AI) {
+  // Requesty is served by the OpenAI client on the backend, so its configs follow the OpenAI rules.
+  if (
+    providerType === PROVIDER_TYPE.OPEN_AI ||
+    providerType === PROVIDER_TYPE.REQUESTY
+  ) {
     const next: T = { ...currentConfig };
     let changed = false;
 
@@ -473,6 +508,9 @@ export const sanitizeConfigForRequest = (
 
   const sanitized: Record<string, unknown> = { ...configs };
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+  // Requesty requests go through the OpenAI client, so the OpenAI rules apply to them as well.
+  const followsOpenAIRules =
+    provider === PROVIDER_TYPE.OPEN_AI || provider === PROVIDER_TYPE.REQUESTY;
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {
     if (!supportsSamplingParams(model)) {
@@ -487,7 +525,7 @@ export const sanitizeConfigForRequest = (
     }
   }
 
-  if (provider === PROVIDER_TYPE.OPEN_AI && sanitized.reasoningEffort != null) {
+  if (followsOpenAIRules && sanitized.reasoningEffort != null) {
     if (!supportsOpenAIReasoningEffort(model)) {
       delete sanitized.reasoningEffort;
     } else {
@@ -504,11 +542,7 @@ export const sanitizeConfigForRequest = (
   // parameter: 'top_p' is not supported with this model." Belt-and-braces with the slider
   // gating and updateProviderConfig: stale persisted prompts that bypass the reconciler
   // still produce a valid wire payload.
-  if (
-    provider === PROVIDER_TYPE.OPEN_AI &&
-    isReasoningModel(model) &&
-    sanitized.topP != null
-  ) {
+  if (followsOpenAIRules && isReasoningModel(model) && sanitized.topP != null) {
     delete sanitized.topP;
   }
 

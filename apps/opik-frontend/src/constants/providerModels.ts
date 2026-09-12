@@ -2978,6 +2978,49 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
   ],
 
+  [PROVIDER_TYPE.REQUESTY]: [
+    {
+      value: PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4O,
+      label: "openai/gpt-4o",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4O_MINI,
+      label: "openai/gpt-4o-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4_1,
+      label: "openai/gpt-4.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_4_1_MINI,
+      label: "openai/gpt-4.1-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5,
+      label: "openai/gpt-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5_MINI,
+      label: "openai/gpt-5-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REQUESTY_ANTHROPIC_CLAUDE_SONNET_4_5,
+      label: "anthropic/claude-sonnet-4-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REQUESTY_ANTHROPIC_CLAUDE_HAIKU_4_5,
+      label: "anthropic/claude-haiku-4-5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REQUESTY_GOOGLE_GEMINI_2_5_FLASH,
+      label: "google/gemini-2.5-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REQUESTY_GOOGLE_GEMINI_2_5_PRO,
+      label: "google/gemini-2.5-pro",
+    },
+  ],
+
   [PROVIDER_TYPE.GEMINI]: [
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_8_FLASH,

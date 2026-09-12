@@ -902,6 +902,9 @@ navigation:
               - page: Portkey
                 path: ./docs-v2/integrations/portkey.mdx
                 slug: portkey
+              - page: Requesty
+                path: ./docs-v2/integrations/requesty.mdx
+                slug: requesty
               - page: TrueFoundry
                 path: ./docs-v2/integrations/truefoundry.mdx
                 slug: truefoundry

@@ -1971,3 +1971,96 @@ openrouter:
     label: "~z-ai/glm-latest"
   - id: "google/gemini-2.0-flash-001"
     structuredOutput: true
+requesty:
+  - id: "requesty/openai/gpt-4o"
+    label: "openai/gpt-4o"
+    structuredOutput: true
+  - id: "requesty/openai/gpt-4o-mini"
+    label: "openai/gpt-4o-mini"
+    structuredOutput: true
+  - id: "requesty/openai/gpt-4.1"
+    label: "openai/gpt-4.1"
+    structuredOutput: true
+  - id: "requesty/openai/gpt-4.1-mini"
+    label: "openai/gpt-4.1-mini"
+    structuredOutput: true
+  - id: "requesty/openai/gpt-4.1-nano"
+    label: "openai/gpt-4.1-nano"
+    structuredOutput: true
+  - id: "requesty/openai/gpt-5"
+    label: "openai/gpt-5"
+    structuredOutput: true
+  - id: "requesty/openai/gpt-5-mini"
+    label: "openai/gpt-5-mini"
+    structuredOutput: true
+  - id: "requesty/openai/gpt-5-nano"
+    label: "openai/gpt-5-nano"
+    structuredOutput: true
+  - id: "requesty/openai/gpt-5.4"
+    label: "openai/gpt-5.4"
+    structuredOutput: true
+  - id: "requesty/openai/gpt-5.4-mini"
+    label: "openai/gpt-5.4-mini"
+    structuredOutput: true
+  - id: "requesty/openai/o1"
+    label: "openai/o1"
+    structuredOutput: true
+    reasoning: true
+  - id: "requesty/openai/o3"
+    label: "openai/o3"
+    structuredOutput: true
+    reasoning: true
+  - id: "requesty/openai/o3-mini"
+    label: "openai/o3-mini"
+    structuredOutput: true
+    reasoning: true
+  - id: "requesty/openai/o4-mini"
+    label: "openai/o4-mini"
+    structuredOutput: true
+    reasoning: true
+  - id: "requesty/anthropic/claude-haiku-4-5"
+    label: "anthropic/claude-haiku-4-5"
+    structuredOutput: true
+  - id: "requesty/anthropic/claude-sonnet-4-5"
+    label: "anthropic/claude-sonnet-4-5"
+    structuredOutput: true
+  - id: "requesty/anthropic/claude-sonnet-4-6"
+    label: "anthropic/claude-sonnet-4-6"
+    structuredOutput: true
+  - id: "requesty/anthropic/claude-opus-4-5"
+    label: "anthropic/claude-opus-4-5"
+    structuredOutput: true
+  - id: "requesty/anthropic/claude-opus-4-6"
+    label: "anthropic/claude-opus-4-6"
+    structuredOutput: true
+  - id: "requesty/anthropic/claude-sonnet-5"
+    label: "anthropic/claude-sonnet-5"
+    structuredOutput: true
+  - id: "requesty/anthropic/claude-opus-5"
+    label: "anthropic/claude-opus-5"
+    structuredOutput: true
+  - id: "requesty/deepseek/deepseek-chat"
+    label: "deepseek/deepseek-chat"
+    structuredOutput: true
+  - id: "requesty/deepseek/deepseek-reasoner"
+    label: "deepseek/deepseek-reasoner"
+    reasoning: true
+  - id: "requesty/google/gemini-2.5-flash"
+    label: "google/gemini-2.5-flash"
+    structuredOutput: true
+  - id: "requesty/google/gemini-2.5-flash-lite"
+    label: "google/gemini-2.5-flash-lite"
+    structuredOutput: true
+  - id: "requesty/google/gemini-2.5-pro"
+    label: "google/gemini-2.5-pro"
+    structuredOutput: true
+  - id: "requesty/mistral/mistral-large-latest"
+    label: "mistral/mistral-large-latest"
+  - id: "requesty/mistral/mistral-medium-latest"
+    label: "mistral/mistral-medium-latest"
+  - id: "requesty/mistral/mistral-small-latest"
+    label: "mistral/mistral-small-latest"
+  - id: "requesty/xai/grok-4"
+    label: "xai/grok-4"
+  - id: "requesty/xai/grok-4-fast"
+    label: "xai/grok-4-fast"
