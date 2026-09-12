@@ -4,6 +4,7 @@ export enum PROVIDER_TYPE {
   OPEN_AI = "openai",
   ANTHROPIC = "anthropic",
   OPEN_ROUTER = "openrouter",
+  REQUESTY = "requesty",
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
   OLLAMA = "ollama",
@@ -821,6 +822,18 @@ export enum PROVIDER_MODEL_TYPE {
   X_AI_GROK_LATEST = "~x-ai/grok-latest",
   Z_AI_GLM_FLASH_LATEST = "~z-ai/glm-flash-latest",
   Z_AI_GLM_LATEST = "~z-ai/glm-latest",
+
+  //   <----- requesty
+  REQUESTY_OPENAI_GPT_4O = "requesty/openai/gpt-4o",
+  REQUESTY_OPENAI_GPT_4O_MINI = "requesty/openai/gpt-4o-mini",
+  REQUESTY_OPENAI_GPT_4_1 = "requesty/openai/gpt-4.1",
+  REQUESTY_OPENAI_GPT_4_1_MINI = "requesty/openai/gpt-4.1-mini",
+  REQUESTY_OPENAI_GPT_5 = "requesty/openai/gpt-5",
+  REQUESTY_OPENAI_GPT_5_MINI = "requesty/openai/gpt-5-mini",
+  REQUESTY_ANTHROPIC_CLAUDE_SONNET_4_5 = "requesty/anthropic/claude-sonnet-4-5",
+  REQUESTY_ANTHROPIC_CLAUDE_HAIKU_4_5 = "requesty/anthropic/claude-haiku-4-5",
+  REQUESTY_GOOGLE_GEMINI_2_5_FLASH = "requesty/google/gemini-2.5-flash",
+  REQUESTY_GOOGLE_GEMINI_2_5_PRO = "requesty/google/gemini-2.5-pro",
 
   //   <----- gemini
   AQA = "aqa",

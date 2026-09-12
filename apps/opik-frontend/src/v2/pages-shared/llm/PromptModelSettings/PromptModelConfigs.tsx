@@ -55,7 +55,11 @@ const PromptModelConfigs = ({
     parseComposedProviderType(composedProviderType);
 
   const getProviderForm = () => {
-    if (provider === PROVIDER_TYPE.OPEN_AI) {
+    // Requesty forwards the OpenAI chat completions parameters, so it shares the OpenAI form.
+    if (
+      provider === PROVIDER_TYPE.OPEN_AI ||
+      provider === PROVIDER_TYPE.REQUESTY
+    ) {
       return (
         <OpenAIModelConfigs
           configs={configs as LLMOpenAIConfigsType}
