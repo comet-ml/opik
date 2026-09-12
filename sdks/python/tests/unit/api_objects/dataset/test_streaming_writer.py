@@ -1,4 +1,5 @@
 import contextlib
+import dataclasses
 import datetime
 import decimal
 import enum
@@ -7,6 +8,7 @@ import json
 import threading
 import uuid
 
+import pydantic
 import pytest
 
 from opik.api_objects.dataset import streaming_writer
@@ -613,3 +615,81 @@ def test_pool__a_body_fails__surfaces_to_the_producer_at_the_bound():
         failed.set()
         with contextlib.suppress(Exception):
             pool.close()
+
+
+# --------------------------------------------------------------------------- #
+# an object with no JSON form is refused wherever it hides
+# --------------------------------------------------------------------------- #
+class _NoJsonForm:
+    """Not serialisable, and not one of the types the encoder converts."""
+
+    def __init__(self) -> None:
+        self.attribute = 1
+
+
+@dataclasses.dataclass
+class _Holder:
+    inner: object
+
+
+class _ModelHolder(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+    inner: object
+
+
+@pytest.mark.parametrize("use_orjson", [False, True])
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(_NoJsonForm(), id="top-level"),
+        pytest.param({"deep": _NoJsonForm()}, id="in-a-dict"),
+        pytest.param([_NoJsonForm()], id="in-a-list"),
+        pytest.param((_NoJsonForm(),), id="in-a-tuple"),
+        pytest.param({_NoJsonForm()}, id="in-a-set"),
+        pytest.param(frozenset({_NoJsonForm()}), id="in-a-frozenset"),
+        pytest.param(_Holder(_NoJsonForm()), id="in-a-dataclass"),
+        pytest.param(_ModelHolder(inner=_NoJsonForm()), id="in-a-pydantic-model"),
+    ],
+)
+def test_add__object_with_no_json_form__raises_wherever_it_is(value, use_orjson):
+    """`jsonable_encoder`'s last resort is `vars(obj)`, which would upload it as a dict.
+
+    The encoder hook hands back the shell of anything with an interior so the serialiser
+    walks back into this check for each member; without that, an object inside a set,
+    dataclass or model was encoded by its attributes and uploaded silently.
+    """
+    if use_orjson:
+        pytest.importorskip("orjson")
+    bodies, flush_callback = _collect()
+    writer = _writer(flush_callback, use_orjson=use_orjson)
+
+    with pytest.raises(streaming_writer.ItemNotSerializableError):
+        writer.add({"id": "a", "data": {"v": value}})
+
+    assert bodies == [], "Nothing may be emitted for an item that cannot be sent"
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        pytest.param({"only"}, ["only"], id="set"),
+        pytest.param(frozenset({"only"}), ["only"], id="frozenset"),
+        pytest.param((1, 2), [1, 2], id="tuple"),
+        pytest.param(_Holder(5), {"inner": 5}, id="dataclass"),
+        pytest.param(
+            _ModelHolder(inner="text"), {"inner": "text"}, id="pydantic-model"
+        ),
+        pytest.param(
+            {datetime.date(2024, 1, 2)}, ["2024-01-02"], id="date-inside-a-set"
+        ),
+    ],
+)
+def test_add__value_with_an_interior__still_encoded_as_it_was(value, expected):
+    """Handing back the shell must not change what an acceptable value looks like."""
+    bodies, flush_callback = _collect()
+    writer = _writer(flush_callback)
+
+    writer.add({"id": "a", "data": {"v": value}})
+    writer.flush()
+
+    assert _decode(bodies[0][0])["items"][0]["data"]["v"] == expected

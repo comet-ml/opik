@@ -7,6 +7,7 @@ wire serialiser every stored digest would stop matching and dedup would silently
 against existing datasets. These tests are the gate on that.
 """
 
+import dataclasses
 import datetime
 import decimal
 import hashlib
@@ -194,3 +195,30 @@ GOLDEN_DIGESTS = [
 @pytest.mark.parametrize("content, digest", GOLDEN_DIGESTS)
 def test_content_hash__matches_the_recorded_digest(content, digest):
     assert dataset_item.DatasetItem(**content).content_hash() == digest
+
+
+@dataclasses.dataclass
+class _Holder:
+    inner: object
+
+
+def test_content_hash__object_with_no_json_form__raises_wherever_it_is():
+    """Hashing and serialising must agree about what an item may contain.
+
+    Both go through `encode_flexible`, so a value the upload would refuse must not hash
+    either -- otherwise deduplication would accept an item the writer then rejects, and
+    which of the two reported it would depend on `deduplication`.
+    """
+
+    class NoJsonForm:
+        def __init__(self) -> None:
+            self.attribute = 1
+
+    for value in (
+        NoJsonForm(),
+        {"deep": NoJsonForm()},
+        {NoJsonForm()},
+        _Holder(NoJsonForm()),
+    ):
+        with pytest.raises(TypeError):
+            dataset_item.DatasetItem(input={"v": value}).content_hash()

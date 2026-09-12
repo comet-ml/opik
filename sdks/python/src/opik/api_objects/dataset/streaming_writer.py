@@ -44,22 +44,16 @@ except ImportError:  # pragma: no cover
 # gzip container rather than a raw deflate stream, matching what the server expects.
 _GZIP_WBITS = 16 + zlib.MAX_WBITS
 
-# Values the generated client accepted that a JSON serialiser rejects on its own: exactly
-# the types `jsonable_encoder` normalises deliberately. Its last-resort branch encodes an
-# unknown object as `vars(obj)`, which would upload an empty dict instead of telling the
-# caller their value cannot be sent, so anything outside this list still raises.
-_FLEXIBLE_TYPES = (
+# Values the generated client accepted that a JSON serialiser rejects on its own, and that
+# `jsonable_encoder` converts without looking inside anything: for these it is exact.
+_FLEXIBLE_LEAVES = (
     bytes,
     enum.Enum,
     datetime.date,  # also covers datetime.datetime
     datetime.time,
     decimal.Decimal,
     uuid.UUID,
-    set,
-    frozenset,
-    tuple,
     pathlib.PurePath,
-    pydantic.BaseModel,
 )
 
 
@@ -77,9 +71,26 @@ def encode_flexible(value: Any) -> Any:
 
     Called only for values a serialiser rejects, so ordinary JSON-native items never pay
     for the normalisation pass this restores.
+
+    A value with an interior is handed back as its shell rather than encoded here, so the
+    serialiser walks into it and comes back through this hook for each member. Letting
+    `jsonable_encoder` encode the interior instead would apply its last resort to whatever
+    it found there -- `vars(obj)` for an object with no JSON form, uploading it as a dict
+    of its attributes rather than telling the caller it cannot be sent.
     """
-    if isinstance(value, _FLEXIBLE_TYPES) or dataclasses.is_dataclass(value):
+    if isinstance(value, _FLEXIBLE_LEAVES):
         return jsonable_encoder(value)
+    if isinstance(value, (set, frozenset, tuple)):
+        return list(value)
+    if isinstance(value, pydantic.BaseModel):
+        # `model_dump`, not the deprecated `dict`, and in python mode so the members come
+        # back through here rather than being encoded by pydantic on the way out.
+        return value.model_dump(by_alias=True)
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {
+            field.name: getattr(value, field.name)
+            for field in dataclasses.fields(value)
+        }
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
