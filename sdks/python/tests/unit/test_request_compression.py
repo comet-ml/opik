@@ -1,0 +1,128 @@
+"""The request compression level is configurable, validated, and actually applied."""
+
+import gzip
+
+import pydantic
+import pytest
+
+from opik import httpx_client
+from opik.config import OpikConfig
+
+
+def test_compression_level__default_is_zlib_default_not_python_default():
+    """Python's gzip default of 9 costs several times the CPU of 6 for under 1% fewer
+    bytes on these payloads, so the SDK picks 6 deliberately."""
+    assert OpikConfig().request_compression_level == 6
+    assert httpx_client.DEFAULT_COMPRESSION_LEVEL == 6
+
+
+def test_compression_level__read_from_the_environment(monkeypatch):
+    monkeypatch.setenv("OPIK_REQUEST_COMPRESSION_LEVEL", "1")
+    assert OpikConfig().request_compression_level == 1
+
+
+@pytest.mark.parametrize("value", ["10", "-1", "99"])
+def test_compression_level__out_of_range__rejected(monkeypatch, value):
+    """An unusable level must fail loudly rather than be silently ignored."""
+    monkeypatch.setenv("OPIK_REQUEST_COMPRESSION_LEVEL", value)
+    with pytest.raises(pydantic.ValidationError):
+        OpikConfig()
+
+
+def test_compression_level__not_an_integer__rejected(monkeypatch):
+    monkeypatch.setenv("OPIK_REQUEST_COMPRESSION_LEVEL", "high")
+    with pytest.raises(pydantic.ValidationError):
+        OpikConfig()
+
+
+@pytest.mark.parametrize("level", [1, 6, 9])
+def test_build_request__uses_the_configured_level(level):
+    """The body must still decompress, and the level must reach gzip."""
+    client = httpx_client.OpikHttpxClient(
+        compress_json_requests=True, compression_level=level
+    )
+    payload = {"items": [{"input": "x" * 500} for _ in range(20)]}
+
+    request = client.build_request("PUT", "http://testserver/x", json=payload)
+    body = request.read()
+
+    assert request.headers["Content-Encoding"] == "gzip"
+    assert gzip.decompress(body) == httpx_client.jsonlib.dumps(payload).encode("utf-8")
+
+
+def test_build_request__lower_level_sends_more_bytes():
+    """Sanity check that the level is doing something rather than being accepted and
+    dropped."""
+    payload = {"items": [{"input": "abcdefghij" * 200} for _ in range(20)]}
+
+    def body_size(level: int) -> int:
+        client = httpx_client.OpikHttpxClient(
+            compress_json_requests=True, compression_level=level
+        )
+        return len(
+            client.build_request("PUT", "http://testserver/x", json=payload).read()
+        )
+
+    assert body_size(1) > body_size(9)
+
+
+@pytest.mark.parametrize(
+    "padding, compressed",
+    [(0, False), (300, True)],
+)
+def test_build_request__entity_size_floor__matches_the_backend(padding, compressed):
+    """The backend will not gzip a response below 256 bytes; requests now agree.
+
+    Below the floor gzip can leave a body larger than it started, which is the reason
+    Dropwizard has one.
+    """
+    client = httpx_client.OpikHttpxClient(compress_json_requests=True)
+    payload = {"name": "accuracy", "value": 0.91, "pad": "x" * padding}
+    assert (
+        len(httpx_client.jsonlib.dumps(payload).encode("utf-8"))
+        >= httpx_client.MIN_COMPRESSED_ENTITY_BYTES
+    ) is compressed
+
+    request = client.build_request("POST", "http://testserver/x", json=payload)
+
+    assert ("Content-Encoding" in request.headers) is compressed
+    if not compressed:
+        assert httpx_client.jsonlib.loads(request.read()) == payload
+
+
+def test_build_request__compression_disabled__body_is_plain_json():
+    client = httpx_client.OpikHttpxClient(compress_json_requests=False)
+    request = client.build_request("PUT", "http://testserver/x", json={"a": 1})
+
+    assert "Content-Encoding" not in request.headers
+
+
+def test_orjson_kill_switch__default_on_but_overridable(monkeypatch):
+    assert OpikConfig().enable_orjson_serialization is True
+
+    monkeypatch.setenv("OPIK_ENABLE_ORJSON_SERIALIZATION", "false")
+    assert OpikConfig().enable_orjson_serialization is False
+
+
+def test_dataset_upload_compression_level__defaults_below_the_global_level():
+    """Bulk dataset uploads are CPU-bound on compression, ordinary requests are not.
+
+    Measured on a 1,500-item / 206.1 MiB upload: level 1 reached 283.40 items/s and put
+    77.6 MiB on the wire, against 121.67 items/s and 67.9 MiB at level 6 -- 14.2% more
+    bytes for 2.33x the throughput.
+    """
+    assert OpikConfig().dataset_upload_compression_level == 1
+    assert OpikConfig().request_compression_level == 6
+
+
+def test_dataset_upload_compression_level__read_from_the_environment(monkeypatch):
+    monkeypatch.setenv("OPIK_DATASET_UPLOAD_COMPRESSION_LEVEL", "6")
+    assert OpikConfig().dataset_upload_compression_level == 6
+    assert OpikConfig().request_compression_level == 6
+
+
+@pytest.mark.parametrize("value", ["10", "-1", "low"])
+def test_dataset_upload_compression_level__invalid__rejected(monkeypatch, value):
+    monkeypatch.setenv("OPIK_DATASET_UPLOAD_COMPRESSION_LEVEL", value)
+    with pytest.raises(pydantic.ValidationError):
+        OpikConfig()

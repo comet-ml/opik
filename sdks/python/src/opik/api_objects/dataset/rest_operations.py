@@ -285,6 +285,7 @@ def get_datasets(
     rest_client: OpikApi,
     max_results: int = 1000,
     sync_items: bool = False,
+    client: Optional[Any] = None,
 ) -> List[dataset.Dataset]:
     page_size = 100
     datasets: List[dataset.Dataset] = []
@@ -311,6 +312,7 @@ def get_datasets(
                 project_name=project_name,
                 rest_client=rest_client,
                 dataset_items_count=dataset_fern.dataset_items_count,
+                client=client,
             )
             # Seed the id from the listing so reads don't re-resolve each
             # dataset by name.

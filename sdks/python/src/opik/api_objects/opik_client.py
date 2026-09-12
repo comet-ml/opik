@@ -1230,6 +1230,7 @@ class Opik:
             rest_client=self._rest_client,
             max_results=max_results,
             sync_items=sync_items,
+            client=self,
         )
 
         return datasets

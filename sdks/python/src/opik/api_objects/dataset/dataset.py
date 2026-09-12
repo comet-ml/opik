@@ -1,36 +1,45 @@
 import abc
+import collections.abc
 import datetime
 import logging
+import os
+
+import httpx
 import functools
 import sys
-from concurrent import futures
 from typing import (
-    Optional,
     Any,
-    List,
     Dict,
-    Sequence,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
     Set,
     TYPE_CHECKING,
-    Iterator,
+    Tuple,
+    Union,
 )
 
 from opik.api_objects import rest_helpers
+from opik.rest_client_configurator import retry_decorator
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types import (
-    dataset_item_write as rest_dataset_item,
     dataset_public as rest_dataset_public,
     dataset_version_public,
-    evaluator_item_write as rest_evaluator_item,
-    execution_policy_write as rest_execution_policy,
 )
 from opik.message_processing.batching import sequence_splitter
-from opik import id_helpers, semantic_version
+from opik import httpx_client, id_helpers, semantic_version
 import opik.exceptions as exceptions
 import opik.config as config
 from .. import constants
-from . import dataset_item, converters, rest_operations, execution_policy
+from . import (
+    dataset_item,
+    converters,
+    rest_operations,
+    execution_policy,
+    streaming_writer,
+)
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -489,6 +498,8 @@ class Dataset(DatasetExportOperations):
         rest_client: rest_api_client.OpikApi,
         dataset_items_count: Optional[int] = None,
         client: Optional[Any] = None,
+        rest_httpx_client: Optional[httpx.Client] = None,
+        url_override: Optional[str] = None,
     ) -> None:
         """
         A Dataset object. This object should not be created directly, instead use :meth:`opik.Opik.create_dataset` or :meth:`opik.Opik.get_dataset`.
@@ -499,6 +510,8 @@ class Dataset(DatasetExportOperations):
         self._dataset_items_count = dataset_items_count
         self._project_name = project_name
         self.client = client
+        self._rest_httpx_client = rest_httpx_client
+        self._url_override = url_override
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
@@ -715,68 +728,127 @@ class Dataset(DatasetExportOperations):
         )
         return dataset_fern.tags or []
 
-    def _convert_to_rest_item(
-        self, item: dataset_item.DatasetItem
-    ) -> rest_dataset_item.DatasetItemWrite:
-        """Convert a DatasetItem to REST API format.
+    def _deduplicating(
+        self, items: Iterable[dataset_item.DatasetItem], deduplication: bool
+    ) -> Iterator[dataset_item.DatasetItem]:
+        """Yield items, dropping ones whose content hash has already been seen.
 
-        Args:
-            item: The DatasetItem to convert.
-
-        Returns:
-            DatasetItemWrite object ready for REST API.
+        The hash state spans the whole pass, so a duplicate is caught however far apart
+        the two copies are. Hashes always use the standard library, so item identity does
+        not depend on which serialiser writes the request body.
         """
+        for item in items:
+            if deduplication:
+                try:
+                    item_hash = item.content_hash()
+                except (TypeError, ValueError) as exception:
+                    # Hashing serialises too, so it reaches a bad value before the writer
+                    # does, and raises the writer's error rather than a bare `TypeError`
+                    # from `json.dumps`. `ValueError` is how that reports a circular
+                    # reference. It does not make the two settings agree everywhere:
+                    # hashing sorts keys, so an item with keys of mixed type still fails
+                    # here and still uploads with `deduplication=False`.
+                    raise streaming_writer.ItemNotSerializableError(
+                        f"Dataset item is not JSON-serializable: {exception}"
+                    ) from exception
+                if item_hash in self._hashes:
+                    LOGGER.debug(
+                        "Duplicate item found with hash: %s - ignored the event",
+                        item_hash,
+                    )
+                    continue
+                self._hashes.add(item_hash)
+                # Keyed the way the item is sent, so a later delete by the id the backend
+                # returns finds the hash this pass cached.
+                self._id_to_hash[streaming_writer.canonical_id(item.id)] = item_hash
+            yield item
+
+    def _item_payload(self, item: dataset_item.DatasetItem) -> Dict[str, Any]:
+        """Wire form of one dataset item, without building an intermediate model."""
+        for field, value in (
+            ("id", item.id),
+            ("trace_id", item.trace_id),
+            ("span_id", item.span_id),
+        ):
+            streaming_writer.validate_identifier(value, field)
         evaluators = None
         if item.evaluators:
             evaluators = [
-                rest_evaluator_item.EvaluatorItemWrite(
-                    name=e.name,
-                    type=e.type,  # type: ignore
-                    config=e.config,
-                )
+                {"name": e.name, "type": e.type, "config": e.config}
                 for e in item.evaluators
             ]
 
-        execution_policy = None
+        execution_policy_payload = None
         if item.execution_policy:
-            execution_policy = rest_execution_policy.ExecutionPolicyWrite(
-                runs_per_item=item.execution_policy.runs_per_item,
-                pass_threshold=item.execution_policy.pass_threshold,
-            )
+            execution_policy_payload = {
+                "runs_per_item": item.execution_policy.runs_per_item,
+                "pass_threshold": item.execution_policy.pass_threshold,
+            }
 
-        return rest_dataset_item.DatasetItemWrite(
-            id=item.id,  # type: ignore
-            trace_id=item.trace_id,  # type: ignore
-            span_id=item.span_id,  # type: ignore
-            source=item.source,  # type: ignore
+        return streaming_writer.item_payload(
+            item_id=item.id,
+            trace_id=item.trace_id,
+            span_id=item.span_id,
+            source=item.source,
             data=item.get_content(),
             description=item.description,
             evaluators=evaluators,
-            execution_policy=execution_policy,
+            execution_policy=execution_policy_payload,
         )
 
-    def _insert_batch_with_retry(
-        self,
-        batch: List[rest_dataset_item.DatasetItemWrite],
-        batch_group_id: str,
-    ) -> None:
-        """Insert a batch of dataset items with automatic retry on rate limit errors.
+    def _upload_transport(self) -> Tuple[httpx.Client, str]:
+        """The HTTP client and base URL used to send prepared request bodies.
 
-        Args:
-            batch: List of dataset items to insert.
-            batch_group_id: UUIDv7 identifier that groups all batches from a single
-                user operation together. All batches sent as part of one insert/update
-                call share the same batch_group_id.
+        A `Dataset` always has a REST client, and the transport underneath it is the very
+        `OpikHttpxClient` the owning client holds -- the same object, carrying the same
+        auth, workspace headers and compression setting -- so a `Dataset` built from a REST
+        client alone resolves a transport like any other, as the read side already does in
+        `parallel_items_reader`. The constructor arguments win where they were supplied.
         """
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: self._rest_client.datasets.create_or_update_dataset_items(
-                dataset_name=self._name,
-                items=batch,
-                batch_group_id=batch_group_id,
-                project_name=self._project_name,
+        httpx_client_ = self._rest_httpx_client
+        base_url = self._url_override
+
+        if httpx_client_ is None:
+            httpx_client_ = self._rest_client._client_wrapper.httpx_client.httpx_client
+        if base_url is None:
+            base_url = self._rest_client._client_wrapper.get_base_url()
+
+        if httpx_client_ is None or base_url is None:
+            raise exceptions.OpikException(
+                "The dataset's REST client exposes no HTTP transport to upload through"
             )
+        return httpx_client_, base_url
+
+    def _send_prepared_body(self, body: bytes) -> None:
+        """Send one already-serialised request body."""
+        httpx_client_, base_url = self._upload_transport()
+
+        def send() -> None:
+            response = httpx_client.send_prepared_json(
+                httpx_client_,
+                base_url,
+                "v1/private/datasets/items",
+                body,
+                headers=httpx_client.wrapper_headers(self._rest_client),
+            )
+            if response.status_code >= 300:
+                raise ApiError(
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    body=response.text,
+                )
+
+        # `rest_client_configurator` wraps every generated client method in this retry, so
+        # a body sent through the raw sender has to carry it too or the bulk path would be
+        # the one path that gives up on a transient 5xx. Nested as it is there: retries
+        # inside, the rate-limit wait outside.
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            retry_decorator.opik_rest_retry(send)
         )
-        LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
+
+    def _open_send_pool(self, num_threads: int) -> streaming_writer.BoundedSendPool:
+        """Upload sink for one insert. Split out so the worker count is observable."""
+        return streaming_writer.BoundedSendPool(self._send_prepared_body, num_threads)
 
     @property
     def _parallel_insert_supported(self) -> bool:
@@ -834,70 +906,9 @@ class Dataset(DatasetExportOperations):
         self._parallel_insert_supported_cache = supported
         return supported
 
-    def _send_batches(
-        self,
-        batches: List[List[rest_dataset_item.DatasetItemWrite]],
-        batch_group_id: str,
-        num_threads: int,
-    ) -> None:
-        """Send batches to the backend, optionally in parallel.
-
-        All batches share ``batch_group_id`` so they fold into a single
-        dataset version regardless of how many workers send them. With
-        ``num_threads <= 1`` batches are sent sequentially in the caller
-        thread. With ``num_threads > 1`` they are fanned out across a thread
-        pool; the first batch that fails re-raises to the caller. There is no
-        rollback, so batches that already succeeded before the failure remain
-        persisted.
-        """
-        if num_threads <= 1:
-            for batch in batches:
-                self._insert_batch_with_retry(batch, batch_group_id=batch_group_id)
-            return
-
-        with futures.ThreadPoolExecutor(max_workers=num_threads) as pool:
-            submitted = [
-                pool.submit(
-                    self._insert_batch_with_retry,
-                    batch,
-                    batch_group_id=batch_group_id,
-                )
-                for batch in batches
-            ]
-            for future in futures.as_completed(submitted):
-                future.result()
-
-    def _deduplicate(
-        self, items: List[dataset_item.DatasetItem]
-    ) -> List[dataset_item.DatasetItem]:
-        """Drop items whose content hash was already seen locally or on the backend."""
-        # Lazy-sync against the backend the first time we insert into a
-        # dataset that was fetched from the backend (list or get-by-name
-        # factory), so content-hash dedup still works without paying an
-        # N+1 sync at list time.
-        if not self._hashes_synced:
-            self.__internal_api__sync_hashes__()
-
-        deduplicated_items: List[dataset_item.DatasetItem] = []
-        for item in items:
-            item_hash = item.content_hash()
-
-            if item_hash in self._hashes:
-                LOGGER.debug(
-                    "Duplicate item found with hash: %s - ignored the event",
-                    item_hash,
-                )
-                continue
-
-            deduplicated_items.append(item)
-            self._hashes.add(item_hash)
-            self._id_to_hash[item.id] = item_hash
-
-        return deduplicated_items
-
     def __internal_api__insert_items_as_dataclasses__(
         self,
-        items: List[dataset_item.DatasetItem],
+        items: Iterable[dataset_item.DatasetItem],
         num_threads: int = 1,
         deduplication: bool = True,
     ) -> None:
@@ -921,31 +932,76 @@ class Dataset(DatasetExportOperations):
             num_threads = 1
 
         if deduplication:
-            items_to_send = self._deduplicate(items)
+            # Lazy-sync against the backend the first time we insert into a dataset that
+            # was fetched from it, so content-hash dedup still works without paying an
+            # N+1 sync at list time.
+            if not self._hashes_synced:
+                self.__internal_api__sync_hashes__()
         else:
-            # Nothing was hashed, so the local cache no longer describes the
-            # backend; force a re-sync before the next deduplicated insert.
-            items_to_send = items
+            # Nothing will be hashed, so the local cache no longer describes the backend;
+            # force a re-sync before the next deduplicated insert.
             self._hashes_synced = False
 
-        rest_items = [self._convert_to_rest_item(item) for item in items_to_send]
-
-        batches = sequence_splitter.split_into_batches(
-            rest_items,
-            max_payload_size_MB=config.MAX_BATCH_SIZE_MB,
-            max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
-        )
-
+        opik_config = config.OpikConfig()
         batch_group_id = id_helpers.generate_id()
 
-        self._send_batches(batches, batch_group_id, num_threads)
+        try:
+            upload_client, _ = self._upload_transport()
+            # The enable flag gates the level: a client built with compression off must
+            # not be handed gzipped bodies, whatever level is configured. A transport that
+            # carries no setting of its own -- a REST client built directly sends through
+            # a plain httpx client -- takes the configured one, the same config the level
+            # and the serialiser are read from.
+            compressing = httpx_client.compresses_json_requests(
+                upload_client, default=opik_config.enable_json_request_compression
+            )
 
-        # Invalidate the cached count so it will be fetched from backend on next access
-        self._dataset_items_count = None
+            pool = self._open_send_pool(num_threads)
+            writer = streaming_writer.StreamingBatchWriter(
+                envelope={
+                    "dataset_name": self._name,
+                    "project_name": self._project_name,
+                    "batch_group_id": batch_group_id,
+                },
+                flush_callback=pool.submit,
+                max_payload_bytes=int(config.MAX_BATCH_SIZE_MB * 1024 * 1024),
+                max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
+                gzip_level=(
+                    opik_config.dataset_upload_compression_level
+                    if compressing
+                    else None
+                ),
+                use_orjson=opik_config.enable_orjson_serialization,
+            )
+
+            try:
+                for item in self._deduplicating(items, deduplication):
+                    writer.add(self._item_payload(item))
+                writer.flush()
+            except BaseException:
+                # Still close and join the pool, but let the producer's exception stand:
+                # a body that failed earlier would otherwise replace the error that
+                # explains why the upload stopped here.
+                try:
+                    pool.close()
+                except Exception:
+                    LOGGER.debug(
+                        "A dataset upload batch also failed while closing the pool",
+                        exc_info=True,
+                    )
+                raise
+            else:
+                pool.close()
+        finally:
+            # In a `finally`, and around both paths, because a partial insert still
+            # changed the dataset: an upload that fails after earlier bodies landed, or a
+            # source that raises part-way, leaves items on the backend that a cached count
+            # taken before the insert does not include.
+            self._dataset_items_count = None
 
     def insert(
         self,
-        items: Sequence[Dict[str, Any]],
+        items: Iterable[Union[Dict[str, Any], dataset_item.DatasetItem]],
         num_threads: int = 4,
         deduplication: bool = True,
     ) -> None:
@@ -953,8 +1009,18 @@ class Dataset(DatasetExportOperations):
         Insert new items into the dataset. A new dataset version will be created.
 
         Args:
-            items: List of dicts (which will be converted to dataset items)
-                to add to the dataset.
+            items: Dicts (or ``DatasetItem`` objects) to add to the dataset. Any
+                iterable is accepted, including a generator, and it is consumed lazily, so
+                no item is retained once its request has been sent and the request bodies
+                in flight are capped. That is the bounded part; deduplication is not, and
+                keeps a content digest and an id per item for the life of the ``Dataset``
+                however the items arrived -- pass ``deduplication=False`` for an upload
+                that retains nothing at all. A list keeps working as before, and its
+                items are checked for shape before the first request goes out; from a
+                generator not even that is possible. Either way a value that cannot be
+                serialised is found when the item carrying it is reached, and the items
+                sent before it stay persisted -- a single-pass upload cannot know the
+                last item is invalid before sending the first batch.
             deduplication: Whether to skip items whose content already exists
                 in the dataset. Pass ``False`` to insert every item as-is
                 without any duplicate checking, which is significantly faster
@@ -969,23 +1035,52 @@ class Dataset(DatasetExportOperations):
                 sequential one.
 
         Raises:
-            ValueError: If ``num_threads`` is not a positive integer, or
-                ``deduplication`` is not a bool.
+            ValueError: If ``num_threads`` is not a positive integer, if
+                ``deduplication`` is not a bool, if an item in a list is neither a dict
+                nor a ``DatasetItem``, or if an item's ``id``, ``trace_id`` or
+                ``span_id`` is not a UUID.
         """
+        # Repeated from the funnel so a bad argument raises before the shape pre-pass
+        # below walks the whole input.
         if isinstance(num_threads, bool) or not isinstance(num_threads, int):
             raise ValueError("num_threads must be a positive integer")
         if num_threads < 1:
             raise ValueError("num_threads must be a positive integer")
-        # Checked here too so bad input raises before any item is converted.
         if not isinstance(deduplication, bool):
             raise ValueError("deduplication must be a bool")
 
-        dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
+        if isinstance(items, collections.abc.Sequence):
+            # Cheap enough to run over the whole input before anything is sent -- one
+            # isinstance per item, nothing retained -- and it buys atomicity: an item of
+            # the wrong type raises before the first request rather than part-way through
+            # the upload with earlier items already persisted. Shape only; a value that
+            # cannot be serialised is still found when it is reached.
+            for index, item in enumerate(items):
+                if not isinstance(item, (dict, dataset_item.DatasetItem)):
+                    raise ValueError(
+                        f"Dataset item at index {index} must be a dict or a DatasetItem, "
+                        f"got {type(item).__name__}"
+                    )
+                # Named with its position while we still have one; the same check runs
+                # per item further down, where a generator gives no index to report.
+                for field in ("id", "trace_id", "span_id"):
+                    supplied = (
+                        item.get(field)
+                        if isinstance(item, dict)
+                        else getattr(item, field, None)
+                    )
+                    streaming_writer.validate_identifier(supplied, field, index)
+
+        # A generator rather than a list: converting lazily is what lets a generator
+        # argument stay un-materialised all the way to the wire.
+        dataset_items = (
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
             for item in items
-        ]
+        )
         self.__internal_api__insert_items_as_dataclasses__(
-            dataset_items, num_threads=num_threads, deduplication=deduplication
+            dataset_items,
+            num_threads=num_threads,
+            deduplication=deduplication,
         )
 
     @property
@@ -1014,31 +1109,56 @@ class Dataset(DatasetExportOperations):
 
         for item in self.__internal_api__stream_items_as_dataclasses__():
             item_hash = item.content_hash()
-            self._id_to_hash[item.id] = item_hash  # type: ignore
+            self._id_to_hash[streaming_writer.canonical_id(item.id)] = item_hash
             self._hashes.add(item_hash)
 
         self._hashes_synced = True
         LOGGER.debug("Finish hash sync in dataset")
 
-    def update(self, items: List[Dict[str, Any]], deduplication: bool = True) -> None:
+    def update(
+        self, items: Iterable[Dict[str, Any]], deduplication: bool = True
+    ) -> None:
         """
         Update existing items in the dataset.
 
         Args:
-            items: List of DatasetItem objects to update in the dataset. You need to provide the full item object as it will override what has been supplied previously.
+            items: Dicts to update in the dataset. You need to provide the full item
+                object as it will override what has been supplied previously. Any
+                iterable is accepted, including a generator.
             deduplication: Whether to skip items whose content already exists in
                 the dataset. See :meth:`insert` for details.
 
         Raises:
-            DatasetItemUpdateOperationRequiresItemId: If any item in the list is missing an id.
+            DatasetItemUpdateOperationRequiresItemId: If an item is missing an id. The
+                item's position in the input is included in the message. A list is
+                scanned before anything is sent; from a generator the missing id is
+                found when its item is reached, and the items before it stay persisted.
         """
-        for item in items:
+
+        def require_id(index: int, item: Dict[str, Any], consequence: str) -> None:
             if "id" not in item:
                 raise exceptions.DatasetItemUpdateOperationRequiresItemId(
-                    "Missing id for dataset item to update: %s", item
+                    f"Missing id for dataset item at index {index}: {item}. {consequence}"
                 )
 
-        self.insert(items, deduplication=deduplication)
+        def checked(
+            source: Iterable[Dict[str, Any]],
+        ) -> Iterator[Dict[str, Any]]:
+            for index, item in enumerate(source):
+                require_id(
+                    index, item, "Items before it may already have been persisted."
+                )
+                yield item
+
+        if isinstance(items, collections.abc.Sequence):
+            # Scannable up front, the way `insert` scans a list for shape, so the
+            # atomicity `update` had before it streamed is kept where it is still
+            # possible. A generator cannot be scanned without consuming it.
+            for index, item in enumerate(items):
+                require_id(index, item, "Nothing has been sent.")
+            self.insert(items, deduplication=deduplication)
+        else:
+            self.insert(checked(items), deduplication=deduplication)
 
     def _delete_batch_with_retry(
         self,
@@ -1065,26 +1185,53 @@ class Dataset(DatasetExportOperations):
         Delete items from the dataset. A new dataset version will be created.
 
         Args:
-            items_ids: List of item ids to delete.
+            items_ids: List of item ids to delete. Ids are normalised the way
+                :meth:`insert` normalises them, so an item inserted with a ``uuid.UUID``
+                object can be deleted by that object or by its string form.
+
+        Raises:
+            ValueError: If an id is ``None`` or empty. The item's position in the input
+                is included in the message.
         """
+        # Through the same canonicalisation the upload used, so an id given here in a
+        # different form than it was inserted in still matches the cached hash.
+        canonical_ids = []
+        for index, id_ in enumerate(items_ids):
+            canonical = streaming_writer.canonical_id(id_)
+            # Neither identifies an item, and both reach the backend as a request to
+            # delete nothing in particular rather than as an error.
+            if not canonical:
+                raise ValueError(
+                    f"Dataset item id at index {index} must be a non-empty value, "
+                    f"got {id_!r}"
+                )
+            canonical_ids.append(canonical)
         batches = sequence_splitter.split_into_batches(
-            items_ids, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
+            canonical_ids, max_length=constants.DATASET_ITEMS_MAX_BATCH_SIZE
         )
 
         batch_group_id = id_helpers.generate_id()
 
-        for batch in batches:
-            LOGGER.debug("Deleting dataset items batch: %s", batch)
-            self._delete_batch_with_retry(batch, batch_group_id=batch_group_id)
+        try:
+            for batch in batches:
+                LOGGER.debug(
+                    "Deleting dataset items batch of size %d, first ids: %s",
+                    len(batch),
+                    batch[:5],
+                )
+                self._delete_batch_with_retry(batch, batch_group_id=batch_group_id)
 
-            for item_id in batch:
-                if item_id in self._id_to_hash:
-                    hash = self._id_to_hash[item_id]
-                    self._hashes.discard(hash)
-                    del self._id_to_hash[item_id]
-
-        # Invalidate the cached count so it will be fetched from backend on next access
-        self._dataset_items_count = None
+                for item_id in batch:
+                    if item_id in self._id_to_hash:
+                        hash = self._id_to_hash[item_id]
+                        self._hashes.discard(hash)
+                        del self._id_to_hash[item_id]
+        finally:
+            # In a `finally` for the same reason the insert path is: a delete that fails
+            # part-way has already removed the batches before it, so a count cached from
+            # before the call no longer describes the dataset -- and would be reported
+            # indefinitely, since the cache is only refilled once cleared.
+            self._dataset_items_count = None
 
     def clear(self) -> None:
         """
@@ -1217,9 +1364,21 @@ class Dataset(DatasetExportOperations):
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
         deduplication: bool = True,
+        validate_before_upload: bool = True,
     ) -> None:
         """
         Read JSONL from a file and insert it into the dataset.
+
+        The file is parsed one line at a time and uploaded as it is read, so a file
+        larger than memory can be inserted whichever way ``validate_before_upload`` is
+        set: neither the file nor the items it holds are retained. Deduplication is the
+        exception and is unchanged -- with ``deduplication=True`` a digest and an id per
+        item are kept for the life of the ``Dataset``, around 0.3 KB each.
+
+        The file is read from the start twice when ``validate_before_upload`` is on, so
+        it has to be re-readable. A path that cannot be re-read -- a pipe or a character
+        device -- is uploaded in a single pass instead, and a warning says so, rather
+        than validating the stream and then finding nothing left to upload.
 
         Args:
             file_path: Path to the JSONL file
@@ -1229,11 +1388,70 @@ class Dataset(DatasetExportOperations):
                 construction - pass them as ignore_keys argument
             deduplication: Whether to skip items whose content already exists in
                 the dataset. See :meth:`insert` for details.
+            validate_before_upload: Whether the file is checked before the upload
+                starts, rather than as it goes. Every item is validated either way, so
+                this decides when a bad one is reported, not whether it is. ``True``
+                (the default) reads the file once first, so a bad line raises before any
+                request -- the check :meth:`insert` runs on a list and cannot run on a
+                generator -- at the cost of parsing the file twice and no extra memory.
+                ``False`` uploads in a single pass and validates each item as it is
+                sent, so a bad line raises when it is reached, with the items before it
+                persisted and no rollback.
+
+        Raises:
+            ValueError: If an item's ``id``, ``trace_id`` or ``span_id`` is not a UUID.
+                With ``validate_before_upload`` it names the item's position among the
+                items read -- blank lines are skipped, so that is not a line number --
+                and nothing has been sent; a malformed line, or a value pydantic
+                rejects, is raised there too. A value that cannot be serialised is found when its
+                item is reached either way, as it is for a list.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
-        new_items = converters.from_jsonl_file(file_path, keys_mapping, ignore_keys)
-        self.insert(new_items, deduplication=deduplication)
+
+        def items() -> Iterator[dataset_item.DatasetItem]:
+            return converters.stream_from_jsonl_file(
+                file_path, keys_mapping, ignore_keys
+            )
+
+        if validate_before_upload and not os.path.isfile(file_path):
+            # Re-opening a pipe lands at EOF, so the check would pass over the whole
+            # stream and the upload would then send nothing at all and return happily.
+            LOGGER.warning(
+                "%s cannot be read twice, so its items are validated as they are sent "
+                "rather than before the first request.",
+                file_path,
+            )
+            validate_before_upload = False
+
+        if validate_before_upload:
+            # A file can be read twice, so it gets the check a list gets and a generator
+            # cannot: one pass that parses every line and builds every item, keeping
+            # none of them. Validating by materialising the items instead would hold
+            # ~1.3 KB each until the upload ends; this holds one line.
+            before = os.stat(file_path)
+            for index, item in enumerate(items()):
+                for field in ("id", "trace_id", "span_id"):
+                    streaming_writer.validate_identifier(
+                        getattr(item, field, None), field, index
+                    )
+            # The upload re-opens the path, so a file rewritten in between would send
+            # rows the check never saw while the caller was told they were checked.
+            # Size and mtime, not a digest: a third pass over the file to hash it would
+            # cost more than the check itself, and this catches an edit rather than an
+            # adversary.
+            after = os.stat(file_path)
+            if (before.st_size, before.st_mtime_ns) != (
+                after.st_size,
+                after.st_mtime_ns,
+            ):
+                raise ValueError(
+                    f"{file_path} changed while it was being validated, so nothing was "
+                    f"uploaded. Retry, or pass validate_before_upload=False to upload "
+                    f"in a single pass."
+                )
+
+        self.insert(items(), deduplication=deduplication)
 
     def insert_from_pandas(
         self,

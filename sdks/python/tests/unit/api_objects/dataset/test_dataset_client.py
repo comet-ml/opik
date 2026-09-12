@@ -9,6 +9,8 @@ from opik.api_objects import constants
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects.dataset.dataset import Dataset
 
+from .upload_capture import UploadCapture, make_dataset
+
 
 def _make_items(count: int) -> list:
     return [
@@ -19,13 +21,8 @@ def _make_items(count: int) -> list:
 
 def test_insert_deduplication__two_dicts_passed_with_the_same_content__only_one_is_inserted():
     mock_rest_client = Mock()
-
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
 
     item_dict = {
         "input": {"key": "value", "key2": "value2"},
@@ -36,25 +33,17 @@ def test_insert_deduplication__two_dicts_passed_with_the_same_content__only_one_
     # Insert the identical items
     dataset.insert([item_dict, item_dict])
 
-    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1, (
-        "create_or_update_dataset_items should be called only once"
-    )
+    assert capture.request_count == 1, "Exactly one request should have been sent"
 
-    call_args = mock_rest_client.datasets.create_or_update_dataset_items.call_args
-    inserted_items = call_args[1]["items"]
+    inserted_items = capture.batches[-1]
 
     assert len(inserted_items) == 1, "Only one item should be inserted"
 
 
 def test_insert_deduplication__two_dicts_passed_with_the_different_content__both_are_inserted():
     mock_rest_client = Mock()
-
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
 
     item_dict1 = {
         "input": {"key": "value1"},
@@ -70,25 +59,17 @@ def test_insert_deduplication__two_dicts_passed_with_the_different_content__both
     # Insert the different items
     dataset.insert([item_dict1, item_dict2])
 
-    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1, (
-        "create_or_update_dataset_items should be called only once"
-    )
+    assert capture.request_count == 1, "Exactly one request should have been sent"
 
-    call_args = mock_rest_client.datasets.create_or_update_dataset_items.call_args
-    inserted_items = call_args[1]["items"]
+    inserted_items = capture.batches[-1]
 
     assert len(inserted_items) == 2, "Two items should be inserted"
 
 
 def test_insert_deduplication__three_dicts_passed__one_unique__two_duplicates__two_different_items_are_inserted():
     mock_rest_client = Mock()
-
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
 
     item_dict1 = {
         "input": {"key": "value1"},
@@ -104,25 +85,17 @@ def test_insert_deduplication__three_dicts_passed__one_unique__two_duplicates__t
     # Insert 3 items: one unique and two duplicates
     dataset.insert([item_dict1, item_dict2, item_dict1])
 
-    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1, (
-        "create_or_update_dataset_items should be called only once"
-    )
+    assert capture.request_count == 1, "Exactly one request should have been sent"
 
-    call_args = mock_rest_client.datasets.create_or_update_dataset_items.call_args
-    inserted_rest_items = call_args[1]["items"]
+    inserted_rest_items = capture.batches[-1]
 
     assert len(inserted_rest_items) == 2, "Two items should be inserted"
 
 
 def test_insert__deduplication_disabled__duplicates_are_inserted():
     mock_rest_client = Mock()
-
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
 
     item_dict = {
         "input": {"key": "value"},
@@ -132,21 +105,15 @@ def test_insert__deduplication_disabled__duplicates_are_inserted():
 
     dataset.insert([item_dict, item_dict], deduplication=False)
 
-    call_args = mock_rest_client.datasets.create_or_update_dataset_items.call_args
-    assert len(call_args[1]["items"]) == 2, (
+    assert len(capture.batches[-1]) == 2, (
         "Both identical items must be sent when deduplication is disabled"
     )
 
 
 def test_insert__deduplication_disabled__backend_items_are_not_downloaded():
     mock_rest_client = Mock()
-
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
     # The state `get_dataset`/`get_datasets` leave behind: the backend holds
     # items this object has not hashed yet.
     dataset.__internal_api__hashes_synced__ = False
@@ -158,13 +125,8 @@ def test_insert__deduplication_disabled__backend_items_are_not_downloaded():
 
 def test_insert__deduplication_disabled__next_deduplicated_insert_syncs_hashes():
     mock_rest_client = Mock()
-
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
 
     dataset.insert(_make_items(3), deduplication=False)
     assert not dataset.__internal_api__hashes_synced__, (
@@ -179,13 +141,8 @@ def test_insert__deduplication_disabled__next_deduplicated_insert_syncs_hashes()
 
 def test_update__deduplication_disabled__unchanged_item_is_still_sent():
     mock_rest_client = Mock()
-
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
 
     item = {
         "input": {"key": "value"},
@@ -194,16 +151,12 @@ def test_update__deduplication_disabled__unchanged_item_is_still_sent():
     }
     dataset.insert([item])
 
-    inserted_id = mock_rest_client.datasets.create_or_update_dataset_items.call_args[1][
-        "items"
-    ][0].id
+    inserted_id = capture.items[0]["id"]
 
     dataset.update([{"id": inserted_id, **item}], deduplication=False)
 
-    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 2
-    updated_items = mock_rest_client.datasets.create_or_update_dataset_items.call_args[
-        1
-    ]["items"]
+    assert capture.request_count == 2
+    updated_items = capture.batches[-1]
     assert len(updated_items) == 1, (
         "An update with unchanged content must still be sent when deduplication "
         "is disabled"
@@ -212,13 +165,8 @@ def test_update__deduplication_disabled__unchanged_item_is_still_sent():
 
 def test_update__happyflow():
     mock_rest_client = Mock()
-
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
 
     initial_item = {
         "input": {"key": "initial_value"},
@@ -228,20 +176,17 @@ def test_update__happyflow():
 
     dataset.insert([initial_item])
 
-    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1, (
-        "create_or_update_dataset_items should be called once for insertion"
+    assert capture.request_count == 1, (
+        "Exactly one request should have been sent for the insertion"
     )
 
-    insert_call_args = (
-        mock_rest_client.datasets.create_or_update_dataset_items.call_args
-    )
-    inserted_items = insert_call_args[1]["items"]
+    inserted_items = capture.batches[-1]
 
     assert len(inserted_items) == 1, "One item should be inserted"
 
     # Create an updated version of the item
     updated_item = {
-        "id": inserted_items[0].id,
+        "id": inserted_items[0]["id"],
         "input": {"key": "updated_value"},
         "expected_output": {"key": "updated_output"},
         "metadata": {"key": "updated_metadata"},
@@ -250,28 +195,23 @@ def test_update__happyflow():
     # Update the item
     dataset.update([updated_item])
 
-    # Check that create_or_update_dataset_items was called twice in total (once for insertion, once for update)
-    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 2, (
-        "create_or_update_dataset_items should be called twice in total"
-    )
+    # One request for the insert and one for the update
+    assert capture.request_count == 2, "Two requests should have been sent in total"
 
-    # Get the arguments passed to create_or_update_dataset_items for update
-    update_call_args = (
-        mock_rest_client.datasets.create_or_update_dataset_items.call_args
-    )
-    updated_rest_items = update_call_args[1]["items"]
+    # The items of the update request
+    updated_rest_items = capture.batches[-1]
 
     # Check that one item was updated
     assert len(updated_rest_items) == 1, "One item should be updated"
 
     # Verify the content of the updated item
-    assert updated_rest_items[0].data["input"] == {"key": "updated_value"}, (
+    assert updated_rest_items[0]["data"]["input"] == {"key": "updated_value"}, (
         "Input should be updated"
     )
-    assert updated_rest_items[0].data["expected_output"] == {"key": "updated_output"}, (
-        "Expected output should be updated"
-    )
-    assert updated_rest_items[0].data["metadata"] == {"key": "updated_metadata"}, (
+    assert updated_rest_items[0]["data"]["expected_output"] == {
+        "key": "updated_output"
+    }, "Expected output should be updated"
+    assert updated_rest_items[0]["data"]["metadata"] == {"key": "updated_metadata"}, (
         "Metadata should be updated"
     )
 
@@ -295,33 +235,27 @@ def _mock_rest_client(
     return mock_rest_client
 
 
+def _dataset_with_capture(mock_rest_client) -> tuple:
+    """A Dataset whose uploads land in a capture instead of on the network."""
+    capture = UploadCapture()
+    return make_dataset(Dataset, mock_rest_client, capture), capture
+
+
 def test_insert__parallel__all_batches_sent_under_one_batch_group_id(monkeypatch):
     _small_batches(monkeypatch, size=2)
     mock_rest_client = _mock_rest_client()
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    dataset, capture = _dataset_with_capture(mock_rest_client)
 
     dataset.insert(_make_items(10), num_threads=4)
 
-    create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
-    assert create_or_update.call_count == 5, "10 items / batch size 2 => 5 batches"
+    assert capture.request_count == 5, "10 items / batch size 2 => 5 batches"
 
-    batch_group_ids = {
-        call.kwargs["batch_group_id"] for call in create_or_update.call_args_list
-    }
+    batch_group_ids = {payload["batch_group_id"] for payload in capture.payloads}
     assert len(batch_group_ids) == 1, (
         "All parallel batches must share one batch_group_id (single version)"
     )
 
-    sent_inputs = sorted(
-        item.data["input"]["i"]
-        for call in create_or_update.call_args_list
-        for item in call.kwargs["items"]
-    )
+    sent_inputs = sorted(item["data"]["input"]["i"] for item in capture.items)
     assert sent_inputs == list(range(10)), (
         "Every item must be sent exactly once regardless of interleaving"
     )
@@ -332,20 +266,9 @@ def test_insert__parallel_and_sequential_send_identical_items(monkeypatch):
     items = _make_items(10)
 
     def sent_inputs(num_threads: int) -> list:
-        mock_rest_client = _mock_rest_client()
-        dataset = Dataset(
-            name="test_dataset",
-            description="Test description",
-            project_name="Test project",
-            rest_client=mock_rest_client,
-        )
+        dataset, capture = _dataset_with_capture(_mock_rest_client())
         dataset.insert(items, num_threads=num_threads)
-        create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
-        return sorted(
-            item.data["input"]["i"]
-            for call in create_or_update.call_args_list
-            for item in call.kwargs["items"]
-        )
+        return sorted(item["data"]["input"]["i"] for item in capture.items)
 
     assert sent_inputs(num_threads=1) == sent_inputs(num_threads=4), (
         "Parallel and sequential inserts must send the same set of items"
@@ -358,19 +281,11 @@ def test_insert__parallel__batch_failure_raises(monkeypatch):
 
     # Any batch failing must surface to the caller. Fail unconditionally so the
     # assertion is deterministic regardless of worker scheduling.
-    def failing_create_or_update(*args, **kwargs):
+    def failing_upload() -> None:
         raise ValueError("backend rejected batch")
 
-    mock_rest_client.datasets.create_or_update_dataset_items.side_effect = (
-        failing_create_or_update
-    )
-
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    capture = UploadCapture(on_request=failing_upload)
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
 
     with pytest.raises(ValueError, match="backend rejected batch"):
         dataset.insert(_make_items(10), num_threads=4)
@@ -379,17 +294,12 @@ def test_insert__parallel__batch_failure_raises(monkeypatch):
 @pytest.mark.parametrize("bad_value", [0, -1, 1.5, "2", True])
 def test_insert__invalid_num_threads__raises_before_upload(bad_value):
     mock_rest_client = Mock()
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    dataset, capture = _dataset_with_capture(mock_rest_client)
 
     with pytest.raises(ValueError, match="num_threads must be a positive integer"):
         dataset.insert(_make_items(3), num_threads=bad_value)
 
-    mock_rest_client.datasets.create_or_update_dataset_items.assert_not_called()
+    assert capture.request_count == 0, "Nothing should have been uploaded"
 
 
 _GATE_BATCH_SIZE = 2
@@ -453,7 +363,7 @@ def _batches_overlapped(
         else None
     )
 
-    def tracked_upload(*args, **kwargs):
+    def tracked_upload() -> None:
         nonlocal in_flight, peak_in_flight
         with lock:
             in_flight += 1
@@ -469,26 +379,17 @@ def _batches_overlapped(
         with lock:
             in_flight -= 1
 
-    mock_rest_client.datasets.create_or_update_dataset_items.side_effect = (
-        tracked_upload
-    )
-
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    capture = UploadCapture(on_request=tracked_upload)
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
     items = _make_items(item_count)
     if num_threads is None:
         dataset.insert(items)
     else:
         dataset.insert(items, num_threads=num_threads)
 
-    assert (
-        mock_rest_client.datasets.create_or_update_dataset_items.call_count
-        == batch_count
-    ), "Every batch must be uploaded regardless of the thread count"
+    assert capture.request_count == batch_count, (
+        "Every batch must be uploaded regardless of the thread count"
+    )
 
     return peak_in_flight > 1
 
@@ -560,24 +461,19 @@ def test_insert__version_probe_recovers__parallel_upload_resumes(monkeypatch):
         ConnectionError("backend unreachable"),
         {"version": constants.MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT},
     ]
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    dataset, capture = _dataset_with_capture(mock_rest_client)
 
     # Spying on the upload layer keeps the assertion on the worker count that
     # actually reached it, so a gate that stops honouring the probe still fails
     # this test.
     workers_per_insert = []
-    original_send = Dataset._send_batches
+    original_pool = Dataset._open_send_pool
 
-    def spy_send_batches(self, batches, batch_group_id, num_threads):
+    def spy_pool(self, num_threads):
         workers_per_insert.append(num_threads)
-        return original_send(self, batches, batch_group_id, num_threads)
+        return original_pool(self, num_threads)
 
-    monkeypatch.setattr(Dataset, "_send_batches", spy_send_batches)
+    monkeypatch.setattr(Dataset, "_open_send_pool", spy_pool)
 
     dataset.insert(_make_items(4), deduplication=False)
     dataset.insert(_make_items(4), deduplication=False)
@@ -597,12 +493,7 @@ def test_insert__unparseable_version__probed_once(monkeypatch):
     """An unparseable version is a conclusive answer, so it must still cache."""
     _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
     mock_rest_client = _mock_rest_client("dev-local")
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    dataset, capture = _dataset_with_capture(mock_rest_client)
 
     for _ in range(3):
         dataset.insert(_make_items(4), deduplication=False)
@@ -616,24 +507,19 @@ def test_internal_insert__old_backend__worker_count_still_gated(monkeypatch):
     """The gate lives in the funnel, so a direct caller cannot skip it."""
     _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
     mock_rest_client = _mock_rest_client("2.2.7")
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    dataset, capture = _dataset_with_capture(mock_rest_client)
 
     # The spy calls through, so the upload still happens and the assertions
     # below cover the items actually reaching the backend, not just the
     # argument the gate computed.
     used_workers = []
-    original_send = Dataset._send_batches
+    original_pool = Dataset._open_send_pool
 
-    def spy_send_batches(self, batches, batch_group_id, num_threads):
+    def spy_pool(self, num_threads):
         used_workers.append(num_threads)
-        return original_send(self, batches, batch_group_id, num_threads)
+        return original_pool(self, num_threads)
 
-    monkeypatch.setattr(Dataset, "_send_batches", spy_send_batches)
+    monkeypatch.setattr(Dataset, "_open_send_pool", spy_pool)
 
     dataset.__internal_api__insert_items_as_dataclasses__(
         [dataset_item.DatasetItem(**item) for item in _make_items(4)],
@@ -645,12 +531,7 @@ def test_internal_insert__old_backend__worker_count_still_gated(monkeypatch):
         "even when the internal API is called directly"
     )
 
-    create_or_update = mock_rest_client.datasets.create_or_update_dataset_items
-    submitted = sorted(
-        item.data["input"]["i"]
-        for call in create_or_update.call_args_list
-        for item in call.kwargs["items"]
-    )
+    submitted = sorted(item["data"]["input"]["i"] for item in capture.items)
     assert submitted == [0, 1, 2, 3], (
         "Forcing a sequential upload must still deliver every item exactly once"
     )
@@ -660,12 +541,7 @@ def test_internal_insert__old_backend__worker_count_still_gated(monkeypatch):
 def test_internal_insert__invalid_num_threads__raises_value_error(bad_value):
     """Direct callers get the named ValueError, not a TypeError from the gate."""
     mock_rest_client = Mock()
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    dataset, capture = _dataset_with_capture(mock_rest_client)
 
     with pytest.raises(ValueError, match="num_threads must be a positive integer"):
         dataset.__internal_api__insert_items_as_dataclasses__(
@@ -673,23 +549,18 @@ def test_internal_insert__invalid_num_threads__raises_value_error(bad_value):
             num_threads=bad_value,
         )
 
-    mock_rest_client.datasets.create_or_update_dataset_items.assert_not_called()
+    assert capture.request_count == 0, "Nothing should have been uploaded"
 
 
 @pytest.mark.parametrize("bad_value", ["false", 0, 1, None, "", []])
 def test_insert__non_bool_deduplication__raises_before_any_request(bad_value):
     mock_rest_client = Mock()
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    dataset, capture = _dataset_with_capture(mock_rest_client)
 
     with pytest.raises(ValueError, match="deduplication must be a bool"):
         dataset.insert(_make_items(3), deduplication=bad_value)
 
-    mock_rest_client.datasets.create_or_update_dataset_items.assert_not_called()
+    assert capture.request_count == 0, "Nothing should have been uploaded"
     mock_rest_client.version.assert_not_called()
 
 
@@ -722,12 +593,7 @@ def test_insert__num_threads_not_given__uploads_concurrently_by_default(monkeypa
 def test_insert__repeated_inserts__backend_version_probed_once(monkeypatch):
     _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
     mock_rest_client = _mock_rest_client()
-    dataset = Dataset(
-        name="test_dataset",
-        description="Test description",
-        project_name="Test project",
-        rest_client=mock_rest_client,
-    )
+    dataset, capture = _dataset_with_capture(mock_rest_client)
 
     for _ in range(3):
         dataset.insert(_make_items(4), deduplication=False)
@@ -736,3 +602,21 @@ def test_insert__repeated_inserts__backend_version_probed_once(monkeypatch):
         "Parallel upload is the default, so the version gate must be probed once "
         "per dataset rather than once per insert"
     )
+
+
+def test_insert__typed_dataset_items__accepted_like_dicts():
+    """`insert` has always taken DatasetItem objects; the annotation now says so too."""
+    mock_rest_client = Mock()
+    dataset, capture = _dataset_with_capture(mock_rest_client)
+
+    dataset.insert(
+        [
+            dataset_item.DatasetItem(input={"key": "typed"}),
+            {"input": {"key": "dict"}},
+        ]
+    )
+
+    assert sorted(item["data"]["input"]["key"] for item in capture.items) == [
+        "dict",
+        "typed",
+    ]
