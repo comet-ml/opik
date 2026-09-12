@@ -1366,10 +1366,8 @@ class Dataset(DatasetExportOperations):
         Read JSONL from a file and insert it into the dataset.
 
         The file is parsed one line at a time and uploaded as it is read, so a file
-        larger than memory can be inserted. Anything wrong with a line -- malformed JSON,
-        an id that is not a UUID, a value with no JSON form -- therefore surfaces when
-        that line is reached, with the items before it already persisted, rather than
-        before the first request. See :meth:`insert` on the same trade for generators.
+        larger than memory can be inserted. It is read twice: once to check every line
+        before anything is sent, once to upload.
 
         Args:
             file_path: Path to the JSONL file
@@ -1379,13 +1377,35 @@ class Dataset(DatasetExportOperations):
                 construction - pass them as ignore_keys argument
             deduplication: Whether to skip items whose content already exists in
                 the dataset. See :meth:`insert` for details.
+
+        Raises:
+            ValueError: If an item's ``id``, ``trace_id`` or ``span_id`` is not a UUID.
+                Raised before the first request, with the item's line position. A
+                malformed line, or a value pydantic rejects, is raised there too. A value
+                that cannot be serialised is still found when its item is reached, as it
+                is for a list.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
-        self.insert(
-            converters.stream_from_jsonl_file(file_path, keys_mapping, ignore_keys),
-            deduplication=deduplication,
-        )
+
+        def items() -> Iterator[dataset_item.DatasetItem]:
+            return converters.stream_from_jsonl_file(
+                file_path, keys_mapping, ignore_keys
+            )
+
+        # A file can be read twice, so it gets the check a list gets and a generator
+        # cannot: one pass that parses every line and builds every item, keeping none of
+        # them, before a single request goes out. Without it a file would be the one
+        # input that could be validated up front and was not. It costs a second parse of
+        # the file and no retention -- unlike validating by materialising the items,
+        # which is ~1.3 KB each held until the upload ends.
+        for index, item in enumerate(items()):
+            for field in ("id", "trace_id", "span_id"):
+                streaming_writer.validate_identifier(
+                    getattr(item, field, None), field, index
+                )
+
+        self.insert(items(), deduplication=deduplication)
 
     def insert_from_pandas(
         self,
