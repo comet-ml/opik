@@ -137,9 +137,29 @@ class LlmModelRegistryServiceTest {
         var service = new LlmModelRegistryService(config);
         var registry = service.getRegistry();
 
-        assertThat(registry).containsKeys("openai", "anthropic", "gemini", "vertex-ai", "openrouter");
+        assertThat(registry).containsKeys("openai", "anthropic", "gemini", "vertex-ai", "openrouter", "requesty");
         assertThat(registry.get("openai")).isNotEmpty();
         assertThat(registry.get("openrouter")).isNotEmpty();
+        assertThat(registry.get("requesty")).isNotEmpty();
+    }
+
+    @Test
+    void defaultResourceRequestyModelsCarryCapabilityFlags() {
+        var config = new LlmModelRegistryConfig();
+
+        var service = new LlmModelRegistryService(config);
+
+        var reasoningModel = service.findModel("requesty/openai/o1");
+        assertThat(reasoningModel).isPresent();
+        assertThat(reasoningModel.get().provider()).isEqualTo(LlmProvider.REQUESTY);
+        assertThat(reasoningModel.get().model().structuredOutput()).isTrue();
+        assertThat(reasoningModel.get().model().reasoning()).isTrue();
+
+        var plainModel = service.findModel("requesty/openai/gpt-4o");
+        assertThat(plainModel).isPresent();
+        assertThat(plainModel.get().provider()).isEqualTo(LlmProvider.REQUESTY);
+        assertThat(plainModel.get().model().structuredOutput()).isTrue();
+        assertThat(plainModel.get().model().reasoning()).isFalse();
     }
 
     @Test
