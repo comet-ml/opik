@@ -67,4 +67,9 @@ def track_cerebras(
 
 
 def _extract_metadata_from_client(client: CerebrasClient) -> Dict[str, Any]:
-    return {"base_url": str(client.base_url)}
+    # Scheme, host and path only. A caller-supplied base_url may carry credentials
+    # in the userinfo, query or fragment, and span metadata reaches the Opik
+    # backend; the path is kept because self-hosted deployments route on it.
+    url = client.base_url
+    host = url.host if url.port is None else f"{url.host}:{url.port}"
+    return {"base_url": f"{url.scheme}://{host}{url.path}"}
