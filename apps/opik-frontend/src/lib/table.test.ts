@@ -161,4 +161,27 @@ describe("reconcileSelectedRows", () => {
 
     expect(map.has("off-page")).toBe(true);
   });
+
+  it("drops retained off-page ids listed in deletedIds", () => {
+    const map = new Map([
+      ["off-page", { id: "off-page", name: "Off" }],
+      ["keep", { id: "keep", name: "Keep" }],
+    ]);
+    const rows = [{ id: "a", name: "A" }];
+    const rowSelection = { a: true, "off-page": true, keep: true };
+    const scopeKeyRef = { current: "scope-a" };
+
+    const result = reconcileSelectedRows(map, rowSelection, rows, {
+      scopeKey: "scope-a",
+      scopeKeyRef,
+      deletedIds: new Set(["off-page"]),
+    });
+
+    expect(map.has("off-page")).toBe(false);
+    expect(map.has("keep")).toBe(true);
+    expect(result).toEqual([
+      { id: "a", name: "A" },
+      { id: "keep", name: "Keep" },
+    ]);
+  });
 });

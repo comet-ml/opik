@@ -836,6 +836,8 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
         filters: effectiveFilters,
         intervalStart,
         intervalEnd,
+        logsSource,
+        visibilityMode: viewConfig.visibilityMode,
       },
     });
 
