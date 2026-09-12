@@ -38,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/ui/select";
+import { Spinner } from "@/ui/spinner";
 import { Textarea } from "@/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import { useToast } from "@/ui/use-toast";
@@ -466,6 +467,7 @@ const AnnotateTracesOrSpansDialog: React.FC<
             disabled={!isValid || !rows.length || isApplying}
             data-testid="annotate-bulk-apply-button"
           >
+            {isApplying && <Spinner size="small" className="mr-2" />}
             <span>{isApplying ? "Applying..." : "Apply"}</span>
           </Button>
         </DialogFooter>

@@ -50,7 +50,11 @@ import {
   LOGS_SOURCE,
   TRACE_VISIBILITY_MODE,
 } from "@/types/traces";
-import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  migrateSelectedColumns,
+  reconcileSelectedRows,
+} from "@/lib/table";
 import { getJSONPaths, cn } from "@/lib/utils";
 import {
   generateSelectColumDef,
@@ -827,27 +831,10 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
   }, [dynamicMetadataColumns]);
 
   const selectedRowsMapRef = useRef(new Map<string, Trace>());
-  const selectedRows: Array<Trace> = useMemo(() => {
-    const selectedRowsMap = selectedRowsMapRef.current;
-    const rowsById = new Map(rows.map((row) => [row.id, row]));
-
-    Object.entries(rowSelection).forEach(([id, selected]) => {
-      if (selected && rowsById.has(id)) {
-        selectedRowsMap.set(id, rowsById.get(id)!);
-      }
-    });
-
-    Array.from(selectedRowsMap.keys()).forEach((id) => {
-      if (!rowSelection[id]) {
-        selectedRowsMap.delete(id);
-      }
-    });
-
-    return Object.keys(rowSelection)
-      .filter((id) => rowSelection[id])
-      .map((id) => selectedRowsMap.get(id))
-      .filter((row): row is Trace => row !== undefined);
-  }, [rowSelection, rows]);
+  const selectedRows: Array<Trace> = useMemo(
+    () => reconcileSelectedRows(selectedRowsMapRef.current, rowSelection, rows),
+    [rowSelection, rows],
+  );
 
   const getDataForExport = useCallback(async (): Promise<Array<Trace>> => {
     const result = await refetchExportData();

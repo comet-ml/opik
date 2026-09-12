@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { injectColumnCallback } from "./table";
+import { injectColumnCallback, reconcileSelectedRows } from "./table";
 import { ColumnDef } from "@tanstack/react-table";
 
 describe("injectColumnCallback", () => {
@@ -73,5 +73,55 @@ describe("injectColumnCallback", () => {
       callback: mockCallback,
       newProp: "value",
     });
+  });
+});
+
+describe("reconcileSelectedRows", () => {
+  it("merges current-page rows into the map", () => {
+    const map = new Map<string, { id: string; name: string }>();
+    const rows = [
+      { id: "a", name: "A" },
+      { id: "b", name: "B" },
+    ];
+    const rowSelection = { a: true, b: true };
+
+    const result = reconcileSelectedRows(map, rowSelection, rows);
+
+    expect(result).toEqual(rows);
+    expect(map.get("a")).toEqual({ id: "a", name: "A" });
+    expect(map.get("b")).toEqual({ id: "b", name: "B" });
+  });
+
+  it("drops deselected IDs from the map", () => {
+    const map = new Map([
+      ["a", { id: "a", name: "A" }],
+      ["b", { id: "b", name: "B" }],
+    ]);
+    const rows = [
+      { id: "a", name: "A" },
+      { id: "b", name: "B" },
+    ];
+    const rowSelection = { a: true, b: false };
+
+    const result = reconcileSelectedRows(map, rowSelection, rows);
+
+    expect(result).toEqual([{ id: "a", name: "A" }]);
+    expect(map.has("a")).toBe(true);
+    expect(map.has("b")).toBe(false);
+  });
+
+  it("preserves selections not on the current page", () => {
+    const map = new Map([["off-page", { id: "off-page", name: "Off" }]]);
+    const rows = [{ id: "a", name: "A" }];
+    const rowSelection = { a: true, "off-page": true };
+
+    const result = reconcileSelectedRows(map, rowSelection, rows);
+
+    expect(result).toEqual([
+      { id: "a", name: "A" },
+      { id: "off-page", name: "Off" },
+    ]);
+    expect(map.get("a")).toEqual({ id: "a", name: "A" });
+    expect(map.get("off-page")).toEqual({ id: "off-page", name: "Off" });
   });
 });

@@ -79,7 +79,11 @@ import {
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
 import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
-import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  migrateSelectedColumns,
+  reconcileSelectedRows,
+} from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import {
@@ -1119,27 +1123,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [dynamicMetadataColumns]);
 
   const selectedRowsMapRef = useRef(new Map<string, Trace | Span>());
-  const selectedRows: Array<Trace | Span> = useMemo(() => {
-    const selectedRowsMap = selectedRowsMapRef.current;
-    const rowsById = new Map(rows.map((row) => [row.id, row]));
-
-    Object.entries(rowSelection).forEach(([id, selected]) => {
-      if (selected && rowsById.has(id)) {
-        selectedRowsMap.set(id, rowsById.get(id)!);
-      }
-    });
-
-    Array.from(selectedRowsMap.keys()).forEach((id) => {
-      if (!rowSelection[id]) {
-        selectedRowsMap.delete(id);
-      }
-    });
-
-    return Object.keys(rowSelection)
-      .filter((id) => rowSelection[id])
-      .map((id) => selectedRowsMap.get(id))
-      .filter((row): row is Trace | Span => row !== undefined);
-  }, [rowSelection, rows]);
+  const selectedRows: Array<Trace | Span> = useMemo(
+    () => reconcileSelectedRows(selectedRowsMapRef.current, rowSelection, rows),
+    [rowSelection, rows],
+  );
 
   const getDataForExport = useCallback(async (): Promise<
     Array<Trace | Span>

@@ -33,8 +33,8 @@ export const isNumericFeedbackScoreValid = (
   value?: number | "",
 ) => isNumber(value) && value >= min && value <= max;
 
-// Backend @DecimalMax / @DecimalMin. Cannot be stored as a JS number
-// (999999999.999999999 rounds to 1000000000).
+// Backend @DecimalMax / @DecimalMin. 999999999.999999999 cannot be
+// represented exactly as a JavaScript number and is rounded to 1000000000.
 export const FEEDBACK_SCORE_DECIMAL_MAX = "999999999.999999999";
 export const FEEDBACK_SCORE_DECIMAL_MIN = "-999999999.999999999";
 

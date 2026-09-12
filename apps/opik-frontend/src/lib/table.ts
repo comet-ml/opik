@@ -165,6 +165,35 @@ export const mapColumnDataFields = <TColumnData, TData>(
 };
 
 /**
+ * Reconciles selected rows across pages: merges current-page selected
+ * rows into the map, drops deselected IDs, and preserves off-page selections.
+ */
+export const reconcileSelectedRows = <T extends { id: string }>(
+  selectedRowsMap: Map<string, T>,
+  rowSelection: Record<string, boolean>,
+  rows: T[],
+): T[] => {
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+
+  Object.entries(rowSelection).forEach(([id, selected]) => {
+    if (selected && rowsById.has(id)) {
+      selectedRowsMap.set(id, rowsById.get(id)!);
+    }
+  });
+
+  Array.from(selectedRowsMap.keys()).forEach((id) => {
+    if (!rowSelection[id]) {
+      selectedRowsMap.delete(id);
+    }
+  });
+
+  return Object.keys(rowSelection)
+    .filter((id) => rowSelection[id])
+    .map((id) => selectedRowsMap.get(id))
+    .filter((row): row is T => row !== undefined);
+};
+
+/**
  * Injects a callback into a column's custom metadata.
  * Useful for adding dynamic row click handlers to columns that need to be editable via the columns menu.
  *

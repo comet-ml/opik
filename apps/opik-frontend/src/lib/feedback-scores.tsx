@@ -126,7 +126,11 @@ export const setExperimentsCompareCache = async (
 
   queryClient.setQueryData(
     queryKey,
-    (originalData: UseCompareExperimentsListResponse) => {
+    (originalData: UseCompareExperimentsListResponse | undefined) => {
+      if (!originalData || !Array.isArray(originalData.content)) {
+        return originalData;
+      }
+
       return {
         ...originalData,
         content: originalData.content.map((experimentsCompare) => {
@@ -168,25 +172,33 @@ export const setTracesCache = async (
 
   await Promise.all(
     query.map(async ({ queryKey }) => {
-      await queryClient.cancelQueries({ queryKey });
+      try {
+        await queryClient.cancelQueries({ queryKey });
 
-      queryClient.setQueryData(
-        queryKey,
-        (originalData: UseTracesListResponse) => {
-          return {
-            ...originalData,
-            content: originalData.content.map((trace) => {
-              if (trace.id === params.traceId) {
-                return {
-                  ...trace,
-                  feedback_scores: mutate(trace.feedback_scores),
-                };
-              }
-              return trace;
-            }),
-          };
-        },
-      );
+        queryClient.setQueryData(
+          queryKey,
+          (originalData: UseTracesListResponse | undefined) => {
+            if (!originalData || !Array.isArray(originalData.content)) {
+              return originalData;
+            }
+
+            return {
+              ...originalData,
+              content: originalData.content.map((trace) => {
+                if (trace.id === params.traceId) {
+                  return {
+                    ...trace,
+                    feedback_scores: mutate(trace.feedback_scores),
+                  };
+                }
+                return trace;
+              }),
+            };
+          },
+        );
+      } catch {
+        // Isolate per-query failures so one bad query cannot reject Promise.all
+      }
     }),
   );
 };
@@ -209,20 +221,27 @@ export const setSpansCache = async (
 
   await queryClient.cancelQueries({ queryKey });
 
-  queryClient.setQueryData(queryKey, (originalData: UseSpansListResponse) => {
-    return {
-      ...originalData,
-      content: originalData.content.map((span) => {
-        if (span.id === params.spanId) {
-          return {
-            ...span,
-            feedback_scores: mutate(span.feedback_scores),
-          };
-        }
-        return span;
-      }),
-    };
-  });
+  queryClient.setQueryData(
+    queryKey,
+    (originalData: UseSpansListResponse | undefined) => {
+      if (!originalData || !Array.isArray(originalData.content)) {
+        return originalData;
+      }
+
+      return {
+        ...originalData,
+        content: originalData.content.map((span) => {
+          if (span.id === params.spanId) {
+            return {
+              ...span,
+              feedback_scores: mutate(span.feedback_scores),
+            };
+          }
+          return span;
+        }),
+      };
+    },
+  );
 };
 
 export const setTraceCache = async (
