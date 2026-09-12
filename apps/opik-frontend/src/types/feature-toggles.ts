@@ -20,6 +20,7 @@ export enum FeatureToggleKeys {
   ANTHROPIC_PROVIDER_ENABLED = "anthropic_provider_enabled",
   GEMINI_PROVIDER_ENABLED = "gemini_provider_enabled",
   OPENROUTER_PROVIDER_ENABLED = "openrouter_provider_enabled",
+  REQUESTY_PROVIDER_ENABLED = "requesty_provider_enabled",
   VERTEXAI_PROVIDER_ENABLED = "vertexai_provider_enabled",
   BEDROCK_PROVIDER_ENABLED = "bedrock_provider_enabled",
   CUSTOMLLM_PROVIDER_ENABLED = "customllm_provider_enabled",
