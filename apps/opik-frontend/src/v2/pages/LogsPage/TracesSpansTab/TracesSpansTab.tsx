@@ -2,7 +2,6 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import {
@@ -15,7 +14,6 @@ import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
   ColumnSort,
-  RowSelectionState,
 } from "@tanstack/react-table";
 import { ExternalLink } from "lucide-react";
 import findIndex from "lodash/findIndex";
@@ -82,8 +80,8 @@ import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import {
   convertColumnDataToColumn,
   migrateSelectedColumns,
-  reconcileSelectedRows,
 } from "@/lib/table";
+import useRetainedRowSelection from "@/hooks/useRetainedRowSelection";
 import { getJSONPaths } from "@/lib/utils";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import {
@@ -806,8 +804,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return [...chipFilters, ...generateEnvironmentFilter(environment)];
   }, [chipFilters, environment, envIsValid]);
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
 
   // Declare selectedColumns early so it can be used in excludeFields computation
@@ -1122,45 +1118,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return fieldColumns;
   }, [dynamicMetadataColumns]);
 
-  const selectedRowsMapRef = useRef(new Map<string, Trace | Span>());
-  const selectionScopeKeyRef = useRef<string | undefined>(undefined);
-  const selectionScopeKey = useMemo(
-    () =>
-      JSON.stringify({
+  const { rowSelection, setRowSelection, selectedRows, clearRowSelection } =
+    useRetainedRowSelection<Trace | Span>({
+      rows,
+      scope: {
         projectId,
         type,
         search: trimmedSearch,
         filters: effectiveFilters,
         intervalStart,
         intervalEnd,
-      }),
-    [
-      projectId,
-      type,
-      trimmedSearch,
-      effectiveFilters,
-      intervalStart,
-      intervalEnd,
-    ],
-  );
-
-  const clearRowSelection = useCallback(() => {
-    setRowSelection({});
-    selectedRowsMapRef.current.clear();
-  }, []);
-
-  useEffect(() => {
-    clearRowSelection();
-  }, [selectionScopeKey, clearRowSelection]);
-
-  const selectedRows: Array<Trace | Span> = useMemo(
-    () =>
-      reconcileSelectedRows(selectedRowsMapRef.current, rowSelection, rows, {
-        scopeKey: selectionScopeKey,
-        scopeKeyRef: selectionScopeKeyRef,
-      }),
-    [rowSelection, rows, selectionScopeKey],
-  );
+      },
+    });
 
   const getDataForExport = useCallback(async (): Promise<
     Array<Trace | Span>

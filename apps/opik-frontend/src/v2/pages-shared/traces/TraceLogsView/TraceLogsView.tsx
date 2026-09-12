@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import {
   JsonParam,
@@ -10,7 +10,6 @@ import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
   ColumnSort,
-  RowSelectionState,
 } from "@tanstack/react-table";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
@@ -53,8 +52,8 @@ import {
 import {
   convertColumnDataToColumn,
   migrateSelectedColumns,
-  reconcileSelectedRows,
 } from "@/lib/table";
+import useRetainedRowSelection from "@/hooks/useRetainedRowSelection";
 import { getJSONPaths, cn } from "@/lib/utils";
 import {
   generateSelectColumDef,
@@ -610,8 +609,6 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     queryParamConfig: JsonParam,
   });
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storagePrefix}${SELECTED_COLUMNS_KEY_V2_SUFFIX}`,
     {
@@ -830,37 +827,17 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     }) as ColumnData<BaseTraceData>[];
   }, [dynamicMetadataColumns]);
 
-  const selectedRowsMapRef = useRef(new Map<string, Trace>());
-  const selectionScopeKeyRef = useRef<string | undefined>(undefined);
-  const selectionScopeKey = useMemo(
-    () =>
-      JSON.stringify({
+  const { rowSelection, setRowSelection, selectedRows, clearRowSelection } =
+    useRetainedRowSelection<Trace>({
+      rows,
+      scope: {
         projectId,
         search: trimmedSearch,
         filters: effectiveFilters,
         intervalStart,
         intervalEnd,
-      }),
-    [projectId, trimmedSearch, effectiveFilters, intervalStart, intervalEnd],
-  );
-
-  const clearRowSelection = useCallback(() => {
-    setRowSelection({});
-    selectedRowsMapRef.current.clear();
-  }, []);
-
-  useEffect(() => {
-    clearRowSelection();
-  }, [selectionScopeKey, clearRowSelection]);
-
-  const selectedRows: Array<Trace> = useMemo(
-    () =>
-      reconcileSelectedRows(selectedRowsMapRef.current, rowSelection, rows, {
-        scopeKey: selectionScopeKey,
-        scopeKeyRef: selectionScopeKeyRef,
-      }),
-    [rowSelection, rows, selectionScopeKey],
-  );
+      },
+    });
 
   const getDataForExport = useCallback(async (): Promise<Array<Trace>> => {
     const result = await refetchExportData();
