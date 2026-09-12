@@ -966,7 +966,6 @@ class Dataset(DatasetExportOperations):
                 flush_callback=pool.submit,
                 max_payload_bytes=int(config.MAX_BATCH_SIZE_MB * 1024 * 1024),
                 max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
-                flush_interval_seconds=constants.DATASET_ITEMS_FLUSH_INTERVAL_SECONDS,
                 gzip_level=(
                     opik_config.dataset_upload_compression_level
                     if compressing

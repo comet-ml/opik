@@ -35,7 +35,6 @@ def _writer(flush_callback, **kwargs):
         "flush_callback": flush_callback,
         "max_payload_bytes": 1_000_000,
         "max_items": 1_000,
-        "flush_interval_seconds": None,
         "gzip_level": 6,
         # The shipped default. Tests that build a stdlib expectation pass
         # `use_orjson=False` explicitly; everything else runs what users run.
@@ -71,28 +70,6 @@ def test_flush__count_threshold__splits_on_item_count():
     writer.flush()
 
     assert [count for _, count in bodies] == [2, 2, 1]
-
-
-def test_flush__time_threshold__sends_a_partial_batch_under_trickle():
-    """Neither size nor count trips, so only elapsed time can send this."""
-    bodies, flush_callback = _collect()
-    writer = _writer(
-        flush_callback,
-        max_payload_bytes=10**9,
-        max_items=10**6,
-        flush_interval_seconds=0.05,
-    )
-
-    writer.add({"id": "first"})
-    assert bodies == [], "Nothing should be sent before the interval elapses"
-
-    import time
-
-    time.sleep(0.06)
-    writer.add({"id": "second"})
-
-    assert len(bodies) == 1, "The elapsed interval should have flushed the buffer"
-    assert bodies[0][1] == 2
 
 
 def test_flush__no_items__does_nothing():

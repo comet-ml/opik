@@ -15,7 +15,6 @@ import enum
 import json
 import logging
 import pathlib
-import time
 import uuid
 import zlib
 from concurrent import futures
@@ -130,10 +129,7 @@ class StreamingBatchWriter:
     the adding thread, so a bounded callback is what applies back-pressure to the producer.
 
     `gzip_level` of None emits the body uncompressed, for a client configured with
-    `enable_json_request_compression` off. `flush_interval_seconds` is evaluated when an
-    item arrives, so it bounds how long a *trickle* of items leaves a batch open, not how
-    long a producer that stops entirely does; `flush()` at the end of the upload covers
-    that case.
+    `enable_json_request_compression` off.
     """
 
     def __init__(
@@ -143,14 +139,12 @@ class StreamingBatchWriter:
         flush_callback: Callable[[bytes, int], None],
         max_payload_bytes: int,
         max_items: int,
-        flush_interval_seconds: Optional[float] = None,
         gzip_level: Optional[int],
         use_orjson: bool = True,
     ) -> None:
         self._flush_callback = flush_callback
         self._max_payload_bytes = max_payload_bytes
         self._max_items = max_items
-        self._flush_interval_seconds = flush_interval_seconds
         self._gzip_level = gzip_level
         self._dumps = select_dumps(use_orjson)
 
@@ -173,7 +167,6 @@ class StreamingBatchWriter:
         self._chunks = [self._encode(self._prefix)]
         self._logical_bytes = 0
         self._items = 0
-        self._opened_at = time.monotonic()
 
     def _encode(self, data: bytes) -> bytes:
         return data if self._compressor is None else self._compressor.compress(data)
@@ -215,13 +208,10 @@ class StreamingBatchWriter:
             self.flush()
 
     def _should_flush(self) -> bool:
-        if self._logical_bytes >= self._max_payload_bytes:
-            return True
-        if self._items >= self._max_items:
-            return True
-        if self._flush_interval_seconds is not None:
-            return time.monotonic() - self._opened_at >= self._flush_interval_seconds
-        return False
+        return (
+            self._logical_bytes >= self._max_payload_bytes
+            or self._items >= self._max_items
+        )
 
     def flush(self) -> None:
         """Emit whatever is buffered. A no-op when nothing has been added."""
