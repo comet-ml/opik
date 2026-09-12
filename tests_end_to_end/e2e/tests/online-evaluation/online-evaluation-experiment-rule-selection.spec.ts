@@ -211,11 +211,23 @@ test.describe('Online Evaluation — experiment-trace rule selection', { tag: ['
       // onto per-type Redis streams via parallelStream(), so one rule's score
       // landing says nothing about another's progress: the quiet period is what
       // makes "this rule did not score it" a real negative.
+      //
+      // `minScores` is the count each trace is EXPECTED to end with, not a
+      // floor of 1. That matters on the experiment trace, which expects two
+      // (the picked rule and the experiment-scope rule): with a floor of 1 the
+      // quiet period could start the moment the faster of the two landed and
+      // expire while the other was still queued, and the closed-set assertion
+      // below would then report a merely-slow rule as absent — reading as a
+      // product bug. Requiring both before the clock starts removes that false
+      // negative, and it strengthens the real negative too, since
+      // `unpickedProduction` now gets the whole quiet period AFTER the last
+      // expected score to wrongly show up in. A rule that genuinely never
+      // scores still fails here, as a timeout naming the scores it did see.
       const [experiment, sdk] = await Promise.all([
         backendClient.waitForTraceScoresSettled(traces.experiment.id, {
           quietPeriodMs: 10_000,
           timeoutMs: 120_000,
-          minScores: 1,
+          minScores: 2,
         }),
         backendClient.waitForTraceScoresSettled(traces.sdk.id, {
           quietPeriodMs: 10_000,
