@@ -114,8 +114,12 @@ describe("reconcileSelectedRows", () => {
     const map = new Map([["off-page", { id: "off-page", name: "Off" }]]);
     const rows = [{ id: "a", name: "A" }];
     const rowSelection = { a: true, "off-page": true };
+    const scopeKeyRef = { current: "scope-a" };
 
-    const result = reconcileSelectedRows(map, rowSelection, rows);
+    const result = reconcileSelectedRows(map, rowSelection, rows, {
+      scopeKey: "scope-a",
+      scopeKeyRef,
+    });
 
     expect(result).toEqual([
       { id: "a", name: "A" },
@@ -123,5 +127,38 @@ describe("reconcileSelectedRows", () => {
     ]);
     expect(map.get("a")).toEqual({ id: "a", name: "A" });
     expect(map.get("off-page")).toEqual({ id: "off-page", name: "Off" });
+  });
+
+  it("clears retained rows when scopeKey changes", () => {
+    const map = new Map([["off-page", { id: "off-page", name: "Off" }]]);
+    const rows = [{ id: "a", name: "A" }];
+    // Caller would also clear rowSelection on scope change; this models a
+    // stale off-page id still present until that clear lands.
+    const rowSelection = { a: true, "off-page": true };
+    const scopeKeyRef = { current: "scope-a" };
+
+    const result = reconcileSelectedRows(map, rowSelection, rows, {
+      scopeKey: "scope-b",
+      scopeKeyRef,
+    });
+
+    expect(scopeKeyRef.current).toBe("scope-b");
+    expect(map.has("off-page")).toBe(false);
+    expect(result).toEqual([{ id: "a", name: "A" }]);
+    expect(map.get("a")).toEqual({ id: "a", name: "A" });
+  });
+
+  it("keeps the map when scopeKey is unchanged", () => {
+    const map = new Map([["off-page", { id: "off-page", name: "Off" }]]);
+    const rows = [{ id: "a", name: "A" }];
+    const rowSelection = { a: true, "off-page": true };
+    const scopeKeyRef = { current: "scope-a" };
+
+    reconcileSelectedRows(map, rowSelection, rows, {
+      scopeKey: "scope-a",
+      scopeKeyRef,
+    });
+
+    expect(map.has("off-page")).toBe(true);
   });
 });

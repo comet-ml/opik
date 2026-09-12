@@ -47,6 +47,8 @@ type TracesActionsPanelProps = {
   hideEvaluate?: boolean;
   buttonVariant?: "outline" | "ghost" | "ghostInverted";
   buttonSize?: ButtonProps["size"];
+  /** Clears retained selection after bulk delete so deleted IDs cannot remain targets. */
+  onAfterDelete?: () => void;
 };
 
 const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
@@ -59,6 +61,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   hideEvaluate = false,
   buttonVariant = "outline",
   buttonSize = "sm",
+  onAfterDelete,
 }) => {
   const { iconButtonSize, leadIconClassName } =
     (buttonSize && ACTIONS_BUTTON_STYLE_BY_SIZE[buttonSize]) ??
@@ -92,11 +95,16 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   });
 
   const deleteTracesHandler = useCallback(() => {
-    mutate({
-      projectId,
-      ids: selectedRows.map((row) => row.id),
-    });
-  }, [projectId, selectedRows, mutate]);
+    mutate(
+      {
+        projectId,
+        ids: selectedRows.map((row) => row.id),
+      },
+      {
+        onSuccess: () => onAfterDelete?.(),
+      },
+    );
+  }, [projectId, selectedRows, mutate, onAfterDelete]);
 
   const mapRowData = useCallback(async () => {
     const rows = await getDataForExport();

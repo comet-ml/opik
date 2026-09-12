@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import {
   JsonParam,
@@ -831,9 +831,35 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
   }, [dynamicMetadataColumns]);
 
   const selectedRowsMapRef = useRef(new Map<string, Trace>());
+  const selectionScopeKeyRef = useRef<string | undefined>(undefined);
+  const selectionScopeKey = useMemo(
+    () =>
+      JSON.stringify({
+        projectId,
+        search: trimmedSearch,
+        filters: effectiveFilters,
+        intervalStart,
+        intervalEnd,
+      }),
+    [projectId, trimmedSearch, effectiveFilters, intervalStart, intervalEnd],
+  );
+
+  const clearRowSelection = useCallback(() => {
+    setRowSelection({});
+    selectedRowsMapRef.current.clear();
+  }, []);
+
+  useEffect(() => {
+    clearRowSelection();
+  }, [selectionScopeKey, clearRowSelection]);
+
   const selectedRows: Array<Trace> = useMemo(
-    () => reconcileSelectedRows(selectedRowsMapRef.current, rowSelection, rows),
-    [rowSelection, rows],
+    () =>
+      reconcileSelectedRows(selectedRowsMapRef.current, rowSelection, rows, {
+        scopeKey: selectionScopeKey,
+        scopeKeyRef: selectionScopeKeyRef,
+      }),
+    [rowSelection, rows, selectionScopeKey],
   );
 
   const getDataForExport = useCallback(async (): Promise<Array<Trace>> => {
@@ -1030,7 +1056,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
   const selectionBar = (
     <SelectionActionBar
       selectedCount={selectedRows.length}
-      onDeselectAll={() => setRowSelection({})}
+      onDeselectAll={clearRowSelection}
     >
       <TracesActionsPanel
         projectId={projectId}
@@ -1042,6 +1068,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
         hideEvaluate
         buttonVariant="ghostInverted"
         buttonSize="2xs"
+        onAfterDelete={clearRowSelection}
       />
     </SelectionActionBar>
   );

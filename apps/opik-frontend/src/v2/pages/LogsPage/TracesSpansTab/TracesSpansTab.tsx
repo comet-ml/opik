@@ -1123,9 +1123,43 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [dynamicMetadataColumns]);
 
   const selectedRowsMapRef = useRef(new Map<string, Trace | Span>());
+  const selectionScopeKeyRef = useRef<string | undefined>(undefined);
+  const selectionScopeKey = useMemo(
+    () =>
+      JSON.stringify({
+        projectId,
+        type,
+        search: trimmedSearch,
+        filters: effectiveFilters,
+        intervalStart,
+        intervalEnd,
+      }),
+    [
+      projectId,
+      type,
+      trimmedSearch,
+      effectiveFilters,
+      intervalStart,
+      intervalEnd,
+    ],
+  );
+
+  const clearRowSelection = useCallback(() => {
+    setRowSelection({});
+    selectedRowsMapRef.current.clear();
+  }, []);
+
+  useEffect(() => {
+    clearRowSelection();
+  }, [selectionScopeKey, clearRowSelection]);
+
   const selectedRows: Array<Trace | Span> = useMemo(
-    () => reconcileSelectedRows(selectedRowsMapRef.current, rowSelection, rows),
-    [rowSelection, rows],
+    () =>
+      reconcileSelectedRows(selectedRowsMapRef.current, rowSelection, rows, {
+        scopeKey: selectionScopeKey,
+        scopeKeyRef: selectionScopeKeyRef,
+      }),
+    [rowSelection, rows, selectionScopeKey],
   );
 
   const getDataForExport = useCallback(async (): Promise<
@@ -1527,7 +1561,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       {selectedRows.length > 0 ? (
         <SelectionActionBar
           selectedCount={selectedRows.length}
-          onDeselectAll={() => setRowSelection({})}
+          onDeselectAll={clearRowSelection}
         >
           <TracesActionsPanel
             projectId={projectId}
@@ -1538,6 +1572,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             type={type as TRACE_DATA_TYPE}
             buttonVariant="ghostInverted"
             buttonSize="2xs"
+            onAfterDelete={clearRowSelection}
           />
         </SelectionActionBar>
       ) : (
