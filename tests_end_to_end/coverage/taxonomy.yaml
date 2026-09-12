@@ -597,6 +597,7 @@ areas:
     spec_dir: experiments
     specs:
       - experiments/compare-json-key-sorting.spec.ts
+      - experiments/compare-row-detail-panel.spec.ts
       - experiments/experiment-delete.spec.ts
       - experiments/experiment-logs-date-window.spec.ts
       - experiments/experiments-compare.spec.ts
@@ -607,7 +608,7 @@ areas:
       compare-side-by-side:    { covered: true,  tier: t2-cuj }
       compare-sort-search:     { covered: true,  tier: t2-cuj }
       compare-feedback-tab:    { covered: true,  tier: t2-cuj }
-      compare-row-detail:      { covered: true,  tier: t2-cuj }
+      compare-row-detail:      { covered: true,  tier: t2-cuj, note: "panel contents per experiment; also the panel's own layout — sections ordered by the experiments URL array asserted both ways round, and a dragged panel width held across in-place arrow navigation (OPIK-8058)" }
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
