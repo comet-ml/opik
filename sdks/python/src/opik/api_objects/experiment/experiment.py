@@ -1,7 +1,7 @@
 import functools
 import logging
 from concurrent import futures
-from typing import List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
@@ -322,22 +322,56 @@ class Experiment:
     def log_experiment_scores(
         self,
         score_results: List["score_result.ScoreResult"],
-    ) -> None:
-        """Log experiment-level scores to the backend."""
-        experiment_scores: List[rest_api_types.ExperimentScore] = []
+        *,
+        preserve_unrelated: bool = False,
+    ) -> List["score_result.ScoreResult"]:
+        """Log scores and return effective scores, replacing recomputed names.
+
+        ``preserve_unrelated`` retains persisted names not recomputed (default false); failed supplied scores return but are not persisted.
+        """
+        if not score_results:
+            return []
+
+        experiment_scores_map: Dict[str, rest_api_types.ExperimentScore] = {}
+        effective_scores: List["score_result.ScoreResult"] = []
+        recomputed_names = {score_result_.name for score_result_ in score_results}
+
+        if preserve_unrelated:
+            from opik.evaluation.metrics import score_result as score_result_module
+
+            existing_experiment = self.get_experiment_data()
+            existing_scores = existing_experiment.experiment_scores or []
+            for score in existing_scores:
+                if score.name not in recomputed_names:
+                    experiment_scores_map[score.name] = rest_api_types.ExperimentScore(
+                        name=score.name, value=score.value
+                    )
+                    effective_scores.append(
+                        score_result_module.ScoreResult(
+                            name=score.name, value=score.value
+                        )
+                    )
 
         for score_result_ in score_results:
+            effective_scores.append(score_result_)
             if score_result_.scoring_failed:
+                experiment_scores_map.pop(score_result_.name, None)
                 continue
 
-            experiment_score = rest_api_types.ExperimentScore(
+            experiment_scores_map[score_result_.name] = rest_api_types.ExperimentScore(
                 name=score_result_.name,
                 value=score_result_.value,
             )
-            experiment_scores.append(experiment_score)
 
-        if experiment_scores:
-            self._rest_client.experiments.update_experiment(
-                id=self.id,
-                experiment_scores=experiment_scores,
-            )
+        experiment_scores = list(experiment_scores_map.values())
+        # The update is a full replacement, so writing an empty list would erase
+        # aggregates this call never looked at.
+        if not experiment_scores and not preserve_unrelated:
+            return effective_scores
+
+        self._rest_client.experiments.update_experiment(
+            id=self.id,
+            experiment_scores=experiment_scores,
+        )
+
+        return effective_scores
