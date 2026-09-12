@@ -165,11 +165,13 @@ def test_evaluate__missing_score_argument__tolerance_all__accumulated_as_failed_
     _assert_failure_is_reported(score, "ScoreMethodMissingArguments")
     assert "expected_label" in score.reason
 
-    # Everything else is scored as usual and the failure is kept out of the stats.
+    # Everything else is scored as usual; the failure counts at its recorded
+    # 0.0 instead of being silently dropped from the stats (#8134).
     assert _score_by_name(result, "always_passes").scoring_failed is False
     aggregated = result.aggregate_evaluation_scores().aggregated_scores
     assert aggregated["always_passes"].mean == 1.0
-    assert "needs_missing_arg" not in aggregated
+    assert aggregated["needs_missing_arg"].mean == 0.0
+    assert aggregated["needs_missing_arg"].values == [0.0, 0.0]
 
 
 def test_evaluate__item_evaluator_cannot_be_built__default_tolerance__evaluation_is_aborted(
@@ -274,23 +276,25 @@ def test_evaluate__item_evaluator_cannot_be_built__config_values_are_not_logged(
         ),
     ],
 )
-def test_evaluate__tolerated_failures__are_not_sent_to_the_backend(
+def test_evaluate__tolerated_failures__are_sent_to_the_backend(
     fake_backend, metrics, items, error_tolerance, failed_score_name
 ):
     # Every failure class has to be covered separately: they reach the backend
-    # boundary by different routes, and the filter that drops them is shared, so
-    # one passing case says nothing about the others.
+    # boundary by different routes. #8134: failed scores used to be dropped by
+    # the shared upload filter, silently diverging backend averages from the
+    # items actually evaluated; they now persist at their recorded 0.0.
     result = _run_evaluation(metrics, error_tolerance=error_tolerance, items=items)
 
-    # The failure has to have actually happened, or its absence below proves nothing.
+    # The failure has to have actually happened, or its presence below proves nothing.
     assert _score_by_name(result, failed_score_name).scoring_failed is True
 
-    logged_score_names = {
-        score.name
+    logged_scores = {
+        score.name: score
         for trace in fake_backend.trace_trees
         for score in trace.feedback_scores or []
     }
-    assert logged_score_names == {"always_passes"}
+    assert set(logged_scores) == {"always_passes", failed_score_name}
+    assert logged_scores[failed_score_name].value == 0.0
 
 
 def test_evaluate__error_tolerance_accepts_plain_ints(fake_backend):
@@ -333,8 +337,9 @@ class TrackedNeedsMissingArgument(base_metric.BaseMetric):
 
 
 def test_evaluate__tolerated_failure__is_reported_on_the_argument_span(fake_backend):
-    # Without this the failure is invisible in the backend: no score is persisted,
-    # and a metric that never runs produces no score span of its own.
+    # A metric that never runs produces no score span of its own, so the
+    # argument-validation span is where the pre-score failure is diagnosable
+    # (the persisted 0.0 score carries the reason, the span the error_info).
     _run_evaluation(
         [AlwaysPasses(), TrackedNeedsMissingArgument()],
         error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,

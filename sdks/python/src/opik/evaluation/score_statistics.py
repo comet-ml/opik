@@ -24,6 +24,11 @@ def calculate_aggregated_statistics(
     """
     Calculate mean, max, and min scores for each score name in the evaluation test results.
 
+    Failed scores (``scoring_failed=True``) count at their recorded value
+    (``0.0`` as built by the engine) so a crashing metric cannot improve its
+    average by dropping hard items (#8134). The failure itself stays auditable
+    via ``reason`` / ``metadata["error_info"]`` on the ``TestResult``.
+
     Args:
         evaluation_results: List of TestResult objects to be aggregated
 
@@ -38,10 +43,9 @@ def calculate_aggregated_statistics(
 
     for test_result_ in evaluation_results:
         for score_result in test_result_.score_results:
-            # Only include successful scores with valid values
-            if not score_result.scoring_failed and _is_valid_score_value(
-                score_result.value
-            ):
+            # Include every valid value — failed scores included, so the
+            # denominator covers all scored items instead of just survivors.
+            if _is_valid_score_value(score_result.value):
                 scores_by_name[score_result.name].append(score_result.value)
 
     # Calculate aggregated statistics for each score name
