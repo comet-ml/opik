@@ -24,7 +24,7 @@ const PROJECT_NAME = `ts-runner-e2e-${Date.now()}`;
 
 const JOB_COMPLETION_TIMEOUT = 30_000;
 const TRACE_PROPAGATION_TIMEOUT = 30_000;
-const AGENT_REGISTRATION_TIMEOUT = 10_000;
+const AGENT_REGISTRATION_TIMEOUT = 30_000;
 const RUNNER_STARTUP_TIMEOUT = 15_000;
 
 function sleep(ms: number): Promise<void> {
@@ -112,9 +112,10 @@ describe.skipIf(!shouldRunApiTests)("Runner Integration Tests", () => {
       env.OPIK_WORKSPACE = process.env.OPIK_WORKSPACE;
     }
 
-    // Spawn echo_app.ts with tsx
+    // Spawn echo_app.ts with tsx. Resolve tsx through Node rather than `npx`,
+    // which would fetch it from the registry inside the registration timeout.
     outputLines = [];
-    runnerProcess = spawn("npx", ["tsx", ECHO_APP], {
+    runnerProcess = spawn(process.execPath, [require.resolve("tsx/cli"), ECHO_APP], {
       env,
       cwd: path.resolve(__dirname, "../../.."),
       stdio: ["pipe", "pipe", "pipe"],
