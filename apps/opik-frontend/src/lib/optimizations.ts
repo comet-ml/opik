@@ -367,7 +367,11 @@ export const getOptimizationDefaultConfigByProvider = (
 ): LLMPromptConfigsType => {
   const providerType = parseComposedProviderType(provider);
 
-  if (providerType === PROVIDER_TYPE.OPEN_AI) {
+  // Requesty reuses the OpenAI client on the backend, so it takes the OpenAI defaults.
+  if (
+    providerType === PROVIDER_TYPE.OPEN_AI ||
+    providerType === PROVIDER_TYPE.REQUESTY
+  ) {
     return {
       temperature: getDefaultTemperatureForModel(model),
     } as LLMOpenAIConfigsType;
