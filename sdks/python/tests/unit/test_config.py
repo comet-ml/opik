@@ -4,7 +4,7 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-from opik.config import OpikConfig
+from opik.config import CONFIG_FILE_PATH_DEFAULT, OpikConfig
 
 
 @pytest.fixture(autouse=True)
@@ -131,3 +131,44 @@ def test_save_to_file_does_not_persist_environment(mock_expanduser, mock_open_fi
     parsed_config.read_string(written_content)
 
     assert "environment" not in parsed_config["opik"]
+
+
+@pytest.mark.parametrize("blank_path", ["", "   ", "\t"])
+def test_blank_opik_config_path_falls_back_to_default(monkeypatch, blank_path):
+    """
+    ``os.getenv(..., default)`` only applies when the variable is missing.
+    A blank assignment (Windows ``set OPIK_CONFIG_PATH=``, a `.env` line
+    with no value) would otherwise resolve to the current directory and
+    ignore ``~/.opik.config``.
+    """
+    monkeypatch.setenv("OPIK_CONFIG_PATH", blank_path)
+
+    config = OpikConfig()
+
+    assert config.config_file_fullpath == Path(CONFIG_FILE_PATH_DEFAULT).expanduser()
+
+
+def test_unset_opik_config_path_uses_default(monkeypatch):
+    monkeypatch.delenv("OPIK_CONFIG_PATH", raising=False)
+
+    config = OpikConfig()
+
+    assert config.config_file_fullpath == Path(CONFIG_FILE_PATH_DEFAULT).expanduser()
+
+
+def test_custom_opik_config_path_is_honored(monkeypatch, tmp_path):
+    custom = tmp_path / "custom.opik.config"
+    monkeypatch.setenv("OPIK_CONFIG_PATH", str(custom))
+
+    config = OpikConfig()
+
+    assert config.config_file_fullpath == custom
+
+
+def test_padded_opik_config_path_is_honored(monkeypatch, tmp_path):
+    custom = tmp_path / "custom.opik.config"
+    monkeypatch.setenv("OPIK_CONFIG_PATH", f"  {custom}  ")
+
+    config = OpikConfig()
+
+    assert config.config_file_fullpath == custom

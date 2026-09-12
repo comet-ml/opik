@@ -39,6 +39,14 @@ ANALYTICS_URL_DEFAULT: Final[str] = "https://stats.comet.com/notify/event/"
 LOGGER = logging.getLogger(__name__)
 
 
+def _resolve_config_file_path() -> str:
+    """Return ``OPIK_CONFIG_PATH``, or the default when it is unset or blank."""
+    raw = os.getenv("OPIK_CONFIG_PATH")
+    if raw is None or not raw.strip():
+        return CONFIG_FILE_PATH_DEFAULT
+    return raw.strip()
+
+
 class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
     """
     A source class that loads variables from a INI file
@@ -48,7 +56,7 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self,
         settings_cls: Type[BaseSettings],
     ):
-        config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
+        config_file_path = _resolve_config_file_path()
         expanded_path = pathlib.Path(config_file_path).expanduser()
         if config_file_path != CONFIG_FILE_PATH_DEFAULT and not expanded_path.exists():
             LOGGER.warning(
@@ -347,7 +355,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     @property
     def config_file_fullpath(self) -> pathlib.Path:
-        config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
+        config_file_path = _resolve_config_file_path()
         return pathlib.Path(config_file_path).expanduser()
 
     @property
