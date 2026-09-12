@@ -1,4 +1,4 @@
-export { test, expect } from './timed-threads.fixture';
+export { test, expect } from './weekly-metric-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -131,4 +131,23 @@ export type {
   DurationThreadsRef,
   TimedThreadsFixtures,
 } from './timed-threads.fixture';
+export type {
+  PagedSpansRef,
+  FarFuturePagedSpanRef,
+  PagedSpansFixtures,
+} from './paged-spans.fixture';
+export type {
+  SpanKpiPeriodExpectation,
+  SpanKpiSpansRef,
+  SpanKpiSpansFixtures,
+} from './span-kpi-cards.fixture';
+export type {
+  FarFutureErrorTracesRef,
+  FarFutureErrorTracesFixtures,
+} from './far-future-error-traces.fixture';
+export type {
+  WeeklyMetricDaySeed,
+  WeeklyMetricSpansRef,
+  WeeklyMetricSpansFixtures,
+} from './weekly-metric-spans.fixture';
 export type { ProjectRef } from '../core/backend';

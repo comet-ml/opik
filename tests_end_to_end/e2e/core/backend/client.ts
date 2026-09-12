@@ -200,6 +200,57 @@ export interface SpanRef {
   parentSpanId: string | null;
 }
 
+/** One span of a `POST /v1/private/spans/batch` write. */
+export interface SpanBatchSeed {
+  /** Caller-minted so the seed knows the exact id set it wrote. Must be a UUIDv7. */
+  id: string;
+  traceId: string;
+  name: string;
+  /**
+   * Defaults to `sdk`, which is what a seed almost always wants: the Logs page
+   * filters every span read on `source = sdk`, and `SpanDAO` binds NULL when
+   * the write omits it — so a span seeded without one is written, queryable by
+   * id, and invisible in the view a UI spec is about to assert on.
+   */
+  source?: 'sdk' | 'experiment' | 'playground' | 'optimization';
+  type?: 'general' | 'llm' | 'tool';
+  startTime?: Date;
+  endTime?: Date;
+  model?: string;
+  provider?: string;
+  /** Written through verbatim; deliberately no `total_cost` (see `createSpan`). */
+  usage?: Record<string, number>;
+  /** Set to make the span count toward the error rate. */
+  errorInfo?: { exceptionType: string; message: string; traceback: string };
+}
+
+/**
+ * One page of the spans listing, kept as ids plus the envelope.
+ *
+ * `total` and `size` are part of the answer, not decoration: a paging spec that
+ * only collected ids could not tell "the last page was short" from "the reader
+ * stopped early", and the table renders `total` to the user as
+ * "Showing 1-25 of 130".
+ */
+export interface SpanIdPage {
+  ids: string[];
+  page: number;
+  size: number;
+  total: number;
+}
+
+/** One KPI card as `POST /v1/private/projects/{id}/kpi-cards` answers it. */
+export interface KpiCardStat {
+  type: 'count' | 'errors' | 'avg_duration' | 'total_cost';
+  /**
+   * Nullable because the API's own shape is. A caller comparing numbers must
+   * assert the value is there rather than default it — `?? 0` would turn "the
+   * card returned nothing" into a passing zero.
+   */
+  currentValue: number | null;
+  previousValue: number | null;
+}
+
 export interface TraceDetail {
   id: string;
   name: string;
@@ -809,7 +860,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
    * The backoff exists because retrying instantly is no retry at all: the three
    * attempts land inside the same burst and all fail.
    */
-  const postSeedWrite = async (path: string, describe: string, body: unknown): Promise<void> => {
+  const postSeedWrite = async (
+    path: string,
+    describe: string,
+    body: unknown,
+    // The single-entity writes answer 201; `/spans/batch` answers 204. Both are
+    // "the write landed", so the expectation is a parameter rather than a
+    // second near-identical helper.
+    expectedStatus = 201,
+  ): Promise<void> => {
     const backoffMs = [1_000, 3_000, 8_000];
     let last: RawApiResult = { status: 0, message: '<no response>', location: null };
     // Counted as requests are made, not inferred from the final status: a 502
@@ -821,7 +880,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
       attempted++;
       const { status, message, location } = await rawFetch('POST', path, { body });
-      if (status === 201) return;
+      if (status === expectedStatus) return;
       last = { status, message, location };
       if (status < 500) break;
       if (attempt < backoffMs.length) {
@@ -830,7 +889,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     }
 
     throw new Error(
-      `${describe}: expected 201, got ${last.status} after ${attempted} attempt(s): ${last.message}`,
+      `${describe}: expected ${expectedStatus}, got ${last.status} after ${attempted} attempt(s): ${last.message}`,
     );
   };
 
@@ -1803,6 +1862,59 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `POST /v1/private/projects/{id}/kpi-cards` — the four numbers the Logs
+     * page renders above its table, for the current period and the equal-length
+     * period immediately before it.
+     *
+     * Raw fetch because the pinned SDK has no binding for it, and because the
+     * status is part of what a caller asserts: an unservable entity type is a
+     * 400, not a wrong number.
+     *
+     * `filters` is sent verbatim when given. The Logs page always sends a
+     * `source = sdk` filter; a caller seeding into a fresh project through the
+     * SDK/REST writes gets the same answer either way, and says so rather than
+     * copying the front end's payload for its own sake.
+     */
+    async projectKpiCards(args: {
+      projectId: string;
+      entityType: 'traces' | 'spans' | 'threads';
+      intervalStart: Date;
+      intervalEnd?: Date;
+      filters?: unknown[];
+    }): Promise<RawApiResult & { stats: KpiCardStat[] }> {
+      const { status, message, json } = await rawFetch(
+        'POST',
+        `/v1/private/projects/${args.projectId}/kpi-cards`,
+        {
+          body: {
+            entity_type: args.entityType,
+            interval_start: args.intervalStart.toISOString(),
+            ...(args.intervalEnd ? { interval_end: args.intervalEnd.toISOString() } : {}),
+            ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+          },
+        },
+      );
+      const body = json as {
+        stats?: Array<{
+          type?: string;
+          current_value?: number | null;
+          previous_value?: number | null;
+        }>;
+      } | null;
+      return {
+        status,
+        message,
+        stats: (body?.stats ?? []).map((stat) => ({
+          type: stat.type as KpiCardStat['type'],
+          // `?? null`, never `?? 0`: the response declares these always-present
+          // but nullable, and a zeroed absent card would read as a real value.
+          currentValue: stat.current_value ?? null,
+          previousValue: stat.previous_value ?? null,
+        })),
+      };
+    },
+
+    /**
      * By id, unlike findExperimentByName — `findExperiments({ name })` is not
      * scoped to a project, so a same-named experiment elsewhere would answer
      * for this one.
@@ -2013,6 +2125,160 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         traceId: String(s.traceId ?? ''),
         parentSpanId: s.parentSpanId ? String(s.parentSpanId) : null,
       }));
+    },
+
+    /**
+     * `POST /v1/private/spans/batch` — many spans in one request.
+     *
+     * The only way to seed a span population large enough to page. Writing them
+     * one at a time through `createSpan` is both slow and the fastest route to
+     * the workspace ingestion rate limit, which surfaces as a seed that half
+     * landed — the worst possible input to a spec whose subject is "every span
+     * comes back exactly once".
+     *
+     * Each span's `source` defaults to `sdk`, which is what the Logs page
+     * filters every span read on. The write does not default it — `SpanDAO`
+     * binds NULL for an absent one — so a batch seeded without it lands, is
+     * readable by id, and never appears in the table.
+     */
+    async createSpansBatch(args: {
+      projectName: string;
+      spans: SpanBatchSeed[];
+    }): Promise<void> {
+      // The endpoint's own cap. Chunking here would hide from the caller that
+      // the seed is no longer one atomic write, which a paging spec cares about.
+      if (args.spans.length < 1 || args.spans.length > 1000) {
+        throw new Error(
+          `createSpansBatch: the endpoint accepts 1..1000 spans, got ${args.spans.length}`,
+        );
+      }
+      const now = new Date();
+      await postSeedWrite(
+        '/v1/private/spans/batch',
+        `createSpansBatch of ${args.spans.length} into '${args.projectName}'`,
+        {
+          spans: args.spans.map((span) => ({
+            id: span.id,
+            trace_id: span.traceId,
+            project_name: args.projectName,
+            name: span.name,
+            source: span.source ?? 'sdk',
+            type: span.type ?? 'general',
+            start_time: (span.startTime ?? now).toISOString(),
+            end_time: (span.endTime ?? now).toISOString(),
+            ...(span.model === undefined ? {} : { model: span.model }),
+            ...(span.provider === undefined ? {} : { provider: span.provider }),
+            ...(span.usage === undefined ? {} : { usage: span.usage }),
+            ...(span.errorInfo === undefined
+              ? {}
+              : {
+                  error_info: {
+                    exception_type: span.errorInfo.exceptionType,
+                    message: span.errorInfo.message,
+                    traceback: span.errorInfo.traceback,
+                  },
+                }),
+          })),
+        },
+        204,
+      );
+    },
+
+    /**
+     * One page of `GET /v1/private/spans`, as the Logs table asks for it.
+     *
+     * Deliberately NOT `fetchAllPages`: the paging itself is what a caller of
+     * this is testing, so the page boundary has to stay visible. `truncate`
+     * keeps the payload slim — these callers only ever read ids.
+     */
+    async listSpanIdsPage(args: {
+      projectId: string;
+      page: number;
+      size: number;
+    }): Promise<SpanIdPage> {
+      // Both retries: `withReadRetry` for an ingress 5xx blip, and
+      // `withRateLimitRetry` because paging a population is a burst of reads
+      // against a per-workspace limit.
+      const answer = await withRateLimitRetry(() =>
+        withReadRetry(() =>
+          opik.api.spans.getSpansByProject({
+            projectId: args.projectId,
+            page: args.page,
+            size: args.size,
+            truncate: true,
+          }),
+        ),
+      );
+      return {
+        ids: (answer.content ?? []).map((s) => String(s.id ?? '')),
+        page: answer.page ?? args.page,
+        size: answer.size ?? 0,
+        total: answer.total ?? 0,
+      };
+    },
+
+    /**
+     * `POST /v1/private/spans/search` — the cursor-paged read, which is a
+     * different query from the offset-paged listing above and not a wrapper
+     * around it.
+     *
+     * Written by hand rather than through `rawFetch` because the endpoint
+     * answers `application/octet-stream`: one JSON object per line, streamed.
+     * `rawFetch` would `JSON.parse` the whole body, fail, and hand back the raw
+     * text as a "message" — which reads like an error response rather than a
+     * successful stream.
+     *
+     * A line that carries no `id` is treated as the stream's error object and
+     * thrown. The streamer really does emit one mid-stream on failure, and
+     * silently skipping it would turn a truncated answer into a short page —
+     * exactly the symptom a paging spec is supposed to catch.
+     */
+    async searchSpanIds(args: {
+      projectId: string;
+      limit: number;
+      lastRetrievedId?: string;
+    }): Promise<string[]> {
+      const headers: Record<string, string> = {
+        Accept: 'application/octet-stream',
+        'Content-Type': 'application/json',
+        'Comet-Workspace': env.workspace,
+      };
+      const key = apiKey ?? env.apiKey;
+      if (key) headers['Authorization'] = key;
+
+      // Rate-limited per workspace (`search_spans:{workspaceId}`), and draining
+      // by cursor is by definition a burst — see `withRateLimitRetry`.
+      const text = await withRateLimitRetry(async () => {
+        const res = await fetch(`${env.apiBaseUrl}/v1/private/spans/search`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            project_id: args.projectId,
+            limit: args.limit,
+            truncate: true,
+            ...(args.lastRetrievedId ? { last_retrieved_id: args.lastRetrievedId } : {}),
+          }),
+        });
+        const body = await res.text();
+        if (!res.ok) {
+          throw new Error(`POST /v1/private/spans/search -> ${res.status}: ${body.slice(0, 300)}`);
+        }
+        return body;
+      });
+
+      const ids: string[] = [];
+      for (const line of text.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const parsed = JSON.parse(trimmed) as { id?: unknown };
+        if (typeof parsed.id !== 'string') {
+          throw new Error(
+            `POST /v1/private/spans/search streamed a non-span line: ${trimmed.slice(0, 300)}`,
+          );
+        }
+        ids.push(parsed.id);
+      }
+      return ids;
     },
 
     /**
@@ -2881,6 +3147,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * scored — and a scoring spec built on it would assert nothing.
        */
       endTime?: Date;
+      /**
+       * Set to make the trace count toward the project's error statistics. The
+       * SDK bridge can seed this too, but only for a trace whose id it mints
+       * itself — and a trace placed inside or outside a window by its id has to
+       * supply its own.
+       */
+      errorInfo?: { exceptionType: string; message: string; traceback: string };
     }): Promise<string> {
       await postSeedWrite('/v1/private/traces', `createTraceWithSource '${args.name}'`, {
         id: args.id,
@@ -2890,6 +3163,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.threadId ? { thread_id: args.threadId } : {}),
         start_time: (args.startTime ?? new Date()).toISOString(),
         ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
+        ...(args.errorInfo
+          ? {
+              error_info: {
+                exception_type: args.errorInfo.exceptionType,
+                message: args.errorInfo.message,
+                traceback: args.errorInfo.traceback,
+              },
+            }
+          : {}),
         ...(args.input === undefined ? {} : { input: args.input }),
         ...(args.output === undefined ? {} : { output: args.output }),
         ...(args.metadata ? { metadata: args.metadata } : {}),
@@ -3161,6 +3443,45 @@ async function withReadRetry<T>(read: () => Promise<T>): Promise<T> {
     } catch (err) {
       const status = statusCodeOf(err);
       if (status === null || status < 500 || attempt >= backoffMs.length) throw err;
+      await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+    }
+  }
+}
+
+/**
+ * True when a read was refused by a rate limiter rather than failing.
+ *
+ * Matched on the status where the pinned SDK exposes one and on the message
+ * otherwise, because the raw-fetch reads here report a refusal as a thrown
+ * `Error` carrying the status text.
+ */
+export function isRateLimitedError(err: unknown): boolean {
+  if (typeof err === 'object' && err !== null && 'statusCode' in err) {
+    if ((err as { statusCode: unknown }).statusCode === 429) return true;
+  }
+  return (err instanceof Error ? err.message : String(err)).includes('429');
+}
+
+/**
+ * Run an idempotent read, standing off and retrying when it is rate-limited.
+ *
+ * Distinct from `withReadRetry`, which hides a 5xx blip. A 429 is not a blip:
+ * the spans listing is limited per workspace (`getSpans:{workspaceId}`), and a
+ * spec that pages a population necessarily issues a burst of reads — on a
+ * shared environment, alongside whatever else is running. Failing the test on
+ * that reports an infrastructure budget as a paging defect.
+ *
+ * Only 429, and only for reads. A different error is a real one and must
+ * surface immediately; a rate limit that outlasts the whole backoff still
+ * throws, because at that point it is not a burst.
+ */
+async function withRateLimitRetry<T>(read: () => Promise<T>): Promise<T> {
+  const backoffMs = [2_000, 5_000, 10_000, 20_000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await read();
+    } catch (err) {
+      if (!isRateLimitedError(err) || attempt >= backoffMs.length) throw err;
       await new Promise((r) => setTimeout(r, backoffMs[attempt]));
     }
   }
