@@ -133,6 +133,68 @@ class SilentMetric(base_metric.BaseMetric):
 }
 
 /**
+ * A metric returning a LIST of scores, some carrying a value and some not.
+ *
+ * `ScoreResult(value=None)` is a legitimate answer from a user metric — a check
+ * that did not apply, or one the metric gave up on — but it cannot be stored
+ * (`feedback_scores.value` is not nullable). The engine's contract, which this
+ * builds the input for, is that a valueless score is dropped on its own and its
+ * siblings in the same batch are still stored.
+ *
+ * One builder rather than three because the shapes a spec needs are the same
+ * list with different contents: a mixed batch, an all-valueless batch (the
+ * empty-batch corner), and a 0.0-valued score, which must be stored as a real
+ * score rather than treated as missing.
+ *
+ * `scores` is emitted in the order given, and the order is worth choosing: a
+ * regression that only handled a TRAILING valueless score would still pass a
+ * batch whose `None` is always last, so a caller should put one first.
+ *
+ * `value=float(...)` is deliberate: a TypeScript `1.0` renders into the source
+ * as `1`, which would otherwise reach `ScoreResult` as a python int.
+ *
+ * `scoreArgs` follows `buildConstantScoreMetric` — the default (`output`) suits
+ * a trace- or span-scope rule mapping one whole section; a thread-scope rule
+ * receives the conversation instead and wants `['context']`.
+ */
+export function buildValuelessScoresMetric(args: {
+  /** In emission order. `value: null` is the `ScoreResult(value=None)` case. */
+  scores: ReadonlyArray<{ name: string; value: number | null }>;
+  scoreArgs?: readonly string[];
+}): string {
+  const params = (args.scoreArgs ?? ['output']).map((a) => `        ${a}: Any = None,`).join('\n');
+  // Rendered pair by pair rather than with JSON.stringify: JSON's null is not
+  // python's None, and a `null` in the source is a NameError that fails the
+  // whole metric — which reads, from the rule's log, exactly like the batch
+  // failure this metric exists to prove no longer happens.
+  const pairs = args.scores
+    .map((s) => `    (${JSON.stringify(s.name)}, ${s.value === null ? 'None' : s.value}),`)
+    .join('\n');
+  return `from typing import Any, List
+from opik.evaluation.metrics import base_metric, score_result
+
+SCORES = [
+${pairs}
+]
+
+class ValuelessScores(base_metric.BaseMetric):
+    def __init__(self, name: str = "valueless_scores"):
+        self.name = name
+
+    def score(
+        self,
+${params}
+        **ignored_kwargs: Any,
+    ) -> List[score_result.ScoreResult]:
+        return [
+            score_result.ScoreResult(
+                value=None if value is None else float(value), name=name
+            )
+            for name, value in SCORES
+        ]`;
+}
+
+/**
  * A metric that exits 0 having printed something that is not the result JSON.
  *
  * The sibling branch of the same fix: exit code 0 whose LAST line does not parse

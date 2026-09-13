@@ -1,4 +1,4 @@
-import type { FeedbackScoreRef, SpanDetail, TraceDetail } from './client';
+import type { FeedbackScoreRef, SpanDetail, ThreadDetail, TraceDetail } from './client';
 
 export interface PollFeedbackScoreOpts {
   timeoutMs?: number;
@@ -21,7 +21,7 @@ interface ScoredEntity {
  * streams), and the id alone does not say which one was being polled.
  */
 async function pollForFeedbackScore<T extends ScoredEntity>(
-  kind: 'trace' | 'span',
+  kind: 'trace' | 'span' | 'thread',
   getEntity: (id: string) => Promise<T | null>,
   id: string,
   scoreName: string,
@@ -71,4 +71,17 @@ export async function pollSpanForFeedbackScore(
   opts: PollFeedbackScoreOpts = {},
 ): Promise<FeedbackScoreRef> {
   return pollForFeedbackScore('span', getSpan, spanId, scoreName, opts);
+}
+
+/**
+ * The thread-scope counterpart. A thread-scope rule writes to the thread and to
+ * none of its turns, so polling a turn's trace for its score waits forever.
+ */
+export async function pollThreadForFeedbackScore(
+  getThread: (threadId: string) => Promise<ThreadDetail>,
+  threadId: string,
+  scoreName: string,
+  opts: PollFeedbackScoreOpts = {},
+): Promise<FeedbackScoreRef> {
+  return pollForFeedbackScore('thread', getThread, threadId, scoreName, opts);
 }
