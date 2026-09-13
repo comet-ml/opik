@@ -84,6 +84,12 @@ async function waitForSpanCount(
 ): Promise<void> {
   const start = Date.now();
   let seen: number | string = 'no answer yet';
+  // The last error this loop chose to swallow. Carried into the timeout message
+  // because a misclassified one would otherwise vanish: the classifier reads a
+  // status out of a message, and the only symptom of getting that wrong is this
+  // poll burning its whole budget and then reporting a count instead of the
+  // refusal that actually stopped it.
+  let lastSwallowed: unknown = null;
   while (Date.now() - start < QUERYABLE_TIMEOUT_MS) {
     try {
       // size 1: the total is in the envelope, so there is no reason to transfer
@@ -99,6 +105,7 @@ async function waitForSpanCount(
       // real one and must surface.
       if (!isRateLimitedError(err)) throw err;
       seen = 'rate limited';
+      lastSwallowed = err;
       await new Promise((r) => setTimeout(r, RATE_LIMIT_BACKOFF_MS));
       continue;
     }
@@ -106,7 +113,12 @@ async function waitForSpanCount(
   }
   throw new Error(
     `[pagedSpans fixture] project ${projectId} reported ${seen} spans, expected ${expected}, ` +
-      `after ${Date.now() - start}ms`,
+      `after ${Date.now() - start}ms` +
+      (lastSwallowed === null
+        ? ''
+        : `; last refusal stood off: ${
+            lastSwallowed instanceof Error ? lastSwallowed.message : String(lastSwallowed)
+          }`),
   );
 }
 

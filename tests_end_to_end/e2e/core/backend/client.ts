@@ -3454,12 +3454,22 @@ async function withReadRetry<T>(read: () => Promise<T>): Promise<T> {
  * Matched on the status where the pinned SDK exposes one and on the message
  * otherwise, because the raw-fetch reads here report a refusal as a thrown
  * `Error` carrying the status text.
+ *
+ * The message match requires `429` to stand alone rather than merely occur, and
+ * that is not pedantry: these messages quote ids and response bodies, and a
+ * UUID with `429` somewhere in its hex would otherwise make every real 4xx look
+ * like a rate limit. The callers stand off and retry on a true, so a
+ * misclassified error is one that gets swallowed for the whole backoff and then
+ * reported as something else. The forms that must still match are
+ * `-> 429:` (the hand-rolled stream read), `got 429 after` (`postSeedWrite`)
+ * and a trailing `status code 429` — all of them delimited.
  */
 export function isRateLimitedError(err: unknown): boolean {
   if (typeof err === 'object' && err !== null && 'statusCode' in err) {
     if ((err as { statusCode: unknown }).statusCode === 429) return true;
   }
-  return (err instanceof Error ? err.message : String(err)).includes('429');
+  const message = err instanceof Error ? err.message : String(err);
+  return /(?:^|[^0-9A-Za-z])429(?:[^0-9A-Za-z]|$)/.test(message);
 }
 
 /**
