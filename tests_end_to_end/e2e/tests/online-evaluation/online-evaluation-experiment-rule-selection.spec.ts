@@ -50,7 +50,15 @@ test.describe('Online Evaluation — experiment-trace rule selection', { tag: ['
     // first, each with a diagnostic naming the trace and the scores it actually
     // saw; this ceiling only governs which error you get on a genuine stall.
     // Observed runtime is well inside it.
-    test.setTimeout(300_000);
+    //
+    // The ceiling has to clear the sum of those waits on the SEQUENTIAL path,
+    // or it fires first and the diagnostic is lost to a bare "Test timeout of
+    // Nms exceeded": 180s for the control score, then 120s for the settle (the
+    // two traces settle in parallel, so 120s not 240s), then 120s for the rule
+    // log — 420s, plus seeding. 480s is that sum with headroom, and it is the
+    // same order as the other end-to-end scoring specs here
+    // (online-evaluation-enable-disable-rule budgets 660s).
+    test.setTimeout(480_000);
 
     // Every rule returns a constant 1.0 under a score name equal to its own
     // name, so "which rules scored this trace" reads straight off the score set.

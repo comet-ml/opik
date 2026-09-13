@@ -72,11 +72,15 @@ test.describe('Playground — metric selector default', { tag: ['@t2-cuj', '@are
 
     await test.step('Open the Playground', async () => {
       await playground.goto();
-      // A keyless install opens the provider-setup dialog over the page; it has
-      // nothing to do with this flow and `waitForReady` cannot pass while it
-      // holds the aria tree.
-      await playground.dismissProviderSetupDialog();
       await playground.waitForReady();
+      // A keyless install opens the provider-setup dialog over the page. It has
+      // nothing to do with this flow, and it has to be closed before the next
+      // gesture: its overlay would make `clickRunExperiment` fail as an
+      // obscured element. Dismissed AFTER `waitForReady` because the dialog is
+      // opened from an effect on the provider-keys query — waiting for it on a
+      // page that has not mounted yet is how the window expires early and the
+      // modal opens behind us.
+      await playground.dismissProviderSetupDialog();
     });
 
     await test.step('Load the dataset as the run-experiment source', async () => {

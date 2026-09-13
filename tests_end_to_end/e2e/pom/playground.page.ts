@@ -294,16 +294,30 @@ export class PlaygroundPage {
    * It is onboarding, not part of any flow asserted here, and it is opened from
    * a `useEffect` on `providerKeys.length === 0` — so whether it appears is a
    * property of the deployment, not of the behaviour under test. Handled as
-   * "close it if it opened" for that reason; `waitForReady` is the real gate,
-   * and it cannot pass while this modal holds the page's aria tree.
+   * "close it if it opened" for that reason.
+   *
+   * **Call this AFTER `waitForReady()`, not before.** The dialog is opened from
+   * an effect that runs once the provider-keys query resolves, so the window
+   * below has to start from a mounted Playground or it can expire while the app
+   * is still loading and let the modal open behind the caller. `waitForReady`
+   * is NOT a second line of defence here: it waits on CSS visibility, which a
+   * Radix modal does not change for the content it covers, so it passes just as
+   * happily with this dialog open. What a late modal costs is the NEXT gesture
+   * — the overlay makes `clickRunExperiment` fail as an obscured-element
+   * timeout, which reads as a broken selector rather than as onboarding.
+   *
+   * That leaves a genuinely unbounded case: an install slow enough to open the
+   * dialog more than `timeout` after the Playground mounted. Closing it
+   * deterministically needs the provider-keys response itself, which no helper
+   * here exposes yet; until then this is bounded-wait-and-close.
    */
-  async dismissProviderSetupDialog(): Promise<void> {
+  async dismissProviderSetupDialog(timeout = 10_000): Promise<void> {
     return test.step('dismiss the provider-setup dialog if this install opened one', async () => {
       const setupDialog = this.page.getByRole('dialog').filter({
         has: this.page.getByRole('heading', { name: 'Add provider configuration' }),
       });
       try {
-        await setupDialog.waitFor({ state: 'visible', timeout: 10_000 });
+        await setupDialog.waitFor({ state: 'visible', timeout });
       } catch {
         // No provider-setup dialog on this deployment — it already has a
         // provider configured. Nothing to dismiss.
