@@ -26,6 +26,8 @@ type CodeBlockProps = {
   search?: string;
   withSearch?: boolean;
   defaultOpen?: boolean;
+  /** Controlled open state. Omit to let the block own it. */
+  open?: boolean;
   disabled?: boolean;
   className?: string;
   quickFilterSection?: QuickFilterSection;
@@ -41,12 +43,14 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   search,
   withSearch,
   defaultOpen = true,
+  open,
   disabled,
   className,
   quickFilterSection,
   onOpenChange,
 }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [uncontrolledIsOpen, setUncontrolledIsOpen] = useState(defaultOpen);
+  const isOpen = open ?? uncontrolledIsOpen;
   const [localSearch, setLocalSearch] = useState("");
 
   const api = useQuickAttributeFilter();
@@ -75,7 +79,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   const handleToggle = () => {
     if (disabled) return;
     const nextIsOpen = !isOpen;
-    setIsOpen(nextIsOpen);
+    setUncontrolledIsOpen(nextIsOpen);
     onOpenChange?.(nextIsOpen);
   };
 

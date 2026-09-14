@@ -138,7 +138,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     { updateType: "replaceIn" },
   );
   const [isGraphFullscreen, setIsGraphFullscreen] = useState(false);
-  const [isErrorExpanded, setIsErrorExpanded] = useState(false);
+  // Which failure the user has the error section open on. Scoped to the span
+  // rather than a bare boolean: the section is one component reused across the
+  // tree, so a plain flag would read as open on a span nobody opened.
+  const [errorExpandedFor, setErrorExpandedFor] = useState<string | null>(null);
 
   const [search = undefined, setSearch] = useQueryParam(
     `trace_panel_search`,
@@ -228,19 +231,22 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     [traceId, projectId, spanId],
   );
 
+  const isErrorExpanded = errorExpandedFor === mcpHintSubject;
+
   const handleErrorExpandedChange = useCallback(
     (expanded: boolean) => {
-      setIsErrorExpanded(expanded);
+      setErrorExpandedFor(expanded ? mcpHintSubject : null);
+      if (!expanded) return;
+
       // Emitted here rather than from the shared error section: this is the only
       // place that knows the hint is switched on, and the funnel's first step
-      // must not count surfaces where the hint never appears.
-      if (expanded) {
-        trackEvent(OpikEvent.TRACE_ERROR_EXPANDED, {
-          entity_type: mcpHintTarget.entityType,
-        });
-      }
+      // must not count surfaces where the hint never appears. The impression
+      // lands in the same breath now that the reveal is immediate.
+      const properties = { entity_type: mcpHintTarget.entityType };
+      trackEvent(OpikEvent.TRACE_ERROR_EXPANDED, properties);
+      if (showMcpHint) trackEvent(OpikEvent.MCP_BUTTON_SHOWN, properties);
     },
-    [mcpHintTarget.entityType],
+    [mcpHintSubject, mcpHintTarget.entityType, showMcpHint],
   );
 
   const spanCount = spansData?.content?.length ?? 0;
@@ -414,6 +420,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     setActiveSection={setActiveSection}
                     isSpansLazyLoading={isSpansLazyLoading}
                     search={search}
+                    isErrorExpanded={showMcpHint ? isErrorExpanded : undefined}
                     onErrorExpandedChange={
                       showMcpHint ? handleErrorExpandedChange : undefined
                     }
@@ -422,7 +429,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                 {showMcpHint && (
                   <McpHintRail
                     isErrorExpanded={isErrorExpanded}
-                    subject={mcpHintSubject}
                     target={mcpHintTarget}
                   />
                 )}
