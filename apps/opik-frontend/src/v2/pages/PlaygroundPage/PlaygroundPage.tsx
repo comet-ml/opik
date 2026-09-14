@@ -291,7 +291,7 @@ const PlaygroundPage = () => {
                   isPendingProviderKeys={isPendingProviderKeys}
                   runSingle={runSingle}
                   stopSingle={stopSingle}
-                  isExperimentMode
+                  isExperimentMode={isExperimentMode}
                 />
               </div>
 

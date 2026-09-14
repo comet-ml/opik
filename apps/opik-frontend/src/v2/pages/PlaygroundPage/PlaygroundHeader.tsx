@@ -31,6 +31,7 @@ import {
   useSetSelectedRuleIds,
   useResetDatasetFilters,
   useResetOutputMap,
+  useClearPromptExperimentNames,
   useSetExperimentNamePrefix,
   useSetDatasetType,
   useDatasetType,
@@ -80,6 +81,7 @@ const PlaygroundHeader = ({
   const resetDatasetFilters = useResetDatasetFilters();
   const resetOutputMap = useResetOutputMap();
   const setExperimentNamePrefix = useSetExperimentNamePrefix();
+  const clearPromptExperimentNames = useClearPromptExperimentNames();
   const isRunning = useIsRunning();
   const setDatasetType = useSetDatasetType();
   const currentDatasetType = useDatasetType();
@@ -202,6 +204,10 @@ const PlaygroundHeader = ({
   // Keyboard shortcut: Shift+Enter to run all
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Text inputs (e.g. the per-prompt experiment name) must not trigger a run.
+      // Prompt editors are contenteditable, so they keep the shortcut.
+      if ((event.target as HTMLElement | null)?.tagName === "INPUT") return;
+
       if (
         event.shiftKey &&
         event.key === "Enter" &&
@@ -242,6 +248,7 @@ const PlaygroundHeader = ({
     resetDatasetFilters();
     setSelectedRuleIds(null);
     setExperimentNamePrefix(null);
+    clearPromptExperimentNames();
     setDatasetType(null);
   }, [
     clearCreatedExperiments,
@@ -250,6 +257,7 @@ const PlaygroundHeader = ({
     resetDatasetFilters,
     setSelectedRuleIds,
     setExperimentNamePrefix,
+    clearPromptExperimentNames,
     setDatasetType,
   ]);
 

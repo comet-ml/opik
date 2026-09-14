@@ -277,6 +277,30 @@ class ExperimentExecutionServiceTest {
         }
 
         @Test
+        void createAndExecuteLeavesNameBlankWhenOnlyWhitespaceProvided() {
+            var prompt = buildPrompt("gpt-4", "Hello").toBuilder()
+                    .experimentName("   ")
+                    .build();
+            var request = ExperimentExecutionRequest.builder()
+                    .datasetName("test-dataset")
+                    .datasetId(UUID.randomUUID())
+                    .prompts(List.of(prompt))
+                    .build();
+
+            stubDatasetItems(List.of(buildDatasetItem(UUID.randomUUID(), null)));
+            when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
+            stubExperimentCreate();
+            stubFinishExperiments();
+
+            executeRequest(request);
+
+            var captor = ArgumentCaptor.forClass(Experiment.class);
+            verify(experimentService).create(captor.capture());
+            // ExperimentService.create falls back to a generated name for blank values
+            assertThat(captor.getValue().name()).isBlank();
+        }
+
+        @Test
         void createAndExecuteUsesExperimentNameProvidedOnPromptVariant() {
             var prompt = buildPrompt("gpt-4", "Hello").toBuilder()
                     .experimentName("my-experiment")

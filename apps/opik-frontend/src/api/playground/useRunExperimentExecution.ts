@@ -49,7 +49,7 @@ const runExperimentExecution = async ({
         prompt.configs as Record<string, unknown>,
       ),
       prompt_versions: promptVersions,
-      experiment_name: prompt.experimentName,
+      experiment_name: prompt.experimentName?.trim() || undefined,
     };
   });
 

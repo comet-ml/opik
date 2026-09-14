@@ -129,6 +129,7 @@ export type PlaygroundStore = {
   ) => void;
   addPrompt: (prompt: PlaygroundPromptType, position?: number) => void;
   setPromptExperimentName: (promptId: string, name: string) => void;
+  clearPromptExperimentNames: () => void;
   deletePrompt: (promptId: string) => void;
   resetOutputMap: () => void;
   updateOutput: (
@@ -248,6 +249,17 @@ const usePlaygroundStore = create<PlaygroundStore>()(
               experimentName: name,
             },
           },
+        }));
+      },
+      clearPromptExperimentNames: () => {
+        set((state) => ({
+          ...state,
+          promptMap: Object.fromEntries(
+            Object.entries(state.promptMap).map(([id, prompt]) => [
+              id,
+              { ...prompt, experimentName: undefined },
+            ]),
+          ),
         }));
       },
       deletePrompt: (promptId) => {
@@ -597,6 +609,9 @@ export const useDeletePrompt = () =>
 
 export const useSetPromptExperimentName = () =>
   usePlaygroundStore((state) => state.setPromptExperimentName);
+
+export const useClearPromptExperimentNames = () =>
+  usePlaygroundStore((state) => state.clearPromptExperimentNames);
 
 export const useResetOutputMap = () =>
   usePlaygroundStore((state) => state.resetOutputMap);

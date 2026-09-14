@@ -6,7 +6,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
-import { Button, ButtonProps } from "@/ui/button";
+import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -15,24 +15,26 @@ interface PromptExperimentNameProps {
   promptId: string;
   value?: string;
   onChange: (value: string) => void;
-  size?: ButtonProps["size"];
-  variant?: ButtonProps["variant"];
 }
 
 const PromptExperimentName: React.FC<PromptExperimentNameProps> = ({
   promptId,
   value = "",
   onChange,
-  size = "icon-xs",
-  variant = "ghost",
 }) => {
   const inputId = `experiment-name-${promptId}`;
+  const hasName = Boolean(value.trim());
 
   return (
     <DropdownMenu>
       <TooltipWrapper content={value || "Experiment name"}>
         <DropdownMenuTrigger asChild>
-          <Button variant={variant} size={size}>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            badge={hasName}
+            data-testid="playground-experiment-name-button"
+          >
             <FlaskConical />
           </Button>
         </DropdownMenuTrigger>
@@ -47,6 +49,7 @@ const PromptExperimentName: React.FC<PromptExperimentNameProps> = ({
         <Label htmlFor={inputId}>Experiment name</Label>
         <Input
           id={inputId}
+          data-testid="playground-experiment-name-input"
           value={value}
           placeholder="Auto-generated name"
           onChange={(e) => onChange(e.target.value)}

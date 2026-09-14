@@ -8,11 +8,14 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -34,7 +37,7 @@ public record ExperimentExecutionRequest(
             @NotNull @NotEmpty List<Message> messages,
             Map<String, JsonNode> configs,
             List<Experiment.PromptVersionLink> promptVersions,
-            String experimentName) {
+            @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String experimentName) {
 
         @Builder(toBuilder = true)
         @JsonIgnoreProperties(ignoreUnknown = true)
