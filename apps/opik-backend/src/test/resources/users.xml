@@ -26,6 +26,20 @@
             <optimize_skip_unused_shards>1</optimize_skip_unused_shards>
             <do_not_merge_across_partitions_select_final>1</do_not_merge_across_partitions_select_final>
             <distributed_product_mode>local</distributed_product_mode>
+            <!-- Distributed async-insert forwarding queue (OPIK-8255). Batching ships many
+                 queued files per network round trip instead of one; split_batch_on_failure
+                 retries a failed batch file-by-file rather than wedging the queue. Both seed
+                 the engine's background_insert_* table settings at attach time.
+
+                 Harmless here, but not because there is no Distributed table — several tests
+                 create real ones against this profile (TracesDistributedWrapMutationTest,
+                 TracesLocalV2CutoverTest, TracesSchemaParityPostCutoverTest). It is that a
+                 single node with prefer_localhost_replica at its default of 1 writes
+                 in-process, so no queue file is produced. Hence prefer_localhost_replica is
+                 deliberately not set to 0 here: it would route those writes through the queue
+                 and the tests' read-backs would stop seeing them. -->
+            <distributed_background_insert_batch>1</distributed_background_insert_batch>
+            <distributed_background_insert_split_batch_on_failure>1</distributed_background_insert_split_batch_on_failure>
         </default>
         <comet_llm_readonly_freeform_sql_profile>
             <readonly>1</readonly>

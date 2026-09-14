@@ -79,10 +79,14 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_5_6_LUNA = "gpt-5.6-luna",
   GPT_5_6_SOL = "gpt-5.6-sol",
   GPT_5_6_TERRA = "gpt-5.6-terra",
+  GPT_6_ASTRA = "gpt-6-astra",
   GPT_IMAGE_1 = "gpt-image-1",
   GPT_IMAGE_1_MINI = "gpt-image-1-mini",
   GPT_IMAGE_1_5 = "gpt-image-1.5",
   GPT_IMAGE_2 = "gpt-image-2",
+  GPT_IMAGE_2_5_FLARE = "gpt-image-2.5-flare",
+  GPT_IMAGE_2_5_SUNBURST = "gpt-image-2.5-sunburst",
+  GPT_LIVE_1 = "gpt-live-1",
   GPT_O1 = "o1",
   GPT_O1_2024_12_17 = "o1-2024-12-17",
   GPT_O1_MINI = "o1-mini",
@@ -100,6 +104,7 @@ export enum PROVIDER_MODEL_TYPE {
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
   CLAUDE_FABLE_5 = "claude-fable-5",
+  CLAUDE_FABLE_5_1 = "claude-fable-5-1",
   CLAUDE_HAIKU_4_5 = "claude-haiku-4-5-20251001",
   CLAUDE_OPUS_4_1 = "claude-opus-4-1-20250805",
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
@@ -113,7 +118,6 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
   CLAUDE_SONNET_5 = "claude-sonnet-5",
-  CLAUDE_FABLE_5_1 = "claude-fable-5-1",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -240,10 +244,12 @@ export enum PROVIDER_MODEL_TYPE {
   DEEPSEEK_DEEPSEEK_V4_FLASH_0731 = "deepseek/deepseek-v4-flash-0731",
   DEEPSEEK_DEEPSEEK_V4_FLASH_0731_BATCH = "deepseek/deepseek-v4-flash-0731:batch",
   DEEPSEEK_DEEPSEEK_V4_FLASH_VISION_EXP = "deepseek/deepseek-v4-flash-vision-exp",
+  DEEPSEEK_DEEPSEEK_V4_FLASH_VISION_EXP_BATCH = "deepseek/deepseek-v4-flash-vision-exp:batch",
   DEEPSEEK_DEEPSEEK_V4_FLASH_FREE = "deepseek/deepseek-v4-flash:free",
   DEEPSEEK_DEEPSEEK_V4_PRO = "deepseek/deepseek-v4-pro",
   DEEPSEEK_DEEPSEEK_V4_PRO_0813 = "deepseek/deepseek-v4-pro-0813",
   DEEPSEEK_DEEPSEEK_V4_PRO_0813_BATCH = "deepseek/deepseek-v4-pro-0813:batch",
+  DEEPSEEK_DEEPSEEK_V4_1_FLASH = "deepseek/deepseek-v4.1-flash",
   DOTS_STUDIO_DOTS_3_NOTE_PREVIEW_FREE = "dots-studio/dots-3-note-preview:free",
   ELEUTHERAI_LLEMMA_7B = "eleutherai/llemma_7b",
   ESSENTIALAI_RNJ_1_INSTRUCT = "essentialai/rnj-1-instruct",
@@ -310,6 +316,7 @@ export enum PROVIDER_MODEL_TYPE {
   IBM_GRANITE_GRANITE_4_2_8B = "ibm-granite/granite-4.2-8b",
   INCEPTION_MERCURY = "inception/mercury",
   INCEPTION_MERCURY_2 = "inception/mercury-2",
+  INCEPTION_MERCURY_2_5 = "inception/mercury-2.5",
   INCEPTION_MERCURY_2_5_PREVIEW = "inception/mercury-2.5-preview",
   INCEPTION_MERCURY_CODER = "inception/mercury-coder",
   INCLUSIONAI_LING_2_6_1T = "inclusionai/ling-2.6-1t",
@@ -317,11 +324,17 @@ export enum PROVIDER_MODEL_TYPE {
   INCLUSIONAI_LING_2_6_FLASH = "inclusionai/ling-2.6-flash",
   INCLUSIONAI_LING_2_6_FLASH_FREE = "inclusionai/ling-2.6-flash:free",
   INCLUSIONAI_LING_3_0_FLASH = "inclusionai/ling-3.0-flash",
+  INCLUSIONAI_LING_3_0_FLASH_FIN = "inclusionai/ling-3.0-flash-fin",
   INCLUSIONAI_LING_3_0_FLASH_FIN_FREE = "inclusionai/ling-3.0-flash-fin:free",
+  INCLUSIONAI_LING_3_0_FLASH_SANTE_FREE = "inclusionai/ling-3.0-flash-sante:free",
+  INCLUSIONAI_LING_3_0_FLASH_VL = "inclusionai/ling-3.0-flash-vl",
+  INCLUSIONAI_LING_3_0_FLASH_VL_FREE = "inclusionai/ling-3.0-flash-vl:free",
   INCLUSIONAI_LING_3_0_FLASH_FREE = "inclusionai/ling-3.0-flash:free",
   INCLUSIONAI_LING_3_0_TINY_FREE = "inclusionai/ling-3.0-tiny:free",
   INCLUSIONAI_RING_2_6_1T = "inclusionai/ring-2.6-1t",
   INCLUSIONAI_RING_2_6_1T_FREE = "inclusionai/ring-2.6-1t:free",
+  INFERENCE_NET_SCHEMATRON_V2_SMALL = "inference-net/schematron-v2-small",
+  INFERENCE_NET_SCHEMATRON_V2_TURBO = "inference-net/schematron-v2-turbo",
   INFLECTION_INFLECTION_3_PI = "inflection/inflection-3-pi",
   INFLECTION_INFLECTION_3_PRODUCTIVITY = "inflection/inflection-3-productivity",
   KWAIPILOT_KAT_CODER_AIR_V2_5 = "kwaipilot/kat-coder-air-v2.5",
@@ -459,6 +472,8 @@ export enum PROVIDER_MODEL_TYPE {
   NEX_AGI_NEX_N2_MINI = "nex-agi/nex-n2-mini",
   NEX_AGI_NEX_N2_PRO = "nex-agi/nex-n2-pro",
   NEX_AGI_NEX_N2_PRO_FREE = "nex-agi/nex-n2-pro:free",
+  NEX_AGI_NEX_N2_5_MINI_FREE = "nex-agi/nex-n2.5-mini:free",
+  NEX_AGI_NEX_N2_5_PRO_FREE = "nex-agi/nex-n2.5-pro:free",
   NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW = "nousresearch/deephermes-3-mistral-24b-preview",
   NOUSRESEARCH_HERMES_2_PRO_LLAMA_3_8B = "nousresearch/hermes-2-pro-llama-3-8b",
   NOUSRESEARCH_HERMES_3_LLAMA_3_1_405B = "nousresearch/hermes-3-llama-3.1-405b",
@@ -477,6 +492,7 @@ export enum PROVIDER_MODEL_TYPE {
   NVIDIA_NEMOTRON_3_ULTRA_550B_A55B = "nvidia/nemotron-3-ultra-550b-a55b",
   NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_BATCH = "nvidia/nemotron-3-ultra-550b-a55b:batch",
   NVIDIA_NEMOTRON_3_ULTRA_550B_A55B_FREE = "nvidia/nemotron-3-ultra-550b-a55b:free",
+  NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY = "nvidia/nemotron-3.5-content-safety",
   NVIDIA_NEMOTRON_3_5_CONTENT_SAFETY_FREE = "nvidia/nemotron-3.5-content-safety:free",
   NVIDIA_NEMOTRON_3_5_LIGHTNING = "nvidia/nemotron-3.5-lightning",
   NVIDIA_NEMOTRON_3_5_LIGHTNING_FREE = "nvidia/nemotron-3.5-lightning:free",
@@ -568,6 +584,10 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_5_6_TERRA_PRO_BATCH = "openai/gpt-5.6-terra-pro:batch",
   OPENAI_GPT_5_6_TERRA_BATCH = "openai/gpt-5.6-terra:batch",
   OPENAI_GPT_5_BATCH = "openai/gpt-5:batch",
+  OPENAI_GPT_6_ASTRA = "openai/gpt-6-astra",
+  OPENAI_GPT_6_ASTRA_PRO = "openai/gpt-6-astra-pro",
+  OPENAI_GPT_6_ASTRA_PRO_BATCH = "openai/gpt-6-astra-pro:batch",
+  OPENAI_GPT_6_ASTRA_BATCH = "openai/gpt-6-astra:batch",
   OPENAI_GPT_AUDIO = "openai/gpt-audio",
   OPENAI_GPT_AUDIO_MINI = "openai/gpt-audio-mini",
   OPENAI_GPT_CHAT_LATEST = "openai/gpt-chat-latest",
@@ -697,6 +717,7 @@ export enum PROVIDER_MODEL_TYPE {
   QWEN_QWEN3_8_27B = "qwen/qwen3.8-27b",
   QWEN_QWEN3_8_FLASH = "qwen/qwen3.8-flash",
   QWEN_QWEN3_8_MAX = "qwen/qwen3.8-max",
+  QWEN_QWEN3_8_MAX_0902 = "qwen/qwen3.8-max-0902",
   QWEN_QWQ_32B = "qwen/qwq-32b",
   RAIFLE_SORCERERLM_8X22B = "raifle/sorcererlm-8x22b",
   REKA_REKA_EDGE = "reka/reka-edge",
@@ -704,7 +725,9 @@ export enum PROVIDER_MODEL_TYPE {
   REKAAI_REKA_FLASH_3 = "rekaai/reka-flash-3",
   RELACE_RELACE_APPLY_3 = "relace/relace-apply-3",
   RELACE_RELACE_SEARCH = "relace/relace-search",
+  SAKANA_FUGU_MAX = "sakana/fugu-max",
   SAKANA_FUGU_ULTRA = "sakana/fugu-ultra",
+  SAKANA_FUGU_ULTRA_V2 = "sakana/fugu-ultra-v2",
   SAKANA_SAKANA_NAMAZU = "sakana/sakana-namazu",
   SAO10K_L3_EURYALE_70B = "sao10k/l3-euryale-70b",
   SAO10K_L3_LUNARIS_8B = "sao10k/l3-lunaris-8b",
@@ -759,6 +782,7 @@ export enum PROVIDER_MODEL_TYPE {
   X_AI_GROK_4_20_MULTI_AGENT = "x-ai/grok-4.20-multi-agent",
   X_AI_GROK_4_20_MULTI_AGENT_BETA = "x-ai/grok-4.20-multi-agent-beta",
   X_AI_GROK_4_3 = "x-ai/grok-4.3",
+  X_AI_GROK_4_3_BATCH = "x-ai/grok-4.3:batch",
   X_AI_GROK_4_5 = "x-ai/grok-4.5",
   X_AI_GROK_4_6 = "x-ai/grok-4.6",
   X_AI_GROK_BUILD_0_1 = "x-ai/grok-build-0.1",
@@ -787,6 +811,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_3 = "z-ai/glm-5.3",
   Z_AI_GLM_5_3_FLASH = "z-ai/glm-5.3-flash",
   Z_AI_GLM_5_3_FLASH_BATCH = "z-ai/glm-5.3-flash:batch",
+  Z_AI_GLM_5_3_BATCH = "z-ai/glm-5.3:batch",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
   ANTHROPIC_CLAUDE_FABLE_LATEST = "~anthropic/claude-fable-latest",
   ANTHROPIC_CLAUDE_HAIKU_LATEST = "~anthropic/claude-haiku-latest",
@@ -796,8 +821,12 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_FLASH_LATEST = "~google/gemini-flash-latest",
   GOOGLE_GEMINI_PRO_LATEST = "~google/gemini-pro-latest",
   MOONSHOTAI_KIMI_LATEST = "~moonshotai/kimi-latest",
+  OPENAI_GPT_ASTRA_LATEST = "~openai/gpt-astra-latest",
   OPENAI_GPT_LATEST = "~openai/gpt-latest",
+  OPENAI_GPT_LUNA_LATEST = "~openai/gpt-luna-latest",
   OPENAI_GPT_MINI_LATEST = "~openai/gpt-mini-latest",
+  OPENAI_GPT_SOL_LATEST = "~openai/gpt-sol-latest",
+  OPENAI_GPT_TERRA_LATEST = "~openai/gpt-terra-latest",
   X_AI_GROK_LATEST = "~x-ai/grok-latest",
   Z_AI_GLM_FLASH_LATEST = "~z-ai/glm-flash-latest",
   Z_AI_GLM_LATEST = "~z-ai/glm-latest",
@@ -829,6 +858,8 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_5_TRANSCRIBE = "gemini-3.5-transcribe",
   GEMINI_3_6_FLASH = "gemini-3.6-flash",
   GEMINI_3_7_FLASH = "gemini-3.7-flash",
+  GEMINI_3_8_FLASH = "gemini-3.8-flash",
+  GEMINI_FLASH_LATEST_HIGH_RES_EXP = "gemini-flash-latest-high-res-exp",
   GEMINI_OMNI_1_1_FLASH = "gemini-omni-1.1-flash",
   GEMINI_OMNI_FLASH_PREVIEW = "gemini-omni-flash-preview",
   GEMINI_PRO_VISION = "gemini-pro-vision",
@@ -836,10 +867,9 @@ export enum PROVIDER_MODEL_TYPE {
   GEMMA_4_31B_IT = "gemma-4-31b-it",
   LYRIA_3_CLIP_PREVIEW = "lyria-3-clip-preview",
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
+  LYRIA_3_5 = "lyria-3.5",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMINI_3_8_FLASH = "gemini-3.8-flash",
-  GEMINI_FLASH_LATEST_HIGH_RES_EXP = "gemini-flash-latest-high-res-exp",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
@@ -860,6 +890,7 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_5_FLASH_LITE = "vertex_ai/gemini-3.5-flash-lite",
   VERTEX_AI_GEMINI_3_6_FLASH = "vertex_ai/gemini-3.6-flash",
   VERTEX_AI_GEMINI_3_7_FLASH = "vertex_ai/gemini-3.7-flash",
+  VERTEX_AI_GEMINI_3_8_FLASH = "vertex_ai/gemini-3.8-flash",
 }
 
 export interface ProviderModelsMap {
@@ -1028,11 +1059,16 @@ export interface LLMOpenRouterConfigsType {
   maxConcurrentRequests?: number;
 }
 
-// "auto" and "off" are Opik's own, not Google levels: pre-Gemini-3 models take a numeric
-// thinking_budget, and these are how the level control expresses that model's dynamic default
-// (send no thinkingConfig) and a zero budget.
+// "auto", "none" and "off" are Opik's own, not Google levels. All three describe what we send
+// rather than a value the API accepts:
+//   auto — send no thinkingConfig, so a thinking-by-default model applies its own dynamic budget
+//   none — send no thinkingConfig, on a model that does not think by default (so nothing is added)
+//   off  — send an explicit zero budget, for a pre-Gemini-3 model that thinks unless told not to
+// auto and none are the same wire behaviour under two labels, because "let the model decide" and
+// "no thinking" are the same request but a very different promise to the user.
 export type GeminiThinkingLevel =
   | "auto"
+  | "none"
   | "off"
   | "minimal"
   | "low"

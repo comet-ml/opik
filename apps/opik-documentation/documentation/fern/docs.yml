@@ -24,6 +24,10 @@ favicon: img/logo.svg
 js:
   - path: ./add_cookbook_banner.js
     strategy: afterInteractive
+  - path: ./page_actions_install_tools.js
+    strategy: afterInteractive
+  - path: ./mcp_prompt_copy.js
+    strategy: afterInteractive
 css: ./styles.css
 
 analytics:
@@ -34,6 +38,10 @@ analytics:
   posthog:
     api-key: ${POSTHOG_API_KEY}
     endpoint: ${POSTHOG_API_HOST}
+theme:
+  page-actions: toolbar
+
+
 layout:
   searchbar-placement: header
   tabs-placement: header
@@ -661,9 +669,24 @@ navigation:
         skip-slug: true
         icon: fa-regular fa-robot
         contents:
+          - page: Overview
+            path: ./docs-v2/integrations/coding-agents.mdx
+            slug: coding-agents
           - page: MCP Server
             path: ./docs-v2/prompt_engineering/mcp-server.mdx
             slug: mcp-server
+          - page: Claude Code
+            path: ./docs-v2/integrations/claude-code.mdx
+            slug: claude-code
+          - page: Cursor
+            path: ./docs-v2/integrations/cursor.mdx
+            slug: cursor
+          - page: GitHub Copilot
+            path: ./docs-v2/integrations/github-copilot.mdx
+            slug: github-copilot
+          - page: OpenAI Codex
+            path: ./docs-v2/integrations/openai-codex.mdx
+            slug: openai-codex
       - section: TypeScript
         skip-slug: true
         icon: fa-brands fa-js
@@ -928,9 +951,6 @@ navigation:
         skip-slug: true
         icon: fa-solid fa-wand-magic-sparkles
         contents:
-          - page: Cursor
-            path: ./docs-v2/integrations/cursor.mdx
-            slug: cursor
           - page: Dify
             path: ./docs-v2/integrations/dify.mdx
             slug: dify
@@ -949,9 +969,6 @@ navigation:
           - page: OpenClaw
             path: ./docs-v2/integrations/openclaw.mdx
             slug: openclaw
-          - page: OpenAI Codex
-            path: ./docs-v2/integrations/openai-codex.mdx
-            slug: openai-codex
           - page: OpenWebUI
             path: ./docs-v2/integrations/openwebui.mdx
             slug: openwebui
@@ -1041,6 +1058,9 @@ navigation:
           - page: LLM model registry
             path: ./docs-v2/self-host/configure/llm-model-registry.mdx
             slug: llm-model-registry
+          - page: UUIDv7 ingestion validation
+            path: ./docs-v2/self-host/configure/uuid_validation.mdx
+            slug: uuid_validation
   - tab: reference
     layout:
       - page: Overview

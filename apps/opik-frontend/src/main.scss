@@ -187,6 +187,11 @@
     --banner-gradient-start: #060a28;
     --banner-gradient-end: #604fff;
 
+    /* MCP announcement banner gradient (OPIK-8260) — same values in both
+       themes: an accent bar with white text reads the same on either ground. */
+    --mcp-banner-gradient-start: #f59e0b;
+    --mcp-banner-gradient-end: #f46e41;
+
     /* Scrollbar colors */
     --scrollbar-thumb: #babac0;
     --scrollbar-thumb-hover: #7d7d7d;
@@ -486,6 +491,10 @@
     /* Welcome banner gradient colors - Dark Mode */
     --banner-gradient-start: #0f172a;
     --banner-gradient-end: hsl(var(--primary));
+
+    /* MCP announcement banner gradient - Dark Mode (OPIK-8260) */
+    --mcp-banner-gradient-start: #f59e0b;
+    --mcp-banner-gradient-end: #f46e41;
 
     /* Scrollbar colors - Dark Mode */
     --scrollbar-thumb: #242424;

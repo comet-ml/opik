@@ -725,48 +725,57 @@ class DatasetServiceImpl implements DatasetService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        // The dataset_items count cannot join the zip directly: it is O(N) in each dataset's item count, and
+        // which datasets need it is only known once the latest versions are in hand. So it is chained off the
+        // version lookup alone -- not off the whole zip, which would make it wait on the experiment and
+        // optimization summaries it has no dependency on and serialize a round trip on fallback-heavy pages.
+        // cache() lets the version result feed both the chain and the zip from one execution.
+        //
         // collect(...) with Collectors.toMap rather than Flux.collectMap: collectMap is last-wins, whereas the
-        // serial code this replaces threw on a duplicate dataset_id. All three queries GROUP BY dataset_id so
+        // serial code this replaces threw on a duplicate dataset_id. All queries GROUP BY dataset_id so
         // duplicates should not occur; keeping the loud form means a query change that broke that assumption
         // fails instead of silently dropping one row's summary.
+        //
+        // defaultIfEmpty guards the zip: a Mono that completes empty makes zip emit nothing at all, which
+        // would turn an absent-versions result into a null and NPE below.
+        Mono<Map<UUID, DatasetVersion>> latestVersions = Mono
+                .fromCallable(() -> fetchLatestVersionsByDatasetIds(ids, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic())
+                .defaultIfEmpty(Map.of())
+                .cache();
+
         var enrichmentData = Mono.zip(
                 experimentItemDAO.findExperimentSummaryByDatasetIds(ids)
                         .collect(toMap(ExperimentSummary::datasetId, Function.identity())),
-                datasetItemDAO.findDatasetItemSummaryByDatasetIds(ids)
-                        .collect(toMap(DatasetItemSummary::datasetId, Function.identity())),
                 optimizationDAO.findOptimizationSummaryByDatasetIds(ids)
                         .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity())),
-                // defaultIfEmpty guards the zip: a Mono that completes empty makes zip emit nothing at all,
-                // which would turn an absent-versions result into a null and NPE below.
-                Mono.fromCallable(() -> fetchLatestVersionsByDatasetIds(ids, workspaceId))
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .defaultIfEmpty(Map.of()))
+                latestVersions,
+                latestVersions.flatMap(
+                        versions -> fetchDatasetItemSummaries(idsNeedingItemCount(datasets, versions))))
                 .contextWrite(ctx -> AsyncUtils.setRequestContext(ctx, userName, workspaceId))
                 .block();
 
         Map<UUID, ExperimentSummary> experimentSummaryMap = enrichmentData.getT1();
-        Map<UUID, DatasetItemSummary> datasetItemSummaryMap = enrichmentData.getT2();
-        Map<UUID, OptimizationDAO.OptimizationSummary> optimizationSummaryMap = enrichmentData.getT3();
-        Map<UUID, DatasetVersion> latestVersionsByDatasetId = enrichmentData.getT4();
+        Map<UUID, OptimizationDAO.OptimizationSummary> optimizationSummaryMap = enrichmentData.getT2();
+        Map<UUID, DatasetVersion> latestVersionsByDatasetId = enrichmentData.getT3();
+        Map<UUID, DatasetItemSummary> datasetItemSummaryMap = enrichmentData.getT4();
 
         return datasets.stream()
                 .map(dataset -> {
                     var experimentSummary = experimentSummaryMap.getOrDefault(dataset.id(),
                             ExperimentSummary.empty(dataset.id()));
-                    var datasetItemSummary = datasetItemSummaryMap.getOrDefault(dataset.id(),
-                            DatasetItemSummary.empty(dataset.id()));
                     var optimizationSummary = optimizationSummaryMap.getOrDefault(dataset.id(),
                             OptimizationDAO.OptimizationSummary.empty(dataset.id()));
                     var latestVersion = latestVersionsByDatasetId.get(dataset.id());
 
-                    // When versioning is enabled and a latest version exists, use itemsTotal from the version
-                    // Otherwise, fall back to the legacy dataset_items count
-                    Long itemsCount;
-                    if (featureFlags.isDatasetVersioningEnabled() && latestVersion != null
-                            && latestVersion.itemsTotal() != null) {
-                        itemsCount = latestVersion.itemsTotal().longValue();
-                    } else {
-                        itemsCount = datasetItemSummary.datasetItemsCount();
+                    // When versioning is enabled and a latest version supplies itemsTotal, use it.
+                    // Otherwise, fall back to the legacy dataset_items count.
+                    Long itemsCount = versionItemsTotal(latestVersion);
+                    if (itemsCount == null) {
+                        var datasetItemSummary = datasetItemSummaryMap.get(dataset.id());
+                        itemsCount = datasetItemSummary != null
+                                ? datasetItemSummary.datasetItemsCount()
+                                : DatasetItemSummary.empty(dataset.id()).datasetItemsCount();
                     }
 
                     return dataset.toBuilder()
@@ -779,6 +788,32 @@ class DatasetServiceImpl implements DatasetService {
                             .build();
                 })
                 .toList();
+    }
+
+    private Set<UUID> idsNeedingItemCount(List<Dataset> datasets,
+            Map<UUID, DatasetVersion> latestVersionsByDatasetId) {
+        return datasets.stream()
+                .map(Dataset::id)
+                .filter(id -> versionItemsTotal(latestVersionsByDatasetId.get(id)) == null)
+                .collect(toSet());
+    }
+
+    private Long versionItemsTotal(DatasetVersion latestVersion) {
+        if (!featureFlags.isDatasetVersioningEnabled() || latestVersion == null
+                || latestVersion.itemsTotal() == null
+                || latestVersion.itemsTotal() == DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED) {
+            return null;
+        }
+        return latestVersion.itemsTotal().longValue();
+    }
+
+    private Mono<Map<UUID, DatasetItemSummary>> fetchDatasetItemSummaries(Set<UUID> datasetIds) {
+        if (datasetIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return datasetItemDAO.findDatasetItemSummaryByDatasetIds(datasetIds)
+                .collect(toMap(DatasetItemSummary::datasetId, Function.identity()));
     }
 
     private Map<UUID, DatasetVersion> fetchLatestVersionsByDatasetIds(Set<UUID> datasetIds, String workspaceId) {

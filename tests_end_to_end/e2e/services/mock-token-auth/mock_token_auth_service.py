@@ -17,9 +17,16 @@ One process, two roles:
 Test hooks:
 
   GET  /health                Liveness for Playwright's webServer probe.
-  GET  /stats                 Counters (tokens_issued, chat_ok, chat_refused_*)
-                              for clock-free refetch assertions.
+  GET  /stats                 Counters (chat_request, tokens_issued, chat_ok,
+                              chat_refused_*) for clock-free refetch and
+                              retry-budget assertions.
   POST /revoke                Invalidate every issued token (reactive-retry path).
+  POST /chat-status           {"model": "<name>", "status": <int>} makes the
+                              gateway answer that HTTP status for every chat
+                              request naming that model; omit "status" to clear
+                              it. Scoped per model so one provider can serve a
+                              different status per model name, which is how a
+                              spec compares two statuses over one trace.
 
 Spawned automatically by the suite's `webServer` config; run by hand with
     python3 mock_token_auth_service.py --port 9878 --ttl 3600
@@ -41,6 +48,7 @@ STATIC_API_KEY = "mock-static-key"  # accepted as a bearer, for the static-auth 
 
 TTL_SECONDS = 3600
 ISSUED_TOKENS = {}  # token -> expiry epoch seconds
+FORCED_CHAT_STATUS = {}  # model name -> HTTP status the gateway must answer for it
 STATS = Counter()
 
 
@@ -102,6 +110,8 @@ class Handler(BaseHTTPRequestHandler):
             STATS["revocations"] += 1
             log(f"REVOKED all {count} issued tokens (gateway will 401 until a fresh fetch)")
             self._reply(200, {"revoked": count})
+        elif self.path == "/chat-status":
+            self._handle_chat_status(raw_body)
         elif self.path.endswith("/chat/completions"):
             self._handle_chat(raw_body)
         else:
@@ -153,6 +163,33 @@ class Handler(BaseHTTPRequestHandler):
             **({"scope": scope} if scope else {}),
         })
 
+    def _handle_chat_status(self, raw_body):
+        """Register (or clear) the HTTP status the gateway must answer for one model.
+
+        Per model rather than per process so a single provider can serve several statuses
+        at once: a spec that compares a permanent status against a transient one wants both
+        judged over the SAME trace, which means both must be live simultaneously.
+        """
+        try:
+            request = json.loads(raw_body)
+        except Exception:
+            self._reply(400, {"error": "invalid_json"})
+            return
+
+        model = request.get("model")
+        if not model:
+            self._reply(400, {"error": "model_required"})
+            return
+
+        status = request.get("status")
+        if status is None:
+            FORCED_CHAT_STATUS.pop(model, None)
+            log(f"chat status hook CLEARED for model={model}")
+        else:
+            FORCED_CHAT_STATUS[model] = int(status)
+            log(f"chat status hook SET model={model} -> HTTP {status}")
+        self._reply(200, {"model": model, "status": status})
+
     def _handle_chat(self, raw_body):
         try:
             request = json.loads(raw_body)
@@ -165,6 +202,12 @@ class Handler(BaseHTTPRequestHandler):
         def count(outcome):
             STATS[outcome] += 1
             STATS[f"{outcome}:{model}"] += 1
+
+        # Counted before any outcome branch, so it is the number of times the provider was
+        # CALLED for this model. The per-outcome counters below cannot answer that once a
+        # single evaluation produces several attempts, which is exactly what a retry-budget
+        # assertion has to count.
+        count("chat_request")
 
         auth = self.headers.get("Authorization") or ""
         token = auth.removeprefix("Bearer ") if auth.startswith("Bearer ") else None
@@ -186,6 +229,20 @@ class Handler(BaseHTTPRequestHandler):
             count("chat_refused_expired")
             log(f"chat request REFUSED: expired token ...{token[-8:]} (model={model})")
             self._reply(401, {"error": {"message": "token expired", "type": "invalid_request_error"}})
+            return
+
+        # Applied only after the bearer checks above: a forced status is about how the
+        # CALLER classifies a provider failure, so it must not double as a way to pass a
+        # request that presented no valid token.
+        forced_status = FORCED_CHAT_STATUS.get(model)
+        if forced_status is not None:
+            count(f"chat_forced_{forced_status}")
+            log(f"chat request FORCED to HTTP {forced_status} (model={model})")
+            self._reply(forced_status, {"error": {
+                "message": f"mock gateway forced HTTP {forced_status} for model '{model}'",
+                "type": "mock_forced_status",
+                "code": forced_status,
+            }})
             return
 
         content = json.dumps(synthesize_reply(request))

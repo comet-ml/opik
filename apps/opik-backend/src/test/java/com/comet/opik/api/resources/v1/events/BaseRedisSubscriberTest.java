@@ -1,11 +1,19 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.redis.testcontainers.RedisContainer;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.exception.HttpException;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.request.ChatRequest;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.AfterEach;
@@ -44,11 +52,17 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.TestUtils.waitForMillis;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Integration tests for {@link BaseRedisSubscriber}  using real Redis test container.
@@ -345,10 +359,21 @@ class BaseRedisSubscriberTest {
                             new NullPointerException("Non-retryable")),
                     Arguments.of("NumberFormatException (subclass of IllegalArgumentException)",
                             new NumberFormatException("Non-retryable")),
-                    Arguments.of("ClientErrorException (4xx)",
+                    Arguments.of("ClientErrorException (401)",
                             new ClientErrorException("Unauthorized", 401)),
+                    Arguments.of("ClientErrorException (400)",
+                            new ClientErrorException("Bad Request", 400)),
+                    Arguments.of("ClientErrorException (403)",
+                            new ClientErrorException("Forbidden", 403)),
                     Arguments.of("NotFoundException (subclass of ClientErrorException)",
-                            new NotFoundException()));
+                            new NotFoundException()),
+                    // The same contract, but with the exception a real ChatCompletionService.scoreTrace threw
+                    // rather than one built here: both halves of the seam were covered before and their
+                    // agreement was not, which is the half that originally broke.
+                    Arguments.of("permanent 400 from a real scoreTrace", thrownByRealScoreTrace(400, "Bad Request")),
+                    Arguments.of("permanent 401 from a real scoreTrace", thrownByRealScoreTrace(401, "Unauthorized")),
+                    Arguments.of("permanent 403 from a real scoreTrace", thrownByRealScoreTrace(403, "Forbidden")),
+                    Arguments.of("permanent 404 from a real scoreTrace", thrownByRealScoreTrace(404, "Not Found")));
         }
 
         @ParameterizedTest(name = "{0}")
@@ -368,6 +393,80 @@ class BaseRedisSubscriberTest {
             // Non-retryable errors should be removed from the stream
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+        }
+
+        /**
+         * OPIK-8262. {@code ClientErrorException} used to be matched by class, which made every 4xx permanent
+         * — including the statuses that mean "not now" rather than "not ever". That is why
+         * {@code ChatCompletionService.scoreTrace} could not report a truthful 429: it would have been acked
+         * and dropped here. These drive the real subscriber against real Redis, so the distinction is proved
+         * where it actually takes effect rather than in a unit test of the predicate.
+         */
+        @ParameterizedTest(name = "{0} is retried, not dropped")
+        @MethodSource("transientClientErrors")
+        void shouldRetainTransientClientErrorsForRetry(String description, RuntimeException exception) {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(TestRedisSubscriber.failingSubscriber(
+                    config, redissonClient, exception));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(
+                            () -> assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(messages.size()));
+            // Asserted with during(), not a single poll: ack-and-remove lands slightly after the failure is
+            // counted, so a one-shot size check could pass in that window and a wrongly acknowledged entry
+            // would go unnoticed. Requiring the entry to STAY in the stream, and stay pending for the group,
+            // closes that gap — a permanent classification removes it and both assertions then fail.
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .during(Duration.ofSeconds(1))
+                    .untilAsserted(() -> {
+                        assertThat(stream.size().block())
+                                .as("a transient status must leave the entry in the stream for redelivery")
+                                .isEqualTo((long) messages.size());
+                        assertThat(pendingCount())
+                                .as("and it must still be pending for the group, i.e. never acknowledged")
+                                .isEqualTo((long) messages.size());
+                    });
+            assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+        }
+
+        static Stream<Arguments> transientClientErrors() {
+            return Stream.of(
+                    Arguments.of("408 Request Timeout", new ClientErrorException("Request Timeout", 408)),
+                    Arguments.of("425 Too Early", new ClientErrorException("Too Early", 425)),
+                    Arguments.of("429 Too Many Requests", new ClientErrorException("Too Many Requests", 429)),
+                    // As above: the exception a real scoreTrace threw, so the seam itself is exercised.
+                    Arguments.of("transient 408 from a real scoreTrace",
+                            thrownByRealScoreTrace(408, "Request Timeout")),
+                    Arguments.of("transient 425 from a real scoreTrace", thrownByRealScoreTrace(425, "Too Early")),
+                    Arguments.of("transient 429 from a real scoreTrace",
+                            thrownByRealScoreTrace(429, "Too Many Requests")));
+        }
+
+        /**
+         * Drives a real {@code ChatCompletionService.scoreTrace} against a provider that answers
+         * {@code status} and returns the exception it threw. Only the provider client is a mock — the
+         * classification under test is the production one.
+         */
+        private static RuntimeException thrownByRealScoreTrace(int status, String reason) {
+            var clientConfig = mock(LlmProviderClientConfig.class);
+            when(clientConfig.getMaxAttempts()).thenReturn(1);
+
+            var chatModel = mock(ChatModel.class);
+            when(chatModel.chat(any(ChatRequest.class)))
+                    .thenThrow(new RuntimeException(new HttpException(status, reason)));
+
+            var providerFactory = mock(LlmProviderFactory.class);
+            when(providerFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+
+            var service = new ChatCompletionService(clientConfig, providerFactory);
+            var request = ChatRequest.builder().messages(UserMessage.from("seam")).build();
+            var parameters = LlmAsJudgeModelParameters.builder().name("seam-test-model").build();
+
+            return catchThrowableOfType(RuntimeException.class,
+                    () -> service.scoreTrace(request, parameters, "seam-workspace"));
         }
 
         /**
@@ -426,6 +525,108 @@ class BaseRedisSubscriberTest {
                             .isEqualTo(countAfterFirstBatch + newMessages.size()));
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getFailedMessageCount().get()).isZero();
+        }
+    }
+
+    /**
+     * OPIK-8240, against a real Redis PEL deeper than one {@code XAUTOCLAIM} scan window.
+     * <p>
+     * Redis caps each {@code XAUTOCLAIM} at {@code COUNT * 10} pending entries <em>examined</em> — not
+     * claimed — and answers with the position the next scan should resume from. Discarding that position
+     * and restarting every scan at {@link StreamMessageId#MIN} is invisible while the head of the PEL
+     * drains, because the entries that leave make room in the window. It stops being invisible as soon
+     * as the head stops draining: the budget is then spent re-examining the same first {@code COUNT * 10}
+     * entries and everything behind them is never looked at again, whatever the retry behaviour further
+     * down.
+     * <p>
+     * Both halves of the cursor contract are observable here, and only on a real Redis: the reply that
+     * this class consumes is produced by Redis's own PEL scan, not by anything the subscriber controls.
+     */
+    @Nested
+    class ClaimCursorTests {
+
+        // Gives XAUTOCLAIM a 100-entry examine budget per scan (COUNT * 10).
+        private static final int CLAIM_BATCH_SIZE = 10;
+        private static final int SCAN_WINDOW = CLAIM_BATCH_SIZE * 10;
+        // Deliberately deeper than one window: the last 50 are the entries a cursor-less scan strands.
+        private static final int BACKLOG_SIZE = SCAN_WINDOW + 50;
+        private static final int CLAIM_TIMEOUT_SECONDS = 30;
+
+        private TestStreamConfiguration deepBacklogConfig;
+        private RStreamReactive<String, String> deepBacklogStream;
+
+        @BeforeEach
+        void setUp() {
+            deepBacklogConfig = TestStreamConfiguration.create().toBuilder()
+                    .consumerBatchSize(CLAIM_BATCH_SIZE)
+                    // Every poll claims. Nothing is published after start(), so a read would only park the
+                    // concatMap on its long poll and stretch the run out for no coverage.
+                    .claimIntervalRatio(1)
+                    .pendingMessageDuration(io.dropwizard.util.Duration.milliseconds(100))
+                    // High enough that nothing retires mid-run. Retirement removes entries from the PEL,
+                    // which would let even a cursor-less scan crawl to the tail eventually and pass this
+                    // test for the wrong reason.
+                    .maxRetries(Integer.MAX_VALUE)
+                    .build();
+            deepBacklogStream = redissonClient.getStream(
+                    deepBacklogConfig.getStreamName(), deepBacklogConfig.getCodec());
+            deepBacklogStream.delete().block();
+        }
+
+        @Test
+        void shouldReachPendingEntriesBeyondTheFirstScanWindowAndThenWrap() {
+            var messages = IntStream.range(0, BACKLOG_SIZE)
+                    .mapToObj(index -> "backlog-%03d-%s".formatted(index, UUID.randomUUID()))
+                    .toList();
+            deepBacklogStream.createGroup(
+                    StreamCreateGroupArgs.name(deepBacklogConfig.getConsumerGroupName()).makeStream()).block();
+
+            // concatMap, not flatMap: stream ids must follow publication order for "the head of the PEL"
+            // to mean the first element of this list.
+            Flux.fromIterable(messages)
+                    .concatMap(message -> deepBacklogStream.add(
+                            StreamAddArgs.entry(TestStreamConfiguration.PAYLOAD_FIELD, message)))
+                    .collectList()
+                    .block();
+
+            // Delivered to a consumer that never acks, which is the backlog a crashed or restarted pod
+            // leaves behind: XLEN and the PEL both hold the full depth.
+            var crashedConsumerId = "crashed-consumer-%s".formatted(UUID.randomUUID());
+            var delivered = deepBacklogStream.readGroup(
+                    deepBacklogConfig.getConsumerGroupName(), crashedConsumerId,
+                    StreamReadGroupArgs.neverDelivered()
+                            .count(BACKLOG_SIZE)
+                            .timeout(deepBacklogConfig.getLongPollingDuration().toJavaDuration()))
+                    .block();
+            assertThat(delivered).hasSize(BACKLOG_SIZE);
+
+            // Idle for longer than min-idle-time, so every entry is claimable rather than skipped.
+            waitForMillis(deepBacklogConfig.getPendingMessageDuration().toMilliseconds() + 100);
+
+            // Every delivery fails retryably, so nothing is acked and the PEL keeps its full depth for the
+            // whole run — the condition that makes the scan window a ceiling rather than a batch size.
+            var deliveries = new ConcurrentHashMap<String, AtomicInteger>();
+            var subscriber = trackSubscriber(TestRedisSubscriber.createSubscriber(
+                    deepBacklogConfig, redissonClient, message -> {
+                        deliveries.computeIfAbsent(message, key -> new AtomicInteger()).incrementAndGet();
+                        return Mono.error(new RuntimeException("Retryable, so the entry stays pending"));
+                    }));
+            subscriber.start();
+
+            // The tail is reached. Without the cursor this stalls at the first SCAN_WINDOW entries: each
+            // scan restarts at MIN, spends its whole examine budget on the head, and returns having never
+            // looked further.
+            await().atMost(CLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(deliveries.keySet())
+                            .containsExactlyInAnyOrderElementsOf(messages));
+
+            // And the scan wraps instead of parking at the end of the PEL. Redis answers a completed pass
+            // with 0-0, which resets the cursor to the oldest entry; without that reset the oldest entry
+            // would never be delivered a second time and the subscriber would go quiet on a PEL that is
+            // still full.
+            await().atMost(CLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(deliveries.get(messages.getFirst()).get())
+                            .isGreaterThan(1));
         }
     }
 
@@ -591,6 +792,12 @@ class BaseRedisSubscriberTest {
     private void waitForMessagesProcessed(TestRedisSubscriber subscriber, int expectedCount) {
         await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(expectedCount));
+    }
+
+    /** Entries delivered but not yet acknowledged. A wrongly acked entry drops out of this count. */
+    private long pendingCount() {
+        var pending = stream.getPendingInfo(config.getConsumerGroupName()).block();
+        return pending == null ? 0L : pending.getTotal();
     }
 
     private void waitForMessagesAckedAndRemoved() {
