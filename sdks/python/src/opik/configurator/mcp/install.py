@@ -383,10 +383,11 @@ PREFETCH_TIMEOUT_SECONDS: Final[int] = 120
 def _prefetch_opik_mcp() -> None:
     """Warm uv's cache so the AI client connects instantly on first launch.
 
-    Clients run ``uvx opik-mcp``, which otherwise fetches the package and a
+    Clients run ``uvx opik-mcp@latest``, which otherwise fetches the package and a
     Python interpreter lazily on first use — slow, and any failure surfaces as an
-    opaque client error. So this runs the same thing the client will, which is
-    what makes it a cache warm.
+    opaque client error. So this runs the same request the client will, down to the
+    ``@latest`` suffix, which is what makes it a cache warm rather than a warm of
+    some neighbouring environment.
 
     Not ``uv tool install opik-mcp``, which was doing more than warming a cache:
     it builds a persistent tool environment and puts an ``opik-mcp`` shim on the
@@ -408,7 +409,7 @@ def _prefetch_opik_mcp() -> None:
 
     try:
         result = subprocess.run(
-            [uv_executable, "tool", "run", "opik-mcp", "--help"],
+            [uv_executable, "tool", "run", mcp_spec.PACKAGE_REQUEST, "--help"],
             capture_output=True,
             text=True,
             # Nothing should prompt here, and if it does the timeout must win
@@ -511,7 +512,7 @@ def _create_server_spec(
         return (
             mcp_spec.StdioServerSpec(
                 command=uvx_executable,
-                args=["opik-mcp"],
+                args=[mcp_spec.PACKAGE_REQUEST],
                 env=server_env,
             ),
             None,

@@ -420,7 +420,7 @@ at all, so use the [local server](#local-server-uvx) instead.
 
 ### Local server (uvx)
 
-The local server runs on demand via `uvx opik-mcp` (requires
+The local server runs on demand via `uvx opik-mcp@latest` (requires
 [`uv`](https://docs.astral.sh/uv/)), with your credentials passed through the
 client's `env` block.
 
@@ -446,7 +446,7 @@ connect to a named cloud workspace.
     claude mcp add --transport stdio opik-mcp \
       --env OPIK_API_KEY=<your-key> \
       --env OPIK_WORKSPACE=<your-workspace> \
-      -- uvx opik-mcp
+      -- uvx opik-mcp@latest
     ```
 
     Or edit `~/.claude.json` directly:
@@ -457,7 +457,7 @@ connect to a named cloud workspace.
         "opik-mcp": {
           "type": "stdio",
           "command": "uvx",
-          "args": ["opik-mcp"],
+          "args": ["opik-mcp@latest"],
           "env": {
             "OPIK_API_KEY": "<your-key>",
             "OPIK_WORKSPACE": "<your-workspace>"
@@ -482,7 +482,7 @@ connect to a named cloud workspace.
         "opik-mcp": {
           "type": "stdio",
           "command": "uvx",
-          "args": ["opik-mcp"],
+          "args": ["opik-mcp@latest"],
           "env": {
             "OPIK_API_KEY": "<your-key>",
             "OPIK_WORKSPACE": "<your-workspace>"
@@ -513,7 +513,7 @@ connect to a named cloud workspace.
         "opik-mcp": {
           "type": "stdio",
           "command": "uvx",
-          "args": ["opik-mcp"],
+          "args": ["opik-mcp@latest"],
           "env": {
             "OPIK_API_KEY": "<your-key>",
             "OPIK_WORKSPACE": "<your-workspace>"
@@ -535,7 +535,7 @@ connect to a named cloud workspace.
     codex mcp add opik-mcp \
       --env OPIK_API_KEY=<your-key> \
       --env OPIK_WORKSPACE=<your-workspace> \
-      -- uvx opik-mcp
+      -- uvx opik-mcp@latest
     ```
 
     Or add an `[mcp_servers.opik-mcp]` table to `~/.codex/config.toml`:
@@ -543,7 +543,7 @@ connect to a named cloud workspace.
     ```toml
     [mcp_servers.opik-mcp]
     command = "uvx"
-    args = ["opik-mcp"]
+    args = ["opik-mcp@latest"]
 
     [mcp_servers.opik-mcp.env]
     OPIK_API_KEY = "<your-key>"
@@ -573,7 +573,7 @@ connect to a named cloud workspace.
       "mcp": {
         "opik-mcp": {
           "type": "local",
-          "command": ["uvx", "opik-mcp"],
+          "command": ["uvx", "opik-mcp@latest"],
           "environment": {
             "OPIK_API_KEY": "<your-key>",
             "OPIK_WORKSPACE": "<your-workspace>"

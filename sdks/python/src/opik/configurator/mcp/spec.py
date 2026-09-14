@@ -10,7 +10,7 @@ Two transports are supported:
 - :class:`RemoteServerSpec` — the Opik-hosted MCP server reached over HTTP, with
   the AI host handling browser-based OAuth. Used when the configured deployment
   advertises an MCP auth server (see ``detection.detect_hosted_mcp_server``).
-- :class:`StdioServerSpec` — a local server run via ``uvx opik-mcp`` and
+- :class:`StdioServerSpec` — a local server run via ``uvx opik-mcp@latest`` and
   authenticated with an API key passed through the environment. Used as the
   fallback when no hosted server is available.
 """
@@ -23,6 +23,12 @@ from typing import Any, Dict, List
 from opik.configurator.mcp import env as mcp_env
 
 SERVER_NAME = "opik-mcp"
+
+#: What the registered stdio command asks ``uvx`` to run. The ``@latest`` suffix
+#: makes uv revalidate the package index on every launch instead of resolving
+#: against whatever it already has cached, so a released fix reaches users on
+#: their next client restart rather than up to an index-cache TTL later.
+PACKAGE_REQUEST = f"{SERVER_NAME}@latest"
 
 _SECRET_ENV_SUFFIXES = ("_KEY", "_TOKEN", "_SECRET", "PASSWORD")
 _REDACTED = "***REDACTED***"
