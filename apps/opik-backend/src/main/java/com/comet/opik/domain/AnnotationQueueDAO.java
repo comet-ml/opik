@@ -324,6 +324,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             SELECT
                 id,
                 project_id,
+                name,
                 scope,
                 annotators_per_item
             FROM annotation_queues
@@ -580,6 +581,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .flatMap(result -> result.map((row, rowMetadata) -> AnnotationQueueInfo.builder()
                         .id(row.get("id", UUID.class))
                         .projectId(row.get("project_id", UUID.class))
+                        .name(row.get("name", String.class))
                         .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
                         .annotatorsPerItem(Optional.ofNullable(row.get("annotators_per_item", Integer.class))
                                 .orElse(DEFAULT_MIN_ANNOTATORS_PER_ITEM))

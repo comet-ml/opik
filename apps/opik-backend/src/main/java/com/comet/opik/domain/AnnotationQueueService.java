@@ -143,7 +143,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
             return Mono.fromRunnable(() -> withAutomation.forEach(
                     queue -> automationService.save(workspaceId, userName, queue.id(), queue.projectId(),
-                            queue.scope(), queue.automation())));
+                            queue.scope(), queue.name(), queue.automation())));
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
@@ -184,6 +184,11 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                                             .then(Mono.fromRunnable(
                                                     () -> automationService.save(workspaceId, userName, id,
                                                             queueInfo.projectId(), queueInfo.scope(),
+                                                            // The rule is named after its queue, so a
+                                                            // renamed queue renames the rule with it.
+                                                            updateRequest.name() != null
+                                                                    ? updateRequest.name()
+                                                                    : queueInfo.name(),
                                                             updateRequest.automation()))
                                                     .subscribeOn(Schedulers.boundedElastic())
                                                     .then());
