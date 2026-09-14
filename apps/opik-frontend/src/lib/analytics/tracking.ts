@@ -38,6 +38,7 @@ export const OpikEvent = {
   MCP_BUTTON_SHOWN: "opik_mcp_button_shown",
   MCP_POPOVER_OPENED: "opik_mcp_popover_opened",
   MCP_POPOVER_CLOSED: "opik_mcp_popover_closed",
+  MCP_CONNECT_CLICKED: "opik_mcp_connect_clicked",
   MCP_LEARN_MORE_CLICKED: "opik_mcp_learn_more_clicked",
   MCP_BANNER_SHOWN: "opik_mcp_banner_shown",
   MCP_BANNER_CTA_CLICKED: "opik_mcp_banner_cta_clicked",

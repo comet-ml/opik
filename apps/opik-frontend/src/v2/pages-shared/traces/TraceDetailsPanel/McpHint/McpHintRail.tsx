@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from "react";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import McpHintButton from "./McpHintButton";
 import useDelayedReveal from "./useDelayedReveal";
+import useMcpInstallMode from "./useMcpInstallMode";
 import { McpHintEntityType } from "./constants";
 
 type McpHintRailProps = {
@@ -27,6 +28,7 @@ const McpHintRail: React.FunctionComponent<McpHintRailProps> = ({
   entityType,
 }) => {
   const isRevealed = useDelayedReveal({ active: isErrorExpanded, subject });
+  const installMode = useMcpInstallMode();
 
   // One impression per reveal. The flag is cleared when the reveal is retracted
   // (a new subject), so the next one counts again.
@@ -39,8 +41,11 @@ const McpHintRail: React.FunctionComponent<McpHintRailProps> = ({
     if (hasTrackedImpressionRef.current) return;
 
     hasTrackedImpressionRef.current = true;
-    trackEvent(OpikEvent.MCP_BUTTON_SHOWN, { entity_type: entityType });
-  }, [isRevealed, entityType]);
+    trackEvent(OpikEvent.MCP_BUTTON_SHOWN, {
+      entity_type: entityType,
+      install_mode: installMode,
+    });
+  }, [isRevealed, entityType, installMode]);
 
   if (!isRevealed) return null;
 

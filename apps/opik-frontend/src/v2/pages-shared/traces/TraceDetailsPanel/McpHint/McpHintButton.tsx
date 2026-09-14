@@ -10,6 +10,7 @@ import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import McpHintPopover from "./McpHintPopover";
 import useHoverGrace from "./useHoverGrace";
+import useMcpInstallMode from "./useMcpInstallMode";
 import { MCP_HINT_LABEL } from "./constants";
 
 // Keep clicks inside the popover from reaching the traceback underneath it.
@@ -27,6 +28,7 @@ const PILL_CLASS = cn(
 
 const McpHintButton: React.FunctionComponent = () => {
   const { isOpen, open, closeNow, closeAfterGrace } = useHoverGrace();
+  const installMode = useMcpInstallMode();
 
   // Distinguishes "read it and walked away" from "used it". Only the first is
   // worth an event; the routes report themselves.
@@ -49,13 +51,13 @@ const McpHintButton: React.FunctionComponent = () => {
 
     if (isOpen) {
       hasActedRef.current = false;
-      trackEvent(OpikEvent.MCP_POPOVER_OPENED);
+      trackEvent(OpikEvent.MCP_POPOVER_OPENED, { install_mode: installMode });
       return;
     }
     if (!hasActedRef.current) {
-      trackEvent(OpikEvent.MCP_POPOVER_CLOSED);
+      trackEvent(OpikEvent.MCP_POPOVER_CLOSED, { install_mode: installMode });
     }
-  }, [isOpen]);
+  }, [isOpen, installMode]);
 
   const handleOpenChange = useCallback(
     (nextIsOpen: boolean) => {
