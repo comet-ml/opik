@@ -251,6 +251,7 @@ areas:
     routes: ["/projects/$projectId/logs?type=traces", "/logs?type=spans"]
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
+      - trace-explore/span-cached-token-cost.spec.ts
       - trace-explore/span-cost-resolution.spec.ts
       - trace-explore/span-kpi-cards.spec.ts
       - trace-explore/spans-view-pagination.spec.ts
@@ -383,6 +384,7 @@ areas:
     spec_dir: dashboards
     specs:
       - dashboards/dashboards-list-filters.spec.ts
+      - dashboards/project-dashboard-scoping.spec.ts
       - dashboards/project-metrics-weekly-interval.spec.ts
       - dashboards/project-span-metrics.spec.ts
       - dashboards/workspace-span-metrics.spec.ts

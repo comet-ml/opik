@@ -1057,11 +1057,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * insights view is rendered by the project page, and `DashboardContent`
      * reads `config.sections`. A caller that wants the page to show something
      * identifiable passes a section of its own.
+     *
+     * Each section is completed to the full `DashboardSection` shape and the
+     * config to the full `DashboardState` — `layout` and `lastModified` are
+     * required by both, and the backend does not supply the defaults. Omitting
+     * them stores a view the app then has to cope with: `areSectionsEqual`
+     * hands `section.layout` to `areLayoutsEqual`, which reads `prev.length`
+     * unguarded, and the unmount path in `useDashboardPersistence` only skips
+     * that comparison when `lastModified === 0` — so an absent one is truthy
+     * and walks straight into it. A seed should look like what the product's
+     * own create dialog writes, not like the minimum the API will accept.
      */
     async createInsightsView(args: {
       name: string;
       projectId: string;
-      sections?: Array<{ id: string; title: string; widgets: unknown[] }>;
+      sections?: Array<{
+        id: string;
+        title: string;
+        widgets: unknown[];
+        layout?: unknown[];
+      }>;
     }): Promise<InsightsViewRef> {
       const created = await opik.api.insightsViews.createInsightsView({
         name: args.name,
@@ -1072,7 +1087,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         type: 'multi_project',
         config: {
           version: 1,
-          sections: args.sections ?? [],
+          sections: (args.sections ?? []).map((s) => ({
+            ...s,
+            layout: s.layout ?? [],
+          })),
+          lastModified: Date.now(),
         },
       });
       const id = created.id;

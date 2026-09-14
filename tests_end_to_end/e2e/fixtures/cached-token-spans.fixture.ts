@@ -151,9 +151,10 @@ const SPAN_SEEDS: Array<Omit<CachedTokenSpanSeed, 'name'>> = [
  *
  * Teardown deletes the trace (and with it its spans) here rather than in the
  * test: the trace's rolled-up cost is one of the things asserted, so a failed
- * assertion must not leave priced spans behind. It runs from a `finally` that
- * opens the moment the trace exists, because the span writes happen BEFORE
- * `use()` and a failure in any of them would otherwise skip the only cleanup.
+ * assertion must not leave priced spans behind. Every write sits inside the
+ * `try`, so the `finally` covers the trace create and the span creates alike —
+ * all of them happen BEFORE `use()`, and a failure in any one would otherwise
+ * skip the only cleanup there is.
  */
 export const test = baseTest.extend<CachedTokenSpansFixtures>({
   cachedTokenSpans: async ({ backendClient, project, testNamespace }, use, testInfo) => {
@@ -162,20 +163,26 @@ export const test = baseTest.extend<CachedTokenSpansFixtures>({
       name: `${testNamespace}-${seed.key}`,
     }));
 
+    // Client-generated, and generated BEFORE the write: the id teardown needs
+    // therefore exists whatever the write does, so the create belongs inside the
+    // `finally`'s reach. A POST that commits server-side but loses its response
+    // would otherwise leave a priced trace behind with nothing to delete it —
+    // and priced spans are exactly what poisons the next run's cost assertions.
     const traceId = uuid7();
     const now = new Date();
-    await backendClient.createTraceWithSource({
-      id: traceId,
-      projectName: project.name,
-      name: `${testNamespace}-cached-cost-trace`,
-      source: 'sdk',
-      input: { question: 'seeded cached-token cost resolution' },
-      output: { answer: 'seeded cached-token cost resolution' },
-      startTime: now,
-      endTime: now,
-    });
 
     try {
+      await backendClient.createTraceWithSource({
+        id: traceId,
+        projectName: project.name,
+        name: `${testNamespace}-cached-cost-trace`,
+        source: 'sdk',
+        input: { question: 'seeded cached-token cost resolution' },
+        output: { answer: 'seeded cached-token cost resolution' },
+        startTime: now,
+        endTime: now,
+      });
+
       for (const span of spans) {
         await backendClient.createSpan({
           id: uuid7(),

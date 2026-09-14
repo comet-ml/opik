@@ -41,6 +41,15 @@ export class ProjectDashboardsPage {
    * The id is passed through verbatim, including one belonging to another
    * project: resolving a foreign id is a case this page has to handle, and a POM
    * that validated it away could not drive it.
+   *
+   * Waits for the project's own view list to come back, not just for the
+   * navigation. `ProjectDashboardViewSelector` builds its options as
+   * `[...TEMPLATE_OPTIONS, ...dashboards]`, where the templates are a module
+   * constant and only `dashboards` comes from `useInsightsViewsList` — so every
+   * built-in option is on screen a full request before any custom view is, and
+   * an absence assertion made in that gap passes against a list that simply had
+   * not arrived. Armed BEFORE `goto` because the selector mounts with the page
+   * and issues the read immediately; a waiter created afterwards races it.
    */
   async goto(opts: { dashboardId?: string } = {}): Promise<void> {
     return test.step(
@@ -50,9 +59,18 @@ export class ProjectDashboardsPage {
         const query = opts.dashboardId
           ? `?${new URLSearchParams({ dashboardId: opts.dashboardId })}`
           : '';
+        // Any status: a backend that refuses this read should surface as the
+        // caller's own picker assertion, which says what the user would see,
+        // rather than as an opaque wait timeout here.
+        const viewsListed = this.page.waitForResponse(
+          (res) =>
+            res.url().includes('/v1/private/insights-views') &&
+            res.url().includes(`project_id=${this.projectId}`),
+        );
         await this.page.goto(
           `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/dashboards${query}`,
         );
+        await viewsListed;
       },
     );
   }
@@ -111,13 +129,14 @@ export class ProjectDashboardsPage {
   }
 
   /**
-   * Opens the picker from a known current selection, and proves it populated
-   * before the caller reads it.
+   * Opens the picker from a known current selection.
    *
-   * The built-in template is always offered, so its presence is what separates
-   * "this view is not in the list" from "the list had not loaded yet" — which is
-   * the difference between the scoping assertion this page exists for and a
-   * test that cannot fail.
+   * The built-in check here asserts the popover rendered its options at all —
+   * and NOTHING about whether the custom views arrived. `Project overview` comes
+   * from the module-level `TEMPLATE_OPTIONS`, so it is on screen whether or not
+   * `useInsightsViewsList` has resolved. What makes an absence assertion
+   * meaningful is `goto()` having awaited that request; this is a cheap guard on
+   * the popover itself, not the readiness gate.
    */
   async openViewPicker(currentViewName: string): Promise<Locator> {
     return test.step(`Open the view picker (showing "${currentViewName}")`, async () => {
