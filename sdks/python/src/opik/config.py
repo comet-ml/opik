@@ -251,13 +251,6 @@ class OpikConfig(pydantic_settings.BaseSettings):
     requests still go through the shared HTTP client at `request_compression_level`.
     """
 
-    enable_orjson_serialization: bool = True
-    """
-    If set to True - Opik will serialize request bodies with `orjson` when it is installed,
-    falling back to the standard library otherwise. Content hashes are always computed with
-    the standard library, so item identity never depends on this setting.
-    """
-
     guardrail_timeout: int = 30
     """
     Timeout for guardrail.validate calls in seconds. If response takes more than this, it will be considered failed and raises an Exception.

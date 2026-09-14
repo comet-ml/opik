@@ -22,17 +22,11 @@ from typing import Any, Callable, Dict, Mapping, Optional, Set, overload
 
 import pydantic
 
+from ... import config
+from .. import constants
 from ...rest_api.core.jsonable_encoder import jsonable_encoder
 
 LOGGER = logging.getLogger(__name__)
-
-try:
-    import orjson
-except ImportError:  # pragma: no cover
-    # Reachable: setup.py deliberately does not require orjson on Windows ARM64 below
-    # Python 3.11, where no wheel is published. Do not delete without revisiting that
-    # marker. Turning the serialiser off on purpose is `enable_orjson_serialization`.
-    orjson = None  # type: ignore[assignment]
 
 # gzip container rather than a raw deflate stream, matching what the server expects.
 _GZIP_WBITS = 16 + zlib.MAX_WBITS
@@ -87,39 +81,13 @@ def encode_flexible(value: Any) -> Any:
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
-def _dumps_stdlib(value: Any) -> bytes:
+def dumps(value: Any) -> bytes:
+    """The wire form of one value.
+
+    `default=` carries the flexible types the generated client used to accept, so only a
+    value that needs the normalisation pays for it.
+    """
     return json.dumps(value, default=encode_flexible).encode("utf-8")
-
-
-def _dumps_orjson(value: Any) -> bytes:
-    # Datetimes are passed through to the encoder above rather than serialised by orjson,
-    # so the wire form of a date does not depend on which serialiser is in use.
-    try:
-        return orjson.dumps(
-            value, default=encode_flexible, option=orjson.OPT_PASSTHROUGH_DATETIME
-        )
-    except TypeError:
-        # Non-string mapping keys, which `json.dumps` coerces. Supporting them costs about
-        # 2.5x per item when left on, so the rare item that has them pays for a retry
-        # instead of every item paying for the option.
-        try:
-            return orjson.dumps(
-                value,
-                default=encode_flexible,
-                option=orjson.OPT_PASSTHROUGH_DATETIME | orjson.OPT_NON_STR_KEYS,
-            )
-        except TypeError:
-            # Integers outside 64 bits are the known case: the standard library writes
-            # them, orjson refuses them at any option. Which serialiser is in use must not
-            # decide whether an item can be uploaded, so the slower one finishes the job.
-            return _dumps_stdlib(value)
-
-
-def select_dumps(use_orjson: bool) -> Callable[[Any], bytes]:
-    """Pick the wire serialiser. Falls back to the standard library when orjson is absent."""
-    if use_orjson and orjson is not None:
-        return _dumps_orjson
-    return _dumps_stdlib
 
 
 class StreamingBatchWriter:
@@ -140,19 +108,17 @@ class StreamingBatchWriter:
         max_payload_bytes: int,
         max_items: int,
         gzip_level: Optional[int],
-        use_orjson: bool = True,
     ) -> None:
         self._flush_callback = flush_callback
         self._max_payload_bytes = max_payload_bytes
         self._max_items = max_items
         self._gzip_level = gzip_level
-        self._dumps = select_dumps(use_orjson)
 
         # Serialise the envelope once and splice the item array onto it, so the dataset
         # name and group id are escaped by the same serialiser as everything else. The
         # envelope always carries fields: splicing onto an empty `{}` would produce
         # `{,"items":[`, so this is not a shape to make optional later.
-        envelope_bytes = self._dumps(dict(envelope))
+        envelope_bytes = dumps(dict(envelope))
         self._prefix = envelope_bytes[:-1] + b',"items":['
         self._suffix = b"]}"
 
@@ -173,7 +139,7 @@ class StreamingBatchWriter:
 
     def _serialize(self, item: Mapping[str, Any]) -> bytes:
         try:
-            return self._dumps(item)
+            return dumps(item)
         except Exception as exception:
             # Checked here rather than relying on a hashing or encoding step elsewhere to
             # raise first: a streaming writer may be the only component that touches the
@@ -243,12 +209,13 @@ class BoundedSendPool:
 
     def __init__(
         self,
+        *,
         send: Callable[[bytes], None],
         num_threads: int,
-        max_pending: Optional[int] = None,
+        max_pending: int,
     ) -> None:
         self._send = send
-        self._max_pending = max_pending if max_pending is not None else num_threads * 2
+        self._max_pending = max_pending
         self._pending: Set["futures.Future[None]"] = set()
         self._pool: Optional[futures.ThreadPoolExecutor] = (
             futures.ThreadPoolExecutor(max_workers=num_threads)
@@ -356,3 +323,46 @@ def item_payload(
         "evaluators": evaluators,
         "execution_policy": execution_policy,
     }
+
+
+def build_batch_writer(
+    *,
+    dataset_name: str,
+    project_name: Optional[str],
+    batch_group_id: str,
+    flush_callback: Callable[[bytes, int], None],
+    gzip_level: Optional[int],
+) -> StreamingBatchWriter:
+    """The writer one dataset upload sends through.
+
+    The batch caps live here rather than at the call site, so what bounds a request is
+    decided in one place for every caller instead of being passed in and possibly
+    differing between them. `gzip_level` stays a parameter because only the caller knows
+    whether its transport expects a compressed body.
+    """
+    return StreamingBatchWriter(
+        envelope={
+            "dataset_name": dataset_name,
+            "project_name": project_name,
+            "batch_group_id": batch_group_id,
+        },
+        flush_callback=flush_callback,
+        max_payload_bytes=int(config.MAX_BATCH_SIZE_MB * 1024 * 1024),
+        max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
+        gzip_level=gzip_level,
+    )
+
+
+def build_send_pool(
+    send: Callable[[bytes], None], num_threads: int
+) -> BoundedSendPool:
+    """The upload sink for one insert.
+
+    Owns the one derivation the pool used to make for itself: twice the worker count,
+    so a worker that finishes has a body waiting without the producer running arbitrarily
+    far ahead. Passing it in explicitly keeps the pool free of a default that decided
+    policy where it could not be seen.
+    """
+    return BoundedSendPool(
+        send=send, num_threads=num_threads, max_pending=num_threads * 2
+    )

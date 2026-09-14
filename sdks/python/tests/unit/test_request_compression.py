@@ -97,13 +97,6 @@ def test_build_request__compression_disabled__body_is_plain_json():
     assert "Content-Encoding" not in request.headers
 
 
-def test_orjson_kill_switch__default_on_but_overridable(monkeypatch):
-    assert OpikConfig().enable_orjson_serialization is True
-
-    monkeypatch.setenv("OPIK_ENABLE_ORJSON_SERIALIZATION", "false")
-    assert OpikConfig().enable_orjson_serialization is False
-
-
 def test_dataset_upload_compression_level__defaults_below_the_global_level():
     """Bulk dataset uploads are CPU-bound on compression, ordinary requests are not.
 

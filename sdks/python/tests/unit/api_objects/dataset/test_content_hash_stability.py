@@ -46,16 +46,6 @@ def test_content_hash__matches_the_legacy_digest(content):
     assert item.content_hash() == _legacy_digest(item.get_content())
 
 
-@pytest.mark.parametrize("content", ITEM_SHAPES)
-def test_content_hash__orjson_enabled__digest_is_unchanged(content, monkeypatch):
-    """Enabling the fast wire serialiser must not move item identity."""
-    pytest.importorskip("orjson")
-    monkeypatch.setenv("OPIK_ENABLE_ORJSON_SERIALIZATION", "true")
-
-    item = dataset_item.DatasetItem(**content)
-    assert item.content_hash() == _legacy_digest(item.get_content())
-
-
 def test_content_hash__compact_separators_would_differ():
     """Guards the premise: the legacy form is not merely 'any json.dumps'."""
     content = {"a": 1, "b": 2}
@@ -67,19 +57,15 @@ def test_content_hash__compact_separators_would_differ():
     )
 
 
-@pytest.mark.parametrize("use_orjson", [True, False])
-def test_insert__dedup_is_independent_of_the_wire_serialiser(use_orjson, monkeypatch):
-    """The same duplicate is caught whichever serialiser writes the body."""
-    monkeypatch.setenv(
-        "OPIK_ENABLE_ORJSON_SERIALIZATION", "true" if use_orjson else "false"
-    )
+def test_insert__dedup_is_independent_of_the_wire_form():
+    """Identity comes from the digest, not from what the writer put on the wire."""
     capture = UploadCapture()
     dataset = make_dataset(Dataset, Mock(), capture)
 
     item = {"input": {"key": "value"}, "expected_output": {"key": "out"}}
     dataset.insert([item, item])
 
-    assert len(capture.items) == 1, "The duplicate must be dropped either way"
+    assert len(capture.items) == 1, "The duplicate must be dropped"
 
 
 def test_insert__duplicate_far_apart_in_the_stream__still_caught():

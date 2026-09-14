@@ -847,7 +847,7 @@ class Dataset(DatasetExportOperations):
 
     def _open_send_pool(self, num_threads: int) -> streaming_writer.BoundedSendPool:
         """Upload sink for one insert. Split out so the worker count is observable."""
-        return streaming_writer.BoundedSendPool(self._send_prepared_body, num_threads)
+        return streaming_writer.build_send_pool(self._send_prepared_body, num_threads)
 
     @property
     def _parallel_insert_supported(self) -> bool:
@@ -956,21 +956,16 @@ class Dataset(DatasetExportOperations):
             )
 
             pool = self._open_send_pool(num_threads)
-            writer = streaming_writer.StreamingBatchWriter(
-                envelope={
-                    "dataset_name": self._name,
-                    "project_name": self._project_name,
-                    "batch_group_id": batch_group_id,
-                },
+            writer = streaming_writer.build_batch_writer(
+                dataset_name=self._name,
+                project_name=self._project_name,
+                batch_group_id=batch_group_id,
                 flush_callback=pool.submit,
-                max_payload_bytes=int(config.MAX_BATCH_SIZE_MB * 1024 * 1024),
-                max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
                 gzip_level=(
                     opik_config.dataset_upload_compression_level
                     if compressing
                     else None
                 ),
-                use_orjson=opik_config.enable_orjson_serialization,
             )
 
             try:

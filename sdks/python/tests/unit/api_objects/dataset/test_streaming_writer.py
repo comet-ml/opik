@@ -36,9 +36,6 @@ def _writer(flush_callback, **kwargs):
         "max_payload_bytes": 1_000_000,
         "max_items": 1_000,
         "gzip_level": 6,
-        # The shipped default. Tests that build a stdlib expectation pass
-        # `use_orjson=False` explicitly; everything else runs what users run.
-        "use_orjson": True,
     }
     params.update(kwargs)
     return streaming_writer.StreamingBatchWriter(**params)
@@ -78,14 +75,11 @@ def test_flush__no_items__does_nothing():
     assert bodies == []
 
 
-@pytest.mark.parametrize("use_orjson", [False, True])
-def test_body__matches_a_one_shot_gzip_of_the_same_rows(use_orjson):
+def test_body__matches_a_one_shot_gzip_of_the_same_rows():
     """Incremental compression must produce the same bytes as compressing once."""
-    if use_orjson:
-        pytest.importorskip("orjson")
-    dumps = streaming_writer.select_dumps(use_orjson)
+    dumps = streaming_writer.dumps
     bodies, flush_callback = _collect()
-    writer = _writer(flush_callback, gzip_level=6, use_orjson=use_orjson)
+    writer = _writer(flush_callback, gzip_level=6)
 
     rows = [{"id": f"item-{i}", "data": {"v": i}} for i in range(5)]
     for row in rows:
@@ -133,41 +127,9 @@ def test_add__value_not_json_serializable__raises_explicitly():
         writer.add({"id": "a", "data": {"bad": NotSerializable()}})
 
 
-def test_add__not_serializable_with_orjson__raises_the_same_error():
-    """orjson raises a different exception type; callers must not have to know that."""
-    pytest.importorskip("orjson")
-    bodies, flush_callback = _collect()
-    writer = _writer(flush_callback, use_orjson=True)
-
-    class NotSerializable:
-        pass
-
-    with pytest.raises(streaming_writer.ItemNotSerializableError):
-        writer.add({"id": "a", "data": {"bad": NotSerializable()}})
-
-
-def test_select_dumps__orjson_disabled__falls_back_to_the_standard_library():
-    assert (
-        streaming_writer.select_dumps(use_orjson=False)
-        is streaming_writer._dumps_stdlib
-    )
-
-
-def test_dumps__orjson_and_stdlib__decode_to_the_same_value():
-    """The wire serialisers may differ in bytes, but not in meaning."""
-    pytest.importorskip("orjson")
-    value = {"b": 2, "a": {"nested": [1, 2, "ü"]}, "n": None}
-
-    stdlib = streaming_writer.select_dumps(use_orjson=False)(value)
-    fast = streaming_writer.select_dumps(use_orjson=True)(value)
-
-    assert json.loads(stdlib) == json.loads(fast) == value
-
-
 # --------------------------------------------------------------------------- #
 # values the generated client accepted: the writer must not narrow them
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("use_orjson", [False, True])
 @pytest.mark.parametrize(
     "value",
     [
@@ -184,13 +146,11 @@ def test_dumps__orjson_and_stdlib__decode_to_the_same_value():
     ],
 )
 def test_add__flexible_value__serialised_the_way_the_generated_client_did(
-    value, use_orjson
+    value
 ):
     """`datetime`, `set`, `Enum` and friends reached the backend before; they still must."""
-    if use_orjson:
-        pytest.importorskip("orjson")
     bodies, flush_callback = _collect()
-    writer = _writer(flush_callback, use_orjson=use_orjson)
+    writer = _writer(flush_callback)
 
     writer.add({"id": "a", "data": {"v": value}})
     writer.flush()
@@ -199,13 +159,10 @@ def test_add__flexible_value__serialised_the_way_the_generated_client_did(
     assert sent == json.loads(json.dumps(jsonable_encoder(value)))
 
 
-@pytest.mark.parametrize("use_orjson", [False, True])
-def test_add__non_string_mapping_keys__coerced_like_json_dumps(use_orjson):
-    """`json.dumps` turns these keys into strings; orjson rejects them by default."""
-    if use_orjson:
-        pytest.importorskip("orjson")
+def test_add__non_string_mapping_keys__coerced_like_json_dumps():
+    """`json.dumps` coerces non-string keys; the wire form must keep doing so."""
     bodies, flush_callback = _collect()
-    writer = _writer(flush_callback, use_orjson=use_orjson)
+    writer = _writer(flush_callback)
 
     writer.add({"id": "a", "data": {1: "x", 2.5: "y", None: "z"}})
     writer.flush()
@@ -260,7 +217,7 @@ def test_pool__worker_error__is_reraised_to_the_producer():
     def send(body: bytes) -> None:
         raise ValueError("rejected")
 
-    pool = streaming_writer.BoundedSendPool(send, num_threads=2)
+    pool = streaming_writer.build_send_pool(send, num_threads=2)
     pool.submit(b"body", 1)
 
     with pytest.raises(ValueError):
@@ -280,7 +237,7 @@ def _executor_threads(pool) -> int:
 def test_pool__workers_follow_the_upload_not_the_ceiling():
     """`num_threads` is a ceiling. A three-body upload must not start sixty-four threads."""
     sent = []
-    pool = streaming_writer.BoundedSendPool(sent.append, num_threads=64)
+    pool = streaming_writer.build_send_pool(sent.append, num_threads=64)
 
     assert _executor_threads(pool) == 0, "No worker before there is a body to send"
 
@@ -307,7 +264,7 @@ def test_pool__sustained_load__grows_to_the_ceiling_and_no_further():
         started.release()
         release.wait(5)
 
-    pool = streaming_writer.BoundedSendPool(blocked_send, num_threads=8)
+    pool = streaming_writer.build_send_pool(blocked_send, num_threads=8)
     try:
         for expected in range(1, 9):
             pool.submit(b"body", 1)
@@ -335,7 +292,7 @@ def test_pool__saturated__submit_blocks_until_a_body_lands():
         release.wait(5)
 
     # num_threads=2 bounds the outstanding bodies at 4.
-    pool = streaming_writer.BoundedSendPool(blocked_send, num_threads=2)
+    pool = streaming_writer.build_send_pool(blocked_send, num_threads=2)
     returned = threading.Event()
 
     def fill_and_overflow() -> None:
@@ -364,7 +321,7 @@ def test_pool__send_raising_a_base_exception__reaches_the_producer():
     def send(body: bytes) -> None:
         raise SystemExit("interrupted")
 
-    pool = streaming_writer.BoundedSendPool(send, num_threads=2)
+    pool = streaming_writer.build_send_pool(send, num_threads=2)
     pool.submit(b"body", 1)
 
     with pytest.raises(SystemExit):
@@ -397,7 +354,7 @@ def test_add__batch_never_exceeds_the_payload_cap():
     bodies, flush_callback = _collect()
     # On the standard library, so the size the assertion recomputes below is the one the
     # writer measured; the cap arithmetic itself does not depend on the serialiser.
-    writer = _writer(flush_callback, max_payload_bytes=300, use_orjson=False)
+    writer = _writer(flush_callback, max_payload_bytes=300)
 
     for i in range(10):
         writer.add({"id": f"item-{i}", "data": {"padding": "x" * 60}})
@@ -504,46 +461,16 @@ def test_item_payload__explicit_nulls_are_sent_not_omitted():
     }
 
 
-# --------------------------------------------------------------------------- #
-# the platform where orjson is not installed at all
-# --------------------------------------------------------------------------- #
-def test_select_dumps__orjson_absent__uses_the_standard_library(monkeypatch):
-    """orjson is not required on Windows ARM64 below 3.11, where no wheel is published.
-
-    `enable_orjson_serialization` still defaults to True there, so asking for orjson when
-    the import failed has to degrade rather than raise.
-    """
-    monkeypatch.setattr(streaming_writer, "orjson", None)
-
-    assert (
-        streaming_writer.select_dumps(use_orjson=True) is streaming_writer._dumps_stdlib
-    )
-
-
-def test_writer__orjson_absent__still_serialises_flexible_values(monkeypatch):
-    """The upload path must not assume orjson anywhere behind the selection."""
-    monkeypatch.setattr(streaming_writer, "orjson", None)
+def test_writer__date_and_oversized_int__serialise_on_the_wire():
+    """Two values the writer must not narrow: `json.dumps` writes both, so it has to."""
     bodies, flush_callback = _collect()
-    writer = _writer(flush_callback)  # the shipped default: use_orjson=True
+    writer = _writer(flush_callback)
 
     writer.add({"id": "a", "data": {"when": datetime.date(2024, 1, 2), "n": 2**70}})
     writer.flush()
 
     sent = _decode(bodies[0][0])["items"][0]["data"]
     assert sent == {"when": "2024-01-02", "n": 2**70}
-
-
-def test_content_hash__digest_does_not_depend_on_orjson(monkeypatch):
-    """Digests must not vary by platform, or dedup breaks for anyone moving between them."""
-    from opik.api_objects.dataset import dataset_item
-
-    content = {"input": {"nested": [1, "two", None]}, "when": datetime.date(2024, 1, 2)}
-    with_orjson = dataset_item.DatasetItem(**content).content_hash()
-
-    monkeypatch.setattr(streaming_writer, "orjson", None)
-    without_orjson = dataset_item.DatasetItem(**content).content_hash()
-
-    assert with_orjson == without_orjson
 
 
 def test_pool__a_body_fails__surfaces_to_the_producer_at_the_bound():
@@ -564,7 +491,7 @@ def test_pool__a_body_fails__surfaces_to_the_producer_at_the_bound():
             raise ValueError("body-0 was rejected")
         failed.wait(5)
 
-    pool = streaming_writer.BoundedSendPool(send, num_threads=2)  # a bound of four
+    pool = streaming_writer.build_send_pool(send, num_threads=2)  # a bound of four
     try:
         attempts = 0
         with pytest.raises(ValueError, match="body-0 was rejected"):
@@ -614,7 +541,6 @@ class _ModelHolder(pydantic.BaseModel):
     inner: object
 
 
-@pytest.mark.parametrize("use_orjson", [False, True])
 @pytest.mark.parametrize(
     "value",
     [
@@ -628,17 +554,15 @@ class _ModelHolder(pydantic.BaseModel):
         pytest.param(_ModelHolder(inner=_NoJsonForm()), id="in-a-pydantic-model"),
     ],
 )
-def test_add__object_with_no_json_form__raises_wherever_it_is(value, use_orjson):
+def test_add__object_with_no_json_form__raises_wherever_it_is(value):
     """`jsonable_encoder`'s last resort is `vars(obj)`, which would upload it as a dict.
 
     The encoder hook hands back the shell of anything with an interior so the serialiser
     walks back into this check for each member; without that, an object inside a set,
     dataclass or model was encoded by its attributes and uploaded silently.
     """
-    if use_orjson:
-        pytest.importorskip("orjson")
     bodies, flush_callback = _collect()
-    writer = _writer(flush_callback, use_orjson=use_orjson)
+    writer = _writer(flush_callback)
 
     with pytest.raises(streaming_writer.ItemNotSerializableError):
         writer.add({"id": "a", "data": {"v": value}})

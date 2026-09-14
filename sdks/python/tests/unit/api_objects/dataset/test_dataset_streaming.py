@@ -575,18 +575,8 @@ def test_insert__list_containing_something_that_is_not_an_item__raises_before_se
     assert capture.request_count == 0, "The valid item must not have been sent"
 
 
-@pytest.mark.parametrize("use_orjson", [True, False])
-def test_insert__integer_beyond_64_bits__sent_whichever_serialiser_is_in_use(
-    monkeypatch, use_orjson
-):
-    """orjson refuses these at any option; the standard library writes them.
-
-    Which serialiser happens to be installed must not decide whether an item can be
-    uploaded -- and `content_hash`, which runs first, has always accepted them.
-    """
-    if use_orjson:
-        pytest.importorskip("orjson")
-    monkeypatch.setenv("OPIK_ENABLE_ORJSON_SERIALIZATION", str(use_orjson).lower())
+def test_insert__integer_beyond_64_bits__is_sent():
+    """`content_hash`, which runs first, has always accepted these, so the wire must too."""
     huge = 2**70
     capture = UploadCapture()
     dataset = make_dataset(Dataset, Mock(), capture)
