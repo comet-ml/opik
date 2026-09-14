@@ -49,6 +49,29 @@ class TestDatasetRateLimitRetry(unittest.TestCase):
         assert capture.request_count == 2
         mock_sleep.assert_called_once_with(5.0)
 
+    @patch("opik.api_objects.rest_helpers._sleep_async")
+    def test_insert__429_on_the_parallel_path__waits_on_the_event_loop(
+        self, mock_sleep: Mock
+    ) -> None:
+        """The parallel upload sends through its own sender, so it needs its own wait."""
+        capture = UploadCapture(
+            responses=[429, 204, 204], response_headers={"RateLimit-Reset": "5"}
+        )
+        rest_client = Mock()
+        rest_client.version.return_value = {"version": "99.0.0"}  # allow parallelism
+        dataset_obj = make_dataset(dataset.Dataset, rest_client, capture)
+
+        # An upload of one request is sent inline over the sync client, and waits on the
+        # sync path; two batches are what reaches the parallel path at all.
+        with (
+            patch(_NO_TENACITY, lambda send: send),
+            patch("opik.api_objects.constants.DATASET_ITEMS_MAX_BATCH_SIZE", 1),
+        ):
+            dataset_obj.insert([{"input": "a"}, {"input": "b"}], num_threads=2)
+
+        assert capture.request_count == 3, "the rate-limited batch was not retried"
+        mock_sleep.assert_called_once_with(5.0)
+
     @patch("opik.api_objects.rest_helpers._sleep")
     def test_insert__429_without_header__uses_fallback_delay(
         self, mock_sleep: Mock

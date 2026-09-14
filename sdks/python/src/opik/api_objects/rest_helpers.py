@@ -1,12 +1,18 @@
+import asyncio
 import logging
 import time
-from typing import Any, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
 from ..rate_limit import rate_limit
 
 LOGGER = logging.getLogger(__name__)
+
+
+async def _sleep_async(seconds: float) -> None:
+    # Same indirection as `_sleep`, so a test can stub the async wait too.
+    await asyncio.sleep(seconds)
 
 
 def _sleep(seconds: float) -> None:
@@ -42,30 +48,55 @@ def ensure_rest_api_call_respecting_rate_limit(
     label = f" for '{operation_name}'" if operation_name else ""
     while True:
         try:
-            result = rest_callable()
-            return result
+            return rest_callable()
         except ApiError as exception:
-            if exception.status_code == 429:
-                if exception.headers is not None:
-                    rate_limiter = rate_limit.parse_rate_limit(exception.headers)
-                    if rate_limiter is not None:
-                        retry_after = rate_limiter.retry_after()
-                        LOGGER.warning(
-                            "Rate limited (HTTP 429)%s, continuing in %s seconds",
-                            label,
-                            retry_after,
-                        )
-                        _sleep(retry_after)
-                        continue
+            retry_after = _rate_limit_delay(exception, label)
+            if retry_after is None:
+                raise
+            _sleep(retry_after)
 
-                LOGGER.warning(
-                    "Rate limited (HTTP 429)%s with no retry-after header, continuing in 1 second",
-                    label,
-                )
-                _sleep(1)
-                continue
 
-            raise
+async def ensure_rest_api_call_respecting_rate_limit_async(
+    rest_callable: Callable[[], Awaitable[Any]],
+    operation_name: Optional[str] = None,
+) -> Any:
+    """Async twin of `ensure_rest_api_call_respecting_rate_limit`.
+
+    Sleeps on the event loop rather than on the thread, so one throttled upload does not
+    stall the others sharing that loop.
+    """
+    label = f" for '{operation_name}'" if operation_name else ""
+    while True:
+        try:
+            return await rest_callable()
+        except ApiError as exception:
+            retry_after = _rate_limit_delay(exception, label)
+            if retry_after is None:
+                raise
+            await _sleep_async(retry_after)
+
+
+def _rate_limit_delay(exception: ApiError, label: str) -> Optional[float]:
+    """How long to wait before retrying, or None when this is not a rate limit."""
+    if exception.status_code != 429:
+        return None
+
+    if exception.headers is not None:
+        rate_limiter = rate_limit.parse_rate_limit(exception.headers)
+        if rate_limiter is not None:
+            retry_after: float = rate_limiter.retry_after()
+            LOGGER.warning(
+                "Rate limited (HTTP 429)%s, continuing in %s seconds",
+                label,
+                retry_after,
+            )
+            return retry_after
+
+    LOGGER.warning(
+        "Rate limited (HTTP 429)%s with no retry-after header, continuing in 1 second",
+        label,
+    )
+    return 1
 
 
 def resolve_project_id_by_name(
