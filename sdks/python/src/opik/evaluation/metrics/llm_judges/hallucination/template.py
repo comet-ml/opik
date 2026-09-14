@@ -1,6 +1,9 @@
 from typing import List, TypedDict, Optional
 
 from opik.evaluation.models import base_model
+from opik.evaluation.metrics.llm_judges import parsing_helpers
+
+_SECTION_TAGS = ("input", "context", "output")
 
 
 class FewShotExampleHallucination(TypedDict):
@@ -87,22 +90,6 @@ OUTPUT:
 </output>"""
 
 
-def _escape(value: object) -> str:
-    """Neutralize closing delimiter tags inside untrusted values.
-
-    The per-call fields are wrapped in ``<input>``/``<context>``/``<output>``
-    tags (same style as ``structure_output_compliance``). A value containing a
-    literal closing tag could otherwise break out of its section and inject a
-    forged verdict, so escape those closings before interpolation.
-    """
-    text = str(value)
-    return (
-        text.replace("</input>", "<\\/input>")
-        .replace("</context>", "<\\/context>")
-        .replace("</output>", "<\\/output>")
-    )
-
-
 def _format_examples(
     few_shot_examples: Optional[List[FewShotExampleHallucination]],
     include_context: bool,
@@ -147,12 +134,15 @@ def build_messages(
     if include_context:
         system_content = _CONTEXT_SYSTEM_PROMPT.format(examples_block=examples_block)
         user_content = _CONTEXT_USER_TEMPLATE.format(
-            input=_escape(input), context=_escape(context), output=_escape(output)
+            input=parsing_helpers.escape_closing_tags(input, _SECTION_TAGS),
+            context=parsing_helpers.escape_closing_tags(context, _SECTION_TAGS),
+            output=parsing_helpers.escape_closing_tags(output, _SECTION_TAGS),
         )
     else:
         system_content = _OUTPUT_SYSTEM_PROMPT.format(examples_block=examples_block)
         user_content = _OUTPUT_USER_TEMPLATE.format(
-            input=_escape(input), output=_escape(output)
+            input=parsing_helpers.escape_closing_tags(input, _SECTION_TAGS),
+            output=parsing_helpers.escape_closing_tags(output, _SECTION_TAGS),
         )
 
     return [
