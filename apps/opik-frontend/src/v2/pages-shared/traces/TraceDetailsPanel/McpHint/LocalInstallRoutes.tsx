@@ -45,7 +45,7 @@ const CLIENTS: Array<{ client: McpClient; label: string; logo: string }> = [
 const configureCommand = (client: McpClient) =>
   `uvx opik mcp configure --ai-client ${client}`;
 
-const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = ({
+const LocalInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = ({
   onRouteUsed,
 }) => {
   const installMode = useMcpInstallMode();
@@ -94,4 +94,4 @@ const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = ({
   );
 };
 
-export default McpInstallRoutes;
+export default LocalInstallRoutes;

@@ -3,7 +3,7 @@ import { ArrowRight, Plug } from "lucide-react";
 
 import { buildDocsUrl } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
-import McpInstallRoutes from "./McpInstallRoutes";
+import InstallRoutes from "./InstallRoutes";
 import McpRouteConfirmation from "./McpRouteConfirmation";
 import { McpInstallRoute } from "./types";
 import {
@@ -58,7 +58,7 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
               {MCP_HINT_DESCRIPTION}
             </p>
 
-            <McpInstallRoutes onRouteUsed={handleRouteUsed} />
+            <InstallRoutes onRouteUsed={handleRouteUsed} />
 
             <a
               href={buildDocsUrl(MCP_HINT_DOCS_PATH)}
