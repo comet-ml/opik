@@ -1,5 +1,7 @@
 import React, { useCallback, useMemo } from "react";
 
+import { useActiveWorkspaceName } from "@/store/AppStore";
+
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 import claudeCodeLogo from "/images/integrations/claude_code.svg";
@@ -8,6 +10,9 @@ import cursorLogo from "/images/integrations/cursor.svg";
 import vscodeLogo from "/images/integrations/vscode.svg";
 
 import McpRouteTile from "./McpRouteTile";
+import McpPromptTile from "./McpPromptTile";
+import useMcpPromptContext from "./useMcpPromptContext";
+import { buildLocalInstallPrompt } from "./prompt";
 import useMcpInstallMode from "./useMcpInstallMode";
 import {
   MCP_CLIENT,
@@ -47,8 +52,17 @@ const configureCommand = (client: McpClient) =>
 
 const LocalInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = ({
   onRouteUsed,
+  traceId,
+  projectId,
 }) => {
   const installMode = useMcpInstallMode();
+  const workspaceName = useActiveWorkspaceName();
+  const { projectName } = useMcpPromptContext(projectId);
+
+  const prompt = useMemo(
+    () => buildLocalInstallPrompt({ traceId, projectName, workspaceName }),
+    [traceId, projectName, workspaceName],
+  );
 
   // Reported here rather than in the popover: this is the only place that knows
   // which server the route installs against and how it gets there.
@@ -86,10 +100,17 @@ const LocalInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = ({
     // Wraps at content width rather than an even two-column grid: the labels
     // differ enough in length that equal columns leave "Codex" swimming in
     // padding next to "Claude Code".
-    <div className="flex flex-wrap gap-1.5">
-      {routes.map((route) => (
-        <McpRouteTile key={route.client} route={route} onUse={handleUse} />
-      ))}
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap gap-1.5">
+        {routes.map((route) => (
+          <McpRouteTile key={route.client} route={route} onUse={handleUse} />
+        ))}
+      </div>
+      <McpPromptTile
+        prompt={prompt}
+        installMode={installMode}
+        onUsed={onRouteUsed}
+      />
     </div>
   );
 };

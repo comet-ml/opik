@@ -30,16 +30,8 @@ export const MCP_INSTALL_MODE = {
 export type McpInstallMode =
   (typeof MCP_INSTALL_MODE)[keyof typeof MCP_INSTALL_MODE];
 
-export type McpInstallRoute = {
-  client: McpClient;
-  label: string;
-  logo: string;
-  tooltip: string;
-  method: McpRouteMethod;
-  /** Deeplink routes only. */
-  href?: string;
-  /** What lands on the clipboard for a copy route. */
-  clipboard?: string;
+/** What the popover shows once the user has left through one of the routes. */
+export type McpRouteOutcome = {
   /** Shown after the route is used. */
   confirmation: string;
   /**
@@ -52,7 +44,22 @@ export type McpInstallRoute = {
   note?: string;
 };
 
+export type McpInstallRoute = McpRouteOutcome & {
+  client: McpClient;
+  label: string;
+  logo: string;
+  tooltip: string;
+  method: McpRouteMethod;
+  /** Deeplink routes only. */
+  href?: string;
+  /** What lands on the clipboard for a copy route. */
+  clipboard?: string;
+};
+
 export type McpInstallRoutesProps = {
-  /** Called with the route the user took, so the popover can confirm it. */
-  onRouteUsed: (route: McpInstallRoute) => void;
+  /** Called with the outcome of the route the user took, so the popover can confirm it. */
+  onRouteUsed: (outcome: McpRouteOutcome) => void;
+  /** The failure the prompt route hands to the agent. */
+  traceId: string;
+  projectId: string;
 };

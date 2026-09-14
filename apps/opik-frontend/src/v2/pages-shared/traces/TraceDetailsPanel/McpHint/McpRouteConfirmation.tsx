@@ -2,10 +2,10 @@ import React, { useState } from "react";
 import { ArrowLeft, Check, Copy } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { McpInstallRoute } from "./types";
+import { McpRouteOutcome } from "./types";
 
 type McpRouteConfirmationProps = {
-  route: McpInstallRoute;
+  route: McpRouteOutcome;
   onBack: () => void;
 };
 

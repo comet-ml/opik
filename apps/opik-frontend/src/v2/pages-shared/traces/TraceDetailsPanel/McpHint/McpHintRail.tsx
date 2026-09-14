@@ -11,6 +11,8 @@ type McpHintRailProps = {
   /** Identifies the failure the hint is about: a new one has to earn its own reveal. */
   subject: string;
   entityType: McpHintEntityType;
+  traceId: string;
+  projectId: string;
 };
 
 /**
@@ -26,6 +28,8 @@ const McpHintRail: React.FunctionComponent<McpHintRailProps> = ({
   isErrorExpanded,
   subject,
   entityType,
+  traceId,
+  projectId,
 }) => {
   const isRevealed = useDelayedReveal({ active: isErrorExpanded, subject });
   const installMode = useMcpInstallMode();
@@ -51,7 +55,7 @@ const McpHintRail: React.FunctionComponent<McpHintRailProps> = ({
 
   return (
     <div className="pointer-events-none absolute right-4 top-4 z-10 flex justify-end motion-safe:animate-in motion-safe:fade-in">
-      <McpHintButton />
+      <McpHintButton traceId={traceId} projectId={projectId} />
     </div>
   );
 };

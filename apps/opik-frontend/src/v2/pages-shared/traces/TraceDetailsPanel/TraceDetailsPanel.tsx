@@ -421,6 +421,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     isErrorExpanded={isErrorExpanded}
                     subject={mcpHintSubject}
                     entityType={mcpHintEntityType}
+                    traceId={traceId}
+                    projectId={projectId}
                   />
                 )}
               </div>

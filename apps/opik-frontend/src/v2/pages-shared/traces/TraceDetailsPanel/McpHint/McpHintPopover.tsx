@@ -5,7 +5,7 @@ import { buildDocsUrl } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import InstallRoutes from "./InstallRoutes";
 import McpRouteConfirmation from "./McpRouteConfirmation";
-import { McpInstallRoute } from "./types";
+import { McpRouteOutcome } from "./types";
 import {
   MCP_HINT_DESCRIPTION,
   MCP_HINT_DOCS_PATH,
@@ -15,24 +15,28 @@ import {
 type McpHintPopoverProps = {
   /** Called when the user leaves through the popover rather than abandoning it. */
   onAction: () => void;
+  traceId: string;
+  projectId: string;
 };
 
 const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   onAction,
+  traceId,
+  projectId,
 }) => {
   // Unmounted with the popover, so closing it is what resets the view — a user
   // who comes back always lands on the routes rather than on a stale receipt.
-  const [usedRoute, setUsedRoute] = useState<McpInstallRoute | null>(null);
+  const [outcome, setOutcome] = useState<McpRouteOutcome | null>(null);
 
   const handleRouteUsed = useCallback(
-    (route: McpInstallRoute) => {
+    (route: McpRouteOutcome) => {
       onAction();
-      setUsedRoute(route);
+      setOutcome(route);
     },
     [onAction],
   );
 
-  const handleBack = useCallback(() => setUsedRoute(null), []);
+  const handleBack = useCallback(() => setOutcome(null), []);
 
   const handleLearnMoreClick = () => {
     onAction();
@@ -50,15 +54,19 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
       <div className="my-1 h-px w-full bg-border" />
 
       <div className="px-2 pb-1 pt-0.5">
-        {usedRoute ? (
-          <McpRouteConfirmation route={usedRoute} onBack={handleBack} />
+        {outcome ? (
+          <McpRouteConfirmation route={outcome} onBack={handleBack} />
         ) : (
           <>
             <p className="comet-body-xs mb-3 leading-4 text-muted-slate">
               {MCP_HINT_DESCRIPTION}
             </p>
 
-            <InstallRoutes onRouteUsed={handleRouteUsed} />
+            <InstallRoutes
+              onRouteUsed={handleRouteUsed}
+              traceId={traceId}
+              projectId={projectId}
+            />
 
             <a
               href={buildDocsUrl(MCP_HINT_DOCS_PATH)}

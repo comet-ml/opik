@@ -26,7 +26,15 @@ const PILL_CLASS = cn(
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-ollie)] focus-visible:ring-offset-1",
 );
 
-const McpHintButton: React.FunctionComponent = () => {
+type McpHintButtonProps = {
+  traceId: string;
+  projectId: string;
+};
+
+const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
+  traceId,
+  projectId,
+}) => {
   const { isOpen, open, closeNow, closeAfterGrace } = useHoverGrace();
   const installMode = useMcpInstallMode();
 
@@ -116,7 +124,11 @@ const McpHintButton: React.FunctionComponent = () => {
         onClick={stop}
         onPointerDown={stop}
       >
-        <McpHintPopover onAction={markAction} />
+        <McpHintPopover
+          onAction={markAction}
+          traceId={traceId}
+          projectId={projectId}
+        />
       </PopoverContent>
     </Popover>
   );
