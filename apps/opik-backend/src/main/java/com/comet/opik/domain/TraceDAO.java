@@ -140,6 +140,7 @@ public interface TraceDAO {
      */
     Mono<Long> batchInsert(@NonNull List<Trace> traces);
 
+    /**
      * Previous-day trace counts per workspace and project. Callers drop demo projects and re-aggregate via
      * {@link DemoDataExclusionUtils}, so the exclusion never reaches the query text.
      */
