@@ -1,25 +1,24 @@
 import React, { useState } from "react";
-import { ArrowLeft, Check, Copy } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { McpRouteOutcome } from "./types";
 
 type McpRouteConfirmationProps = {
   route: McpRouteOutcome;
-  onBack: () => void;
 };
 
 /**
- * What the popover shows after a route is used.
+ * What the card shows after a route is used.
  *
- * Persistent while the popover is open rather than reverting on a timer: it
+ * Persistent while the card is open rather than reverting on a timer: it
  * carries a command the user has to read and paste, and for a deeplink it is
  * the only recovery there is — the OS hand-off cannot be observed from the
  * page, so a link that opened nothing looks exactly like one that worked.
  */
 const McpRouteConfirmation: React.FunctionComponent<
   McpRouteConfirmationProps
-> = ({ route, onBack }) => {
+> = ({ route }) => {
   const [hasRecopied, setHasRecopied] = useState(false);
 
   const handleRecopy = () => {
@@ -40,7 +39,10 @@ const McpRouteConfirmation: React.FunctionComponent<
           <code className="min-w-0 flex-1 whitespace-pre-wrap break-all text-xs leading-4 text-muted-slate">
             {route.snippet}
           </code>
-          <TooltipWrapper content={hasRecopied ? "Copied" : "Copy"}>
+          <TooltipWrapper
+            content={hasRecopied ? "Copied" : "Copy"}
+            nonInteractive
+          >
             <button
               type="button"
               aria-label="Copy the command"
@@ -60,15 +62,6 @@ const McpRouteConfirmation: React.FunctionComponent<
       {route.note && (
         <p className="comet-body-xs leading-4 text-light-slate">{route.note}</p>
       )}
-
-      <button
-        type="button"
-        onClick={onBack}
-        className="comet-body-xs inline-flex w-fit items-center gap-1 leading-4 text-muted-slate hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ArrowLeft className="size-3 shrink-0" />
-        <span>Back</span>
-      </button>
     </div>
   );
 };

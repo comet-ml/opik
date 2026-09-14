@@ -72,6 +72,11 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
   // without it the card is unreachable on touch, where neither exists.
   const handleClick = useCallback(() => setIsOpen(true), []);
 
+  // A confirmation is showing. It is shorter than the route list, so the card
+  // shrinks out from under the pointer that just clicked — and the pointer-leave
+  // that follows would close it before the user has read what it says.
+  const [hasOutcome, setHasOutcome] = useState(false);
+
   const contentRef = useRef<HTMLDivElement>(null);
   const holdsFocus = () =>
     Boolean(contentRef.current?.contains(document.activeElement));
@@ -80,19 +85,30 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
   // user does on their way *into* the card. The tiles sit immediately after the
   // pill in tab order, so without this the card closes out from under them a
   // quarter-second after they arrive. Decline while it holds focus.
-  const handleOpenChange = useCallback((nextIsOpen: boolean) => {
-    if (!nextIsOpen && holdsFocus()) return;
-    setIsOpen(nextIsOpen);
+  const close = useCallback(() => {
+    setHasOutcome(false);
+    setIsOpen(false);
   }, []);
+
+  const handleOpenChange = useCallback(
+    (nextIsOpen: boolean) => {
+      // Decline the pointer's verdict while the card holds focus or is showing
+      // a confirmation. Escape and a click outside still close it, below.
+      if (!nextIsOpen && (holdsFocus() || hasOutcome)) return;
+      setIsOpen(nextIsOpen);
+    },
+    [hasOutcome],
+  );
 
   // ...and close once focus actually leaves it, rather than waiting for a
   // pointer that a keyboard user never moves.
   const handleContentBlur = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {
       if (contentRef.current?.contains(event.relatedTarget)) return;
+      if (hasOutcome) return;
       setIsOpen(false);
     },
-    [],
+    [hasOutcome],
   );
 
   return (
@@ -121,6 +137,9 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
       <HoverCardContent
         ref={contentRef}
         onBlur={handleContentBlur}
+        onEscapeKeyDown={close}
+        onPointerDownOutside={close}
+        onFocusOutside={close}
         side="bottom"
         align="end"
         sideOffset={6}
@@ -129,7 +148,11 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
         onClick={stopPointerPropagation}
         onPointerDown={stopPointerPropagation}
       >
-        <McpHintPopover onAction={markAction} target={target} />
+        <McpHintPopover
+          onAction={markAction}
+          onOutcomeChange={setHasOutcome}
+          target={target}
+        />
       </HoverCardContent>
     </HoverCard>
   );
