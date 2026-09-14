@@ -853,7 +853,7 @@ const TraceLogsView: React.FunctionComponent<TraceLogsViewProps> = ({
     type: "trace",
     queryPrefix: TLS_QUERY_PREFIX,
     manageLastSection: true,
-    traceDetailsPanelProps: { projectId, container },
+    traceDetailsPanelProps: { projectId, container, showMcpHint: true },
     threadDetailsPanelProps: {
       projectId,
       projectName,

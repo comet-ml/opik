@@ -48,6 +48,8 @@ type TraceDataViewerProps = {
   setActiveSection: (v: DetailsActionSectionValue) => void;
   isSpansLazyLoading: boolean;
   search?: string;
+  /** Must be referentially stable — see ErrorCallout. */
+  onErrorExpandedChange?: (expanded: boolean) => void;
 };
 
 const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
@@ -59,6 +61,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   setActiveSection,
   isSpansLazyLoading,
   search,
+  onErrorExpandedChange,
 }) => {
   const {
     permissions: { canAnnotateTraceSpanThread, canViewPrompts },
@@ -259,7 +262,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           />
         </div>
 
-        <ErrorCallout error={data.error_info} search={search} />
+        <ErrorCallout
+          error={data.error_info}
+          search={search}
+          onExpandedChange={onErrorExpandedChange}
+        />
 
         <Tabs
           defaultValue={defaultTab}

@@ -48,6 +48,9 @@ import {
 } from "@/constants/traces";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useVisibleSpans } from "@/v2/pages-shared/traces/hiddenSpans";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+import McpHintRail from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/McpHintRail";
+import { McpHintEntityType } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/constants";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
 const EMPTY_FILTERS: unknown[] = [];
@@ -103,6 +106,11 @@ export type TraceDetailsPanelProps = {
   container?: HTMLElement | null;
   refetchInterval?: number | false;
   hideAnnotateActions?: boolean;
+  /**
+   * Opt-in: the MCP hint ships on the Logs page only. Off by default so a new
+   * surface cannot acquire it — or start feeding its funnel — by accident.
+   */
+  showMcpHint?: boolean;
 };
 
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
@@ -119,6 +127,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   container,
   refetchInterval,
   hideAnnotateActions,
+  showMcpHint,
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
@@ -129,6 +138,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     { updateType: "replaceIn" },
   );
   const [isGraphFullscreen, setIsGraphFullscreen] = useState(false);
+  const [isErrorExpanded, setIsErrorExpanded] = useState(false);
 
   const [search = undefined, setSearch] = useQueryParam(
     `trace_panel_search`,
@@ -209,6 +219,26 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   const treeData = useMemo(() => {
     return [...(trace ? [trace] : []), ...(spansData?.content || [])];
   }, [spansData?.content, trace]);
+
+  // The failure the hint is about. A different span or trace is a different
+  // failure, so the hint has to earn its reveal again.
+  const mcpHintSubject = `${traceId}:${spanId}`;
+  const mcpHintEntityType: McpHintEntityType = spanId ? "span" : "trace";
+
+  const handleErrorExpandedChange = useCallback(
+    (expanded: boolean) => {
+      setIsErrorExpanded(expanded);
+      // Emitted here rather than from the shared error section: this is the only
+      // place that knows the hint is switched on, and the funnel's first step
+      // must not count surfaces where the hint never appears.
+      if (expanded) {
+        trackEvent(OpikEvent.TRACE_ERROR_EXPANDED, {
+          entity_type: mcpHintEntityType,
+        });
+      }
+    },
+    [mcpHintEntityType],
+  );
 
   const spanCount = spansData?.content?.length ?? 0;
 
@@ -381,6 +411,16 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     setActiveSection={setActiveSection}
                     isSpansLazyLoading={isSpansLazyLoading}
                     search={search}
+                    onErrorExpandedChange={
+                      showMcpHint ? handleErrorExpandedChange : undefined
+                    }
+                  />
+                )}
+                {showMcpHint && (
+                  <McpHintRail
+                    isErrorExpanded={isErrorExpanded}
+                    subject={mcpHintSubject}
+                    entityType={mcpHintEntityType}
                   />
                 )}
               </div>

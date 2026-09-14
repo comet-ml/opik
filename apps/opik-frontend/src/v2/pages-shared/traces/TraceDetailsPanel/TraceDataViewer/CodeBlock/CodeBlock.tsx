@@ -29,6 +29,8 @@ type CodeBlockProps = {
   disabled?: boolean;
   className?: string;
   quickFilterSection?: QuickFilterSection;
+  /** Notified when the user toggles the section. Never called on mount. */
+  onOpenChange?: (open: boolean) => void;
 };
 
 const CodeBlock: React.FC<CodeBlockProps> = ({
@@ -42,6 +44,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   disabled,
   className,
   quickFilterSection,
+  onOpenChange,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [localSearch, setLocalSearch] = useState("");
@@ -71,7 +74,9 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
 
   const handleToggle = () => {
     if (disabled) return;
-    setIsOpen((prev) => !prev);
+    const nextIsOpen = !isOpen;
+    setIsOpen(nextIsOpen);
+    onOpenChange?.(nextIsOpen);
   };
 
   return (
