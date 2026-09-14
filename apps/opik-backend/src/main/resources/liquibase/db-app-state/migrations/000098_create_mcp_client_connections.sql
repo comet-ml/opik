@@ -21,9 +21,12 @@ CREATE TABLE mcp_client_connections
     last_connected_at  TIMESTAMP(6)  NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
     PRIMARY KEY (id),
-    -- The claim: an upsert against this key is what decides "first connection", atomically. Keyed on
-    -- workspace_id, not workspace_name: the name is mutable, so keying on it would re-fire the event on a
-    -- rename and split one real workspace across two rows.
+    -- One row per registration a user has connected in a workspace; the upsert refreshes it on every exchange.
+    -- It does not decide "first connection": that is the EXISTS read in
+    -- McpClientConnectionDAO.existsActiveConnectionForHost, run before any write in the same transaction. Two
+    -- exchanges for the same host racing through that read can both count as first — accepted analytics drift,
+    -- not guarded here. Keyed on workspace_id, not workspace_name: the name is mutable, so keying on it would
+    -- re-fire the event on a rename and split one real workspace across two rows.
     UNIQUE KEY mcp_client_connections_identity_uk (user_name, workspace_id, client_id),
     -- Serves the future UI listing a user's connected clients, most recently used first: both equalities
     -- then the sort.
@@ -35,3 +38,4 @@ CREATE TABLE mcp_client_connections
   COLLATE = utf8mb4_unicode_ci;
 
 --rollback DROP TABLE mcp_client_connections;
+

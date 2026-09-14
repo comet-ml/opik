@@ -9,6 +9,6 @@ ALTER TABLE mcp_oauth_clients CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_u
 ALTER TABLE mcp_oauth_codes CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ALTER TABLE mcp_oauth_tokens CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
---rollback ALTER TABLE mcp_oauth_clients CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
---rollback ALTER TABLE mcp_oauth_codes CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
---rollback ALTER TABLE mcp_oauth_tokens CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+-- In-place change to existing tables: rolling it back would reintroduce the collation mismatch this fixes.
+--rollback empty
+

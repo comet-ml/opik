@@ -75,28 +75,31 @@ public class OAuthTokenService {
                     log.warn("MCP OAuth authorization_code request rejected: unknown client '{}'", clientId);
                     return new OAuthException(ERROR_INVALID_CLIENT);
                 });
+        CodeExchange exchange;
         try {
-            CodeExchange exchange = mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, client);
-            log.info("MCP OAuth authorization_code exchanged '{}'", clientId);
-
-            if (exchange.firstConnection()) {
-                // This endpoint is unauthenticated, so RequestContext carries no user and the 2-arg overload
-                // would silently fall back to the installation anonymous ID. Pass the resource owner
-                // explicitly: the warehouse joins this event on the user_name the frontend identifies on.
-                analyticsService.trackEvent("opik_mcp_connected", Map.of(
-                        "user_name", exchange.userName(),
-                        "workspace_id", exchange.tokens().workspaceId(),
-                        "workspace_name", exchange.tokens().workspaceName(),
-                        "client_id", clientId,
-                        "client_name", client.name()),
-                        exchange.userName());
-            }
-
-            return exchange.tokens();
+            exchange = mcpOAuthService.exchangeCode(code, codeVerifier, redirectUri, client);
         } catch (BadRequestException e) {
             log.warn("MCP OAuth authorization_code exchange failed '{}'", clientId, e);
             throw new OAuthException(ERROR_INVALID_GRANT);
         }
+        log.info("MCP OAuth authorization_code exchanged '{}'", clientId);
+
+        // Outside the try: the tokens are committed by now, and the grant's error handling has no business
+        // wrapping the event.
+        if (exchange.firstConnection()) {
+            // This endpoint is unauthenticated, so RequestContext carries no user and the 2-arg overload
+            // would silently fall back to the installation anonymous ID. Pass the resource owner
+            // explicitly: the warehouse joins this event on the user_name the frontend identifies on.
+            analyticsService.trackEvent("opik_mcp_connected", Map.of(
+                    "user_name", exchange.userName(),
+                    "workspace_id", exchange.tokens().workspaceId(),
+                    "workspace_name", exchange.tokens().workspaceName(),
+                    "client_id", clientId,
+                    "client_name", client.name()),
+                    exchange.userName());
+        }
+
+        return exchange.tokens();
     }
 
     private TokenResponse issueFromRefreshToken(String refreshToken, String clientId) {

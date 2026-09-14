@@ -39,6 +39,8 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CLIENT_ID;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_TOKEN;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.REVOKE_PATH;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -119,16 +121,18 @@ class McpClientConnectionIntegrationTest {
 
     /** The silent disconnect: the host stops coming back and its tokens age out, but its row stays. */
     private void expireTokensOf(String clientId) {
-        transactionTemplate.inTransaction(handle -> handle
-                .createUpdate("UPDATE mcp_oauth_tokens SET expires_at = NOW(6) - INTERVAL 1 SECOND "
-                        + "WHERE client_id = :clientId")
+        transactionTemplate.inTransaction(WRITE, handle -> handle
+                .createUpdate("""
+                        UPDATE mcp_oauth_tokens SET expires_at = NOW(6) - INTERVAL 1 SECOND
+                        WHERE client_id = :clientId
+                        """)
                 .bind("clientId", clientId)
                 .execute());
     }
 
     private List<McpClientConnection> connections(String workspaceId, String userName) {
         return transactionTemplate
-                .inTransaction(handle -> handle.attach(McpClientConnectionDAO.class)
+                .inTransaction(READ_ONLY, handle -> handle.attach(McpClientConnectionDAO.class)
                         .findByUser(workspaceId, userName));
     }
 
@@ -161,15 +165,22 @@ class McpClientConnectionIntegrationTest {
                 .orElseThrow();
 
         // The row is what a connected-clients UI renders: every field it carries has to survive the mapper
-        // and the upsert, not just the identity.
-        assertThat(row.userName()).isEqualTo(ProjectService.DEFAULT_USER);
-        assertThat(row.workspaceId()).isEqualTo(exchange.tokens().workspaceId());
-        assertThat(row.workspaceName()).isEqualTo(exchange.tokens().workspaceName());
-        assertThat(row.clientId()).isEqualTo(authorized.clientId());
-        assertThat(row.clientName()).isEqualTo(host);
-        assertThat(row.logoUri()).as("registration sent no logo").isNull();
-        assertThat(row.resource()).isEqualTo(RESOURCE_URI);
-        assertThat(row.redirectUri()).isEqualTo(REDIRECT_URI);
+        // and the upsert, not just the identity. Only the database-generated fields are excluded, by name.
+        var expected = McpClientConnection.builder()
+                .id(row.id())
+                .userName(ProjectService.DEFAULT_USER)
+                .workspaceId(exchange.tokens().workspaceId())
+                .workspaceName(exchange.tokens().workspaceName())
+                .clientId(authorized.clientId())
+                .clientName(host)
+                .logoUri(null) // registration sent no logo
+                .resource(RESOURCE_URI)
+                .redirectUri(REDIRECT_URI)
+                .build();
+        assertThat(row)
+                .usingRecursiveComparison()
+                .ignoringFields("firstConnectedAt", "lastConnectedAt", "active")
+                .isEqualTo(expected);
         assertThat(row.firstConnectedAt()).isNotNull();
         assertThat(row.lastConnectedAt()).isAfterOrEqualTo(row.firstConnectedAt());
         assertThat(row.active()).as("tokens are live").isTrue();
@@ -225,14 +236,18 @@ class McpClientConnectionIntegrationTest {
         // same human ends up with several client_ids for one product. That is one adoption, not several.
         String host = "Codex-" + RandomStringUtils.secure().nextAlphanumeric(6);
 
-        var first = exchange(host);
-        var second = exchange(host);
+        var firstRegistration = oauthClient.authorizeArtifacts(host);
+        var secondRegistration = oauthClient.authorizeArtifacts(host);
+        var first = exchange(firstRegistration);
+        var second = exchange(secondRegistration);
 
         assertThat(first.firstConnection()).as("first client_id for this host").isTrue();
         assertThat(second.firstConnection()).as("another client_id, same host, still connected").isFalse();
         assertThat(connections(first.tokens().workspaceId(), ProjectService.DEFAULT_USER))
                 .filteredOn(row -> row.clientName().equals(host))
-                .as("both registrations are still recorded for the UI").hasSize(2);
+                .extracting(McpClientConnection::clientId)
+                .as("both registrations are still recorded for the UI")
+                .containsExactlyInAnyOrder(firstRegistration.clientId(), secondRegistration.clientId());
     }
 
     @Test
@@ -308,7 +323,7 @@ class McpClientConnectionIntegrationTest {
         String userName = "u-" + RandomStringUtils.secure().nextAlphanumeric(8);
         String workspaceId = "ws-" + RandomStringUtils.secure().nextAlphanumeric(8);
 
-        transactionTemplate.inTransaction(handle -> handle.attach(McpClientConnectionDAO.class)
+        transactionTemplate.inTransaction(WRITE, handle -> handle.attach(McpClientConnectionDAO.class)
                 .upsert(McpClientConnection.builder()
                         .id(UUID.randomUUID().toString())
                         .userName(userName)
@@ -333,7 +348,7 @@ class McpClientConnectionIntegrationTest {
         String workspaceId = "ws-" + RandomStringUtils.secure().nextAlphanumeric(8);
         String clientId = UUID.randomUUID().toString();
 
-        transactionTemplate.inTransaction(handle -> {
+        transactionTemplate.inTransaction(WRITE, handle -> {
             handle.attach(McpClientConnectionDAO.class).upsert(McpClientConnection.builder()
                     .id(UUID.randomUUID().toString()).userName(userName).workspaceName("ws-name")
                     .workspaceId(workspaceId).clientId(clientId).clientName("Stale Host")
