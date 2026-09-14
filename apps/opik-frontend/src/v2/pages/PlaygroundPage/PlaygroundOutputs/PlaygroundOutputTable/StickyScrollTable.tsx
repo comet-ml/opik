@@ -6,6 +6,8 @@
 import React, { useCallback, useRef } from "react";
 import { ColumnDef, ColumnSizingState } from "@tanstack/react-table";
 import DataTable from "@/shared/DataTable/DataTable";
+import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
+import StickyScrollTableBodyWrapper from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/StickyScrollTableBodyWrapper";
 import { OnChangeFn, ROW_HEIGHT } from "@/types/shared";
 
 interface ResizeConfig {
@@ -28,10 +30,6 @@ const EMPTY_DATA: never[] = [];
 const HeaderWrapper: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => <div className="[&_tbody]:hidden">{children}</div>;
-
-const BodyWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="border-b [&_thead]:hidden">{children}</div>
-);
 
 const StickyScrollTable = <TData,>({
   columns,
@@ -84,7 +82,8 @@ const StickyScrollTable = <TData,>({
           resizeConfig={resizeConfig}
           noData={noData}
           showLoadingOverlay={showLoadingOverlay}
-          TableWrapper={BodyWrapper}
+          TableWrapper={StickyScrollTableBodyWrapper}
+          TableBody={DataTableVirtualBody}
         />
       </div>
     </div>
