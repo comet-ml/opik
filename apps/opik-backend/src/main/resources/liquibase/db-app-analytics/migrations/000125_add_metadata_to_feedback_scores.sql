@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset trakshan:000119_add_metadata_to_feedback_scores
+--changeset trakshan:000125_add_metadata_to_feedback_scores
 --comment: Add metadata column to feedback_scores and authored_feedback_scores for evaluator provenance (OPIK-7980)
 --
 -- Stores opaque caller-supplied JSON (e.g. evaluator revision/fingerprint) alongside a score.
