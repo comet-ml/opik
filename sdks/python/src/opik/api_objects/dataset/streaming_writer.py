@@ -57,17 +57,28 @@ class ItemNotSerializableError(TypeError):
 def _ordered_set_members(value: Any) -> list:
     """A set's members in an order that does not vary between processes.
 
-    Python randomises string hashing per process, so `list()` over a set of strings comes
-    out differently each run. That order reaches `content_hash` -- `sort_keys=True` orders
-    a dict's keys, never a list's members -- and a digest that moves between processes
-    means the same item deduplicates against itself in one run and uploads twice in the
-    next.
+    A set never survives the round trip: it goes out as a JSON array and comes back as a
+    list, so its digest has to equal the digest of the array it becomes or it could never
+    deduplicate against its own stored form. A canonical order is what makes those two
+    agree, which is why this is a requirement and not tidiness. `list()` alone comes out
+    differently in every process -- Python randomises string hashing -- and
+    `sort_keys=True` orders a dict's keys, never a list's members.
 
-    Sorted on the type name before the repr, because a set may legitimately mix types and
-    `sorted` alone raises on `{1, "a"}`. The order this produces is arbitrary rather than
-    natural -- "10" sorts before "9" -- which is all a canonical form has to be.
+    Natural order where the members compare, which is most sets and much the cheaper
+    path. A set may legitimately mix types and `sorted` alone raises on `{1, "a"}`, so
+    those fall back to the type name ahead of the repr; that order is arbitrary rather
+    than meaningful, which is all a canonical form has to be.
+
+    A row written before this was canonical holds an arbitrary order, so a set will not
+    deduplicate against one. That is not recoverable from here -- the order differs per
+    row and per writing process -- and it costs nothing that worked, because hashing a
+    set raised `TypeError` before this change and such a row could never be deduplicated
+    against at all.
     """
-    return sorted(value, key=lambda member: (type(member).__name__, repr(member)))
+    try:
+        return sorted(value)
+    except TypeError:
+        return sorted(value, key=lambda member: (type(member).__name__, repr(member)))
 
 
 def encode_flexible(value: Any) -> Any:

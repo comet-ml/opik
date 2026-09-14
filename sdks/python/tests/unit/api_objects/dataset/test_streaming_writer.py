@@ -610,11 +610,27 @@ def test_encode_flexible__set__ordered_canonically_not_by_iteration():
     assert streaming_writer.encode_flexible(frozenset({"b", "a"})) == ["a", "b"]
 
 
-def test_encode_flexible__set_of_mixed_types__still_encodes():
-    """`sorted` alone raises on `{1, "a"}`; a set may legitimately hold both."""
-    encoded = streaming_writer.encode_flexible({1, "a", None, 2.5})
+def test_encode_flexible__set_of_one_comparable_type__natural_order():
+    """The common path: members that compare are sorted directly, not by their repr.
 
-    assert sorted(map(repr, encoded)) == sorted(map(repr, [1, "a", None, 2.5]))
+    Pinned because the two disagree -- by repr `10` precedes `2` -- so this is what
+    fixes which of them is the identity a stored row is matched against.
+    """
+    assert streaming_writer.encode_flexible({10, 1, 2}) == [1, 2, 10]
+    assert streaming_writer.encode_flexible({"b", "a", "c"}) == ["a", "b", "c"]
+
+
+def test_encode_flexible__set_of_mixed_types__ordered_by_type_then_repr():
+    """`sorted` alone raises on `{1, "a"}`; a set may legitimately hold both.
+
+    The exact list, not the members: sorting both sides of the comparison would check
+    only that nothing was lost, and would hold however the order moved -- which is the
+    one thing this has to pin.
+
+    `NoneType` < `float` < `int` < `str` is the type name deciding, before the repr ever
+    comes into it, which is why `2.5` precedes `1`.
+    """
+    assert streaming_writer.encode_flexible({1, "a", None, 2.5}) == [None, 2.5, 1, "a"]
 
 
 def test_encode_flexible__tuple__keeps_the_order_it_was_given():
