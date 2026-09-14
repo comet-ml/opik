@@ -313,6 +313,8 @@ class Opik:
             thread_id: Used to group multiple traces into a thread.
                 The identifier is user-defined and has to be unique per project.
             attachments: The list of attachments to be uploaded to the trace.
+            environment: The environment in which the trace was created, e.g. 'production'
+                or 'development'. If not provided, falls back to the client's configured environment.
 
         Returns:
             trace.Trace: The created trace object.
