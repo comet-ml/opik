@@ -8,10 +8,17 @@ export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 const IDLE_CELL_TEXT = 'No runs yet';
 
 /**
- * A failed run surfaces as the output cell's own value. Kept narrow on purpose:
- * a model is free to emit the word "error", but never this phrasing.
+ * A failed run surfaces as the output cell's own value — `processCombination` catches and
+ * writes `error.message` there, with no flag to distinguish it from a real completion, so
+ * text is the only signal available. Kept narrow on purpose: these two are strings Opik
+ * itself emits, whereas a broad /error/i would fire on legitimate model output. Provider
+ * errors are free-form and stay undetected here by design.
  */
-const RUN_ERROR_TEXT = /\bnot defined\b/i;
+const RUN_ERROR_TEXT = /\bnot defined\b|returned an empty response/i;
+
+/** A cell has run when it holds anything other than the idle placeholder. */
+const hasProducedOutput = (text: string): boolean =>
+  text.trim() !== '' && !text.includes(IDLE_CELL_TEXT);
 
 export interface PlaygroundVariantConfig {
   /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
@@ -179,11 +186,14 @@ export class PlaygroundPage {
   async waitForRunsComplete(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
     return test.step(`wait for ${opts.expectedRows} run(s) to complete`, async () => {
       await expect
-        .poll(async () => this.countOutputRows(), {
-          timeout: opts.timeoutMs ?? 120_000,
-          intervals: [1000, 2000, 3000],
-        })
-        .toBeGreaterThanOrEqual(opts.expectedRows);
+        .poll(
+          async () => {
+            const texts = await this.outputCells().allInnerTexts();
+            return texts.length >= opts.expectedRows && texts.every(hasProducedOutput);
+          },
+          { timeout: opts.timeoutMs ?? 120_000, intervals: [1000, 2000, 3000] },
+        )
+        .toBe(true);
 
       const failed = (await this.outputCells().allInnerTexts()).filter((t) =>
         RUN_ERROR_TEXT.test(t),
@@ -196,10 +206,12 @@ export class PlaygroundPage {
     });
   }
 
-  /** Number of result rows whose output cell has produced content. */
-  async countOutputRows(): Promise<number> {
-    const texts = await this.outputCells().allInnerTexts();
-    return texts.filter((t) => t.trim() !== '' && !t.includes(IDLE_CELL_TEXT)).length;
+  /**
+   * Output cells that have produced content — one per dataset row *per variant*, so this
+   * exceeds the row count whenever more than one variant is configured.
+   */
+  async countCompletedOutputCells(): Promise<number> {
+    return (await this.outputCells().allInnerTexts()).filter(hasProducedOutput).length;
   }
 
   /**
@@ -480,7 +492,12 @@ export class PlaygroundPage {
    * and the variant columns are `output-<promptId>`.
    */
   private outputCells(): Locator {
-    return this.resultsTable().locator('tbody tr[data-row-id] td[data-cell-id*="_output-"]');
+    // The `:not(.comet-table-body-loading-overlay)` matters: switching sources keeps the
+    // previous dataset's rows on screen (`keepPreviousData`) while the new items load, and
+    // those rows are idle, so counting them would report ready for the wrong dataset.
+    return this.resultsTable().locator(
+      'tbody:not(.comet-table-body-loading-overlay) tr[data-row-id] td[data-cell-id*="_output-"]',
+    );
   }
 
   /** Output cells whose row has not been run yet. */

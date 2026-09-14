@@ -54,7 +54,7 @@ test.describe('Playground — smoke', { tag: ['@t1-smoke', '@area:playground', '
 
       await playground.clickReRun();
       await playground.waitForRunsComplete({ expectedRows: 3, timeoutMs: 120_000 });
-      expect(await playground.countOutputRows()).toBeGreaterThanOrEqual(3);
+      expect(await playground.countCompletedOutputCells()).toBeGreaterThanOrEqual(3);
     });
 
     await test.step('SDK-verify an experiment landed under the project (auto-named)', async () => {
