@@ -909,7 +909,7 @@ class Dataset(DatasetExportOperations):
     def __internal_api__insert_items_as_dataclasses__(
         self,
         items: Iterable[dataset_item.DatasetItem],
-        num_threads: int = 1,
+        num_threads: int = constants.DATASET_ITEMS_WRITE_NUM_THREADS,
         deduplication: bool = True,
     ) -> None:
         # Validated here rather than in each public entry point: every insert

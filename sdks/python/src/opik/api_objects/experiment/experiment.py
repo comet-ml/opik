@@ -189,8 +189,12 @@ class Experiment:
         1000-item and 4MB-per-request limits, and sent with automatic retry on rate
         limiting (HTTP 429).
 
-        If a batch fails, the exception propagates and the remaining batches are
-        not sent, leaving the experiment partially populated. Rate-limit retries
+        If a batch fails the exception propagates and the experiment is left
+        partially populated, but what "remaining" means depends on the worker
+        count. With ``num_threads=1`` nothing after the failed batch is sent.
+        With the parallel default, batches already in flight are left to finish
+        and only those not yet started are dropped, so a few batches after the
+        failed one may still have landed. Rate-limit retries
         re-send the identical payload, so they never duplicate anything. Calling
         this method again, however, mints new ids for any trace or span left
         without one, which would duplicate whatever the first call did manage to

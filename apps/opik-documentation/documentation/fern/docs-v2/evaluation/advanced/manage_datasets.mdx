@@ -480,10 +480,10 @@ customer-scale datasets — you should not need to pass `num_threads` at all:
 | Operation | Call | Default |
 | --- | --- | --- |
 | Dataset read | `dataset.get_items()`, `dataset.stream_items()` | 8 |
-| Dataset write | `dataset.insert()` (and `insert_from_json`, `insert_from_pandas`, `read_jsonl_from_file`, `update`) | 8 |
+| Dataset write | `dataset.insert()` | 8 |
 | Experiment write | `experiment.batch_upload_items()` | 8 |
 
-Each call takes a `num_threads` argument if you do want to change it:
+Each of those takes a `num_threads` argument if you do want to change it:
 
 ```python title="Python" language="python"
 items = dataset.get_items(num_threads=4)       # read more gently
@@ -505,9 +505,24 @@ batches arrive in order.
 <Note>
   `num_threads` must be a positive integer. Dataset reads and experiment uploads cap it at 32, since
   the SDK's HTTP client pools a limited number of connections and extra threads would queue behind it
-  rather than speed anything up. Thread count never changes the result of an operation, only how fast
-  it arrives.
+  rather than speed anything up. Thread count never changes the result of an operation that succeeds,
+  only how fast it arrives. It does change what a *failure* leaves behind — see below.
 </Note>
+
+<Note>
+  `update()`, `insert_from_json()`, `insert_from_pandas()` and `read_jsonl_from_file()` all upload
+  through `insert()`, so they get the same 8-thread default — but they do not take a `num_threads`
+  argument of their own, and passing one raises `TypeError`. Convert to items and call `insert()`
+  directly when you need to tune one of those uploads.
+</Note>
+
+<Warning>
+  On a failed upload, the worker count decides what was already written. With `num_threads=1`
+  nothing after the failed batch is sent. In parallel, batches already in flight are left to
+  finish and only those not yet started are dropped, so batches *after* the failed one may still
+  have landed. Neither case rolls back what already succeeded. Use `num_threads=1` when you need a
+  failure to stop at a predictable point.
+</Warning>
 
 <Warning>
   Parallel dataset upload also requires an Opik backend of 2.2.8 or newer. Against an older backend
