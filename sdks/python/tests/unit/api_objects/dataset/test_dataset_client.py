@@ -575,9 +575,11 @@ def test_insert__sequential__uploads_sequentially_without_probing_version(monkey
     mock_rest_client.version.assert_not_called()
 
 
-# 4 batches, which is the default worker count — so all of them fit in flight
-# together and the barrier can prove the default really uses the pool.
-_DEFAULT_THREADS_ITEM_COUNT = _GATE_BATCH_SIZE * 4
+# One batch per default worker, so all of them fit in flight together and the
+# barrier can prove the default really uses the pool.
+_DEFAULT_THREADS_ITEM_COUNT = (
+    _GATE_BATCH_SIZE * constants.DATASET_ITEMS_WRITE_NUM_THREADS
+)
 
 
 def test_insert__num_threads_not_given__uploads_concurrently_by_default(monkeypatch):

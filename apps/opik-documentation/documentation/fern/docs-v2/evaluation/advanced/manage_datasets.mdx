@@ -300,9 +300,9 @@ deduplication disabled, inserting the same content twice produces two separate d
 <Note>
   When using the SDK to insert items, a new dataset version is automatically created.
   If you insert items in multiple batches within a single `insert()` call, they are grouped into one version.
-  The Python SDK uploads those batches on 4 worker threads by default; use `num_threads=1` to upload them
-  sequentially instead. Parallel upload requires a recent Opik backend — against older ones the SDK falls back
-  to a sequential upload and logs a warning.
+  The Python SDK uploads those batches on 8 worker threads by default; use `num_threads=1` to upload them
+  sequentially instead. See [Tuning SDK throughput](#tuning-sdk-throughput). Parallel upload requires a recent
+  Opik backend — against older ones the SDK falls back to a sequential upload and logs a warning.
 </Note>
 
 Once the items have been inserted, you can view them in the Opik UI:
@@ -417,8 +417,8 @@ You can download a dataset from Opik using the `get_dataset` method:
 
 ### Downloading large datasets faster
 
-Dataset items are fetched a page at a time, and those pages are downloaded concurrently. Raise
-`num_threads` to speed up a large read — the default is 4:
+Dataset items are fetched a page at a time, and those pages are downloaded concurrently. The default is
+8 threads; pass `num_threads` to read with more or fewer (see [Tuning SDK throughput](#tuning-sdk-throughput)):
 
 ```python title="Python" language="python"
 from opik import Opik
@@ -426,8 +426,8 @@ from opik import Opik
 client = Opik()
 dataset = client.get_dataset(name="My dataset")
 
-# The whole dataset as one list, downloaded over 8 threads
-items = dataset.get_items(num_threads=8)
+# The whole dataset as one list, downloaded over 16 threads
+items = dataset.get_items(num_threads=16)
 ```
 
 The thread count never changes the result, only how quickly it arrives.
@@ -445,7 +445,7 @@ client = Opik()
 dataset = client.get_dataset(name="My dataset")
 
 # One chunk at a time, instead of the whole dataset at once
-for chunk in dataset.stream_items(chunk_size=5000, num_threads=8):
+for chunk in dataset.stream_items(chunk_size=5000):
     process(chunk)  # a list of dicts, exactly as get_items() returns them
 ```
 
@@ -454,7 +454,6 @@ accept the same `filter_string`, and `nb_samples` to read only the first N items
 
 ```python title="Python" language="python"
 for chunk in dataset.stream_items(
-    num_threads=8,
     filter_string='data.category = "geography"',
     nb_samples=10_000,
 ):
@@ -471,6 +470,49 @@ or a negative value raises `ValueError` rather than being treated as a limit.
   lower it only when individual items are large, since up to `2 * num_threads` chunks are held in
   memory at once.
 </Note>
+
+## Tuning SDK throughput
+
+The Python SDK moves dataset and experiment items on a pool of worker threads. Every one of these
+paths defaults to **8 threads**, which is what we benchmark against and what we recommend for
+customer-scale datasets — you should not need to pass `num_threads` at all:
+
+| Operation | Call | Default |
+| --- | --- | --- |
+| Dataset read | `dataset.get_items()`, `dataset.stream_items()` | 8 |
+| Dataset write | `dataset.insert()` (and `insert_from_json`, `insert_from_pandas`, `read_jsonl_from_file`, `update`) | 8 |
+| Experiment write | `experiment.batch_upload_items()` | 8 |
+
+Each call takes a `num_threads` argument if you do want to change it:
+
+```python title="Python" language="python"
+items = dataset.get_items(num_threads=4)       # read more gently
+dataset.insert(items, num_threads=16)          # more concurrency, if the client has CPU headroom
+experiment.batch_upload_items(records, num_threads=1)  # upload sequentially
+```
+
+**Raise it** when the client is idle waiting on the network — a big upload over a high-latency link
+is the usual case. Do not expect much: on a 119,903-item upload we measured 16 threads running
+slightly *slower* than 8, because the SDK saturates a CPU core serializing and compressing payloads
+long before thread count becomes the limit. Past 8, extra workers mostly add scheduling overhead.
+
+**Lower it** when you are sharing a rate limit with other jobs, when the client machine is small, or
+when individual items are large enough that memory matters — both directions keep up to
+`2 * num_threads` payloads in flight, chunks on a read and request bodies on a write.
+`num_threads=1` makes the operation fully sequential, which is the only setting that guarantees
+batches arrive in order.
+
+<Note>
+  `num_threads` must be a positive integer. Dataset reads and experiment uploads cap it at 32, since
+  the SDK's HTTP client pools a limited number of connections and extra threads would queue behind it
+  rather than speed anything up. Thread count never changes the result of an operation, only how fast
+  it arrives.
+</Note>
+
+<Warning>
+  Parallel dataset upload also requires an Opik backend of 2.2.8 or newer. Against an older backend
+  the SDK falls back to a sequential upload and logs a warning, whatever `num_threads` you pass.
+</Warning>
 
 ## Filtering datasets programmatically
 

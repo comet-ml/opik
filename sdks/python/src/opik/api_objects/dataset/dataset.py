@@ -997,7 +997,7 @@ class Dataset(DatasetExportOperations):
     def insert(
         self,
         items: Iterable[Dict[str, Any]],
-        num_threads: int = 4,
+        num_threads: int = constants.DATASET_ITEMS_WRITE_NUM_THREADS,
         deduplication: bool = True,
     ) -> None:
         """
@@ -1022,8 +1022,9 @@ class Dataset(DatasetExportOperations):
                 on large datasets. The next insert that does deduplicate has to
                 re-read the dataset's items to account for what was skipped.
             num_threads: Number of worker threads used to upload the item
-                batches. Must be a positive integer, defaults to ``4``; pass
-                ``1`` to upload sequentially. All batches land in a single
+                batches. Must be a positive integer, defaults to ``8``; pass
+                ``1`` to upload sequentially, or a higher number to push a
+                large upload harder. All batches land in a single
                 dataset version. If a batch fails the call raises, and the
                 batches that already succeeded stay persisted. Older Opik
                 backends do not support parallel upload and fall back to a
