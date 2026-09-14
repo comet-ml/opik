@@ -1,4 +1,4 @@
-export { test, expect } from './weekly-metric-spans.fixture';
+export { test, expect } from './bulk-uploaded-experiments.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -150,4 +150,13 @@ export type {
   WeeklyMetricSpansRef,
   WeeklyMetricSpansFixtures,
 } from './weekly-metric-spans.fixture';
+export type {
+  BulkUploadArmRef,
+  BulkUploadedExperimentsRef,
+  BulkUploadedExperimentsFixtures,
+} from './bulk-uploaded-experiments.fixture';
+export {
+  BULK_SCORE_NAME,
+  BULK_EXPECTED_MEAN_SCORE,
+} from './bulk-uploaded-experiments.fixture';
 export type { ProjectRef } from '../core/backend';

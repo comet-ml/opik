@@ -199,6 +199,36 @@ export interface PythonSdkClient {
       }>;
     }>;
   }>;
+  /**
+   * One `Experiment.batch_upload_items(...)` over every item of an existing
+   * dataset — the SDK entry point a caller uses to upload results computed
+   * outside `evaluate()`.
+   *
+   * The records are generated bridge-side from `filler_bytes` and `score_name`
+   * rather than sent from here: the scenario needs a payload that splits into
+   * more batches than there are workers, which is tens of megabytes.
+   *
+   * Omit `num_threads` to exercise the SDK's own default. `batch_count` and
+   * `num_threads` come back as the SDK's own account of how it split the work,
+   * so a caller can tell a real fan-out from a single batch that never used the
+   * pool; both are null if that account could not be read.
+   */
+  bulkUploadExperimentItems(args: {
+    project_name: string;
+    dataset_name: string;
+    experiment_name: string;
+    score_name: string;
+    filler_bytes?: number;
+    num_threads?: number;
+    workspace?: string;
+  }): Promise<{
+    experiment_id: string;
+    experiment_name: string;
+    record_count: number;
+    batch_count: number | null;
+    num_threads: number | null;
+    items: Array<{ dataset_item_id: string; score: number }>;
+  }>;
   createTextPrompt(args: {
     name: string;
     prompt: string;
@@ -472,6 +502,20 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
           }>;
         }>;
       }>('POST', '/experiments/compare-seed', args);
+    },
+    async bulkUploadExperimentItems(args) {
+      // Builds and uploads tens of megabytes of records inside one request, so
+      // the default budget does not cover it. Aborting client-side would leave a
+      // half-populated experiment behind — exactly the state the assertions are
+      // meant to be able to rule out.
+      return request<{
+        experiment_id: string;
+        experiment_name: string;
+        record_count: number;
+        batch_count: number | null;
+        num_threads: number | null;
+        items: Array<{ dataset_item_id: string; score: number }>;
+      }>('POST', '/experiments/bulk-upload', args, { timeoutMs: 300_000 });
     },
     async createTextPrompt(args) {
       return request<{ id: string; name: string }>('POST', '/prompts/text', args);
