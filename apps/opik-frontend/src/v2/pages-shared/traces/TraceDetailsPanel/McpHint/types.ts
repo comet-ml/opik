@@ -56,10 +56,26 @@ export type McpInstallRoute = McpRouteOutcome & {
   clipboard?: string;
 };
 
+/** Reported on the funnel events so trace-level and span-level failures stay separable. */
+export type McpHintEntityType = "trace" | "span";
+
+/** The failure the hint is about. One value because these always travel together. */
+export type McpHintTarget = {
+  traceId: string;
+  projectId: string;
+  entityType: McpHintEntityType;
+};
+
+/** Everything a prompt may need; each builder takes the same shape and uses what it needs. */
+export type McpPromptContext = {
+  traceId: string;
+  projectName: string;
+  workspaceName: string;
+  serverUrl: string;
+};
+
 export type McpInstallRoutesProps = {
   /** Called with the outcome of the route the user took, so the popover can confirm it. */
   onRouteUsed: (outcome: McpRouteOutcome) => void;
-  /** The failure the prompt route hands to the agent. */
-  traceId: string;
-  projectId: string;
+  target: McpHintTarget;
 };

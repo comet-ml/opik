@@ -4,15 +4,13 @@ import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import McpHintButton from "./McpHintButton";
 import useDelayedReveal from "./useDelayedReveal";
 import useMcpInstallMode from "./useMcpInstallMode";
-import { McpHintEntityType } from "./constants";
+import { McpHintTarget } from "./types";
 
 type McpHintRailProps = {
   isErrorExpanded: boolean;
   /** Identifies the failure the hint is about: a new one has to earn its own reveal. */
   subject: string;
-  entityType: McpHintEntityType;
-  traceId: string;
-  projectId: string;
+  target: McpHintTarget;
 };
 
 /**
@@ -27,9 +25,7 @@ type McpHintRailProps = {
 const McpHintRail: React.FunctionComponent<McpHintRailProps> = ({
   isErrorExpanded,
   subject,
-  entityType,
-  traceId,
-  projectId,
+  target,
 }) => {
   const isRevealed = useDelayedReveal({ active: isErrorExpanded, subject });
   const installMode = useMcpInstallMode();
@@ -46,16 +42,16 @@ const McpHintRail: React.FunctionComponent<McpHintRailProps> = ({
 
     hasTrackedImpressionRef.current = true;
     trackEvent(OpikEvent.MCP_BUTTON_SHOWN, {
-      entity_type: entityType,
+      entity_type: target.entityType,
       install_mode: installMode,
     });
-  }, [isRevealed, entityType, installMode]);
+  }, [isRevealed, target.entityType, installMode]);
 
   if (!isRevealed) return null;
 
   return (
     <div className="pointer-events-none absolute right-4 top-4 z-10 flex justify-end motion-safe:animate-in motion-safe:fade-in">
-      <McpHintButton traceId={traceId} projectId={projectId} />
+      <McpHintButton target={target} />
     </div>
   );
 };

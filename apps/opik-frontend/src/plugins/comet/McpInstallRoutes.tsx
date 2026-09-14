@@ -1,16 +1,12 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useMemo } from "react";
 
 import claudeCodeLogo from "/images/integrations/claude_code.svg";
 import codexLogo from "/images/integrations/codex.svg";
 import cursorLogo from "/images/integrations/cursor.svg";
 import vscodeLogo from "/images/integrations/vscode.svg";
 
-import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
-import McpRouteTile from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/McpRouteTile";
-import McpPromptTile from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/McpPromptTile";
-import useMcpPromptContext from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/useMcpPromptContext";
+import InstallRoutesLayout from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/InstallRoutesLayout";
 import { buildHostedInstallPrompt } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/prompt";
-import useMcpInstallMode from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/useMcpInstallMode";
 import {
   getMcpServerUrl,
   MCP_SERVER_NAME,
@@ -54,24 +50,9 @@ const claudeCodeDeeplink = (url: string) =>
 
 const NOTHING_OPENED = "Nothing opened? Run this instead.";
 
-const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = ({
-  onRouteUsed,
-  traceId,
-  projectId,
-}) => {
-  const installMode = useMcpInstallMode();
-  const { projectName } = useMcpPromptContext(projectId);
-
-  const prompt = useMemo(
-    () =>
-      buildHostedInstallPrompt({
-        traceId,
-        projectName,
-        serverUrl: getMcpServerUrl(),
-      }),
-    [traceId, projectName],
-  );
-
+const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
+  props,
+) => {
   const routes = useMemo<McpInstallRoute[]>(() => {
     const url = getMcpServerUrl();
 
@@ -125,31 +106,12 @@ const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = ({
     ];
   }, []);
 
-  const handleUse = useCallback(
-    (route: McpInstallRoute) => {
-      trackEvent(OpikEvent.MCP_CONNECT_CLICKED, {
-        client: route.client,
-        method: route.method,
-        install_mode: installMode,
-      });
-      onRouteUsed(route);
-    },
-    [installMode, onRouteUsed],
-  );
-
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap gap-1.5">
-        {routes.map((route) => (
-          <McpRouteTile key={route.client} route={route} onUse={handleUse} />
-        ))}
-      </div>
-      <McpPromptTile
-        prompt={prompt}
-        installMode={installMode}
-        onUsed={onRouteUsed}
-      />
-    </div>
+    <InstallRoutesLayout
+      {...props}
+      routes={routes}
+      buildPrompt={buildHostedInstallPrompt}
+    />
   );
 };
 

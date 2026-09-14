@@ -7,14 +7,16 @@ import React, {
 
 import { cn } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
-import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "@/ui/popover";
 import McpHintPopover from "./McpHintPopover";
 import useHoverGrace from "./useHoverGrace";
 import useMcpInstallMode from "./useMcpInstallMode";
 import { MCP_HINT_LABEL } from "./constants";
+import { McpHintTarget } from "./types";
 
 // Keep clicks inside the popover from reaching the traceback underneath it.
-const stop = (event: SyntheticEvent) => event.stopPropagation();
+const stopPointerPropagation = (event: SyntheticEvent) =>
+  event.stopPropagation();
 
 // The Ollie pill, same palette as the Explain affordance and the MCP
 // announcement banner: amber into orange, with the Ollie shadow.
@@ -27,13 +29,11 @@ const PILL_CLASS = cn(
 );
 
 type McpHintButtonProps = {
-  traceId: string;
-  projectId: string;
+  target: McpHintTarget;
 };
 
 const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
-  traceId,
-  projectId,
+  target,
 }) => {
   const { isOpen, open, closeNow, closeAfterGrace } = useHoverGrace();
   const installMode = useMcpInstallMode();
@@ -59,24 +59,28 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
 
     if (isOpen) {
       hasActedRef.current = false;
-      trackEvent(OpikEvent.MCP_POPOVER_OPENED, { install_mode: installMode });
+      trackEvent(OpikEvent.MCP_POPOVER_OPENED, {
+        install_mode: installMode,
+        entity_type: target.entityType,
+      });
       return;
     }
     if (!hasActedRef.current) {
-      trackEvent(OpikEvent.MCP_POPOVER_CLOSED, { install_mode: installMode });
+      trackEvent(OpikEvent.MCP_POPOVER_CLOSED, {
+        install_mode: installMode,
+        entity_type: target.entityType,
+      });
     }
-  }, [isOpen, installMode]);
+  }, [isOpen, installMode, target.entityType]);
 
-  const handleOpenChange = useCallback(
+  // Only ever a dismissal: Escape, or a pointer outside. Opening is ours.
+  const handleDismiss = useCallback(
     (nextIsOpen: boolean) => {
-      if (nextIsOpen) {
-        open();
-        return;
-      }
+      if (nextIsOpen) return;
       ignoreNextFocusRef.current = true;
       closeNow();
     },
-    [open, closeNow],
+    [closeNow],
   );
 
   const handleFocus = useCallback(() => {
@@ -89,12 +93,20 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
   }, []);
 
   return (
-    <Popover open={isOpen} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
+    <Popover open={isOpen} onOpenChange={handleDismiss}>
+      {/* An anchor rather than a trigger. Radix's trigger *toggles*, and with
+          hover already having opened the popover a mouse click would arrive to
+          find it open and close it — so clicking the pill would dismiss the
+          thing it is supposed to summon. Opening stays ours; Radix keeps
+          Escape and outside-pointer dismissal. */}
+      <PopoverAnchor asChild>
         <button
           type="button"
           className={PILL_CLASS}
           data-testid="mcp-hint-button"
+          aria-haspopup="dialog"
+          aria-expanded={isOpen}
+          onClick={open}
           onPointerEnter={open}
           onPointerLeave={closeAfterGrace}
           onFocus={handleFocus}
@@ -107,7 +119,7 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
             {MCP_HINT_LABEL}
           </span>
         </button>
-      </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent
         side="bottom"
         align="end"
@@ -121,14 +133,10 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
         onOpenAutoFocus={(event) => event.preventDefault()}
         onPointerEnter={open}
         onPointerLeave={closeAfterGrace}
-        onClick={stop}
-        onPointerDown={stop}
+        onClick={stopPointerPropagation}
+        onPointerDown={stopPointerPropagation}
       >
-        <McpHintPopover
-          onAction={markAction}
-          traceId={traceId}
-          projectId={projectId}
-        />
+        <McpHintPopover onAction={markAction} target={target} />
       </PopoverContent>
     </Popover>
   );

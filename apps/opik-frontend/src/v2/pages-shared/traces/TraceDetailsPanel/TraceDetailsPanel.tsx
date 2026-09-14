@@ -50,7 +50,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { useVisibleSpans } from "@/v2/pages-shared/traces/hiddenSpans";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import McpHintRail from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/McpHintRail";
-import { McpHintEntityType } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/constants";
+import { McpHintTarget } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/types";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
 const EMPTY_FILTERS: unknown[] = [];
@@ -223,7 +223,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   // The failure the hint is about. A different span or trace is a different
   // failure, so the hint has to earn its reveal again.
   const mcpHintSubject = `${traceId}:${spanId}`;
-  const mcpHintEntityType: McpHintEntityType = spanId ? "span" : "trace";
+  const mcpHintTarget = useMemo<McpHintTarget>(
+    () => ({ traceId, projectId, entityType: spanId ? "span" : "trace" }),
+    [traceId, projectId, spanId],
+  );
 
   const handleErrorExpandedChange = useCallback(
     (expanded: boolean) => {
@@ -233,11 +236,11 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       // must not count surfaces where the hint never appears.
       if (expanded) {
         trackEvent(OpikEvent.TRACE_ERROR_EXPANDED, {
-          entity_type: mcpHintEntityType,
+          entity_type: mcpHintTarget.entityType,
         });
       }
     },
-    [mcpHintEntityType],
+    [mcpHintTarget.entityType],
   );
 
   const spanCount = spansData?.content?.length ?? 0;
@@ -420,9 +423,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                   <McpHintRail
                     isErrorExpanded={isErrorExpanded}
                     subject={mcpHintSubject}
-                    entityType={mcpHintEntityType}
-                    traceId={traceId}
-                    projectId={projectId}
+                    target={mcpHintTarget}
                   />
                 )}
               </div>

@@ -274,7 +274,7 @@ areas:
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: true,  tier: t2-cuj, note: "the Spans toggle and paging the table it renders: 130 seeded spans read back as an exact set through offset paging, through the /spans/search cursor and through the rendered table, plus a span whose UUIDv7 id embeds mid-2200 used as the cursor. Also the four KPI cards above the Spans table — count, error rate, avg duration and total cost — and their period-over-period deltas, asserted against the kpi-cards read for both periods" }
       filter-traces:          { covered: true,  tier: t2-cuj }
-      mcp-hint-install:       { covered: true,  tier: t2-cuj, note: "the MCP hint offered on an expanded trace error: hidden while the error is collapsed, revealed a beat after it is opened, kept when the error is collapsed again, and the popover that explains Opik MCP and links to its docs" }
+      mcp-hint-install:       { covered: false, note: "spec written (trace-explore/mcp-hint.spec.ts) but never run green — the SDK bridge could not seed traces on the machine it was written on. Flip to covered: true once it passes." }
       configure-columns:      { covered: false }
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }

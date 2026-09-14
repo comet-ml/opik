@@ -104,16 +104,31 @@ describe("useDelayedReveal", () => {
     expect(result.current).toBe(false);
   });
 
-  it("re-earns the reveal on the new subject while still active", () => {
+  // Staying active across a change of subject is not a fresh ask — the user
+  // expanded the *previous* failure and simply never closed it. Re-revealing
+  // here would also put an impression on the funnel with no expansion in front
+  // of it.
+  it("does not re-earn the reveal on a new subject it was merely left active for", () => {
     const { result, rerender } = reveal(true);
 
     advance(MCP_HINT_REVEAL_DELAY_MS);
     rerender({ active: true, subject: "span-2" });
 
-    advance(MCP_HINT_REVEAL_DELAY_MS - 1);
-    expect(result.current).toBe(false);
+    advance(MCP_HINT_REVEAL_DELAY_MS * 10);
 
-    advance(1);
+    expect(result.current).toBe(false);
+  });
+
+  it("reveals on the new subject once the user asks again there", () => {
+    const { result, rerender } = reveal(true);
+
+    advance(MCP_HINT_REVEAL_DELAY_MS);
+    rerender({ active: true, subject: "span-2" });
+    rerender({ active: false, subject: "span-2" });
+    rerender({ active: true, subject: "span-2" });
+
+    advance(MCP_HINT_REVEAL_DELAY_MS);
+
     expect(result.current).toBe(true);
   });
 

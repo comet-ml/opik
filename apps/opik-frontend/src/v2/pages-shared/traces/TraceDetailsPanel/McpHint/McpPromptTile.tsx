@@ -2,12 +2,15 @@ import React from "react";
 import { Copy, Sparkles } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { cn } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
-import { McpInstallMode, McpRouteOutcome } from "./types";
+import { McpHintEntityType, McpInstallMode, McpRouteOutcome } from "./types";
+import { MCP_TILE_CLASS } from "./tileStyles";
 
 type McpPromptTileProps = {
   prompt: string;
   installMode: McpInstallMode;
+  entityType: McpHintEntityType;
   onUsed: (outcome: McpRouteOutcome) => void;
 };
 
@@ -23,14 +26,18 @@ type McpPromptTileProps = {
 const McpPromptTile: React.FunctionComponent<McpPromptTileProps> = ({
   prompt,
   installMode,
+  entityType,
   onUsed,
 }) => {
-  const handleClick = () => {
+  const handlePromptCopy = () => {
     navigator.clipboard.writeText(prompt);
     // Its own event, and deliberately not `mcp_connect_clicked`: counting it as
     // both would double-count the funnel's "chose a route" step. Whoever builds
     // the funnel needs the union of the two.
-    trackEvent(OpikEvent.MCP_PROMPT_COPIED, { install_mode: installMode });
+    trackEvent(OpikEvent.MCP_PROMPT_COPIED, {
+      install_mode: installMode,
+      entity_type: entityType,
+    });
     onUsed({
       confirmation: "Copied — paste it into your coding agent",
       note: "It will set up the server, then debug this trace for you.",
@@ -44,9 +51,9 @@ const McpPromptTile: React.FunctionComponent<McpPromptTileProps> = ({
     >
       <button
         type="button"
-        onClick={handleClick}
+        onClick={handlePromptCopy}
         data-testid="mcp-route-prompt"
-        className="flex h-6 w-full items-center gap-1.5 rounded border border-border bg-background px-2 font-mono text-xs text-foreground transition-colors hover:bg-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(MCP_TILE_CLASS, "w-full")}
       >
         <Sparkles className="size-3 shrink-0 text-[var(--color-ollie)]" />
         <span className="flex-1 whitespace-nowrap text-left">Prompt</span>

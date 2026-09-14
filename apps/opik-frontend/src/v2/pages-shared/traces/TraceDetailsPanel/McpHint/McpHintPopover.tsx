@@ -5,7 +5,7 @@ import { buildDocsUrl } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import InstallRoutes from "./InstallRoutes";
 import McpRouteConfirmation from "./McpRouteConfirmation";
-import { McpRouteOutcome } from "./types";
+import { McpHintTarget, McpRouteOutcome } from "./types";
 import {
   MCP_HINT_DESCRIPTION,
   MCP_HINT_DOCS_PATH,
@@ -15,14 +15,12 @@ import {
 type McpHintPopoverProps = {
   /** Called when the user leaves through the popover rather than abandoning it. */
   onAction: () => void;
-  traceId: string;
-  projectId: string;
+  target: McpHintTarget;
 };
 
 const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   onAction,
-  traceId,
-  projectId,
+  target,
 }) => {
   // Unmounted with the popover, so closing it is what resets the view — a user
   // who comes back always lands on the routes rather than on a stale receipt.
@@ -62,11 +60,7 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
               {MCP_HINT_DESCRIPTION}
             </p>
 
-            <InstallRoutes
-              onRouteUsed={handleRouteUsed}
-              traceId={traceId}
-              projectId={projectId}
-            />
+            <InstallRoutes onRouteUsed={handleRouteUsed} target={target} />
 
             <a
               href={buildDocsUrl(MCP_HINT_DOCS_PATH)}

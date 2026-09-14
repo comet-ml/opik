@@ -15,6 +15,3 @@ export const MCP_HINT_TITLE = "Opik MCP";
 
 export const MCP_HINT_DESCRIPTION =
   "Instead of writing a script for each question, your agent reads Opik directly — and can fix the code in the same step.";
-
-/** Reported on the funnel events so trace-level and span-level failures stay separable. */
-export type McpHintEntityType = "trace" | "span";
