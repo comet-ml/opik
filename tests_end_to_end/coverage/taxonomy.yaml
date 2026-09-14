@@ -606,7 +606,7 @@ areas:
       - experiments/experiments-smoke.spec.ts
     capabilities:
       list-experiments:        { covered: true,  tier: t1-smoke }
-      per-item-scores:         { covered: true,  tier: t1-smoke }
+      per-item-scores:         { covered: true,  tier: t1-smoke, note: "t2 additionally covers Experiment.batch_upload_items at its default worker count: 1200 items over more batches than the pool has workers land exactly once, per-item scores render on the detail page, and the aggregate is the seeded mean" }
       compare-side-by-side:    { covered: true,  tier: t2-cuj }
       compare-sort-search:     { covered: true,  tier: t2-cuj }
       compare-feedback-tab:    { covered: true,  tier: t2-cuj }

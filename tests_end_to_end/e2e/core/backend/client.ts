@@ -142,6 +142,28 @@ export interface ExperimentRefDetail {
   datasetId: string | null;
 }
 
+/** One row of `POST /v1/private/experiments/items/stream`. */
+export interface ExperimentItemRef {
+  id: string;
+  experimentId: string;
+  datasetItemId: string;
+  traceId: string;
+}
+
+/** The counters the experiments list and detail header read off an experiment. */
+export interface ExperimentSummaryRef {
+  id: string;
+  name: string;
+  /**
+   * `null`, never `0`, when the backend omits the field: an experiment whose
+   * traces have not been aggregated yet answers without it, and zeroing that
+   * would read as "the upload landed nothing".
+   */
+  traceCount: number | null;
+  /** Mean feedback score per metric name, as the aggregate chip renders it. */
+  feedbackScores: Record<string, number>;
+}
+
 export interface TestSuiteRef {
   id: string;
   name: string;
@@ -1959,6 +1981,111 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       } catch (err) {
         if (isNotFoundError(err)) return;
         throw err;
+      }
+    },
+
+    /**
+     * The counters an experiment reports about itself — `trace_count` and the
+     * mean of each feedback score — as the experiments list and the detail
+     * header render them.
+     */
+    async getExperimentSummary(id: string): Promise<ExperimentSummaryRef> {
+      const experiment = await opik.api.experiments.getExperimentById(id);
+      return {
+        id: String(experiment.id),
+        name: experiment.name ?? '',
+        traceCount: experiment.traceCount ?? null,
+        feedbackScores: Object.fromEntries(
+          (experiment.feedbackScores ?? []).map((s) => [s.name, Number(s.value)]),
+        ),
+      };
+    },
+
+    /**
+     * Every item of an experiment, drained through
+     * `POST /v1/private/experiments/items/stream` — the read that says which
+     * dataset items an upload actually linked, and to which traces.
+     *
+     * Written by hand rather than through `rawFetch` for the same reason as
+     * `searchSpanIds`: the endpoint answers `application/octet-stream`, one JSON
+     * object per line, which `rawFetch` would try to parse as a single document.
+     *
+     * Cursor-drained rather than read in one shot. `limit` is capped at 2000
+     * server-side (`ExperimentItemStreamRequest`), so a one-page read of a
+     * larger experiment would silently return a prefix — which is
+     * indistinguishable from an upload that dropped the rest, and is exactly the
+     * failure a caller comes here to rule out. The stream orders by `id DESC`
+     * and pages on `id < last_retrieved_id`, so the last id of a page is the
+     * cursor for the next.
+     *
+     * A line carrying no `id` is the stream's mid-flight error object and is
+     * thrown; skipping it would turn a truncated answer into a short result.
+     */
+    async listExperimentItems(args: {
+      experimentName: string;
+      projectName?: string;
+      pageSize?: number;
+    }): Promise<ExperimentItemRef[]> {
+      const pageSize = args.pageSize ?? 2000;
+      const headers: Record<string, string> = {
+        Accept: 'application/octet-stream',
+        'Content-Type': 'application/json',
+        'Comet-Workspace': env.workspace,
+      };
+      const key = apiKey ?? env.apiKey;
+      if (key) headers['Authorization'] = key;
+
+      const items: ExperimentItemRef[] = [];
+      let lastRetrievedId: string | undefined;
+
+      for (;;) {
+        const text = await withRateLimitRetry(async () => {
+          const res = await fetch(`${env.apiBaseUrl}/v1/private/experiments/items/stream`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              experiment_name: args.experimentName,
+              limit: pageSize,
+              truncate: true,
+              ...(args.projectName ? { project_name: args.projectName } : {}),
+              ...(lastRetrievedId ? { last_retrieved_id: lastRetrievedId } : {}),
+            }),
+          });
+          const body = await res.text();
+          if (!res.ok) {
+            throw new Error(
+              `POST /v1/private/experiments/items/stream -> ${res.status}: ${body.slice(0, 300)}`,
+            );
+          }
+          return body;
+        });
+
+        const page: ExperimentItemRef[] = [];
+        for (const line of text.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          const parsed = JSON.parse(trimmed) as {
+            id?: unknown;
+            experiment_id?: unknown;
+            dataset_item_id?: unknown;
+            trace_id?: unknown;
+          };
+          if (typeof parsed.id !== 'string') {
+            throw new Error(
+              `POST /v1/private/experiments/items/stream streamed a non-item line: ${trimmed.slice(0, 300)}`,
+            );
+          }
+          page.push({
+            id: parsed.id,
+            experimentId: String(parsed.experiment_id ?? ''),
+            datasetItemId: String(parsed.dataset_item_id ?? ''),
+            traceId: String(parsed.trace_id ?? ''),
+          });
+        }
+
+        items.push(...page);
+        if (page.length < pageSize) return items;
+        lastRetrievedId = page[page.length - 1].id;
       }
     },
 

@@ -359,6 +359,64 @@ class ExperimentCompareSeedResponse(BaseModel):
     experiments: list[CompareExperimentResult]
 
 
+class ExperimentBulkUploadRequest(BaseModel):
+    """One `Experiment.batch_upload_items(...)` over every item of a dataset.
+
+    The records are built here rather than sent over the bridge: the scenario
+    needs a payload big enough to split into more batches than there are worker
+    threads, and shipping tens of megabytes of filler through this route to
+    describe something a formula generates is cost with no assertion behind it.
+
+    `num_threads` is deliberately optional and NOT restated with the SDK's own
+    default: omitting it is what makes the call exercise the default the SDK
+    ships, which is the thing under test.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str
+    # Resolved within project_name, the same scope as /datasets/insert-items:
+    # same-named datasets can exist across projects. The experiment is created
+    # in the same project, because the bulk endpoint rejects an upload whose
+    # project_name differs from the dataset's own with a 409.
+    dataset_name: str
+    experiment_name: str
+    score_name: str
+    # Filler bytes added to each record's trace input. Batching is driven by the
+    # serialized payload size (EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB) long
+    # before the 1000-item ceiling bites, so this is the knob that decides how
+    # many batches a given item count splits into.
+    filler_bytes: int = 0
+    num_threads: int | None = None
+    workspace: str | None = None
+
+
+class ExperimentBulkUploadItem(BaseModel):
+    dataset_item_id: str
+    score: float
+
+
+class ExperimentBulkUploadResponse(BaseModel):
+    """What the upload sent, and how the SDK chose to send it.
+
+    `batch_count` and `num_threads` are read back from the SDK's own account of
+    the call rather than recomputed here — see `_observe_bulk_upload` in
+    routes/experiments.py. Both are optional because the only honest answer when
+    that account cannot be read is "unknown": a caller asserting on the fan-out
+    must fail loudly rather than be handed a number this route guessed.
+    """
+
+    experiment_id: str
+    experiment_name: str
+    record_count: int
+    batch_count: int | None = None
+    num_threads: int | None = None
+    # One entry per uploaded record, in upload order: the dataset item it was
+    # attached to and the feedback score it carried. This is the map a caller
+    # needs to assert a rendered cell against the value that was sent.
+    items: list[ExperimentBulkUploadItem]
+
+
 class TestSuiteItemSeed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
