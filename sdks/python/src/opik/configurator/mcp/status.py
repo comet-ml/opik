@@ -11,7 +11,9 @@ import pathlib
 from typing import Any, Dict, List, Optional
 
 import opik.config as opik_config
+from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp import targets as mcp_targets
+from opik.configurator.mcp import uv_tool
 
 # The Opik REST base implied by a local (uvx) server block that carries an API
 # key but no URL override — i.e. an Opik Cloud target.
@@ -32,6 +34,11 @@ class HostStatus:
     points_to: Optional[str] = None
     workspace: Optional[str] = None
     in_sync: Optional[bool] = None
+    # Local (uvx) registrations only: whether the recorded command asks for a
+    # version. Without one, an `opik-mcp` installed as a uv tool wins and the
+    # client starts that version forever. ``None`` for a hosted registration,
+    # which runs no local package at all.
+    requests_latest: Optional[bool] = None
 
 
 def collect_host_statuses(config: opik_config.OpikConfig) -> List[HostStatus]:
@@ -78,6 +85,7 @@ def _describe_block(
     env = block.get("env") or {}
     status.transport = TRANSPORT_LOCAL
     status.workspace = env.get("COMET_WORKSPACE")
+    status.requests_latest = _requests_latest(block)
 
     if "OPIK_URL" in env:
         api_url = str(env["OPIK_URL"])
@@ -94,6 +102,63 @@ def _describe_block(
         status.workspace is None or status.workspace == current_workspace
     )
     status.in_sync = _normalize_url(api_url) == current_api_url and workspace_in_sync
+
+
+def _requests_latest(block: Dict[str, Any]) -> bool:
+    """Whether a recorded stdio block asks uv for a version of ``opik-mcp``.
+
+    Reads ``args`` and ``command`` both: most hosts split the executable from its
+    arguments, while opencode records one ``command`` list holding both.
+    """
+    words: List[str] = []
+    for key in ("args", "command"):
+        value = block.get(key)
+        if isinstance(value, list):
+            words.extend(str(item) for item in value)
+    return mcp_spec.PACKAGE_REQUEST in words
+
+
+def uv_tool_install_note(host_statuses: List[HostStatus]) -> Optional[str]:
+    """What to say about an ``opik-mcp`` installed as a uv tool, if anything.
+
+    Only meaningful alongside a local (uvx) registration — a hosted server runs no
+    local package, so an install on the same machine is beside the point.
+
+    The two cases read very differently to the person on the other end, so they
+    are worded differently. A registration with no version request is *currently
+    frozen* on the installed version and has a fix; one that asks for
+    ``@latest`` is fine, and the install is merely shadowing a command they might
+    type themselves. Neither is phrased as an error: a deliberate pin is rare but
+    real, and this is the only signal that distinguishes it from the accident.
+    """
+    installed = uv_tool.installed_version()
+    if installed is None:
+        return None
+
+    local_hosts = [
+        host
+        for host in host_statuses
+        if host.registered and host.transport == TRANSPORT_LOCAL
+    ]
+    if len(local_hosts) == 0:
+        return None
+
+    frozen = [host.display_name for host in local_hosts if not host.requests_latest]
+    if len(frozen) > 0:
+        return (
+            f"opik-mcp {installed} is installed as a uv tool, and "
+            f"{', '.join(frozen)} still launches it as `uvx opik-mcp` with no "
+            f"version — so it starts {installed} every time, whatever has been "
+            f"released since. Re-run `opik mcp configure` to update the "
+            f"registration."
+        )
+
+    return (
+        f"opik-mcp {installed} is installed as a uv tool. Your registrations ask "
+        f"for `{mcp_spec.PACKAGE_REQUEST}`, so the MCP server is unaffected — but "
+        f"that install shadows a bare `uvx opik-mcp` you run yourself. `uv tool "
+        f"upgrade opik-mcp` updates it; `uv tool uninstall opik-mcp` removes it."
+    )
 
 
 def _api_url_from_mcp_url(mcp_url: str) -> str:

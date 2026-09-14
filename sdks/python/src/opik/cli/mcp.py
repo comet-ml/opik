@@ -250,4 +250,6 @@ def status() -> None:
     """
     config = opik_config.OpikConfig()
     host_statuses = mcp_status.collect_host_statuses(config)
-    status_view.render_mcp_status(config, host_statuses)
+    status_view.render_mcp_status(
+        config, host_statuses, tool_note=mcp_status.uv_tool_install_note(host_statuses)
+    )

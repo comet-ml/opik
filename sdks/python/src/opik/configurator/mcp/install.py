@@ -22,6 +22,7 @@ from opik.configurator.mcp import detection as mcp_detection
 from opik.configurator.mcp import env as mcp_env
 from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp import targets as mcp_targets
+from opik.configurator.mcp import uv_tool
 from opik.configurator.mcp import verification as mcp_verification
 from opik.configurator.mcp import view as mcp_view
 
@@ -190,6 +191,11 @@ def setup_mcp_server(
         ]
     )
 
+    if isinstance(server_spec, mcp_spec.StdioServerSpec) and any(
+        result.succeeded for result in results
+    ):
+        _report_uv_tool_install(display)
+
     # One verification per run: it exercises the credentials, which are identical
     # for every host, so running it once and reporting once is enough.
     if any(result.succeeded for result in results):
@@ -213,6 +219,28 @@ def setup_mcp_server(
         for target, result in zip(selected_targets, results)
         if result.succeeded
     ]
+
+
+def _report_uv_tool_install(display: mcp_view.InstallView) -> None:
+    """Tell the user about an ``opik-mcp`` installed as a uv tool, and stop there.
+
+    Older SDKs created these (see ``uv_tool``), and while ``@latest`` means one no
+    longer decides what the MCP server runs, it still shadows a bare ``uvx
+    opik-mcp`` typed by hand. Both remedies are the user's to choose: removing
+    something from their environment without asking is the bug this whole change
+    exists to undo.
+    """
+    installed = uv_tool.installed_version()
+    if installed is None:
+        return
+
+    display.note(
+        f"Note: opik-mcp {installed} is also installed as a uv tool. The server "
+        f"registered here asks for `{mcp_spec.PACKAGE_REQUEST}`, so it is "
+        f"unaffected — but that install still shadows a bare `uvx opik-mcp` you "
+        f"run yourself. `uv tool upgrade opik-mcp` updates it; `uv tool uninstall "
+        f"opik-mcp` removes it so uvx always resolves the published version."
+    )
 
 
 def _deployment_label(
@@ -392,8 +420,17 @@ def _prefetch_opik_mcp() -> None:
     Not ``uv tool install opik-mcp``, which was doing more than warming a cache:
     it builds a persistent tool environment and puts an ``opik-mcp`` shim on the
     user's PATH — an install into their environment that nothing announced, and
-    one that silently keeps an older copy if there already was one. ``uv tool
-    run`` populates the cache that the registered command actually reads.
+    one that silently keeps an older copy if there already was one. Worse, a bare
+    ``uvx opik-mcp`` then resolves to that environment forever rather than to the
+    index, which is how machines configured by SDK 2.0.60–2.2.44 froze on the
+    version current the day they ran it (see ``uv_tool``). ``uv tool run``
+    populates the cache that the registered command actually reads.
+
+    The request here must stay identical to :data:`spec.PACKAGE_REQUEST`, down to
+    the ``@latest`` suffix, because uv caches per resolved requirement: warming
+    ``opik-mcp`` for a client that will run ``opik-mcp@latest`` populates an entry
+    nothing subsequently reads, leaving the first real launch to do the download
+    this function exists to have already done.
 
     Output is captured rather than streamed because the caller runs this inside a
     rich status spinner: both write to the same terminal, and uv's progress bars

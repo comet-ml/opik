@@ -1,4 +1,5 @@
 import json
+import pathlib
 from unittest import mock
 
 from opik.configurator.mcp import status, targets
@@ -154,3 +155,111 @@ def test_collect__not_registered__reports_detection(monkeypatch, tmp_path):
     assert host.detected is False
     assert host.transport is None
     assert host.in_sync is None
+
+
+def _local_block(args):
+    return {
+        "type": "stdio",
+        "command": "/usr/bin/uvx",
+        "args": args,
+        "env": {"OPIK_API_KEY": "key", "COMET_WORKSPACE": "alex"},
+    }
+
+
+def test_collect__local_block_without_version__requests_latest_false(
+    monkeypatch, tmp_path
+):
+    _patch_single_host(monkeypatch, tmp_path, block=_local_block(["opik-mcp"]))
+
+    [host] = status.collect_host_statuses(
+        _config("https://www.comet.com/opik/api/", "alex")
+    )
+
+    assert host.requests_latest is False
+
+
+def test_collect__local_block_with_version__requests_latest_true(monkeypatch, tmp_path):
+    _patch_single_host(monkeypatch, tmp_path, block=_local_block(["opik-mcp@latest"]))
+
+    [host] = status.collect_host_statuses(
+        _config("https://www.comet.com/opik/api/", "alex")
+    )
+
+    assert host.requests_latest is True
+
+
+def test_collect__opencode_command_list__requests_latest_true(monkeypatch, tmp_path):
+    # opencode records the executable and its arguments in one `command` list.
+    block = {"type": "local", "command": ["uvx", "opik-mcp@latest"], "environment": {}}
+    _patch_single_host(monkeypatch, tmp_path, block=block)
+
+    [host] = status.collect_host_statuses(
+        _config("https://www.comet.com/opik/api/", "alex")
+    )
+
+    assert host.requests_latest is True
+
+
+def test_collect__remote_block__requests_latest_is_none(monkeypatch, tmp_path):
+    _patch_single_host(
+        monkeypatch,
+        tmp_path,
+        block={"type": "http", "url": "https://www.comet.com/opik/api/v1/mcp"},
+    )
+
+    [host] = status.collect_host_statuses(
+        _config("https://www.comet.com/opik/api/", "alex")
+    )
+
+    assert host.requests_latest is None
+
+
+def _host_status(transport, requests_latest, registered=True):
+    return status.HostStatus(
+        display_name="Test Host",
+        config_path=pathlib.Path("/tmp/host.json"),
+        detected=True,
+        registered=registered,
+        transport=transport,
+        requests_latest=requests_latest,
+    )
+
+
+def test_uv_tool_note__no_install__is_none(monkeypatch):
+    monkeypatch.setattr(status.uv_tool, "installed_version", lambda: None)
+
+    hosts = [_host_status(status.TRANSPORT_LOCAL, requests_latest=False)]
+
+    assert status.uv_tool_install_note(hosts) is None
+
+
+def test_uv_tool_note__install_but_only_hosted_registrations__is_none(monkeypatch):
+    # A hosted server runs no local package, so an install is beside the point.
+    monkeypatch.setattr(status.uv_tool, "installed_version", lambda: "0.2.12")
+
+    hosts = [_host_status(status.TRANSPORT_HOSTED, requests_latest=None)]
+
+    assert status.uv_tool_install_note(hosts) is None
+
+
+def test_uv_tool_note__frozen_registration__names_host_and_remedy(monkeypatch):
+    monkeypatch.setattr(status.uv_tool, "installed_version", lambda: "0.2.12")
+
+    hosts = [_host_status(status.TRANSPORT_LOCAL, requests_latest=False)]
+    note = status.uv_tool_install_note(hosts)
+
+    assert "0.2.12" in note
+    assert "Test Host" in note
+    assert "opik mcp configure" in note
+
+
+def test_uv_tool_note__registration_asks_for_latest__shadow_wording_only(monkeypatch):
+    monkeypatch.setattr(status.uv_tool, "installed_version", lambda: "0.2.12")
+
+    hosts = [_host_status(status.TRANSPORT_LOCAL, requests_latest=True)]
+    note = status.uv_tool_install_note(hosts)
+
+    assert "unaffected" in note
+    assert "uv tool uninstall opik-mcp" in note
+    # Not the frozen wording: nothing here needs re-configuring.
+    assert "opik mcp configure" not in note

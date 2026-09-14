@@ -7,7 +7,7 @@ functions to be displayed.
 """
 
 import pathlib
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import rich.console
 from rich import padding, table, text
@@ -64,11 +64,15 @@ def render_config_summary(config: opik_config.OpikConfig) -> None:
 
 
 def render_mcp_status(
-    config: opik_config.OpikConfig, host_statuses: List[mcp_status.HostStatus]
+    config: opik_config.OpikConfig,
+    host_statuses: List[mcp_status.HostStatus],
+    tool_note: Optional[str] = None,
 ) -> None:
     """Print the Opik config summary plus each AI client that has the MCP server.
 
-    Assistants without an Opik MCP registration are omitted.
+    Assistants without an Opik MCP registration are omitted. ``tool_note``, when
+    given, is the advisory about an ``opik-mcp`` installed as a uv tool; it is
+    printed last because it describes the machine rather than any one client.
     """
     render_config_summary(config)
     console.print()
@@ -87,6 +91,10 @@ def render_mcp_status(
 
     for host in configured:
         _render_host(host)
+
+    if tool_note:
+        console.print()
+        console.print(text.Text(tool_note, style="yellow"))
 
 
 def _render_host(host: mcp_status.HostStatus) -> None:

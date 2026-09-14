@@ -543,3 +543,46 @@ class TestInstallOutcomeVocabulary:
     def test_no_host_reports_the_mechanism_as_its_outcome(self):
         """The plan block already says "via `claude mcp add`"; the result must not."""
         assert "Registered" not in pathlib.Path(targets.__file__).read_text()
+
+
+def test_install_over_legacy_block__rewrites_args_to_versioned_request(tmp_path):
+    """Re-running configure must migrate machines frozen by the old installer.
+
+    A config written before `@latest` says `args: ["opik-mcp"]`, which resolves to
+    any `opik-mcp` installed as a uv tool rather than to the index. Rewriting the
+    whole block — not merging into it — is what unfreezes those clients.
+    """
+    config_path = tmp_path / "mcp.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "opik-mcp": {
+                        "type": "stdio",
+                        "command": "/old/uvx",
+                        "args": ["opik-mcp"],
+                        "env": {"OPIK_API_KEY": "old-key"},
+                    },
+                    "other-server": {"command": "keep-me"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = targets._install_via_json_file(
+        config_path=config_path,
+        top_level_key="mcpServers",
+        display_name="Test Host",
+        server_block=mcp_spec.StdioServerSpec(
+            command="/usr/bin/uvx",
+            args=[mcp_spec.PACKAGE_REQUEST],
+            env={"OPIK_API_KEY": "new-key"},
+        ).to_block(),
+    )
+
+    written = json.loads(config_path.read_text(encoding="utf-8"))
+    assert written["mcpServers"]["opik-mcp"]["args"] == ["opik-mcp@latest"]
+    assert written["mcpServers"]["other-server"] == {"command": "keep-me"}
+    assert result.succeeded is True
+    assert result.summary == "Updated"

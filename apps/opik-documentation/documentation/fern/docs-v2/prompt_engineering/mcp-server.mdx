@@ -690,12 +690,37 @@ client. Most problems end there.
     - Open a new terminal and run `uvx --version`.
   </Accordion>
   <Accordion title="The first tool call takes a long time, or the client says the server failed to start">
-    With the local server the client runs `uvx opik-mcp`, which downloads the
-    package and a Python runtime on first use. Setup pre-warms that cache, but
+    With the local server the client runs `uvx opik-mcp@latest`, which downloads
+    the package and a Python runtime on first use. Setup pre-warms that cache, but
     gives up after a timeout.
 
     - Let the first call finish once. Later calls start in about a second.
-    - If it fails, run `uvx opik-mcp --help` in a terminal to see the real error.
+    - If it fails, run `uvx opik-mcp@latest --help` in a terminal to see the real
+      error.
+  </Accordion>
+  <Accordion title="The server keeps starting an old version">
+    Opik SDK 2.0.60 through 2.2.44 ran `uv tool install opik-mcp` while setting up
+    the MCP server, which leaves `opik-mcp` permanently installed as a uv tool. A
+    client configured to run `uvx opik-mcp` then starts that installed copy rather
+    than the published one, on every restart.
+
+    - Re-run `uvx opik mcp configure`. It registers `opik-mcp@latest`, which
+      resolves past an installed tool, and reports the leftover install if it finds
+      one. `uvx opik mcp status` reports it too.
+    - To clear the install itself: `uv tool upgrade opik-mcp` to update it, or
+      `uv tool uninstall opik-mcp` to remove it. Opik will not do either for you —
+      it is your environment.
+  </Accordion>
+  <Accordion title="The local server fails to start with no network">
+    `opik-mcp@latest` asks uv to resolve against the package index, so a machine
+    with no route to PyPI and nothing in its uv cache cannot start the local
+    server. A warm cache is enough — a laptop that has run the server before still
+    starts it offline.
+
+    - For an airgapped or firewalled deployment, point uv at an internal index
+      (`UV_DEFAULT_INDEX`) that mirrors `opik-mcp`.
+    - Note that a bare `uvx opik-mcp` fails the same way on a cold cache unless
+      `opik-mcp` is installed as a uv tool.
   </Accordion>
   <Accordion title="Cursor: tool call timed out after 60 seconds">
     Cursor enforces a hard 60-second timeout per tool call, and large traces hit it.

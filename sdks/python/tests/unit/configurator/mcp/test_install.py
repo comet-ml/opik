@@ -1029,3 +1029,58 @@ class TestTerminalRequired:
 
         assert install._confirm_targets(candidates, None, False, view) == []
         assert view.choose_calls
+
+
+def test_setup_mcp_server__stale_uv_tool_install__is_reported_not_removed(monkeypatch):
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    monkeypatch.setattr(install.uv_tool, "installed_version", lambda: "0.2.12")
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    install.setup_mcp_server(**args)
+
+    [note] = [note for note in args["view"].notes if "0.2.12" in note]
+    assert "uv tool uninstall opik-mcp" in note
+    # Advisory only. Removing it is the user's call — an unannounced mutation of
+    # their environment is the bug this whole change exists to undo.
+    uninstall_calls = [
+        call
+        for call in install.subprocess.run.call_args_list
+        if "uninstall" in call.args[0]
+    ]
+    assert uninstall_calls == []
+
+
+def test_setup_mcp_server__no_uv_tool_install__says_nothing(monkeypatch):
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    monkeypatch.setattr(install.uv_tool, "installed_version", lambda: None)
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    install.setup_mcp_server(**args)
+
+    assert [note for note in args["view"].notes if "uv tool" in note] == []
+
+
+def test_setup_mcp_server__hosted_server__does_not_report_uv_tool_install(monkeypatch):
+    # The hosted server runs no local package, so an install on the same machine
+    # has no bearing on what was just configured.
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    monkeypatch.setattr(install.uv_tool, "installed_version", lambda: "0.2.12")
+    monkeypatch.setattr(
+        install.mcp_detection,
+        "detect_hosted_mcp_server",
+        lambda **kwargs: "https://www.comet.com/opik/api/v1/mcp",
+    )
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    install.setup_mcp_server(**args)
+
+    assert [note for note in args["view"].notes if "uv tool" in note] == []
