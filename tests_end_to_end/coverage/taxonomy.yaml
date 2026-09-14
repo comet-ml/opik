@@ -435,6 +435,7 @@ areas:
     routes: ["/projects/$projectId/playground"]
     spec_dir: playground
     specs:
+      - playground/playground-model-parameters.spec.ts
       - playground/playground-providers.spec.ts
       - playground/playground-smoke.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
@@ -694,6 +695,7 @@ areas:
       - online-evaluation/online-evaluation-oversized-payload.spec.ts
       - online-evaluation/online-evaluation-provider-error-classification.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
+      - online-evaluation/online-evaluation-python-score-usability.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-smoke.spec.ts
       - online-evaluation/online-evaluation-thread-judge-provider-failure.spec.ts
