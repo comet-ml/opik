@@ -206,8 +206,8 @@ def evaluate(
         nb_samples: number of samples to evaluate. If no value is provided, all samples in the dataset will be evaluated.
 
         task_threads: number of thread workers to run tasks. If set to 1, no additional
-            threads are created, all tasks executed in the current thread sequentially.
-            are executed sequentially in the current thread.
+            threads are created and all tasks are executed sequentially in the current
+            thread.
             Use more than 1 worker if your task object is compatible with sharing across threads.
 
         prompt: Prompt object to link with experiment. Deprecated, use `prompts` argument instead.
@@ -1366,8 +1366,8 @@ def evaluate_optimization_trial(
         nb_samples: number of samples to evaluate. If no value is provided, all samples in the dataset will be evaluated.
 
         task_threads: number of thread workers to run tasks. If set to 1, no additional
-            threads are created, all tasks executed in the current thread sequentially.
-            are executed sequentially in the current thread.
+            threads are created and all tasks are executed sequentially in the current
+            thread.
             Use more than 1 worker if your task object is compatible with sharing across threads.
 
         prompt: Prompt object to link with experiment. Deprecated, use `prompts` argument instead.
