@@ -4,6 +4,15 @@ import { loadEnvConfig } from '../config/env.config';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
+/** Empty-state text an output cell shows until its row has been run. */
+const IDLE_CELL_TEXT = 'No runs yet';
+
+/**
+ * A failed run surfaces as the output cell's own value. Kept narrow on purpose:
+ * a model is free to emit the word "error", but never this phrasing.
+ */
+const RUN_ERROR_TEXT = /\bnot defined\b/i;
+
 export interface PlaygroundVariantConfig {
   /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
   systemPrompt?: string;
@@ -135,51 +144,62 @@ export class PlaygroundPage {
   }
 
   /**
-   * Wait for runs to complete in the experiment-results table.
+   * Wait until a loaded dataset/suite can actually be run.
    *
-   * Polling shape depends on what was loaded:
-   *  - test_suite: rows show "Passed <output>" / "Failed <output>" (LLM-judged).
-   *  - dataset: rows show the raw output cell (no pass/fail label).
-   *
-   * Completion requires BOTH: all "No runs yet" placeholders are gone, AND the
-   * rendered row count meets `expectedRows`. Checking only the placeholder
-   * disappearance lets us return early if the table briefly re-renders during
-   * loading (`No runs yet` is unmounted while rows are still being painted).
+   * The source pill commits with the *selection*, which is strictly before
+   * `useDatasetItemsList` resolves. Running in that window builds the
+   * prompt/item combinations from an empty item list, so every row fails
+   * client-side with "<var> not defined" — no LLM call, no experiment, and a
+   * permanent error state that no later wait can recover. The output cells come
+   * from the same query as the runner's items, so their presence is the signal
+   * that the run has something to iterate.
    */
-  async waitForRunsComplete(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
-    return test.step(`wait for ${opts.expectedRows} run(s) to complete`, async () => {
-      const table = this.resultsTable();
+  async waitForRunReady(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
+    return test.step(`wait for ${opts.expectedRows} row(s) to be run-ready`, async () => {
       await expect
         .poll(
           async () => {
-            const noRunsYet = await table.getByText('No runs yet').count();
-            if (noRunsYet !== 0) return false;
-            const rowCount = await this.countOutputRows();
-            return rowCount >= opts.expectedRows;
+            const total = await this.outputCells().count();
+            return total >= opts.expectedRows && (await this.idleOutputCells().count()) === total;
           },
-          { timeout: opts.timeoutMs ?? 120_000, intervals: [1000, 2000, 3000] },
+          { timeout: opts.timeoutMs ?? 30_000, intervals: [250, 500, 1000] },
         )
         .toBe(true);
     });
   }
 
   /**
-   * Number of result rows that have completed (non-empty output cell).
-   * Counts rows where "No runs yet" is NOT present and the row is in the
-   * results table's right-side variant column.
+   * Wait for every output cell to leave the idle/streaming state.
+   *
+   * A run that fails writes the failure into the cell as its value, so "no
+   * longer idle" does not mean "succeeded" — check for it here, where the cell
+   * text is still available to report, rather than leaving the caller to time
+   * out later on a write that is never coming.
    */
+  async waitForRunsComplete(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
+    return test.step(`wait for ${opts.expectedRows} run(s) to complete`, async () => {
+      await expect
+        .poll(async () => this.countOutputRows(), {
+          timeout: opts.timeoutMs ?? 120_000,
+          intervals: [1000, 2000, 3000],
+        })
+        .toBeGreaterThanOrEqual(opts.expectedRows);
+
+      const failed = (await this.outputCells().allInnerTexts()).filter((t) =>
+        RUN_ERROR_TEXT.test(t),
+      );
+      if (failed.length > 0) {
+        throw new Error(
+          `Playground run failed in ${failed.length} row(s): ${failed[0].trim().slice(0, 200)}`,
+        );
+      }
+    });
+  }
+
+  /** Number of result rows whose output cell has produced content. */
   async countOutputRows(): Promise<number> {
-    const table = this.resultsTable();
-    // The results table has the data-side (left) and the variant-output side (right).
-    // The variant-output side has either "No runs yet" (empty) or actual output text.
-    // We count rows by counting the data-side and subtracting any still-empty cells.
-    const passedFailedCount = await table.getByRole('row', { name: /^(Passed|Failed) / }).count();
-    if (passedFailedCount > 0) return passedFailedCount;
-    // Dataset mode: count rows by their data preview (left table).
-    // Each "row" in the left table corresponds to one expected output row.
-    const itemRows = await table.locator('tr').count();
-    const noRunsYet = await table.getByText('No runs yet').count();
-    return Math.max(0, itemRows - noRunsYet - 1 /* header */);
+    const texts = await this.outputCells().allInnerTexts();
+    return texts.filter((t) => t.trim() !== '' && !t.includes(IDLE_CELL_TEXT)).length;
   }
 
   /**
@@ -451,6 +471,21 @@ export class PlaygroundPage {
 
   private resultsTable(): Locator {
     return this.page.getByTestId('playground-results-table');
+  }
+
+  /**
+   * Output cells of the experiment-results table — one per dataset row, per
+   * variant. The table is the shared `DataTable` split into sticky-header and
+   * scrollable-body halves, so body cells carry `data-cell-id="<rowId>_<colId>"`
+   * and the variant columns are `output-<promptId>`.
+   */
+  private outputCells(): Locator {
+    return this.resultsTable().locator('tbody tr[data-row-id] td[data-cell-id*="_output-"]');
+  }
+
+  /** Output cells whose row has not been run yet. */
+  private idleOutputCells(): Locator {
+    return this.outputCells().filter({ hasText: IDLE_CELL_TEXT });
   }
 
   private variantCard(index: number): Locator {
