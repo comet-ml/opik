@@ -481,7 +481,136 @@ export class PlaygroundPage {
     });
   }
 
+  /**
+   * Whether the model picker offers a model, by display name. Leaves the picker
+   * closed either way.
+   *
+   * The option list comes from the deployment's own model registry and from the
+   * provider keys configured on the workspace, so a model this suite names may
+   * simply not be there. Probing lets a spec skip on that rather than spend
+   * `setModelForVariant`'s retry budget failing to click an option that will
+   * never appear.
+   */
+  async isModelOffered(index: number, modelDisplayName: string): Promise<boolean> {
+    return test.step(`check whether "${modelDisplayName}" is offered`, async () => {
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await this.modelPicker(index).click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
+      const offered = await listbox
+        .getByRole('option', { name: modelDisplayName, exact: true })
+        .first()
+        .waitFor({ state: 'visible', timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
+
+      await this.page.keyboard.press('Escape');
+      await expect(listbox).toBeHidden();
+      return offered;
+    });
+  }
+
+  /** Open a variant's model-parameters popover and wait for it to render. */
+  async openModelParameters(index: number): Promise<void> {
+    return test.step(`open model parameters for variant ${index}`, async () => {
+      await this.modelParametersTrigger(index).click();
+      await this.modelParametersPanel().waitFor({ state: 'visible' });
+    });
+  }
+
+  /** Close the model-parameters popover, and wait until it is really gone. */
+  async closeModelParameters(): Promise<void> {
+    return test.step('close model parameters', async () => {
+      await this.page.keyboard.press('Escape');
+      await this.modelParametersPanel().waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * The open model-parameters popover.
+   *
+   * One is open at a time — it is a `DropdownMenu`, and Radix unmounts the
+   * content of a closed one — so this needs no variant scoping.
+   */
+  modelParametersPanel(): Locator {
+    return this.page.getByRole('menu');
+  }
+
+  /**
+   * The Sampling choice's two options. Anthropic takes Temperature or Top P and
+   * never both, so which one carries `data-state="on"` is the panel's claim
+   * about what the request will contain.
+   */
+  samplingOption(label: 'Temperature' | 'Top P'): Locator {
+    return this.modelParametersPanel().getByRole('radio', { name: label, exact: true });
+  }
+
+  /** Every Sampling option currently selected — asserted to be exactly one. */
+  selectedSamplingOptions(): Locator {
+    return this.modelParametersPanel().locator('[role="radio"][data-state="on"]');
+  }
+
+  /**
+   * The number input of a named slider control, e.g. `temperature` or `topP`.
+   *
+   * Presence is the assertion, not just the value: the panel renders the live
+   * half of the sampling pair and unmounts the other, so a control that is
+   * merely dimmed — or two that are both mounted — is the regression.
+   */
+  sliderInput(controlId: string): Locator {
+    return this.page.getByTestId(`${controlId}-input`);
+  }
+
+  /** The Thinking effort dropdown. Its text is the effort the panel claims. */
+  thinkingEffortSelect(): Locator {
+    return this.modelParametersPanel().getByLabel('Thinking effort');
+  }
+
+  /** Pick a Thinking effort by its displayed label. */
+  async selectThinkingEffort(label: string): Promise<void> {
+    return test.step(`select thinking effort "${label}"`, async () => {
+      await this.thinkingEffortSelect().click();
+      await this.page.getByRole('option', { name: label, exact: true }).click();
+      await expect(this.thinkingEffortSelect()).toHaveText(label);
+    });
+  }
+
+  /** Type a prompt into variant 0's first message row. */
+  async fillFirstMessage(text: string): Promise<void> {
+    return test.step('fill the first message of variant 0', async () => {
+      await this.fillMessageBody(this.variantMessages(0).first(), text);
+    });
+  }
+
+  /** Click Run (free mode) without waiting for the completion to come back. */
+  async clickRun(): Promise<void> {
+    return test.step('click Run', async () => {
+      await this.runButton().click();
+    });
+  }
+
   // ── private helpers ─────────────────────────────────────────────────────
+
+  /**
+   * The gear button that opens a variant's model parameters.
+   *
+   * Anchored to the model picker rather than addressed directly: the trigger
+   * carries no testid and no accessible name (its tooltip is a Radix
+   * `TooltipContent`, not an `aria-label`), and the variant card holds other
+   * `aria-haspopup="menu"` buttons — every message row's role selector is one.
+   * "The menu button immediately after the model picker" is the one stable
+   * description available. A `data-testid` on `PromptModelConfigs`' trigger
+   * would be better, but these specs run against a deployed Opik, where an
+   * attribute added alongside them would not exist in the version under test.
+   */
+  private modelParametersTrigger(index: number): Locator {
+    return this.variantCard(index).locator(
+      'button:has(> [data-testid="select-a-llm-model"]) + button[aria-haspopup="menu"]',
+    );
+  }
 
   private runExperimentTriggerButton(): Locator {
     return this.page

@@ -106,6 +106,80 @@ class ThreadConstantScore(base_metric.BaseMetric):
 }
 
 /**
+ * One score a metric is to return, as `buildScoreResultMetric` renders it.
+ *
+ * `value: null` and `scoringFailed: true` are the two shapes the backend drops
+ * for different stated reasons, and they are deliberately expressible
+ * independently — a caller has to be able to build the flagged-with-a-0.0 score
+ * the SDK actually emits, which is storable-looking and must still be dropped.
+ */
+export interface PythonScoreSpec {
+  /**
+   * The name this score lands under. It is the ScoreResult's own name, not the
+   * rule's — the engine uses it verbatim — so two scores from one metric need
+   * two names or one silently overwrites the other.
+   */
+  name: string;
+  /** `null` renders `value=None`: the "metric returned no value" drop. */
+  value: number | null;
+  /** Renders `scoring_failed=True`: the "metric reported the scoring as failed" drop. */
+  scoringFailed?: boolean;
+}
+
+/** A TS value as the Python literal it has to become inside the metric source. */
+function toPythonLiteral(value: number | string | boolean | null): string {
+  if (value === null) return 'None';
+  if (typeof value === 'boolean') return value ? 'True' : 'False';
+  // JSON's string and number grammars are both Python literal grammars for the
+  // ASCII names and finite values these specs use.
+  return JSON.stringify(value);
+}
+
+/**
+ * A metric that returns exactly the scores it is given — including the ones the
+ * backend is supposed to refuse to store.
+ *
+ * The three other builders here answer "did the evaluator run at all"; this one
+ * answers "which of a run's scores survived", which is a different question and
+ * needs a metric whose output is unusable on purpose. Every drop path is one
+ * `ScoreResult` field away from a storable score, so the shapes have to be
+ * constructed rather than provoked.
+ *
+ * **A single spec returns a bare `ScoreResult`, several return a list**, because
+ * the two take different paths and only one of them can produce a partial
+ * result: a single unusable score makes the whole response unusable and the
+ * python evaluator answers 400, while a list holding one usable score is passed
+ * through for the backend to split. Wrapping a single score in a list would
+ * quietly test the list path twice.
+ */
+export function buildScoreResultMetric(
+  metricName: string,
+  scores: readonly PythonScoreSpec[],
+): string {
+  const construct = (spec: PythonScoreSpec) =>
+    `score_result.ScoreResult(name=${toPythonLiteral(spec.name)}, ` +
+    `value=${toPythonLiteral(spec.value)}, ` +
+    `scoring_failed=${toPythonLiteral(spec.scoringFailed ?? false)})`;
+
+  const body =
+    scores.length === 1
+      ? `return ${construct(scores[0])}`
+      : `return [\n${scores.map((s) => `            ${construct(s)},`).join('\n')}\n        ]`;
+
+  return `from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+METRIC_NAME = ${JSON.stringify(metricName)}
+
+class ReportedScores(base_metric.BaseMetric):
+    def __init__(self, name: str = METRIC_NAME):
+        self.name = name
+
+    def score(self, output: Any = None, **ignored_kwargs: Any) -> Any:
+        ${body}`;
+}
+
+/**
  * A metric that exits 0 without ever printing its result line.
  *
  * `os._exit` is deliberate: it ends the interpreter immediately, so the runner's
