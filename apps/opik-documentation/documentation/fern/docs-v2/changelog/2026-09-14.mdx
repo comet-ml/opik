@@ -1,0 +1,17 @@
+## Bug Fixes & Improvements
+
+- **Playground sampling parameters survive a model switch** — Switching to a model that doesn't support temperature or Top P could permanently wipe out those values from the run configuration, and the OpenAI and Anthropic panels disagreed about what a missing value meant: one hid the control for good, the other silently fell back to showing a default while the request actually carried nothing. Both panels now read through the same resolver, so a slider can no longer show a value the request doesn't send, and switching back to a compatible model restores what you last set instead of a default.
+
+- **MCP connectors stay connected under concurrent tool calls** — MCP hosts that run several tool calls in parallel (Claude.ai, Codex, Claude Code) could each trigger a token refresh at the same moment; only one could win, and the rest were treated as an invalid credential, disconnecting the connector and forcing a full reconnect. A short grace window now lets a re-presented, already-rotated refresh token mint its own new token pair instead of failing.
+
+- **Vertex AI sends Gemini 3's thinking level directly** — Vertex previously had no way to send a thinking level to the model API, so a level chosen in the Playground, an online evaluation rule, or an experiment was translated into an approximate token budget. Gemini 3 models now receive the thinking level directly; Gemini 2.5 models continue to use the budget translation, since the API only accepts a level for Gemini 3 and newer.
+
+- **Usage and billing counts stay reliable as the demo-project list grows** — The daily trace usage and billing queries excluded demo projects with an ever-growing list of literal project ids inlined into the query text, which could push the query past its time limit and silently stop producing that day's counts. Demo projects are now excluded after the data is fetched instead, keeping the query text constant regardless of how many demo projects exist.
+
+- **Experiment comparison panels no longer collapse when navigating dataset items** — Clicking through dataset items in the experiment comparison view could cause the result panel to collapse to its minimum width while the dataset panel took the rest of the space. Panel sizing is now stable while paging through items.
+
+---
+
+👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.2.59...main)
+
+_Releases_: shipping in `2.2.60`
