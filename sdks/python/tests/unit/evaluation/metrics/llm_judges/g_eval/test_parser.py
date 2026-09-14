@@ -121,7 +121,7 @@ def test_leading_space_score_token_is_scored_not_rejected():
     assert 0.0 < result.value < 0.09, f"unexpected value {result.value}"
 
 
-def test_punctuation_carrying_split_digits_degrade_to_text_path():
+def test_punctuation_carrying_split_digits_degrade_to_text_path(capture_log_debug):
     # {"score":10} split as "1" + "0,": no candidate passes the decimal
     # filter, so there is no probability mass. The parser must degrade to
     # the text path (score 1.0) instead of raising on a parseable response.
@@ -147,6 +147,10 @@ def test_punctuation_carrying_split_digits_degrade_to_text_path():
     )
     assert result.value == 1.0
     assert result.reason == "ok"
+    # The degradation must stay observable: this branch found the score key, so
+    # a silent fallback reads the same as a provider that returns no logprobs.
+    assert "carried no probability mass" in capture_log_debug.text
+    assert "'g_eval'" in capture_log_debug.text
 
 
 def test_single_digit_score_at_position_three_unchanged():

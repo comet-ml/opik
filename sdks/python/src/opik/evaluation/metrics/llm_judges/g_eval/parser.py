@@ -92,7 +92,14 @@ def parse_litellm_model_output(
             # tokens carrying punctuation, so no candidate passes the decimal
             # filter): degrade to the text path the same way the short-stream
             # and no-logprob branches do, instead of raising on a response
-            # that is perfectly parseable.
+            # that is perfectly parseable. Unlike those two branches this one
+            # did find the score key, so without a log a lower-fidelity score
+            # is indistinguishable from a provider that never returns logprobs.
+            LOGGER.debug(
+                "g_eval score digits carried no probability mass for metric "
+                "'%s'; falling back to the score parsed from text content.",
+                name,
+            )
             return _extract_score_from_text_content(choice_dict, name=name)
         final_score: float = weighted_score_sum / linear_probs_sum / 10
 
