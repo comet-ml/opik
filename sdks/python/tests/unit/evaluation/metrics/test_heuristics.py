@@ -1,4 +1,6 @@
+import concurrent.futures
 import re
+import time
 import warnings
 
 import pytest
@@ -1037,3 +1039,28 @@ def test_readability__language__changes_real_textstat_result_without_warning():
         deutsch.metadata["flesch_reading_ease"]
         != english.metadata["flesch_reading_ease"]
     )
+
+
+def test_readability__concurrent_metrics_with_different_languages__each_scores_with_own_locale():
+    class SlowTextStat(_RecordingTextStat):
+        def set_lang(self, lang: str) -> None:
+            super().set_lang(lang)
+            # Widen the window between applying the locale and reading it back.
+            time.sleep(0.002)
+
+    shared = SlowTextStat(syllables_per_lang={"en_US": 4, "de_DE": 7})
+    english = Readability(language="en_US", track=False, textstat_module=shared)
+    german = Readability(language="de_DE", track=False, textstat_module=shared)
+    jobs = [(english, 4), (german, 7)] * 25
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(
+            pool.map(
+                lambda job: (job[0].score(output="Four short words here."), job[1]),
+                jobs,
+            )
+        )
+
+    for result, expected_syllables in results:
+        assert result.metadata is not None
+        assert result.metadata["syllable_count"] == expected_syllables
