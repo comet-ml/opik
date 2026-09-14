@@ -16,9 +16,23 @@ const IDLE_CELL_TEXT = 'No runs yet';
  */
 const RUN_ERROR_TEXT = /\bnot defined\b|returned an empty response/i;
 
-/** A cell has run when it holds anything other than the idle placeholder. */
-const hasProducedOutput = (text: string): boolean =>
-  text.trim() !== '' && !text.includes(IDLE_CELL_TEXT);
+/**
+ * A test-suite cell leaves the idle state as soon as its experiment exists, which is well
+ * before the output lands, so the LLM-judged verdict — not "no longer idle" — is what marks
+ * a suite row finished.
+ */
+const ASSERTION_VERDICT = /\b(Passed|Failed)\b/;
+
+/**
+ * Whether a cell has finished. Text is the only handle: the idle placeholder carries no
+ * testid, so output that itself contained "No runs yet" would read as idle. Left as is
+ * rather than adding one — these specs run against deployed Opik, so a new testid would not
+ * exist in the version under test.
+ */
+const hasProducedOutput = (text: string, mode?: RunExperimentSourceMode): boolean => {
+  if (text.trim() === '' || text.includes(IDLE_CELL_TEXT)) return false;
+  return mode === 'test_suite' ? ASSERTION_VERDICT.test(text) : true;
+};
 
 export interface PlaygroundVariantConfig {
   /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
@@ -176,31 +190,38 @@ export class PlaygroundPage {
   }
 
   /**
-   * Wait for every output cell to leave the idle/streaming state.
+   * Wait for every output cell to finish.
    *
-   * A run that fails writes the failure into the cell as its value, so "no
-   * longer idle" does not mean "succeeded" — check for it here, where the cell
-   * text is still available to report, rather than leaving the caller to time
-   * out later on a write that is never coming.
+   * A run that fails writes the failure into the cell as its value, so "no longer idle"
+   * does not mean "succeeded". The failure scan runs inside the poll, not after it: one
+   * errored cell next to one that never ran would otherwise hold the predicate false for
+   * the full timeout and report a bare poll timeout instead of the failure.
    */
-  async waitForRunsComplete(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
+  async waitForRunsComplete(opts: {
+    expectedRows: number;
+    mode?: RunExperimentSourceMode;
+    timeoutMs?: number;
+  }): Promise<void> {
     return test.step(`wait for ${opts.expectedRows} run(s) to complete`, async () => {
+      let failures: string[] = [];
       await expect
         .poll(
           async () => {
             const texts = await this.outputCells().allInnerTexts();
-            return texts.length >= opts.expectedRows && texts.every(hasProducedOutput);
+            failures = texts.filter((t) => RUN_ERROR_TEXT.test(t));
+            if (failures.length > 0) return true;
+            return (
+              texts.length >= opts.expectedRows &&
+              texts.every((t) => hasProducedOutput(t, opts.mode))
+            );
           },
           { timeout: opts.timeoutMs ?? 120_000, intervals: [1000, 2000, 3000] },
         )
         .toBe(true);
 
-      const failed = (await this.outputCells().allInnerTexts()).filter((t) =>
-        RUN_ERROR_TEXT.test(t),
-      );
-      if (failed.length > 0) {
+      if (failures.length > 0) {
         throw new Error(
-          `Playground run failed in ${failed.length} row(s): ${failed[0].trim().slice(0, 200)}`,
+          `Playground run failed in ${failures.length} cell(s): ${failures[0].trim()}`,
         );
       }
     });
@@ -210,8 +231,9 @@ export class PlaygroundPage {
    * Output cells that have produced content — one per dataset row *per variant*, so this
    * exceeds the row count whenever more than one variant is configured.
    */
-  async countCompletedOutputCells(): Promise<number> {
-    return (await this.outputCells().allInnerTexts()).filter(hasProducedOutput).length;
+  async countCompletedOutputCells(mode?: RunExperimentSourceMode): Promise<number> {
+    const texts = await this.outputCells().allInnerTexts();
+    return texts.filter((t) => hasProducedOutput(t, mode)).length;
   }
 
   /**
