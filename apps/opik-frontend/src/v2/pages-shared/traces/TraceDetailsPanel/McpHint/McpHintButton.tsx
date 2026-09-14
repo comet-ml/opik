@@ -72,10 +72,33 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
   // without it the card is unreachable on touch, where neither exists.
   const handleClick = useCallback(() => setIsOpen(true), []);
 
+  const contentRef = useRef<HTMLDivElement>(null);
+  const holdsFocus = () =>
+    Boolean(contentRef.current?.contains(document.activeElement));
+
+  // HoverCard closes on the trigger's blur — which is exactly what a keyboard
+  // user does on their way *into* the card. The tiles sit immediately after the
+  // pill in tab order, so without this the card closes out from under them a
+  // quarter-second after they arrive. Decline while it holds focus.
+  const handleOpenChange = useCallback((nextIsOpen: boolean) => {
+    if (!nextIsOpen && holdsFocus()) return;
+    setIsOpen(nextIsOpen);
+  }, []);
+
+  // ...and close once focus actually leaves it, rather than waiting for a
+  // pointer that a keyboard user never moves.
+  const handleContentBlur = useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      if (contentRef.current?.contains(event.relatedTarget)) return;
+      setIsOpen(false);
+    },
+    [],
+  );
+
   return (
     <HoverCard
       open={isOpen}
-      onOpenChange={setIsOpen}
+      onOpenChange={handleOpenChange}
       openDelay={0}
       closeDelay={MCP_HINT_CLOSE_DELAY_MS}
     >
@@ -84,7 +107,6 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
           type="button"
           className={PILL_CLASS}
           data-testid="mcp-hint-button"
-          aria-haspopup="dialog"
           aria-expanded={isOpen}
           onClick={handleClick}
         >
@@ -97,6 +119,8 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
         </button>
       </HoverCardTrigger>
       <HoverCardContent
+        ref={contentRef}
+        onBlur={handleContentBlur}
         side="bottom"
         align="end"
         sideOffset={6}

@@ -8,7 +8,7 @@ import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
 import { BillingLinkProps } from "@/plugins/comet/BillingLink";
 import { BridgeSurface, ExplainButtonProps } from "@/types/assistant-sidebar";
-import { McpInstallRoutesProps } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/types";
+import type { McpInstallRoutesProps } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/types";
 import {
   type PluginManifest,
   type PluginRouteParents,

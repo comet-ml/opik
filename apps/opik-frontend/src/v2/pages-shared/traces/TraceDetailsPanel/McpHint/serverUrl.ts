@@ -16,3 +16,7 @@ export const MCP_SERVER_NAME = "opik-mcp";
  */
 export const getMcpServerUrl = (): string =>
   new URL(`${BASE_API_URL}/v1/mcp`, window.location.origin).toString();
+
+/** The CLI route, for a client the deployment cannot deeplink to. */
+export const cliConfigureCommand = (client: string) =>
+  `uvx opik mcp configure --ai-client ${client}`;

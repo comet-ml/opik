@@ -6,6 +6,7 @@ import cursorLogo from "/images/integrations/cursor.svg";
 import vscodeLogo from "/images/integrations/vscode.svg";
 
 import InstallRoutesLayout from "./InstallRoutesLayout";
+import { cliConfigureCommand } from "./serverUrl";
 import { buildLocalInstallPrompt } from "./prompt";
 import {
   MCP_CLIENT,
@@ -41,8 +42,6 @@ const CLIENTS: Array<{ client: McpClient; label: string; logo: string }> = [
  * instructions, when the configured workspace is ambiguous. The prompt route
  * names it instead, where prose can.
  */
-const configureCommand = (client: McpClient) =>
-  `uvx opik mcp configure --ai-client ${client}`;
 
 const LocalInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
   props,
@@ -50,7 +49,7 @@ const LocalInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
   const routes = useMemo<McpInstallRoute[]>(
     () =>
       CLIENTS.map(({ client, label, logo }) => {
-        const command = configureCommand(client);
+        const command = cliConfigureCommand(client);
         return {
           client,
           label,

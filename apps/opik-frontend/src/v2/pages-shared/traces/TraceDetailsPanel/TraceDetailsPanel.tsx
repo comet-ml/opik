@@ -50,6 +50,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import { useVisibleSpans } from "@/v2/pages-shared/traces/hiddenSpans";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import McpHintRail from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/McpHintRail";
+import useMcpInstallMode from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/useMcpInstallMode";
 import { McpHintTarget } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/types";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
@@ -142,6 +143,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   // the section is one component reused across the tree, so a flag would read as
   // open on a node nobody opened.
   const [errorOpenFor, setErrorOpenFor] = useState<string | null>(null);
+  // Which node the hint has been asked for. Opening the error is the ask and it
+  // stands, so this outlives a collapse; switching node leaves it behind.
+  const [hintShownFor, setHintShownFor] = useState<string | null>(null);
+  const mcpInstallMode = useMcpInstallMode();
 
   const [search = undefined, setSearch] = useQueryParam(
     `trace_panel_search`,
@@ -231,6 +236,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   );
 
   const isErrorOpen = errorOpenFor === mcpHintSubject;
+  const isHintVisible = hintShownFor === mcpHintSubject;
 
   const handleErrorExpandedChange = useCallback(
     (expanded: boolean) => {
@@ -239,13 +245,27 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
 
       // Emitted here rather than from the shared error section: this is the only
       // place that knows the hint is switched on, and the funnel's first step
-      // must not count surfaces where the hint never appears. The impression
-      // lands in the same breath, since the hint appears immediately.
-      const properties = { entity_type: mcpHintTarget.entityType };
+      // must not count surfaces where the hint never appears.
+      const properties = {
+        entity_type: mcpHintTarget.entityType,
+        install_mode: mcpInstallMode,
+      };
       trackEvent(OpikEvent.TRACE_ERROR_EXPANDED, properties);
-      if (showMcpHint) trackEvent(OpikEvent.MCP_BUTTON_SHOWN, properties);
+
+      // One impression per node. The hint stays through a collapse, so a
+      // collapse-and-expand would otherwise count a second showing of a button
+      // that never went away.
+      if (!showMcpHint || hintShownFor === mcpHintSubject) return;
+      setHintShownFor(mcpHintSubject);
+      trackEvent(OpikEvent.MCP_BUTTON_SHOWN, properties);
     },
-    [mcpHintSubject, mcpHintTarget.entityType, showMcpHint],
+    [
+      mcpHintSubject,
+      mcpHintTarget.entityType,
+      mcpInstallMode,
+      showMcpHint,
+      hintShownFor,
+    ],
   );
 
   const spanCount = spansData?.content?.length ?? 0;
@@ -427,8 +447,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                 )}
                 {showMcpHint && (
                   <McpHintRail
-                    key={mcpHintSubject}
-                    isErrorOpen={isErrorOpen}
+                    isVisible={isHintVisible}
                     target={mcpHintTarget}
                   />
                 )}

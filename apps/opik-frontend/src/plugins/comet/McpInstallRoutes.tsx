@@ -8,6 +8,7 @@ import vscodeLogo from "/images/integrations/vscode.svg";
 import InstallRoutesLayout from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/InstallRoutesLayout";
 import { buildHostedInstallPrompt } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/prompt";
 import {
+  cliConfigureCommand,
   getMcpServerUrl,
   MCP_SERVER_NAME,
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/serverUrl";
@@ -79,7 +80,7 @@ const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
         method: MCP_ROUTE_METHOD.DEEPLINK,
         href: cursorDeeplink(url),
         confirmation: "Opening Cursor…",
-        snippet: `uvx opik mcp configure --ai-client ${MCP_CLIENT.CURSOR}`,
+        snippet: cliConfigureCommand(MCP_CLIENT.CURSOR),
         note: NOTHING_OPENED,
       },
       {
@@ -90,7 +91,7 @@ const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
         method: MCP_ROUTE_METHOD.DEEPLINK,
         href: vscodeDeeplink(url),
         confirmation: "Opening VS Code…",
-        snippet: `uvx opik mcp configure --ai-client ${MCP_CLIENT.VSCODE}`,
+        snippet: cliConfigureCommand(MCP_CLIENT.VSCODE),
         note: NOTHING_OPENED,
       },
       {

@@ -290,7 +290,7 @@ export class TracePanelPage {
     });
   }
 
-  /** The `Fix via MCP` pill, revealed a beat after the error is expanded. */
+  /** The `Fix via MCP` pill, shown once the user opens the error. */
   get mcpHintButton(): Locator {
     return this.root.getByTestId('mcp-hint-button');
   }
@@ -300,9 +300,9 @@ export class TracePanelPage {
     return this.page.getByTestId('mcp-hint-popover');
   }
 
-  /** Waits out the deliberate reveal delay. */
+  /** The hint fades in, so give the animation a moment to land. */
   async waitForMcpHint(): Promise<void> {
-    return test.step('Wait for the MCP hint to be revealed', async () => {
+    return test.step('Wait for the MCP hint to appear', async () => {
       await this.mcpHintButton.waitFor({ state: 'visible', timeout: 5_000 });
     });
   }

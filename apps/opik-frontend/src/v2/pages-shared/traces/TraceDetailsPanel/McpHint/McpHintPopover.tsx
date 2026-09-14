@@ -5,6 +5,7 @@ import { buildDocsUrl } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import InstallRoutes from "./InstallRoutes";
 import McpRouteConfirmation from "./McpRouteConfirmation";
+import useMcpInstallMode from "./useMcpInstallMode";
 import { McpHintTarget, McpRouteOutcome } from "./types";
 import {
   MCP_HINT_DESCRIPTION,
@@ -25,6 +26,7 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   // Unmounted with the popover, so closing it is what resets the view — a user
   // who comes back always lands on the routes rather than on a stale receipt.
   const [outcome, setOutcome] = useState<McpRouteOutcome | null>(null);
+  const installMode = useMcpInstallMode();
 
   const handleRouteUsed = useCallback(
     (route: McpRouteOutcome) => {
@@ -38,7 +40,10 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
 
   const handleLearnMoreClick = () => {
     onAction();
-    trackEvent(OpikEvent.MCP_LEARN_MORE_CLICKED);
+    trackEvent(OpikEvent.MCP_LEARN_MORE_CLICKED, {
+      install_mode: installMode,
+      entity_type: target.entityType,
+    });
   };
 
   return (
