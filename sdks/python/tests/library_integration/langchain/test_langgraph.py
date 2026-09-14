@@ -17,6 +17,7 @@ from opik.api_objects import span, trace
 from opik.integrations.langchain import (
     OpikTracer,
     extract_current_langgraph_span_data,
+    track_langgraph,
     LANGGRAPH_INTERRUPT_OUTPUT_KEY,
     LANGGRAPH_RESUME_INPUT_KEY,
     LANGGRAPH_INTERRUPT_METADATA_KEY,
@@ -756,6 +757,79 @@ async def test_langgraph__astream__tracked_node__update_current_span_updates_lan
     )
 
     # The cost must not land on a second, spurious root trace.
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+@pytest.mark.asyncio
+async def test_langgraph__ainvoke__async_node__tracked_call_nests_and_context_is_visible(
+    fake_backend,
+):
+    """An async node under ainvoke() sees the tracer's context and a plain @track call nests.
+
+    This is what the LangGraph integration docs promise for asynchronous execution: no
+    explicit propagation via extract_current_langgraph_span_data is needed, because
+    OpikTracer's callbacks run inline in the calling task.
+    """
+    seen: Dict[str, Any] = {}
+
+    @opik.track
+    def process_data(value: int) -> int:
+        return value * 2
+
+    async def my_async_node(state: Dict[str, Any]) -> Dict[str, Any]:
+        seen["trace"] = opik_context.get_current_trace_data()
+        seen["span"] = opik_context.get_current_span_data()
+        return {"value": process_data(state["value"])}
+
+    graph = StateGraph(dict)
+    graph.add_node("processor", my_async_node)
+    graph.add_edge(START, "processor")
+    graph.add_edge("processor", END)
+    app = track_langgraph(graph.compile(), OpikTracer())
+
+    result = await app.ainvoke({"value": 21})
+    opik.flush_tracker()
+
+    assert result == {"value": 42}
+    assert seen["trace"] is not None and seen["trace"].name == "LangGraph"
+    assert seen["span"] is not None and seen["span"].name == "processor"
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="LangGraph",
+        input=ANY_DICT,
+        output=ANY_DICT,
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="processor",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                metadata=ANY_DICT,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="process_data",
+                        input={"value": 21},
+                        output={"output": 42},
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        source="sdk",
+                    ),
+                ],
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
