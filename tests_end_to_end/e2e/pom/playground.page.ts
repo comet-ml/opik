@@ -503,6 +503,91 @@ export class PlaygroundPage {
       .and(this.page.locator('[data-mode="run"], [data-mode="re-run"]'));
   }
 
+  /**
+   * The Playground's own page scroller. Row virtualization measures the table's offset
+   * inside this element, so scrolling for virtualization assertions must drive it rather
+   * than the window.
+   */
+  scrollContainer(): Locator {
+    return this.page.getByTestId('playground-scroll-container');
+  }
+
+  /** Dataset rows currently mounted in the body table — under virtualization this is the window, not the page. */
+  async renderedRowCount(): Promise<number> {
+    return this.resultsTable()
+      .locator('tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]')
+      .count();
+  }
+
+  /** Scroll the Playground page body to a ratio of its scrollable height (0 = top, 1 = bottom). */
+  async scrollResultsTo(ratio: number): Promise<void> {
+    await this.scrollContainer().evaluate((el, r) => {
+      el.scrollTop = (el.scrollHeight - el.clientHeight) * r;
+    }, ratio);
+    // Two frames: one for the scroll event, one for the virtualizer's re-render.
+    await this.page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+  }
+
+  /**
+   * Labels of the dataset rows currently mounted, in DOM order. Callers should not assume a
+   * particular dataset ordering — the grid renders items newest-first.
+   */
+  async mountedRowLabels(pattern = /row-\d{3}/g): Promise<string[]> {
+    const texts = await this.resultsTable()
+      .locator('tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]')
+      .allInnerTexts();
+    return texts.map((t) => t.match(pattern)?.[0]).filter((v): v is string => Boolean(v));
+  }
+
+  /** The results grid, for text assertions against whichever rows are currently mounted. */
+  resultsTableBody(): Locator {
+    return this.resultsTable();
+  }
+
+  /**
+   * Whether a gap sits between the top of the scroller's viewport and the first mounted row,
+   * once the grid itself has been scrolled past. That is what a stale table offset looks
+   * like: the virtual window is positioned from the wrong origin, so the rows it renders
+   * land below where the scroll position says they should.
+   */
+  async hasBlankBandAboveRows(): Promise<boolean> {
+    return this.scrollContainer().evaluate((scroller) => {
+      const wrapper = scroller.querySelector('[data-table-wrapper]');
+      const firstRow = wrapper?.querySelector('tbody tr[data-row-id]');
+      if (!(wrapper instanceof HTMLElement) || !(firstRow instanceof HTMLElement)) return false;
+
+      const viewportTop = scroller.getBoundingClientRect().top;
+      // Only meaningful once the grid's own top has scrolled above the viewport.
+      if (wrapper.getBoundingClientRect().top >= viewportTop) return false;
+
+      return firstRow.getBoundingClientRect().top > viewportTop + 1;
+    });
+  }
+
+  /** Whether every sticky-header half is horizontally aligned with its body half. */
+  async headerBodyColumnsAligned(): Promise<boolean> {
+    return this.resultsTable().evaluate((root) => {
+      const scrollers = [...root.querySelectorAll('div.overflow-x-auto')].filter((e) =>
+        e.querySelector('table'),
+      ) as HTMLElement[];
+      for (let i = 0; i + 1 < scrollers.length; i += 2) {
+        if (scrollers[i].scrollLeft !== scrollers[i + 1].scrollLeft) return false;
+      }
+      return scrollers.length > 0;
+    });
+  }
+
+  /** Choose a "rows per page" value from the results pagination. */
+  async setPageSize(size: number): Promise<void> {
+    await this.resultsTable()
+      .locator('..')
+      .getByRole('button', { name: /^(10|50|100|200|500|1000)$/ })
+      .click();
+    await this.page.getByRole('menuitemcheckbox', { name: String(size), exact: true }).click();
+  }
+
   private resultsTable(): Locator {
     return this.page.getByTestId('playground-results-table');
   }
