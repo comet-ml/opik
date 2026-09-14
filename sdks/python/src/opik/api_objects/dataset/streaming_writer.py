@@ -54,6 +54,22 @@ class ItemNotSerializableError(TypeError):
     """
 
 
+def _ordered_set_members(value: Any) -> list:
+    """A set's members in an order that does not vary between processes.
+
+    Python randomises string hashing per process, so `list()` over a set of strings comes
+    out differently each run. That order reaches `content_hash` -- `sort_keys=True` orders
+    a dict's keys, never a list's members -- and a digest that moves between processes
+    means the same item deduplicates against itself in one run and uploads twice in the
+    next.
+
+    Sorted on the type name before the repr, because a set may legitimately mix types and
+    `sorted` alone raises on `{1, "a"}`. The order this produces is arbitrary rather than
+    natural -- "10" sorts before "9" -- which is all a canonical form has to be.
+    """
+    return sorted(value, key=lambda member: (type(member).__name__, repr(member)))
+
+
 def encode_flexible(value: Any) -> Any:
     """One value the wire serialiser could not encode, in the form the client sent before.
 
@@ -68,7 +84,10 @@ def encode_flexible(value: Any) -> Any:
     """
     if isinstance(value, _FLEXIBLE_LEAVES):
         return jsonable_encoder(value)
-    if isinstance(value, (set, frozenset, tuple)):
+    if isinstance(value, (set, frozenset)):
+        return _ordered_set_members(value)
+    if isinstance(value, tuple):
+        # A tuple's order is the caller's, unlike a set's, so it is kept as given.
         return list(value)
     if isinstance(value, pydantic.BaseModel):
         # `model_dump`, not the deprecated `dict`, and in python mode so the members come

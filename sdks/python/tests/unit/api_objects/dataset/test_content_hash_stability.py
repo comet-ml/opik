@@ -208,3 +208,23 @@ def test_content_hash__object_with_no_json_form__raises_wherever_it_is():
     ):
         with pytest.raises(TypeError):
             dataset_item.DatasetItem(input={"v": value}).content_hash()
+
+
+def test_content_hash__set_valued_item__digest_is_pinned():
+    """A set's members must reach the digest in an order no process can change.
+
+    Python randomises string hashing per process, so `list()` over a set of strings comes
+    out differently each run, and `sort_keys=True` orders a dict's keys but never a
+    list's members. Before this was canonicalised the digest below differed in every
+    process, which meant the same item deduplicated against itself in one run and
+    uploaded twice in the next.
+
+    Pinned rather than compared against a freshly computed digest, which would agree with
+    itself however the order moved. Recorded from the canonical form, so a change to that
+    order fails here instead of silently splitting stored items from new ones.
+    """
+    item = dataset_item.DatasetItem(input={"tags": {"alpha", "beta", "gamma", "delta"}})
+
+    assert item.content_hash() == (
+        "56d8f26305d963aa017a728776dbe66c69846651c498eec63b37b62bc24e5204"
+    )

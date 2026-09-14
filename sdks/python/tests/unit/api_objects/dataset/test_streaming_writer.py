@@ -592,3 +592,31 @@ def test_add__value_with_an_interior__still_encoded_as_it_was(value, expected):
     writer.flush()
 
     assert _decode(bodies[0][0])["items"][0]["data"]["v"] == expected
+
+
+def test_encode_flexible__set__ordered_canonically_not_by_iteration():
+    """Sorted, so the result cannot depend on a per-process hash seed.
+
+    Asserted against the sorted order rather than against another `list()` of the same
+    set: within one process those agree whatever the rule is, so that comparison would
+    hold even for the iteration order this replaced.
+    """
+    assert streaming_writer.encode_flexible({"gamma", "alpha", "delta", "beta"}) == [
+        "alpha",
+        "beta",
+        "delta",
+        "gamma",
+    ]
+    assert streaming_writer.encode_flexible(frozenset({"b", "a"})) == ["a", "b"]
+
+
+def test_encode_flexible__set_of_mixed_types__still_encodes():
+    """`sorted` alone raises on `{1, "a"}`; a set may legitimately hold both."""
+    encoded = streaming_writer.encode_flexible({1, "a", None, 2.5})
+
+    assert sorted(map(repr, encoded)) == sorted(map(repr, [1, "a", None, 2.5]))
+
+
+def test_encode_flexible__tuple__keeps_the_order_it_was_given():
+    """A tuple is ordered by the caller, unlike a set, so canonicalising it would lose data."""
+    assert streaming_writer.encode_flexible(("z", "a", "m")) == ["z", "a", "m"]
