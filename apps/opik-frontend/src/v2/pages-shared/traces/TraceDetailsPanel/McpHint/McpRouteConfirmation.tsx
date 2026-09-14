@@ -30,14 +30,14 @@ const McpRouteConfirmation: React.FunctionComponent<
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-1.5 text-primary">
-        <Check className="size-3.5 shrink-0" />
+      <div className="flex items-start gap-1.5 text-green-600">
+        <Check className="mt-0.5 size-3.5 shrink-0" />
         <span className="comet-body-xs leading-4">{route.confirmation}</span>
       </div>
 
       {route.snippet && (
-        <div className="flex items-center gap-1.5 rounded border border-border bg-soft-background px-2 py-1">
-          <code className="min-w-0 flex-1 truncate text-xs text-muted-slate">
+        <div className="flex items-start gap-1.5 rounded border border-border bg-soft-background px-2 py-1">
+          <code className="min-w-0 flex-1 whitespace-pre-wrap break-all text-xs leading-4 text-muted-slate">
             {route.snippet}
           </code>
           <TooltipWrapper content={hasRecopied ? "Copied" : "Copy"}>
@@ -45,7 +45,7 @@ const McpRouteConfirmation: React.FunctionComponent<
               type="button"
               aria-label="Copy the command"
               onClick={handleRecopy}
-              className="shrink-0 text-light-slate hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="mt-0.5 shrink-0 text-light-slate hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {hasRecopied ? (
                 <Check className="size-3" />
