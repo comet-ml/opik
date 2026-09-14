@@ -29,6 +29,21 @@ export interface DashboardRef {
   description: string;
 }
 
+/**
+ * A dashboard read out of the `insights-views` collection — the project-scoped
+ * one, as opposed to the workspace-scoped `DashboardRef` above.
+ *
+ * `projectId` and `scope` are carried rather than dropped because they are the
+ * subject: a scoping assertion that only compared ids could not tell a view the
+ * backend attached to the right project from one it attached to none.
+ */
+export interface InsightsViewRef {
+  id: string;
+  name: string;
+  projectId: string | null;
+  scope: string | null;
+}
+
 export interface DatasetRef {
   id: string;
   name: string;
@@ -190,6 +205,21 @@ export interface SpanCostRef {
   model: string | null;
   provider: string | null;
   totalEstimatedCost: number | null;
+  /**
+   * The `usage` map as the backend stored it, so a cost assertion can first
+   * prove the priced quantity really reached the server under the key the
+   * calculator reads.
+   *
+   * Load-bearing for the cache-rate vectors: a seed whose
+   * `original_usage.prompt_tokens_details.cached_tokens` key was dropped in
+   * transit prices exactly like one that reported no cached tokens, so
+   * "cached tokens bought no discount" and "no cached tokens were logged" are
+   * the same observation until this is read back.
+   *
+   * Null, not `{}`, when the span carries no usage at all — an absent map and an
+   * empty one are different answers.
+   */
+  usage: Record<string, number> | null;
 }
 
 /** A span reduced to the fields a cascade assertion needs: who it is, and whose it is. */
@@ -1008,6 +1038,89 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     async deleteDashboard(id: string): Promise<void> {
       try {
         await opik.api.dashboards.deleteDashboard(id);
+      } catch (err) {
+        if (!isNotFoundError(err)) throw err;
+      }
+    },
+
+    /**
+     * `POST /v1/private/insights-views` — a dashboard that belongs to one
+     * project, which is what the project Dashboards page reads and writes.
+     *
+     * A different collection from `createDashboard` above, not a parameter of
+     * it: that one posts to `/v1/private/dashboards` and the backend stamps
+     * `scope: workspace`, which is what the workspace Dashboards list shows.
+     * Passing a `projectId` there would not move it. The two scopes are exactly
+     * what a scoping spec has to be able to seed independently.
+     *
+     * `sections: []` rather than the `widgets` shape `createDashboard` uses: an
+     * insights view is rendered by the project page, and `DashboardContent`
+     * reads `config.sections`. A caller that wants the page to show something
+     * identifiable passes a section of its own.
+     */
+    async createInsightsView(args: {
+      name: string;
+      projectId: string;
+      sections?: Array<{ id: string; title: string; widgets: unknown[] }>;
+    }): Promise<InsightsViewRef> {
+      const created = await opik.api.insightsViews.createInsightsView({
+        name: args.name,
+        projectId: args.projectId,
+        // The type the project page's own create dialog sends. The picker filters
+        // its list on it, so a view seeded without it is invisible there — which
+        // would read as the scoping under test rather than as a bad seed.
+        type: 'multi_project',
+        config: {
+          version: 1,
+          sections: args.sections ?? [],
+        },
+      });
+      const id = created.id;
+      if (typeof id !== 'string') {
+        throw new Error(`createInsightsView(${args.name}) returned no id`);
+      }
+      return {
+        id,
+        name: args.name,
+        projectId: created.projectId ?? null,
+        scope: created.scope ?? null,
+      };
+    },
+
+    /**
+     * `GET /v1/private/insights-views` — the read the project page's view picker
+     * issues, with the same `project_id` narrowing.
+     *
+     * `projectId` is optional because its absence is itself a case worth
+     * driving: the unscoped read is what a shared link resolves against, and the
+     * difference between the two is the scoping this exists to check.
+     */
+    async listInsightsViews(args: { projectId?: string } = {}): Promise<InsightsViewRef[]> {
+      const content = await fetchAllPages(
+        (page) =>
+          opik.api.insightsViews.findInsightsViews({
+            ...(args.projectId ? { projectId: args.projectId } : {}),
+            page,
+            size: 100,
+          }),
+        100,
+      );
+      return content.map((d) => ({
+        id: String(d.id ?? ''),
+        name: d.name,
+        projectId: d.projectId ?? null,
+        scope: d.scope ?? null,
+      }));
+    },
+
+    /**
+     * Nothing cascades to an insights view: it outlives the project it names,
+     * and `global-teardown`'s prefix sweep only knows the workspace-scoped
+     * `/dashboards` collection. So a spec that seeds one must delete it.
+     */
+    async deleteInsightsView(id: string): Promise<void> {
+      try {
+        await opik.api.insightsViews.deleteInsightsView(id);
       } catch (err) {
         if (!isNotFoundError(err)) throw err;
       }
@@ -2091,6 +2204,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         model: s.model ?? null,
         provider: s.provider ?? null,
         totalEstimatedCost: s.totalEstimatedCost ?? null,
+        usage: s.usage ?? null,
       }));
     },
 
