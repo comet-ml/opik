@@ -233,6 +233,35 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void dropsScoresWithoutValueAndPersistsTheRest() {
+            // A thread metric returning ScoreResult(value=None) cannot be stored — the value column is not
+            // nullable — but the score next to it must still land: binding the valueless one used to throw
+            // an NPE that failed the whole insert for the thread.
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            stubPythonScoringHappyPath(trace, project);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(
+                            PythonScoreResult.builder()
+                                    .name("test_score")
+                                    .value(BigDecimal.valueOf(0.95))
+                                    .reason("test reason")
+                                    .build(),
+                            PythonScoreResult.builder()
+                                    .name("undecided_score")
+                                    .reason("metric could not decide")
+                                    .build())));
+
+            scorer.score(message).block();
+
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService).scoreBatchOfThreads(captor.capture());
+            assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
+                    threadScore("test_score", BigDecimal.valueOf(0.95), "test reason", project)));
+        }
+
+        @Test
         void stillScoresWhenSpanSizeAggregateFails() {
             // Sizing is advisory: a failed aggregate must not abort the evaluation, because
             // BaseRedisSubscriber would retry maxRetries times and then acknowledge the message,

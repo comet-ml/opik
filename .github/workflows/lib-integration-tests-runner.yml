@@ -19,8 +19,9 @@ on:
           - langchain_legacy
           - llama_index
           - anthropic
-          - mistral
+          # - mistral  # disabled: Mistral API rejects the test traffic with 429
           - groq
+          - cerebras
           - aisuite
           - haystack
           # - guardrails  # disabled: guardrails-ai is on PyPI quarantine
@@ -133,16 +134,25 @@ jobs:
     uses: ./.github/workflows/lib-anthropic-tests.yml
     secrets: inherit
 
-  mistral_tests:
-    needs: [init_environment]
-    if: contains(fromJSON('["mistral", "all"]'), needs.init_environment.outputs.LIBS)
-    uses: ./.github/workflows/lib-mistral-tests.yml
-    secrets: inherit
+  # The Mistral API answers the test traffic with 429 "Rate limit exceeded", so
+  # nearly every test fails regardless of the change under test. Re-enable once
+  # the account's rate limit is raised.
+  # mistral_tests:
+  #   needs: [init_environment]
+  #   if: contains(fromJSON('["mistral", "all"]'), needs.init_environment.outputs.LIBS)
+  #   uses: ./.github/workflows/lib-mistral-tests.yml
+  #   secrets: inherit
 
   groq_tests:
     needs: [init_environment]
     if: contains(fromJSON('["groq", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-groq-tests.yml
+    secrets: inherit
+
+  cerebras_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["cerebras", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-cerebras-tests.yml
     secrets: inherit
 
   aisuite_tests:
@@ -240,8 +250,9 @@ jobs:
       - langchain_legacy_tests
       - llama_index_tests
       - anthropic_tests
-      - mistral_tests
+      # - mistral_tests  # disabled: Mistral API rejects the test traffic with 429
       - groq_tests
+      - cerebras_tests
       - aisuite_tests
       - haystack_tests
       # - guardrails_tests  # disabled: guardrails-ai is on PyPI quarantine
@@ -289,8 +300,8 @@ jobs:
               "LangChain Legacy": "${{ needs.langchain_legacy_tests.result }}",
               "LlamaIndex": "${{ needs.llama_index_tests.result }}",
               "Anthropic": "${{ needs.anthropic_tests.result }}",
-              "Mistral": "${{ needs.mistral_tests.result }}",
               "Groq": "${{ needs.groq_tests.result }}",
+              "Cerebras": "${{ needs.cerebras_tests.result }}",
               "AISuite": "${{ needs.aisuite_tests.result }}",
               "Haystack": "${{ needs.haystack_tests.result }}",
               "DSPy": "${{ needs.dspy_tests.result }}",

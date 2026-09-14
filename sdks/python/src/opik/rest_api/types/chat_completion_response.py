@@ -3,7 +3,9 @@
 import typing
 
 import pydantic
+import typing_extensions
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from ..core.serialization import FieldMetadata
 from .chat_completion_choice import ChatCompletionChoice
 from .usage import Usage
 
@@ -14,8 +16,10 @@ class ChatCompletionResponse(UniversalBaseModel):
     model: typing.Optional[str] = None
     choices: typing.Optional[typing.List[ChatCompletionChoice]] = None
     usage: typing.Optional[Usage] = None
-    system_fingerprint: typing.Optional[str] = None
-    service_tier: typing.Optional[str] = None
+    system_fingerprint: typing_extensions.Annotated[typing.Optional[str], FieldMetadata(alias="systemFingerprint")] = (
+        None
+    )
+    service_tier: typing_extensions.Annotated[typing.Optional[str], FieldMetadata(alias="serviceTier")] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

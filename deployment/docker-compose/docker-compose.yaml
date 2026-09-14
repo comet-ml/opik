@@ -58,6 +58,7 @@ services:
       - clickhouse-server:/var/log/clickhouse-server/:type=volume,source=~/opik/clickhouse/logs
       - clickhouse-config:/etc/clickhouse-server/config.d
       - ./clickhouse_config/users.d/enable_time_type.xml:/etc/clickhouse-server/users.d/enable_time_type.xml
+      - ./clickhouse_config/users.d/distributed_insert_queue.xml:/etc/clickhouse-server/users.d/distributed_insert_queue.xml
     healthcheck:
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping" ]
       interval: 1s

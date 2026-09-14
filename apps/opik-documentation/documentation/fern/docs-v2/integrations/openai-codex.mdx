@@ -16,9 +16,24 @@ Use this guide if you run Codex (CLI/IDE/app) and want its OTEL trace exporter t
 <Callout type="info">
   This guide covers telemetry flowing **from Codex to Opik**. For the other direction — letting Codex
   read your traces, score outputs and run evaluations — register the
-  [Opik MCP server](/mcp-server) with it. One command, `opik configure`, installs the server and the
-  Opik skills. The two are independent, and you can use either or both.
+  [Opik MCP server](/mcp-server) with it. One command, `uvx opik mcp configure`, installs the server
+  and the Opik skills without the SDK. The two are independent, and you can use either or both.
 </Callout>
+
+<Tip title="Looking to reduce Codex spend rather than review sessions?">
+  Opik shows you **what Codex did**. If the question is **where the tokens went and how to spend
+  fewer of them**, that is [Cost Intelligence](/cost-intelligence/overview): every Codex API call
+  captured on the wire and attributed to system prompt, tools, MCP servers and user input, per
+  user and per repository, with policy controls that typically cut spend by 15% to 30%. Only
+  counts and metadata leave the machine, never content. It runs side by side with the OTel export
+  on this page.
+</Tip>
+
+<Warning>
+  Codex redacts prompt text unless `log_user_prompt = true`. With the default `false`, Opik traces
+  show structure, timing and token counts but not what the developer typed. Enable it only if your
+  policy allows prompt export.
+</Warning>
 
 <Callout type="info">
 The block structure below follows the current Codex runtime config shape used in local `config.toml` (`[otel.trace_exporter.otlp-http]`).
