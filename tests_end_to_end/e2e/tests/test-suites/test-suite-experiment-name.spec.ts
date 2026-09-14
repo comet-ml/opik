@@ -80,8 +80,7 @@ test.describe('Test Suites — experiment naming from a suite run', { tag: ['@t2
         // written a third, auto-named experiment against the same suite. The
         // suite is fixture-seeded and untouched by anything else in the run, so
         // its full experiment list is a closed set this test can assert on.
-        const forSuite = (await backendClient.listExperimentsWithPrefix(''))
-          .filter((e) => e.datasetId === testSuite.id)
+        const forSuite = (await backendClient.listExperimentsForDataset(testSuite.id))
           .map((e) => e.name)
           .sort();
         expect(forSuite).toEqual([nameA, nameB].sort());
@@ -160,9 +159,7 @@ test.describe('Test Suites — experiment naming from a suite run', { tag: ['@t2
       });
 
       await test.step('No experiment landed against the suite', async () => {
-        const forSuite = (await backendClient.listExperimentsWithPrefix('')).filter(
-          (e) => e.datasetId === testSuite.id,
-        );
+        const forSuite = await backendClient.listExperimentsForDataset(testSuite.id);
         expect(forSuite).toHaveLength(0);
       });
     },

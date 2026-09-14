@@ -1978,6 +1978,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         }));
     },
 
+    /**
+     * Every experiment recorded against one dataset, scoped by the server.
+     *
+     * The narrowing is the point. `listExperimentsWithPrefix('')` turns the
+     * server-side name filter off and then filters client-side, so it can only
+     * ever see the first 500 rows the workspace happens to return — fine for a
+     * real prefix, but a closed-set assertion built on it ("this dataset holds
+     * exactly these two experiments") silently becomes a truncation test on a
+     * shared environment that already holds more. A dataset seeded by a fixture
+     * holds a handful, so scoping the query keeps the set genuinely closed.
+     */
+    async listExperimentsForDataset(datasetId: string): Promise<ExperimentRefDetail[]> {
+      const page = await opik.api.experiments.findExperiments({ datasetId, size: 500 });
+      return (page.content ?? []).map((e) => ({
+        id: String(e.id),
+        name: e.name as string,
+        datasetId: e.datasetId ? String(e.datasetId) : null,
+      }));
+    },
+
     async deleteExperiment(id: string): Promise<void> {
       try {
         await opik.api.experiments.deleteExperimentsById({ ids: [id] });

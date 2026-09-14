@@ -55,7 +55,15 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
   test(
     'Each variant\'s flask name lands on that variant\'s experiment',
     { tag: ['@cap:playground.run-against-dataset'] },
-    async ({ project, dataset, providerKeys, backendClient, testNamespace, page }) => {
+    async ({
+      project,
+      dataset,
+      providerKeys,
+      backendClient,
+      registerExperimentCleanup,
+      testNamespace,
+      page,
+    }) => {
       test.setTimeout(180_000);
 
       const nameA = `${testNamespace}-variant-a`;
@@ -117,17 +125,18 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         await expect
           .poll(
             async () =>
-              (await backendClient.listExperimentsWithPrefix(''))
-                .filter((e) => e.datasetId === dataset.id)
+              (await backendClient.listExperimentsForDataset(dataset.id))
                 .map((e) => e.name)
                 .sort(),
             { timeout: 60_000, intervals: [500, 1000, 2000, 5000] },
           )
           .toEqual([nameA, nameB].sort());
 
-        return (await backendClient.listExperimentsWithPrefix('')).filter(
-          (e) => e.datasetId === dataset.id,
-        );
+        const created = await backendClient.listExperimentsForDataset(dataset.id);
+        for (const experiment of created) {
+          registerExperimentCleanup(experiment.id, experiment.name);
+        }
+        return created;
       });
 
       await test.step('Both names render on the project Experiments page', async () => {
@@ -144,7 +153,15 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
   test(
     'A whitespace-only name is sent as no name at all, and the experiment is auto-named',
     { tag: ['@cap:playground.run-against-dataset'] },
-    async ({ project, dataset, providerKeys, backendClient, testNamespace, page }) => {
+    async ({
+      project,
+      dataset,
+      providerKeys,
+      backendClient,
+      registerExperimentCleanup,
+      testNamespace,
+      page,
+    }) => {
       test.setTimeout(180_000);
 
       const modelDisplayName = 'unreachable-model';
@@ -194,17 +211,18 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
       await test.step('The experiment landed under a generated name', async () => {
         await expect
           .poll(
-            async () =>
-              (await backendClient.listExperimentsWithPrefix('')).filter(
-                (e) => e.datasetId === dataset.id,
-              ).length,
+            async () => (await backendClient.listExperimentsForDataset(dataset.id)).length,
             { timeout: 60_000, intervals: [500, 1000, 2000, 5000] },
           )
           .toBe(1);
 
-        const [experiment] = (await backendClient.listExperimentsWithPrefix('')).filter(
-          (e) => e.datasetId === dataset.id,
-        );
+        const [experiment] = await backendClient.listExperimentsForDataset(dataset.id);
+        // Registered here and not earlier because the id does not exist until
+        // the run has created it. This is the one experiment in the PR that the
+        // run-prefix sweep in `global-teardown.ts` can never reach: the whole
+        // point of the test is that the server named it, so its name carries no
+        // run prefix to match on. Without this it outlives the run.
+        registerExperimentCleanup(experiment.id, experiment.name);
         expect(experiment.name.trim()).not.toBe('');
         // The generated names are `<adjective>_<animal>_<digits>`; anything
         // carrying the run namespace would mean the whitespace was forwarded

@@ -435,6 +435,7 @@ areas:
     routes: ["/projects/$projectId/playground"]
     spec_dir: playground
     specs:
+      - playground/playground-experiment-name.spec.ts
       - playground/playground-providers.spec.ts
       - playground/playground-smoke.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
@@ -563,6 +564,7 @@ areas:
     spec_dir: test-suites
     specs:
       - test-suites/test-suite-delete.spec.ts
+      - test-suites/test-suite-experiment-name.spec.ts
       - test-suites/test-suite-insert-dedup-listed-suite.spec.ts
       - test-suites/test-suite-insert-deduplication.spec.ts
       - test-suites/test-suites-smoke.spec.ts
