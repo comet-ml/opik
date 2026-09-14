@@ -271,6 +271,7 @@ const usePromptDatasetItemCombination = ({
           providerMessages,
           promptLibraryVersions,
           promptLibraryMetadata,
+          experimentName: prompt.experimentName?.trim() || undefined,
           configs: prompt.configs,
           model: prompt.model,
           provider: prompt.provider,

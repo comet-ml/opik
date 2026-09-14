@@ -18,6 +18,7 @@ interface PlaygroundPromptsProps {
   isPendingProviderKeys: boolean;
   runSingle?: (promptId: string) => void;
   stopSingle?: (promptId: string) => void;
+  isExperimentMode?: boolean;
 }
 
 const PlaygroundPrompts = ({
@@ -26,6 +27,7 @@ const PlaygroundPrompts = ({
   isPendingProviderKeys,
   runSingle,
   stopSingle,
+  isExperimentMode,
 }: PlaygroundPromptsProps) => {
   const promptCount = usePromptCount();
   const promptIds = usePromptIds();
@@ -71,6 +73,7 @@ const PlaygroundPrompts = ({
           modelResolver={calculateDefaultModel}
           onRun={runSingle ? () => runSingle(promptId) : undefined}
           onStop={stopSingle ? () => stopSingle(promptId) : undefined}
+          isExperimentMode={isExperimentMode}
         />
       ))}
     </div>
