@@ -62,13 +62,13 @@ public interface AnnotationQueueDAO {
 
     Mono<Long> deleteBatch(Set<UUID> ids);
 
+    Mono<Set<UUID>> findProjectIdsByQueueIds(Set<UUID> ids);
+
     Mono<Long> addItems(UUID queueId, Set<UUID> itemIds, UUID projectId, AnnotationQueueItemSource source);
 
     Mono<Long> removeItems(UUID queueId, Set<UUID> itemIds, UUID projectId);
 
     Flux<AnnotationQueueItem> findItemsByIds(UUID queueId, UUID projectId, Set<UUID> itemIds);
-
-    Mono<Set<UUID>> findPreviouslyAddedItems(UUID queueId, UUID projectId, Set<UUID> itemIds);
 
     Mono<Long> countItems(UUID queueId, UUID projectId);
 
@@ -189,36 +189,6 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                     <if(item.hasNext)>,<endif>
                 }>
             """;
-
-    /**
-     * Companion insert to {@link #BATCH_ITEMS_INSERT}: records that these items were once in this queue,
-     * so automation never adds them here again. Written for manual adds too — a trace a human already
-     * queued must not be re-added by a later automation run — which is why the invariant lives in the DAO
-     * rather than in the automation runner.
-     */
-    public static final String BATCH_ITEM_HISTORY_INSERT = """
-            INSERT INTO annotation_queue_item_history (
-                queue_id,
-                item_id,
-                project_id,
-                workspace_id,
-                created_by,
-                last_updated_by
-            )
-            VALUES
-                <items:{item |
-                    (
-                        :queue_id,
-                        :item_id<item.index>,
-                        :project_id,
-                        :workspace_id,
-                        :user_name,
-                        :user_name
-                    )
-                    <if(item.hasNext)>,<endif>
-                }>
-            """;
-
     public static final String DELETE_ITEMS_BY_IDS = """
             DELETE FROM annotation_queue_items
             WHERE workspace_id = :workspace_id
@@ -232,20 +202,6 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             WHERE workspace_id = :workspace_id
             AND id IN :ids
             """;
-
-    // History rows outlive item removal by design, but not queue deletion — a stale row would keep
-    // excluding items from a queue id that no longer exists, and grow unbounded.
-    //
-    // Scoped by project as well as queue because the sort key is (workspace_id, project_id, queue_id,
-    // item_id): without project_id the predicate cannot use the key past workspace_id, turning a queue
-    // deletion into a scan of every history row in the workspace.
-    private static final String DELETE_ITEM_HISTORY_BY_QUEUE_IDS = """
-            DELETE FROM annotation_queue_item_history
-            WHERE workspace_id = :workspace_id
-            AND project_id IN :project_ids
-            AND queue_id IN :ids
-            """;
-
     // Read before the queues are deleted: their rows are what maps a queue to its project.
     private static final String SELECT_PROJECT_IDS_BY_QUEUE_IDS = """
             SELECT DISTINCT project_id
@@ -253,18 +209,6 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             WHERE workspace_id = :workspace_id
             AND id IN :ids
             """;
-
-    // Which of these items have ever been in this queue. The caller supplies a bounded id set, so
-    // fetching the intersection and subtracting is simpler than a NOT IN subquery and does the same job.
-    private static final String SELECT_PREVIOUSLY_ADDED_ITEMS = """
-            SELECT DISTINCT item_id
-            FROM annotation_queue_item_history
-            WHERE workspace_id = :workspace_id
-            AND project_id = :project_id
-            AND queue_id = :queue_id
-            AND item_id IN :item_ids
-            """;
-
     // Counts what the queue holds now, not what it has ever held — items removed by a reviewer free up
     // room again. DISTINCT because the table is a ReplacingMergeTree and an unmerged part can still hold
     // more than one row per item.
@@ -603,18 +547,10 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             return Mono.just(0L);
         }
 
-        // Items first, ledger second, on purpose. If the ledger insert fails afterwards, a later
-        // automation run may re-add an item that is already there — a no-op the ReplacingMergeTree
-        // collapses. Ledger-first would risk the opposite: a row excluding an item that never landed,
-        // silently making that trace ineligible for this queue forever.
         return Mono.from(connectionFactory.create())
-                .flatMap(connection -> Flux.from(createItems(queueId, itemIds, projectId, source, connection))
-                        .flatMap(Result::getRowsUpdated)
-                        .reduce(0L, Long::sum)
-                        .flatMap(added -> Flux.from(recordItemHistory(queueId, itemIds, projectId, connection))
-                                .flatMap(Result::getRowsUpdated)
-                                .then()
-                                .thenReturn(added)));
+                .flatMapMany(connection -> createItems(queueId, itemIds, projectId, source, connection))
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum);
     }
 
     @Override
@@ -640,27 +576,6 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     @Override
-    public Mono<Set<UUID>> findPreviouslyAddedItems(@NonNull UUID queueId, @NonNull UUID projectId,
-            @NonNull Set<UUID> itemIds) {
-        if (itemIds.isEmpty()) {
-            return Mono.just(Set.of());
-        }
-
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(SELECT_PREVIOUSLY_ADDED_ITEMS)
-                            .bind("project_id", projectId.toString())
-                            .bind("queue_id", queueId.toString())
-                            .bind("item_ids", itemIds.toArray(UUID[]::new));
-
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
-                })
-                .flatMap(result -> result.map(
-                        (row, metadata) -> UUID.fromString(row.get("item_id", String.class))))
-                .collect(Collectors.toSet());
-    }
-
-    @Override
     public Mono<Long> countItems(@NonNull UUID queueId, @NonNull UUID projectId) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
@@ -673,25 +588,6 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
                 .reduce(0L, Long::sum);
     }
-
-    private Publisher<? extends Result> recordItemHistory(UUID queueId, Set<UUID> itemIds, UUID projectId,
-            Connection connection) {
-        var queryItems = getQueryItemPlaceHolder(itemIds.size());
-        var template = TemplateUtils.newST(BATCH_ITEM_HISTORY_INSERT).add("items", queryItems);
-
-        var statement = connection.createStatement(template.render());
-        statement.bind("queue_id", queueId.toString())
-                .bind("project_id", projectId.toString());
-
-        int index = 0;
-        for (UUID itemId : itemIds) {
-            statement.bind("item_id" + index, itemId.toString());
-            index++;
-        }
-
-        return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement));
-    }
-
     @Override
     public Mono<Long> removeItems(@NonNull UUID queueId, @NonNull Set<UUID> itemIds, @NonNull UUID projectId) {
         if (itemIds.isEmpty()) {
@@ -720,19 +616,22 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         }
 
         return Mono.from(connectionFactory.create())
-                .flatMap(connection -> Flux.from(selectProjectIds(ids, connection))
-                        .flatMap(result -> result.map((row, metadata) -> UUID.fromString(
-                                row.get("project_id", String.class))))
-                        .collect(Collectors.toSet())
-                        .flatMap(projectIds -> Flux.from(deleteQueues(ids, connection))
-                                .flatMap(Result::getRowsUpdated)
-                                .reduce(0L, Long::sum)
-                                .flatMap(deleted -> projectIds.isEmpty()
-                                        ? Mono.just(deleted)
-                                        : Flux.from(deleteItemHistory(ids, projectIds, connection))
-                                                .flatMap(Result::getRowsUpdated)
-                                                .then()
-                                                .thenReturn(deleted))));
+                .flatMapMany(connection -> deleteQueues(ids, connection))
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum);
+    }
+
+    @Override
+    public Mono<Set<UUID>> findProjectIdsByQueueIds(@NonNull Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> selectProjectIds(ids, connection))
+                .flatMap(result -> result.map((row, metadata) -> UUID.fromString(
+                        row.get("project_id", String.class))))
+                .collect(Collectors.toSet());
     }
 
     private Publisher<? extends Result> deleteQueues(Set<UUID> ids, Connection connection) {
@@ -741,16 +640,6 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
         return makeMonoContextAware(bindWorkspaceIdToMono(statement));
     }
-
-    private Publisher<? extends Result> deleteItemHistory(Set<UUID> ids, Set<UUID> projectIds,
-            Connection connection) {
-        var statement = connection.createStatement(DELETE_ITEM_HISTORY_BY_QUEUE_IDS)
-                .bind("ids", ids.toArray(UUID[]::new))
-                .bind("project_ids", projectIds.toArray(UUID[]::new));
-
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
-    }
-
     private Publisher<? extends Result> selectProjectIds(Set<UUID> ids, Connection connection) {
         var statement = connection.createStatement(SELECT_PROJECT_IDS_BY_QUEUE_IDS)
                 .bind("ids", ids.toArray(UUID[]::new));

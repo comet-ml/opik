@@ -58,6 +58,7 @@ public interface AnnotationQueueService {
 class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
     private final @NonNull AnnotationQueueDAO annotationQueueDAO;
+    private final @NonNull AnnotationQueueItemHistoryDAO itemHistoryDAO;
     private final @NonNull AnnotationQueueItemLockService lockService;
     private final @NonNull AnnotationQueueAutomationService automationService;
     private final @NonNull IdGenerator idGenerator;
@@ -236,10 +237,26 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .flatMap(queue -> eligibleItems(queueId, queue.projectId(), itemIds, source)
                         .flatMap(eligible -> eligible.isEmpty()
                                 ? Mono.just(0L)
-                                : annotationQueueDAO.addItems(queueId, eligible, queue.projectId(), source)))
+                                : addAndRecord(queueId, eligible, queue.projectId(), source)))
                 .doOnSuccess(addedCount -> log.debug("Successfully added '{}' items to annotation queue with id '{}'",
                         addedCount, queueId))
                 .doOnError(error -> log.info("Failed to add items to annotation queue with id '{}'", queueId, error));
+    }
+
+    /**
+     * Items first, ledger second, on purpose.
+     *
+     * <p>If the ledger insert fails afterwards, a later automation run may re-add an item that is already
+     * there — a no-op the ReplacingMergeTree collapses. Ledger-first would risk the opposite: a row
+     * excluding an item that never landed, silently making that trace ineligible for this queue forever.
+     *
+     * <p>The two tables have no shared transaction, so the ordering is the whole guarantee. It lives here
+     * rather than in either DAO because it is a statement about how they relate.
+     */
+    private Mono<Long> addAndRecord(UUID queueId, Set<UUID> itemIds, UUID projectId,
+            AnnotationQueueItemSource source) {
+        return annotationQueueDAO.addItems(queueId, itemIds, projectId, source)
+                .flatMap(added -> itemHistoryDAO.recordItems(queueId, itemIds, projectId).thenReturn(added));
     }
 
     /**
@@ -257,7 +274,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
             return Mono.just(itemIds);
         }
 
-        return annotationQueueDAO.findPreviouslyAddedItems(queueId, projectId, itemIds)
+        return itemHistoryDAO.findPreviouslyAddedItems(queueId, projectId, itemIds)
                 .map(alreadyAdded -> {
                     if (alreadyAdded.isEmpty()) {
                         return itemIds;
@@ -374,6 +391,10 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             return Mono.fromRunnable(() -> automationService.deleteByQueueIds(workspaceId, List.copyOf(ids)));
         })
+                // History before the queues: the queue rows are what map a queue to its project, and the
+                // ledger delete is scoped by project to stay on the sort key.
+                .then(annotationQueueDAO.findProjectIdsByQueueIds(ids))
+                .flatMap(projectIds -> itemHistoryDAO.deleteByQueueIds(ids, projectIds))
                 .then(annotationQueueDAO.deleteBatch(ids))
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnSuccess(deletedCount -> log.debug("Successfully deleted '{}' annotation queues", deletedCount))
