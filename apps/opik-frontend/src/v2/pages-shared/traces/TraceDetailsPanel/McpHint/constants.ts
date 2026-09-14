@@ -1,8 +1,6 @@
 // The control is not offered because an error exists — it is offered because the
-// user chose to open it. Landing a beat after that choice is what makes it read
-// as a response rather than as furniture that was there all along.
-export const MCP_HINT_REVEAL_DELAY_MS = 1000;
-
+// user chose to open it, and it goes away with it. The fade is what makes it
+// read as a response rather than as furniture that was there all along.
 // Long enough to cross the gap between the button and the popover, short enough
 // that a popover the user has walked away from does not linger.
 export const MCP_HINT_HOVER_GRACE_MS = 260;
