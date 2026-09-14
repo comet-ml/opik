@@ -138,10 +138,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     { updateType: "replaceIn" },
   );
   const [isGraphFullscreen, setIsGraphFullscreen] = useState(false);
-  // Which failure the user has the error section open on. Scoped to the span
-  // rather than a bare boolean: the section is one component reused across the
-  // tree, so a plain flag would read as open on a span nobody opened.
-  const [errorExpandedFor, setErrorExpandedFor] = useState<string | null>(null);
+  // Which node the error section is open on. Scoped rather than a bare boolean:
+  // the section is one component reused across the tree, so a flag would read as
+  // open on a node nobody opened.
+  const [errorOpenFor, setErrorOpenFor] = useState<string | null>(null);
 
   const [search = undefined, setSearch] = useQueryParam(
     `trace_panel_search`,
@@ -223,25 +223,24 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     return [...(trace ? [trace] : []), ...(spansData?.content || [])];
   }, [spansData?.content, trace]);
 
-  // The failure the hint is about. A different span or trace is a different
-  // failure, so the hint has to earn its reveal again.
+  // The node being inspected. Switching it resets the hint.
   const mcpHintSubject = `${traceId}:${spanId}`;
   const mcpHintTarget = useMemo<McpHintTarget>(
     () => ({ traceId, projectId, entityType: spanId ? "span" : "trace" }),
     [traceId, projectId, spanId],
   );
 
-  const isErrorExpanded = errorExpandedFor === mcpHintSubject;
+  const isErrorOpen = errorOpenFor === mcpHintSubject;
 
   const handleErrorExpandedChange = useCallback(
     (expanded: boolean) => {
-      setErrorExpandedFor(expanded ? mcpHintSubject : null);
+      setErrorOpenFor(expanded ? mcpHintSubject : null);
       if (!expanded) return;
 
       // Emitted here rather than from the shared error section: this is the only
       // place that knows the hint is switched on, and the funnel's first step
       // must not count surfaces where the hint never appears. The impression
-      // lands in the same breath now that the reveal is immediate.
+      // lands in the same breath, since the hint appears immediately.
       const properties = { entity_type: mcpHintTarget.entityType };
       trackEvent(OpikEvent.TRACE_ERROR_EXPANDED, properties);
       if (showMcpHint) trackEvent(OpikEvent.MCP_BUTTON_SHOWN, properties);
@@ -420,7 +419,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     setActiveSection={setActiveSection}
                     isSpansLazyLoading={isSpansLazyLoading}
                     search={search}
-                    isErrorExpanded={showMcpHint ? isErrorExpanded : undefined}
+                    isErrorExpanded={showMcpHint ? isErrorOpen : undefined}
                     onErrorExpandedChange={
                       showMcpHint ? handleErrorExpandedChange : undefined
                     }
@@ -428,7 +427,8 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                 )}
                 {showMcpHint && (
                   <McpHintRail
-                    isErrorExpanded={isErrorExpanded}
+                    key={mcpHintSubject}
+                    isErrorOpen={isErrorOpen}
                     target={mcpHintTarget}
                   />
                 )}

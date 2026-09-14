@@ -8,7 +8,7 @@ type ErrorCalloutProps = {
   search?: string;
   /**
    * Controlled open state. Passed straight through — the section deliberately
-   * does not keep its own copy, so nothing can drift from whoever owns it.
+   * keeps no copy, so nothing can drift from whoever owns it.
    */
   isExpanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
