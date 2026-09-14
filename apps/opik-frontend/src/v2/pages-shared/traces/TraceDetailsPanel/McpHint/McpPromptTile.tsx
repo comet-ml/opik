@@ -2,7 +2,6 @@ import React from "react";
 import { Copy, Sparkles } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { cn } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { McpHintEntityType, McpInstallMode, McpRouteOutcome } from "./types";
 import { MCP_TILE_CLASS } from "./tileStyles";
@@ -53,10 +52,10 @@ const McpPromptTile: React.FunctionComponent<McpPromptTileProps> = ({
         type="button"
         onClick={handlePromptCopy}
         data-testid="mcp-route-prompt"
-        className={cn(MCP_TILE_CLASS, "w-full")}
+        className={MCP_TILE_CLASS}
       >
         <Sparkles className="size-3 shrink-0 text-[var(--color-ollie)]" />
-        <span className="flex-1 whitespace-nowrap text-left">Prompt</span>
+        <span className="whitespace-nowrap">Prompt</span>
         <Copy className="size-3 shrink-0 text-light-slate" />
       </button>
     </TooltipWrapper>

@@ -62,16 +62,10 @@ const InstallRoutesLayout: React.FunctionComponent<
   );
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap gap-1.5">
-        {routes.map((route) => (
-          <McpRouteTile
-            key={route.client}
-            route={route}
-            onUse={handleRouteUse}
-          />
-        ))}
-      </div>
+    <div className="flex flex-wrap gap-1.5">
+      {routes.map((route) => (
+        <McpRouteTile key={route.client} route={route} onUse={handleRouteUse} />
+      ))}
       <McpPromptTile
         prompt={prompt}
         installMode={installMode}

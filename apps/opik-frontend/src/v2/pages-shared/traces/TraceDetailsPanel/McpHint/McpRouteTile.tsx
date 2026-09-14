@@ -2,7 +2,6 @@ import React from "react";
 import { Copy, ExternalLink } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { cn } from "@/lib/utils";
 import { McpInstallRoute, MCP_ROUTE_METHOD } from "./types";
 import { MCP_TILE_CLASS } from "./tileStyles";
 
@@ -41,7 +40,7 @@ const McpRouteTile: React.FunctionComponent<McpRouteTileProps> = ({
     </>
   );
 
-  const className = cn(MCP_TILE_CLASS, "w-fit shrink-0");
+  const className = MCP_TILE_CLASS;
 
   return (
     <TooltipWrapper content={route.tooltip} nonInteractive>
