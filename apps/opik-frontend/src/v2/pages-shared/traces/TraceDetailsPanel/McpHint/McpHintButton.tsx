@@ -68,15 +68,12 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
     }
   }, [isOpen, installMode, target.entityType]);
 
-  // HoverCard covers pointer and keyboard focus on its own. Click is ours:
-  // without it the card is unreachable on touch, where neither exists.
-  const handleClick = useCallback(() => setIsOpen(true), []);
-
   // A confirmation is showing. It is shorter than the route list, so the card
   // shrinks out from under the pointer that just clicked — and the pointer-leave
   // that follows would close it before the user has read what it says.
   const [hasOutcome, setHasOutcome] = useState(false);
 
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const holdsFocus = () =>
     Boolean(contentRef.current?.contains(document.activeElement));
@@ -89,6 +86,29 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
     setHasOutcome(false);
     setIsOpen(false);
   }, []);
+
+  // HoverCard covers pointer and keyboard focus on its own. Click is ours, and
+  // it toggles: a control that opens on click but cannot close again makes the
+  // user go looking for somewhere else to click. Also the only way in on touch,
+  // where neither hover nor focus exists.
+  const handleClick = useCallback(() => {
+    if (isOpen) {
+      close();
+      return;
+    }
+    setIsOpen(true);
+  }, [isOpen, close]);
+
+  // The trigger sits outside the content, so its own pointer-down counts as an
+  // outside interaction. Left alone it would close the card a moment before the
+  // click reopened it, and the toggle would never appear to work.
+  const handlePointerDownOutside = useCallback(
+    (event: Event) => {
+      if (triggerRef.current?.contains(event.target as Node)) return;
+      close();
+    },
+    [close],
+  );
 
   const handleOpenChange = useCallback(
     (nextIsOpen: boolean) => {
@@ -120,6 +140,7 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
     >
       <HoverCardTrigger asChild>
         <button
+          ref={triggerRef}
           type="button"
           className={PILL_CLASS}
           data-testid="mcp-hint-button"
@@ -138,12 +159,17 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
         ref={contentRef}
         onBlur={handleContentBlur}
         onEscapeKeyDown={close}
-        onPointerDownOutside={close}
+        onPointerDownOutside={handlePointerDownOutside}
         onFocusOutside={close}
         side="bottom"
         align="end"
         sideOffset={6}
-        className="w-auto border-0 bg-transparent p-0 shadow-none"
+        // No exit animation. Radix unmounts the card on `animationend`, and in
+        // this position that event never arrives — the exit animation reports
+        // itself as running forever, so the card stayed on screen, fully
+        // opaque, long after it had closed. Clicking away appeared to do
+        // nothing at all. Entering still animates.
+        className="w-auto border-0 bg-transparent p-0 shadow-none data-[state=closed]:!animate-none"
         data-testid="mcp-hint-popover"
         onClick={stopPointerPropagation}
         onPointerDown={stopPointerPropagation}
