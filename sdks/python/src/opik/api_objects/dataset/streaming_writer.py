@@ -18,12 +18,13 @@ import pathlib
 import uuid
 import zlib
 from concurrent import futures
-from typing import Any, Callable, Dict, Mapping, Optional, Set, overload
+from typing import Any, Callable, Dict, Mapping, Optional, Set
 
 import pydantic
 
 from ... import config
 from .. import constants
+from . import identifiers
 from ...rest_api.core.jsonable_encoder import jsonable_encoder
 
 LOGGER = logging.getLogger(__name__)
@@ -250,46 +251,6 @@ class BoundedSendPool:
             self._pool.shutdown(wait=True)
 
 
-@overload
-def canonical_id(value: None) -> None: ...
-
-
-@overload
-def canonical_id(value: Any) -> str: ...
-
-
-def canonical_id(value: Any) -> Optional[str]:
-    """The one form of an item identifier, for the wire and for anything keyed by it.
-
-    `DatasetItem` declares its identifiers `SkipValidation[str]` and so passes through
-    whatever it was given -- a `uuid.UUID` object, most usefully. Everything that has to
-    agree on what an item *is* goes through here, the request body and the caches keyed by
-    id alike, so an id and the form it was sent in cannot become two identities for one
-    item.
-    """
-    return value if value is None or isinstance(value, str) else str(value)
-
-
-def validate_identifier(value: Any, field: str, index: Optional[int] = None) -> None:
-    """Reject an identifier the backend cannot store, before the request goes out.
-
-    `id`, `trace_id` and `span_id` are UUID columns server-side, so anything else is
-    refused there with a deserialisation error that names neither the item nor the field.
-    `DatasetItem` declares them `SkipValidation[str]` and a prepared body never passes
-    through the generated model, so this is the only check between the caller and that.
-    """
-    canonical = canonical_id(value)
-    if canonical is None:
-        return
-    try:
-        uuid.UUID(canonical)
-    except ValueError:
-        where = "" if index is None else f" at index {index}"
-        raise ValueError(
-            f"Dataset item{where} has an invalid {field}: {value!r} is not a UUID"
-        ) from None
-
-
 def item_payload(
     *,
     item_id: Optional[str],
@@ -308,15 +269,15 @@ def item_payload(
     client omits fields that were never set while serialising explicit `None`s as null.
     Anything added here that the generated client does not send would change the request.
 
-    The three identifiers go through `canonical_id`, because `DatasetItem` passes whatever
-    it was given straight through and a `uuid.UUID` is an identifier that simply is not a
-    string yet. Anything that is not a UUID in either form is refused before this, by
-    `validate_identifier`.
+    The three identifiers go through `identifiers.optional_canonical_id`, because
+    `DatasetItem` passes whatever it was given straight through and a `uuid.UUID` is an
+    identifier that simply is not a string yet. Anything that is not a UUID in either
+    form is refused before this, by `identifiers.validate_identifier`.
     """
     return {
-        "id": canonical_id(item_id),
-        "trace_id": canonical_id(trace_id),
-        "span_id": canonical_id(span_id),
+        "id": identifiers.optional_canonical_id(item_id),
+        "trace_id": identifiers.optional_canonical_id(trace_id),
+        "span_id": identifiers.optional_canonical_id(span_id),
         "source": source,
         "data": data,
         "description": description,
@@ -353,9 +314,7 @@ def build_batch_writer(
     )
 
 
-def build_send_pool(
-    send: Callable[[bytes], None], num_threads: int
-) -> BoundedSendPool:
+def build_send_pool(send: Callable[[bytes], None], num_threads: int) -> BoundedSendPool:
     """The upload sink for one insert.
 
     Owns the one derivation the pool used to make for itself: twice the worker count,

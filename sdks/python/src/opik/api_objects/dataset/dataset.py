@@ -34,6 +34,7 @@ import opik.config as config
 from .. import constants
 from . import (
     dataset_item,
+    identifiers,
     converters,
     rest_operations,
     execution_policy,
@@ -759,7 +760,7 @@ class Dataset(DatasetExportOperations):
                 self._hashes.add(item_hash)
                 # Keyed the way the item is sent, so a later delete by the id the backend
                 # returns finds the hash this pass cached.
-                self._id_to_hash[streaming_writer.canonical_id(item.id)] = item_hash
+                self._id_to_hash[identifiers.canonical_id(item.id)] = item_hash
             yield item
 
     def _item_payload(self, item: dataset_item.DatasetItem) -> Dict[str, Any]:
@@ -769,7 +770,7 @@ class Dataset(DatasetExportOperations):
             ("trace_id", item.trace_id),
             ("span_id", item.span_id),
         ):
-            streaming_writer.validate_identifier(value, field)
+            identifiers.validate_identifier(value, field)
         evaluators = None
         if item.evaluators:
             evaluators = [
@@ -1063,7 +1064,7 @@ class Dataset(DatasetExportOperations):
                         if isinstance(item, dict)
                         else getattr(item, field, None)
                     )
-                    streaming_writer.validate_identifier(supplied, field, index)
+                    identifiers.validate_identifier(supplied, field, index)
 
         # A generator rather than a list: converting lazily is what lets a generator
         # argument stay un-materialised all the way to the wire.
@@ -1103,7 +1104,7 @@ class Dataset(DatasetExportOperations):
 
         for item in self.__internal_api__stream_items_as_dataclasses__():
             item_hash = item.content_hash()
-            self._id_to_hash[streaming_writer.canonical_id(item.id)] = item_hash
+            self._id_to_hash[identifiers.canonical_id(item.id)] = item_hash
             self._hashes.add(item_hash)
 
         self._hashes_synced = True
@@ -1191,7 +1192,7 @@ class Dataset(DatasetExportOperations):
         # different form than it was inserted in still matches the cached hash.
         canonical_ids = []
         for index, id_ in enumerate(items_ids):
-            canonical = streaming_writer.canonical_id(id_)
+            canonical = identifiers.optional_canonical_id(id_)
             # Neither identifies an item, and both reach the backend as a request to
             # delete nothing in particular rather than as an error.
             if not canonical:
@@ -1426,7 +1427,7 @@ class Dataset(DatasetExportOperations):
             before = os.stat(file_path)
             for index, item in enumerate(items()):
                 for field in ("id", "trace_id", "span_id"):
-                    streaming_writer.validate_identifier(
+                    identifiers.validate_identifier(
                         getattr(item, field, None), field, index
                     )
             # The upload re-opens the path, so a file rewritten in between would send

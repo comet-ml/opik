@@ -145,9 +145,7 @@ def test_add__value_not_json_serializable__raises_explicitly():
         uuid.UUID("00000000-0000-0000-0000-000000000001"),
     ],
 )
-def test_add__flexible_value__serialised_the_way_the_generated_client_did(
-    value
-):
+def test_add__flexible_value__serialised_the_way_the_generated_client_did(value):
     """`datetime`, `set`, `Enum` and friends reached the backend before; they still must."""
     bodies, flush_callback = _collect()
     writer = _writer(flush_callback)
