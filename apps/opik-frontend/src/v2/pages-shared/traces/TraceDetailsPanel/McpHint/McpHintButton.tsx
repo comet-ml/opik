@@ -2,19 +2,19 @@ import React, {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type SyntheticEvent,
 } from "react";
 
 import { cn } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
-import { Popover, PopoverAnchor, PopoverContent } from "@/ui/popover";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import McpHintPopover from "./McpHintPopover";
-import useHoverGrace from "./useHoverGrace";
 import useMcpInstallMode from "./useMcpInstallMode";
-import { MCP_HINT_LABEL } from "./constants";
+import { MCP_HINT_CLOSE_DELAY_MS, MCP_HINT_LABEL } from "./constants";
 import { McpHintTarget } from "./types";
 
-// Keep clicks inside the popover from reaching the traceback underneath it.
+// Keep clicks inside the card from reaching the traceback underneath it.
 const stopPointerPropagation = (event: SyntheticEvent) =>
   event.stopPropagation();
 
@@ -35,7 +35,7 @@ type McpHintButtonProps = {
 const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
   target,
 }) => {
-  const { isOpen, open, closeNow, closeAfterGrace } = useHoverGrace();
+  const [isOpen, setIsOpen] = useState(false);
   const installMode = useMcpInstallMode();
 
   // Distinguishes "read it and walked away" from "used it". Only the first is
@@ -44,11 +44,6 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
   const markAction = useCallback(() => {
     hasActedRef.current = true;
   }, []);
-
-  // Radix restores focus to the trigger when the popover is dismissed, which
-  // would re-open it through onFocus. Suppress exactly that one focus, and let
-  // the next real one through.
-  const ignoreNextFocusRef = useRef(false);
 
   // Driven off the resulting state rather than off each handler: hover, click
   // and keyboard all land here, and only the transition is an event.
@@ -73,44 +68,25 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
     }
   }, [isOpen, installMode, target.entityType]);
 
-  // Only ever a dismissal: Escape, or a pointer outside. Opening is ours.
-  const handleDismiss = useCallback(
-    (nextIsOpen: boolean) => {
-      if (nextIsOpen) return;
-      ignoreNextFocusRef.current = true;
-      closeNow();
-    },
-    [closeNow],
-  );
-
-  const handleFocus = useCallback(() => {
-    if (ignoreNextFocusRef.current) return;
-    open();
-  }, [open]);
-
-  const handleBlur = useCallback(() => {
-    ignoreNextFocusRef.current = false;
-  }, []);
+  // HoverCard covers pointer and keyboard focus on its own. Click is ours:
+  // without it the card is unreachable on touch, where neither exists.
+  const handleClick = useCallback(() => setIsOpen(true), []);
 
   return (
-    <Popover open={isOpen} onOpenChange={handleDismiss}>
-      {/* An anchor rather than a trigger. Radix's trigger *toggles*, and with
-          hover already having opened the popover a mouse click would arrive to
-          find it open and close it — so clicking the pill would dismiss the
-          thing it is supposed to summon. Opening stays ours; Radix keeps
-          Escape and outside-pointer dismissal. */}
-      <PopoverAnchor asChild>
+    <HoverCard
+      open={isOpen}
+      onOpenChange={setIsOpen}
+      openDelay={0}
+      closeDelay={MCP_HINT_CLOSE_DELAY_MS}
+    >
+      <HoverCardTrigger asChild>
         <button
           type="button"
           className={PILL_CLASS}
           data-testid="mcp-hint-button"
           aria-haspopup="dialog"
           aria-expanded={isOpen}
-          onClick={open}
-          onPointerEnter={open}
-          onPointerLeave={closeAfterGrace}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
+          onClick={handleClick}
         >
           {/* Wrapped rather than bare so a page translator cannot re-parent the
               text node out from under React (see the browser-translation note
@@ -119,26 +95,19 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
             {MCP_HINT_LABEL}
           </span>
         </button>
-      </PopoverAnchor>
-      <PopoverContent
+      </HoverCardTrigger>
+      <HoverCardContent
         side="bottom"
         align="end"
-        sideOffset={0}
-        // The gap below the pill is padding on this transparent wrapper, not a
-        // positional offset. An offset would leave a strip the pointer cannot
-        // cross without the popover closing out from under it.
-        className="w-auto border-0 bg-transparent p-0 pt-1.5 shadow-none"
+        sideOffset={6}
+        className="w-auto border-0 bg-transparent p-0 shadow-none"
         data-testid="mcp-hint-popover"
-        // Hover must not steal focus; a keyboard user stays on the trigger.
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        onPointerEnter={open}
-        onPointerLeave={closeAfterGrace}
         onClick={stopPointerPropagation}
         onPointerDown={stopPointerPropagation}
       >
         <McpHintPopover onAction={markAction} target={target} />
-      </PopoverContent>
-    </Popover>
+      </HoverCardContent>
+    </HoverCard>
   );
 };
 
