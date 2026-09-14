@@ -444,7 +444,7 @@ areas:
     capabilities:
       compose-run-prompt:        { covered: true,  tier: t1-smoke }
       select-model-provider:     { covered: true,  suites: [provider-sanity] }
-      run-against-dataset:       { covered: true,  tier: t1-smoke, note: "auto-creates experiment" }
+      run-against-dataset:       { covered: true,  tier: t1-smoke, note: "auto-creates experiment; t2 additionally covers OPIK-3268 naming — the per-variant flask name reaches that variant's experiment, a duplicated variant starts unnamed, and a whitespace-only name is posted as no name and auto-generated server-side" }
       save-new-prompt:           { covered: true,  tier: t1-smoke }
       save-prompt-version:       { covered: true,  tier: t2-cuj }
       load-prompt-version:       { covered: true,  tier: t2-cuj }
@@ -583,7 +583,12 @@ areas:
       create-suite-sdk:      { covered: true,  tier: t1-smoke }
       view-suite-items:      { covered: true,  tier: t1-smoke, note: "3 SDK-seeded items render; t2 also covers TestSuite.insert's deduplication flag both ways — deduplication=False renders both identical test cases as separate rows (asserted by data-row-id, since the Test cases table shows no data columns), the default renders one" }
       run-suite-sdk:         { covered: true,  tier: t1-smoke, note: "3/3 pass experiment" }
-      run-suite-playground:  { covered: true,  tier: t1-smoke }
+      # The t2 spec covers the endpoint the Playground's suite mode posts to
+      # (`/experiments/execute`), not the Playground UI itself — the UI half of
+      # this capability is still the t1 smoke's. Scoped here rather than left
+      # implicit so the note never reads as a claim that a second spec drives
+      # the Playground.
+      run-suite-playground:  { covered: true,  tier: t1-smoke, note: "t2 additionally covers OPIK-3268 naming at /experiments/execute: each prompt variant's experiment_name reaches its own experiment, an omitted one falls back to a distinct generated name, and a whitespace-only one is rejected 422" }
       pass-rate-display:     { covered: true,  tier: t1-smoke }
       global-assertions:     { covered: true,  tier: t1-smoke }
       delete-suite:          { covered: true,  tier: t2-cuj }

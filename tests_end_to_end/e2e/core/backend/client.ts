@@ -142,6 +142,31 @@ export interface ExperimentRefDetail {
   datasetId: string | null;
 }
 
+/** One prompt variant of a `POST /v1/private/experiments/execute` request. */
+export interface ExecutePromptSeed {
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+  /**
+   * The per-variant experiment name (OPIK-3268). Omitted rather than sent as
+   * null when absent, so a caller testing the auto-name fallback exercises the
+   * same payload shape the Playground sends.
+   */
+  experimentName?: string;
+}
+
+/**
+ * The `202` body of `/v1/private/experiments/execute`, plus the raw status so a
+ * caller can assert a rejection without the call throwing first — the blank-name
+ * `422` is part of this endpoint's contract, not a transport failure.
+ */
+export interface ExecuteExperimentsResult {
+  status: number;
+  message: string;
+  /** Ordered by `promptIndex`, so `[i]` is the experiment for `prompts[i]`. */
+  experiments: Array<{ experimentId: string; promptIndex: number }>;
+  totalItems: number | null;
+}
+
 export interface TestSuiteRef {
   id: string;
   name: string;
@@ -1960,6 +1985,87 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * One experiment by id, as the server stored it.
+     *
+     * `findExperimentByName` cannot answer "what name did this experiment end
+     * up with", which is the question a naming test asks: it looks the row up
+     * BY the name, so an experiment that was stored under a different name than
+     * the one requested simply reads as absent, and the failure says "not
+     * found" instead of naming the two strings that disagree.
+     */
+    async getExperiment(id: string): Promise<ExperimentRefDetail> {
+      const experiment = await opik.api.experiments.getExperimentById(id);
+      const name = experiment.name;
+      // Asserted, not defaulted: the generated client types `name` as optional,
+      // and a `?? ''` here would turn "the server dropped the name" — the exact
+      // regression this exists to catch — into a comparison against an empty
+      // string that reads like an ordinary mismatch.
+      if (typeof name !== 'string') {
+        throw new Error(`getExperiment: experiment ${id} carried no name`);
+      }
+      return {
+        id: String(experiment.id),
+        name,
+        datasetId: experiment.datasetId ? String(experiment.datasetId) : null,
+      };
+    },
+
+    /**
+     * `POST /v1/private/experiments/execute` — the write path a test-suite run
+     * takes, and the one that carries a per-variant `experiment_name`
+     * (OPIK-3268). The pinned SDK has no binding for it, so this goes through
+     * `rawFetch` like the other contract-level calls above.
+     *
+     * Returns rather than throws on a non-2xx: the endpoint's rejection of a
+     * blank name is behaviour under test.
+     */
+    async executeExperiments(args: {
+      datasetName: string;
+      datasetId: string;
+      projectName: string;
+      prompts: ExecutePromptSeed[];
+    }): Promise<ExecuteExperimentsResult> {
+      const { status, message, json } = await rawFetch('POST', '/v1/private/experiments/execute', {
+        body: {
+          dataset_name: args.datasetName,
+          dataset_id: args.datasetId,
+          project_name: args.projectName,
+          prompts: args.prompts.map((prompt) => ({
+            model: prompt.model,
+            messages: prompt.messages,
+            ...(prompt.experimentName === undefined
+              ? {}
+              : { experiment_name: prompt.experimentName }),
+          })),
+        },
+      });
+
+      const body = json as {
+        experiments?: Array<{ experiment_id?: string; prompt_index?: number }>;
+        total_items?: number;
+        errors?: string[];
+      } | null;
+
+      // The validation failures answer `{"errors": [...]}` rather than the
+      // `message` field `rawFetch` prefers, so fold them in — otherwise a
+      // caller asserting on the rejection text gets the raw JSON blob.
+      const errors = body?.errors;
+      const detail = Array.isArray(errors) && errors.length > 0 ? errors.join('; ') : message;
+
+      return {
+        status,
+        message: detail,
+        experiments: (body?.experiments ?? [])
+          .map((entry) => ({
+            experimentId: String(entry.experiment_id),
+            promptIndex: Number(entry.prompt_index),
+          }))
+          .sort((a, b) => a.promptIndex - b.promptIndex),
+        totalItems: typeof body?.total_items === 'number' ? body.total_items : null,
+      };
     },
 
     async findTestSuiteByName(name: string, projectName?: string): Promise<TestSuiteRef | null> {

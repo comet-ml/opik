@@ -135,6 +135,54 @@ export class PlaygroundPage {
   }
 
   /**
+   * Add a variant that copies the last one — same model and messages, but a
+   * cleared experiment name (`PlaygroundAddVariant.handleDuplicateLastPrompt`).
+   *
+   * Duplicating rather than adding a blank variant is deliberate: a blank one
+   * inherits only the last-picked model and needs its messages configured
+   * again, which is setup the naming assertion does not care about.
+   */
+  async duplicateLastVariant(): Promise<void> {
+    return test.step('add variant (duplicate of the last one)', async () => {
+      await this.page.getByTestId('playground-add-variant-button').click();
+      await this.page.getByRole('button', { name: 'Duplicate variant' }).click();
+    });
+  }
+
+  /**
+   * Type an experiment name into a variant's flask menu (OPIK-3268).
+   *
+   * The menu is a dropdown, so the input only exists while it is open, and the
+   * menu is left closed afterwards (see `closeExperimentNameMenu`). `fill('')`
+   * is a real clear, which is how a caller drives the "blank name falls back to
+   * an auto-generated one" path.
+   */
+  async setExperimentName(index: number, name: string): Promise<void> {
+    return test.step(`set variant ${index} experiment name to "${name}"`, async () => {
+      const input = await this.openExperimentNameMenu(index);
+      await input.fill(name);
+      await expect(input).toHaveValue(name);
+      await this.closeExperimentNameMenu(index);
+    });
+  }
+
+  /**
+   * The experiment name currently held for a variant, read out of its own menu.
+   *
+   * Returns the input's value rather than the trigger's tooltip: the tooltip is
+   * only rendered on hover, and its fallback text ("Experiment name") is
+   * indistinguishable from a variant genuinely named that.
+   */
+  async readExperimentName(index: number): Promise<string> {
+    return test.step(`read variant ${index} experiment name`, async () => {
+      const input = await this.openExperimentNameMenu(index);
+      const value = await input.inputValue();
+      await this.closeExperimentNameMenu(index);
+      return value;
+    });
+  }
+
+  /**
    * Wait for runs to complete in the experiment-results table.
    *
    * Polling shape depends on what was loaded:
@@ -465,6 +513,66 @@ export class PlaygroundPage {
 
   private modelPicker(index: number): Locator {
     return this.page.getByTestId('select-a-llm-model').nth(index);
+  }
+
+  /**
+   * Open one variant's experiment-name dropdown and return its input.
+   *
+   * Scoped to the variant card, not `page`, so the locator names ONE variant:
+   * the testid is per-variant and a page-level `getByTestId` would resolve to
+   * whichever card happened to render first, silently naming the wrong one.
+   *
+   * The trigger is retried the same way `setModelForVariant` retries the model
+   * picker — a Radix dropdown routinely swallows the first click as a hover.
+   */
+  private async openExperimentNameMenu(index: number): Promise<Locator> {
+    const trigger = this.experimentNameTrigger(index);
+    const input = this.experimentNameInput();
+    await expect(async () => {
+      await trigger.click();
+      await expect(input).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
+    // The menu content is portalled to the page root, so only the open one is
+    // in the DOM. Asserting that rather than taking `.first()` means a second
+    // variant's menu left open would fail here instead of silently letting the
+    // next fill land on the wrong variant.
+    await expect(input).toHaveCount(1);
+    return input;
+  }
+
+  /**
+   * Close the open experiment-name menu by toggling its own trigger.
+   *
+   * Closing matters because only one of these menus is in the DOM at a time,
+   * and a spec that names several variants has to read each one back.
+   *
+   * Two things make this fiddlier than it looks, both verified against the
+   * live page rather than assumed:
+   *  - Escape does nothing. The input calls `stopPropagation` on keydown so
+   *    typing a name can't trip the Playground's window-level "Run all"
+   *    shortcut, and that also stops the key reaching Radix's dismiss layer.
+   *  - Clicking outside does nothing either. The menu is modal, so Radix puts
+   *    `pointer-events: none` on the body; a click anywhere else — even at raw
+   *    coordinates — is never dispatched, so the dismiss layer never sees it.
+   *
+   * `force` is required for the same reason: the trigger inherits the body's
+   * disabled pointer events, so the actionability check can never clear, even
+   * though the click itself registers and closes the menu.
+   */
+  private async closeExperimentNameMenu(index: number): Promise<void> {
+    const input = this.experimentNameInput();
+    await expect(async () => {
+      await this.experimentNameTrigger(index).click({ force: true });
+      await expect(input).toBeHidden({ timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
+  }
+
+  private experimentNameTrigger(index: number): Locator {
+    return this.variantCard(index).getByTestId('playground-experiment-name-button');
+  }
+
+  private experimentNameInput(): Locator {
+    return this.page.getByTestId('playground-experiment-name-input');
   }
 
   private async setModelForVariant(index: number, modelDisplayName: string): Promise<void> {
