@@ -9698,8 +9698,6 @@ components:
             minLength: 0
             type: string
         logo_uri:
-          maxLength: 2048
-          minLength: 0
           type: string
         software_id:
           type: string

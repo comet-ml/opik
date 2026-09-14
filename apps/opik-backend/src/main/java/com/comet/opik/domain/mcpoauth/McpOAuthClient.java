@@ -1,5 +1,6 @@
 package com.comet.opik.domain.mcpoauth;
 
+import jakarta.annotation.Nullable;
 import lombok.Builder;
 import lombok.NonNull;
 
@@ -10,9 +11,9 @@ public record McpOAuthClient(
         @NonNull String id,
         @NonNull String name,
         @NonNull Set<String> redirectUris,
-        String logoUri,
-        String softwareId,
-        String softwareVersion,
-        String clientUri,
-        String ownerUserName) {
+        @Nullable String logoUri,
+        @Nullable String softwareId,
+        @Nullable String softwareVersion,
+        @Nullable String clientUri,
+        @Nullable String ownerUserName) {
 }

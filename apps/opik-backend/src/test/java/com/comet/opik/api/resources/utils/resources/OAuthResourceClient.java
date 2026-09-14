@@ -123,8 +123,16 @@ public class OAuthResourceClient {
                 .build());
     }
 
-    /** Same, registering with the full RFC 7591 metadata the caller supplies (software_id, logo_uri, ...). */
+    /**
+     * Same, registering with the full RFC 7591 metadata the caller supplies (software_id, logo_uri, ...).
+     * Consent and the exchange are always driven with this helper's {@code redirectUri}, so the registration
+     * must list it — a registration that does not would be rejected at the consent context, one step later and
+     * less legibly.
+     */
     public Authorized authorizeArtifacts(ClientRegistrationRequest registration) {
+        assertThat(registration.redirectUris())
+                .as("the helper consents and exchanges with its own redirect URI, so the registration must allow it")
+                .contains(redirectUri);
         return reauthorize(registerClient(registration));
     }
 

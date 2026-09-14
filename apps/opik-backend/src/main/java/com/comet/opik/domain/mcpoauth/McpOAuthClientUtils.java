@@ -1,9 +1,12 @@
 package com.comet.opik.domain.mcpoauth;
 
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.Locale;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.regex.Pattern;
 
 /**
  * Sanitisers for RFC 7591 client metadata. Dynamic Client Registration is unauthenticated, so every string a
@@ -18,6 +21,7 @@ public class McpOAuthClientUtils {
 
     private static final int DISPLAY_TEXT_MAX = 255;
     private static final int DISPLAY_URI_MAX = 2048;
+    private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
 
     /**
      * Strips control characters, which would otherwise forge lines in the registration log, and caps the
@@ -25,21 +29,56 @@ public class McpOAuthClientUtils {
      * silently discarded before, so failing an over-long one would break a host that registers fine today.
      */
     public static String sanitizeDisplayText(String value) {
-        String trimmed = StringUtils.trimToNull(value);
-        return trimmed == null ? null : StringUtils.truncate(trimmed.replaceAll("\\p{Cntrl}", " "), DISPLAY_TEXT_MAX);
+        return clean(value, " ", DISPLAY_TEXT_MAX);
     }
 
     /**
      * Same, for a URL that will be rendered as an {@code <img src>} on the consent page or an {@code <a href>}
-     * in the connected-clients UI. Anything but http(s) — {@code javascript:}, {@code data:} — is dropped
-     * rather than stored, so a script-scheme URL can never reach a sink, whoever renders it.
+     * in the connected-clients UI. Anything that is not a well-formed http(s) URL with a host — {@code javascript:},
+     * {@code data:}, a malformed value — is dropped rather than stored, so nothing but a fetchable web URL can
+     * reach a sink, whoever renders it.
      */
     public static String sanitizeDisplayUri(String value) {
-        String trimmed = StringUtils.trimToNull(value);
-        if (trimmed == null) {
+        String uri = clean(value, "", DISPLAY_URI_MAX);
+        if (uri == null) {
             return null;
         }
-        String uri = StringUtils.truncate(trimmed.replaceAll("\\p{Cntrl}", ""), DISPLAY_URI_MAX);
-        return StringUtils.startsWithAny(uri.toLowerCase(Locale.ROOT), "http://", "https://") ? uri : null;
+        // Parsed, not prefix-matched: "http://[bad" or "http:///no-host" would otherwise be stored as valid.
+        // Loopback and private hosts are deliberately allowed — the fetch is the end user's browser rendering
+        // an <img>, never this server, and a self-hosted Opik legitimately serves logos from internal hosts.
+        try {
+            URI parsed = new URI(uri);
+            boolean webScheme = parsed.getScheme() != null
+                    && StringUtils.equalsAnyIgnoreCase(parsed.getScheme(), "http", "https");
+            return webScheme && StringUtils.isNotBlank(parsed.getHost()) ? uri : null;
+        } catch (URISyntaxException e) {
+            return null;
+        }
+    }
+
+    /** Trim, replace control characters, cap; blank in is {@code null} out. */
+    private static String clean(String value, String controlCharReplacement, int max) {
+        String trimmed = StringUtils.trimToNull(value);
+        return trimmed == null
+                ? null
+                : StringUtils.truncate(CONTROL_CHARS.matcher(trimmed).replaceAll(controlCharReplacement), max);
+    }
+
+    /**
+     * Re-applies the display sanitisers to a client read back from the database. Registration has only
+     * filtered these fields since this rule landed, so a row written before it may still hold a
+     * {@code javascript:} logo or a name with a line break in it, which would otherwise reach the consent page,
+     * the connection row and the event untouched; running the same filters on the read path closes that gap
+     * without a data migration, and is a no-op for rows written since. {@code name} falls back to the
+     * {@code client_id}, as it does at registration, so it can never come back blank.
+     */
+    public static McpOAuthClient sanitizeDisplayFields(@NonNull McpOAuthClient client) {
+        return client.toBuilder()
+                .name(StringUtils.defaultIfBlank(sanitizeDisplayText(client.name()), client.id()))
+                .softwareId(sanitizeDisplayText(client.softwareId()))
+                .softwareVersion(sanitizeDisplayText(client.softwareVersion()))
+                .logoUri(sanitizeDisplayUri(client.logoUri()))
+                .clientUri(sanitizeDisplayUri(client.clientUri()))
+                .build();
     }
 }

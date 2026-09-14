@@ -1,5 +1,6 @@
 package com.comet.opik.domain.mcpoauth;
 
+import jakarta.annotation.Nullable;
 import lombok.Builder;
 import lombok.NonNull;
 
@@ -18,13 +19,13 @@ public record McpClientConnection(
         @NonNull String workspaceId,
         @NonNull String clientId,
         @NonNull String clientName,
-        String softwareId,
-        String softwareVersion,
-        String logoUri,
+        @Nullable String softwareId,
+        @Nullable String softwareVersion,
+        @Nullable String logoUri,
         @NonNull String resource,
         @NonNull String redirectUri,
-        Instant firstConnectedAt,
-        Instant lastConnectedAt,
+        @Nullable Instant firstConnectedAt,
+        @Nullable Instant lastConnectedAt,
         /**
          * Whether a live grant still backs this connection. Populated by reads only — like the timestamps
          * above it is derived by the database, and is ignored when the row is written.

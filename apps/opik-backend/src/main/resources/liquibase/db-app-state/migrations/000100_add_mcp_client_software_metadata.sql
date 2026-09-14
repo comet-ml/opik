@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset yaroslavb:000098_add_mcp_client_software_metadata
+--changeset yaroslavb:000100_add_mcp_client_software_metadata
 --comment: Persist the RFC 7591 §2 client metadata the registration endpoint was silently dropping. software_id is assigned by the client developer and is stable across installs and versions of the same product, so it identifies the MCP host itself (Claude Code, Cursor) where client_id only identifies one registration. software_version and client_uri are for display.
 
 ALTER TABLE mcp_oauth_clients
@@ -15,3 +15,4 @@ ALTER TABLE mcp_client_connections
 
 --rollback ALTER TABLE mcp_oauth_clients DROP COLUMN software_id, DROP COLUMN software_version, DROP COLUMN client_uri;
 --rollback ALTER TABLE mcp_client_connections DROP COLUMN software_id, DROP COLUMN software_version;
+
