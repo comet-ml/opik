@@ -320,13 +320,14 @@ def process_data(value: int) -> int:
     return value * 2
 
 async def my_async_node(state, config):
-    # Extract current span data from LangGraph config
+    # Extract current span data from LangGraph config; None when OpikTracer is not configured
     span_data = extract_current_langgraph_span_data(config)
-    
+    headers = span_data.get_distributed_trace_headers() if span_data is not None else None
+
     # Pass distributed trace headers explicitly to the tracked function
     result = process_data(
         state["value"],
-        opik_distributed_trace_headers=span_data.get_distributed_trace_headers()  # the track decorator adds this parameter to every decorated function
+        opik_distributed_trace_headers=headers,  # the track decorator adds this parameter to every decorated function
     )
     return {"value": result}
 
@@ -353,12 +354,13 @@ from langgraph.graph import StateGraph, START, END
 
 async def my_async_node(state, config):
     span_data = extract_current_langgraph_span_data(config)
-    
+    headers = span_data.get_distributed_trace_headers() if span_data is not None else None
+
     # Use context manager with distributed headers
     with opik.start_as_current_span(
         name="custom_operation",
         input={"input": state["value"]},
-        opik_distributed_trace_headers=span_data.get_distributed_trace_headers()
+        opik_distributed_trace_headers=headers,
     ) as span_data:
         # Your custom logic here
         result = state["value"] * 2
