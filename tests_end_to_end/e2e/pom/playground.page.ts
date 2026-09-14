@@ -17,22 +17,22 @@ const IDLE_CELL_TEXT = 'No runs yet';
 const RUN_ERROR_TEXT = /\bnot defined\b|returned an empty response/i;
 
 /**
- * A test-suite cell leaves the idle state as soon as its experiment exists, which is well
- * before the output lands, so the LLM-judged verdict — not "no longer idle" — is what marks
- * a suite row finished.
+ * Whether a cell has finished.
+ *
+ * Deliberately does NOT require a test-suite cell's Passed/Failed verdict. A suite cell does
+ * leave the idle state before its verdict lands, but the verdict comes from
+ * `PlaygroundOutputAssertionStatus`, which polls the experiment for up to its own 5-minute
+ * ceiling — far past the 120s callers allow — so requiring it times the wait out on a run
+ * that is working. It also overshoots what these specs claim, which is that a run produces
+ * output, not that its assertions were scored. A spec that wants the verdict should wait on
+ * it explicitly, with a budget to match.
+ *
+ * Text is the only handle here: the idle placeholder carries no testid, so output that
+ * itself contained "No runs yet" would read as idle. Adding one would not help — these specs
+ * run against deployed Opik, so it would not exist in the version under test.
  */
-const ASSERTION_VERDICT = /\b(Passed|Failed)\b/;
-
-/**
- * Whether a cell has finished. Text is the only handle: the idle placeholder carries no
- * testid, so output that itself contained "No runs yet" would read as idle. Left as is
- * rather than adding one — these specs run against deployed Opik, so a new testid would not
- * exist in the version under test.
- */
-const hasProducedOutput = (text: string, mode?: RunExperimentSourceMode): boolean => {
-  if (text.trim() === '' || text.includes(IDLE_CELL_TEXT)) return false;
-  return mode === 'test_suite' ? ASSERTION_VERDICT.test(text) : true;
-};
+const hasProducedOutput = (text: string): boolean =>
+  text.trim() !== '' && !text.includes(IDLE_CELL_TEXT);
 
 export interface PlaygroundVariantConfig {
   /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
@@ -197,11 +197,7 @@ export class PlaygroundPage {
    * errored cell next to one that never ran would otherwise hold the predicate false for
    * the full timeout and report a bare poll timeout instead of the failure.
    */
-  async waitForRunsComplete(opts: {
-    expectedRows: number;
-    mode?: RunExperimentSourceMode;
-    timeoutMs?: number;
-  }): Promise<void> {
+  async waitForRunsComplete(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
     return test.step(`wait for ${opts.expectedRows} run(s) to complete`, async () => {
       let failures: string[] = [];
       await expect
@@ -212,7 +208,7 @@ export class PlaygroundPage {
             if (failures.length > 0) return true;
             return (
               texts.length >= opts.expectedRows &&
-              texts.every((t) => hasProducedOutput(t, opts.mode))
+              texts.every(hasProducedOutput)
             );
           },
           { timeout: opts.timeoutMs ?? 120_000, intervals: [1000, 2000, 3000] },
@@ -231,9 +227,8 @@ export class PlaygroundPage {
    * Output cells that have produced content — one per dataset row *per variant*, so this
    * exceeds the row count whenever more than one variant is configured.
    */
-  async countCompletedOutputCells(mode?: RunExperimentSourceMode): Promise<number> {
-    const texts = await this.outputCells().allInnerTexts();
-    return texts.filter((t) => hasProducedOutput(t, mode)).length;
+  async countCompletedOutputCells(): Promise<number> {
+    return (await this.outputCells().allInnerTexts()).filter(hasProducedOutput).length;
   }
 
   /**

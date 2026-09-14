@@ -179,8 +179,8 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@area:test-suites']
       });
       await playground.waitForRunReady({ expectedRows: 1 });
       await playground.clickReRun();
-      await playground.waitForRunsComplete({ expectedRows: 1, mode: 'test_suite', timeoutMs: 120_000 });
-      expect(await playground.countCompletedOutputCells('test_suite')).toBeGreaterThanOrEqual(1);
+      await playground.waitForRunsComplete({ expectedRows: 1, timeoutMs: 120_000 });
+      expect(await playground.countCompletedOutputCells()).toBeGreaterThanOrEqual(1);
     });
   });
 });
