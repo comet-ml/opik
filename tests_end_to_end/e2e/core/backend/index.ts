@@ -25,6 +25,9 @@ export {
   type PromptVersionRef,
   type SpanCostRef,
   type SpanRef,
+  type SpanBatchSeed,
+  type SpanIdPage,
+  type KpiCardStat,
   type TraceDetail,
   type TracePayload,
   type SpanDetail,
@@ -49,9 +52,10 @@ export {
   numericStat,
   type BackendFilter,
   type ReadWindow,
+  isRateLimitedError,
 } from './client';
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';
-export { uuid7 } from './uuid7';
+export { uuid7, uuid7Moment } from './uuid7';
 export {
   buildDatasetItem,
   buildDatasetItemBatches,

@@ -32,10 +32,15 @@
 #
 # POST-CUTOVER WRITES: stages B/C promote the frozen pre-cutover backup back to live `traces`, so traces WRITTEN to the
 # successor after cutover_start stop being live. They are NOT destroyed — the successor is parked as
-# traces_post_rollback_backup and retained until finalize.sh, so they can be recovered from there during the soak — but
-# the live table no longer serves them. This is inherent to promoting a point-in-time backup and cannot be "fixed"
-# (auto-merging the successor's writes would re-import the very data the rollback is discarding);
-# --accept-post-cutover-write-loss makes the operator acknowledge it before the promote.
+# traces_post_rollback_backup and retained until finalize.sh. --accept-post-cutover-write-loss makes the operator
+# acknowledge that before the promote.
+#
+# Acknowledging it is a CHOICE, not a verdict, and this driver prints both options with the gap already sized. Merging
+# those writes back is right when the rollback was motivated by latency, merge load or the wrap — there they are good
+# data — and wrong when the successor's CONTENT is what is suspect, since it re-imports exactly what the rollback existed
+# to discard. `reconcile.sh --confirm-reimport-successor-writes` is the supported way to take the first option; it sweeps
+# them out of the parked successor with sentinel -> NULL denormalization and then re-runs the reverse replay, so
+# post-cutover deletes still win. Whichever is chosen, decide it BEFORE finalize.sh, which destroys the only copy.
 #
 # SAFETY: the stages are mutually exclusive and each lives in its OWN file, so no single file mixes a TRUNCATE with an
 # EXCHANGE/DROP — running any file does exactly one stage. Before running, this asserts the live `traces` topology matches
@@ -300,8 +305,12 @@ fi
 if [[ ( "$STAGE" == "B" || "$STAGE" == "C" ) && "$ACCEPT_WRITE_LOSS" != "1" ]]; then
     echo "ERROR: rollback --stage $STAGE requires --accept-post-cutover-write-loss. Promoting the frozen backup makes" >&2
     echo "       traces written to the successor after cutover_start non-live. They are NOT destroyed — the successor is" >&2
-    echo "       parked as traces_post_rollback_backup until finalize.sh, so recover them during the soak — but the live" >&2
-    echo "       table will no longer serve them. Re-run with the flag once you accept this." >&2
+    echo "       parked as traces_post_rollback_backup until finalize.sh." >&2
+    echo "       The flag acknowledges the loss; it does not commit you to it. After the promote this driver prints how" >&2
+    echo "       many such traces there are and the 'reconcile.sh --confirm-reimport-successor-writes' command that merges" >&2
+    echo "       them back (post-cutover deletes still win). Take that route when the rollback is about latency, merge" >&2
+    echo "       load or the wrap; leave the writes discarded when the successor's CONTENT is what is suspect." >&2
+    echo "       Re-run with the flag once you accept that the promote makes them non-live." >&2
     exit 2
 fi
 
@@ -571,6 +580,18 @@ sentinel_counts() {
     sql="${sql//'${SENTINEL_WINDOW_FROM}'/$from}"
     sql="${sql//'${SENTINEL_WINDOW_TO}'/$to}"
     clickhouse-client "${CH_ARGS[@]}" --query "$sql"
+}
+
+PROMOTE_DONE=""   # set by record_promote_done after a stage B/C promote; the reverse sweep's "do not resurrect" bound.
+
+# Captured immediately AFTER the promote RENAME returns and BEFORE the reverse replay, which is what makes it usable as
+# reconcile.sh's --swap-done. It is deliberately not cutover_start: that instant precedes the promote, so using it as the
+# exclusion bound would wrongly drop a trace deleted and then re-created on the successor before the promote — a trace
+# the parked successor legitimately holds live and that the reverse sweep has to bring back.
+record_promote_done() {
+    PROMOTE_DONE="$(ch "SELECT toString(now64(6, 'UTC'))")"
+    echo "RECORD promote_done=$PROMOTE_DONE UTC  (the reverse sweep's exclusion bound; pass it with the marker:"
+    echo "       reconcile.sh --swap-done '$PROMOTE_DONE UTC')"
 }
 
 run_file() {
@@ -865,6 +886,7 @@ case "$STAGE" in
     B)
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage B" >&2; exit 2; }
         run_file 000004_rollback_stage_b_exchange_back.sql
+        record_promote_done
         run_file 000004_rollback_reverse_replay.sql
         verify_replay_postcondition || REPLAY_CHECK_FAILED=1
         echo "Stage B done: tables swapped back and deletes since cutover_start re-applied."
@@ -872,6 +894,7 @@ case "$STAGE" in
     C)
         [[ -n "$CUTOVER_START" ]] || { echo "ERROR: --cutover-start is required for stage C" >&2; exit 2; }
         run_file 000004_rollback_stage_c_promote_original.sql
+        record_promote_done
         run_file 000004_rollback_reverse_replay.sql
         verify_replay_postcondition || REPLAY_CHECK_FAILED=1
         echo "Stage C done: wrapper dropped, original promoted, deletes since cutover_start re-applied."
@@ -880,6 +903,38 @@ esac
 
 if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "Now in the canonical state: traces = original data (live), traces_post_rollback_backup = successor data (parked)."
+    echo
+    # Size the loss instead of describing it. --accept-post-cutover-write-loss was an acknowledgment, not a verdict, and
+    # the operator cannot weigh the choice against a number nobody has printed. Same predicate the reverse sweep uses
+    # (created_at OR last_updated_at, prunes on the successor's minmax skip indexes), so this IS the set reconcile.sh
+    # would re-import. Advisory and non-fatal: the rollback has already succeeded, and the guidance below still has to
+    # print — a failed read must not swallow it.
+    discarded="$(ch "SELECT count() FROM $DATABASE.traces_post_rollback_backup
+                     WHERE created_at >= toDateTime64('$CUTOVER_START', 6, 'UTC')
+                        OR last_updated_at >= toDateTime64('$CUTOVER_START', 6, 'UTC')" 2>/dev/null || true)"
+    if [[ "$discarded" =~ ^[0-9]+$ ]]; then
+        echo "POST-CUTOVER WRITES NOW NON-LIVE: $discarded row(s) in traces_post_rollback_backup were written after"
+        echo "cutover_start and are no longer served by the live table."
+    else
+        echo "POST-CUTOVER WRITES NOW NON-LIVE: the count could not be read just now, but the set is every row in"
+        echo "traces_post_rollback_backup with created_at or last_updated_at at/after cutover_start."
+    fi
+    echo "You have two options, and both are only available while that table is parked (finalize.sh ends both):"
+    echo "  * ACCEPT the loss — do nothing. Right when the successor's CONTENT is what is suspect, since merging those"
+    echo "    writes back would re-import the very data this rollback existed to discard."
+    echo "  * RECOVER them — right when the rollback was about latency, merge load or the wrap, where they are good data:"
+    if [[ -n "$PROMOTE_DONE" ]]; then
+        echo "      ./reconcile.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} \\"
+        echo "          --cutover-start '$CUTOVER_START UTC' --swap-done '$PROMOTE_DONE UTC' \\"
+        echo "          --confirm-reimport-successor-writes --confirm-retention-paused"
+    else
+        echo "      ./reconcile.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} \\"
+        echo "          --cutover-start '$CUTOVER_START UTC' --swap-done '<promote_done, UTC>' \\"
+        echo "          --confirm-reimport-successor-writes --confirm-retention-paused"
+    fi
+    echo "    It re-imports them with the successor's epoch/NaN sentinels denormalized back to NULL (so their recomputed"
+    echo "    duration is NULL, not a large negative), then re-runs the reverse replay so post-cutover deletes still win."
+    echo "    Add --report-only first to see the four reconciliation counts without importing anything."
     # The divergence is bounded by the CUTOVER WINDOW, not by the calendar, so print the offset of the last week wholly
     # before cutover_start: unlike a calendar-relative bound it stays correct if the verify runs days later. Same anchor
     # math verify.sh uses on this table, capped at its last populated week (LAST_WEEK, from max(created_at)) because
@@ -903,6 +958,13 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
         echo "  where N could not be computed just now: it is the whole weeks between toMonday(min(created_at)) on"
         echo "  'traces' and cutover_start's Monday, minus 1."
     fi
+    echo "THAT BOUND IS FOR THE 'ACCEPT' OPTION ONLY. If you take the RECOVER option above, the cutover week no longer"
+    echo "legitimately mismatches BY WRITES — reconcile.sh has just put them back — so DROP the --to-week bound and run"
+    echo "the compare unbounded. What remains expected there is not writes: post-cutover DELETES (masked on the restored"
+    echo "original by the reverse replay, still live in the parked successor) and anything written after the promote."
+    echo "Running the bounded form after a recovery is not wrong, only weaker: it stops short of the week the recovery"
+    echo "was about."
+    echo
     echo "A mismatch inside that bound is NOT automatically corruption. Any write touching a PRE-EXISTING trace after"
     echo "cutover_start diverges it in a sealed week, which no weekly bound excludes: the update endpoint keeps the row's"
     echo "created_at (so the key differs on both sides), while batch ingestion re-stamps it (so the key goes missing from"
@@ -936,7 +998,9 @@ if [[ "$STAGE" == "B" || "$STAGE" == "C" ]]; then
     echo "LAST, and only once every step above has landed: finalize.sh recycles traces_post_rollback_backup into an"
     echo "empty traces_local_v2. That is the irreversible step — it destroys the only copy of the post-cutover writes"
     echo "this rollback discarded, and with it the cheap retry. Do not run it until the flag reverts, the sentinel"
-    echo "repair and the checks above are done (runbook: 'When the rollback is done')."
+    echo "repair and the checks above are done (runbook: 'When the rollback is done'). It refuses without"
+    echo "--confirm-post-cutover-decision, which is you asserting that the accept-or-recover decision above has been"
+    echo "MADE — not that a recovery ran."
 fi
 
 # Last, so the guidance above always prints: a caller reading only $? must not be told this rollback succeeded.

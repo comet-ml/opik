@@ -293,14 +293,23 @@ mcpOAuth:
   # Description: Access token lifetime
   accessTokenTtl: PT1H
   # Default: P7D
-  # Description: Refresh token absolute lifetime (not sliding)
+  # Description: Refresh token idle lifetime. Sliding: every rotation issues the new refresh token with this much lifetime from now, so an actively used connector stays connected; one left unused for this long has to re-authorize. At most 365 days
   refreshTokenTtl: P7D
+  # Default: P30D
+  # Description: Absolute lifetime of a token family, measured from the authorization that created it. Caps the sliding refresh lifetime: no matter how actively a connector is used, it has to re-authorize once this has elapsed. Never effectively shorter than refreshTokenTtl; at most 365 days
+  refreshTokenAbsoluteTtl: P30D
   # Default: PT60S
   # Description: Authorization code lifetime
   codeTtl: PT60S
-  # Default: PT30S
-  # Description: Grace window during which a just-rotated refresh token is still accepted
-  refreshRotationGrace: PT30S
+  # Default: PT2M
+  # Description: Grace window after a refresh-token rotation during which re-presenting the rotated token still mints a token pair (MCP hosts refresh from several parallel tool calls at once); after it, re-presentation is treated as reuse and revokes the whole token family
+  refreshRotationGrace: PT2M
+  # Default: 10
+  # Description: How many extra token pairs a single rotated refresh token may still mint inside the grace window (one per parallel host request that lost the rotation race). Requests beyond it are refused with invalid_grant one by one; the family and the pairs already handed out stay valid, since hitting the cap is oversubscription, not reuse
+  refreshRotationMaxRetries: 10
+  # Default: PT10S
+  # Description: Lease of the per-family Redis lock under which refresh-token rotation, in-grace retries and revocation run. Must outlast the MySQL transaction that rotates a token; if it lapses mid-rotation a concurrent refresh with the same token may be refused instead of served
+  refreshLockLease: PT10S
   # Default: PT5M
   # Description: TTL of the Redis lock held by the scrub job. The lock is held until expiry (not released after the scrub), so keeping it close to the 5-minute schedule prevents staggered replicas from re-scrubbing within the same cycle.
   scrubLockTimeout: PT5M
@@ -621,16 +630,13 @@ llmProviderClient:
     # Default: https://www.googleapis.com/auth/cloud-platform
     # Description: Vertex AI SCOPE API URL
     scope: https://www.googleapis.com/auth/cloud-platform
-    # Default: GRPC
-    # Description: Transport used by the Vertex AI SDK. One of GRPC or REST
-    transport: GRPC
     # Description: API endpoint per multi-region location, keyed by lower-case location. Single-region locations are
-    # not listed and keep the host the SDK derives from the location itself. Required: these hosts exist only here,
-    # the application defines no fallback for them.
+    # not listed and keep the endpoint the SDK derives from the location itself. Required: these endpoints exist only
+    # here, the application defines no fallback for them. Values may be a bare host or an https:// URL.
     multiRegionApiEndpoints:
-      global: aiplatform.googleapis.com
-      eu: aiplatform.eu.rep.googleapis.com
-      us: aiplatform.us.rep.googleapis.com
+      global: https://aiplatform.googleapis.com
+      eu: https://aiplatform.eu.rep.googleapis.com
+      us: https://aiplatform.us.rep.googleapis.com
 
 # Configuration for cache manager
 cacheManager:

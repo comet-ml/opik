@@ -300,10 +300,24 @@ client's MCP settings:
 
 ### Hosted server (Opik Cloud)
 
-The hosted server connects over HTTP and signs in with a browser-based OAuth
-flow on first connect — no API key is stored in the client config. Point your client
-at your deployment's MCP endpoint, which is your Opik API base plus `/v1/mcp`. On
-Opik Cloud that is `https://www.comet.com/opik/api/v1/mcp`.
+Every client below asks for this URL:
+
+```text title="Remote MCP server URL"
+https://www.comet.com/opik/api/v1/mcp
+```
+
+The server connects over HTTP and signs in through the browser on first use, so
+your client stores no API key.
+
+On a self-hosted deployment the URL is your own Opik API base plus `/v1/mcp`, and
+the deployment has to run the MCP OAuth authorization server. It is off by
+default: turn on `mcpOAuth.enabled` in the Helm chart together with
+`MCP_OAUTH_ENABLED=true` and `OPIK_BASE_URL` on the backend. Set `OPIK_BASE_URL`
+to the public deployment root without `/api`, for example
+`https://opik.example.com/opik`. The server appends `/api/v1/mcp` to it to build
+the MCP resource URI, so a value that already ends in `/api` advertises the wrong
+one and sign-in fails. Where MCP OAuth is off, the endpoint has no sign-in routes
+at all, so use the [local server](#local-server-uvx) instead.
 
 <Tabs>
     <Tab title="Claude Code">
@@ -377,6 +391,29 @@ Opik Cloud that is `https://www.comet.com/opik/api/v1/mcp`.
 
     Confirm with `codex mcp get opik-mcp`, start a new session and complete the
     browser sign-in when prompted.
+
+    </Tab>
+    <Tab title="Claude.ai and Claude Desktop">
+
+    Claude calls a remote MCP server a **custom connector** and adds it through the
+    UI rather than a config file.
+
+    - On a Pro or Max plan: **Customize → Connectors → + → Add custom connector**,
+      then paste the URL above. Leave Advanced settings empty. Opik registers your
+      client automatically.
+    - On Team or Enterprise, an owner adds it in
+      **Organization settings → Connectors → Add → Custom → Web**.
+
+    Claude then opens the Opik sign-in in your browser. Until you finish signing in,
+    the connector lists only the `authenticate` and `complete_authentication`
+    tools. The rest appear afterwards.
+
+    <Note>
+    Claude reaches the server from Anthropic's cloud, not from your machine, so a
+    self-hosted deployment also has to be reachable from the public internet. One
+    on `localhost` or behind a VPN is out of reach, so use the
+    [local server](#local-server-uvx) with a desktop client instead.
+    </Note>
 
     </Tab>
 </Tabs>
@@ -599,6 +636,14 @@ client. Most problems end there.
       deployment's domain and its identity provider instead.
     - Sessions expire. When that happens, the client asks you to sign in again.
   </Accordion>
+  <Accordion title="The client lists only `authenticate` and `complete_authentication`">
+    You are connected but not signed in. Those two tools are how you sign in.
+
+    - Ask your assistant to authenticate, or run the `authenticate` tool, and
+      finish in the browser tab it opens.
+    - In Claude Code, run `/mcp` and choose Authenticate.
+    - The other tools appear once the sign-in completes.
+  </Accordion>
   <Accordion title="Opik does not show up in the client, or shows no tools">
     Clients read MCP servers and skills when a session starts.
 
@@ -683,6 +728,14 @@ client. Most problems end there.
     else is read-only. Keep your client's tool approval on for writes. Trace content
     is text your users wrote, so treat anything the agent reads from a trace as
     data, not as instructions.
+  </Accordion>
+  <Accordion title="Can I use Opik from Claude.ai, Claude Desktop or Cowork?">
+    Yes, as a custom connector. Add `https://www.comet.com/opik/api/v1/mcp` under
+    **Customize → Connectors → Add custom connector**, or under
+    **Organization settings → Connectors** on Team and Enterprise. Claude opens the
+    Opik sign-in in your browser. This gives you the MCP server; the skill pack is
+    for coding agents only. [Manual setup](#hosted-server-opik-cloud) has the steps
+    and the self-hosted caveat.
   </Accordion>
   <Accordion title="My client is not in the list. Can I still use it?">
     Yes. The CLI covers Claude Code, Cursor, VS Code Copilot, Codex and opencode.

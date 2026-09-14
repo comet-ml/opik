@@ -19,6 +19,7 @@ public record McpOAuthToken(
         String rotatedFromId,
         Instant issuedAt,
         @NonNull Instant expiresAt,
+        Instant absoluteExpiresAt,
         Instant revokedAt,
         RevokedReason revokedReason) {
 

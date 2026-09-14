@@ -1,28 +1,29 @@
 package com.comet.opik.infrastructure.llm.vertexai;
 
-import com.google.cloud.vertexai.VertexAI;
+import com.google.genai.Client;
 import dev.langchain4j.model.ModelProvider;
 import dev.langchain4j.model.chat.Capability;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
 
-// Owns the VertexAI and closes it; the langchain4j model can't (its two-arg ctor nulls its handle, so its close() is a no-op).
+// Owns the genai Client and closes it; the langchain4j model can't (it keeps the client private and is not closeable).
 @Slf4j
+@RequiredArgsConstructor
+@Accessors(fluent = true)
 class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
 
     private final @NonNull ChatModel delegate;
-    private final @NonNull VertexAI vertexAI;
-
-    CloseableVertexAiChatModel(@NonNull ChatModel delegate, @NonNull VertexAI vertexAI) {
-        this.delegate = delegate;
-        this.vertexAI = vertexAI;
-    }
+    @Getter
+    private final @NonNull Client client;
 
     @Override
     public ChatResponse chat(ChatRequest chatRequest) {
@@ -48,11 +49,11 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
     @Override
     public void close() {
         try {
-            vertexAI.close();
+            client.close();
         } catch (Exception e) {
             log.warn("Failed to close Vertex AI client", e);
         }
-        // Symmetry: a no-op today, but the delegate is the only thing that can release resources it may own.
+        // A no-op with today's delegate, but only it can release anything it owns.
         try {
             if (delegate instanceof AutoCloseable closeable) {
                 closeable.close();
@@ -60,9 +61,5 @@ class CloseableVertexAiChatModel implements ChatModel, AutoCloseable {
         } catch (Exception e) {
             log.warn("Failed to close the delegate Vertex AI model", e);
         }
-    }
-
-    VertexAI vertexAI() {
-        return vertexAI;
     }
 }
