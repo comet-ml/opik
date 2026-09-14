@@ -1,7 +1,7 @@
 import getpass
 import logging
 import os
-from typing import Final, Optional
+from typing import Any, Callable, Dict, Final, List, Optional
 
 import httpx
 import opik.config
@@ -13,12 +13,19 @@ from opik.configurator.interactive_helpers import (
     ask_user_for_approval_default_no,
     is_interactive,
 )
+from opik.configurator import consent
 from opik.configurator import mcp
 from opik.configurator import opik_rest_helpers
+from opik.configurator import skills
 from opik.exceptions import ConfigurationError
 import opik.url_helpers as url_helpers
 from opik.api_key import opik_api_key
 
+
+#: Runs the assistant setup on the caller's behalf. Takes the resolved connection
+#: block, the ``--install-mcp`` / ``--install-skills`` tri-states and whether ``-y``
+#: was passed. Injected by the CLI so the configurator itself never renders.
+AssistantSetup = Callable[[Dict[str, Any], Optional[bool], Optional[bool], bool], None]
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +45,8 @@ class OpikConfigurator:
         automatic_approvals: bool = False,
         project_name: Optional[str] = None,
         install_mcp: Optional[bool] = None,
+        install_skills: Optional[bool] = None,
+        assistant_setup: Optional[AssistantSetup] = None,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -48,6 +57,11 @@ class OpikConfigurator:
         self.automatic_approvals = automatic_approvals
         self.project_name = project_name
         self.install_mcp = install_mcp
+        self.install_skills = install_skills
+        self.assistant_setup = assistant_setup
+        # Set when the consent prompt named the detected hosts, so the installer
+        # can skip re-confirming the very same list.
+        self._mcp_prompt_named_detected_hosts = False
 
         # Handle URL
         #
@@ -84,7 +98,71 @@ class OpikConfigurator:
             # LOCAL OPIK DEPLOYMENT
             self._configure_local()
 
+        self._setup_assistants()
+
+    def _setup_assistants(self) -> None:
+        """Register the MCP server and install the skill pack.
+
+        Delegated when the caller supplied a renderer — that is how the CLI gets
+        its selectors and formatted output. ``opik.configure()`` has no renderer
+        and keeps the plain-text prompts, since a library must not take over the
+        caller's terminal.
+        """
+        if self.assistant_setup is not None:
+            self.assistant_setup(
+                {
+                    "api_key": self.api_key,
+                    "workspace": self.workspace,
+                    "base_url": self.base_url,
+                    "api_url": self.api_url,
+                    "use_local": self.use_local,
+                    "self_hosted_comet": self.self_hosted_comet,
+                    "check_tls_certificate": self.current_config.check_tls_certificate,
+                },
+                self.install_mcp,
+                self.install_skills,
+                self.automatic_approvals,
+            )
+            return
+
         self._maybe_setup_mcp_server()
+        self._maybe_setup_skills()
+
+    def _maybe_setup_skills(self) -> None:
+        """Offer the Opik skill pack, which is a separate decision from the server.
+
+        Asked after MCP rather than folded into the same question: the MCP step
+        writes credentials into a config file the user already trusts with them,
+        while this writes instruction files the assistant then acts on with its
+        own permissions. Same list of assistants, materially different consent.
+        """
+        host_keys = self._skills_host_keys()
+        if host_keys is None:
+            return
+
+        result = skills.setup_skills(host_keys)
+        if result.succeeded:
+            LOGGER.info(
+                "Installed the Opik skill pack (%s) in %s.",
+                ", ".join(result.skills),
+                result.shared_dir,
+            )
+        else:
+            LOGGER.warning("Could not install the Opik skill pack: %s.", result.error)
+
+    def _skills_host_keys(self) -> Optional[List[str]]:
+        """Hosts to install the skill pack for, or ``None`` to skip."""
+        detected = skills.detected_host_keys()
+        verdict = consent.resolve(
+            self.install_skills,
+            assume_yes=self.automatic_approvals,
+            interactive=is_interactive(),
+            anything_detected=len(detected) > 0,
+        )
+        granted = consent.granted(
+            verdict, lambda: ask_user_for_approval(consent.SKILLS_PROMPT)
+        )
+        return detected if granted else None
 
     def _maybe_setup_mcp_server(self) -> None:
         if not self._should_setup_mcp_server():
@@ -99,33 +177,30 @@ class OpikConfigurator:
             self_hosted_comet=self.self_hosted_comet,
             check_tls_certificate=self.current_config.check_tls_certificate,
             force_local_server=False,
+            # The prompt below already named the detected hosts, so re-confirming
+            # them inside the installer would ask the same question twice.
+            assume_confirmed=self._mcp_prompt_named_detected_hosts,
         )
 
     def _should_setup_mcp_server(self) -> bool:
         """Decide whether to offer registering the Opik MCP server.
 
-        - ``install_mcp is False`` or a non-interactive session: skip.
-        - ``install_mcp is True``: proceed without asking.
-        - ``automatic_approvals`` (the ``-y`` / preflight path): skip, since this
-          mutates configuration files owned by external tools.
-        - Otherwise: ask the user, defaulting to "no".
+        The rules and the wording live in ``configurator.consent``; this only wires
+        them to the configurator's state and does the asking.
         """
-        if self.install_mcp is False:
-            return False
-
-        if not is_interactive():
-            return False
-
-        if self.install_mcp is True:
-            return True
-
-        if self.automatic_approvals:
-            return False
-
-        return ask_user_for_approval_default_no(
-            "Set up the Opik MCP server for an AI assistant "
-            "(Claude Code, Cursor, VS Code)? (y/N) "
+        detected = mcp.detected_host_names()
+        verdict = consent.resolve(
+            self.install_mcp,
+            assume_yes=self.automatic_approvals,
+            interactive=is_interactive(),
+            anything_detected=len(detected) > 0,
         )
+        return consent.granted(verdict, lambda: self._ask_about_mcp(detected))
+
+    def _ask_about_mcp(self, detected: List[str]) -> bool:
+        """Ask, recording that the prompt already named the detected hosts."""
+        self._mcp_prompt_named_detected_hosts = True
+        return ask_user_for_approval_default_no(consent.mcp_prompt(detected))
 
     def _configure_cloud(self) -> None:
         """
@@ -666,7 +741,6 @@ def configure(
     automatic_approvals: Optional[bool] = None,
     url_override: Optional[str] = None,
     project_name: Optional[str] = None,
-    install_mcp: Optional[bool] = None,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
@@ -683,8 +757,6 @@ def configure(
                without user confirmation if `automatic_approvals` is not set to `False`.
         automatic_approvals: if True, `yes` will automatically be answered whenever a user approval is required
         project_name: The name of the project to configure. If not provided, the default project will be used.
-        install_mcp: If True, register the Opik MCP server with detected AI hosts; if False, skip the step.
-            If None, the user is prompted in interactive sessions.
 
     Raises:
         ConfigurationError
@@ -706,6 +778,5 @@ def configure(
         if automatic_approvals is not None
         else force,
         project_name=project_name,
-        install_mcp=install_mcp,
     )
     client.configure()

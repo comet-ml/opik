@@ -78,7 +78,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
     private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
-    private final SpanService spanService;
     private final AgenticScoringService agenticScoringService;
     private final TraceCompressor traceCompressor;
     private final WorkspaceNameService workspaceNameService;
@@ -104,13 +103,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull OpikConfiguration opikConfiguration,
             @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder,
             @NonNull AttachmentService attachmentService) {
-        super(config, redisson, feedbackScoreService, traceService,
+        super(config, redisson, feedbackScoreService, traceService, spanService,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
         this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
-        this.spanService = spanService;
         this.agenticScoringService = agenticScoringService;
         this.traceCompressor = traceCompressor;
         this.workspaceNameService = workspaceNameService;
@@ -181,10 +179,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 UserLog.RULE_ID, message.ruleId().toString());
 
         // Spans are fetched here, in the reactive chain, only when they'll actually be consumed
-        // downstream — either to pre-seed the agentic-tools cache (provider supports tools AND
-        // experimentId branch OR size-based toggle is on) OR to substitute into a {{spans}}
-        // template variable on the inline path (sentinel: any variable mapped to the bare
-        // string "spans"). Skip the I/O otherwise. Keeping the fetch reactive and out of
+        // downstream — either to pre-seed the agentic-tools cache (provider supports tools) OR to
+        // substitute into a {{spans}} template variable on the inline path (sentinel: any variable
+        // mapped to the bare string "spans"). Skip the I/O otherwise. Keeping the fetch reactive and out of
         // evaluate() avoids the .block() pattern that pinned a workersScheduler thread for the
         // upstream wait (OPIK-6308).
         Mono<List<Span>> spansMono = shouldFetchSpans(message)
@@ -197,13 +194,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
         // Presence of the {{trace}} variable is the declarative agentic trigger: it injects the
         // trace structure (trace id, span ids, attachment file_names) into the prompt so the judge
-        // can call get_attachment with real ids instead of guessing. Gated by the agentic-tools
-        // toggle, same as the size-based path.
-        boolean referencesTrace = serviceTogglesConfig.isAgenticToolsEnabled()
-                && OnlineScoringEngine.templateReferencesTraceStructure(
-                        message.llmAsJudgeCode().messages(),
-                        message.llmAsJudgeCode().variables(),
-                        message.promptType());
+        // can call get_attachment with real ids instead of guessing.
+        boolean referencesTrace = OnlineScoringEngine.templateReferencesTraceStructure(
+                message.llmAsJudgeCode().messages(),
+                message.llmAsJudgeCode().variables(),
+                message.promptType());
 
         // Monitoring recorder for the evaluation loop (OPIK-6994): one hidden source=evaluator trace per
         // evaluation, one llm span per LLM round. NOOP when the toggle is off — the evaluation then runs
@@ -522,57 +517,48 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      * Routing decision for whether to fetch the trace's spans before running the LLM call.
      * Spans are needed in two cases:
      * <ul>
-     *   <li>The agentic-tools path is possible (provider supports tools AND the experimentId
-     *       branch is on OR the size-based toggle is enabled) — spans pre-seed the read-tool
-     *       cache so the in-loop {@code get_trace_spans} call doesn't redo the fetch.
-     *   <li>The inline prompt template references {@code {{spans}}} — see
+     *   <li>The provider supports tool-calling, so the agentic-tools path is possible — spans
+     *       pre-seed the read-tool cache so the in-loop {@code get_trace_spans} call doesn't
+     *       redo the fetch.
+     *   <li>The inline prompt template references {@code {{spans}}} or {@code {{trace}}} — see
      *       {@link OnlineScoringEngine#templateReferencesSpans} for both opt-in shapes
-     *       (sentinel-valued variable AND implicit template reference). <strong>Gated by
-     *       {@code isAgenticToolsEnabled}</strong>: both pathways ship under the same flag.
+     *       (sentinel-valued variable AND implicit template reference).
      * </ul>
      *
-     * <p><strong>Toggle semantics — important and not symmetric:</strong> this method gates
-     * the {@code spanService.getByTraceIds} I/O. It does <em>not</em> gate the substitution
-     * itself — {@link OnlineScoringEngine#injectSpansIntoReplacements} runs unconditionally
-     * inside {@code prepareLlmRequest}. When the toggle is off and a rule still carries a
-     * sentinel-mapped {@code spans} variable (e.g. saved by an older FE before the toggle
-     * flipped), {@code {{spans}}} renders as the empty JSON array {@code []} via the empty
-     * spans list threaded through. We do <em>not</em> gate the substitution because doing so
-     * would let the sentinel value {@code "spans"} leak through {@code toReplacements}'
-     * literal-value fallback and render the bare word {@code spans} in the prompt — worse
-     * UX than {@code []}. Net behavior with toggle off:
-     * <ul>
-     *   <li>Existing rules with sentinel mapping → {@code Spans: []}
-     *   <li>New rules created via the FE → FE skips the auto-fill, user maps {@code spans}
-     *       like any other variable, BE renders whatever path they pick.
-     *   <li>Experiment-id (test-suite assertion) path → agentic-tools fires regardless, so
-     *       spans are still fetched and {@code {{spans}}} substitutes the actual JSON.
-     * </ul>
+     * <p><strong>Deliberately broader than {@link #shouldUseAgenticTools}</strong>, which also weighs
+     * the experimentId branch ({@link LlmAsJudgeToolsMode#shouldUseTools}), the size threshold and
+     * {@code {{trace}}}. Those cannot be consulted here: the size estimate is computed <em>from</em> the
+     * fetched spans, so the pre-fetch necessarily precedes the routing decision it feeds. Narrowing this
+     * gate to the experimentId branch would starve the two triggers that depend on the estimate — a trace
+     * over the token threshold would take the tools path with an unseeded read-tool cache.
+     *
+     * <p>This gates the {@code spanService.getByTraceIds} I/O only, not the substitution:
+     * {@link OnlineScoringEngine#injectSpansIntoReplacements} runs unconditionally inside
+     * {@code prepareLlmRequest}, so a trace whose spans were not fetched renders {@code {{spans}}}
+     * as the empty JSON array {@code []} rather than leaking the bare sentinel word {@code spans}
+     * through {@code toReplacements}' literal-value fallback.
      */
     // Package-private for unit tests.
     boolean shouldFetchSpans(TraceToScoreLlmAsJudge message) {
         String modelName = message.llmAsJudgeCode().model().name();
         boolean agenticToolsPathPossible = agenticScoringService.supportsToolCalling(
-                llmProviderFactory.getLlmProvider(modelName))
-                && (LlmAsJudgeToolsMode.shouldUseTools(message)
-                        || serviceTogglesConfig.isAgenticToolsEnabled());
-        boolean templateNeedsSpans = serviceTogglesConfig.isAgenticToolsEnabled()
-                && (OnlineScoringEngine.templateReferencesSpans(
+                llmProviderFactory.getLlmProvider(modelName));
+        boolean templateNeedsSpans = OnlineScoringEngine.templateReferencesSpans(
+                message.llmAsJudgeCode().messages(),
+                message.llmAsJudgeCode().variables(),
+                message.promptType())
+                || OnlineScoringEngine.templateReferencesTraceStructure(
                         message.llmAsJudgeCode().messages(),
                         message.llmAsJudgeCode().variables(),
-                        message.promptType())
-                        || OnlineScoringEngine.templateReferencesTraceStructure(
-                                message.llmAsJudgeCode().messages(),
-                                message.llmAsJudgeCode().variables(),
-                                message.promptType()));
+                        message.promptType());
         return agenticToolsPathPossible || templateNeedsSpans;
     }
 
     /**
      * Routing decision for whether to attach tool specs + run the tool-call loop. Tools fire
      * when ANY of (a) the experimentId-driven branch applies (test-suite assertion), (b) the
-     * size-based branch applies (toggle on, context above threshold), or (c) the prompt references
-     * the {@code {{trace}}} skeleton variable (toggle on) — AND the provider supports tool-calling.
+     * context is above the size threshold, or (c) the prompt references the {@code {{trace}}}
+     * skeleton variable — AND the provider supports tool-calling.
      * Without the provider check, a non-tool-calling model (Ollama / Custom / OpikFree) selected
      * via {@code test_suite_model} metadata would crash inside the LangChain4j chat call when the
      * request carries {@code toolSpecifications}.
@@ -590,13 +576,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         boolean experimentIdPath = LlmAsJudgeToolsMode.shouldUseTools(message);
         boolean providerSupportsTools = agenticScoringService.supportsToolCalling(
                 llmProviderFactory.getLlmProvider(modelName));
-        boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
-                && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
+        boolean overSizeThreshold = estimatedContextTokens >= onlineScoringConfig
+                .getAgenticToolsThresholdTokens();
         // The {{trace}} variable forces the agentic-tools path regardless of context size: the prompt
         // carries the trace skeleton (ids + attachment file_names) and the judge uses get_attachment /
-        // read to drill in. Gated by the same toggle as the size path.
-        boolean traceVariablePath = serviceTogglesConfig.isAgenticToolsEnabled() && referencesTrace;
-        boolean wantsTools = experimentIdPath || overSizeThreshold || traceVariablePath;
+        // read to drill in.
+        boolean wantsTools = experimentIdPath || overSizeThreshold || referencesTrace;
         boolean useTools = wantsTools && providerSupportsTools;
 
         if (experimentIdPath && !providerSupportsTools) {
@@ -615,7 +600,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             userFacingLogger.info(
                     "Trace context exceeds '{}' tokens; switching to agentic-tools mode for traceId '{}'",
                     onlineScoringConfig.getAgenticToolsThresholdTokens(), message.trace().id());
-        } else if (!experimentIdPath && !overSizeThreshold && traceVariablePath && !providerSupportsTools) {
+        } else if (!experimentIdPath && !overSizeThreshold && referencesTrace && !providerSupportsTools) {
             // Surface to the user: their prompt references {{trace}} (so they expect tool-driven
             // inspection of the trace skeleton / attachments) but the chosen model's provider can't
             // call tools — an actionable misconfiguration, unlike the purely-internal routing
@@ -626,12 +611,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                             + " skeleton or load attachments. Pick a tool-calling provider"
                             + " (OpenAI / Anthropic / Gemini / OpenRouter / Vertex / Bedrock).",
                     message.trace().id(), modelName);
-        } else if (!experimentIdPath && !overSizeThreshold && traceVariablePath && useTools) {
-            log.debug("Trace '{}' rule references {{trace}}; switching to agentic-tools mode",
-                    message.trace().id());
+        } else if (!experimentIdPath && !overSizeThreshold && referencesTrace && useTools) {
+            log.debug("Agentic tools routing: rule references {{trace}}; switching to agentic-tools mode."
+                    + " traceId='{}'", message.trace().id());
         }
 
-        recordRoutingDecision(message, useTools, experimentIdPath, overSizeThreshold, traceVariablePath);
+        recordRoutingDecision(message, useTools, experimentIdPath, overSizeThreshold, referencesTrace);
         return useTools;
     }
 

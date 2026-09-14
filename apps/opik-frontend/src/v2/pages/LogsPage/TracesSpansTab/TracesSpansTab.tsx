@@ -877,7 +877,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       filters: effectiveFilters,
       page: page as number,
       size: size as number,
-      search: search as string,
+      search: trimmedSearch,
       truncate: false,
       fromTime: intervalStart,
       toTime: intervalEnd,

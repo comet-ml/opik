@@ -8,6 +8,7 @@ import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Lists;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -90,7 +91,10 @@ public class CipxSpendBlockDAO {
             @NonNull String label,
             int isDefinition,
             double alloc,
-            @NonNull String contentSha256) {
+            @NonNull String contentSha256,
+            /** The block's share of the span's usage units (alloc x its tier's per-token rate);
+             * null when the span reports none. */
+            @Nullable Double aiuNano) {
 
         /**
          * Derives all rows for one cipx span: one attributed row per non-identity block (keeping the
@@ -120,6 +124,8 @@ public class CipxSpendBlockDAO {
                     && cacheCreation.path("ephemeral_1h_input_tokens").asLong(0) == 0
                             ? "cache_creation_5m"
                             : "cache_creation_1h";
+
+            double[] aiuRates = aiuRatesPerToken(CipxMetadata.copilotUsage(metadata));
 
             JsonNode blocks = metadata.path("cipx").path("blocks");
             long[] tierChars = new long[TIER_NAMES.length];
@@ -151,15 +157,44 @@ public class CipxSpendBlockDAO {
                     if (isIdentityContext(block)) {
                         continue;
                     }
-                    rows.add(attributed(base, idx, block, tierTokens, tierChars, writeTier));
+                    rows.add(attributed(base, idx, block, tierTokens, tierChars, writeTier, aiuRates));
                 }
             }
             for (int tier = 0; tier < TIER_NAMES.length; tier++) {
                 if (!tierPresent[tier] && tierTokens[tier] > 0) {
-                    rows.add(residual(base, tier, tierTokens[tier], writeTier));
+                    rows.add(residual(base, tier, tierTokens[tier], writeTier, aiuRates));
                 }
             }
             return rows;
+        }
+
+        /** Usage units per token, indexed by tier ordinal; null when the span reports none. */
+        private static double[] aiuRatesPerToken(JsonNode copilotUsage) {
+            if (!copilotUsage.isObject()) {
+                return null;
+            }
+            double[] rates = new double[TIER_NAMES.length];
+            for (JsonNode detail : copilotUsage.path("token_details")) {
+                int tier = switch (detail.path("token_type").asText("")) {
+                    case "input" -> 0;
+                    case "cache_read" -> 1;
+                    case "cache_write" -> CACHE_CREATION_TIER;
+                    case "output" -> 3;
+                    default -> -1;
+                };
+                long batchSize = detail.path("batch_size").asLong(0);
+                if (tier >= 0 && batchSize > 0) {
+                    rates[tier] = detail.path("cost_per_batch").asDouble(0) / batchSize;
+                }
+            }
+            return rates;
+        }
+
+        private static Double aiuNano(double[] aiuRates, int tier, double tokens) {
+            if (aiuRates == null) {
+                return null;
+            }
+            return tier >= 0 ? tokens * aiuRates[tier] : 0.0;
         }
 
         /** cache_creation (ordinal 2) is written as its per-span TTL variant; the rest are fixed. */
@@ -168,7 +203,7 @@ public class CipxSpendBlockDAO {
         }
 
         private static BlockRow attributed(BlockRowBuilder base, int idx, JsonNode block, long[] tierTokens,
-                long[] tierChars, String writeTier) {
+                long[] tierChars, String writeTier, double[] aiuRates) {
             String category = block.path("category").asText("");
             String side = block.path("side").asText("");
             String cacheStatus = block.path("cache_status").asText("");
@@ -203,10 +238,12 @@ public class CipxSpendBlockDAO {
                     .isDefinition(isDefinition(category))
                     .alloc(alloc)
                     .contentSha256(block.path("sha256").asText(""))
+                    .aiuNano(aiuNano(aiuRates, tier, alloc))
                     .build();
         }
 
-        private static BlockRow residual(BlockRowBuilder base, int tier, long tokens, String writeTier) {
+        private static BlockRow residual(BlockRowBuilder base, int tier, long tokens, String writeTier,
+                double[] aiuRates) {
             return base
                     .blockIdx(RESIDUAL_IDX_BASE + tier)
                     .src(SRC_RESIDUAL)
@@ -228,6 +265,7 @@ public class CipxSpendBlockDAO {
                     .isDefinition(0)
                     .alloc(tokens)
                     .contentSha256("")
+                    .aiuNano(aiuNano(aiuRates, tier, tokens))
                     .build();
         }
 
@@ -407,6 +445,7 @@ public class CipxSpendBlockDAO {
         node.put("is_definition", row.isDefinition());
         node.put("alloc", row.alloc());
         node.put("content_sha256", row.contentSha256());
+        node.put("aiu_nano", row.aiuNano());
         node.put("start_time", ClickHouseDateTimeFormat.formatNanos(row.startTime()));
         out.append(node).append('\n');
     }

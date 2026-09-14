@@ -43,6 +43,9 @@ public class OpikConfiguration extends JobConfiguration {
     private McpOAuthConfig mcpOAuth = new McpOAuthConfig();
 
     @Valid @NotNull @JsonProperty
+    private CipxTokenValidationConfig cipxTokenValidation = new CipxTokenValidationConfig();
+
+    @Valid @NotNull @JsonProperty
     private RedisConfig redis = new RedisConfig();
 
     @Valid @NotNull @JsonProperty
@@ -190,4 +193,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private ReportGenerationConfig reportGeneration = new ReportGenerationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private RedactionConfig redaction = new RedactionConfig();
 }

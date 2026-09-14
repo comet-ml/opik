@@ -4,8 +4,8 @@
 
   This is a TEST FIXTURE, not a shipped migration: it lives on the test classpath so the pattern can be applied against
   both topologies and proven, without adding DDL to db-app-analytics/migrations that every install would run. A real
-  traces migration copies the shape of migrations/000001_reference_topology_aware_change.sql into the shipped
-  directory; see guides/traces-schema-ddl.md for the playbook.
+  traces migration copies the shape of migrations/reference_topology_aware_change.sql into the shipped directory; see
+  apps/opik-backend/docs/traces-schema-ddl.md for the playbook.
 -->
 <databaseChangeLog
         xmlns="http://www.liquibase.org/xml/ns/dbchangelog"

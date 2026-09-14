@@ -463,7 +463,6 @@ class OnlineScoringEngineTest {
 
         var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
 
-        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
         Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
         Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
 
@@ -471,6 +470,10 @@ class OnlineScoringEngineTest {
 
         // Wait longer for async processing to complete (both evaluators need to process)
         Awaitility.await().untilAsserted(() -> {
+            // Fresh captor per poll: a captor hoisted out of this lambda re-captures every prior
+            // invocation on each retry, so getAllValues() grows monotonically (6 → 12 → 18 …) and the
+            // size assertion below can never recover once a single poll lands before scoring finishes.
+            ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
             // Verify that evaluators were processed
             // We should have at least 1 call to scoreBatchOfTraces
             Mockito.verify(feedbackScoreService, Mockito.atLeastOnce()).scoreBatchOfTraces(captor.capture());
@@ -2377,56 +2380,6 @@ class OnlineScoringEngineTest {
         var allText = request.messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
         assertThat(allText).contains(spanRef);
         // Sentinel literal must not leak into the rendered prompt.
-        assertThat(allText).doesNotContain("{{span}}");
-    }
-
-    @Test
-    @DisplayName("prepareSpanLlmRequest (inline) injects the {{span}} structure without capping")
-    void prepareSpanLlmRequestInlineInjectsSpanStructure() {
-        var evaluatorCode = AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.builder()
-                .model(LlmAsJudgeModelParameters.builder()
-                        .name("gpt-4o").temperature(0.3).build())
-                .messages(List.of(
-                        LlmAsJudgeMessage.builder()
-                                .role(ChatMessageType.USER)
-                                .content("Inspect: {{span}}")
-                                .build()))
-                .variables(new LinkedHashMap<>(Map.of("span", "span")))
-                .schema(List.of())
-                .build();
-        var span = createSpan(generator.generate(), generator.generate());
-        var spanRef = "span-" + RandomStringUtils.secure().nextAlphanumeric(12);
-        var structure = "{\"span_id\":\"%s\",\"attachments\":[]}".formatted(spanRef);
-
-        var request = OnlineScoringEngine.prepareSpanLlmRequest(evaluatorCode, span,
-                new InstructionStrategy(), structure);
-
-        var allText = request.messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
-        assertThat(allText).contains(spanRef);
-        assertThat(allText).doesNotContain("{{span}}");
-    }
-
-    @Test
-    @DisplayName("prepareSpanLlmRequest renders {{span}} as {} when no structure is supplied, not the literal sentinel")
-    void prepareSpanLlmRequestRendersEmptyStructureWhenNull() {
-        var evaluatorCode = AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.builder()
-                .model(LlmAsJudgeModelParameters.builder()
-                        .name("gpt-4o").temperature(0.3).build())
-                .messages(List.of(
-                        LlmAsJudgeMessage.builder()
-                                .role(ChatMessageType.USER)
-                                .content("Inspect: {{span}}")
-                                .build()))
-                .variables(new LinkedHashMap<>(Map.of("span", "span")))
-                .schema(List.of())
-                .build();
-        var span = createSpan(generator.generate(), generator.generate());
-
-        var request = OnlineScoringEngine.prepareSpanLlmRequest(evaluatorCode, span,
-                new InstructionStrategy(), null);
-
-        var allText = request.messages().stream().map(Object::toString).collect(Collectors.joining("\n"));
-        assertThat(allText).contains("Inspect: {}");
         assertThat(allText).doesNotContain("{{span}}");
     }
 

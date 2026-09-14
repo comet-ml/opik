@@ -702,13 +702,50 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 WHERE ef.experiment_type NOT IN ('mini-batch', 'mutation')
             ), objective_scores_per_experiment AS (
                 SELECT
-                    ef.optimization_id,
-                    esp.experiment_id,
-                    esp.value AS objective_score
-                FROM experiment_scores_parsed esp
-                INNER JOIN experiments_final ef ON esp.experiment_id = ef.id
-                INNER JOIN optimization_final o ON ef.optimization_id = o.id
-                WHERE esp.name = o.objective_name
+                    optimization_id,
+                    experiment_id,
+                    /*
+                     * Mirrors the run page's precedence (getObjectiveScoreValue): the trace-derived feedback
+                     * score wins, the experiment-level score is the fallback.
+                     *
+                     * toNullable is load-bearing, not decoration. candidate_metrics LEFT JOINs this CTE and
+                     * guards the weighted average with isNotNull(objective_score); under join_use_nulls = 0
+                     * an unmatched non-Nullable Float64 arrives as 0, which makes that guard always true and
+                     * scores every unscored candidate a real 0. Every candidate then ties, the best_* rollups
+                     * fall through to their earliest-created tie-break, and "best" collapses onto the
+                     * baseline - so the runs list reported the baseline's latency and cost with a 0% delta
+                     * while the run page reported the genuine best trial (OPIK-8060). duration_p50 in
+                     * experiment_durations is Nullable for the same reason.
+                     */
+                    toNullable(argMin(objective_score, source_rank)) AS objective_score
+                FROM (
+                    /*
+                     * Dataset runs - Studio runs and every SDK optimizer. The objective is a per-trace
+                     * feedback score averaged per experiment, and leaving it out was the OPIK-8060 defect:
+                     * these runs populate no experiment_scores at all, so the CTE matched nothing for them.
+                     */
+                    SELECT
+                        ef.optimization_id AS optimization_id,
+                        ef.id AS experiment_id,
+                        fs.feedback_scores[o.objective_name] AS objective_score,
+                        0 AS source_rank
+                    FROM experiments_final ef
+                    INNER JOIN optimization_final o ON ef.optimization_id = o.id
+                    INNER JOIN feedback_scores_agg fs ON ef.id = fs.experiment_id
+                    WHERE mapContains(fs.feedback_scores, o.objective_name)
+                    UNION ALL
+                    -- Test-suite runs, where the objective is scored at the experiment level.
+                    SELECT
+                        ef.optimization_id AS optimization_id,
+                        esp.experiment_id AS experiment_id,
+                        esp.value AS objective_score,
+                        1 AS source_rank
+                    FROM experiment_scores_parsed esp
+                    INNER JOIN experiments_final ef ON esp.experiment_id = ef.id
+                    INNER JOIN optimization_final o ON ef.optimization_id = o.id
+                    WHERE esp.name = o.objective_name
+                )
+                GROUP BY optimization_id, experiment_id
             ), candidate_metrics AS (
                 SELECT
                     ec.optimization_id AS optim_id,
@@ -722,6 +759,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     sum(ed.total_estimated_cost)
                         / nullIf(sum(ed.trace_count), 0)
                         AS per_trace_cost,
+                    sum(ed.trace_count) AS evaluated_count,
                     min(ec.experiment_created_at) AS earliest_created_at
                 FROM experiment_candidates ec
                 LEFT JOIN objective_scores_per_experiment ospe
@@ -729,19 +767,58 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     AND ec.optimization_id = ospe.optimization_id
                 LEFT JOIN experiment_durations ed ON ec.experiment_id = ed.experiment_id
                 GROUP BY ec.optimization_id, ec.candidate_id
+            /*
+             * How many items a full evaluation covers in this run, taken from the baseline. Deliberately
+             * baseline-derived rather than a max() over all candidates, matching the run page's
+             * getExpectedItemCount: a candidate groups all of its experiments and sums their counts, so one
+             * double-counted candidate would inflate the threshold and prune every genuinely-complete trial.
+             */
+            ), candidate_expectations AS (
+                SELECT
+                    optim_id,
+                    argMin(evaluated_count, earliest_created_at) AS expected_count
+                FROM candidate_metrics
+                GROUP BY optim_id
+            /*
+             * Which candidates may win "best". A candidate that scored fewer items than a full evaluation
+             * covers holds a partial average, which is not a result and must not win - the same gate the run
+             * page applies (OPIK-7460, isStillEvaluating). Without it the two views disagree even once both
+             * read the same scores: an optimizer that evaluates most trials on a subset (GEPA and friends)
+             * leaves the runs list crowning a 5-of-12 trial while the run page reports the best fully
+             * evaluated one (OPIK-8060).
+             *
+             * A zero expectation means "unknown" and fails open, and when nothing is complete the whole set
+             * stays eligible, so a run never loses its best marker.
+             */
+            ), candidate_eligibility AS (
+                SELECT
+                    cm.*,
+                    ce.expected_count = 0 OR cm.evaluated_count >= ce.expected_count AS is_complete
+                FROM candidate_metrics cm
+                INNER JOIN candidate_expectations ce ON cm.optim_id = ce.optim_id
+            ), candidate_pools AS (
+                SELECT optim_id, max(is_complete) AS has_complete
+                FROM candidate_eligibility
+                GROUP BY optim_id
             ), candidate_rollup AS (
                 SELECT
-                    optim_id AS optimization_id,
-                    maxIf(weighted_score, isNotNull(weighted_score)) AS best_score,
+                    cel.optim_id AS optimization_id,
+                    maxIf(weighted_score, in_pool AND isNotNull(weighted_score)) AS best_score,
                     argMinIf(weighted_duration, tuple(-weighted_score, earliest_created_at),
-                        isNotNull(weighted_score)) AS best_duration,
+                        in_pool AND isNotNull(weighted_score)) AS best_duration,
                     argMinIf(per_trace_cost, tuple(-weighted_score, earliest_created_at),
-                        isNotNull(weighted_score)) AS best_cost,
+                        in_pool AND isNotNull(weighted_score)) AS best_cost,
                     argMin(weighted_score, earliest_created_at) AS baseline_score,
                     argMin(weighted_duration, earliest_created_at) AS baseline_duration,
                     argMin(per_trace_cost, earliest_created_at) AS baseline_cost
-                FROM candidate_metrics
-                GROUP BY optim_id
+                FROM (
+                    -- The baseline defines the threshold, so it is complete by construction and the
+                    -- baseline_* rollups below stay an unfiltered argMin over every candidate.
+                    SELECT cel.*, if(cp.has_complete, cel.is_complete, 1) AS in_pool
+                    FROM candidate_eligibility cel
+                    INNER JOIN candidate_pools cp ON cel.optim_id = cp.optim_id
+                ) AS cel
+                GROUP BY cel.optim_id
             ), optimization_tagged_trace_ids AS (
                 SELECT id, project_id
                 FROM traces
@@ -860,7 +937,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * The {@link #FIND} projection for the case where no optimization in scope has an experiment. Every
      * aggregate in {@link #FIND} except {@code total_optimization_cost} is derived from
      * {@code experiments_final}, so with no experiments they all collapse to their empty-input values and the
-     * fifteen-CTE pipeline reads nothing useful. The literals below reproduce those values and their exact
+     * whole CTE pipeline reads nothing useful. The literals below reproduce those values and their exact
      * declared types.
      * <p>
      * {@code total_optimization_cost} is the exception and must be computed for real (OPIK-7521): it also sums

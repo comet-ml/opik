@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import { PendingUsage, TraceData, TurnUsage } from './interface';
 import { captureException } from './sentry';
-
-type LoggedTurn = Omit<PendingUsage, 'attempt' | 'nextAttemptAt'>;
+import { latestUsageModel } from './cursor/usageAggregation';
+import { deliverTracesWithClient, LoggedTurn } from './cursor/traceDelivery';
 
 async function createClient(apiKey: string) {
     const config = vscode.workspace.getConfiguration();
@@ -21,83 +21,10 @@ export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Prom
     }
 
     console.log(`📦 Processing ${traces.length} traces using Opik SDK`);
-    const loggedTurns: LoggedTurn[] = [];
-
     try {
         const client = await createClient(apiKey);
-
-        for (const traceData of traces) {
-            const metadata = {
-                ...(traceData.metadata || {}),
-                created_from: "cursor-extension"
-            };
-
-            const trace = client.trace({
-                name: traceData.name,
-                projectName: traceData.project_name,
-                input: traceData.input,
-                output: traceData.output,
-                startTime: new Date(traceData.start_time),
-                endTime: traceData.end_time ? new Date(traceData.end_time) : undefined,
-                tags: traceData.tags,
-                metadata: metadata,
-                threadId: traceData.thread_id
-            });
-
-            // The span is created without usage. Cursor only exposes token counts
-            // a few seconds later over its usage API, so UsageEnricher patches it.
-            //
-            // This one span carries the usage of the whole turn on purpose.
-            // Cursor records tokens once per turn, never per model call: only
-            // 477 of 19691 bubbles in a real database hold a non-zero
-            // tokenCount, always the last bubble of a turn, and the billing API
-            // reports one request per turn too. Splitting that total across the
-            // child llm spans would invent numbers.
-            const span = trace.span({
-                name: 'llm_turn',
-                type: 'llm',
-                model: traceData.model,
-                provider: 'cursor',
-                input: traceData.input,
-                output: traceData.output,
-                startTime: new Date(traceData.start_time),
-                endTime: traceData.end_time ? new Date(traceData.end_time) : undefined,
-                tags: traceData.tags,
-                metadata: traceData.metadata
-            });
-
-            for (const child of traceData.spans ?? []) {
-                span.span({
-                    name: child.name,
-                    type: child.type,
-                    model: child.model,
-                    provider: child.provider,
-                    input: child.input,
-                    output: child.output,
-                    errorInfo: child.errorInfo,
-                    startTime: child.startTime,
-                    endTime: child.endTime,
-                    tags: child.tags,
-                    metadata: child.metadata
-                });
-            }
-            // Deliberately not calling span.end()/trace.end(): both overwrite
-            // endTime with the current time, which would replace the real Cursor
-            // turn end with the upload time.
-
-            if (traceData.thread_id) {
-                loggedTurns.push({
-                    composerId: traceData.thread_id,
-                    turnStartMs: traceData.turn_start_ms,
-                    traceId: trace.data.id,
-                    spanId: span.data.id,
-                    projectName: traceData.project_name ?? 'default',
-                });
-            }
-        }
-
         console.log(`📤 Flushing ${traces.length} traces to Opik`);
-        await client.flush();
+        const loggedTurns = await deliverTracesWithClient(client, traces);
         console.log(`🎉 All ${traces.length} traces processed successfully using Opik SDK!`);
 
         return loggedTurns;
@@ -142,7 +69,7 @@ export async function applyTurnUsage(
         body: {
             traceId: pending.traceId,
             projectName: pending.projectName,
-            model: usage.models[0],
+            model: latestUsageModel(usage),
             provider: 'cursor',
             usage: spanUsage,
             totalEstimatedCost: usage.chargedCents / 100,

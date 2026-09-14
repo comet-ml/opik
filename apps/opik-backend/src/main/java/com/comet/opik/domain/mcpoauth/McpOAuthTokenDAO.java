@@ -12,6 +12,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 @RegisterConstructorMapper(McpOAuthToken.class)
@@ -21,14 +22,17 @@ interface McpOAuthTokenDAO {
 
     @SqlUpdate("""
             INSERT INTO mcp_oauth_tokens (id, token_hash, type, client_id, user_name, workspace_name, workspace_id,
-                resource, family_id, rotated_from_id, expires_at)
+                resource, family_id, rotated_from_id, expires_at, absolute_expires_at)
             VALUES (:bean.id, :bean.tokenHash, :bean.type, :bean.clientId, :bean.userName, :bean.workspaceName, :bean.workspaceId,
-                :bean.resource, :bean.familyId, :bean.rotatedFromId, :bean.expiresAt)
+                :bean.resource, :bean.familyId, :bean.rotatedFromId, :bean.expiresAt, :bean.absoluteExpiresAt)
             """)
     void save(@BindMethods("bean") McpOAuthToken token);
 
     @SqlQuery("SELECT * FROM mcp_oauth_tokens WHERE token_hash = :tokenHash")
     McpOAuthToken findByHash(@Bind("tokenHash") String tokenHash);
+
+    @SqlQuery("SELECT * FROM mcp_oauth_tokens WHERE family_id = :familyId AND workspace_id = :workspaceId")
+    List<McpOAuthToken> findFamily(@Bind("familyId") String familyId, @Bind("workspaceId") String workspaceId);
 
     @UseStringTemplateEngine
     @SqlUpdate("""

@@ -1,0 +1,66 @@
+# Narrow-returning datetime conversions applied to a UUIDv7-derived value, for
+# apps/opik-backend/src/main/java.
+#
+# ClickHouse's toMonday and toDate return a 16-bit Date (1970..2149) and toDateTime a 32-bit
+# DateTime (1970..2106). All three WRAP past their ceiling rather than saturating, so applied
+# to a value derived from a row's UUIDv7 id they fold a far-future timestamp — a client with a
+# broken clock (BerriAI/litellm#31294 mints ~2201) — into a plausible recent date.
+#
+# Two shapes have shipped as bugs, and the cost differs:
+#
+#   * As a week bound paired with an id-range (`toMonday(id_at) >= toMonday(...)`), the bound is
+#     documented as a strict consequence of the id-range: a pruning hint that must never exclude
+#     a row the id-range admits. Wrapped, it becomes a filter, and far-future rows disappear from
+#     every time-bounded query (traces: PR #8096; spans and retention: OPIK-8241).
+#   * As a bucketing expression (`toDateTime(UUIDv7ToDateTime(toUUID(t.id)))`), it IS the answer
+#     rather than a hint, so no wider id-range recovers it — a far-future trace was counted as a
+#     recent error (OPIK-8241).
+#
+# The wide replacements are toDate32(...), toDateTime64(..., 0, 'UTC'), and for a week start the
+# partition key's own expression `toDate32(E) - toIntervalDay(toDayOfWeek(E, 1))` on BOTH operands.
+#
+# Why a lint and not only tests: the spans read paths carried the wrapping form for months with a
+# full partitioning suite passing, because the suite was written against the shape the DAO already
+# had. Tests cover the predicates that exist; the failure mode is a new time-bounded query copied
+# from a neighbouring one, and only a check on the text catches that.
+#
+# Scope is production code only — the hook's `files:` regex excludes test sources, where these
+# functions legitimately appear as the oracle a far-future test compares against.
+#
+# The rule matches where the query is DECLARED, not where it executes: Opik holds SQL in
+# `static final` text blocks rendered through StringTemplate, so call-site patterns match nothing.
+# `pattern: $X` binds every expression node and `metavariable-regex` then inspects the string
+# literal's own contents, text blocks included. Comments are never bound, so the javadoc in these
+# DAOs can keep naming `toMonday(id_at)` to explain why it is not used.
+#
+# Deliberately NOT guarded by a leading SELECT/WITH: two of the sites OPIK-8241 fixed were bare
+# expression strings passed as StringTemplate attributes, not whole statements, so requiring a
+# SQL keyword would have missed exactly the shape that is easiest to add by hand.
+#
+# Fixtures live in java-sql-narrow-datetime.java next to this file. Run them after any edit here:
+#   semgrep test --config .semgrep/java-sql-narrow-datetime.yaml .semgrep/java-sql-narrow-datetime.java
+rules:
+  - id: sql-narrow-datetime-on-id
+    languages: [java]
+    severity: ERROR
+    message: >-
+      This SQL applies a narrow-returning datetime function to a UUIDv7-derived value.
+      toMonday/toDate return a 16-bit Date (1970..2149) and toDateTime a 32-bit DateTime
+      (1970..2106), and all three wrap rather than saturate, so a far-future id folds into a
+      plausible recent date — silently dropping rows from time-bounded queries, or bucketing
+      them into the wrong period. Use toDate32(...) or toDateTime64(..., 0, 'UTC'); for a week
+      start use the partition key's own `toDate32(E) - toIntervalDay(toDayOfWeek(E, 1))` on BOTH
+      operands. See OPIK-8241.
+    patterns:
+      - pattern: $X
+      # `\(` immediately after the name is what separates the narrow functions from their wide
+      # counterparts: `toDate32(` cannot match `toDate\(`, nor `toDateTime64(` match `toDateTime\(`.
+      # The lookbehind stops a longer identifier ending in one of these names from matching.
+      #
+      # The optional qualifier admits `toMonday(t.id_at)`: these DAOs alias their tables, so the
+      # unqualified form alone would miss the most ordinary way of writing the same mistake. Two levels
+      # cover `db.table.column`. The trailing boundary keeps a longer identifier that merely ends in
+      # `id_at` from matching.
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?s)^".*(?<![A-Za-z0-9_])to(?:Monday|DateTime|Date)\(\s*(?:[A-Za-z_][A-Za-z0-9_]*\.){0,2}(?:id_at|UUIDv7ToDateTime)(?![A-Za-z0-9_]).*"$

@@ -29,8 +29,8 @@
 -- replica still has the wrapper, that wrapper resolves `traces_local`, which the already-renamed replicas no longer
 -- have, so a query routed there can fail with UNKNOWN_TABLE (the wrap's own window is the same thing in reverse — a
 -- Distributed query reaching a node where `traces_local` does not exist YET). It is brief and fails loudly rather than
--- silently, and ../rollback.sh gates it behind --confirm-maintenance; quiescing reads, not just buffering writes, is
--- what actually covers it.
+-- silently, and ../rollback.sh gates it behind --confirm-maintenance; only quiescing reads as well as writes actually
+-- covers it — nothing on the ingestion side can.
 --
 -- Partial-failure recovery: if the RENAME succeeds and the DROP does not, the estate is already correct (`traces` is the
 -- successor) and only the data-less ex-wrapper lingers under `traces_dist_old`. Nothing needs re-running — --unwrap-only
@@ -43,7 +43,8 @@
 -- the flip that enabled the wrap. It is the ONLY flag this reverses, and `traceColumnsNonNullable` must stay `true`: the
 -- live table keeps the successor's sentinel schema, which un-wrapping preserves. Contrast stage B/C, which restore the
 -- unpartitioned original and so also revert `traceColumnsNonNullable` (stage C both flags), plus the sentinel/duration
--- repair.
+-- repair. Trace-delete partition pruning is not a flag at all, so no stage of any rollback weighs it — see the runbook's
+-- "Trace-delete partition pruning needs no flip at all".
 
 -- 1. Gapless un-wrap: rotate both names atomically.
 SET log_comment = 'traces_local_v2_rollback:unwrap';

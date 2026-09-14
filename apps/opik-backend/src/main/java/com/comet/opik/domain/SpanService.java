@@ -545,11 +545,13 @@ public class SpanService {
                         return commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds, projectId)
                                 .then(Mono.defer(() -> feedbackScoreService.deleteBySpanIds(spanIds, projectId)))
                                 .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds, projectId)))
-                                .then(spanDAO.deleteByIds(spanIds, projectId)
+                                .then(captureDeletions(spanIds, projectId, workspaceId, userName))
+                                // Deferred like the steps above it, so the delete is assembled after the capture
+                                // rather than alongside it.
+                                .then(Mono.defer(() -> spanDAO.deleteByIds(spanIds, projectId)
                                         .doOnSuccess(__ -> log.info(
                                                 "Deleted '{}' spans for workspace '{}', project '{}'",
-                                                spanIds.size(), workspaceId, projectId)))
-                                .then(captureDeletions(spanIds, projectId, workspaceId, userName))
+                                                spanIds.size(), workspaceId, projectId))))
                                 .thenReturn(spanIds);
                     })
                     .doOnSuccess(spanIds -> {
@@ -562,11 +564,12 @@ public class SpanService {
     }
 
     /**
-     * Records the span ids removed by the trace-delete cascade in the {@code deletion_events_local} bridge so they
-     * survive the {@code spans} table copy during the Slice 3 migration window. Best-effort and deferred: gated by
-     * {@code spanDeletionEventsCaptureEnabled} and run only after the delete succeeds, and any capture failure is
-     * logged and swallowed so it can never disrupt the delete. Spans have no standalone delete, so this cascade is the
-     * only capture path. Mirrors {@code TraceService.captureDeletions}.
+     * Records the span ids the trace-delete cascade is about to remove in the {@code deletion_events_local} bridge so
+     * they survive the {@code spans} table copy during its migration window. Runs <b>before</b> the span lightweight
+     * delete and is best-effort, for the reasons in {@code TraceServiceImpl.captureDeletions}. Sits immediately before
+     * {@code SpanDAO.deleteByIds} rather than at the top of the cascade: the bridge records rows of the {@code spans}
+     * table, and a child-entity delete failing upstream leaves those rows untouched, so there is nothing to record.
+     * No-op unless capture is enabled. Spans have no standalone delete, so this cascade is the only capture path.
      */
     private Mono<Void> captureDeletions(Set<UUID> ids, UUID projectId, String workspaceId, String userName) {
         return Mono.defer(() -> {

@@ -3,12 +3,9 @@ import { useMemo } from "react";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 
 /**
- * Compute the human-facing "v{n}" label for a specific prompt version.
- *
- * Versions are labeled by their position when sorted by created_at desc:
- * the oldest is v1, the newest is v{total}. We need the versions list to
- * find that position — version_count on the Prompt object only tells us
- * the total (i.e., the latest's label).
+ * Compute the human-facing label for a specific prompt version, using the
+ * backend-persisted version_number so it stays correct even after older
+ * versions are deleted (positional "v{n}" labels shift when that happens).
  */
 const usePromptVersionLabel = (
   promptId: string | undefined,
@@ -27,9 +24,8 @@ const usePromptVersionLabel = (
 
   return useMemo(() => {
     if (versionId && data?.content) {
-      const idx = data.content.findIndex((v) => v.id === versionId);
-      const total = data.total ?? data.content.length;
-      if (idx >= 0 && total > 0) return `v${total - idx}`;
+      const version = data.content.find((v) => v.id === versionId);
+      if (version) return version.version_number ?? version.commit;
     }
     return fallbackVersionCount && fallbackVersionCount > 0
       ? `v${fallbackVersionCount}`

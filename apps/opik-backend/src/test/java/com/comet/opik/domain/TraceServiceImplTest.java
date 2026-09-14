@@ -1,12 +1,16 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceCountResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
 import com.comet.opik.api.error.InvalidUUIDException;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.DatabaseAnalyticsDataModelConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -16,6 +20,8 @@ import com.comet.opik.utils.ErrorUtils;
 import com.google.common.eventbus.EventBus;
 import io.r2dbc.spi.Connection;
 import jakarta.ws.rs.NotFoundException;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +32,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamFactoryImpl;
@@ -45,8 +52,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -55,6 +64,7 @@ import static org.mockito.Mockito.when;
 class TraceServiceImplTest {
 
     public static final LockService DUMMY_LOCK_SERVICE = new DummyLockService();
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private TraceServiceImpl traceService;
 
@@ -88,7 +98,6 @@ class TraceServiceImplTest {
 
     private final PodamFactory factory = new PodamFactoryImpl();
     private final TraceSortingFactory traceSortingFactory = new TraceSortingFactory();
-    private final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     @BeforeEach
     void setUp() {
@@ -107,7 +116,7 @@ class TraceServiceImplTest {
                 deletionEventDAO,
                 template,
                 projectService,
-                idGenerator,
+                ID_GENERATOR,
                 DUMMY_LOCK_SERVICE,
                 eventBus,
                 traceSortingFactory,
@@ -225,8 +234,8 @@ class TraceServiceImplTest {
         @Test
         @DisplayName("when capture is disabled, then delete records no deletion events")
         void delete__whenCaptureDisabled__thenRecordsNoDeletionEvents() {
-            var ids = Set.of(idGenerator.generateId(), idGenerator.generateId());
-            var projectId = idGenerator.generateId();
+            var ids = Set.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
+            var projectId = ID_GENERATOR.generateId();
             var workspaceId = UUID.randomUUID().toString();
             var connection = mockDeleteFlow();
             when(traceDao.delete(pairs(projectId, ids), connection)).thenReturn(Mono.empty());
@@ -246,12 +255,12 @@ class TraceServiceImplTest {
         @Test
         @DisplayName("when capture is enabled and recording fails, then the delete still succeeds")
         void delete__whenCaptureEnabledAndRecordingFails__thenDeleteSucceeds() {
-            var ids = Set.of(idGenerator.generateId(), idGenerator.generateId());
-            var projectId = idGenerator.generateId();
+            var ids = Set.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
+            var projectId = ID_GENERATOR.generateId();
             var workspaceId = UUID.randomUUID().toString();
             var connection = mockDeleteFlow();
             when(traceDao.delete(pairs(projectId, ids), connection)).thenReturn(Mono.empty());
-            when(deletionEventDAO.insert(any(), eq(DEFAULT_USER)))
+            when(deletionEventDAO.insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER))
                     .thenReturn(Mono.error(new RuntimeException("Error inserting deletion events")));
 
             var traceService = newTraceService(DatabaseAnalyticsDataModelConfig.builder()
@@ -266,23 +275,26 @@ class TraceServiceImplTest {
 
             verify(traceDao).delete(pairs(projectId, ids), connection);
             verifyTracesDeletedPosted(ids, projectId, workspaceId);
-            verify(deletionEventDAO).insert(any(), eq(DEFAULT_USER));
+            verify(deletionEventDAO).insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER);
         }
 
         @Test
-        @DisplayName("when the delete fails, then no deletion events are recorded and the error propagates")
-        void delete__whenDeleteFails__thenRecordsNoDeletionEventsAndPropagates() {
-            var ids = Set.of(idGenerator.generateId(), idGenerator.generateId());
-            var projectId = idGenerator.generateId();
+        @DisplayName("when the delete fails, then the deletion events are still recorded and the error propagates")
+        void delete__whenDeleteFails__thenStillRecordsDeletionEventsAndPropagates() {
+            var ids = Set.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
+            var projectId = ID_GENERATOR.generateId();
             var workspaceId = UUID.randomUUID().toString();
             var connection = mockDeleteFlow();
             when(traceDao.delete(pairs(projectId, ids), connection))
                     .thenReturn(Mono.error(new RuntimeException("Error deleting traces")));
+            when(deletionEventDAO.insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER))
+                    .thenReturn(Mono.empty());
 
             var traceService = newTraceService(DatabaseAnalyticsDataModelConfig.builder()
                     .traceDeletionEventsCaptureEnabled(true)
                     .build());
-            // Capture runs only after a successful delete, so a failed delete records nothing and surfaces the error.
+            // OPIK-8141: capture runs before the delete, so a failed delete is recorded anyway - including one whose
+            // statement errored on the client while its server-side mutation applied, the case that lost the event.
             assertThatThrownBy(() -> traceService
                     .delete(ids, projectId)
                     .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, DEFAULT_USER)
@@ -291,8 +303,12 @@ class TraceServiceImplTest {
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageContaining("Error deleting traces");
 
-            verify(traceDao).delete(pairs(projectId, ids), connection);
-            verifyNoInteractions(deletionEventDAO, eventBus);
+            // The ordering is the fix, so assert it rather than infer it from both having happened.
+            var inOrder = inOrder(deletionEventDAO, traceDao);
+            inOrder.verify(deletionEventDAO).insert(deletionEvents(projectId, ids, workspaceId), DEFAULT_USER);
+            inOrder.verify(traceDao).delete(pairs(projectId, ids), connection);
+            // A failed delete still skips the cascade: its children belong to traces that may well be live.
+            verifyNoInteractions(eventBus);
         }
 
         @Test
@@ -302,12 +318,12 @@ class TraceServiceImplTest {
             // can't reach this branch (a wrapped-id_at row can't be created through the API), so it's covered here:
             // the bounded pass resolves one id, the miss set (a second id, reused across two projects) is resolved by
             // the unbounded pass, and the delete runs over the merged (project_id, id) pairs.
-            var resolvedId = idGenerator.generateId();
-            var missedId = idGenerator.generateId();
+            var resolvedId = ID_GENERATOR.generateId();
+            var missedId = ID_GENERATOR.generateId();
             var ids = Set.of(resolvedId, missedId);
-            var projectA = idGenerator.generateId();
-            var projectB = idGenerator.generateId();
-            var projectC = idGenerator.generateId();
+            var projectA = ID_GENERATOR.generateId();
+            var projectB = ID_GENERATOR.generateId();
+            var projectC = ID_GENERATOR.generateId();
             var workspaceId = UUID.randomUUID().toString();
             var connection = mockDeleteFlow();
 
@@ -343,6 +359,23 @@ class TraceServiceImplTest {
             return ids.stream().map(id -> Pair.of(projectId, id)).collect(Collectors.toUnmodifiableSet());
         }
 
+        /**
+         * The bridge rows the delete is expected to record: one {@code traces} / {@code user_request} event per pair,
+         * with {@code eventTime} left null for ClickHouse to stamp. Matching the insert on this rather than on
+         * {@code any()} is what pins the recorded contents, so a wrong source table, reason or id fails the test.
+         */
+        private Set<DeletionEvent> deletionEvents(UUID projectId, Set<UUID> ids, String workspaceId) {
+            return ids.stream()
+                    .map(id -> DeletionEvent.builder()
+                            .sourceTable(SourceTable.TRACES)
+                            .workspaceId(workspaceId)
+                            .projectId(projectId)
+                            .deletedId(id.toString())
+                            .deletionReason(DeletionReason.USER_REQUEST)
+                            .build())
+                    .collect(Collectors.toUnmodifiableSet());
+        }
+
         private Connection mockDeleteFlow() {
             var connection = mock(Connection.class);
             when(template.nonTransaction(any()))
@@ -361,6 +394,188 @@ class TraceServiceImplTest {
             assertThat(event.projectId()).isEqualTo(projectId);
             assertThat(event.workspaceId()).isEqualTo(workspaceId);
             assertThat(event.userName()).isEqualTo(DEFAULT_USER);
+        }
+    }
+
+    /**
+     * The demo-project exclusion is applied in this service rather than in the usage SQL, so what it does with the
+     * DAO's per-project rows is behaviour worth pinning: drop demo projects, sum the rest back into the shape the
+     * endpoints return, and resolve the demo set through the bounded lookup rather than the unscoped one.
+     */
+    @Nested
+    class DailyUsage {
+
+        private static final String WORKSPACE_ID = UUID.randomUUID().toString();
+        private static final String OTHER_WORKSPACE_ID = UUID.randomUUID().toString();
+        private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        private static final String OTHER_USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        private static final UUID REGULAR_PROJECT_ID = ID_GENERATOR.generateId();
+        private static final UUID OTHER_REGULAR_PROJECT_ID = ID_GENERATOR.generateId();
+        private static final UUID DEMO_PROJECT_ID = ID_GENERATOR.generateId();
+
+        @Test
+        void countTracesPerWorkspace__whenWorkspaceHasDemoAndRegularProjects__thenSumsOnlyTheRegularOnes() {
+            var regularCount = randomCount();
+            var otherRegularCount = randomCount();
+
+            when(traceDao.countTracesPerWorkspaceProject()).thenReturn(Flux.just(
+                    WorkspaceProjectCount.builder()
+                            .workspaceId(WORKSPACE_ID)
+                            .projectId(REGULAR_PROJECT_ID)
+                            .count(regularCount)
+                            .build(),
+                    WorkspaceProjectCount.builder()
+                            .workspaceId(WORKSPACE_ID)
+                            .projectId(OTHER_REGULAR_PROJECT_ID)
+                            .count(otherRegularCount)
+                            .build(),
+                    WorkspaceProjectCount.builder()
+                            .workspaceId(WORKSPACE_ID)
+                            .projectId(DEMO_PROJECT_ID)
+                            .count(randomCount())
+                            .build()));
+            when(projectService.getDemoProjectIdsInWorkspaces(Set.of(WORKSPACE_ID)))
+                    .thenReturn(Mono.just(Set.of(DEMO_PROJECT_ID)));
+
+            var expectedResponse = TraceCountResponse.builder()
+                    .workspacesTracesCount(List.of(TraceCountResponse.WorkspaceTraceCount.builder()
+                            .workspace(WORKSPACE_ID)
+                            .traceCount(Math.toIntExact(regularCount + otherRegularCount))
+                            .build()))
+                    .build();
+
+            var actualResponse = traceService.countTracesPerWorkspace().block();
+
+            assertThat(actualResponse).isEqualTo(expectedResponse);
+        }
+
+        @Test
+        void getTraceBIInformation__whenUserHasDemoAndRegularProjects__thenSumsOnlyTheRegularOnesPerUser() {
+            var regularCount = randomCount();
+            var otherRegularCount = randomCount();
+            var otherUserCount = randomCount();
+
+            when(traceDao.getTraceBIInformationPerProject()).thenReturn(Flux.just(
+                    WorkspaceProjectUserCount.builder()
+                            .workspaceId(WORKSPACE_ID)
+                            .projectId(REGULAR_PROJECT_ID)
+                            .user(USER)
+                            .count(regularCount)
+                            .build(),
+                    WorkspaceProjectUserCount.builder()
+                            .workspaceId(WORKSPACE_ID)
+                            .projectId(OTHER_REGULAR_PROJECT_ID)
+                            .user(USER)
+                            .count(otherRegularCount)
+                            .build(),
+                    WorkspaceProjectUserCount.builder()
+                            .workspaceId(WORKSPACE_ID)
+                            .projectId(REGULAR_PROJECT_ID)
+                            .user(OTHER_USER)
+                            .count(otherUserCount)
+                            .build(),
+                    WorkspaceProjectUserCount.builder()
+                            .workspaceId(WORKSPACE_ID)
+                            .projectId(DEMO_PROJECT_ID)
+                            .user(USER)
+                            .count(randomCount())
+                            .build()));
+            when(projectService.getDemoProjectIdsInWorkspaces(Set.of(WORKSPACE_ID)))
+                    .thenReturn(Mono.just(Set.of(DEMO_PROJECT_ID)));
+
+            var expectedResponse = BiInformationResponse.builder()
+                    .biInformation(List.of(
+                            BiInformationResponse.BiInformation.builder()
+                                    .workspaceId(WORKSPACE_ID)
+                                    .user(USER)
+                                    .count(regularCount + otherRegularCount)
+                                    .build(),
+                            BiInformationResponse.BiInformation.builder()
+                                    .workspaceId(WORKSPACE_ID)
+                                    .user(OTHER_USER)
+                                    .count(otherUserCount)
+                                    .build()))
+                    .build();
+
+            var actualResponse = traceService.getTraceBIInformation().block();
+
+            assertThat(actualResponse).isEqualTo(expectedResponse);
+        }
+
+        @Test
+        void getDailyCreatedCount__whenSeveralWorkspaces__thenTotalsThemWithDemoProjectsExcluded() {
+            var regularCount = randomCount();
+            var otherWorkspaceCount = randomCount();
+
+            when(traceDao.countTracesPerWorkspaceProject()).thenReturn(Flux.just(
+                    WorkspaceProjectCount.builder()
+                            .workspaceId(WORKSPACE_ID)
+                            .projectId(REGULAR_PROJECT_ID)
+                            .count(regularCount)
+                            .build(),
+                    WorkspaceProjectCount.builder()
+                            .workspaceId(WORKSPACE_ID)
+                            .projectId(DEMO_PROJECT_ID)
+                            .count(randomCount())
+                            .build(),
+                    WorkspaceProjectCount.builder()
+                            .workspaceId(OTHER_WORKSPACE_ID)
+                            .projectId(OTHER_REGULAR_PROJECT_ID)
+                            .count(otherWorkspaceCount)
+                            .build()));
+            when(projectService.getDemoProjectIdsInWorkspaces(Set.of(WORKSPACE_ID, OTHER_WORKSPACE_ID)))
+                    .thenReturn(Mono.just(Set.of(DEMO_PROJECT_ID)));
+
+            var expectedCount = regularCount + otherWorkspaceCount;
+
+            var actualCount = traceService.getDailyCreatedCount().block();
+
+            assertThat(actualCount).isEqualTo(expectedCount);
+        }
+
+        /**
+         * The bound, asserted where it is cheap to assert: the lookup only ever sees the workspaces that had
+         * traces.
+         * {@code DemoDataExclusionLiteralArchTest} forbids the unscoped fetch from gaining callers at build time;
+         * this pins that the trace path does not reach for it at runtime.
+         */
+        @Test
+        void countTracesPerWorkspace__whenFolding__thenTheDemoProjectLookupIsScopedToTheWorkspacesThatHadTraces() {
+            when(traceDao.countTracesPerWorkspaceProject()).thenReturn(Flux.just(
+                    WorkspaceProjectCount.builder()
+                            .workspaceId(WORKSPACE_ID)
+                            .projectId(REGULAR_PROJECT_ID)
+                            .count(randomCount())
+                            .build(),
+                    WorkspaceProjectCount.builder()
+                            .workspaceId(WORKSPACE_ID)
+                            .projectId(DEMO_PROJECT_ID)
+                            .count(randomCount())
+                            .build()));
+            when(projectService.getDemoProjectIdsInWorkspaces(Set.of(WORKSPACE_ID)))
+                    .thenReturn(Mono.just(Set.of(DEMO_PROJECT_ID)));
+
+            traceService.countTracesPerWorkspace().block();
+
+            verify(projectService).getDemoProjectIdsInWorkspaces(Set.of(WORKSPACE_ID));
+            verify(projectService, never()).getDemoProjectIdsWithTimestamps();
+        }
+
+        @Test
+        void countTracesPerWorkspace__whenNoTraces__thenReturnsEmptyResponse() {
+            when(traceDao.countTracesPerWorkspaceProject()).thenReturn(Flux.empty());
+            when(projectService.getDemoProjectIdsInWorkspaces(Set.of())).thenReturn(Mono.just(Set.of()));
+
+            var expectedResponse = TraceCountResponse.builder().workspacesTracesCount(List.of()).build();
+
+            var actualResponse = traceService.countTracesPerWorkspace().block();
+
+            assertThat(actualResponse).isEqualTo(expectedResponse);
+            verify(projectService, never()).getDemoProjectIdsWithTimestamps();
+        }
+
+        private long randomCount() {
+            return RandomUtils.secure().randomLong(1, 1_000);
         }
     }
 }

@@ -125,7 +125,7 @@ jobs:
 
       - name: Install TypeScript SDK dependencies
         working-directory: sdks/typescript
-        run: npm ci
+        run: npm ci --no-audit
 
       - name: Build TypeScript SDK
         working-directory: sdks/typescript
