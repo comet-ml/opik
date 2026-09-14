@@ -70,11 +70,14 @@ def parse_litellm_model_output(
         # lands, and a two-digit score ("10") spans two tokens.
         entry_indices = _locate_score_entries(entries)
         if entry_indices is None:
+            reconstructed_length = sum(
+                len(str(_to_dict(entry).get("token", ""))) for entry in entries
+            )
             LOGGER.debug(
-                "g_eval score key not found in the reconstructed response; "
-                "falling back to the legacy fixed token offset. Reconstructed "
-                "response: %r",
-                "".join(str(_to_dict(entry).get("token", "")) for entry in entries),
+                "g_eval score key not found in the reconstructed response "
+                "(reconstructed length: %d); falling back to the legacy fixed "
+                "token offset.",
+                reconstructed_length,
             )
             entry_indices = [3]
 
@@ -84,12 +87,14 @@ def parse_litellm_model_output(
             token_candidate,
         ) = _weighted_score_sums(entries, entry_indices)
 
-        if linear_probs_sum != 0.0:
-            final_score: float = weighted_score_sum / linear_probs_sum / 10
-        else:
-            if not token_candidate.isdecimal():
-                raise exceptions.MetricComputationError(GEVAL_SCORE_CALC_FAILED)
-            final_score = int(token_candidate) / 10
+        if linear_probs_sum == 0.0:
+            # No probability mass on the located digits (e.g. the digits span
+            # tokens carrying punctuation, so no candidate passes the decimal
+            # filter): degrade to the text path the same way the short-stream
+            # and no-logprob branches do, instead of raising on a response
+            # that is perfectly parseable.
+            return _extract_score_from_text_content(choice_dict, name=name)
+        final_score: float = weighted_score_sum / linear_probs_sum / 10
 
         if not (0.0 <= final_score <= 1.0):
             raise ValueError(
@@ -141,10 +146,11 @@ def _locate_score_entries(entries: list) -> list[int] | None:
     return indices
 
 
-def _decimal_candidates(entry) -> list:
+def _decimal_candidates(entry: Any) -> list[tuple[str, float]]:
+    entry_dict = _to_dict(entry)
     return [
         (str(info.get("token", "")).strip(), math.exp(float(info["logprob"])))
-        for info in (_to_dict(cand) for cand in (entry.get("top_logprobs") or []))
+        for info in (_to_dict(cand) for cand in (entry_dict.get("top_logprobs") or []))
         if str(info.get("token", "")).strip().isdecimal()
         and info.get("logprob") is not None
     ]

@@ -38,8 +38,6 @@ def _entry(token, logprob, top=None):
 
 
 def _response(content, entries):
-    from types import SimpleNamespace
-
     return SimpleNamespace(
         choices=[
             SimpleNamespace(
@@ -123,6 +121,34 @@ def test_leading_space_score_token_is_scored_not_rejected():
     assert 0.0 < result.value < 0.09, f"unexpected value {result.value}"
 
 
+def test_punctuation_carrying_split_digits_degrade_to_text_path():
+    # {"score":10} split as "1" + "0,": no candidate passes the decimal
+    # filter, so there is no probability mass. The parser must degrade to
+    # the text path (score 1.0) instead of raising on a parseable response.
+    entries = [
+        _entry('{"', -0.01),
+        _entry("score", -0.01),
+        _entry('":', -0.01),
+        _entry("1", -0.05, top=[{"token": "1,", "logprob": -0.05}]),
+        _entry("0,", -0.02, top=[{"token": "0,", "logprob": -0.02}]),
+        _entry(",", -0.01),
+        _entry(" ", -0.01),
+        _entry('"', -0.01),
+        _entry("reason", -0.01),
+        _entry('":', -0.01),
+        _entry(" ", -0.01),
+        _entry('"ok"', -0.01),
+        _entry("}", -0.01),
+    ]
+    result = parser.parse_litellm_model_output(
+        _response('{"score":10, "reason": "ok"}', entries),
+        name="g_eval",
+        log_probs_supported=True,
+    )
+    assert result.value == 1.0
+    assert result.reason == "ok"
+
+
 def test_single_digit_score_at_position_three_unchanged():
     # Control: the no-space, single-digit case must keep today's exact value.
     entries = [
@@ -157,24 +183,32 @@ def test_duplicate_score_keys_last_wins_like_the_text_path():
     # must mirror that: a first-occurrence scan scores from the first,
     # stale key instead.
     entries = [
-        _entry('{\"', -0.01),
+        _entry('{"', -0.01),
         _entry("score", -0.01),
-        _entry('\":', -0.01),
+        _entry('":', -0.01),
         _entry(" ", -0.01),
-        _entry("9", -0.5, top=[{"token": "9", "logprob": -0.01}, {"token": "5", "logprob": -3.00}]),
+        _entry(
+            "9",
+            -0.5,
+            top=[{"token": "9", "logprob": -0.01}, {"token": "5", "logprob": -3.00}],
+        ),
         _entry(",", -0.01),
         _entry(" ", -0.01),
-        _entry("\"score", -0.01),
-        _entry('\":', -0.01),
+        _entry('"score', -0.01),
+        _entry('":', -0.01),
         _entry(" ", -0.01),
-        _entry("7", -0.1, top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.00}]),
+        _entry(
+            "7",
+            -0.1,
+            top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.00}],
+        ),
         _entry(",", -0.01),
         _entry(" ", -0.01),
-        _entry("\"", -0.01),
+        _entry('"', -0.01),
         _entry("reason", -0.01),
-        _entry('\":', -0.01),
+        _entry('":', -0.01),
         _entry(" ", -0.01),
-        _entry("\"ok\"", -0.01),
+        _entry('"ok"', -0.01),
         _entry("}", -0.01),
     ]
     content = '{"score": 9, "score": 7, "reason": "ok"}'
@@ -197,18 +231,26 @@ def test_escaped_quote_echo_is_not_a_matchable_key():
     # locator stays on the real key. Guards against a looser rewrite
     # that would scan bare text.
     entries = [
-        _entry('{\"', -0.01),
+        _entry('{"', -0.01),
         _entry("reason", -0.01),
-        _entry('\":', -0.01),
+        _entry('":', -0.01),
         _entry(' "the rubric said \\"', -0.01),
         _entry("score", -0.01),
         _entry('\\": ', -0.01),
-        _entry("9", -0.5, top=[{"token": "9", "logprob": -0.01}, {"token": "5", "logprob": -3.00}]),
-        _entry(" here\", ", -0.01),
-        _entry("\"score", -0.01),
-        _entry('\":', -0.01),
+        _entry(
+            "9",
+            -0.5,
+            top=[{"token": "9", "logprob": -0.01}, {"token": "5", "logprob": -3.00}],
+        ),
+        _entry(' here", ', -0.01),
+        _entry('"score', -0.01),
+        _entry('":', -0.01),
         _entry(" ", -0.01),
-        _entry("7", -0.1, top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.00}]),
+        _entry(
+            "7",
+            -0.1,
+            top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.00}],
+        ),
         _entry("}", -0.01),
     ]
     content = '{"reason": "the rubric said \\"score\\": 9 here", "score": 7}'
@@ -287,156 +329,113 @@ def _geval_on_stubbed_provider(monkeypatch, content, entries):
     return metric, captured
 
 
-def test_geval_litellm_path_split_score_scores_near_one(monkeypatch):
-    # {"score":10} split across "1" + "0" must score near 1.0 end to end. A
-    # legacy fixed-offset read of entries[3] alone averages to ~0.099.
-    entries = [
-        _entry('{"', -0.01),
-        _entry("score", -0.01),
-        _entry('":', -0.01),
-        _entry(
-            "1",
-            -0.05,
-            top=[
-                {"token": "1", "logprob": -0.05},
-                {"token": "0", "logprob": -2.30},
-                {"token": "2", "logprob": -2.40},
-            ],
-        ),
-        _entry(
-            "0",
-            -0.02,
-            top=[{"token": "0", "logprob": -0.02}, {"token": "1", "logprob": -3.00}],
-        ),
-        _entry(",", -0.01),
-        _entry('"reason"', -0.01),
-        _entry('":', -0.01),
-        _entry(" ", -0.01),
-        _entry('"excellent"', -0.01),
-        _entry("}", -0.01),
-    ]
-    content = '{"score":10, "reason": "excellent"}'
+# Shared fixtures for the provider-shaped GEval tests below: the split-score
+# and folded-whitespace token streams, each paired with the content they
+# decode to and the exact value the shared synchronous parser yields.
+_SPLIT_SCORE_ENTRIES = [
+    _entry('{"', -0.01),
+    _entry("score", -0.01),
+    _entry('":', -0.01),
+    _entry(
+        "1",
+        -0.05,
+        top=[
+            {"token": "1", "logprob": -0.05},
+            {"token": "0", "logprob": -2.30},
+            {"token": "2", "logprob": -2.40},
+        ],
+    ),
+    _entry(
+        "0",
+        -0.02,
+        top=[{"token": "0", "logprob": -0.02}, {"token": "1", "logprob": -3.00}],
+    ),
+    _entry(",", -0.01),
+    _entry('"reason"', -0.01),
+    _entry('":', -0.01),
+    _entry(" ", -0.01),
+    _entry('"excellent"', -0.01),
+    _entry("}", -0.01),
+]
+
+_FOLDED_WHITESPACE_ENTRIES = [
+    _entry('{"', -0.01),
+    _entry("score", -0.01),
+    _entry('":', -0.01),
+    _entry(
+        " 0",
+        -0.02,
+        top=[
+            {"token": " 0", "logprob": -0.02},
+            {"token": " 1", "logprob": -2.00},
+            {"token": " 10", "logprob": -2.50},
+        ],
+    ),
+    _entry(",", -0.01),
+    _entry('"reason"', -0.01),
+    _entry('":', -0.01),
+    _entry(" ", -0.01),
+    _entry('"none"', -0.01),
+    _entry("}", -0.01),
+]
+
+_PROVIDER_CASES = [
+    (
+        _SPLIT_SCORE_ENTRIES,
+        '{"score":10, "reason": "excellent"}',
+        0.9007723389857002,
+        "excellent",
+    ),
+    (
+        _FOLDED_WHITESPACE_ENTRIES,
+        '{"score": 0, "reason": "none"}',
+        0.07984052568223204,
+        "none",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "entries, content, expected_value, expected_reason", _PROVIDER_CASES
+)
+def test_geval_litellm_path_scores_end_to_end(
+    monkeypatch, entries, content, expected_value, expected_reason
+):
+    # The split-score case ({"score":10} across "1" + "0") must score near 1.0
+    # end to end: a legacy fixed-offset read of entries[3] alone averages to
+    # ~0.099. The folded-whitespace twin (the space after the colon folds into
+    # the score token, " 0") must score instead of raising on a perfectly
+    # parseable response.
     metric, captured = _geval_on_stubbed_provider(monkeypatch, content, entries)
 
     result = metric.score("any input")
 
     assert captured["logprobs"] is True
     assert captured["top_logprobs"] == 20
-    assert result.value == pytest.approx(0.9007723389857002, abs=1e-9)
-    assert result.reason == "excellent"
-
-
-def test_geval_litellm_path_folded_whitespace_is_scored(monkeypatch):
-    # The space after the colon folds into the score token (" 0"); the
-    # end-to-end path must score it instead of raising
-    # MetricComputationError on a perfectly parseable response.
-    entries = [
-        _entry('{"', -0.01),
-        _entry("score", -0.01),
-        _entry('":', -0.01),
-        _entry(
-            " 0",
-            -0.02,
-            top=[
-                {"token": " 0", "logprob": -0.02},
-                {"token": " 1", "logprob": -2.00},
-                {"token": " 10", "logprob": -2.50},
-            ],
-        ),
-        _entry(",", -0.01),
-        _entry('"reason"', -0.01),
-        _entry('":', -0.01),
-        _entry(" ", -0.01),
-        _entry('"none"', -0.01),
-        _entry("}", -0.01),
-    ]
-    content = '{"score": 0, "reason": "none"}'
-    metric, captured = _geval_on_stubbed_provider(monkeypatch, content, entries)
-
-    result = metric.score("any input")
-
-    assert captured["logprobs"] is True
-    assert captured["top_logprobs"] == 20
-    assert result.value == pytest.approx(0.07984052568223204, abs=1e-9)
-    assert result.reason == "none"
+    assert result.value == pytest.approx(expected_value, abs=1e-9)
+    assert result.reason == expected_reason
 
 
 # --- async provider-shaped GEval coverage ------------------------------------
 # GEval.ascore goes through aget_provider_response (an independent call site)
-# into the same parser, so the sync tests above cannot catch an async-only
-# regression. Fixtures and expectations mirror the sync twins exactly: the
-# parser is synchronous and shared, so identical entries/content must yield
-# identical values.
+# into the same synchronous parser, so the sync test above cannot catch an
+# async-only regression. Expectations mirror the sync cases exactly: identical
+# entries/content through the shared parser must yield identical values.
 
 
 @pytest.mark.asyncio
-async def test_geval_litellm_path_split_score_scores_near_one_async(monkeypatch):
-    # Async twin of test_geval_litellm_path_split_score_scores_near_one.
-    entries = [
-        _entry('{"', -0.01),
-        _entry("score", -0.01),
-        _entry('":', -0.01),
-        _entry(
-            "1",
-            -0.05,
-            top=[
-                {"token": "1", "logprob": -0.05},
-                {"token": "0", "logprob": -2.30},
-                {"token": "2", "logprob": -2.40},
-            ],
-        ),
-        _entry(
-            "0",
-            -0.02,
-            top=[{"token": "0", "logprob": -0.02}, {"token": "1", "logprob": -3.00}],
-        ),
-        _entry(",", -0.01),
-        _entry('"reason"', -0.01),
-        _entry('":', -0.01),
-        _entry(" ", -0.01),
-        _entry('"excellent"', -0.01),
-        _entry("}", -0.01),
-    ]
-    content = '{"score":10, "reason": "excellent"}'
+@pytest.mark.parametrize(
+    "entries, content, expected_value, expected_reason", _PROVIDER_CASES
+)
+async def test_geval_litellm_path_scores_end_to_end_async(
+    monkeypatch, entries, content, expected_value, expected_reason
+):
+    # Async twin of test_geval_litellm_path_scores_end_to_end.
     metric, captured = _geval_on_stubbed_provider(monkeypatch, content, entries)
 
     result = await metric.ascore("any input")
 
     assert captured["logprobs"] is True
     assert captured["top_logprobs"] == 20
-    assert result.value == pytest.approx(0.9007723389857002, abs=1e-9)
-    assert result.reason == "excellent"
-
-
-@pytest.mark.asyncio
-async def test_geval_litellm_path_folded_whitespace_is_scored_async(monkeypatch):
-    # Async twin of test_geval_litellm_path_folded_whitespace_is_scored.
-    entries = [
-        _entry('{"', -0.01),
-        _entry("score", -0.01),
-        _entry('":', -0.01),
-        _entry(
-            " 0",
-            -0.02,
-            top=[
-                {"token": " 0", "logprob": -0.02},
-                {"token": " 1", "logprob": -2.00},
-                {"token": " 10", "logprob": -2.50},
-            ],
-        ),
-        _entry(",", -0.01),
-        _entry('"reason"', -0.01),
-        _entry('":', -0.01),
-        _entry(" ", -0.01),
-        _entry('"none"', -0.01),
-        _entry("}", -0.01),
-    ]
-    content = '{"score": 0, "reason": "none"}'
-    metric, captured = _geval_on_stubbed_provider(monkeypatch, content, entries)
-
-    result = await metric.ascore("any input")
-
-    assert captured["logprobs"] is True
-    assert captured["top_logprobs"] == 20
-    assert result.value == pytest.approx(0.07984052568223204, abs=1e-9)
-    assert result.reason == "none"
+    assert result.value == pytest.approx(expected_value, abs=1e-9)
+    assert result.reason == expected_reason
