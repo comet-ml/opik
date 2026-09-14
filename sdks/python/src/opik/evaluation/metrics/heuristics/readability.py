@@ -71,6 +71,15 @@ class Readability(BaseMetric):
             raise MetricComputationError("Text is empty (Readability metric).")
 
         cleaned = output.strip()
+
+        # textstat reads the locale from module state set via `set_lang`; the `lang`
+        # keyword of `syllable_count` is deprecated, has no effect, and is scheduled
+        # for removal. Applying the language here keeps the syllable count and the
+        # Flesch formulas consistent with the configured locale.
+        set_lang = getattr(self._textstat, "set_lang", None)
+        if set_lang is not None:
+            set_lang(self._language)
+
         sentence_count = self._textstat.sentence_count(cleaned)
         word_count = self._textstat.lexicon_count(cleaned, removepunct=True)
         if sentence_count <= 0 or word_count <= 0:
@@ -78,7 +87,7 @@ class Readability(BaseMetric):
                 "Unable to parse text for readability metrics."
             )
 
-        syllable_count = self._textstat.syllable_count(cleaned, lang=self._language)
+        syllable_count = self._textstat.syllable_count(cleaned)
         reading_ease = float(self._textstat.flesch_reading_ease(cleaned))
         fk_grade = float(self._textstat.flesch_kincaid_grade(cleaned))
 
