@@ -17,7 +17,6 @@ from typing import (
     Set,
     TYPE_CHECKING,
     Tuple,
-    Union,
 )
 
 from opik.api_objects import rest_helpers
@@ -1001,7 +1000,7 @@ class Dataset(DatasetExportOperations):
 
     def insert(
         self,
-        items: Iterable[Union[Dict[str, Any], dataset_item.DatasetItem]],
+        items: Iterable[Dict[str, Any]],
         num_threads: int = 4,
         deduplication: bool = True,
     ) -> None:
@@ -1009,10 +1008,10 @@ class Dataset(DatasetExportOperations):
         Insert new items into the dataset. A new dataset version will be created.
 
         Args:
-            items: Dicts (or ``DatasetItem`` objects) to add to the dataset. Any
-                iterable is accepted, including a generator, and it is consumed lazily, so
-                no item is retained once its request has been sent and the request bodies
-                in flight are capped. That is the bounded part; deduplication is not, and
+            items: Dicts to add to the dataset. Any iterable is accepted, including
+                a generator, and it is consumed lazily, so no item is retained once
+                its request has been sent and the request bodies in flight are
+                capped. That is the bounded part; deduplication is not, and
                 keeps a content digest and an id per item for the life of the ``Dataset``
                 however the items arrived -- pass ``deduplication=False`` for an upload
                 that retains nothing at all. A list keeps working as before, and its
