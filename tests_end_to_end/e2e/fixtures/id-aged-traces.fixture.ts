@@ -2,6 +2,7 @@ import type { TestInfo } from '@playwright/test';
 import { test as baseTest } from './dashboard-cleanup.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7, type BackendClient } from '../core/backend';
+import { isUuidWindowRejection, UUID_VALIDATION_SKIP_REASON } from './uuid-window-guard';
 
 /**
  * One seeded trace whose UUIDv7 id embeds a chosen instant.
@@ -70,31 +71,6 @@ const FAR_FUTURE_MOMENT = new Date(Date.UTC(2201, 0, 15));
 /** How long a just-written trace may take to become readable. */
 const READABLE_TIMEOUT_MS = 30_000;
 const READABLE_POLL_MS = 500;
-
-/**
- * Reject-mode UUID validation refuses the ids these specs exist to seed.
- *
- * `UuidV7TimestampValidator` bounds an ingested id's embedded timestamp to
- * `[now - window, now + window]` and answers 400 when `uuidValidation.enabled=true`
- * and `auditOnly=false`. It ships disabled, so the default install seeds fine —
- * but the mode is not readable from the client, so it is detected from the
- * rejection rather than checked up front. Without this the whole spec fails as
- * an opaque 400 from a seed helper, which reads as a product bug instead of an
- * environment the spec cannot run in.
- *
- * Matched on the `message` field, not the `too_old` / `too_far_future` reason:
- * the reason lives in the response's `details`, which `rawFetch` drops when it
- * narrows the body to `message`. Verified against a reject-mode backend.
- */
-export function isUuidWindowRejection(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err);
-  return message.includes('Invalid UUID for id');
-}
-
-export const UUID_VALIDATION_SKIP_REASON =
-  'this env runs UUID timestamp validation in reject mode (UUID_VALIDATION_ENABLED=true, ' +
-  'auditOnly=false), which refuses the out-of-window ids these specs seed — set auditOnly=true ' +
-  'or disable validation to run them';
 
 async function seedAgedTrace(
   backendClient: BackendClient,

@@ -55,7 +55,7 @@ export {
   isRateLimitedError,
 } from './client';
 export { type PollFeedbackScoreOpts } from './poll-feedback-score';
-export { uuid7 } from './uuid7';
+export { uuid7, uuid7Moment } from './uuid7';
 export {
   buildDatasetItem,
   buildDatasetItemBatches,

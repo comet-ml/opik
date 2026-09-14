@@ -1,6 +1,6 @@
 import type { TestInfo } from '@playwright/test';
 import { test as baseTest } from './timed-threads.fixture';
-import { isUuidWindowRejection, UUID_VALIDATION_SKIP_REASON } from './id-aged-traces.fixture';
+import { isUuidWindowRejection, UUID_VALIDATION_SKIP_REASON } from './uuid-window-guard';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import {
   isRateLimitedError,

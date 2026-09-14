@@ -96,7 +96,7 @@ export type {
 } from './token-usage-spans.fixture';
 export type { AutomationRulesCleanupFixtures } from './automation-rules.fixture';
 export type {
-  ProjectMetricDaySeed,
+  ProjectMetricHourSeed,
   ProjectMetricSpansRef,
   ProjectMetricSpansFixtures,
 } from './project-metric-spans.fixture';

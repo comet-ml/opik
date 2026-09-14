@@ -1,5 +1,5 @@
 import { test as baseTest } from './span-kpi-cards.fixture';
-import { isUuidWindowRejection, UUID_VALIDATION_SKIP_REASON } from './id-aged-traces.fixture';
+import { isUuidWindowRejection, UUID_VALIDATION_SKIP_REASON } from './uuid-window-guard';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7, type BackendClient } from '../core/backend';
 
