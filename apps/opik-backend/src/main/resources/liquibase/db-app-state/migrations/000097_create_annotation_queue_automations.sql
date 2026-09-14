@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset aliaksandrk:000096_create_annotation_queue_automations
+--changeset aliaksandrk:000097_create_annotation_queue_automations
 --comment: Create annotation_queue_automations — per-queue configuration for automatic queue population (OPIK-6303)
 
 -- The queue itself lives in ClickHouse (annotation_queues, a ReplacingMergeTree where an update means
