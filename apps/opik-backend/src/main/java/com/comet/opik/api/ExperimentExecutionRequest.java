@@ -33,7 +33,8 @@ public record ExperimentExecutionRequest(
             @NotBlank String model,
             @NotNull @NotEmpty List<Message> messages,
             Map<String, JsonNode> configs,
-            List<Experiment.PromptVersionLink> promptVersions) {
+            List<Experiment.PromptVersionLink> promptVersions,
+            String experimentName) {
 
         @Builder(toBuilder = true)
         @JsonIgnoreProperties(ignoreUnknown = true)

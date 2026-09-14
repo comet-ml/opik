@@ -60,7 +60,11 @@ const PlaygroundAddVariant = ({ providerKeys }: PlaygroundAddVariantProps) => {
     if (!lastPrompt) return;
 
     const newPrompt = generateDefaultPrompt({
-      initPrompt: { ...lastPrompt, skipInitialPromptLoad: true },
+      initPrompt: {
+        ...lastPrompt,
+        experimentName: undefined,
+        skipInitialPromptLoad: true,
+      },
       setupProviders: providerKeys,
       providerResolver: calculateModelProvider,
       modelResolver: calculateDefaultModel,
