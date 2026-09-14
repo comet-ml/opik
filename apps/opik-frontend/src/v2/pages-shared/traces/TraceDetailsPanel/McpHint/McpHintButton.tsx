@@ -15,6 +15,13 @@ import { MCP_HINT_CLOSE_DELAY_MS, MCP_HINT_LABEL } from "./constants";
 import { McpHintTarget } from "./types";
 
 // Keep clicks inside the card from reaching the traceback underneath it.
+//
+// Click only, never pointerdown: React's stopPropagation stops the native event
+// at the root container, so a pointerdown stopped here never reaches the
+// document listener Radix's dismissable layer uses to track whether the last
+// pointerdown was inside it. That flag would then stay stuck on "inside", and
+// the next click outside would be spent clearing it instead of dismissing —
+// closing the card after using a route took two clicks.
 const stopPointerPropagation = (event: SyntheticEvent) =>
   event.stopPropagation();
 
@@ -41,8 +48,20 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
   // Distinguishes "read it and walked away" from "used it". Only the first is
   // worth an event; the routes report themselves.
   const hasActedRef = useRef(false);
+
+  // Using a route swaps the routes out for a confirmation. That confirmation is
+  // shorter than what it replaces, so the card shrinks out from under the
+  // pointer that just clicked it, and the pointer-leave that follows closes the
+  // card before it can be read. Once the user has committed to a route, hover
+  // stops being what keeps the card alive — only an explicit dismissal closes
+  // it (below). A ref rather than state: the dismissal handlers have to clear
+  // it and have Radix's own close see the new value within the same event,
+  // which a state update queued for the next render would not.
+  const isPinnedRef = useRef(false);
+
   const markAction = useCallback(() => {
     hasActedRef.current = true;
+    isPinnedRef.current = true;
   }, []);
 
   // Driven off the resulting state rather than off each handler: hover, click
@@ -54,6 +73,7 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
 
     if (isOpen) {
       hasActedRef.current = false;
+      isPinnedRef.current = false;
       trackEvent(OpikEvent.MCP_POPOVER_OPENED, {
         install_mode: installMode,
         entity_type: target.entityType,
@@ -68,67 +88,40 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
     }
   }, [isOpen, installMode, target.entityType]);
 
-  // A confirmation is showing. It is shorter than the route list, so the card
-  // shrinks out from under the pointer that just clicked — and the pointer-leave
-  // that follows would close it before the user has read what it says.
-  const [hasOutcome, setHasOutcome] = useState(false);
+  // HoverCard covers pointer and keyboard focus on its own. Click is ours:
+  // without it the card is unreachable on touch, where neither exists.
+  const handleClick = useCallback(() => setIsOpen(true), []);
 
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const holdsFocus = () =>
-    Boolean(contentRef.current?.contains(document.activeElement));
 
-  // HoverCard closes on the trigger's blur — which is exactly what a keyboard
-  // user does on their way *into* the card. The tiles sit immediately after the
-  // pill in tab order, so without this the card closes out from under them a
-  // quarter-second after they arrive. Decline while it holds focus.
+  // The two reasons an implicit close has to be declined. First, the pin above.
+  // Second: HoverCard closes on the trigger's blur, which is exactly what a
+  // keyboard user does on their way *into* the card — the tiles sit immediately
+  // after the pill in tab order, so without this the card would close out from
+  // under them a quarter-second after they arrive.
+  const handleOpenChange = useCallback((nextIsOpen: boolean) => {
+    if (!nextIsOpen) {
+      if (isPinnedRef.current) return;
+      if (contentRef.current?.contains(document.activeElement)) return;
+    }
+    setIsOpen(nextIsOpen);
+  }, []);
+
+  // Deliberate dismissals, which outrank both of those: clicking away, Escape,
+  // and tabbing out. Each clears the pin first, so that Radix's own close —
+  // which follows in the same event — is no longer declined. Without that,
+  // dismissing a pinned card would take two clicks.
   const close = useCallback(() => {
-    setHasOutcome(false);
+    isPinnedRef.current = false;
     setIsOpen(false);
   }, []);
 
-  // HoverCard covers pointer and keyboard focus on its own. Click is ours, and
-  // it toggles: a control that opens on click but cannot close again makes the
-  // user go looking for somewhere else to click. Also the only way in on touch,
-  // where neither hover nor focus exists.
-  const handleClick = useCallback(() => {
-    if (isOpen) {
-      close();
-      return;
-    }
-    setIsOpen(true);
-  }, [isOpen, close]);
-
-  // The trigger sits outside the content, so its own pointer-down counts as an
-  // outside interaction. Left alone it would close the card a moment before the
-  // click reopened it, and the toggle would never appear to work.
-  const handlePointerDownOutside = useCallback(
-    (event: Event) => {
-      if (triggerRef.current?.contains(event.target as Node)) return;
-      close();
-    },
-    [close],
-  );
-
-  const handleOpenChange = useCallback(
-    (nextIsOpen: boolean) => {
-      // Decline the pointer's verdict while the card holds focus or is showing
-      // a confirmation. Escape and a click outside still close it, below.
-      if (!nextIsOpen && (holdsFocus() || hasOutcome)) return;
-      setIsOpen(nextIsOpen);
-    },
-    [hasOutcome],
-  );
-
-  // ...and close once focus actually leaves it, rather than waiting for a
-  // pointer that a keyboard user never moves.
   const handleContentBlur = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {
       if (contentRef.current?.contains(event.relatedTarget)) return;
-      if (hasOutcome) return;
-      setIsOpen(false);
+      close();
     },
-    [hasOutcome],
+    [close],
   );
 
   return (
@@ -140,7 +133,6 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
     >
       <HoverCardTrigger asChild>
         <button
-          ref={triggerRef}
           type="button"
           className={PILL_CLASS}
           data-testid="mcp-hint-button"
@@ -158,27 +150,22 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
       <HoverCardContent
         ref={contentRef}
         onBlur={handleContentBlur}
-        onEscapeKeyDown={close}
-        onPointerDownOutside={handlePointerDownOutside}
-        onFocusOutside={close}
         side="bottom"
         align="end"
         sideOffset={6}
-        // No exit animation. Radix unmounts the card on `animationend`, and in
-        // this position that event never arrives — the exit animation reports
-        // itself as running forever, so the card stayed on screen, fully
-        // opaque, long after it had closed. Clicking away appeared to do
-        // nothing at all. Entering still animates.
+        // No exit animation. Radix unmounts on `animationend`, and in this
+        // position that event never arrives — the exit animation reports itself
+        // as running forever, so the card stayed on screen, fully opaque, long
+        // after it had closed, and clicking away looked like it did nothing.
+        // Needs `!`: the base variant's `animate-out` otherwise wins on source
+        // order. Entering still animates.
         className="w-auto border-0 bg-transparent p-0 shadow-none data-[state=closed]:!animate-none"
         data-testid="mcp-hint-popover"
+        onPointerDownOutside={close}
+        onEscapeKeyDown={close}
         onClick={stopPointerPropagation}
-        onPointerDown={stopPointerPropagation}
       >
-        <McpHintPopover
-          onAction={markAction}
-          onOutcomeChange={setHasOutcome}
-          target={target}
-        />
+        <McpHintPopover onAction={markAction} target={target} />
       </HoverCardContent>
     </HoverCard>
   );

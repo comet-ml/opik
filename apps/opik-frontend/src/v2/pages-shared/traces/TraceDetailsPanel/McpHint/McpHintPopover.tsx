@@ -16,14 +16,11 @@ import {
 type McpHintPopoverProps = {
   /** Called when the user leaves through the card rather than abandoning it. */
   onAction: () => void;
-  /** Whether a confirmation is on screen, which the card must not close under. */
-  onOutcomeChange: (hasOutcome: boolean) => void;
   target: McpHintTarget;
 };
 
 const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   onAction,
-  onOutcomeChange,
   target,
 }) => {
   // Unmounted with the popover, so closing it is what resets the view — a user
@@ -35,9 +32,8 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
     (route: McpRouteOutcome) => {
       onAction();
       setOutcome(route);
-      onOutcomeChange(true);
     },
-    [onAction, onOutcomeChange],
+    [onAction],
   );
 
   const handleLearnMoreClick = () => {
