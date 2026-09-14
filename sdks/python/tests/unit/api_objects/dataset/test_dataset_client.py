@@ -470,9 +470,9 @@ def test_insert__version_probe_recovers__parallel_upload_resumes(monkeypatch):
     workers_per_insert = []
     original_pool = Dataset._open_send_pool
 
-    def spy_pool(self, num_threads):
+    def spy_pool(self, num_threads, **kwargs):
         workers_per_insert.append(num_threads)
-        return original_pool(self, num_threads)
+        return original_pool(self, num_threads, **kwargs)
 
     monkeypatch.setattr(Dataset, "_open_send_pool", spy_pool)
 
@@ -516,9 +516,9 @@ def test_internal_insert__old_backend__worker_count_still_gated(monkeypatch):
     used_workers = []
     original_pool = Dataset._open_send_pool
 
-    def spy_pool(self, num_threads):
+    def spy_pool(self, num_threads, **kwargs):
         used_workers.append(num_threads)
-        return original_pool(self, num_threads)
+        return original_pool(self, num_threads, **kwargs)
 
     monkeypatch.setattr(Dataset, "_open_send_pool", spy_pool)
 
@@ -551,6 +551,28 @@ def test_internal_insert__invalid_num_threads__raises_value_error(bad_value):
         )
 
     assert capture.request_count == 0, "Nothing should have been uploaded"
+
+
+def test_internal_insert__num_threads_above_the_ceiling__is_clamped(monkeypatch):
+    """The count sizes the upload's byte budget too, so it cannot be unbounded."""
+    mock_rest_client = _mock_rest_client("2.2.8")
+    dataset, _ = _dataset_with_capture(mock_rest_client)
+
+    used_workers = []
+    original_pool = Dataset._open_send_pool
+
+    def spy_pool(self, num_threads, **kwargs):
+        used_workers.append(num_threads)
+        return original_pool(self, num_threads, **kwargs)
+
+    monkeypatch.setattr(Dataset, "_open_send_pool", spy_pool)
+
+    dataset.__internal_api__insert_items_as_dataclasses__(
+        [dataset_item.DatasetItem(**item) for item in _make_items(2)],
+        num_threads=256,
+    )
+
+    assert used_workers == [constants.DATASET_ITEMS_WRITE_MAX_THREADS]
 
 
 @pytest.mark.parametrize("bad_value", ["false", 0, 1, None, "", []])
