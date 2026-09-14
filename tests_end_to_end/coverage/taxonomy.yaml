@@ -600,6 +600,7 @@ areas:
     spec_dir: experiments
     specs:
       - experiments/compare-json-key-sorting.spec.ts
+      - experiments/experiment-bulk-upload-parallel-default.spec.ts
       - experiments/experiment-delete.spec.ts
       - experiments/experiment-logs-date-window.spec.ts
       - experiments/experiments-compare.spec.ts
