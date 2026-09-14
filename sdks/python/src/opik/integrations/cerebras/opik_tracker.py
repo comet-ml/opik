@@ -71,5 +71,7 @@ def _extract_metadata_from_client(client: CerebrasClient) -> Dict[str, Any]:
     # in the userinfo, query or fragment, and span metadata reaches the Opik
     # backend; the path is kept because self-hosted deployments route on it.
     url = client.base_url
-    host = url.host if url.port is None else f"{url.host}:{url.port}"
-    return {"base_url": f"{url.scheme}://{host}{url.path}"}
+    # netloc keeps the IPv6 brackets that "host:port" would drop, turning
+    # https://[::1]:8443 into the unparseable https://::1:8443.
+    netloc = url.netloc.decode("ascii")
+    return {"base_url": f"{url.scheme}://{netloc}{url.path}"}

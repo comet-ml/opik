@@ -64,7 +64,10 @@ def aggregate(
 
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
         if reasoning_chunks:
-            aggregated_response["choices"][0]["message"]["reasoning"] = "".join(
+            # reasoning_content is the name opik's own API types use
+            # (rest_api/types/assistant_message.py, delta.py), so the renderer
+            # and the persisted payload agree.
+            aggregated_response["choices"][0]["message"]["reasoning_content"] = "".join(
                 reasoning_chunks
             )
         result = ChatCompletionChunksAggregated(**aggregated_response)
