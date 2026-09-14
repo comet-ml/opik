@@ -253,3 +253,111 @@ async def test_async_tracked_exception_propagates_and_callback_runs(
     _, kwargs = callback.call_args
     assert kwargs["capture_output"] is True
     _assert_error_info_matches(kwargs["error_info"])
+
+
+def _raw_events() -> list:
+    """A minimal but complete raw event sequence, including tool input deltas
+    that anthropic accumulates into partial JSON."""
+    message = anthropic.types.Message.construct(
+        id="msg_1",
+        type="message",
+        role="assistant",
+        model="claude-3-5-sonnet-20241022",
+        content=[],
+        stop_reason=None,
+        stop_sequence=None,
+        usage={"input_tokens": 10, "output_tokens": 0},
+    )
+    types = anthropic.types
+
+    return [
+        types.RawMessageStartEvent.construct(type="message_start", message=message),
+        types.RawContentBlockStartEvent.construct(
+            type="content_block_start",
+            index=0,
+            content_block=types.TextBlock.construct(type="text", text=""),
+        ),
+        types.RawContentBlockDeltaEvent.construct(
+            type="content_block_delta",
+            index=0,
+            delta=types.TextDelta.construct(type="text_delta", text="Hello"),
+        ),
+        types.RawContentBlockStopEvent.construct(type="content_block_stop", index=0),
+        types.RawContentBlockStartEvent.construct(
+            type="content_block_start",
+            index=1,
+            content_block=types.ToolUseBlock.construct(
+                type="tool_use", id="tool_1", name="get_weather", input={}
+            ),
+        ),
+        types.RawContentBlockDeltaEvent.construct(
+            type="content_block_delta",
+            index=1,
+            delta=types.InputJSONDelta.construct(
+                type="input_json_delta", partial_json='{"city": '
+            ),
+        ),
+        types.RawContentBlockDeltaEvent.construct(
+            type="content_block_delta",
+            index=1,
+            delta=types.InputJSONDelta.construct(
+                type="input_json_delta", partial_json='"Paris"}'
+            ),
+        ),
+        types.RawContentBlockStopEvent.construct(type="content_block_stop", index=1),
+        types.RawMessageStopEvent.construct(type="message_stop"),
+    ]
+
+
+def _assert_accumulated_message_matches(output):
+    assert output is not None
+    assert output.content[0].text == "Hello"
+    assert output.content[1].input == {"city": "Paris"}
+
+
+def test_sync_stream_accumulates_events_into_the_final_message(
+    restore_stream_patches,
+):
+    """Regression test for anthropic changing `accumulate_event()`'s signature
+    (1.5.0 made the partial-JSON buffer a required caller-owned argument).
+    """
+    events = _raw_events()
+
+    def _iter_events(self):
+        yield from events
+
+    callback = mock.Mock()
+    config = next(c for c in _sync_wrappers() if c.id == "Stream")
+    _install(config, _iter_events, callback)
+    stream = _make_stream(config, tracked=True)
+
+    assert list(stream) == events
+
+    callback.assert_called_once()
+    _, kwargs = callback.call_args
+    assert kwargs["error_info"] is None
+    _assert_accumulated_message_matches(kwargs["output"])
+
+
+@pytest.mark.asyncio
+async def test_async_stream_accumulates_events_into_the_final_message(
+    restore_stream_patches,
+):
+    """Async variant of the `accumulate_event()` signature regression test."""
+    events = _raw_events()
+
+    async def _aiter_events(self):
+        for event in events:
+            yield event
+
+    callback = mock.Mock()
+    config = next(c for c in _async_wrappers() if c.id == "AsyncStream")
+    _install(config, _aiter_events, callback)
+    stream = _make_stream(config, tracked=True, is_async=True)
+
+    assert [event async for event in stream] == events
+
+    callback.assert_called_once()
+    _, kwargs = callback.call_args
+    assert kwargs["error_info"] is None
+    _assert_accumulated_message_matches(kwargs["output"])
