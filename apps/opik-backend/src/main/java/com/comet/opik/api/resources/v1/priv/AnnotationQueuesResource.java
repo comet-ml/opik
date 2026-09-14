@@ -273,9 +273,9 @@ public class AnnotationQueuesResource {
     @JsonView(AnnotationQueueItem.View.Public.class)
     public Response searchAnnotationQueueItems(
             @PathParam("id") UUID queueId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = AnnotationQueueItemIds.class))) @Valid AnnotationQueueItemIds request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = AnnotationQueueItemIds.class))) @NotNull @Valid AnnotationQueueItemIds request) {
 
-        log.info("Finding '{}' items of annotation queue with id '{}'", request.ids().size(), queueId);
+        log.info("Finding items of annotation queue, itemCount '{}', queueId '{}'", request.ids().size(), queueId);
 
         var items = annotationQueueService.findItemsByIds(queueId, request.ids())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))

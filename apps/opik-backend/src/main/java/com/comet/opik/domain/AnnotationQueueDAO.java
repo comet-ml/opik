@@ -201,7 +201,9 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 queue_id,
                 item_id,
                 project_id,
-                workspace_id
+                workspace_id,
+                created_by,
+                last_updated_by
             )
             VALUES
                 <items:{item |
@@ -209,7 +211,9 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         :queue_id,
                         :item_id<item.index>,
                         :project_id,
-                        :workspace_id
+                        :workspace_id,
+                        :user_name,
+                        :user_name
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -231,10 +235,23 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
     // History rows outlive item removal by design, but not queue deletion — a stale row would keep
     // excluding items from a queue id that no longer exists, and grow unbounded.
+    //
+    // Scoped by project as well as queue because the sort key is (workspace_id, project_id, queue_id,
+    // item_id): without project_id the predicate cannot use the key past workspace_id, turning a queue
+    // deletion into a scan of every history row in the workspace.
     private static final String DELETE_ITEM_HISTORY_BY_QUEUE_IDS = """
             DELETE FROM annotation_queue_item_history
             WHERE workspace_id = :workspace_id
+            AND project_id IN :project_ids
             AND queue_id IN :ids
+            """;
+
+    // Read before the queues are deleted: their rows are what maps a queue to its project.
+    private static final String SELECT_PROJECT_IDS_BY_QUEUE_IDS = """
+            SELECT DISTINCT project_id
+            FROM annotation_queues
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
             """;
 
     // Which of these items have ever been in this queue. The caller supplies a bounded id set, so
@@ -269,7 +286,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             AND project_id = :project_id
             AND queue_id = :queue_id
             AND item_id IN :item_ids
-            ORDER BY item_id DESC, last_updated_at DESC
+            ORDER BY workspace_id, project_id, queue_id, item_id DESC, last_updated_at DESC
             LIMIT 1 BY item_id
             """;
 
@@ -670,7 +687,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             index++;
         }
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+        return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement));
     }
 
     @Override
@@ -701,13 +718,19 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         }
 
         return Mono.from(connectionFactory.create())
-                .flatMap(connection -> Flux.from(deleteQueues(ids, connection))
-                        .flatMap(Result::getRowsUpdated)
-                        .reduce(0L, Long::sum)
-                        .flatMap(deleted -> Flux.from(deleteItemHistory(ids, connection))
+                .flatMap(connection -> Flux.from(selectProjectIds(ids, connection))
+                        .flatMap(result -> result.map((row, metadata) -> UUID.fromString(
+                                row.get("project_id", String.class))))
+                        .collect(Collectors.toSet())
+                        .flatMap(projectIds -> Flux.from(deleteQueues(ids, connection))
                                 .flatMap(Result::getRowsUpdated)
-                                .then()
-                                .thenReturn(deleted)));
+                                .reduce(0L, Long::sum)
+                                .flatMap(deleted -> projectIds.isEmpty()
+                                        ? Mono.just(deleted)
+                                        : Flux.from(deleteItemHistory(ids, projectIds, connection))
+                                                .flatMap(Result::getRowsUpdated)
+                                                .then()
+                                                .thenReturn(deleted))));
     }
 
     private Publisher<? extends Result> deleteQueues(Set<UUID> ids, Connection connection) {
@@ -717,11 +740,20 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
         return makeMonoContextAware(bindWorkspaceIdToMono(statement));
     }
 
-    private Publisher<? extends Result> deleteItemHistory(Set<UUID> ids, Connection connection) {
+    private Publisher<? extends Result> deleteItemHistory(Set<UUID> ids, Set<UUID> projectIds,
+            Connection connection) {
         var statement = connection.createStatement(DELETE_ITEM_HISTORY_BY_QUEUE_IDS)
-                .bind("ids", ids.toArray(UUID[]::new));
+                .bind("ids", ids.toArray(UUID[]::new))
+                .bind("project_ids", projectIds.toArray(UUID[]::new));
 
         return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+    }
+
+    private Publisher<? extends Result> selectProjectIds(Set<UUID> ids, Connection connection) {
+        var statement = connection.createStatement(SELECT_PROJECT_IDS_BY_QUEUE_IDS)
+                .bind("ids", ids.toArray(UUID[]::new));
+
+        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
     private Flux<? extends Result> findById(UUID id, Connection connection) {

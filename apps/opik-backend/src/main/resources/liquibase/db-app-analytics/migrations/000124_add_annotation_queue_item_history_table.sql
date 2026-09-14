@@ -8,7 +8,9 @@
 -- Written for manual adds too — a trace a human queued must not later be re-added by the sweep.
 --
 -- Deliberately a pure set; existence is the only question it answers. Provenance stays on
--- annotation_queue_items.source/created_by, which is accurate for as long as anyone can still ask.
+-- annotation_queue_items.source/created_by, which is accurate for as long as anyone can still ask. The
+-- metadata columns are the ones every entity here carries, and last_updated_at doubles as the version
+-- column rather than inventing a separate added_at with the same meaning.
 --
 -- The considered alternative was a soft-delete flag on annotation_queue_items, which needs no new table
 -- but adds a predicate to every existing join on it (ThreadDAO, TraceDAO, the item-count CTE), where one
@@ -16,13 +18,16 @@
 -- maintenance burden.
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_item_history ON CLUSTER '{cluster}'
 (
-    workspace_id String,
-    project_id   FixedString(36),
-    queue_id     FixedString(36),
-    item_id      FixedString(36),
-    added_at     DateTime64(9, 'UTC') DEFAULT now64(9)
+    workspace_id     String,
+    project_id       FixedString(36),
+    queue_id         FixedString(36),
+    item_id          FixedString(36),
+    created_at       DateTime64(9, 'UTC') DEFAULT now64(9),
+    created_by       String DEFAULT 'admin',
+    last_updated_at  DateTime64(6, 'UTC') DEFAULT now64(6),
+    last_updated_by  String DEFAULT 'admin'
 )
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/annotation_queue_item_history', '{replica}', added_at)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/annotation_queue_item_history', '{replica}', last_updated_at)
 ORDER BY (workspace_id, project_id, queue_id, item_id)
 SETTINGS index_granularity = 8192;
 

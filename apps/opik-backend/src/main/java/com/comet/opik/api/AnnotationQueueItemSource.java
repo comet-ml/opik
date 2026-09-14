@@ -24,7 +24,7 @@ public enum AnnotationQueueItemSource {
     @JsonCreator
     public static AnnotationQueueItemSource fromString(String value) {
         return Arrays.stream(values())
-                .filter(source -> source.value.equals(value))
+                .filter(source -> source.value.equalsIgnoreCase(value))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown annotation queue item source '%s'".formatted(value)));

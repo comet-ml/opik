@@ -54,7 +54,7 @@ public class AnnotationQueueAutomationService {
             return null;
         });
 
-        log.info("Saved annotation queue automation for queue '{}', enabled '{}'", queueId, enabled);
+        log.info("Saved annotation queue automation, queueId '{}', enabled '{}'", queueId, enabled);
     }
 
     /**

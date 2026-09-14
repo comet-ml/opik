@@ -10,12 +10,10 @@ import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.LockResponse;
 import com.comet.opik.api.Project;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -59,11 +57,8 @@ public interface AnnotationQueueService {
 @Slf4j
 class AnnotationQueueServiceImpl implements AnnotationQueueService {
 
-    private static final String AUTOMATED_FILL_LOCK = "AnnotationQueueAutomatedFill";
-
     private final @NonNull AnnotationQueueDAO annotationQueueDAO;
     private final @NonNull AnnotationQueueItemLockService lockService;
-    private final @NonNull LockService distributedLockService;
     private final @NonNull AnnotationQueueAutomationService automationService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull ProjectService projectService;
@@ -128,10 +123,10 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
      * UI and fixable by editing — rather than an automation row pointing at a queue that does not exist,
      * which the sweep would have to defend against on every run.
      *
-     * <p>A failed automation write does not fail the request. Creating the queue was the caller's primary
-     * intent and it succeeded; failing the whole call would let a transient MySQL blip turn into duplicate
-     * queues on retry. The response reflects reality because the automation is read back from storage
-     * rather than echoed from the request, so an unsaved automation comes back absent.
+     * <p>A failure here fails the request. The queue row is already written at this point, so the caller is
+     * left with a queue whose automation did not save — but that state is reported rather than hidden, and a
+     * retry is idempotent for the automation because the row is keyed by queue. Swallowing it would return
+     * success for a half-applied write, which is the worse of the two.
      */
     private Mono<Void> saveAutomations(List<AnnotationQueue> queues) {
         List<AnnotationQueue> withAutomation = queues.stream()
@@ -146,18 +141,9 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return Mono.fromRunnable(() -> withAutomation.forEach(queue -> {
-                try {
-                    automationService.save(workspaceId, userName, queue.id(), queue.projectId(),
-                            queue.scope(), queue.automation());
-                } catch (BadRequestException e) {
-                    // Invalid conditions are the caller's error, not a partial failure — surface them.
-                    throw e;
-                } catch (Exception e) {
-                    log.error("Failed to save automation for annotation queue '{}'; the queue was created "
-                            + "without it", queue.id(), e);
-                }
-            }));
+            return Mono.fromRunnable(() -> withAutomation.forEach(
+                    queue -> automationService.save(workspaceId, userName, queue.id(), queue.projectId(),
+                            queue.scope(), queue.automation())));
         }).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
@@ -240,35 +226,15 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
         // policy is uniform. Past allowed — queues commonly collect older traces/threads.
         itemIds.forEach(itemId -> idGenerator.validateIdNotInFuture(itemId, "AnnotationQueue item"));
 
-        return addEligibleItems(queueId, itemIds, source)
-                .doOnSuccess(addedCount -> log.debug("Successfully added '{}' items to annotation queue with id '{}'",
-                        addedCount, queueId))
-                .doOnError(error -> log.info("Failed to add items to annotation queue with id '{}'", queueId, error));
-    }
-
-    /**
-     * Automated fills of one queue run one at a time; manual adds are not serialised.
-     *
-     * <p>The ceiling is checked by reading the queue's size and then inserting, which is not atomic: two
-     * consumers draining different batches for the same queue would otherwise both read the same size and
-     * each fill the same headroom, taking the queue past its ceiling. The lock is scoped to the automated
-     * path because that is the only one the ceiling applies to, so a person adding items never waits on it.
-     *
-     * <p>The queue lookup is inside the lock, not before it, so a queue deleted while a fill was waiting
-     * is seen as gone rather than written to.
-     */
-    private Mono<Long> addEligibleItems(UUID queueId, Set<UUID> itemIds, AnnotationQueueItemSource source) {
-
-        Mono<Long> add = Mono.defer(() -> annotationQueueDAO.findQueueInfoById(queueId)
+        return annotationQueueDAO.findQueueInfoById(queueId)
                 .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
                 .flatMap(queue -> eligibleItems(queueId, queue.projectId(), itemIds, source)
                         .flatMap(eligible -> eligible.isEmpty()
                                 ? Mono.just(0L)
-                                : annotationQueueDAO.addItems(queueId, eligible, queue.projectId(), source))));
-
-        return source == AnnotationQueueItemSource.AUTOMATED
-                ? distributedLockService.executeWithLock(new LockService.Lock(queueId, AUTOMATED_FILL_LOCK), add)
-                : add;
+                                : annotationQueueDAO.addItems(queueId, eligible, queue.projectId(), source)))
+                .doOnSuccess(addedCount -> log.debug("Successfully added '{}' items to annotation queue with id '{}'",
+                        addedCount, queueId))
+                .doOnError(error -> log.info("Failed to add items to annotation queue with id '{}'", queueId, error));
     }
 
     /**
@@ -294,7 +260,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                     Set<UUID> eligible = itemIds.stream()
                             .filter(itemId -> !alreadyAdded.contains(itemId))
                             .collect(Collectors.toSet());
-                    log.debug("Skipping '{}' items already routed to annotation queue '{}'",
+                    log.debug("Skipping items already routed to annotation queue, skipped '{}', queueId '{}'",
                             alreadyAdded.size(), queueId);
                     return eligible;
                 })
@@ -309,6 +275,12 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
      * <p>A queue over its ceiling is filled to the ceiling rather than skipped wholesale — dropping a batch
      * of 500 because there is room for 3 would waste the 3. The remainder is not held anywhere; automation
      * will consider those entities again the next time one of their scores changes.
+     *
+     * <p>The ceiling is approximate by design. Reading the size and inserting is not atomic, so consumers
+     * draining different batches for the same queue can each fill the headroom they saw and overshoot by up
+     * to one batch apiece. It does not drift: once the queue is at or over the ceiling every later fill adds
+     * nothing, so an overshoot is a one-off per contended window rather than something that accumulates.
+     * Serialising the fills would cost a lock on the routing path to buy an exactness nobody needs.
      */
     private Mono<Set<UUID>> withinMaxItems(UUID queueId, UUID projectId, Set<UUID> eligible) {
         if (eligible.isEmpty()) {
@@ -329,8 +301,8 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
         long headroom = maxItemsInQueue - held;
 
         if (headroom <= 0) {
-            log.debug("Annotation queue '{}' holds '{}' items and its automation ceiling is '{}'; "
-                    + "skipping '{}' items", queueId, held, maxItemsInQueue, eligible.size());
+            log.debug("Annotation queue is at its automation ceiling, queueId '{}', held '{}', ceiling '{}', "
+                    + "skipped '{}'", queueId, held, maxItemsInQueue, eligible.size());
             return Set.of();
         }
 
@@ -338,8 +310,8 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
             return eligible;
         }
 
-        log.debug("Annotation queue '{}' has room for '{}' of '{}' items before its automation ceiling of '{}'",
-                queueId, headroom, eligible.size(), maxItemsInQueue);
+        log.debug("Annotation queue has room below its automation ceiling, queueId '{}', headroom '{}', "
+                + "offered '{}', ceiling '{}'", queueId, headroom, eligible.size(), maxItemsInQueue);
 
         // Sorted so which items land is deterministic rather than dependent on hash order.
         return eligible.stream()
@@ -352,7 +324,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
     @WithSpan
     public Mono<AnnotationQueueItem.AnnotationQueueItems> findItemsByIds(@NonNull UUID queueId,
             @NonNull Set<UUID> itemIds) {
-        log.debug("Finding '{}' items of annotation queue with id '{}'", itemIds.size(), queueId);
+        log.debug("Finding items of annotation queue, itemCount '{}', queueId '{}'", itemIds.size(), queueId);
 
         return annotationQueueDAO.findQueueInfoById(queueId)
                 .switchIfEmpty(Mono.error(createNotFoundError(queueId)))
