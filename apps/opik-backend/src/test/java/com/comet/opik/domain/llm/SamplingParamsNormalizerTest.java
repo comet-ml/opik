@@ -26,7 +26,8 @@ class SamplingParamsNormalizerTest {
     @ValueSource(strings = {
             "claude-opus-4-6",
             "claude-sonnet-4-6",
-            "anthropic/claude-sonnet-5",
+            // Sonnet 5 belongs to the takes-neither set below; this list is sampling-capable Claude.
+            "anthropic/claude-sonnet-4-6",
             "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
             "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0",
             "CLAUDE-HAIKU-4-5-20251001"
@@ -73,6 +74,75 @@ class SamplingParamsNormalizerTest {
                 .normalizeRequest(request("custom-llm/claude-gw/claude-opus-4-6", 0.7, 0.9));
 
         assertThat(normalized.topP()).isNull();
+    }
+
+    /**
+     * The adaptive-thinking models reject temperature and top_p outright, not merely together. The
+     * Anthropic provider's mapper already gates them; these arrive by other routes and must not be
+     * left with a parameter the model refuses.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "claude-sonnet-5",
+            "custom-llm/gw/claude-sonnet-5",
+            "anthropic/claude-sonnet-5",
+            "us.anthropic.claude-sonnet-5-20250101-v1:0",
+            "custom-llm/gw/claude-opus-4-7",
+            "custom-llm/gw/claude-opus-4-8"
+    })
+    void dropsBothForModelsThatTakeNeither(String model) {
+        var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, 0.9));
+
+        assertThat(normalized.temperature()).isNull();
+        assertThat(normalized.topP()).isNull();
+    }
+
+    /**
+     * The capability list names the models that DO take sampling params, so a Claude we recognise but
+     * have not marked capable — a newly synced id nobody has classified yet — is assumed not to.
+     * Fable 5.1 is exactly that case today: newer than Fable 5, which takes none.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "claude-fable-5-1",
+            "custom-llm/gw/claude-fable-5-1",
+            "claude-opus-5",
+            "custom-llm/gw/claude-opus-5"
+    })
+    void dropsBothForARecognisedClaudeNotMarkedCapable(String model) {
+        var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, 0.9));
+
+        assertThat(normalized.temperature()).isNull();
+        assertThat(normalized.topP()).isNull();
+    }
+
+    /**
+     * An id we cannot place is left alone rather than stripped: a proxy may be serving a capable
+     * Claude under a name of its own, and silently dropping a temperature someone set is the defect
+     * this normalizer exists to prevent, pointed the other way.
+     */
+    @Test
+    void leavesAnUnrecognisedClaudeItsTemperature() {
+        var normalized = SamplingParamsNormalizer
+                .normalizeRequest(request("custom-llm/gw/my-claude-deployment", 0.7, null));
+
+        assertThat(normalized.temperature()).isEqualTo(0.7);
+    }
+
+    @Test
+    void dropsALoneTemperatureForAModelThatTakesNeither() {
+        var normalized = SamplingParamsNormalizer
+                .normalizeRequest(request("custom-llm/gw/claude-sonnet-5", 0.7, null));
+
+        assertThat(normalized.temperature()).isNull();
+    }
+
+    @Test
+    void leavesASamplingCapableClaudeAlone() {
+        var normalized = SamplingParamsNormalizer
+                .normalizeRequest(request("custom-llm/gw/claude-sonnet-4-6", 0.7, null));
+
+        assertThat(normalized.temperature()).isEqualTo(0.7);
     }
 
     @Test

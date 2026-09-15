@@ -2,6 +2,7 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.ModelCostData;
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.experimental.UtilityClass;
@@ -64,15 +65,38 @@ public class ModelCapabilities {
         if (StringUtils.isBlank(modelName)) {
             return false;
         }
-        // Match the model, not the route to it. Custom ids carry the gateway in the prefix
-        // (custom-llm/<provider_name>/<model>), so a provider someone called "claude-gw" would
-        // otherwise make every model behind it — Mistral, Llama — look like Claude and lose its top_p.
-        // An id with no separator is the model; one that ends in a separator names no model at all,
-        // and must not fall back to the gateway — the frontend reads the same id the same way.
-        var model = StringUtils.contains(modelName, "/")
+        return EXCLUSIVE_SAMPLING_MODEL_PATTERN.matcher(modelSegment(modelName)).matches();
+    }
+
+    /**
+     * Whether the model refuses temperature and top_p outright, rather than merely refusing them
+     * together. Anthropic's adaptive-thinking models answer a request carrying either with a 400.
+     */
+    public boolean rejectsSamplingParams(String modelName) {
+        if (StringUtils.isBlank(modelName)) {
+            return false;
+        }
+        var model = modelSegment(modelName);
+        // Contains rather than equals: Bedrock embeds the model in a longer, dated id.
+        if (AnthropicModelName.samplingCapableModelIds().stream().anyMatch(model::contains)) {
+            return false;
+        }
+        // Recognised but not marked capable: assume it takes none. An id matching nothing we know
+        // stays permissive — a proxy may be serving a capable Claude under a name of its own.
+        return AnthropicModelName.allModelIds().stream().anyMatch(model::contains);
+    }
+
+    /**
+     * The model, not the route to it. Custom ids carry the gateway in the prefix
+     * (custom-llm/&lt;provider_name&gt;/&lt;model&gt;), so a provider someone called "claude-gw" would
+     * otherwise make every model behind it — Mistral, Llama — look like Claude. An id with no
+     * separator is the model; one that ends in a separator names no model at all and must not fall
+     * back to the gateway — the frontend reads the same id the same way.
+     */
+    private String modelSegment(String modelName) {
+        return StringUtils.contains(modelName, "/")
                 ? StringUtils.substringAfterLast(modelName, "/")
                 : modelName;
-        return EXCLUSIVE_SAMPLING_MODEL_PATTERN.matcher(model).matches();
     }
 
     public boolean supportsVision(String modelName) {

@@ -22,7 +22,6 @@ import {
   PROVIDER_TYPE,
 } from "@/types/providers";
 import { ANTHROPIC_MODEL_CAPABILITIES } from "@/constants/llm";
-import { getProviderFromModel } from "@/lib/provider";
 
 const ANTHROPIC = PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE;
 const OPEN_AI = PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE;
@@ -1243,18 +1242,38 @@ describe("resolveSamplingParams", () => {
   });
 });
 
-describe("resolveSamplingParams provider routing", () => {
-  it("routes every model with an Anthropic capability row to the Anthropic rules", () => {
-    // getProviderFromModel falls back to OpenAI for a model it cannot place, and the OpenAI branch
-    // fills in a default topP. An Anthropic model missing from the registry would therefore be sent
-    // temperature and top_p together, which Anthropic rejects.
+describe("every model with an Anthropic capability row", () => {
+  it("never resolves to both temperature and topP, whatever it routes to", () => {
+    // This replaces a narrower guard that required every such model to route to the Anthropic
+    // provider. Some capability rows deliberately cover ids the frontend registry does not offer
+    // (dated variants reachable only through the API or a proxy), and the rule no longer depends on
+    // routing: what must hold is that Anthropic never receives the pair.
     for (const model of Object.keys(
       ANTHROPIC_MODEL_CAPABILITIES,
     ) as PROVIDER_MODEL_TYPE[]) {
-      expect(getProviderFromModel(model)).toBe(PROVIDER_TYPE.ANTHROPIC);
+      const resolved = resolveSamplingParams(model, {
+        temperature: 0.7,
+        topP: 0.9,
+      });
+
       expect(
-        resolveSamplingParams(model, { temperature: 0 }).topP,
-      ).toBeUndefined();
+        resolved.temperature !== undefined && resolved.topP !== undefined,
+      ).toBe(false);
+    }
+  });
+
+  it("omits both for the ones not marked as taking them", () => {
+    for (const [model, capabilities] of Object.entries(
+      ANTHROPIC_MODEL_CAPABILITIES,
+    )) {
+      if (capabilities?.supportsSamplingParams) continue;
+
+      expect(
+        resolveSamplingParams(model as PROVIDER_MODEL_TYPE, {
+          temperature: 0.7,
+          topP: 0.9,
+        }),
+      ).toEqual({});
     }
   });
 });
@@ -1404,7 +1423,8 @@ describe("Claude sampling exclusivity across providers", () => {
     ["us.anthropic.claude-sonnet-4-5-20250929-v1:0", "Bedrock"],
     ["bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0", "Bedrock via proxy"],
     ["claude-opus-4-6", "an OpenAI-compatible proxy"],
-    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_5, "OpenRouter"],
+    // Sonnet 5 takes neither, so it belongs to the cases below, not here.
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6, "OpenRouter"],
   ])("drops topP for %s served by %s", (model) => {
     expect(
       resolveSamplingParams(model as PROVIDER_MODEL_TYPE, {
@@ -1440,6 +1460,40 @@ describe("Claude sampling exclusivity across providers", () => {
         { temperature: 0.7, topP: 0.9 },
       ),
     ).toEqual({ temperature: 0.7 });
+  });
+
+  // The adaptive-thinking models reject both parameters outright, not merely together, and arrive
+  // through the same decorated ids as everything else.
+  it.each([
+    "custom-llm/gw/claude-sonnet-5",
+    "anthropic/claude-sonnet-5",
+    "us.anthropic.claude-sonnet-5-20250101-v1:0",
+    "custom-llm/gw/claude-opus-4-7",
+  ])("omits both for %s, which takes neither", (model) => {
+    expect(
+      resolveSamplingParams(model as PROVIDER_MODEL_TYPE, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({});
+  });
+
+  it("omits a lone temperature for a model that takes neither", () => {
+    expect(
+      resolveSamplingParams(
+        "custom-llm/gw/claude-sonnet-5" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7 },
+      ),
+    ).toEqual({});
+  });
+
+  it("leaves a sampling-capable Claude on the same route alone", () => {
+    expect(
+      resolveSamplingParams(
+        "custom-llm/gw/claude-sonnet-4-6" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7 },
+      ),
+    ).toEqual({ temperature: 0.7, topP: undefined });
   });
 
   it("does not classify an id whose model segment is empty", () => {

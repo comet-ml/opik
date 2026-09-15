@@ -63,7 +63,7 @@ describe("a Claude model behind another provider", () => {
     renderPanel(
       <OpenRouterModelConfigs
         configs={OPEN_ROUTER_CONFIG}
-        model={PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_5}
+        model={PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4_6}
         onChange={vi.fn()}
       />,
     );

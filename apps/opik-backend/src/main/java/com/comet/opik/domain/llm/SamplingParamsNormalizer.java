@@ -17,6 +17,13 @@ import lombok.experimental.UtilityClass;
 public class SamplingParamsNormalizer {
 
     public ChatCompletionRequest normalizeRequest(@NonNull ChatCompletionRequest request) {
+        // Some Claude models refuse both outright rather than refusing them together.
+        if (ModelCapabilities.rejectsSamplingParams(request.model())) {
+            return request.temperature() == null && request.topP() == null
+                    ? request
+                    : ChatCompletionRequest.builder().from(request).temperature(null).topP(null).build();
+        }
+
         if (request.temperature() == null
                 || request.topP() == null
                 || !ModelCapabilities.requiresExclusiveSamplingParams(request.model())) {

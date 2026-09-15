@@ -18,6 +18,7 @@ import {
 } from "@/lib/provider";
 import omit from "lodash/omit";
 import { getLatestModelFlags } from "@/lib/modelRegistryStore";
+import { PROVIDER_MODELS } from "@/constants/providerModels";
 
 export const getRoutableProviderModelValue = (
   composedProviderType: COMPOSED_PROVIDER_TYPE,
@@ -291,11 +292,46 @@ const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
   max: "Max",
 };
 
+// Derived from the capability map so the two cannot drift.
+const SAMPLING_CAPABLE_MODELS = Object.entries(ANTHROPIC_MODEL_CAPABILITIES)
+  .filter(([, capabilities]) => capabilities?.supportsSamplingParams)
+  .map(([model]) => model);
+
+const KNOWN_ANTHROPIC_MODELS = (
+  PROVIDER_MODELS[PROVIDER_TYPE.ANTHROPIC] ?? []
+).map((model) => model.value as string);
+
+/**
+ * Whether the model accepts temperature/top_p at all.
+ *
+ * The capability map names the models that do, so a Claude we recognise without a row is assumed to
+ * take none — newer ones increasingly don't, and that way a newly added model omits a parameter
+ * instead of having the provider reject the request. A name we cannot place stays permissive: it may
+ * be a capable Claude a proxy renamed, and dropping a temperature someone set is worse there.
+ *
+ * Matching is on the model segment and by containment, because the same models arrive through
+ * Bedrock and OpenAI-compatible proxies under prefixed and dated ids.
+ */
 export const supportsSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean =>
-  ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-    ?.supportsSamplingParams ?? true;
+): boolean => {
+  if (!model) {
+    return true;
+  }
+
+  const declared =
+    ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+      ?.supportsSamplingParams;
+  if (declared !== undefined) {
+    return declared;
+  }
+
+  const segment = model.split("/").pop() ?? "";
+  if (SAMPLING_CAPABLE_MODELS.some((id) => segment.includes(id))) {
+    return true;
+  }
+  return !KNOWN_ANTHROPIC_MODELS.some((id) => segment.includes(id));
+};
 
 export const supportsAnthropicThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
@@ -474,12 +510,15 @@ export const resolveSamplingParams = (
     return { temperature, topP };
   }
 
+  // Some Claude models refuse both outright. Checked ahead of the provider branches because it
+  // holds wherever the model is served from, not only under the Anthropic provider.
+  if (isClaudeModel(model) && !supportsSamplingParams(model)) {
+    return {};
+  }
+
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {
-    if (!supportsSamplingParams(model)) {
-      return {};
-    }
     // Anthropic takes one of the pair, never both: temperature wins a config carrying both, and
     // takes over when neither is set so the panel can't offer two live sliders.
     if (temperature !== undefined) {
