@@ -35,16 +35,20 @@ public record AnnotationQueueAutomation(
                 AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @NotNull Boolean enabled,
 
-        // Nullable so flipping the toggle off is a one-field request: {"enabled": false} keeps the stored
-        // conditions, which also makes enable/disable idempotent and stops two clients racing on the
-        // toggle from clobbering each other's conditions. "An enabled automation needs at least one
-        // group" is a cross-field rule and lives in the service.
+        /**
+         * Nullable so flipping the toggle off is a one-field request: {@code {"enabled": false}} keeps the
+         * stored conditions, which also makes enable/disable idempotent and stops two clients racing on
+         * the toggle from clobbering each other's conditions. "An enabled automation needs at least one
+         * group" is a cross-field rule and lives in the service.
+         */
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @Nullable @Valid Conditions conditions,
 
-        // Ceiling on how large automation is allowed to grow the queue: once the queue holds this many
-        // items, automation stops adding. Absent means no ceiling. Nullable for the same reason as
-        // conditions — a toggle-only request must not silently drop it.
+        /**
+         * Ceiling on how large automation is allowed to grow the queue: once the queue holds this many
+         * items, automation stops adding. Absent means no ceiling. Nullable for the same reason as
+         * conditions — a toggle-only request must not silently drop it.
+         */
         @JsonView({AnnotationQueue.View.Public.class,
                 AnnotationQueue.View.Write.class}) @Nullable @Positive Integer maxItemsInQueue) {
 
