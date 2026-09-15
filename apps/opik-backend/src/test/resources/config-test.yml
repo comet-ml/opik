@@ -136,6 +136,16 @@ databaseAnalyticsDataModel:
   #   both `traces_local` and `traces`, else reads can't see the column (code 47).
   tracesDistributedWrapEnabled: false
   #  Default: false
+  #  Description: Spans sibling of tracesDistributedWrapEnabled. The Slice 3 cutover wraps `spans` as a Distributed
+  #   table over the `spans_local` shard, co-located with traces on sipHash64(project_id). Leave false at deploy time
+  #   and while `spans` is still a MergeTree (deletes work directly); set true in lockstep with applying the spans wrap.
+  #   While true, SpanDAO routes its cascade and retention deletes to `spans_local`; reads and inserts stay on the
+  #   Distributed `spans`. Post-wrap, changes to `spans` split by kind exactly as for traces: row mutations (DELETE) +
+  #   MATERIALIZE COLUMN/ADD INDEX/MODIFY TTL target `spans_local` only (the Distributed `spans` rejects them);
+  #   ADD/DROP/MODIFY COLUMN must target both `spans_local` and `spans`, else reads can't see the column (code 47).
+  #   Independent of the trace flag, and NOT covered by the `clickhouse-traces-topology` readiness check, which
+  #   asserts the trace flag only.
+  spansDistributedWrapEnabled: false
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.

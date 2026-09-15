@@ -496,6 +496,7 @@ Call opik api on http://localhost:5173/api
 | databaseAnalyticsDataModel.deletionEventsInsertBatchSize | int | `1000` |  |
 | databaseAnalyticsDataModel.spanColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.spanDeletionEventsCaptureEnabled | bool | `false` |  |
+| databaseAnalyticsDataModel.spansDistributedWrapEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.traceColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.tracesDistributedWrapEnabled | bool | `false` |  |
