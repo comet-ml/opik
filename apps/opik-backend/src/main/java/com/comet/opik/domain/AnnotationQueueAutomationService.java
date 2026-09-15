@@ -127,7 +127,7 @@ public class AnnotationQueueAutomationService {
      * this configuration are in different databases with no shared transaction, so a rejection discovered
      * during the save would otherwise leave a queue behind that the caller believes was never created.
      */
-    public void validate(@NonNull String workspaceId, @NonNull Map<UUID, AnnotationQueueAutomation> automations) {
+    public void validate(@NonNull String workspaceId, Map<UUID, AnnotationQueueAutomation> automations) {
         if (MapUtils.isEmpty(automations)) {
             return;
         }
@@ -222,7 +222,7 @@ public class AnnotationQueueAutomationService {
     }
 
     public Map<UUID, AnnotationQueueAutomation> findByQueueIds(@NonNull String workspaceId,
-            @NonNull List<UUID> queueIds) {
+            List<UUID> queueIds) {
         if (CollectionUtils.isEmpty(queueIds)) {
             return Map.of();
         }
@@ -239,7 +239,7 @@ public class AnnotationQueueAutomationService {
      * to a queue and a queue belongs to a project.
      */
     public List<QueueAutomation> findEnabledByProjects(@NonNull String workspaceId,
-            @NonNull Set<UUID> projectIds, @NonNull AnnotationQueue.AnnotationScope scope) {
+            Set<UUID> projectIds, @NonNull AnnotationQueue.AnnotationScope scope) {
         if (CollectionUtils.isEmpty(projectIds)) {
             return List.of();
         }
@@ -279,7 +279,7 @@ public class AnnotationQueueAutomationService {
     public record QueueAutomation(UUID queueId, UUID projectId, AnnotationQueueAutomation.Conditions conditions) {
     }
 
-    public void deleteByQueueIds(@NonNull String workspaceId, @NonNull List<UUID> queueIds) {
+    public void deleteByQueueIds(@NonNull String workspaceId, List<UUID> queueIds) {
         if (CollectionUtils.isEmpty(queueIds)) {
             return;
         }
