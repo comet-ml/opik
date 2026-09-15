@@ -6,11 +6,19 @@ import CodeBlock from "./CodeBlock";
 type ErrorCalloutProps = {
   error?: BaseTraceDataErrorInfo;
   search?: string;
+  /**
+   * Controlled open state. Passed straight through — the section deliberately
+   * keeps no copy, so nothing can drift from whoever owns it.
+   */
+  isExpanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 };
 
 const ErrorCallout: React.FunctionComponent<ErrorCalloutProps> = ({
   error,
   search,
+  isExpanded,
+  onExpandedChange,
 }) => {
   if (!error) return null;
 
@@ -29,6 +37,8 @@ const ErrorCallout: React.FunctionComponent<ErrorCalloutProps> = ({
       withSearch
       search={search}
       defaultOpen={false}
+      open={isExpanded}
+      onOpenChange={onExpandedChange}
       className="mb-4 border-destructive"
     />
   );
