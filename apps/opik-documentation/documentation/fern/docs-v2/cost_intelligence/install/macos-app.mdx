@@ -1,0 +1,277 @@
+---
+headline: Install the macOS app with MDM
+og:description: Deploy Cost Intelligence as a macOS menu-bar app and network
+  extension for transparent capture of every Claude Code user, including the
+  desktop app, delivered through the MDM you already run.
+og:site_name: Opik Documentation
+og:title: Install the macOS app with MDM - Opik
+title: macOS app with MDM
+---
+
+The macOS app is the rollout path for full coverage: it captures every Claude Code user on the machine, whether they work in the CLI or the desktop app. Developers keep working exactly as before — no base-URL change, no environment variables, nothing to install in the agent. The app sees the traffic anyway.
+
+## How it works
+
+Everything happens on the developer's machine. The app runs as a menu-bar app with a network extension, and macOS hands that extension the coding agent's traffic. The extension acts as a local MITM (man-in-the-middle): it terminates TLS on the device to read each call, then forwards it re-encrypted — with full certificate validation — to Anthropic or your LLM gateway, unchanged:
+
+<Frame>
+  <img src="/img/v2/cost-intelligence/macos-app-flow.svg" alt="macOS app data flow: an MDM delivers the app and its configuration profile to a managed Mac, macOS diverts Claude Code traffic to the app's network extension, calls are forwarded re-encrypted to the Anthropic API or a configured gateway, and metadata-only spans ship to Opik" />
+</Frame>
+
+The data landing in Opik is the same as the plugin produces. What differs is how the traffic gets seen:
+
+| | Plugin (proxy) | macOS app (extension) |
+| --- | --- | --- |
+| How traffic arrives | Agent is pointed at a local port | The OS diverts the flows |
+| Captures | Claude Code CLI | CLI **and** the Claude Code desktop app |
+| Configuration touches | The agent's settings | Certificate trust only, set up by the app |
+| Delivered via | MDM or Claude managed settings | MDM |
+| TLS | Not intercepted | Terminated locally |
+| Platforms | macOS, Linux, Windows | macOS only |
+
+<Note>
+  **The plugin is our recommended path.** It is simpler — no system extension,
+  no certificate, no TLS interception — and it runs on macOS, Linux and
+  Windows. Its limit is coverage: it captures the Claude Code **CLI**, not the
+  desktop app. Choose the macOS app when you want to roll Cost Intelligence
+  out to all of your users, including the ones working in the Claude Code
+  desktop app.
+</Note>
+
+## Deploy via MDM
+
+Three steps, delivered with the MDM you already run (Jamf, Kandji, Intune, JumpCloud):
+
+<Steps>
+
+### Push the app and its configuration profile
+
+Deploy `Opik CIPX.app` to `/Applications` as a package payload, together with an MDM configuration profile. The profile does two jobs: it pre-approves the system extension so activation is **silent** (the developer never sees an approval prompt), and it forces the app's settings so users can't turn capture off. The app bundle embeds the extension and the capture engine, so there is nothing else to install.
+
+<Accordion title="View an example configuration profile">
+
+```xml title="opik-cipx-app.mobileconfig"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadDisplayName</key>
+  <string>Opik Cost Intelligence</string>
+  <key>PayloadIdentifier</key>
+  <string>com.comet.opik-cipx-app.managed</string>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>8A7B0C64-1D2E-4F35-9B86-3C5A7D9E0F12</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+  <key>PayloadContent</key>
+  <array>
+    <!-- Job 1: pre-approve the system extension (silent activation) -->
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.system-extension-policy</string>
+      <key>PayloadIdentifier</key>
+      <string>com.comet.opik-cipx-app.managed.sysext</string>
+      <key>PayloadUUID</key>
+      <string>2F4E6A18-9C3B-4D07-8E51-B6A0D2C48F93</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>AllowedSystemExtensions</key>
+      <dict>
+        <!-- Comet's Apple developer team ID -->
+        <key>XXXXXXXXXX</key>
+        <array>
+          <string>com.comet.opik-cipx-app.extension</string>
+        </array>
+      </dict>
+    </dict>
+    <!-- Job 2: force the app's settings -->
+    <dict>
+      <key>PayloadType</key>
+      <string>com.comet.opik-cipx-app</string>
+      <key>PayloadIdentifier</key>
+      <string>com.comet.opik-cipx-app.managed.settings</string>
+      <key>PayloadUUID</key>
+      <string>5D1C8B72-0A94-4E6F-B3D8-7E29C4A61F05</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>Cipx.isEnabled</key>
+      <true/>
+      <key>Settings.startAtLogin</key>
+      <true/>
+      <key>Settings.allowExtensionUninstall</key>
+      <false/>
+      <key>Settings.enableViewer</key>
+      <false/>
+      <key>Settings.enableAdmin</key>
+      <false/>
+      <key>Settings.enabledHarnesses</key>
+      <array>
+        <string>com.anthropic.claude-code</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>
+```
+
+The team ID and the extension bundle identifier must match the shipped app.
+Email [sales@comet.com](mailto:sales@comet.com) for a filled-in,
+ready-to-push profile.
+
+</Accordion>
+
+Every payload key, profile validation, and the per-MDM upload paths are in [Advanced](#advanced) below.
+
+### Drop the workspace credentials
+
+Ship a file per user at `~/.opik-cipx/config.toml`:
+
+```toml
+[opik]
+base_url  = "https://www.comet.com/opik/api"
+api_key   = "<workspace-scoped service-account key>"
+workspace = "your-org-cc-workspace"
+project   = "claude-code"
+
+[capture]
+capture_content = false
+```
+
+It lands in a user home, so an MDM script running as root must resolve the console user and `chown` the file to them, with the file at mode `0600` and the directory `0700`.
+
+### Launch once and verify
+
+Trigger a first launch — a package postinstall script that opens the app in the console user's context works best. From there the app handles everything itself: it activates the extension, starts capture, and registers a login item so capture survives reboots. With the profile in place, none of this prompts the user.
+
+Then check a target device:
+
+```bash
+systemextensionsctl list | grep opik-cipx        # extension activated
+ls -l ~/.opik-cipx/config.toml                   # the step that silently fails
+```
+
+Finally, confirm traces are arriving in your Opik workspace. That last check is the one that matters: the app is deliberately fail-open, so a device missing its credentials file looks completely healthy and captures nothing.
+
+</Steps>
+
+## Advanced
+
+<AccordionGroup>
+
+<Accordion title="The configuration profile in detail">
+
+The profile carries two payloads that do different jobs.
+
+**Pre-approving the system extension.** A `com.apple.system-extension-policy` payload allow-lists the capture extension so it activates silently: the developer never sees the *System Settings → General → Login Items & Extensions → Network Extensions* approval gate. This is honored **only when the profile is pushed by an MDM the device is enrolled in** — a locally installed profile is ignored for this payload type, so a test machine with a hand-installed profile will still show the manual approval prompt. That's expected, and it isn't a broken profile.
+
+**Forcing the app's settings.** A managed-preferences payload writes into the app's preference domain `com.comet.opik-cipx-app`. Forced values take precedence over anything the user sets, and the corresponding controls are disabled in the app's Settings window with a "Managed by your organization" note.
+
+| Key | Type | Recommended | Why |
+| --- | --- | --- | --- |
+| `Cipx.isEnabled` | Boolean | `true` | Master capture switch; also drives automatic activation |
+| `Settings.enableViewer` | Boolean | `false` | Local debug dashboard; no place in a fleet |
+| `Settings.enableAdmin` | Boolean | `false` | Local control endpoint |
+| `Settings.startAtLogin` | Boolean | `true` | Capture survives logout and reboot |
+| `Settings.allowExtensionUninstall` | Boolean | `false` | Hides the uninstall action from users |
+| `Settings.enabledHarnesses` | Array | `["com.anthropic.claude-code"]` | Which clients to capture, by code-signing ID |
+
+Validate the profile before pushing, because a malformed payload is silently ignored by some MDMs:
+
+```bash
+plutil -lint opik-cipx-app.mobileconfig    # must print "OK"
+```
+
+Where it goes in each MDM:
+
+| MDM | Path |
+| --- | --- |
+| **Jamf Pro** | Configuration Profile → Application & Custom Settings → External Applications; domain `com.comet.opik-cipx-app`. The system-extension allow-list is a separate *System Extensions* payload. |
+| **Kandji** | Library → Custom Profile → upload the `.mobileconfig` |
+| **Intune** | Devices → macOS → Configuration profile → Preference file; domain `com.comet.opik-cipx-app` |
+| **JumpCloud** | Custom macOS MDM Profile (Policy) → paste the `.mobileconfig` |
+
+</Accordion>
+
+<Accordion title="Why credentials ship as a file">
+
+The Opik destination is **not** a preference key, so no configuration profile can carry it. The capture engine is launched by a login-item app, and GUI apps don't inherit shell environment, so nothing you export in a shell profile or push as an MDM environment variable reaches it. The per-user file at `~/.opik-cipx/config.toml` is the only path that works.
+
+The file contains the ingest API key, so use a workspace-scoped service-account key and rotate it by re-deploying the file.
+
+</Accordion>
+
+<Accordion title="Activation and first launch">
+
+On first launch the app activates the system extension, starts the capture engine, enables the proxy configuration, and registers a login item so capture returns after every reboot. The engine also applies your org's [cost policies](/cost-intelligence/roll-out-cost-policies) to the machine automatically.
+
+Activation is fail-safe: any error in the chain turns capture back off rather than leaving a half-configured proxy.
+
+Ways to trigger the first launch, in order of preference:
+
+1. A package postinstall script that opens the app in the console user's context.
+2. A LaunchAgent shipped alongside the app. This also covers users who weren't logged in at install time.
+3. An MDM "run as current user" script.
+
+</Accordion>
+
+<Accordion title="The data path in detail">
+
+The four numbered steps in the diagram, in full:
+
+1. **The developer works as usual.** They prompt Claude Code from the CLI or the desktop app. Neither is configured, pointed at a proxy, or aware the app exists.
+2. **macOS diverts the agent's API calls to the app.** The system extension terminates TLS on the device so the app can read each call and attribute its cost — that interception happens on the device only, and it never leaves the machine.
+3. **The call is forwarded unchanged.** The app opens its own TLS connection — to the Anthropic API by default, or to your LLM gateway when one is configured — with full certificate validation, and passes the request and response through untouched.
+4. **Metadata ships to Opik on the side.** Counts, costs, and structure — [never content](/cost-intelligence/data-privacy-security) — go to your Opik workspace asynchronously. This side path never sits between the developer and the model: if anything in it fails, the agent keeps working.
+
+</Accordion>
+
+<Accordion title="Certificate trust">
+
+To categorize traffic rather than just count bytes, the extension terminates TLS locally, which means the client must trust the interception certificate.
+
+The certificate authority is minted **per device**, with a private key that is hardware-backed and non-extractable. This is deliberate: there is no shared fleet-wide interception key, so compromising one device does not compromise the fleet. The consequence is that **there is no single certificate to embed in a centrally authored MDM certificate payload**; trust is established on the device that generated it.
+
+For Claude Code this is handled for you: the app points Claude Code at the device's own certificate. The certificate authority also carries constraints limiting it to the specific model-provider hostnames, so even a fully trusted authority cannot vouch for any other domain. That is worth raising early in a security review, because it's the property that makes local termination defensible.
+
+</Accordion>
+
+<Accordion title="Uninstall">
+
+```bash
+# Remove the profile via your MDM, or:
+sudo profiles remove -identifier com.comet.opik-cipx-app.managed
+
+# Tear down cleanly, then remove the app
+open -a "/Applications/Opik CIPX.app" --args disable
+sudo rm -rf "/Applications/Opik CIPX.app"
+
+# Local state, including the per-device certificate
+rm -rf ~/.opik-cipx "~/Library/Application Support/opik-cipx"
+```
+
+Removing the app without disabling first leaves an orphaned system-extension registration, so prefer the `disable` step.
+
+</Accordion>
+
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Reduce coding agent spend"
+    icon="fa-regular fa-arrow-trend-down"
+    href="/cost-intelligence/reduce-agent-spend"
+  >
+    Turn the data into a lower bill.
+  </Card>
+  <Card
+    title="Installation overview"
+    icon="fa-regular fa-download"
+    href="/cost-intelligence/install/overview"
+  >
+    Compare rollout paths and review the data inventory.
+  </Card>
+</CardGroup>

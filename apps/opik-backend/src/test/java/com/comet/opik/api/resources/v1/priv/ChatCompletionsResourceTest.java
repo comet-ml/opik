@@ -309,6 +309,31 @@ class ChatCompletionsResourceTest {
             assertThat(errorMessage.getMessage())
                     .containsIgnoringCase(ERROR_MODEL_NOT_SUPPORTED.formatted(model));
         }
+
+        @Test
+        void createAndStreamResponseReturnsBadRequestWhenNoMessages() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+            createLlmProviderApiKey(workspaceName, LlmProvider.ANTHROPIC, UUID.randomUUID().toString());
+
+            // The streaming twin of createAnthropicValidateMandatoryFields, which pins stream(false) and so cannot
+            // catch a regression on this path. LlmProviderAnthropic.generateStream validates messages inline before
+            // any provider I/O, which is why a throwaway API key still reaches the rejection. This must stay a real
+            // HTTP 400 rather than a 200 carrying the error inside the SSE body: nothing upstream validates messages,
+            // and callers branch on the status.
+            var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
+                    .stream(true)
+                    .model(AnthropicModelName.CLAUDE_SONNET_3_7.toString())
+                    .maxCompletionTokens(100)
+                    .build();
+
+            var errorMessage = chatCompletionsClient.createAndStreamError(API_KEY, workspaceName, request,
+                    HttpStatus.SC_BAD_REQUEST);
+
+            assertThat(errorMessage.getCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            assertThat(errorMessage.getMessage()).containsIgnoringCase(ERROR_EMPTY_MESSAGES);
+        }
     }
 
     @ParameterizedTest

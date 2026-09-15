@@ -34,6 +34,7 @@ export class ReportsClient {
      * @param {OpikApi.ReportCompleteRequest} request
      * @param {ReportsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link OpikApi.BadRequestError}
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
@@ -94,6 +95,8 @@ export class ReportsClient {
 
         if (_response.error.reason === "status-code") {
             switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 404:
                     throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
                 default:

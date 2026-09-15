@@ -5,6 +5,7 @@ import { formatQueryBuilderSummary } from "@/shared/filter-chips/chips/QueryBuil
 import {
   QueryBuilderChipDefinition,
   QueryBuilderChipValue,
+  chipTestId,
 } from "@/shared/filter-chips/types";
 
 interface QueryBuilderChipProps {
@@ -35,6 +36,7 @@ const QueryBuilderChip: React.FC<QueryBuilderChipProps> = ({
       onOpenChange={onOpenChange}
       onClear={onClear}
       contentProps={{ onOpenAutoFocus: (event) => event.preventDefault() }}
+      testId={chipTestId(definition.id)}
     >
       <QueryBuilderChipPopoverContent
         definition={definition}

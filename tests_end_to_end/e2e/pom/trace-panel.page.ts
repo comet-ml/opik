@@ -83,6 +83,76 @@ export class TracePanelPage {
     return this.root.getByText(value);
   }
 
+  /**
+   * The detail half of the panel — the pane that renders whichever entity is
+   * selected in the span tree, as opposed to the tree itself.
+   */
+  get dataViewer(): Locator {
+    return this.root.locator('#data-viewer');
+  }
+
+  /**
+   * The estimated-cost stat in the data viewer's header row, as it is formatted.
+   *
+   * Scoped to the viewer, not the whole panel: the span tree renders a cost per
+   * node too, so a panel-wide lookup matches the tree row and the header both.
+   * Exact, not substring: `$3` must not pass for `$30`, and `$6` must not pass
+   * for `$6.25`. Whose cost it reads follows the panel's own selection — the
+   * trace's rolled-up total while the trace is selected, that span's own once a
+   * span is. `TraceStatsDisplay` carries no `data-testid`, so the formatted
+   * amount is the handle; adding one is a worthwhile follow-up, but a spec
+   * verified against a deployed build cannot depend on an attribute that build
+   * does not have.
+   */
+  estimatedCost(formatted: string): Locator {
+    return this.dataViewer.getByText(formatted, { exact: true });
+  }
+
+  // --- Attachments ---
+
+  /**
+   * The "Attachments" collapsible section header.
+   *
+   * The section renders nothing at all when the trace carries no media, so its
+   * presence is itself an assertion and not just a scoping step.
+   */
+  get attachmentsSection(): Locator {
+    return this.root.getByRole('button', { name: 'Attachments' });
+  }
+
+  /**
+   * One attachment thumbnail, addressed by the download link it stamps with its
+   * own file name.
+   *
+   * By name rather than by position: the list is re-sorted by media type before
+   * it renders (`ATTACHMENT_ORDER_MAP`), so the upload order is not the display
+   * order and any index-based locator would be asserting on the sort instead of
+   * on the attachment. `download="<file name>"` is the one attribute unique to
+   * a single thumbnail — a thumbnail carries no `data-testid`, and its visible
+   * label is plain text that a matching input/output payload could also
+   * produce. The link only *becomes visible* on hover, so assert on its count,
+   * not its visibility; `attachmentLabel` covers what the user actually sees.
+   */
+  attachmentThumbnail(fileName: string): Locator {
+    return this.root.locator(`a[download="${fileName}"]`);
+  }
+
+  /** The file name as the thumbnail renders it. */
+  attachmentLabel(fileName: string): Locator {
+    return this.root.getByText(fileName, { exact: true });
+  }
+
+  /** Opens the Attachments section if it is collapsed. Idempotent. */
+  async openAttachments(): Promise<void> {
+    return test.step('Open the Attachments section', async () => {
+      const header = this.attachmentsSection;
+      await header.waitFor({ state: 'visible', timeout: 30_000 });
+      if ((await header.getAttribute('aria-expanded')) !== 'true') {
+        await header.click();
+      }
+    });
+  }
+
   // --- Tags ---
 
   get addTagButton(): Locator {

@@ -122,11 +122,12 @@ class PromptResourceFindProjectPromptsTest {
     }
 
     private CreatePromptVersion createPromptVersionRequest(String name, PromptVersion version,
-            TemplateStructure templateStructure) {
+            TemplateStructure templateStructure, UUID projectId) {
         return CreatePromptVersion.builder()
                 .name(name)
                 .version(version)
                 .templateStructure(templateStructure)
+                .projectId(projectId)
                 .build();
     }
 
@@ -430,7 +431,8 @@ class PromptResourceFindProjectPromptsTest {
                 var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                         .createdBy(USER)
                         .build();
-                var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure());
+                var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure(),
+                        prompt.projectId());
                 createPromptVersion(request, apiKey, workspaceName);
             }
         });
@@ -572,7 +574,8 @@ class PromptResourceFindProjectPromptsTest {
                 var promptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
                         .createdBy(USER)
                         .build();
-                var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure());
+                var request = createPromptVersionRequest(prompt.name(), promptVersion, prompt.templateStructure(),
+                        prompt.projectId());
                 createPromptVersion(request, apiKey, workspaceName);
             }
         });

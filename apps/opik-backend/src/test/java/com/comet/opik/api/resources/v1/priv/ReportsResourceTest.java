@@ -20,6 +20,7 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +39,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -240,6 +242,92 @@ class ReportsResourceTest {
             var updated = reportsResourceClient.getReports(projectId, API_KEY, TEST_WORKSPACE_NAME);
             assertThat(updated.content().get(0).status()).isEqualTo(OllieReport.ReportStatus.COMPLETED);
             assertThat(updated.content().get(0).content()).isEqualTo("# Test Report");
+        }
+
+        @Test
+        @DisplayName("Complete callback persists the failure reason on a failed report")
+        void completeReport__failedWithReason__persistsReason() {
+            var projectId = projectResourceClient.createProject(
+                    "project-" + UUID.randomUUID(), API_KEY, TEST_WORKSPACE_NAME);
+
+            reportsResourceClient.generateReport(projectId, API_KEY, TEST_WORKSPACE_NAME).close();
+            var report = reportsResourceClient.getReports(projectId, API_KEY, TEST_WORKSPACE_NAME).content().get(0);
+
+            try (var response = reportsResourceClient.completeReport(projectId, report.id(),
+                    Map.of("status", "failed", "failure_reason", OllieReport.FailureReason.OUT_OF_CREDITS),
+                    API_KEY, TEST_WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            var updated = reportsResourceClient.getReports(projectId, API_KEY, TEST_WORKSPACE_NAME).content().get(0);
+            assertThat(updated.status()).isEqualTo(OllieReport.ReportStatus.FAILED);
+            assertThat(updated.failureReason()).isEqualTo(OllieReport.FailureReason.OUT_OF_CREDITS);
+        }
+
+        @Test
+        @DisplayName("Complete callback drops a failure reason sent alongside a completed report")
+        void completeReport__completedWithReason__ignoresReason() {
+            var projectId = projectResourceClient.createProject(
+                    "project-" + UUID.randomUUID(), API_KEY, TEST_WORKSPACE_NAME);
+
+            reportsResourceClient.generateReport(projectId, API_KEY, TEST_WORKSPACE_NAME).close();
+            var report = reportsResourceClient.getReports(projectId, API_KEY, TEST_WORKSPACE_NAME).content().get(0);
+
+            try (var response = reportsResourceClient.completeReport(projectId, report.id(),
+                    Map.of("content", "# Test Report", "status", "completed", "session_id", "sess-1",
+                            "failure_reason", OllieReport.FailureReason.OUT_OF_CREDITS),
+                    API_KEY, TEST_WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            var updated = reportsResourceClient.getReports(projectId, API_KEY, TEST_WORKSPACE_NAME).content().get(0);
+            assertThat(updated.status()).isEqualTo(OllieReport.ReportStatus.COMPLETED);
+            assertThat(updated.failureReason()).isNull();
+        }
+
+        @Test
+        @DisplayName("A 402 from the trigger marks the report failed with out_of_credits")
+        void generateReport__triggerReturns402__marksReportOutOfCredits() {
+            var projectId = projectResourceClient.createProject(
+                    "project-" + UUID.randomUUID(), API_KEY, TEST_WORKSPACE_NAME);
+
+            // Last matching stub wins in WireMock, so this overrides the class-level 200 for this test only.
+            var rejection = wireMock.server().stubFor(post(urlPathEqualTo("/reports/generate"))
+                    .willReturn(aResponse().withStatus(402)
+                            .withBody("{\"error_code\":\"out_of_credits\"}")));
+            try {
+                reportsResourceClient.generateReport(projectId, API_KEY, TEST_WORKSPACE_NAME).close();
+
+                // The trigger is fire-and-forget, so the failure is recorded asynchronously.
+                Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> {
+                    var report = reportsResourceClient.getReports(projectId, API_KEY, TEST_WORKSPACE_NAME)
+                            .content().get(0);
+                    assertThat(report.status()).isEqualTo(OllieReport.ReportStatus.FAILED);
+                    assertThat(report.failureReason())
+                            .isEqualTo(OllieReport.FailureReason.OUT_OF_CREDITS);
+                });
+            } finally {
+                // Leave the class-level 200 stub in charge for the remaining tests.
+                wireMock.server().removeStub(rejection);
+            }
+        }
+
+        @Test
+        @DisplayName("Complete callback rejects a non-terminal status")
+        void completeReport__pendingStatus__returns400AndLeavesReportPending() {
+            var projectId = projectResourceClient.createProject(
+                    "project-" + UUID.randomUUID(), API_KEY, TEST_WORKSPACE_NAME);
+
+            reportsResourceClient.generateReport(projectId, API_KEY, TEST_WORKSPACE_NAME).close();
+            var report = reportsResourceClient.getReports(projectId, API_KEY, TEST_WORKSPACE_NAME).content().get(0);
+
+            try (var response = reportsResourceClient.completeReport(projectId, report.id(),
+                    Map.of("status", "pending"), API_KEY, TEST_WORKSPACE_NAME)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+
+            var after = reportsResourceClient.getReports(projectId, API_KEY, TEST_WORKSPACE_NAME).content().get(0);
+            assertThat(after.status()).isEqualTo(OllieReport.ReportStatus.PENDING);
         }
 
         @Test

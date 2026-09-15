@@ -195,6 +195,7 @@ const CompareExperimentsActionsPanel: React.FC<
       <EvaluateExperimentTracesButton experiment={singleExperiment} />
       {columnsToExport && (
         <ExportToButton
+          buttonSize="icon-2xs"
           disabled={
             disabled || columnsToExport.length === 0 || !isExportEnabled
           }

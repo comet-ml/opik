@@ -21,11 +21,17 @@ import java.util.concurrent.TimeUnit;
  * when zero rows are written and fails with a typed exception once attempts are exhausted,
  * instead of silently committing the truncated state.
  *
+ * <p>{@code lockLease} is the per-dataset distributed-lock lease that serializes the
+ * read-latest &rarr; create-version &rarr; flip-latest sequence so parallel uploads can't
+ * race on the mutable 'latest' pointer (OPIK-7264).
+ *
  * <p>Defaults live in {@code config.yml} / {@code config-test.yml}, not here.
  */
 @Builder(toBuilder = true)
 public record DatasetVersioningConfig(
-        @Valid @NotNull ZeroRowsRetry zeroRowsRetry) {
+        @Valid @NotNull ZeroRowsRetry zeroRowsRetry,
+        @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS) //
+        @MaxDuration(value = 10, unit = TimeUnit.MINUTES) Duration lockLease) {
 
     @Builder(toBuilder = true)
     public record ZeroRowsRetry(

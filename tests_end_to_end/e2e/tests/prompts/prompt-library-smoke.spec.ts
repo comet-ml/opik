@@ -29,10 +29,10 @@ async function runVersioningSteps(detail: PromptDetailPage, opts: VersioningOpts
   });
 }
 
-test.describe('Prompt Library — smoke', { tag: ['@t1-smoke', '@prompts'] }, () => {
+test.describe('Prompt Library — smoke', { tag: ['@t1-smoke', '@area:prompts'] }, () => {
   test.use({ viewport: { width: 1600, height: 900 } });
 
-  test('SDK-seeded text prompt appears in library, edit creates new version, old version is preserved', async ({
+  test('SDK-seeded text prompt appears in library, edit creates new version, old version is preserved', { tag: ['@cap:prompts.list-prompts', '@cap:prompts.sdk-seeded-visible', '@cap:prompts.edit-creates-version', '@cap:prompts.old-version-preserved'] }, async ({
     project,
     textPrompt,
     page,
@@ -64,7 +64,7 @@ test.describe('Prompt Library — smoke', { tag: ['@t1-smoke', '@prompts'] }, ()
     });
   });
 
-  test('SDK-seeded chat prompt appears in library, edit creates new version, old version is preserved', async ({
+  test('SDK-seeded chat prompt appears in library, edit creates new version, old version is preserved', { tag: ['@cap:prompts.sdk-seeded-visible', '@cap:prompts.edit-creates-version', '@cap:prompts.version-history'] }, async ({
     project,
     chatPrompt,
     page,
@@ -98,73 +98,95 @@ test.describe('Prompt Library — smoke', { tag: ['@t1-smoke', '@prompts'] }, ()
   });
 
   type UiVariant = {
-    label: string;
     nameSuffix: string;
     template: string;
-    updatedContent: string;
     create: (prompts: PromptsPage, name: string, content: string) => Promise<PromptDetailPage>;
     versioning: VersioningOpts;
   };
 
-  const UI_VARIANTS: UiVariant[] = [
-    {
-      label: 'text',
-      nameSuffix: 'ui-text',
-      template: 'You are a helpful assistant. Answer: {{question}}',
+  const TEXT_VARIANT: UiVariant = {
+    nameSuffix: 'ui-text',
+    template: 'You are a helpful assistant. Answer: {{question}}',
+    create: (prompts, name, content) => prompts.createTextPromptViaUI(name, content),
+    versioning: {
+      contentLocator: (d) => d.textContent(),
+      initialContent: 'You are a helpful assistant',
       updatedContent: 'You are an expert assistant. Respond concisely to: {{question}}',
-      create: (prompts, name, content) => prompts.createTextPromptViaUI(name, content),
-      versioning: {
-        contentLocator: (d) => d.textContent(),
-        initialContent: 'You are a helpful assistant',
-        updatedContent: 'You are an expert assistant. Respond concisely to: {{question}}',
-        edit: (d, content) => d.editTextPrompt(content),
-      },
+      edit: (d, content) => d.editTextPrompt(content),
     },
-    {
-      label: 'chat',
-      nameSuffix: 'ui-chat',
-      template: 'Answer the following: {{question}}',
+  };
+
+  const CHAT_VARIANT: UiVariant = {
+    nameSuffix: 'ui-chat',
+    template: 'Answer the following: {{question}}',
+    create: (prompts, name, content) => prompts.createChatPromptViaUI(name, content),
+    versioning: {
+      contentLocator: (d) => d.chatMessages(),
+      initialContent: 'Answer the following',
       updatedContent: 'Provide a concise expert answer to: {{question}}',
-      create: (prompts, name, content) => prompts.createChatPromptViaUI(name, content),
-      versioning: {
-        contentLocator: (d) => d.chatMessages(),
-        initialContent: 'Answer the following',
-        updatedContent: 'Provide a concise expert answer to: {{question}}',
-        edit: (d, content) => d.editChatFirstMessage(content),
-      },
+      edit: (d, content) => d.editChatFirstMessage(content),
     },
-  ];
+  };
 
-  for (const variant of UI_VARIANTS) {
-    test(`UI-created ${variant.label} prompt shows content, edit creates new version, old version is preserved`, async ({
-      project,
-      page,
-      registerPromptCleanup,
-      testNamespace,
-    }) => {
-      const promptName = `${testNamespace}-${variant.nameSuffix}`;
-      const prompts = new PromptsPage(page);
+  type UiFlowFixtures = Pick<
+    Parameters<Parameters<typeof test>[2]>[0],
+    'project' | 'page' | 'registerPromptCleanup' | 'testNamespace'
+  >;
 
-      await test.step('Navigate to empty Prompts Library', async () => {
-        await prompts.goto(project.id);
-        await prompts.waitForReady();
-      });
+  async function runUiCreateAndVersionFlow(
+    variant: UiVariant,
+    { project, page, registerPromptCleanup, testNamespace }: UiFlowFixtures,
+  ): Promise<void> {
+    const promptName = `${testNamespace}-${variant.nameSuffix}`;
+    const prompts = new PromptsPage(page);
 
-      const detail = await variant.create(prompts, promptName, variant.template);
-
-      const urlParts = new URL(page.url()).pathname.split('/').filter(Boolean);
-      const promptsIdx = urlParts.lastIndexOf('prompts');
-      const promptId = promptsIdx >= 0 ? (urlParts[promptsIdx + 1] ?? '') : '';
-      expect(promptId, 'Expected to extract promptId from URL after prompt creation').toBeTruthy();
-      registerPromptCleanup(promptId, promptName);
-
-      await test.step('Verify detail page shows correct content', async () => {
-        await detail.waitForReady();
-        await expect(detail.promptNameHeading()).toHaveText(promptName);
-        await expect(variant.versioning.contentLocator(detail)).toContainText(variant.versioning.initialContent);
-      });
-
-      await runVersioningSteps(detail, variant.versioning);
+    await test.step('Navigate to empty Prompts Library', async () => {
+      await prompts.goto(project.id);
+      await prompts.waitForReady();
     });
+
+    const detail = await variant.create(prompts, promptName, variant.template);
+
+    const urlParts = new URL(page.url()).pathname.split('/').filter(Boolean);
+    const promptsIdx = urlParts.lastIndexOf('prompts');
+    const promptId = promptsIdx >= 0 ? (urlParts[promptsIdx + 1] ?? '') : '';
+    expect(promptId, 'Expected to extract promptId from URL after prompt creation').toBeTruthy();
+    registerPromptCleanup(promptId, promptName);
+
+    await test.step('Verify detail page shows correct content', async () => {
+      await detail.waitForReady();
+      await expect(detail.promptNameHeading()).toHaveText(promptName);
+      await expect(variant.versioning.contentLocator(detail)).toContainText(variant.versioning.initialContent);
+    });
+
+    await runVersioningSteps(detail, variant.versioning);
   }
+
+  // Text and chat are two separate tests rather than a loop over variants so
+  // that each declares only the creation capability it actually exercises. A
+  // loop would have to build its tag array from the variant, and both the tag
+  // lint and the coverage builder read tags as string literals — a computed tag
+  // is invisible to them, which would silently drop the capability instead of
+  // mis-attributing it.
+  test('UI-created text prompt shows content, edit creates new version, old version is preserved', {
+    tag: [
+      '@cap:prompts.create-text-prompt-ui',
+      '@cap:prompts.edit-creates-version',
+      '@cap:prompts.old-version-preserved',
+      '@cap:prompts.version-history',
+    ],
+  }, async ({ project, page, registerPromptCleanup, testNamespace }) => {
+    await runUiCreateAndVersionFlow(TEXT_VARIANT, { project, page, registerPromptCleanup, testNamespace });
+  });
+
+  test('UI-created chat prompt shows content, edit creates new version, old version is preserved', {
+    tag: [
+      '@cap:prompts.create-chat-prompt-ui',
+      '@cap:prompts.edit-creates-version',
+      '@cap:prompts.old-version-preserved',
+      '@cap:prompts.version-history',
+    ],
+  }, async ({ project, page, registerPromptCleanup, testNamespace }) => {
+    await runUiCreateAndVersionFlow(CHAT_VARIANT, { project, page, registerPromptCleanup, testNamespace });
+  });
 });

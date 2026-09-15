@@ -8,6 +8,7 @@ import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Lists;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -64,6 +65,10 @@ public class CipxSpendBlockDAO {
             @NonNull String projectId,
             @NonNull Instant startTime,
             @NonNull String model,
+            /** Per-call speed modifier; selects the rate table that prices the call. Carried on
+             * every block because block-level cost needs the value that priced it. '' = standard,
+             * incl. every row written before the field existed. */
+            @NonNull String speed,
             int blockIdx,
             @NonNull String src,
             @NonNull String category,
@@ -76,13 +81,20 @@ public class CipxSpendBlockDAO {
             @NonNull String toolUseId,
             @NonNull String resource,
             @NonNull String kind,
+            /** Which variant of `category` the block is (memory: auto_memory vs project_instructions
+             * vs rule vs user_global). '' = unknown, incl. every block written before cipx emitted
+             * it -- consumers must treat it as "can't tell", not as a default value. */
+            @NonNull String subcategory,
             @NonNull String tier,
             @NonNull String lane,
             @NonNull String bdLane,
             @NonNull String label,
             int isDefinition,
             double alloc,
-            @NonNull String contentSha256) {
+            @NonNull String contentSha256,
+            /** The block's share of the span's usage units (alloc x its tier's per-token rate);
+             * null when the span reports none. */
+            @Nullable Double aiuNano) {
 
         /**
          * Derives all rows for one cipx span: one attributed row per non-identity block (keeping the
@@ -95,6 +107,7 @@ public class CipxSpendBlockDAO {
                 Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
             JsonNode usage = call.path("usage");
+            JsonNode config = call.path("config");
             String model = call.path("model").asText("");
             long[] tierTokens = {
                     usage.path("input_tokens").asLong(0),
@@ -111,6 +124,8 @@ public class CipxSpendBlockDAO {
                     && cacheCreation.path("ephemeral_1h_input_tokens").asLong(0) == 0
                             ? "cache_creation_5m"
                             : "cache_creation_1h";
+
+            double[] aiuRates = aiuRatesPerToken(CipxMetadata.copilotUsage(metadata));
 
             JsonNode blocks = metadata.path("cipx").path("blocks");
             long[] tierChars = new long[TIER_NAMES.length];
@@ -134,22 +149,52 @@ public class CipxSpendBlockDAO {
                     .traceId(traceId.toString())
                     .projectId(projectId != null ? projectId.toString() : "")
                     .startTime(startTime)
-                    .model(model);
+                    .model(model)
+                    .speed(config.path("speed").asText(""));
             if (blocks.isArray()) {
                 for (int idx = 0; idx < blocks.size(); idx++) {
                     JsonNode block = blocks.get(idx);
                     if (isIdentityContext(block)) {
                         continue;
                     }
-                    rows.add(attributed(base, idx, block, tierTokens, tierChars, writeTier));
+                    rows.add(attributed(base, idx, block, tierTokens, tierChars, writeTier, aiuRates));
                 }
             }
             for (int tier = 0; tier < TIER_NAMES.length; tier++) {
                 if (!tierPresent[tier] && tierTokens[tier] > 0) {
-                    rows.add(residual(base, tier, tierTokens[tier], writeTier));
+                    rows.add(residual(base, tier, tierTokens[tier], writeTier, aiuRates));
                 }
             }
             return rows;
+        }
+
+        /** Usage units per token, indexed by tier ordinal; null when the span reports none. */
+        private static double[] aiuRatesPerToken(JsonNode copilotUsage) {
+            if (!copilotUsage.isObject()) {
+                return null;
+            }
+            double[] rates = new double[TIER_NAMES.length];
+            for (JsonNode detail : copilotUsage.path("token_details")) {
+                int tier = switch (detail.path("token_type").asText("")) {
+                    case "input" -> 0;
+                    case "cache_read" -> 1;
+                    case "cache_write" -> CACHE_CREATION_TIER;
+                    case "output" -> 3;
+                    default -> -1;
+                };
+                long batchSize = detail.path("batch_size").asLong(0);
+                if (tier >= 0 && batchSize > 0) {
+                    rates[tier] = detail.path("cost_per_batch").asDouble(0) / batchSize;
+                }
+            }
+            return rates;
+        }
+
+        private static Double aiuNano(double[] aiuRates, int tier, double tokens) {
+            if (aiuRates == null) {
+                return null;
+            }
+            return tier >= 0 ? tokens * aiuRates[tier] : 0.0;
         }
 
         /** cache_creation (ordinal 2) is written as its per-span TTL variant; the rest are fixed. */
@@ -158,7 +203,7 @@ public class CipxSpendBlockDAO {
         }
 
         private static BlockRow attributed(BlockRowBuilder base, int idx, JsonNode block, long[] tierTokens,
-                long[] tierChars, String writeTier) {
+                long[] tierChars, String writeTier, double[] aiuRates) {
             String category = block.path("category").asText("");
             String side = block.path("side").asText("");
             String cacheStatus = block.path("cache_status").asText("");
@@ -185,6 +230,7 @@ public class CipxSpendBlockDAO {
                     .toolUseId(block.path("tool_use_id").asText(""))
                     .resource(resource)
                     .kind(kind)
+                    .subcategory(block.path("subcategory").asText(""))
                     .tier(tier >= 0 ? tierName(tier, writeTier) : "")
                     .lane(lane(category, toolServer))
                     .bdLane(bdLane(category, toolServer))
@@ -192,10 +238,12 @@ public class CipxSpendBlockDAO {
                     .isDefinition(isDefinition(category))
                     .alloc(alloc)
                     .contentSha256(block.path("sha256").asText(""))
+                    .aiuNano(aiuNano(aiuRates, tier, alloc))
                     .build();
         }
 
-        private static BlockRow residual(BlockRowBuilder base, int tier, long tokens, String writeTier) {
+        private static BlockRow residual(BlockRowBuilder base, int tier, long tokens, String writeTier,
+                double[] aiuRates) {
             return base
                     .blockIdx(RESIDUAL_IDX_BASE + tier)
                     .src(SRC_RESIDUAL)
@@ -209,6 +257,7 @@ public class CipxSpendBlockDAO {
                     .toolUseId("")
                     .resource("")
                     .kind("")
+                    .subcategory("")
                     .tier(tierName(tier, writeTier))
                     .lane("unattributed")
                     .bdLane("")
@@ -216,6 +265,7 @@ public class CipxSpendBlockDAO {
                     .isDefinition(0)
                     .alloc(tokens)
                     .contentSha256("")
+                    .aiuNano(aiuNano(aiuRates, tier, tokens))
                     .build();
         }
 
@@ -243,15 +293,21 @@ public class CipxSpendBlockDAO {
         private static String lane(String category, String toolServer) {
             return switch (category) {
                 case "tool_io" -> toolServer.isEmpty() ? "built_in_tools" : "mcp_servers";
-                case "user_prompts" -> "user_prompts";
+                case "system_tools", "system_tools_deferred" -> "built_in_tools";
+                // slash_command is a user-invoked expansion — user-driven content, so it
+                // rides the user_prompts lane rather than the harness's static_overhead.
+                case "user_prompts", "slash_command" -> "user_prompts";
                 case "prior_assistant" -> "prior_assistant";
                 case "mcp_tools_active", "mcp_tools_deferred", "mcp_server_instructions" -> "mcp_servers";
                 case "skills_menu", "skills_loaded" -> "skills";
                 case "custom_agents" -> "custom_agents";
                 case "memory" -> "memory";
                 case "file_attachments" -> "file_attachments";
-                case "system_prompt", "env_info", "system_tools", "system_tools_deferred" -> "static_overhead";
-                case "auto_classifier", "agent_overhead" -> "static_overhead";
+                case "system_prompt", "env_info" -> "static_overhead";
+                // identity_context here is the surviving framing (identity reminders +
+                // other <system-reminder> riders carved out of another parent); the pure
+                // identity_context/identity_context rows are dropped at ingestion.
+                case "auto_classifier", "agent_overhead", "identity_context" -> "static_overhead";
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
                 case "built_in_tool_calls" -> "built_in_tool_calls";
@@ -261,26 +317,17 @@ public class CipxSpendBlockDAO {
             };
         }
 
-        /** Breakdown lane: like {@link #lane} but categories with no breakdown rows map to '' (excluded). */
+        /**
+         * Breakdown lane: like {@link #lane} but categories with no breakdown rows map to '' (excluded).
+         * Delegates to {@link #lane} for the shared dispatch table and only overrides the two
+         * intentional differences, so the two tables can't drift apart on a future category addition.
+         */
         private static String bdLane(String category, String toolServer) {
-            return switch (category) {
-                case "tool_io" -> toolServer.isEmpty() ? "built_in_tools" : "mcp_servers";
-                case "user_prompts" -> "user_prompts";
-                case "prior_assistant" -> "prior_assistant";
-                case "mcp_tools_active" -> "mcp_servers";
-                case "skills_menu", "skills_loaded" -> "skills";
-                case "custom_agents" -> "custom_agents";
-                case "memory" -> "memory";
-                case "file_attachments" -> "file_attachments";
-                case "system_prompt", "env_info", "system_tools", "system_tools_deferred" -> "static_overhead";
-                case "auto_classifier", "agent_overhead" -> "static_overhead";
-                case "thinking" -> "thinking";
-                case "assistant_text" -> "assistant_text";
-                case "built_in_tool_calls" -> "built_in_tool_calls";
-                case "mcp_tool_calls" -> "mcp_tool_calls";
-                case "skill_invocations" -> "skill_invocations";
-                default -> "";
-            };
+            if (category.equals("mcp_tools_deferred") || category.equals("mcp_server_instructions")) {
+                return "";
+            }
+            String baseLane = lane(category, toolServer);
+            return baseLane.equals("unattributed") ? "" : baseLane;
         }
 
         /** Breakdown row key; which raw field names the row depends on the category. */
@@ -290,14 +337,13 @@ public class CipxSpendBlockDAO {
                 case "user_prompts" ->
                     chars < 1_000 ? "small" : chars < 10_000 ? "medium" : chars < 100_000 ? "large" : "xlarge";
                 case "file_attachments", "skills_menu", "skills_loaded", "custom_agents", "memory",
-                        "skill_invocations" ->
+                        "skill_invocations", "slash_command" ->
                     resource;
                 case "tool_io" -> toolServer.isEmpty() ? toolName : toolServer;
+                case "system_tools", "system_tools_deferred" -> toolName.isEmpty() ? "(unattributed)" : toolName;
                 case "prior_assistant" -> kind;
                 case "mcp_tools_active", "mcp_tool_calls" -> toolServer;
-                case "system_prompt", "env_info", "system_tools", "system_tools_deferred", "auto_classifier",
-                        "agent_overhead" ->
-                    category;
+                case "system_prompt", "env_info", "auto_classifier", "agent_overhead", "identity_context" -> category;
                 case "thinking" -> "thinking";
                 case "assistant_text" -> "assistant_text";
                 case "built_in_tool_calls" -> toolName;
@@ -321,7 +367,7 @@ public class CipxSpendBlockDAO {
     /**
      * Bulk insert via the ClickHouse v2 HTTP client using JSONEachRow, NOT the R2DBC statement path
      * the sibling cipx DAOs use. One span event fans out to hundreds of block rows (~350/span, so a
-     * 200-span batch is ~70k rows x 24 columns), and the R2DBC driver resolves every named bind with
+     * 200-span batch is ~70k rows x 26 columns), and the R2DBC driver resolves every named bind with
      * a linear scan over the statement's parameter list — O(n^2) over ~1.7M parameters, hours of CPU
      * for a single event (see ExperimentAggregatesDAO.insertExperimentItems for the same trade-off).
      * The JSONEachRow payload is one HTTP body with no per-parameter work at all.
@@ -379,6 +425,7 @@ public class CipxSpendBlockDAO {
         node.put("span_id", row.spanId());
         node.put("block_idx", row.blockIdx());
         node.put("model", row.model());
+        node.put("speed", row.speed());
         node.put("src", row.src());
         node.put("category", row.category());
         node.put("side", row.side());
@@ -390,6 +437,7 @@ public class CipxSpendBlockDAO {
         node.put("tool_use_id", row.toolUseId());
         node.put("resource", row.resource());
         node.put("kind", row.kind());
+        node.put("subcategory", row.subcategory());
         node.put("tier", row.tier());
         node.put("lane", row.lane());
         node.put("bd_lane", row.bdLane());
@@ -397,6 +445,7 @@ public class CipxSpendBlockDAO {
         node.put("is_definition", row.isDefinition());
         node.put("alloc", row.alloc());
         node.put("content_sha256", row.contentSha256());
+        node.put("aiu_nano", row.aiuNano());
         node.put("start_time", ClickHouseDateTimeFormat.formatNanos(row.startTime()));
         out.append(node).append('\n');
     }

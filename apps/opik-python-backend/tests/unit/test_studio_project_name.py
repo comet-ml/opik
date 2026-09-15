@@ -49,10 +49,18 @@ class TestRunOptimizationForwardsProjectName:
             score=1.0, initial_score=None
         )
 
+        # A real message shape: run_optimization rejects a prompt with no
+        # optimizable role, which is unrelated to what these tests cover.
+        prompt = MagicMock()
+        prompt.get_messages.return_value = [
+            {"role": "system", "content": "You answer questions."},
+            {"role": "user", "content": "Answer {question}"},
+        ]
+
         run_optimization(
             optimizer=optimizer,
             optimization_id="opt-1",
-            prompt=MagicMock(),
+            prompt=prompt,
             dataset=MagicMock(),
             metric_fn=lambda *_args, **_kwargs: 0.0,
             project_name=project_name,

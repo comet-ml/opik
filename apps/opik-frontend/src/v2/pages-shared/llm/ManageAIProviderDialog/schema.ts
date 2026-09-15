@@ -2,10 +2,12 @@ import { z } from "zod";
 import uniq from "lodash/uniq";
 
 import {
+  AUTH_SEND_AS_VALUES,
   OPENAI_PIPELINE_MODE_VALUES,
   OpenAiPipelineMode,
   PROVIDER_TYPE,
 } from "@/types/providers";
+import { AUTH_MODE_VALUES } from "./customProviderConfig";
 
 export type { OpenAiPipelineMode };
 export { OPENAI_PIPELINE_MODE_VALUES };
@@ -118,8 +120,91 @@ export const createCustomProviderDetailsFormSchema = (
         .optional(),
       authHeaderName: z.string().max(150).optional(),
       suppressDefaultAuth: z.boolean().optional(),
+      authMode: z.enum(AUTH_MODE_VALUES).optional(),
+      authTokenUrl: z.string().optional(),
+      authSendAs: z.enum(AUTH_SEND_AS_VALUES).optional(),
+      authCredentials: z
+        .array(
+          z.object({
+            // maxes mirror the backend's @Size(max = 250 / 2000) on Credential
+            key: z.string().max(250),
+            value: z.string().max(2000),
+            secret: z.boolean(),
+            saved: z.boolean(),
+            id: z.string(),
+          }),
+        )
+        .optional(),
+      authTokenField: z.string().max(250).optional(),
+      authExpiresField: z.string().max(250).optional(),
+      authFallbackTtl: z.string().optional(),
     })
     .superRefine((data, ctx) => {
+      // Token-auth mode requirements: field-level rules stay optional because static mode is the
+      // default and none of these apply there.
+      if (data.authMode === "token") {
+        const tokenUrl = (data.authTokenUrl ?? "").trim();
+        if (!tokenUrl || !z.string().url().safeParse(tokenUrl).success) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Token URL must be a valid URL",
+            path: ["authTokenUrl"],
+          });
+        } else if (!/^https?:\/\//i.test(tokenUrl)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Token URL must use http or https",
+            path: ["authTokenUrl"],
+          });
+        }
+
+        const credentials = data.authCredentials ?? [];
+        if (!credentials.some((entry) => entry.key.trim().length > 0)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "At least one credential is required",
+            path: ["authTokenUrl"],
+          });
+        }
+
+        const credentialKeys: string[] = [];
+        credentials.forEach((entry, index) => {
+          const hasKey = entry.key.trim().length > 0;
+          if (!hasKey && entry.value.trim().length > 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "Credential key is required",
+              path: ["authCredentials", index, "key"],
+            });
+          }
+          if (hasKey) {
+            const trimmedKey = entry.key.trim();
+            if (credentialKeys.includes(trimmedKey)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Credential key must be unique",
+                path: ["authCredentials", index, "key"],
+              });
+            } else {
+              credentialKeys.push(trimmedKey);
+            }
+          }
+        });
+
+        const fallbackTtl = (data.authFallbackTtl ?? "").trim();
+        // digits-only implies non-negative; no separate sign/number check needed
+        if (
+          fallbackTtl.length > 0 &&
+          (!/^\d+$/.test(fallbackTtl) || Number(fallbackTtl) > 31_536_000)
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              "Fallback lifetime must be a whole number of seconds, at most 31,536,000 (one year)",
+            path: ["authFallbackTtl"],
+          });
+        }
+      }
       // Validate headers: if a header has any content, both key and value must be non-empty
       if (data.headers) {
         const headerKeys: string[] = [];

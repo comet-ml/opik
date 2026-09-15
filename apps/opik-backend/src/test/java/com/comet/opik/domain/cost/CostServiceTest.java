@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.util.Map;
@@ -376,6 +377,68 @@ class CostServiceTest {
     }
 
     /**
+     * A compact-dated name must price at exactly the rate of the base model it normalizes to,
+     * not merely at some non-zero rate -- that is what distinguishes a real price-table hit from
+     * an accidental one. Every case below was observed in production traffic routed through an
+     * enterprise gateway, which emits Anthropic ids in reversed family/version order with a
+     * compact date. Before the fix each of these resolved to DEFAULT_COST and reported $0.00.
+     */
+    @ParameterizedTest
+    @MethodSource("provideCompactDatedModelNamesWithBaseEquivalent")
+    void calculateCost_compactDateSuffixPricesSameAsBaseModel(String datedModelName, String baseModelName,
+            String provider) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal datedCost = CostService.calculateCost(datedModelName, provider, usage, null);
+        BigDecimal baseCost = CostService.calculateCost(baseModelName, provider, usage, null);
+
+        assertThat(baseCost).isGreaterThan(BigDecimal.ZERO);
+        assertThat(datedCost).isEqualByComparingTo(baseCost);
+    }
+
+    private static Stream<Arguments> provideCompactDatedModelNamesWithBaseEquivalent() {
+        return Stream.of(
+                // Reversed family/version order reaches the price row through an `alias_of` entry,
+                // which is only reachable once the compact date is stripped.
+                Arguments.of("anthropic/claude-4.6-opus-20260205", "claude-opus-4-6", "anthropic"),
+                Arguments.of("anthropic/claude-4.6-sonnet-20260217", "claude-sonnet-4-6", "anthropic"),
+                Arguments.of("anthropic/claude-4.5-haiku-20251001", "claude-haiku-4-5", "anthropic"),
+                // Same path without the provider prefix.
+                Arguments.of("claude-4.6-opus-20260205", "claude-opus-4-6", "anthropic"),
+                // Canonical order, compact date, dot form: reaches the row via dot normalization.
+                Arguments.of("claude-opus-4.6-20260205", "claude-opus-4-6", "anthropic"));
+    }
+
+    @Test
+    void calculateCost_shouldReturnZeroForUnknownModelWithCompactDateSuffix() {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost("unknown-model-20251217", "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    /**
+     * The month/day ranges in the pattern keep an arbitrary 8-digit build or revision number from
+     * being mistaken for a date and silently collapsing a distinct model onto another model's row.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"gpt-5.2-99999999", "gpt-5.2-20251345", "gpt-5.2-12345678"})
+    void calculateCost_shouldNotStripNonDateEightDigitSuffix(String modelName) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost(modelName, "openai", usage, null);
+
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
+    }
+
+    /**
      * Test for issue #5621: LiteLLM OTel model names with provider prefix not found in pricing table.
      *
      * LiteLLM sends model names with provider prefix via gen_ai.request.model
@@ -521,7 +584,11 @@ class CostServiceTest {
     private static Stream<Arguments> provideMistralModels() {
         return Stream.of(
                 // Upstream LiteLLM row: $6e-08 in / $1.8e-07 out → 0.06 + 0.18 = 0.24
-                Arguments.of("mistral-small-latest", "0.24"),
+                // Pinned to the dated id rather than the `mistral-small-latest` alias: aliases are
+                // re-priced upstream whenever Mistral ships a new generation (Small 4 moved
+                // `mistral-small-latest` to 1.5e-07 / 6e-07), which breaks an exact-cost assertion
+                // on every automated model-prices update.
+                Arguments.of("mistral-small-3-2-2506", "0.24"),
                 // Upstream LiteLLM row: $5e-07 in / $1.5e-06 out → 0.5 + 1.5 = 2.00
                 Arguments.of("mistral-large-3", "2.00"),
                 // Upstream LiteLLM row: $3e-07 in / $9e-07 out → 0.3 + 0.9 = 1.20
@@ -585,17 +652,19 @@ class CostServiceTest {
     }
 
     /**
-     * Covers both branches of registering {@code xai} as a canonical provider so that the 40
-     * xai-tagged entries in {@code model_prices_and_context_window.json} (the full grok-2, grok-3,
-     * grok-4 and grok-code families) are no longer silently dropped at load time:
-     * <ul>
-     *   <li>xai model with no cache rates falls through to {@link SpanCostCalculator#textGenerationCost}.</li>
-     *   <li>xai model with cache rates routes through
-     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — xAI's cost calculator in
-     *       LiteLLM delegates to {@code generic_cost_per_token} using OpenAI-shape
-     *       {@code prompt_tokens_details.cached_tokens}, so the same subtract-from-total logic
-     *       used for OpenAI/Azure applies unchanged here.</li>
-     * </ul>
+     * Covers registering {@code xai} as a canonical provider so that the xai-tagged entries in
+     * {@code model_prices_and_context_window.json} (the grok-3, grok-4 and grok-code families) are
+     * no longer silently dropped at load time, and that they route through
+     * {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — xAI's cost calculator in
+     * LiteLLM delegates to {@code generic_cost_per_token} using OpenAI-shape
+     * {@code prompt_tokens_details.cached_tokens}, so the same subtract-from-total logic used for
+     * OpenAI/Azure applies unchanged here.
+     * <p>
+     * Both cases take that calculator, because every xai row carrying token rates also publishes
+     * {@code cache_read_input_token_cost}. They differ only in whether the usage payload reports
+     * cached tokens, which pins down that the subtraction leaves an uncached prompt billed in full.
+     * The cache-free {@link SpanCostCalculator#textGenerationCost} route is covered for this same
+     * usage shape by the {@code deepinfra} and {@code snowflake} cases.
      */
     @ParameterizedTest(name = "{0}")
     @MethodSource("provideXaiProviderCases")
@@ -607,19 +676,22 @@ class CostServiceTest {
     }
 
     private static Stream<Arguments> provideXaiProviderCases() {
-        // xai/grok-2: input 2e-6, output 1e-5 (no cache rates) -> textGenerationCost
-        // 1000 * 2e-6 + 200 * 1e-5 = 0.002 + 0.002 = 0.004
-        // xai/grok-3: input 3e-6, output 1.5e-5, cache_read 7.5e-7 -> textGenerationWithCacheCostOpenAI
-        // non-cached input = 1000 - 300 = 700
-        // 700 * 3e-6 + 200 * 1.5e-5 + 300 * 7.5e-7 = 0.0021 + 0.003 + 0.000225 = 0.005325
+        // xai/grok-4.3: input 1.25e-6, output 2.5e-6, cache_read 2e-7. Pinned to this row because its
+        // rates have held while the grok-2 generation was retired upstream and grok-3 / grok-4 were
+        // re-priced; the above_200k tier rates it also publishes stay inactive at a 1000-token prompt.
+        // No cached tokens in usage -> the whole prompt bills at the input rate
+        // 1000 * 1.25e-6 + 200 * 2.5e-6 = 0.00125 + 0.0005 = 0.00175
+        // With cached tokens -> non-cached input = 1000 - 300 = 700
+        // 700 * 1.25e-6 + 200 * 2.5e-6 + 300 * 2e-7 = 0.000875 + 0.0005 + 0.00006 = 0.001435
         return Stream.of(
-                Arguments.of("plain text-generation route", "xai/grok-2",
-                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.004"),
-                Arguments.of("cache-aware route via OpenAI calc", "xai/grok-3",
+                // Bare usage keys, as logged by SDKs below 1.6.0.
+                Arguments.of("cache-aware route, no cached tokens in usage", "xai/grok-4.3",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00175"),
+                Arguments.of("cache-aware route via OpenAI calc", "xai/grok-4.3",
                         Map.of("original_usage.prompt_tokens", 1000,
                                 "original_usage.completion_tokens", 200,
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
-                        "0.005325"));
+                        "0.001435"));
     }
 
     /**
@@ -734,6 +806,143 @@ class CostServiceTest {
     }
 
     /**
+     * Covers both branches of registering {@code moonshot} as a canonical provider so that the
+     * 22 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "moonshot"} (the {@code moonshot-v1-*} legacy models and the
+     * {@code kimi-*} family) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>Moonshot model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Moonshot model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI} — Moonshot's API is
+     *       OpenAI-compatible and its LiteLLM cost calculator delegates to
+     *       {@code generic_cost_per_token}, so cached tokens are flattened under
+     *       {@code prompt_tokens_details.cached_tokens}, matching the OpenAI/Azure/xAI/DeepSeek/
+     *       Fireworks routing.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideMoonshotProviderCases")
+    void calculateCostHandlesMoonshotModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "moonshot", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideMoonshotProviderCases() {
+        // moonshot/moonshot-v1-8k: input 2e-7, output 2e-6 (no cache rates) -> textGenerationCost
+        // 1000 * 2e-7 + 200 * 2e-6 = 0.0002 + 0.0004 = 0.0006
+        // moonshot/kimi-k2-0711-preview: input 6e-7, output 2.5e-6, cache_read 1.5e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 6e-7 + 200 * 2.5e-6 + 300 * 1.5e-7 = 0.00042 + 0.0005 + 0.000045 = 0.000965
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "moonshot/moonshot-v1-8k",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0006"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "moonshot/kimi-k2-0711-preview",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.000965"));
+    }
+
+    @Test
+    void calculateCostHandlesCerebrasModels() {
+        // Registering cerebras as a canonical provider loads its 7 non-zero-cost entries in
+        // model_prices_and_context_window.json (llama and qwen models served on Cerebras Cloud),
+        // which drop at load time otherwise. No Cerebras model publishes cache rates, so requests
+        // route through SpanCostCalculator.textGenerationCost.
+        // cerebras/llama-3.3-70b: input 8.5e-7, output 1.2e-6
+        // 1000 * 8.5e-7 + 200 * 1.2e-6 = 0.00085 + 0.00024 = 0.00109
+        BigDecimal cost = CostService.calculateCost("cerebras/llama-3.3-70b", "cerebras",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00109");
+    }
+
+    /**
+     * Covers registering {@code sambanova} as a canonical provider so that the 19 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "sambanova"} (the deepseek, llama, qwen and minimax models served
+     * on SambaNova Cloud) are no longer silently dropped at load time. No SambaNova model
+     * publishes cache rates today, so all SambaNova requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesSambanovaModels() {
+        // sambanova/MiniMax-M2.7: input 6e-7, output 2.4e-6
+        // 1000 * 6e-7 + 200 * 2.4e-6 = 0.0006 + 0.00048 = 0.00108
+        BigDecimal cost = CostService.calculateCost("sambanova/MiniMax-M2.7", "sambanova",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00108");
+    }
+
+    /**
+     * Covers registering {@code nebius} as a canonical provider so that the 30 non-zero-cost
+     * entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "nebius"} (the {@code nebius/<org>/<model>} catalog: deepseek,
+     * qwen, llama and more) are no longer silently dropped at load time. No Nebius model
+     * publishes cache rates today, so all Nebius requests route through
+     * {@link SpanCostCalculator#textGenerationCost}.
+     */
+    @Test
+    void calculateCostHandlesNebiusModels() {
+        // nebius/deepseek-ai/DeepSeek-R1: input 8e-7, output 2.4e-6
+        // 1000 * 8e-7 + 200 * 2.4e-6 = 0.0008 + 0.00048 = 0.00128
+        BigDecimal cost = CostService.calculateCost("nebius/deepseek-ai/DeepSeek-R1", "nebius",
+                Map.of("prompt_tokens", 1000, "completion_tokens", 200), null);
+
+        assertThat(cost).isEqualByComparingTo("0.00128");
+    }
+
+    /**
+     * Covers both branches of registering {@code snowflake} as a canonical provider so that the
+     * 21 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "snowflake"} (Snowflake Cortex-hosted claude, deepseek and llama
+     * models) are no longer silently dropped at load time:
+     * <ul>
+     *   <li>Snowflake model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>Snowflake model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI}; Snowflake's cost entry in
+     *       LiteLLM exposes OpenAI-shape {@code cache_read_input_token_cost}, so cached tokens
+     *       arrive flattened under {@code prompt_tokens_details.cached_tokens} like the other
+     *       OpenAI-compatible providers.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideSnowflakeProviderCases")
+    void calculateCostHandlesSnowflakeModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "snowflake", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideSnowflakeProviderCases() {
+        // snowflake/deepseek-r1: input 1.35e-6, output 5.4e-6 (no cache rates) -> textGenerationCost
+        // 1000 * 1.35e-6 + 200 * 5.4e-6 = 0.00135 + 0.00108 = 0.00243
+        // snowflake/claude-3-5-sonnet: input 3e-6, output 1.5e-5, cache_read 3e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 3e-6 + 200 * 1.5e-5 + 300 * 3e-7 = 0.0021 + 0.003 + 0.00009 = 0.00519
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "snowflake/deepseek-r1",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.00243"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "snowflake/claude-3-5-sonnet",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.00519"));
+    }
+
+    /**
      * Covers the provider-prefix fallback in {@link CostService#findModelPrice}. Callers that
      * route a model through an aggregator ({@link com.comet.opik.api.resources.v1.events.BudgetGuard}
      * calls {@code CostService.calculateCost} via {@code LlmProviderFactoryImpl.getResolvedModelInfo},
@@ -761,6 +970,44 @@ class CostServiceTest {
                 Arguments.of("perplexity/sonar-pro", "openrouter", "0.006"),
                 // custom-llm and empty-adjacent providers hit the same fallback path.
                 Arguments.of("perplexity/sonar", "custom-llm", "0.0012"));
+    }
+
+    /**
+     * OpenRouter exposes Moonshot's Kimi family under a different namespace prefix
+     * ({@code moonshotai/*}) than LiteLLM's canonical ({@code moonshot/*}) — see the
+     * {@code MOONSHOTAI_*} entries in {@code OpenRouterModelName}. Without a
+     * {@code moonshotai -> moonshot} alias in {@link CostService#PROVIDERS_MAPPING}, the
+     * provider-prefix fallback returns null and the aggregator-routed request resolves to
+     * {@code DEFAULT_COST}, silently under-charging every Kimi call routed through OpenRouter.
+     * With the alias, the fallback maps {@code moonshotai} to the canonical {@code moonshot}
+     * and the pricing row is found. Mirrors the existing {@code microsoft -> azure} override
+     * pattern in the same map.
+     */
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @MethodSource("provideAggregatorRoutedMoonshotCases")
+    void calculateCostFindsMoonshotViaAggregatorProviderPrefix(String model, String provider,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAggregatorRoutedMoonshotCases() {
+        // moonshot/kimi-k2-0711-preview: input 6e-7, output 2.5e-6 (cache rates ignored here
+        // because usage carries no cached_tokens key -> textGenerationCost path)
+        // 1000 * 6e-7 + 200 * 2.5e-6 = 0.0006 + 0.0005 = 0.0011
+        // moonshot/moonshot-v1-8k: input 2e-7, output 2e-6
+        // 1000 * 2e-7 + 200 * 2e-6 = 0.0002 + 0.0004 = 0.0006
+        return Stream.of(
+                // OpenRouter-style routing: model carries the moonshotai/ prefix and caller
+                // passes provider="openrouter" (or any non-canonical). Alias makes the lookup
+                // find the underlying moonshot/ price row.
+                Arguments.of("moonshotai/kimi-k2-0711-preview", "openrouter", "0.0011"),
+                Arguments.of("moonshotai/moonshot-v1-8k", "openrouter", "0.0006"),
+                // custom-llm and other pass-through providers hit the same fallback.
+                Arguments.of("moonshotai/kimi-k2-0711-preview", "custom-llm", "0.0011"));
     }
 
     /**
@@ -800,6 +1047,108 @@ class CostServiceTest {
                 Arguments.of("claude-sonnet-4.5", "anthropic"),
                 // 4. Provider prefix + date suffix: prefix stripped first, then date suffix removed
                 Arguments.of("anthropic/claude-sonnet-4.5-2025-12-17", "anthropic"),
-                Arguments.of("openai/gpt-5.2-2025-12-17", "openai"));
+                Arguments.of("openai/gpt-5.2-2025-12-17", "openai"),
+                // 5. Compact YYYYMMDD dates, the form Anthropic actually ships on every dated id.
+                Arguments.of("gpt-5.2-20251217", "openai"),
+                Arguments.of("claude-sonnet-4.5-20251217", "anthropic"),
+                Arguments.of("anthropic/claude-sonnet-4.5-20251217", "anthropic"),
+                Arguments.of("openai/gpt-5.2-20251217", "openai"));
+    }
+
+    /**
+     * Same gap as the {@code moonshotai} alias, for five more vendors OpenRouter resells.
+     * {@code ai21}, {@code morph}, {@code inception}, {@code meta} and {@code zai} all carry
+     * non-zero-cost rows in {@code model_prices_and_context_window.json}, but none were in
+     * {@link CostService#PROVIDERS_MAPPING}, so {@code buildModelPrice} dropped every one of
+     * them at load time and the provider-prefix fallback had nothing to resolve against. Any
+     * call routed through OpenRouter fell through to {@code DEFAULT_COST}.
+     * <p>
+     * {@code z-ai} needs two entries for the same reason {@code moonshot} does: the map is read
+     * both with the price file's {@code litellm_provider} ({@code zai}) when loading rows, and
+     * with the model-name prefix OpenRouter uses ({@code z-ai}) when resolving the fallback.
+     * The other four spell both the same way, so one entry each.
+     * <p>
+     * All of these take the {@link SpanCostCalculator#textGenerationCost} path. Four of the
+     * models below publish a {@code cache_read_input_token_cost}, but none of these providers is
+     * registered in {@code PROVIDERS_CACHE_COST_CALCULATOR}, so cached tokens are not discounted
+     * yet. Registering them needs evidence of how each API reports cached tokens, which is a
+     * separate change.
+     */
+    @ParameterizedTest(name = "{0} via provider={1}")
+    @MethodSource("provideAggregatorRoutedVendorCases")
+    void calculateCostFindsOpenRouterVendorPricesViaProviderPrefix(String model, String provider,
+            String expectedCost) {
+        Map<String, Integer> usage = Map.of("prompt_tokens", 1000, "completion_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideAggregatorRoutedVendorCases() {
+        // ai21/jamba-large-1.7:   input 2e-6,    output 8e-6    -> 1000*2e-6    + 200*8e-6    = 0.0036
+        // ai21/jamba-mini-1.7:    input 2e-7,    output 4e-7    -> 1000*2e-7    + 200*4e-7    = 0.00028
+        // zai/glm-4.5:            input 6e-7,    output 2.2e-6  -> 1000*6e-7    + 200*2.2e-6  = 0.00104
+        // zai/glm-5:              input 1e-6,    output 3.2e-6  -> 1000*1e-6    + 200*3.2e-6  = 0.00164
+        // morph/morph-v3-fast:    input 8e-7,    output 1.2e-6  -> 1000*8e-7    + 200*1.2e-6  = 0.00104
+        // morph/morph-v3-large:   input 9e-7,    output 1.9e-6  -> 1000*9e-7    + 200*1.9e-6  = 0.00128
+        // inception/mercury-2:    input 2.5e-7,  output 7.5e-7  -> 1000*2.5e-7  + 200*7.5e-7  = 0.0004
+        // meta/muse-spark-1.1:    input 1.25e-6, output 4.25e-6 -> 1000*1.25e-6 + 200*4.25e-6 = 0.0021
+        return Stream.of(
+                Arguments.of("ai21/jamba-large-1.7", "openrouter", "0.0036"),
+                Arguments.of("ai21/jamba-mini-1.7", "openrouter", "0.00028"),
+                // OpenRouter namespaces Z.ai as z-ai/, the price file as zai/.
+                Arguments.of("z-ai/glm-4.5", "openrouter", "0.00104"),
+                Arguments.of("z-ai/glm-5", "openrouter", "0.00164"),
+                Arguments.of("morph/morph-v3-fast", "openrouter", "0.00104"),
+                Arguments.of("morph/morph-v3-large", "openrouter", "0.00128"),
+                Arguments.of("inception/mercury-2", "openrouter", "0.0004"),
+                Arguments.of("meta/muse-spark-1.1", "openrouter", "0.0021"),
+                // custom-llm hits the same fallback, as it does for perplexity and moonshot.
+                Arguments.of("z-ai/glm-4.5", "custom-llm", "0.00104"));
+    }
+
+    /**
+     * Covers both branches of registering {@code deepinfra} as a canonical provider so that the
+     * ~67 non-zero-cost entries in {@code model_prices_and_context_window.json} tagged with
+     * {@code litellm_provider: "deepinfra"} (the {@code deepinfra/<org>/<model>} catalog) are no
+     * longer silently dropped at load time:
+     * <ul>
+     *   <li>DeepInfra model with no cache rates falls through to
+     *       {@link SpanCostCalculator#textGenerationCost}.</li>
+     *   <li>DeepInfra model with cache rates routes through
+     *       {@link SpanCostCalculator#textGenerationWithCacheCostOpenAI}; DeepInfra exposes an
+     *       OpenAI-compatible API, so even Claude models it hosts report cached tokens under
+     *       {@code prompt_tokens_details.cached_tokens} rather than the Anthropic shape.</li>
+     * </ul>
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideDeepinfraProviderCases")
+    void calculateCostHandlesDeepinfraModels(String description, String model, Map<String, Integer> usage,
+            String expectedCost) {
+        BigDecimal cost = CostService.calculateCost(model, "deepinfra", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideDeepinfraProviderCases() {
+        // deepinfra/anthropic/claude-4-sonnet: input 3.3e-6, output 1.65e-5 (no cache) -> textGenerationCost
+        // 1000 * 3.3e-6 + 200 * 1.65e-5 = 0.0033 + 0.0033 = 0.0066
+        // Pinned to one of DeepInfra's Anthropic-hosted rows: it re-prices its open-weights catalog
+        // in bulk, while none of the anthropic-hosted rows has been re-priced.
+        // deepinfra/anthropic/claude-3-7-sonnet-latest: input 3.3e-6, output 1.65e-5, cache_read 3.3e-7
+        // -> textGenerationWithCacheCostOpenAI
+        // non-cached input = 1000 - 300 = 700
+        // 700 * 3.3e-6 + 200 * 1.65e-5 + 300 * 3.3e-7 = 0.00231 + 0.0033 + 0.000099 = 0.005709
+        return Stream.of(
+                Arguments.of("plain text-generation route",
+                        "deepinfra/anthropic/claude-4-sonnet",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200), "0.0066"),
+                Arguments.of("cache-aware route via OpenAI calc",
+                        "deepinfra/anthropic/claude-3-7-sonnet-latest",
+                        Map.of("original_usage.prompt_tokens", 1000,
+                                "original_usage.completion_tokens", 200,
+                                "original_usage.prompt_tokens_details.cached_tokens", 300),
+                        "0.005709"));
     }
 }

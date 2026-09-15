@@ -186,7 +186,6 @@ from .automation_rule_evaluator_write_action import AutomationRuleEvaluatorWrite
 from .automation_rule_evaluator_write_trigger_scope import AutomationRuleEvaluatorWriteTriggerScope
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
-from .batch_delete_by_project import BatchDeleteByProject
 from .bi_information import BiInformation
 from .bi_information_response import BiInformationResponse
 from .blueprint_page_history import BlueprintPageHistory
@@ -245,6 +244,9 @@ from .completion_tokens_details import CompletionTokensDetails
 from .consent_response import ConsentResponse
 from .count_value_stat_public import CountValueStatPublic
 from .create_session_response import CreateSessionResponse
+from .credential import Credential
+from .credential_public import CredentialPublic
+from .credential_write import CredentialWrite
 from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
 from .dashboard_public_scope import DashboardPublicScope
@@ -572,6 +574,12 @@ from .provider_api_key_page_public import ProviderApiKeyPagePublic
 from .provider_api_key_provider import ProviderApiKeyProvider
 from .provider_api_key_public import ProviderApiKeyPublic
 from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
+from .provider_auth_config import ProviderAuthConfig
+from .provider_auth_config_public import ProviderAuthConfigPublic
+from .provider_auth_config_public_send_as import ProviderAuthConfigPublicSendAs
+from .provider_auth_config_send_as import ProviderAuthConfigSendAs
+from .provider_auth_config_write import ProviderAuthConfigWrite
+from .provider_auth_config_write_send_as import ProviderAuthConfigWriteSendAs
 from .recent_activity_item_public import RecentActivityItemPublic
 from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
@@ -723,8 +731,6 @@ from .workspace_project_user_count import WorkspaceProjectUserCount
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 from .workspace_user_permissions import WorkspaceUserPermissions
-from .workspace_version import WorkspaceVersion
-from .workspace_version_opik_version import WorkspaceVersionOpikVersion
 
 __all__ = [
     "Agent",
@@ -873,7 +879,6 @@ __all__ = [
     "AutomationRuleEvaluator_UserDefinedMetricPython",
     "AvgValueStatPublic",
     "BatchDelete",
-    "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
     "BlueprintPageHistory",
@@ -932,6 +937,9 @@ __all__ = [
     "ConsentResponse",
     "CountValueStatPublic",
     "CreateSessionResponse",
+    "Credential",
+    "CredentialPublic",
+    "CredentialWrite",
     "DashboardPagePublic",
     "DashboardPublic",
     "DashboardPublicScope",
@@ -1250,6 +1258,12 @@ __all__ = [
     "ProviderApiKeyProvider",
     "ProviderApiKeyPublic",
     "ProviderApiKeyPublicProvider",
+    "ProviderAuthConfig",
+    "ProviderAuthConfigPublic",
+    "ProviderAuthConfigPublicSendAs",
+    "ProviderAuthConfigSendAs",
+    "ProviderAuthConfigWrite",
+    "ProviderAuthConfigWriteSendAs",
     "RecentActivityItemPublic",
     "RecentActivityItemPublicType",
     "RecentActivityPagePublic",
@@ -1401,6 +1415,4 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
-    "WorkspaceVersion",
-    "WorkspaceVersionOpikVersion",
 ]

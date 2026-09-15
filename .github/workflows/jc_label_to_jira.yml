@@ -1,0 +1,98 @@
+name: JC Label to Jira
+
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+      && format('JC → Jira for issue {0} (manual)', inputs.issue_number)
+      || format('JC → Jira for issue {0}', github.event.issue.number) }}
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Issue number to sync
+        required: true
+        type: number
+      dry_run:
+        description: Resolve and report, but write nothing
+        required: false
+        default: false
+        type: boolean
+
+# Serialise per issue. Maintainers re-label to retry (issue #7760 saw five label
+# events in 34 minutes), and concurrent runs would both miss the dedupe check
+# and create. cancel-in-progress stays false so an in-flight create is never
+# killed halfway.
+concurrency:
+  group: jc-sync-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    # Two gates:
+    #
+    #  - `vars.JC_SYNC_ENABLED` must be 'true'. Merging this while the n8n
+    #    workflow still reacts to the same label would have both producers
+    #    create their own ticket, and GitHub concurrency cannot serialise an
+    #    external system. The variable is the cutover switch: set it only once
+    #    n8n is confirmed off. It gates the manual path too, so a dispatch
+    #    cannot bypass it.
+    #  - the label must be exactly `JC` (case-sensitive, matching the repo
+    #    label); every other label event is a no-op.
+    if: >-
+      vars.JC_SYNC_ENABLED == 'true'
+      && (github.event_name == 'workflow_dispatch'
+          || github.event.label.name == 'JC')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write # to comment the Jira link back on the issue
+
+    steps:
+      # Fail before touching the issue. Without this, an unconfigured repo would
+      # reach the sync, fail on a Jira 401, and leave a failure notice on a real
+      # issue — noise caused by setup, not by the issue.
+      - name: Check Jira credentials are configured
+        env:
+          JIRA_BASE_URL: ${{ vars.JC_JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JC_JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JC_JIRA_API_TOKEN }}
+        run: |
+          missing=""
+          [ -n "${JIRA_BASE_URL}" ]   || missing="${missing} vars.JC_JIRA_BASE_URL"
+          [ -n "${JIRA_USER_EMAIL}" ] || missing="${missing} secrets.JC_JIRA_USER_EMAIL"
+          [ -n "${JIRA_API_TOKEN}" ]  || missing="${missing} secrets.JC_JIRA_API_TOKEN"
+          if [ -n "${missing}" ]; then
+            echo "::error::JC → Jira is not configured. Missing:${missing}"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts/jc-sync
+          persist-credentials: false
+
+      - name: Sync issue to Jira
+        # Everything is passed through env: rather than interpolated into the
+        # run body — issue titles and bodies are attacker-controlled text.
+        # See https://docs.github.com/en/actions/reference/security/secure-use
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          JIRA_BASE_URL: ${{ vars.JC_JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JC_JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JC_JIRA_API_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            node .github/scripts/jc-sync/sync.mjs --issue="${ISSUE_NUMBER}" --dry-run
+          else
+            node .github/scripts/jc-sync/sync.mjs --issue="${ISSUE_NUMBER}"
+          fi

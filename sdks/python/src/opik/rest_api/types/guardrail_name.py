@@ -2,4 +2,6 @@
 
 import typing
 
-GuardrailName = typing.Union[typing.Literal["TOPIC", "PII"], typing.Any]
+GuardrailName = typing.Union[
+    typing.Literal["TOPIC", "PII", "LLM_JUDGE", "PROMPT_INJECTION", "CUSTOM_CLASSIFIER"], typing.Any
+]

@@ -4,6 +4,8 @@ export enum ReportStatus {
   FAILED = "failed",
 }
 
+export const OUT_OF_CREDITS_FAILURE_REASON = "out_of_credits";
+
 export interface RecommendedAction {
   name: string;
   description: string;
@@ -17,6 +19,7 @@ export interface OllieReport {
   content?: string;
   recommended_actions?: RecommendedAction[];
   status: ReportStatus;
+  failure_reason?: string;
   created_at: string;
   last_updated_at: string;
 }

@@ -12,6 +12,7 @@ import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,7 +36,8 @@ interface OllieReportDAO {
     @SqlUpdate("""
             UPDATE ollie_reports
             SET content = :content, session_id = :sessionId,
-                recommended_actions = :recommendedActions, status = :status
+                recommended_actions = :recommendedActions, status = :status,
+                failure_reason = :failureReason
             WHERE id = :id AND workspace_id = :workspaceId
                 AND project_id = :projectId AND status = 'pending'
             """)
@@ -45,12 +47,13 @@ interface OllieReportDAO {
             @Bind("content") String content,
             @Bind("sessionId") String sessionId,
             @Bind("recommendedActions") JsonNode recommendedActions,
-            @Bind("status") String status);
+            @Bind("status") String status,
+            @Bind("failureReason") String failureReason);
 
     @SqlQuery("""
             SELECT * FROM ollie_reports
             WHERE workspace_id = :workspaceId AND project_id = :projectId
-            ORDER BY created_at DESC
+            ORDER BY created_at DESC, id ASC
             LIMIT :limit OFFSET :offset
             """)
     List<OllieReport> findByProjectId(@Bind("workspaceId") String workspaceId,
@@ -65,9 +68,33 @@ interface OllieReportDAO {
     long countByProjectId(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId);
 
-    @SqlUpdate("""
-            UPDATE ollie_reports SET status = 'failed'
-            WHERE status = 'pending' AND created_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)
+    @SqlQuery("""
+            SELECT created_at FROM ollie_reports
+            WHERE id = :id AND workspace_id = :workspaceId
             """)
-    int failStaleReports();
+    Instant getCreatedAt(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+
+    @SqlQuery("""
+            SELECT workspace_id FROM ollie_reports
+            WHERE status = 'pending' AND created_at < DATE_SUB(NOW(), INTERVAL :staleMinutes MINUTE)
+            """)
+    List<String> findStalePendingWorkspaceIds(@Bind("staleMinutes") int staleMinutes);
+
+    @SqlQuery("""
+            SELECT workspace_id, COUNT(*) AS pending_count FROM ollie_reports
+            WHERE status = 'pending'
+            GROUP BY workspace_id
+            """)
+    @RegisterConstructorMapper(WorkspacePendingCount.class)
+    List<WorkspacePendingCount> countPendingByWorkspace();
+
+    record WorkspacePendingCount(String workspaceId, long pendingCount) {
+    }
+
+    @SqlUpdate("""
+            UPDATE ollie_reports SET status = 'failed', failure_reason = :failureReason
+            WHERE status = 'pending' AND created_at < DATE_SUB(NOW(), INTERVAL :staleMinutes MINUTE)
+            """)
+    int failStaleReports(@Bind("staleMinutes") int staleMinutes,
+            @Bind("failureReason") String failureReason);
 }

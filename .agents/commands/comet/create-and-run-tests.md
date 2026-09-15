@@ -48,7 +48,7 @@ This workflow will:
 - **Framework**: Vitest, Playwright, React Testing Library
 - **Test organization**: Co-located with components or in dedicated test directories
 - **Naming conventions**: `should render user profile`, `should handle form submission`
-- **Test location**: `apps/opik-frontend/src/` or `apps/opik-frontend/e2e/`
+- **Test location**: `apps/opik-frontend/src/` (unit) or `tests_end_to_end/e2e/` (cross-stack)
 
 #### **Python SDK**
 - **Framework**: pytest, fake_backend fixture, testlib utilities

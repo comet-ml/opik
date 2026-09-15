@@ -89,7 +89,7 @@ def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
                 model = run_dict["outputs"]["generations"][-1][-1]["message"]["kwargs"][
                     "response_metadata"
                 ][model_name_key]
-        except KeyError:
+        except (KeyError, IndexError):
             continue
 
     if model is None:

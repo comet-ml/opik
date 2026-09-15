@@ -2,8 +2,6 @@ import { create } from "zustand";
 import axiosInstance from "@/api/api";
 import { DEFAULT_USERNAME, isDefaultUser } from "@/constants/user";
 
-export type WorkspaceVersion = "v1" | "v2";
-
 type AppUser = {
   apiKey: string;
   userName: string;
@@ -18,10 +16,6 @@ type AppStore = {
   setActiveProjectId: (projectId: string | null) => void;
   isProjectLoading: boolean;
   setIsProjectLoading: (loading: boolean) => void;
-  workspaceVersion: WorkspaceVersion | null;
-  setWorkspaceVersion: (version: WorkspaceVersion) => void;
-  detectedWorkspaceVersion: WorkspaceVersion | null;
-  setDetectedWorkspaceVersion: (version: WorkspaceVersion | null) => void;
   previousWorkspaceName: string | null;
   setPreviousWorkspaceName: (workspaceName: string | null) => void;
   opikWorkspaceOverride: string | null;
@@ -48,12 +42,6 @@ const useAppStore = create<AppStore>((set) => ({
     set({ activeProjectId: projectId }),
   isProjectLoading: true,
   setIsProjectLoading: (loading: boolean) => set({ isProjectLoading: loading }),
-  workspaceVersion: null,
-  setWorkspaceVersion: (version: WorkspaceVersion) =>
-    set({ workspaceVersion: version }),
-  detectedWorkspaceVersion: null,
-  setDetectedWorkspaceVersion: (version: WorkspaceVersion | null) =>
-    set({ detectedWorkspaceVersion: version }),
   previousWorkspaceName: null,
   setPreviousWorkspaceName: (workspaceName: string | null) =>
     set({ previousWorkspaceName: workspaceName }),
@@ -70,12 +58,6 @@ export const useActiveProjectId = () =>
 
 export const useIsProjectLoading = () =>
   useAppStore((state) => state.isProjectLoading);
-
-export const useWorkspaceVersion = () =>
-  useAppStore((state) => state.workspaceVersion);
-
-export const useDetectedWorkspaceVersion = () =>
-  useAppStore((state) => state.detectedWorkspaceVersion);
 
 export const usePreviousWorkspaceName = () =>
   useAppStore((state) => state.previousWorkspaceName);

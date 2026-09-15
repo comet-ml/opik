@@ -45,12 +45,37 @@ export class DatasetItemsPage {
     return this.page.getByText(`v${version}`, { exact: true });
   }
 
+  /**
+   * Every rendered item row. Exposed so callers can use a retrying
+   * `toHaveCount(...)` instead of the one-shot `countItems()`, which reads
+   * whatever happens to be in the DOM at that instant.
+   */
+  itemRows(): Locator {
+    return this.itemsTableBody.locator('tr[data-row-id]');
+  }
+
   itemRow(index: number): Locator {
     return this.itemsTableBody.locator('tr[data-row-id]').nth(index);
   }
 
   itemRowById(id: string): Locator {
     return this.itemsTableBody.locator(`tr[data-row-id="${id}"]`);
+  }
+
+  /**
+   * The dataset item ids the grid is currently rendering, in row order.
+   *
+   * Read from `data-row-id` rather than from cell text: a caller checking which
+   * rows survived a scoped mutation needs identity, and the visible columns are
+   * user-configurable. Single page only — the table paginates at 10 by default,
+   * so a caller asserting an exact set must keep the fixture under a page.
+   */
+  async itemRowIds(): Promise<string[]> {
+    return test.step('Read rendered dataset item ids', async () => {
+      return this.itemsTableBody
+        .locator('tr[data-row-id]')
+        .evaluateAll((rows) => rows.map((r) => r.getAttribute('data-row-id') ?? ''));
+    });
   }
 
   async clickAddItem(): Promise<void> {
@@ -108,6 +133,51 @@ export class DatasetItemsPage {
       await this.page.getByTestId('dataset-items-bulk-delete-button').click();
       await this.draftBadge().waitFor({ state: 'visible' });
     });
+  }
+
+  /** Second tab of the dataset page: one row per committed version. */
+  async openVersionHistory(): Promise<void> {
+    return test.step('Open the Version history tab', async () => {
+      await this.page.getByRole('tab', { name: 'Version history' }).click();
+      const realRow = this.versionsTableBody.locator('tr[data-row-id]').first();
+      const emptyState = this.page.getByText('No version history yet');
+      await Promise.race([
+        realRow.waitFor({ state: 'visible' }),
+        emptyState.waitFor({ state: 'visible' }),
+      ]);
+    });
+  }
+
+  versionHistoryRow(versionName: string): Locator {
+    return this.versionsTableBody
+      .locator('tr[data-row-id]')
+      .filter({ has: this.page.getByRole('cell', { name: versionName, exact: true }) });
+  }
+
+  /**
+   * The "Item count" cell of a version row, as rendered — thousands-separated
+   * ("1,800"), because the column formats through toLocaleString().
+   *
+   * Addressed by the table's own `data-cell-id` (`<rowId>_<columnId>`) rather
+   * than a positional nth(): the version table has no per-cell testid, and
+   * column order is user-configurable, so position is not stable.
+   */
+  versionItemCount(versionName: string): Locator {
+    return this.versionHistoryRow(versionName).locator('[data-cell-id$="_items_total"]');
+  }
+
+  /**
+   * The "Changes" cell of a version row: the added / modified / deleted tags
+   * the column renders, e.g. `+ 1` for a version that added one item and
+   * changed nothing else, or `-` for a version with no counted change.
+   *
+   * Addressed by `data-cell-id` for the same reason as `versionItemCount`.
+   * This is the only place the per-version added/modified split is visible to
+   * a user — "Item count" alone cannot tell a version that added one item
+   * apart from one that added two and deleted one.
+   */
+  versionChangeSummary(versionName: string): Locator {
+    return this.versionHistoryRow(versionName).locator('[data-cell-id$="_change_summary"]');
   }
 
   async search(term: string): Promise<void> {
@@ -212,6 +282,10 @@ export class DatasetItemsPage {
 
   private get itemsTableBody(): Locator {
     return this.page.getByRole('tabpanel', { name: 'Records' }).locator('tbody');
+  }
+
+  private get versionsTableBody(): Locator {
+    return this.page.getByRole('tabpanel', { name: 'Version history' }).locator('tbody');
   }
 
   /** Panel stays mounted; open/closed is animated via CSS transform, not display/visibility. */

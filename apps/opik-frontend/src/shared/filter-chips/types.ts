@@ -22,6 +22,15 @@ export const chipOptionsValue = (
   value: ChipOptionsResult,
 ): ChipOptionsConfig => ({ value });
 
+/**
+ * `data-testid` for a chip trigger. Chip ids are snake_case domain keys
+ * (`with_errors`, `feedback_scores`); test ids are kebab-case by convention, so
+ * only the rendered selector is normalised — the id itself stays untouched for
+ * filter state and lookup.
+ */
+export const chipTestId = (chipId: string): string =>
+  `filter-chip-${chipId.replace(/_/g, "-")}`;
+
 export const resolveChipOptions = (
   config: ChipOptionsConfig | undefined,
 ): ChipOptionsResult => {

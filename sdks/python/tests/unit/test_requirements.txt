@@ -6,3 +6,4 @@ scipy
 textstat
 opentelemetry-api
 opentelemetry-sdk
+botocore

@@ -1,8 +1,8 @@
 import { test, expect } from '@e2e/fixtures';
 import { LogsPage } from '@e2e/pom/logs.page';
 
-test.describe('Trace spans — panel depth', { tag: ['@t2-cuj', '@trace-explore'] }, () => {
-  test('Span tree renders the seeded nested hierarchy with working expand/collapse', async ({
+test.describe('Trace spans — panel depth', { tag: ['@t2-cuj', '@area:traces'] }, () => {
+  test('Span tree renders the seeded nested hierarchy with working expand/collapse', { tag: ['@cap:traces.span-tree-expand'] }, async ({
     tracedAgent,
     project,
     page,
@@ -35,7 +35,7 @@ test.describe('Trace spans — panel depth', { tag: ['@t2-cuj', '@trace-explore'
     });
   });
 
-  test('Selecting the LLM span shows its model, token usage, and cost', async ({
+  test('Selecting the LLM span shows its model, token usage, and cost', { tag: ['@cap:traces.span-model-cost-tokens'] }, async ({
     tracedAgent,
     project,
     page,
@@ -62,7 +62,7 @@ test.describe('Trace spans — panel depth', { tag: ['@t2-cuj', '@trace-explore'
     });
   });
 
-  test('A tag can be added to a trace from the panel and removed', async ({
+  test('A tag can be added to a trace from the panel and removed', { tag: ['@cap:traces.trace-tag-add-remove'] }, async ({
     tracedAgent,
     project,
     page,
@@ -85,7 +85,7 @@ test.describe('Trace spans — panel depth', { tag: ['@t2-cuj', '@trace-explore'
     });
   });
 
-  test('A manual feedback score can be added, edited, and deleted from the Annotate panel', async ({
+  test('A manual feedback score can be added, edited, and deleted from the Annotate panel', { tag: ['@cap:traces.manual-feedback-score'] }, async ({
     tracedAgent,
     feedbackDefinition,
     project,

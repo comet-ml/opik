@@ -3,7 +3,7 @@ from typing import List, Callable, Optional
 from . import evaluation_result
 from ...api_objects import opik_client
 from ...api_objects.conversation import conversation_thread, conversation_factory
-from ...rest_api import TraceThread, JsonListStringPublic
+from ...rest_api import TraceThread, JsonListStringPublic, TracePublic
 from ...types import BatchFeedbackScoreDict
 from ...api_objects.threads import threads_client
 
@@ -37,6 +37,9 @@ def load_conversation_thread(
     max_results: int,
     project_name: Optional[str],
     client: opik_client.Opik,
+    trace_context_transform: Optional[
+        Callable[[TracePublic], Optional[List[str]]]
+    ] = None,
 ) -> conversation_thread.ConversationThread:
     traces = client.search_traces(
         project_name=project_name,
@@ -48,4 +51,5 @@ def load_conversation_thread(
         traces=traces,
         input_transform=trace_input_transform,
         output_transform=trace_output_transform,
+        context_transform=trace_context_transform,
     )

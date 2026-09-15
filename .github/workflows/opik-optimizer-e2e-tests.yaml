@@ -18,11 +18,12 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  packages: read
 
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
   HF_HUB_ENABLE_PROGRESS_BARS: "0"
   HF_HUB_DISABLE_TELEMETRY: "1"
   OPIK_URL_OVERRIDE: http://localhost:8080
@@ -32,6 +33,13 @@ env:
 
 jobs:
     build-opik:
+        # The reusable build workflow pushes images to GHCR; pass down the
+        # packages: write grant here rather than at the workflow level (a
+        # called workflow's permissions can only be maintained or reduced from
+        # the caller's, never elevated).
+        permissions:
+          contents: read
+          packages: write
         uses: ./.github/workflows/build_e2e_docker.yaml
         with:
           include_guardrails: true
@@ -53,10 +61,10 @@ jobs:
 
         steps:
         - name: Check out code
-          uses: actions/checkout@v6
+          uses: actions/checkout@v7
 
         - name: Login to GHCR
-          uses: docker/login-action@v3
+          uses: docker/login-action@v4
           with:
             registry: ghcr.io
             username: ${{ github.actor }}
@@ -74,12 +82,12 @@ jobs:
             docker tag "ghcr.io/comet-ml/opik/opik-guardrails-backend:$TAG" ghcr.io/comet-ml/opik/opik-guardrails-backend:latest
 
         - name: Setup Python ${{matrix.python_version}}
-          uses: actions/setup-python@v5
+          uses: actions/setup-python@v7
           with:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v8.3.2
+          uses: astral-sh/setup-uv@v10.0.1
 
         - name: Run latest Opik server
           env:
@@ -105,7 +113,7 @@ jobs:
             ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
 
         - name: Cache HuggingFace datasets
-          uses: actions/cache@v4
+          uses: actions/cache@v6
           with:
             path: ~/.cache/huggingface
             key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
@@ -113,7 +121,7 @@ jobs:
               hf-datasets-
 
         - name: Cache LiteLLM cache
-          uses: actions/cache@v4
+          uses: actions/cache@v6
           with:
             path: ~/.litellm_cache
             key: litellm-cache-${{ hashFiles('**/requirements.txt', '**/pyproject.toml', '**/setup.py') }}
@@ -161,18 +169,18 @@ jobs:
 
         steps:
         - name: Check out code
-          uses: actions/checkout@v6
+          uses: actions/checkout@v7
 
         - name: Setup Python 3.12
-          uses: actions/setup-python@v5
+          uses: actions/setup-python@v7
           with:
             python-version: "3.12"
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v8.3.2
+          uses: astral-sh/setup-uv@v10.0.1
 
         - name: Cache HuggingFace datasets
-          uses: actions/cache@v4
+          uses: actions/cache@v6
           with:
             path: ~/.cache/huggingface
             key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}

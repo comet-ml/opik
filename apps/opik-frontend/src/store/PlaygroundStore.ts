@@ -1,8 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import pick from "lodash/pick";
+import mapValues from "lodash/mapValues";
 
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
+import { restoreMissingConfigKeys } from "@/lib/playground";
 import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
 import { DATASET_TYPE } from "@/types/datasets";
@@ -467,6 +469,25 @@ const usePlaygroundStore = create<PlaygroundStore>()(
     }),
     {
       name: "PLAYGROUND_STATE",
+      // Normalizes on every load rather than through `migrate`: persisted blobs carry no version
+      // (this store never set one), and zustand only migrates a blob whose stored version is a
+      // number — so a migrate hook would skip exactly the states that need repairing. Cheap and
+      // idempotent, since restoreMissingConfigKeys returns the prompt untouched when it is complete.
+      merge: (persisted, current) => {
+        const state = {
+          ...current,
+          ...(persisted as Partial<PlaygroundStore>),
+        };
+
+        if (!state.promptMap) {
+          return state;
+        }
+
+        return {
+          ...state,
+          promptMap: mapValues(state.promptMap, restoreMissingConfigKeys),
+        };
+      },
       partialize: (state) => {
         /* eslint-disable @typescript-eslint/no-unused-vars */
         const {
@@ -529,31 +550,6 @@ export const useFirstOutputUsageByPromptId = (promptId: string) =>
       : undefined;
   });
 
-export const useOutputValueByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-) => {
-  return useOutputByPromptDatasetItemId(promptId, datasetItemId)?.value ?? null;
-};
-
-export const useOutputLoadingByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-) => {
-  return (
-    useOutputByPromptDatasetItemId(promptId, datasetItemId)?.isLoading ?? false
-  );
-};
-
-export const useOutputStaleStatusByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-) => {
-  return (
-    useOutputByPromptDatasetItemId(promptId, datasetItemId)?.stale ?? false
-  );
-};
-
 export const useIsPromptOutputStale = (promptId: string) =>
   usePlaygroundStore((state) => {
     const entry = state.outputMap?.[promptId];
@@ -594,23 +590,6 @@ export const useUpdateOutput = () =>
 
 export const useUpdateOutputTraceId = () =>
   usePlaygroundStore((state) => state.updateOutputTraceId);
-
-export const useTraceIdByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-) => {
-  return (
-    useOutputByPromptDatasetItemId(promptId, datasetItemId)?.traceId ?? null
-  );
-};
-
-export const useSelectedRuleIdsByPromptDatasetItemId = (
-  promptId: string,
-  datasetItemId?: string,
-): string[] | null | undefined => {
-  return useOutputByPromptDatasetItemId(promptId, datasetItemId)
-    ?.selectedRuleIds;
-};
 
 export const useDatasetVariables = () =>
   usePlaygroundStore((state) => state.datasetVariables);

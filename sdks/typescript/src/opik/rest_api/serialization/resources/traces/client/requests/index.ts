@@ -1,3 +1,4 @@
+export { BatchDeleteByProject } from "./BatchDeleteByProject.js";
 export { DeleteThreadFeedbackScores } from "./DeleteThreadFeedbackScores.js";
 export { DeleteTraceThreads } from "./DeleteTraceThreads.js";
 export { FeedbackScoreBatchThread } from "./FeedbackScoreBatchThread.js";

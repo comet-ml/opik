@@ -132,9 +132,9 @@ public class MessageContentNormalizer {
             // Extract and add image URL
             var url = matcher.group(1).trim();
             if (!url.isEmpty()) {
-                // Unescape HTML entities for backward compatibility with URLs that were escaped by Mustache templates on the frontend
-                // RECOMMENDED: Use {{{variable}}} (triple braces) or {{&variable}} in Mustache templates on the frontend
-                // to prevent HTML escaping of URLs before sending them to the backend
+                // Defensive: runs on every image URL reaching chat completions, whatever the source.
+                // Template rendering itself no longer escapes (OPIK-7354), so entities now only arrive
+                // from URLs that were already stored escaped.
                 var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
                 contentList.add(Content.builder()
                         .type(ContentType.IMAGE_URL)

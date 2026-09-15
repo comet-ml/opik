@@ -14,9 +14,24 @@ import java.util.concurrent.TimeUnit;
  * <p>{@code enabled} is an operational kill-switch: when {@code false}, ids are not checked against
  * {@code window}. {@code window} bounds the embedded-timestamp distance from now, so a misbehaving
  * client can't land a row in a far-future partition.
+ *
+ * <p>{@code auditOnly} adds a third, shadow state on top of the {@code enabled} switch. It only takes
+ * effect when {@code enabled} is {@code true}: instead of rejecting out-of-window ids, the validator
+ * records the reject-rate metric (tagged by workspace) and logs, but lets the write through. This
+ * surfaces offending clients in real time without breaking ingestion. The effective mode is:
+ * {@code enabled=false} → disabled (no-op); {@code enabled=true, auditOnly=true} → audit (count + log,
+ * no reject); {@code enabled=true, auditOnly=false} → reject (HTTP 400).
+ *
+ * <p>{@code bypassWindow} is a wider override of {@code window}, applied only to the workspaces on the
+ * allow-list that {@link com.comet.opik.infrastructure.db.UuidV7TimestampValidator} reads from the
+ * environment, so that internal demo workspaces can build projects spanning time. It is inert while that
+ * allow-list is empty, which is the default, and it is bounded exactly like {@code window}: an
+ * allow-listed workspace is still rejected beyond it.
  */
 @Builder(toBuilder = true)
 public record UuidValidationConfig(
         boolean enabled,
-        @NotNull @MinDuration(value = 12, unit = TimeUnit.HOURS) @MaxDuration(value = 45, unit = TimeUnit.DAYS) Duration window) {
+        boolean auditOnly,
+        @NotNull @MinDuration(value = 12, unit = TimeUnit.HOURS) @MaxDuration(value = 45, unit = TimeUnit.DAYS) Duration window,
+        @NotNull @MinDuration(value = 12, unit = TimeUnit.HOURS) @MaxDuration(value = 45, unit = TimeUnit.DAYS) Duration bypassWindow) {
 }

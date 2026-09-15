@@ -1,4 +1,4 @@
-import useAppStore, { useWorkspaceVersion } from "@/store/AppStore";
+import useAppStore from "@/store/AppStore";
 import useAllWorkspaces from "./useAllWorkspaces";
 import useOrganizations from "./useOrganizations";
 import useUser from "./useUser";
@@ -7,7 +7,6 @@ import { ORGANIZATION_PLAN_ENTERPRISE, ORGANIZATION_ROLE_TYPE } from "./types";
 
 const useAiSpendManager = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const workspaceVersion = useWorkspaceVersion();
 
   const { data: user } = useUser();
   const isEnabled = !!user?.loggedIn;
@@ -34,9 +33,7 @@ const useAiSpendManager = () => {
     organization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
   return {
-    isPending:
-      isEnabled &&
-      (isOrganizationsPending || isWorkspacesPending || !workspaceVersion),
+    isPending: isEnabled && (isOrganizationsPending || isWorkspacesPending),
     organization,
     spendWorkspace,
     spendWorkspaceName: spendWorkspace?.workspaceName,
@@ -44,9 +41,7 @@ const useAiSpendManager = () => {
     isEnterprise,
     isOrganizationAdmin,
     hasAccess:
-      Boolean(spendWorkspace) &&
-      Boolean(organization?.costIntelligenceEnabled) &&
-      workspaceVersion === "v2",
+      Boolean(spendWorkspace) && Boolean(organization?.costIntelligenceEnabled),
   };
 };
 

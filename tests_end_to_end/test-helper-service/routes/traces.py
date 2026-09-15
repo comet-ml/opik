@@ -376,6 +376,46 @@ def create_rich_trace_for_sidebar():
     )
 
 
+@traces_bp.route("/create-trace-with-agent-graph-span", methods=["POST"])
+def create_trace_with_agent_graph_span():
+    data = request.get_json()
+    validate_required_fields(data, ["project_name", "trace_name"])
+
+    project_name = data["project_name"]
+    trace_name = data["trace_name"]
+
+    client = get_opik_client()
+
+    # Fixed start/end time so the sidebar always renders a "0s" duration badge.
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    trace = client.trace(
+        name=trace_name,
+        project_name=project_name,
+        input={"messages": [{"role": "user", "content": "Plan a trip to Paris"}]},
+        output={"choices": [{"message": {"role": "assistant", "content": "Here is your itinerary."}}]},
+        start_time=now,
+        end_time=now,
+    )
+
+    span_name = "orchestrator"
+    trace.span(
+        name=span_name,
+        input={"input": "Plan a trip to Paris"},
+        output={"output": "Here is your itinerary."},
+        start_time=now,
+        end_time=now,
+        metadata={
+            "_opik_graph_definition": {
+                "format": "mermaid",
+                "data": "graph TD;\n  Orchestrator-->Researcher;\n  Orchestrator-->Planner;\n  Planner-->Booking;",
+            },
+        },
+    )
+
+    return success_response({"span_name": span_name})
+
+
 @traces_bp.route("/get-traces", methods=["POST"])
 def get_traces():
     data = request.get_json()

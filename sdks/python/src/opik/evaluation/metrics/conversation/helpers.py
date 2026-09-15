@@ -77,8 +77,31 @@ def extract_turns_windows_from_conversation(
     return turns_windows
 
 
+def render_turns_for_prompt(
+    conversation: types.Conversation, include_context: bool = False
+) -> str:
+    """Renders a conversation for interpolation into a judge prompt.
+
+    ``role`` and ``content`` are always emitted. Messages may carry extra keys -
+    today ``context``, the documents an answer was generated from - and prompts must
+    opt into those explicitly rather than inherit them by stringifying the message
+    dicts, which would silently change what the judge sees whenever a key is added.
+
+    With ``include_context``, a message's documents are rendered next to the message
+    they belong to, so the judge sees each answer alongside what it was based on.
+    """
+    rendered = []
+    for message in conversation:
+        turn = {"role": message["role"], "content": message["content"]}
+        if include_context and message.get("context"):
+            turn["context"] = message["context"]  # type: ignore[assignment]
+        rendered.append(turn)
+    return str(rendered)
+
+
 __all__ = [
     "get_turns_in_sliding_window",
     "merge_turns",
     "extract_turns_windows_from_conversation",
+    "render_turns_for_prompt",
 ]

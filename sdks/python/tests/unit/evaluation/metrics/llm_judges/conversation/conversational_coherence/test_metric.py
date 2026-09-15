@@ -4,8 +4,10 @@ from unittest import mock
 import pytest
 
 from opik import exceptions
+from opik.evaluation.metrics.conversation import helpers as conversation_helpers
 from opik.evaluation.metrics.conversation.llm_judges.conversational_coherence import (
     schema,
+    templates,
 )
 from opik.evaluation.metrics.conversation.llm_judges.conversational_coherence.metric import (
     ConversationalCoherenceMetric,
@@ -315,3 +317,138 @@ async def test_score__no_user_assistant_turns__raises_MetricComputationError__as
     )
     with pytest.raises(exceptions.MetricComputationError):
         await metric.ascore(conversation=conversation)
+
+
+@pytest.fixture
+def grounded_conversation():
+    return [
+        {"role": "user", "content": "What is the overdraft fee?"},
+        {
+            "role": "assistant",
+            "content": "It is 5% of the overdrawn amount.",
+            "context": ["The overdraft fee is 5% of the overdrawn amount."],
+        },
+        {"role": "user", "content": "How long do I have to repay?"},
+        {
+            "role": "assistant",
+            "content": "You can repay whenever you like.",
+            "context": ["Customers must repay an overdraft within 30 days."],
+        },
+    ]
+
+
+def _make_with_documents_side_effect():
+    """First window judged relevant, second one not."""
+    verdicts = iter(["yes", "no"])
+
+    def side_effect(*args, **kwargs):
+        response_format = kwargs.get("response_format")
+        if response_format == schema.EvaluateConversationCoherenceResponse:
+            verdict = next(verdicts)
+            return _assistant_message(
+                json.dumps(
+                    {
+                        "verdict": verdict,
+                        "reason": None
+                        if verdict == "yes"
+                        else "Contradicts the documents.",
+                    }
+                )
+            )
+        elif response_format == schema.ScoreReasonResponse:
+            return _assistant_message(
+                json.dumps({"reason": "Because of the documents."})
+            )
+        return _assistant_message("{}")
+
+    return side_effect
+
+
+def test_score__messages_with_context__still_returns_one_coherence_score(
+    mock_model, grounded_conversation
+):
+    """Documents are background for the judge; the metric still returns one score."""
+    mock_model.generate_chat_completion.side_effect = _make_with_documents_side_effect()
+
+    metric = ConversationalCoherenceMetric(model=mock_model, track=False)
+    result = metric.score(grounded_conversation)
+
+    assert not isinstance(result, list)
+    assert result.name == "conversational_coherence_score"
+    assert result.value == 0.5  # one of two windows judged relevant
+
+    used_formats = {
+        call.kwargs.get("response_format")
+        for call in mock_model.generate_chat_completion.call_args_list
+    }
+    assert schema.EvaluateConversationCoherenceResponse in used_formats
+
+
+def test_score__messages_with_context__uses_the_with_documents_prompt(
+    mock_model, grounded_conversation
+):
+    """The documents have to actually reach the judge."""
+    mock_model.generate_chat_completion.side_effect = _make_with_documents_side_effect()
+
+    ConversationalCoherenceMetric(model=mock_model, track=False).score(
+        grounded_conversation
+    )
+
+    prompts = [
+        call.kwargs["messages"][1]["content"]
+        for call in mock_model.generate_chat_completion.call_args_list
+        if call.kwargs.get("response_format")
+        == schema.EvaluateConversationCoherenceResponse
+    ]
+    assert any("'context':" in prompt for prompt in prompts)
+    assert any(
+        "The overdraft fee is 5% of the overdrawn amount." in prompt
+        for prompt in prompts
+    )
+
+
+def test_score__messages_without_context__uses_the_original_prompt(
+    mock_model, simple_conversation
+):
+    """Without documents the metric behaves exactly as before."""
+    mock_model.generate_chat_completion.side_effect = (
+        _all_relevant_responses_side_effect
+    )
+
+    metric = ConversationalCoherenceMetric(model=mock_model, track=False)
+    result = metric.score(simple_conversation)
+
+    assert not isinstance(result, list)
+    assert result.name == "conversational_coherence_score"
+    prompts = [
+        call.kwargs["messages"][0]["content"]
+        for call in mock_model.generate_chat_completion.call_args_list
+    ]
+    assert not any("RETRIEVED DOCUMENTS" in prompt for prompt in prompts)
+
+
+def test_prompts__context_only_where_it_is_asked_for():
+    """Documents reach a prompt only when it opted in, never by stringifying messages."""
+    conversation = [
+        {"role": "user", "content": "What is the overdraft fee?"},
+        {"role": "assistant", "content": "5%.", "context": ["SECRET-DOC"]},
+        {"role": "user", "content": "Thanks!"},
+        {"role": "assistant", "content": "You are welcome."},
+    ]
+    window = conversation_helpers.extract_turns_windows_from_conversation(
+        conversation=conversation, window_size=10
+    )[-1]
+
+    no_documents_prompt = templates.build_evaluate_conversation_messages(
+        sliding_window=window
+    )[1]["content"]
+    assert "SECRET-DOC" not in no_documents_prompt
+
+    # The context-aware prompt shows each message's documents next to that message.
+    with_documents_prompt = (
+        templates.build_evaluate_conversation_with_documents_messages(
+            sliding_window=window
+        )[1]["content"]
+    )
+    assert "SECRET-DOC" in with_documents_prompt
+    assert "'context':" in with_documents_prompt

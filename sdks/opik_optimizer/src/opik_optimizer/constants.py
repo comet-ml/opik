@@ -53,6 +53,16 @@ DEFAULT_TOOL_CALL_MAX_TOOLS_TO_OPTIMIZE = 3
 DEFAULT_N_SAMPLES_STRATEGY = "random_sorted"
 DEFAULT_N_SAMPLES_MINIBATCH = None
 
+# GEPA delegates its whole search loop to gepa.optimize(), so Opik's
+# runtime.should_stop never runs during the search. These stop conditions are
+# wired into gepa.optimize() as stop_callbacks instead. The stall stopper ends
+# a run after this many consecutive engine iterations without a full-eval
+# improvement (the strict-acceptance gate can otherwise spin on mini-batches,
+# burning metric calls until the budget is exhausted). Set the
+# `no_improvement_iterations` extra_param to 0 to disable the stall stopper; an
+# absent/None value uses this default.
+DEFAULT_GEPA_NO_IMPROVEMENT_ITERATIONS = 10
+
 # Benchmarks defaults.
 DEFAULT_BENCHMARK_MAX_CONCURRENT = 5
 DEFAULT_BENCHMARK_WORKER_TIMEOUT_SECONDS = 60 * 60 * 12  # 12 hours

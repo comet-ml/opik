@@ -13,6 +13,7 @@ type UseProjectWithStatisticsParams = {
   page: number;
   size: number;
   logsSource?: LOGS_SOURCE;
+  windowDays?: number;
 };
 
 type UseProjectWithStatisticsResponse = {
@@ -29,19 +30,22 @@ export default function useProjectWithStatisticsList(
   params: UseProjectWithStatisticsParams,
   config: Omit<UseQueryOptions, "queryKey" | "queryFn">,
 ) {
+  const { windowDays, ...projectsParams } = params;
+
   const {
     data: projectsData,
     isPending,
     isPlaceholderData,
     isFetching,
-  } = useProjectsList(params, {
+  } = useProjectsList(projectsParams, {
     ...config,
     placeholderData: keepPreviousData,
   } as never);
 
   const { data: projectsStatisticData } = useProjectStatisticsList(
     {
-      ...params,
+      ...projectsParams,
+      windowDays,
     },
     {
       ...config,

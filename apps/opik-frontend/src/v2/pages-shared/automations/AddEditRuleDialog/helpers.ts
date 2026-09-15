@@ -5,6 +5,10 @@ import {
   EVALUATORS_RULE_TYPE,
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
+import {
+  RESERVED_SPAN_EVALUATOR_VARIABLES,
+  RESERVED_TRACE_EVALUATOR_VARIABLES,
+} from "@/constants/llm";
 import { Filter } from "@/types/filters";
 import { ColumnData } from "@/types/shared";
 
@@ -84,3 +88,20 @@ export const normalizeFilters = (
     };
   }) as Filter[];
 };
+
+/**
+ * The reserved-variable set a Python-metric editor must pass for {@code scope}.
+ *
+ * <p>Span scope gets the empty {@link RESERVED_SPAN_EVALUATOR_VARIABLES}: a span has no
+ * sub-spans, and {@code PythonCodeDetailsSpanFormSchema} accepts only
+ * {@code input}/{@code output}/{@code metadata} paths — so auto-filling the trace
+ * {@code spans} sentinel would fail validation on a row the sentinel filter hides from
+ * the mapping list, leaving the dialog unsubmittable with nothing visible to correct.
+ * Thread scope has no argument mapping at all, so the value is unused there.
+ */
+export const reservedPythonMetricVariablesForScope = (
+  scope: EVALUATORS_RULE_SCOPE,
+): Readonly<Record<string, string>> =>
+  scope === EVALUATORS_RULE_SCOPE.span
+    ? RESERVED_SPAN_EVALUATOR_VARIABLES
+    : RESERVED_TRACE_EVALUATOR_VARIABLES;

@@ -13,6 +13,6 @@ export interface PromptVersionRetrieveDetail {
     environment?: string;
     /** If provided, resolves to the version with this sequential number (e.g. v3); mutually exclusive with commit and environment */
     versionNumber?: string;
-    /** If provided, scopes the search to the specified project */
+    /** If provided, scopes the search to the specified project; prompts belonging to other projects are never matched, and an unknown project name returns 404. Legacy prompts that are not scoped to any project are still matched as a deprecated fallback, signalled by the X-Opik-Deprecation response header. */
     projectName?: string;
 }

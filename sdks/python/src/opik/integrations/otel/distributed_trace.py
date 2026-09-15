@@ -4,6 +4,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 from opik import id_helpers
 from opik.integrations.otel import types as otel_types
 from opik.integrations.otel import attributes as otel_attributes
+from opik import analytics
 
 if TYPE_CHECKING:
     from opentelemetry import trace
@@ -106,6 +107,7 @@ def attach_to_parent(span: "trace.Span", http_headers: Dict[str, str]) -> bool:
         True if the distributed trace headers were successfully extracted
             and attached, otherwise False.
     """
+    analytics.track_event("integration", "otel")
     opik_distributed_trace_headers = extract_opik_distributed_trace_attributes(
         http_headers
     )

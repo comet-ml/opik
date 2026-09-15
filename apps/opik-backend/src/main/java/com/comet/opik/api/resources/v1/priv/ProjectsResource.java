@@ -73,6 +73,7 @@ import static com.comet.opik.api.Project.ProjectPage;
 import static com.comet.opik.api.Project.View;
 import static com.comet.opik.domain.ProjectMetricsService.ERR_START_BEFORE_END;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+import static com.comet.opik.utils.ValidationUtils.validateTimeRangeParameters;
 
 @Path("/v1/private/projects")
 @Produces(MediaType.APPLICATION_JSON)
@@ -353,13 +354,19 @@ public class ProjectsResource {
             @QueryParam("size") @Min(1) @DefaultValue(PAGE_SIZE) int size,
             @QueryParam("name") @Schema(description = "Filter projects by name (partial match, case insensitive)") String name,
             @QueryParam("filters") String filters,
+            @QueryParam("from_time") @Schema(description = "When set, scope the project metrics from this time (ISO-8601 format); omitted keeps the all-time aggregates") Instant fromTime,
+            @QueryParam("to_time") @Schema(description = "Scope the project metrics up to this time (ISO-8601 format). Must be after 'from_time'.") Instant toTime,
             @QueryParam("sorting") String sorting) {
+
+        validateTimeRangeParameters(fromTime, toTime);
 
         var traceFilters = filtersFactory.newFilters(filters, TraceFilter.LIST_TYPE_REFERENCE);
 
         var criteria = ProjectCriteria.builder()
                 .projectName(name)
                 .filters(traceFilters)
+                .fromTime(fromTime)
+                .toTime(toTime)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

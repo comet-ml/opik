@@ -1,8 +1,9 @@
-"""Terminal rendering for ``opik configure status`` and ``opik mcp status``.
+"""Terminal rendering for the ``opik`` status commands.
 
-Presentation only — no business logic lives here. Command handlers gather the
-data (an ``OpikConfig`` and, for MCP, the host statuses computed by
-``configurator.mcp.status``) and hand it to these functions to be displayed.
+Covers ``opik configure status`` and ``opik mcp status``. Presentation only — no
+business logic lives here. Command handlers gather the data (an ``OpikConfig``,
+the host statuses computed by ``configurator.mcp.status``) and hand it to these
+functions to be displayed.
 """
 
 import pathlib
@@ -65,7 +66,7 @@ def render_config_summary(config: opik_config.OpikConfig) -> None:
 def render_mcp_status(
     config: opik_config.OpikConfig, host_statuses: List[mcp_status.HostStatus]
 ) -> None:
-    """Print the Opik config summary plus each assistant that has the MCP server.
+    """Print the Opik config summary plus each AI client that has the MCP server.
 
     Assistants without an Opik MCP registration are omitted.
     """
@@ -74,12 +75,12 @@ def render_mcp_status(
 
     configured = [host for host in host_statuses if host.registered]
     if not configured:
-        console.print("The Opik MCP server is not configured for any AI assistant.")
+        console.print("The Opik MCP server is not configured for any AI client.")
         console.print("Run [bold]opik mcp configure[/bold] to set it up.")
         return
 
     count = len(configured)
-    noun = "assistant" if count == 1 else "assistants"
+    noun = "client" if count == 1 else "clients"
     console.print(
         text.Text(f"Opik MCP server — configured for {count} AI {noun}:", style="bold")
     )

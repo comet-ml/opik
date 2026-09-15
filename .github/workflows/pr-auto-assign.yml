@@ -22,13 +22,17 @@ jobs:
     steps:
       - name: Determine user to assign
         id: get_assignee_user
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          SENDER_LOGIN: ${{ github.event.sender.login }}
+          PR_AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
         run: |
           ASSIGN_USER=""
           EVENT_ACTOR=""
-          if [[ "${{ github.event.action }}" == "synchronize" ]]; then
-            EVENT_ACTOR="${{ github.event.sender.login }}"
+          if [[ "${EVENT_ACTION}" == "synchronize" ]]; then
+            EVENT_ACTOR="${SENDER_LOGIN}"
           else
-            EVENT_ACTOR="${{ github.event.pull_request.user.login }}"
+            EVENT_ACTOR="${PR_AUTHOR_LOGIN}"
           fi
 
           KNOWN_BOTS=("dependabot[bot]" "github-actions[bot]" "github-copilot[bot]" "copilot-bot[bot]")

@@ -1097,15 +1097,25 @@ def _build_structured_output_lookup(prices: dict) -> dict[str, bool]:
 
 
 def _get_vertexai_models_from_prices(prices: dict) -> list[tuple[str, bool]]:
-    """Extract VertexAI models from the prices JSON."""
+    """Extract VertexAI models from the prices JSON.
+
+    LiteLLM spreads Vertex Gemini entries across several `litellm_provider` tags with no clear
+    rule, so all of them have to be read. Missing one silently hides whole model families: the
+    flash-lite variants are tagged `vertex_ai-language-models`, so leaving that tag out kept them
+    out of the dropdown entirely. The `vertex_ai/gemini-` guard below is what keeps the wider tags
+    from pulling in non-Gemini models.
+    """
     vertexai_models = extract_models_from_prices(
         prices, "vertex_ai-chat-models", [], key_prefix=""
     )
     vertexai_models_alt = extract_models_from_prices(
         prices, "vertex_ai", GEMINI_EXCLUDE_PATTERNS, key_prefix=""
     )
+    vertexai_models_language = extract_models_from_prices(
+        prices, "vertex_ai-language-models", GEMINI_EXCLUDE_PATTERNS, key_prefix=""
+    )
     vertexai_all = {}
-    for k, so in vertexai_models + vertexai_models_alt:
+    for k, so in vertexai_models + vertexai_models_alt + vertexai_models_language:
         if k.startswith("vertex_ai/gemini-"):
             vertexai_all[k] = vertexai_all.get(k, False) or so
     return sorted(vertexai_all.items(), key=lambda x: x[0])

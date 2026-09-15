@@ -13,6 +13,7 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Mono;
@@ -49,10 +50,14 @@ public class CipxTraceIdentityDAO {
             @NonNull String repository,
             @NonNull String sessionId,
             @NonNull String harness,
+            @NonNull String deviceId,
             int schemaVersion,
             @NonNull String billingMode,
             @NonNull String plan,
             @NonNull String planUsageStatus,
+            @NonNull String organizationType,
+            @NonNull String seatTier,
+            @NonNull String billingType,
             @NonNull String branch,
             @NonNull String headShaStart,
             @NonNull String headShaEnd,
@@ -63,7 +68,8 @@ public class CipxTraceIdentityDAO {
             int linesAdded,
             int linesDeleted) {
 
-        public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
+        public static TraceIdentityRow from(UUID traceId, UUID projectId, JsonNode metadata, Instant startTime,
+                String deviceId) {
             JsonNode session = metadata.path("cipx").path("session");
             JsonNode identity = session.path("identity");
             JsonNode repository = session.path("repository");
@@ -81,10 +87,14 @@ public class CipxTraceIdentityDAO {
                     .repository(repository.path("remote").asText(""))
                     .sessionId(session.path("session_id").asText(""))
                     .harness(session.path("harness").asText(""))
+                    .deviceId(StringUtils.defaultString(deviceId))
                     .schemaVersion(session.path("schema_version").asInt(0))
                     .billingMode(identity.path("billing_mode").asText(""))
                     .plan(identity.path("plan").asText(""))
                     .planUsageStatus(identity.path("plan_usage_status").asText(""))
+                    .organizationType(identity.path("organization_type").asText(""))
+                    .seatTier(identity.path("seat_tier").asText(""))
+                    .billingType(identity.path("billing_type").asText(""))
                     .branch(repository.path("branch").asText(""))
                     .headShaStart(repository.path("head_sha").asText(""))
                     .headShaEnd(repository.path("head_sha_end").asText(""))
@@ -103,8 +113,8 @@ public class CipxTraceIdentityDAO {
     private static final String INSERT = """
             INSERT INTO cipx_trace_identities
                 (workspace_id, project_id, trace_id, start_time, user_uuid,
-                 user_email, user_display_name, repository, session_id, harness, schema_version,
-                 billing_mode, plan, plan_usage_status,
+                 user_email, user_display_name, repository, session_id, harness, device_id, schema_version,
+                 billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                  branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                  files_added, files_deleted, lines_added, lines_deleted)
             SETTINGS log_comment = '<log_comment>'
@@ -121,10 +131,14 @@ public class CipxTraceIdentityDAO {
                         :repository<item.index>,
                         :session_id<item.index>,
                         :harness<item.index>,
+                        :device_id<item.index>,
                         :schema_version<item.index>,
                         :billing_mode<item.index>,
                         :plan<item.index>,
                         :plan_usage_status<item.index>,
+                        :organization_type<item.index>,
+                        :seat_tier<item.index>,
+                        :billing_type<item.index>,
                         :branch<item.index>,
                         :head_sha_start<item.index>,
                         :head_sha_end<item.index>,
@@ -163,7 +177,7 @@ public class CipxTraceIdentityDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 22 parameters per row tuple in template order.
+        // (repeats dedup), then 26 parameters per row tuple in template order.
         statement.bind(0, workspaceId);
         int index = 1;
         for (TraceIdentityRow row : rows) {
@@ -176,10 +190,14 @@ public class CipxTraceIdentityDAO {
                     .bind(index++, row.repository())
                     .bind(index++, row.sessionId())
                     .bind(index++, row.harness())
+                    .bind(index++, row.deviceId())
                     .bind(index++, row.schemaVersion())
                     .bind(index++, row.billingMode())
                     .bind(index++, row.plan())
                     .bind(index++, row.planUsageStatus())
+                    .bind(index++, row.organizationType())
+                    .bind(index++, row.seatTier())
+                    .bind(index++, row.billingType())
                     .bind(index++, row.branch())
                     .bind(index++, row.headShaStart())
                     .bind(index++, row.headShaEnd())

@@ -1,0 +1,102 @@
+suite: clickhouse default settings profile (Distributed insert-queue settings)
+
+# The Distributed forwarding queue ships one file per network round trip unless
+# `distributed_background_insert_batch` is on, each trip paying the receiving node's
+# async-insert flush. That caps forwarding throughput, and once arrivals exceed it the queue
+# and the ingestion visibility lag grow without bound, with no errors and no MergeTree
+# throttling (OPIK-8255). So these settings are an installation-wide baseline, not an opt-in.
+#
+# `clickhouse.additionalProfiles` is what makes that stick: the operator renders it into
+# `users.d/chop-generated-profiles.xml`, the last file the server reads, so it wins over both
+# the chart's `conf.d/profiles.xml` and the operator's own default profile.
+#
+# The cost is that Helm replaces lists wholesale rather than merging them, so any values file
+# declaring its own list drops the `default` entry unless it repeats it. This suite pins the
+# chart's default and asserts the drop, so a consumer's obligation is visible here rather than
+# only in a comment.
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: sets the Distributed insert-queue settings on the default profile out of the box
+    asserts:
+      - equal:
+          path: spec.configuration.profiles["default/distributed_background_insert_batch"]
+          value: 1
+      - equal:
+          path: spec.configuration.profiles["default/distributed_background_insert_split_batch_on_failure"]
+          value: 1
+
+  # The settings have to reach the *default* profile specifically: that is the profile the
+  # backend's ClickHouse user inherits, and so the one the insert path runs under.
+  - it: renders the settings under the default profile, not a profile of their own
+    asserts:
+      - equal:
+          path: spec.configuration.profiles
+          value:
+            default/distributed_background_insert_batch: 1
+            default/distributed_background_insert_split_batch_on_failure: 1
+
+  # The rendered key shape is `<profile>/<setting>`, which is what the Altinity operator
+  # flattens into the users.d XML. Asserted separately so a template refactor that changed the
+  # separator would fail loudly rather than silently emitting a profile nobody inherits.
+  - it: keeps the operator's profile/setting key shape
+    asserts:
+      - exists:
+          path: spec.configuration.profiles["default/distributed_background_insert_batch"]
+      - notExists:
+          path: spec.configuration.profiles.default
+
+  # Extra profiles are additive: a consumer adding a read-only profile must not have to think
+  # about the queue settings, so the `default` entry has to survive alongside its own entries.
+  - it: keeps the default entry alongside additional profiles
+    set:
+      clickhouse.additionalProfiles:
+        - name: default
+          settings:
+            distributed_background_insert_batch: 1
+            distributed_background_insert_split_batch_on_failure: 1
+        - name: readonly_profile
+          settings:
+            readonly: 1
+            max_execution_time: 60
+    asserts:
+      - equal:
+          path: spec.configuration.profiles["default/distributed_background_insert_batch"]
+          value: 1
+      - equal:
+          path: spec.configuration.profiles["default/distributed_background_insert_split_batch_on_failure"]
+          value: 1
+      - equal:
+          path: spec.configuration.profiles["readonly_profile/readonly"]
+          value: 1
+
+  # The trap, asserted rather than only commented: a values file that declares its own list and
+  # omits `default` loses the queue settings entirely. Any consumer that overrides the list must
+  # repeat the `default` entry — which is what the test above covers.
+  - it: loses the settings when a consumer replaces the list without the default entry
+    set:
+      clickhouse.additionalProfiles:
+        - name: readonly_profile
+          settings:
+            readonly: 1
+    asserts:
+      - notExists:
+          path: spec.configuration.profiles["default/distributed_background_insert_batch"]
+      - notExists:
+          path: spec.configuration.profiles["default/distributed_background_insert_split_batch_on_failure"]
+
+  # The monitoring user's readonly flag shares the profiles block with these settings; it is
+  # gated separately, so check the two coexist rather than one gate shadowing the other.
+  - it: coexists with the monitoring profile
+    set:
+      clickhouse.monitoring.enabled: true
+      clickhouse.monitoring.username: monitor
+    asserts:
+      - equal:
+          path: spec.configuration.profiles["monitor/readonly"]
+          value: 1
+      - equal:
+          path: spec.configuration.profiles["default/distributed_background_insert_batch"]
+          value: 1

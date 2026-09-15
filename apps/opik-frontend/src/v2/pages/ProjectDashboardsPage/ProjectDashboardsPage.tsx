@@ -6,6 +6,11 @@ import {
   useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import {
+  resolveProjectDateRangeConfig,
+  ProjectDateRangeConfig,
+} from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
+import useProjectById from "@/api/projects/useProjectById";
 import DashboardContent from "@/v2/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardAutoSaveIndicator from "@/v2/pages-shared/dashboards/DashboardAutoSaveIndicator/DashboardAutoSaveIndicator";
 import ProjectDashboardViewSelector from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardViewSelector";
@@ -35,8 +40,14 @@ const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
 const DEFAULT_TEMPLATE = PROJECT_TEMPLATE_LIST[0];
 const DEFAULT_TEMPLATE_ID = DEFAULT_TEMPLATE.id;
 
-const ProjectDashboardsPage: React.FunctionComponent = () => {
-  const projectId = useActiveProjectId()!;
+type ProjectDashboardsContentProps = {
+  projectId: string;
+  dateRangeConfig: ProjectDateRangeConfig;
+};
+
+const ProjectDashboardsContent: React.FunctionComponent<
+  ProjectDashboardsContentProps
+> = ({ projectId, dateRangeConfig }) => {
   const workspaceName = useActiveWorkspaceName();
 
   const {
@@ -44,7 +55,7 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
   } = usePermissions();
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
-    localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}`,
+    localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}-${projectId}`,
     queryKey: DASHBOARD_QUERY_PARAM_KEY,
     defaultValue: null as string | null,
     queryParamConfig: StringParam,
@@ -71,10 +82,18 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
   });
 
   useEffect(() => {
-    if (!isPending && dashboardId && !dashboard) {
+    if (isPending || !dashboardId) return;
+
+    // A shared link carries the id in the query string, and reading one by id is not project
+    // scoped, so another project's view would render here. Legacy views carry no project and stay.
+    const belongsToAnotherProject = Boolean(
+      dashboard?.project_id && dashboard.project_id !== projectId,
+    );
+
+    if (!dashboard || belongsToAnotherProject) {
       setDashboardId(DEFAULT_TEMPLATE_ID);
     }
-  }, [isPending, dashboardId, dashboard, setDashboardId]);
+  }, [isPending, dashboardId, dashboard, projectId, setDashboardId]);
 
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);
 
@@ -82,6 +101,7 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
     useMetricDateRangeWithQueryAndStorage({
       key: "dashboard_time_range",
       localStorageKey: "opik-project-insights-daterange",
+      ...dateRangeConfig,
     });
 
   useEffect(() => {
@@ -150,6 +170,34 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
         {!isPending && dashboard && <DashboardContent />}
       </div>
     </PageBodyScrollContainer>
+  );
+};
+
+/**
+ * Resolves the project before mounting the content.
+ *
+ * The date-range state below is backed by use-local-storage-state, which captures its
+ * `defaultValue` once (useState) and writes that captured value into storage. A content mount that
+ * happened while the project name was still unknown would therefore freeze the workspace 30-day
+ * default and keep it after the demo project's 24h default arrived. Gating the mount makes the
+ * captured value right by construction. A failed lookup reports not-pending, so this cannot hang.
+ */
+const ProjectDashboardsPage: React.FunctionComponent = () => {
+  const projectId = useActiveProjectId()!;
+  const { data: project, isPending: isProjectPending } = useProjectById(
+    { projectId },
+    { refetchOnMount: false },
+  );
+
+  if (isProjectPending) {
+    return <Loader />;
+  }
+
+  return (
+    <ProjectDashboardsContent
+      projectId={projectId}
+      dateRangeConfig={resolveProjectDateRangeConfig(project?.name)}
+    />
   );
 };
 

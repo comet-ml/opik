@@ -10,6 +10,16 @@ dependencies = [
     "opik>=2.0.0",
 ]
 
+# Resolve `opik` from this repo rather than PyPI. The bridge exists so SDK
+# regressions surface as E2E failures, and the released wheel cannot show a
+# regression in code that has not shipped yet — so a spec covering an
+# in-flight SDK change (here: `evaluate_threads(trace_context_transform=...)`)
+# is unrunnable against PyPI by construction. This is the same choice the
+# repo's Python SDK E2E job already makes (`uv pip install --system .` from
+# sdks/python in python_sdk_e2e_tests.yml).
+[tool.uv.sources]
+opik = { path = "../../../../sdks/python", editable = true }
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

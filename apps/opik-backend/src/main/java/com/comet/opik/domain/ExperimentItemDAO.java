@@ -49,8 +49,25 @@ class ExperimentItemDAO {
     }
 
     /**
-     * The query validates if already exists with this id. Failing if so.
-     * That way only insert is allowed, but not update.
+     * Plain multi-row insert. Duplicate ids are tolerated rather than rejected: {@code experiment_items} is
+     * a {@code ReplicatedReplacingMergeTree(last_updated_at)} (migration 000017), so re-posting an existing
+     * id appends a new version that wins dedup — which is why {@link #SELECT} carries
+     * {@code ORDER BY last_updated_at DESC LIMIT 1} and {@link #STREAM} carries {@code LIMIT 1 BY id}.
+     * {@code ExperimentItemService} only validates the UUID version of client-supplied ids, not their
+     * existence.
+     *
+     * <p>{@code created_at} is deliberately absent from the column list, so the column DEFAULT
+     * ({@code now64}) stamps it server-side. Keep it that way: the stalled-run reaper reads it as its
+     * item-level liveness signal ({@code OptimizationDAO#FIND_STALLED_STUDIO_OPTIMIZATIONS}, OPIK-7459),
+     * and binding it from the client, or adding a path that rewrites an existing row's value, would let a
+     * dead run look alive or a live one look dead.
+     *
+     * <p>The invariant is per physical row — nothing rewrites a row's {@code created_at} — not per item id.
+     * A client re-posting an old trial's item id publishes a NEW version dated now, which the reaper reads
+     * as fresh progress. The other paths in this class that affect the signal are the two lightweight
+     * deletes ({@link #DELETE}, {@link #DELETE_BY_EXPERIMENT_IDS}): the reaper's probes read raw rows with
+     * no {@code FINAL}, so deleting a running trial's items removes the liveness rows and makes a live run
+     * read as silent.
      */
     private static final String INSERT = """
             INSERT INTO experiment_items (
@@ -479,6 +496,14 @@ class ExperimentItemDAO {
             ;
             """;
 
+    /**
+     * The 'experiment_id IN (...)' predicate is what restricts the 'experiment_items' scan. Without it, the only
+     * predicate on the large table is 'workspace_id': 'experiment_items' has no 'dataset_id' column, so a
+     * 'dataset_id' filter on the joined side can only discard rows after they have been read, making the cost scale
+     * with total workspace experiment volume rather than with the requested datasets. 'experiment_id' is the second
+     * column of the sort key '(workspace_id, experiment_id, dataset_item_id, trace_id, id)', so filtering on it
+     * directly lets ClickHouse prune granules. The join is retained solely to project 'dataset_id' for the grouping.
+     */
     private static final String FIND_EXPERIMENT_SUMMARY_BY_DATASET_IDS = """
             SELECT
                 e.dataset_id,
@@ -486,8 +511,14 @@ class ExperimentItemDAO {
                 max(ei.last_updated_at) as most_recent_experiment_at
             FROM experiment_items ei
             JOIN experiments e ON ei.experiment_id = e.id AND e.workspace_id = ei.workspace_id
-            WHERE e.dataset_id in :dataset_ids
-            AND ei.workspace_id = :workspace_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.experiment_id IN (
+                SELECT id
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND dataset_id IN :dataset_ids
+            )
+            AND e.dataset_id in :dataset_ids
             GROUP BY
                 e.dataset_id
             SETTINGS log_comment = '<log_comment>'

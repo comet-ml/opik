@@ -29,17 +29,22 @@ def test_incorrect_constructor_parameters():
 
 
 def test_score():
+    # `name` is set in BaseMetric.__init__, so `spec=` does not expose it; a real
+    # metric always has one and AggregatedMetric reads it when dispatching.
     first_metric = mock.Mock(spec=metrics.BaseMetric)
+    first_metric.name = "first_metric"
     first_metric.score.return_value = score_result.ScoreResult(
         name="first_metric_result", value=0.3
     )
 
     second_metric = mock.Mock(spec=metrics.BaseMetric)
+    second_metric.name = "second_metric"
     second_metric.score.return_value = score_result.ScoreResult(
         name="second_metric_result", value=0.3
     )
 
     third_metric = mock.Mock(spec=metrics.BaseMetric)
+    third_metric.name = "third_metric"
     third_metric.score.return_value = [
         score_result.ScoreResult(name="third_metric_result_1", value=0.1),
         score_result.ScoreResult(name="third_metric_result_2", value=0.3),

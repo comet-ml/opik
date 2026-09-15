@@ -23,6 +23,7 @@ export interface ChatPromptRef {
 export interface PromptFixtures {
   textPrompt: TextPromptRef;
   chatPrompt: ChatPromptRef;
+  bystanderPrompt: TextPromptRef;
   registerPromptCleanup: (id: string, name: string) => void;
 }
 
@@ -45,6 +46,46 @@ export const test = baseTest.extend<PromptFixtures>({
         await backendClient.deletePrompt(created.id);
       } catch (err) {
         console.warn(`[textPrompt fixture] delete warning for ${name}:`, err);
+      }
+    }
+  },
+
+  /**
+   * A prompt the test must NOT touch, so a delete that wiped the whole library
+   * cannot pass as a delete of one row.
+   *
+   * Resolves the id by name rather than using the one create returned: the
+   * Python SDK hands back the prompt VERSION id, which `DELETE
+   * /v1/private/prompts/{id}` answers 404 for, so teardown would silently
+   * leak the prompt.
+   */
+  bystanderPrompt: async (
+    { sdkClient, backendClient, project, testNamespace },
+    use,
+    testInfo,
+  ) => {
+    const name = `${testNamespace}-prompt-bystander`;
+    const template = 'Bystander prompt: {{question}}';
+    await sdkClient.python.createTextPrompt({
+      name,
+      prompt: template,
+      project_name: project.name,
+    });
+    const id = await backendClient.findPromptIdByName(name, project.id);
+    if (!id) {
+      throw new Error(`[bystanderPrompt fixture] could not resolve id for "${name}" after create`);
+    }
+    const ref: TextPromptRef = { id, name, template };
+    await testInfo.attach('opik.bystander-prompt', {
+      body: JSON.stringify(ref, null, 2),
+      contentType: 'application/json',
+    });
+    await use(ref);
+    if (!shouldLeaveArtifacts(testInfo)) {
+      try {
+        await backendClient.deletePrompt(id);
+      } catch (err) {
+        console.warn(`[bystanderPrompt fixture] delete warning for ${name}:`, err);
       }
     }
   },

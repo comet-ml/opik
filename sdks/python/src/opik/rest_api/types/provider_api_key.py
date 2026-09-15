@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .provider_api_key_provider import ProviderApiKeyProvider
+from .provider_auth_config import ProviderAuthConfig
 
 
 class ProviderApiKey(UniversalBaseModel):
@@ -21,6 +22,7 @@ class ProviderApiKey(UniversalBaseModel):
     headers: typing.Optional[typing.Dict[str, str]] = None
     configuration: typing.Optional[typing.Dict[str, str]] = None
     base_url: typing.Optional[str] = None
+    auth_config: typing.Optional[ProviderAuthConfig] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None

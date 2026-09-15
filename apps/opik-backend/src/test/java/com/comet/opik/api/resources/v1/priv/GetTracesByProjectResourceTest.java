@@ -1919,6 +1919,39 @@ class GetTracesByProjectResourceTest {
         }
 
         @ParameterizedTest
+        @ValueSource(strings = {"$..test", "$[abc]", "$.key with space", "[", "]", "[..]"})
+        @DisplayName("a malformed or non-matching metadata path returns an empty page rather than failing")
+        void whenFilterMetadataPathIsMalformedOrNonMatching__thenReturnEmptyPage(String key) {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .build())
+                    .toList();
+            traces.forEach(trace -> create(trace, apiKey, workspaceName));
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key(key)
+                    .value("gpt-4")
+                    .build());
+
+            var actualPage = traceResourceClient.getTraces(projectName, null, apiKey, workspaceName, filters, null,
+                    traces.size(), Map.of());
+
+            assertThat(actualPage.content()).isEmpty();
+            assertThat(actualPage.total()).isZero();
+        }
+
+        @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterMetadataEqualString__thenReturnTracesFiltered(String endpoint,
                 Operator operator,
@@ -3368,6 +3401,43 @@ class GetTracesByProjectResourceTest {
                     values.all(), filters, Map.of());
         }
 
+        @Test
+        @DisplayName("get trace stats without filters aggregates span feedback scores")
+        void getTraceStats__whenNoFilters__thenSpanFeedbackScoresAggregated() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .limit(3)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(projectName)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var traceIdToSpanFeedbackScoresMap = new HashMap<UUID, FeedbackScore>();
+            var traceIdToSpansMap = new HashMap<UUID, List<Span>>();
+            var templateScore = initFeedbackScoreItem().build();
+
+            // Every trace has spans carrying span-level feedback scores. With no filter the stats query
+            // takes the else branch and must still aggregate them through the inverted span-score lookup
+            // (OPIK-7331): span_scores -> scored_span_traces -> span_fs, without a full spans scan.
+            traces.forEach(trace -> processTraceWithFeedbackScores(trace, projectName, apiKey, workspaceName,
+                    templateScore, 70, 90, traceIdToSpansMap, traceIdToSpanFeedbackScoresMap));
+
+            var expectedTraces = enrichTracesWithSpanData(traces, traceIdToSpanFeedbackScoresMap, traceIdToSpansMap);
+
+            var values = traceStatsAssertion.transformTestParams(expectedTraces, expectedTraces, List.of());
+            traceStatsAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(), values.all(), List.of(), Map.of());
+        }
+
         private Stream<Arguments> getTracesByProject__whenFilterSpanFeedbackScoresIsEmpty__thenReturnTracesFiltered() {
             return Stream.of(
                     Arguments.of(Operator.IS_NOT_EMPTY,
@@ -4350,6 +4420,56 @@ class GetTracesByProjectResourceTest {
                             traces.size(), Set.of());
                 }
             }
+        }
+
+        /**
+         * The cursor is whatever id the previous page ended on, so it can carry a far-future timestamp: a UUIDv7 minted
+         * by a broken clock (litellm BerriAI/litellm#31294) sorts above every real id, so it comes back first under
+         * {@code ORDER BY id DESC} and becomes the cursor for page two.
+         *
+         * <p>Each id-range bound in the read path carries a parallel week-start bound on {@code id_at}, a pruning hint
+         * that must never exclude a row the id-range admits. When that bound was {@code toMonday} it broke exactly here
+         * (OPIK-7456): {@code toMonday} returns a 16-bit {@code Date} that wraps past 2149, so a far-future cursor
+         * folded into a past week and every ordinary trace — whose week is later — failed {@code <=}. The page came
+         * back empty and pagination stopped dead.
+         *
+         * <p>No far-future trace is needed to reach it, which is why this belongs here rather than in a schema-level
+         * suite: {@code lastRetrievedId} is an unvalidated cursor on the request, so passing one is enough, and
+         * ingestion — which would reject such an id — is not involved. Asserts every seeded trace still streams back.
+         */
+        @Test
+        void whenStreamCursorCarriesAFarFutureTimestamp__thenTracesAreStillReturned() {
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
+                            .projectName(projectName)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Sorts above every seeded id, so `id < :cursor` admits all of them and only the week bound can drop them.
+            var farFutureCursor = idGenerator.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(apiKey, workspaceName,
+                    TraceSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .lastRetrievedId(farFutureCursor)
+                            .limit(traces.size())
+                            .build());
+
+            var expectedTraces = traces.stream()
+                    .sorted(Comparator.comparing(Trace::id).reversed())
+                    .toList();
+
+            TraceAssertions.assertTraces(actualTraces, expectedTraces, USER);
         }
 
         @ParameterizedTest
@@ -5780,6 +5900,151 @@ class GetTracesByProjectResourceTest {
 
             assertThat(actualPage.total()).isEqualTo(0);
             assertThat(actualPage.content()).isEmpty();
+        }
+    }
+
+    /**
+     * The stats queries dedup by {@code GROUP BY} + {@code argMax(..., last_updated_at)} rather than {@code FINAL}
+     * (OPIK-7636), so a filter has to be decided on each trace's <em>latest</em> version. Updating a trace writes a
+     * new row version rather than replacing the old one, which makes these the cases that catch the rewrite being
+     * applied row-level: evaluating the filter per row would let a superseded version keep a trace in, or out of,
+     * the stats.
+     */
+    @Nested
+    @DisplayName("Trace stats respect the latest version only:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TraceStatsLatestVersionOnly {
+
+        private List<TraceFilter> nameEquals(String name) {
+            return List.of(TraceFilter.builder()
+                    .field(TraceField.NAME)
+                    .operator(Operator.EQUAL)
+                    .value(name)
+                    .build());
+        }
+
+        private long traceCount(String projectName, List<? extends TraceFilter> filters, String search) {
+            var stats = traceResourceClient.getTraceStats(projectName, null, API_KEY, TEST_WORKSPACE, filters,
+                    search == null ? Map.of() : Map.of("search", search));
+
+            return stats.stats().stream()
+                    .filter(stat -> "trace_count".equals(stat.getName()))
+                    .map(stat -> (Number) stat.getValue())
+                    .mapToLong(Number::longValue)
+                    .findFirst()
+                    .orElse(0L);
+        }
+
+        @Test
+        @DisplayName("a trace updated so it no longer matches the filter drops out of the stats")
+        void getStats__whenLatestVersionNoLongerMatchesFilter__excludesTrace() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var matchedName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var traces = Stream.of(createTrace(), createTrace())
+                    .map(trace -> trace.toBuilder().projectName(projectName).name(matchedName).usage(null).build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+
+            assertThat(traceCount(projectName, nameEquals(matchedName), null)).isEqualTo(2);
+
+            // supersede the first trace with a version whose name no longer matches
+            traceResourceClient.updateTrace(traces.getFirst().id(),
+                    TraceUpdate.builder()
+                            .projectName(projectName)
+                            .name(RandomStringUtils.secure().nextAlphanumeric(10))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(traceCount(projectName, nameEquals(matchedName), null)).isEqualTo(1);
+        }
+
+        /**
+         * The free-text search spans eight columns, three of which the traces/spans stats CTE also projects
+         * per-version ({@code thread_id}, {@code error_info}, {@code duration}). A filter that touches only one
+         * unprojected column cannot detect an aliasing collision between the two, so this exercises the search
+         * clause specifically.
+         */
+        @Test
+        @DisplayName("free-text search over the stats query respects the latest version")
+        void getStats__whenSearchTextMatchesLatestVersionOnly__countsCorrectly() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var needle = RandomStringUtils.secure().nextAlphanumeric(16);
+
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .name(needle)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            assertThat(traceCount(projectName, List.of(), needle)).isEqualTo(1);
+
+            // supersede it with a version that no longer carries the needle anywhere searchable
+            traceResourceClient.updateTrace(trace.id(),
+                    TraceUpdate.builder()
+                            .projectName(projectName)
+                            .name(RandomStringUtils.secure().nextAlphanumeric(10))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(traceCount(projectName, List.of(), needle)).isZero();
+        }
+
+        @Test
+        @DisplayName("a trace updated so it now matches the filter appears in the stats")
+        void getStats__whenLatestVersionStartsMatchingFilter__includesTrace() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var matchedName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .name(RandomStringUtils.secure().nextAlphanumeric(10))
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            assertThat(traceCount(projectName, nameEquals(matchedName), null)).isZero();
+
+            traceResourceClient.updateTrace(trace.id(),
+                    TraceUpdate.builder().projectName(projectName).name(matchedName).build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(traceCount(projectName, nameEquals(matchedName), null)).isEqualTo(1);
+        }
+
+        /**
+         * The argMax dedup only renders when a search term is present, so a filter reaches
+         * {@code HAVING argMax(...)} only in company of one. Searching on the trace id keeps the search clause
+         * matching every row version, which leaves the name filter as the only discriminator: if that filter were
+         * evaluated row-level in {@code WHERE} instead, the superseded version would survive the scan and argMax
+         * would report it, counting a trace whose current version no longer matches.
+         */
+        @Test
+        @DisplayName("a filter alongside a search term is evaluated on the latest version")
+        void getStats__whenFilterAndSearchTextCombined__evaluatesFilterOnLatestVersion() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var matchedName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .name(matchedName)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            var idSearch = trace.id().toString();
+            assertThat(traceCount(projectName, nameEquals(matchedName), idSearch)).isEqualTo(1);
+
+            // supersede it with a version the name filter no longer matches; the id search still matches both
+            traceResourceClient.updateTrace(trace.id(),
+                    TraceUpdate.builder()
+                            .projectName(projectName)
+                            .name(RandomStringUtils.secure().nextAlphanumeric(10))
+                            .build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(traceCount(projectName, nameEquals(matchedName), idSearch)).isZero();
         }
     }
 

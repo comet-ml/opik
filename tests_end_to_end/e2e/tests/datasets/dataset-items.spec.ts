@@ -1,12 +1,12 @@
 import { test, expect } from '@e2e/fixtures';
 import { DatasetsPage } from '@e2e/pom/datasets.page';
 
-test.describe('Dataset items — direct coverage', { tag: ['@datasets'] }, () => {
+test.describe('Dataset items — direct coverage', { tag: ['@area:datasets'] }, () => {
   /** Items toolbar collapses to icon-only (no accessible name) below ~850px container width. */
   test.use({ viewport: { width: 1600, height: 900 } });
 
   test('Editing an item field commits as a new version and round-trips to the SDK', {
-    tag: ['@t2-cuj'],
+    tag: ['@t2-cuj', '@cap:datasets.edit-item-versions'],
   }, async ({
     dataset,
     project,
@@ -44,7 +44,7 @@ test.describe('Dataset items — direct coverage', { tag: ['@datasets'] }, () =>
 
   test(
     'Bulk-deleting selected items commits as a new version and round-trips to the SDK',
-    { tag: ['@t3-nightly'] },
+    { tag: ['@t3-nightly', '@cap:datasets.bulk-delete-items'] },
     async ({ dataset, project, backendClient, page }) => {
       const items = await test.step('Open the dataset items page', async () => {
         const datasets = new DatasetsPage(page);
@@ -75,7 +75,7 @@ test.describe('Dataset items — direct coverage', { tag: ['@datasets'] }, () =>
 
   test(
     'Searching filters the items table to matching rows',
-    { tag: ['@t3-nightly'] },
+    { tag: ['@t3-nightly', '@cap:datasets.search-items'] },
     async ({ dataset, project, page }) => {
       const items = await test.step('Open the dataset items page', async () => {
         const datasets = new DatasetsPage(page);

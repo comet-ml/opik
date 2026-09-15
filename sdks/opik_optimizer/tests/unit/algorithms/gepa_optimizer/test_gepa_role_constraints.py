@@ -32,7 +32,7 @@ def test_gepa_rebuild_respects_allowed_roles() -> None:
         "p_system_0": "System v2",
         "p_user_1": "mutated user",
     }
-    rebuilt = candidate_ops.rebuild_prompts_from_candidate(
+    rebuilt, _ = candidate_ops.rebuild_prompts_from_candidate(
         base_prompts={"p": prompt},
         candidate=candidate,
         allowed_roles={"system"},

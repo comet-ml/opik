@@ -906,7 +906,11 @@ class TracesClient:
         return _response.data
 
     def delete_traces(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        project_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete traces
@@ -914,6 +918,10 @@ class TracesClient:
         Parameters
         ----------
         ids : typing.Sequence[str]
+            Ids of the traces to delete
+
+        project_id : typing.Optional[str]
+            Optional. Scopes the deletion to this project. When omitted, each trace's owning project is resolved automatically and the trace is deleted under its full key, so a trace can be deleted without knowing its project.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -928,7 +936,7 @@ class TracesClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.traces.delete_traces(ids=['ids'], )
         """
-        _response = self._raw_client.delete_traces(ids=ids, request_options=request_options)
+        _response = self._raw_client.delete_traces(ids=ids, project_id=project_id, request_options=request_options)
         return _response.data
 
     def find_feedback_score_names2(
@@ -2654,7 +2662,11 @@ class AsyncTracesClient:
         return _response.data
 
     async def delete_traces(
-        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        ids: typing.Sequence[str],
+        project_id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
         Delete traces
@@ -2662,6 +2674,10 @@ class AsyncTracesClient:
         Parameters
         ----------
         ids : typing.Sequence[str]
+            Ids of the traces to delete
+
+        project_id : typing.Optional[str]
+            Optional. Scopes the deletion to this project. When omitted, each trace's owning project is resolved automatically and the trace is deleted under its full key, so a trace can be deleted without knowing its project.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2679,7 +2695,9 @@ class AsyncTracesClient:
             await client.traces.delete_traces(ids=['ids'], )
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_traces(ids=ids, request_options=request_options)
+        _response = await self._raw_client.delete_traces(
+            ids=ids, project_id=project_id, request_options=request_options
+        )
         return _response.data
 
     async def find_feedback_score_names2(

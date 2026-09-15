@@ -479,3 +479,10 @@ export const generateGroupedRowCellDef = <TData, TValue>(
     enableHiding: false,
   } as ColumnDef<TData, TValue>;
 };
+
+export const getVirtualizationConfig = (
+  columnCount: number,
+  rowCount: number,
+): { enabled: boolean } => ({
+  enabled: columnCount * rowCount > 3000,
+});

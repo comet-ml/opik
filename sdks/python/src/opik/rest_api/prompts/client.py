@@ -597,7 +597,7 @@ class PromptsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
-        Retrieve prompt version
+        Retrieve prompt version. When project_name is supplied the lookup is scoped to that project: a prompt belonging to a different project is never matched, and an unknown project name returns 404. Legacy prompts with no project are still resolved as a deprecated fallback, signalled by the X-Opik-Deprecation response header.
 
         Parameters
         ----------
@@ -612,7 +612,7 @@ class PromptsClient:
             If provided, resolves to the version with this sequential number (e.g. v3); mutually exclusive with commit and environment
 
         project_name : typing.Optional[str]
-            If provided, scopes the search to the specified project
+            If provided, scopes the search to the specified project; prompts belonging to other projects are never matched, and an unknown project name returns 404. Legacy prompts that are not scoped to any project are still matched as a deprecated fallback, signalled by the X-Opik-Deprecation response header.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1325,7 +1325,7 @@ class AsyncPromptsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
-        Retrieve prompt version
+        Retrieve prompt version. When project_name is supplied the lookup is scoped to that project: a prompt belonging to a different project is never matched, and an unknown project name returns 404. Legacy prompts with no project are still resolved as a deprecated fallback, signalled by the X-Opik-Deprecation response header.
 
         Parameters
         ----------
@@ -1340,7 +1340,7 @@ class AsyncPromptsClient:
             If provided, resolves to the version with this sequential number (e.g. v3); mutually exclusive with commit and environment
 
         project_name : typing.Optional[str]
-            If provided, scopes the search to the specified project
+            If provided, scopes the search to the specified project; prompts belonging to other projects are never matched, and an unknown project name returns 404. Legacy prompts that are not scoped to any project are still matched as a deprecated fallback, signalled by the X-Opik-Deprecation response header.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.

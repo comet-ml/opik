@@ -9,6 +9,7 @@ from . import (
 )
 import opik.semantic_version as semantic_version
 from opik.types import LLMProvider
+from ... import analytics
 
 OpenAIClient = TypeVar("OpenAIClient", openai.OpenAI, openai.AsyncOpenAI)
 
@@ -63,6 +64,7 @@ def track_openai(
     Returns:
         The modified OpenAI client with Opik tracking enabled.
     """
+    analytics.track_event("integration", "openai")
     if hasattr(openai_client, "opik_tracked"):
         return openai_client
 

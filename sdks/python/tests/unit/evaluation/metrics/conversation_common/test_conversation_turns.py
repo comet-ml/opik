@@ -18,6 +18,20 @@ def test_build_conversation_turns__happy_path():
     assert turns[1].output == conversation[3]
 
 
+def test_build_conversation_turns__messages_with_context__context_preserved():
+    conversation = [
+        {"role": "user", "content": "What is the overdraft fee?"},
+        {
+            "role": "assistant",
+            "content": "It is 5%.",
+            "context": ["The overdraft fee is 5%."],
+        },
+    ]
+    turns = conversation_turns.build_conversation_turns(conversation)
+    assert len(turns) == 1
+    assert turns[0].output == conversation[1]
+
+
 def test_build_conversation_turns__last_user_message_included():
     conversation = [
         {"role": "user", "content": "Hi!"},

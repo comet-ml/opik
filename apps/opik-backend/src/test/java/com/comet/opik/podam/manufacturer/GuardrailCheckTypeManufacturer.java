@@ -15,6 +15,7 @@ import uk.co.jemos.podam.typeManufacturers.AbstractTypeManufacturer;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 public class GuardrailCheckTypeManufacturer extends AbstractTypeManufacturer<Guardrail> {
@@ -66,6 +67,15 @@ public class GuardrailCheckTypeManufacturer extends AbstractTypeManufacturer<Gua
                         }
                     })
                     .build()));
+            case PROMPT_INJECTION -> JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of(
+                    "injection_score", RANDOM.nextFloat())));
+            case CUSTOM_CLASSIFIER -> JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of(
+                    "model_name", RandomStringUtils.randomAlphanumeric(10),
+                    "score", RANDOM.nextFloat())));
+            case LLM_JUDGE -> JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(Map.of(
+                    "name", RandomStringUtils.randomAlphanumeric(10),
+                    "passed", RANDOM.nextBoolean(),
+                    "reason", RandomStringUtils.randomAlphanumeric(20))));
         };
     }
 }

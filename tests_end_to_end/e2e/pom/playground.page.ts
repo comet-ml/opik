@@ -4,6 +4,36 @@ import { loadEnvConfig } from '../config/env.config';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
+/** Empty-state text an output cell shows until its row has been run. */
+const IDLE_CELL_TEXT = 'No runs yet';
+
+/**
+ * A failed run surfaces as the output cell's own value — `processCombination` catches and
+ * writes `error.message` there, with no flag to distinguish it from a real completion, so
+ * text is the only signal available. Kept narrow on purpose: these two are strings Opik
+ * itself emits, whereas a broad /error/i would fire on legitimate model output. Provider
+ * errors are free-form and stay undetected here by design.
+ */
+const RUN_ERROR_TEXT = /\bnot defined\b|returned an empty response/i;
+
+/**
+ * Whether a cell has finished.
+ *
+ * Deliberately does NOT require a test-suite cell's Passed/Failed verdict. A suite cell does
+ * leave the idle state before its verdict lands, but the verdict comes from
+ * `PlaygroundOutputAssertionStatus`, which polls the experiment for up to its own 5-minute
+ * ceiling — far past the 120s callers allow — so requiring it times the wait out on a run
+ * that is working. It also overshoots what these specs claim, which is that a run produces
+ * output, not that its assertions were scored. A spec that wants the verdict should wait on
+ * it explicitly, with a budget to match.
+ *
+ * Text is the only handle here: the idle placeholder carries no testid, so output that
+ * itself contained "No runs yet" would read as idle. Adding one would not help — these specs
+ * run against deployed Opik, so it would not exist in the version under test.
+ */
+const hasProducedOutput = (text: string): boolean =>
+  text.trim() !== '' && !text.includes(IDLE_CELL_TEXT);
+
 export interface PlaygroundVariantConfig {
   /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
   systemPrompt?: string;
@@ -135,51 +165,70 @@ export class PlaygroundPage {
   }
 
   /**
-   * Wait for runs to complete in the experiment-results table.
+   * Wait until a loaded dataset/suite can actually be run.
    *
-   * Polling shape depends on what was loaded:
-   *  - test_suite: rows show "Passed <output>" / "Failed <output>" (LLM-judged).
-   *  - dataset: rows show the raw output cell (no pass/fail label).
-   *
-   * Completion requires BOTH: all "No runs yet" placeholders are gone, AND the
-   * rendered row count meets `expectedRows`. Checking only the placeholder
-   * disappearance lets us return early if the table briefly re-renders during
-   * loading (`No runs yet` is unmounted while rows are still being painted).
+   * The source pill commits with the *selection*, which is strictly before
+   * `useDatasetItemsList` resolves. Running in that window builds the
+   * prompt/item combinations from an empty item list, so every row fails
+   * client-side with "<var> not defined" — no LLM call, no experiment, and a
+   * permanent error state that no later wait can recover. The output cells come
+   * from the same query as the runner's items, so their presence is the signal
+   * that the run has something to iterate.
    */
-  async waitForRunsComplete(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
-    return test.step(`wait for ${opts.expectedRows} run(s) to complete`, async () => {
-      const table = this.resultsTable();
+  async waitForRunReady(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
+    return test.step(`wait for ${opts.expectedRows} row(s) to be run-ready`, async () => {
       await expect
         .poll(
           async () => {
-            const noRunsYet = await table.getByText('No runs yet').count();
-            if (noRunsYet !== 0) return false;
-            const rowCount = await this.countOutputRows();
-            return rowCount >= opts.expectedRows;
+            const total = await this.outputCells().count();
+            return total >= opts.expectedRows && (await this.idleOutputCells().count()) === total;
           },
-          { timeout: opts.timeoutMs ?? 120_000, intervals: [1000, 2000, 3000] },
+          { timeout: opts.timeoutMs ?? 30_000, intervals: [250, 500, 1000] },
         )
         .toBe(true);
     });
   }
 
   /**
-   * Number of result rows that have completed (non-empty output cell).
-   * Counts rows where "No runs yet" is NOT present and the row is in the
-   * results table's right-side variant column.
+   * Wait for every output cell to finish.
+   *
+   * A run that fails writes the failure into the cell as its value, so "no longer idle"
+   * does not mean "succeeded". The failure scan runs inside the poll, not after it: one
+   * errored cell next to one that never ran would otherwise hold the predicate false for
+   * the full timeout and report a bare poll timeout instead of the failure.
    */
-  async countOutputRows(): Promise<number> {
-    const table = this.resultsTable();
-    // The results table has the data-side (left) and the variant-output side (right).
-    // The variant-output side has either "No runs yet" (empty) or actual output text.
-    // We count rows by counting the data-side and subtracting any still-empty cells.
-    const passedFailedCount = await table.getByRole('row', { name: /^(Passed|Failed) / }).count();
-    if (passedFailedCount > 0) return passedFailedCount;
-    // Dataset mode: count rows by their data preview (left table).
-    // Each "row" in the left table corresponds to one expected output row.
-    const itemRows = await table.locator('tr').count();
-    const noRunsYet = await table.getByText('No runs yet').count();
-    return Math.max(0, itemRows - noRunsYet - 1 /* header */);
+  async waitForRunsComplete(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
+    return test.step(`wait for ${opts.expectedRows} run(s) to complete`, async () => {
+      let failures: string[] = [];
+      await expect
+        .poll(
+          async () => {
+            const texts = await this.outputCells().allInnerTexts();
+            failures = texts.filter((t) => RUN_ERROR_TEXT.test(t));
+            if (failures.length > 0) return true;
+            return (
+              texts.length >= opts.expectedRows &&
+              texts.every(hasProducedOutput)
+            );
+          },
+          { timeout: opts.timeoutMs ?? 120_000, intervals: [1000, 2000, 3000] },
+        )
+        .toBe(true);
+
+      if (failures.length > 0) {
+        throw new Error(
+          `Playground run failed in ${failures.length} cell(s): ${failures[0].trim()}`,
+        );
+      }
+    });
+  }
+
+  /**
+   * Output cells that have produced content — one per dataset row *per variant*, so this
+   * exceeds the row count whenever more than one variant is configured.
+   */
+  async countCompletedOutputCells(): Promise<number> {
+    return (await this.outputCells().allInnerTexts()).filter(hasProducedOutput).length;
   }
 
   /**
@@ -453,6 +502,26 @@ export class PlaygroundPage {
     return this.page.getByTestId('playground-results-table');
   }
 
+  /**
+   * Output cells of the experiment-results table — one per dataset row, per
+   * variant. The table is the shared `DataTable` split into sticky-header and
+   * scrollable-body halves, so body cells carry `data-cell-id="<rowId>_<colId>"`
+   * and the variant columns are `output-<promptId>`.
+   */
+  private outputCells(): Locator {
+    // The `:not(.comet-table-body-loading-overlay)` matters: switching sources keeps the
+    // previous dataset's rows on screen (`keepPreviousData`) while the new items load, and
+    // those rows are idle, so counting them would report ready for the wrong dataset.
+    return this.resultsTable().locator(
+      'tbody:not(.comet-table-body-loading-overlay) tr[data-row-id] td[data-cell-id*="_output-"]',
+    );
+  }
+
+  /** Output cells whose row has not been run yet. */
+  private idleOutputCells(): Locator {
+    return this.outputCells().filter({ hasText: IDLE_CELL_TEXT });
+  }
+
   private variantCard(index: number): Locator {
     return this.page.locator(
       `[data-testid="playground-variant-card"][data-variant-index="${index}"]`,
@@ -476,8 +545,19 @@ export class PlaygroundPage {
       await this.modelPicker(index).click();
       await expect(listbox).toBeVisible({ timeout: 2_000 });
     }).toPass({ timeout: 15_000 });
-    await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
-    await listbox.getByRole('option', { name: modelDisplayName, exact: true }).first().click();
+
+    // The option list remounts when /llm/models or /provider-keys resolves, and
+    // the suite configures a provider immediately before opening the Playground —
+    // so the dropdown routinely opens inside that refetch window and options are
+    // detached mid-click. Re-filter and re-click until the popover actually
+    // closes, which is the only reliable signal the selection registered.
+    await expect(async () => {
+      await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
+      const option = listbox.getByRole('option', { name: modelDisplayName, exact: true });
+      await expect(option.first()).toBeVisible({ timeout: 2_000 });
+      await option.first().click({ timeout: 2_000 });
+      await expect(listbox).toBeHidden({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
   }
 
   private async fillMessageBody(messageRow: Locator, text: string): Promise<void> {

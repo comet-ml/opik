@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import noop from "lodash/noop";
 import { cn } from "@/lib/utils";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { STICKY_ATTRIBUTE_VERTICAL } from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -93,6 +94,8 @@ const PageBodyScrollContainer: React.FC<PageBodyScrollContainerProps> = ({
     <PageBodyScrollContainerContext.Provider
       value={{
         scrollContainer: scrollContainer ?? null,
+        horizontalScrollContainer: null,
+        registerHorizontalScrollContainer: noop,
         tableOffset,
         recalculateOffsets,
       }}

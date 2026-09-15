@@ -2,4 +2,6 @@
 
 import typing
 
-CheckName = typing.Union[typing.Literal["TOPIC", "PII"], typing.Any]
+CheckName = typing.Union[
+    typing.Literal["TOPIC", "PII", "LLM_JUDGE", "PROMPT_INJECTION", "CUSTOM_CLASSIFIER"], typing.Any
+]

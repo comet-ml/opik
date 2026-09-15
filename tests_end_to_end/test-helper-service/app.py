@@ -20,6 +20,8 @@ from routes.threads import threads_bp
 from routes.feedback_scores import feedback_scores_bp
 from routes.experiments import experiments_bp
 from routes.prompts import prompts_bp
+from routes.environments import environments_bp
+from routes.ai_providers import ai_providers_bp
 
 
 def authenticate_if_needed():
@@ -105,6 +107,8 @@ app.register_blueprint(threads_bp, url_prefix="/api/threads")
 app.register_blueprint(feedback_scores_bp, url_prefix="/api/feedback-scores")
 app.register_blueprint(experiments_bp, url_prefix="/api/experiments")
 app.register_blueprint(prompts_bp, url_prefix="/api/prompts")
+app.register_blueprint(environments_bp, url_prefix="/api/environments")
+app.register_blueprint(ai_providers_bp, url_prefix="/api/ai-providers")
 
 
 @app.route("/health", methods=["GET"])

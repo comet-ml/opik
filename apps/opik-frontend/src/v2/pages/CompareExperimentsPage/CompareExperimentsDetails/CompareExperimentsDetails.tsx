@@ -21,10 +21,9 @@ import {
   SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
-import { generateExperimentIdsFilter } from "@/lib/filters";
 import { isTestSuiteExperiment } from "@/lib/experiments";
-import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import ExperimentTagsList from "@/v2/pages/CompareExperimentsPage/ExperimentTagsList";
+import ExperimentIdButton from "@/v2/pages/CompareExperimentsPage/ExperimentIdButton";
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -48,11 +47,6 @@ const CompareExperimentsDetails: React.FunctionComponent<
     title && setBreadcrumbParam("compare", "Compare", title);
     return () => setBreadcrumbParam("compare", "Compare", "");
   }, [title, setBreadcrumbParam]);
-
-  const experimentSourceFilters = useMemo(
-    () => generateExperimentIdsFilter(experimentsIds),
-    [experimentsIds],
-  );
 
   const experimentScores: FeedbackScoreDisplay[] = useMemo(() => {
     if (isCompare || !experiment) return [];
@@ -114,6 +108,9 @@ const CompareExperimentsDetails: React.FunctionComponent<
             resource={RESOURCE_TYPE.experiment}
           />
         )}
+        {!isCompare && experiment?.id && (
+          <ExperimentIdButton experimentId={experiment.id} />
+        )}
         {experiment?.dataset_id && (
           <NavigationTag
             id={experiment.dataset_id}
@@ -146,13 +143,6 @@ const CompareExperimentsDetails: React.FunctionComponent<
               prefix="Prompt"
             />
           )}
-        {experiment?.project_id && (
-          <TraceLogsSidebarButton
-            projectId={experiment.project_id}
-            sourceFilters={experimentSourceFilters}
-            title="Experiment logs"
-          />
-        )}
         {!isCompare &&
           isTestSuiteExperiment(experiment) &&
           isNumber(experiment.pass_rate) && (

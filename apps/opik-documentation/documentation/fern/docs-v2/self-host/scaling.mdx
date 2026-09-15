@@ -128,6 +128,25 @@ Memory-optimized instances are recommended, with a minimum 4:1 memory-to-CPU rat
 
 Always scale vertically before adding more replicas for efficiency.
 
+#### Internal Replication in Multi-Replica Deployments
+
+ClickHouse's `internal_replication` setting controls how Distributed tables route writes across replicas:
+
+- **When `internal_replication: true`** (recommended for 2+ replicas)
+  - Distributed table writes to a single replica per shard
+  - ReplicatedMergeTree handles replication across replicas
+  - More efficient, reduces duplicate writes
+
+- **When `internal_replication: false`** (default for single-replica)
+  - Distributed table writes to all replicas
+  - Suitable for single-replica deployments only
+
+**How Opik applies this setting**:
+- When **sharding is disabled** (`clickhouse.sharding.enabled: false`, the default): the ClickHouse operator automatically infers `internal_replication` from `replicasCount > 1`
+- When **sharding is enabled** (`clickhouse.sharding.enabled: true`) and you have 2+ replicas: Opik explicitly pins `internal_replication: true` on each shard
+
+**Important Scope Note**: This setting applies **only** to the operator-managed cluster defined in the Helm chart. If you create a Replicated-engine database outside this definition (e.g., `CREATE DATABASE mydb ENGINE = Replicated(...)`), that database auto-generates its own internal cluster with independent replication settings. Opik's cluster configuration does not govern those self-managed databases — their replication behavior is independent and must be configured separately if needed.
+
 #### Fresh multi-replica installs: migrate first, then scale
 
 A brand-new install running directly on **2 or more ClickHouse replicas** cannot complete its analytics migrations. Opik's earliest migrations aren't cluster-aware, so on a fresh multi-replica cluster they only reach one replica; later migrations then fail with errors such as `UNKNOWN_TABLE` or `UNKNOWN_DATABASE` (a table or the `opik` database missing on one replica), and `opik-backend` never becomes ready. Install High-Availability deployments in two phases:

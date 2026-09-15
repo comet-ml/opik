@@ -7,7 +7,12 @@ just unknown-type errors.
 import pytest
 from unittest.mock import MagicMock, patch
 
-from opik_backend.studio.optimizers import OptimizerFactory
+from opik_backend.studio import config as config_module
+from opik_backend.studio import optimizers as optimizers_module
+from opik_backend.studio.optimizers import (
+    OptimizerFactory,
+    ensure_default_model_params,
+)
 from opik_backend.studio.exceptions import InvalidOptimizerError
 
 
@@ -103,6 +108,174 @@ class TestOptimizerFactoryBadParamsRaisesTypedError:
                 )
 
 
+class TestOptimizerFactoryPerfectScoreInjection:
+    """OPIK-7511: Studio runs pin perfect_score to full marks via the optimizer
+    constructor — the SDK's 0.95 default ends strong-baseline runs with zero
+    candidates. Injected as a default so an explicit run value still wins."""
+
+    def test_perfect_score__not_in_params__injected_as_one(self):
+        recorder = _make_recording_constructor()
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={},
+            )
+        assert recorder.captured_kwargs["perfect_score"] == 1.0
+
+    def test_perfect_score__explicit_in_params__wins_over_injection(self):
+        recorder = _make_recording_constructor()
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={"perfect_score": 0.8},
+            )
+        assert recorder.captured_kwargs["perfect_score"] == 0.8
+
+    def test_perfect_score__injection__does_not_mutate_caller_params(self):
+        recorder = _make_recording_constructor()
+        caller_params: dict = {}
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params=caller_params,
+            )
+        assert caller_params == {}
+
+    def test_perfect_score__real_gepa_optimizer__constructor_accepts_it(self):
+        """The injection relies on the pinned SDK accepting perfect_score in
+        the constructor — guard that against a pin change."""
+        optimizer = OptimizerFactory.build(
+            optimizer_type="gepa",
+            model="openai/gpt-4o",
+            model_params={},
+            optimizer_params={},
+        )
+        assert optimizer.perfect_score == 1.0
+
+
+class TestTaskModelTemperaturePinning:
+    """OPIK-7511: the scored (task) model runs at a pinned temperature so repeated
+    evaluations of one prompt agree; the reflection model keeps its sampling
+    diversity."""
+
+    def test_task_params__no_temperature_given__pinned_to_configured_value(self):
+        # Assert against the configured value, not a literal: config reads
+        # OPTIMIZER_TASK_TEMPERATURE at import, so an env override in the test
+        # environment must not turn a correct implementation red.
+        params = ensure_default_model_params({}, deterministic=True)
+        assert params["temperature"] == optimizers_module.OPTIMIZER_TASK_TEMPERATURE
+
+    def test_task_params__pin_is_survivable_on_fixed_temperature_models(self):
+        """Models that fix their own temperature (gpt-5 family) must ignore the
+        pin rather than fail the run. The helper does not set drop_params per
+        call — importing opik_optimizer sets it process-wide
+        (base_optimizer.py), and the runner always imports it. Assert that
+        guarantee here, so losing it fails a test instead of a live run."""
+        import litellm
+
+        assert litellm.drop_params is True
+
+    def test_task_params__default_configured_value_is_zero(self, monkeypatch):
+        """The shipped default, independent of the ambient environment."""
+        monkeypatch.delenv("OPTIMIZER_TASK_TEMPERATURE", raising=False)
+        assert (
+            config_module._read_float_env(
+                "OPTIMIZER_TASK_TEMPERATURE", "0.0", minimum=0.0, maximum=2.0
+            )
+            == 0.0
+        )
+
+    def test_task_params__explicit_temperature__wins(self):
+        params = ensure_default_model_params({"temperature": 0.7}, deterministic=True)
+        assert params["temperature"] == 0.7
+
+    def test_task_params__explicit_null_temperature__is_pinned_not_forwarded(self):
+        """The studio config can carry explicit nulls; forwarding None to litellm
+        would either error or silently fall back to the provider default."""
+        params = ensure_default_model_params(
+            {"temperature": None}, deterministic=True
+        )
+        assert params["temperature"] == optimizers_module.OPTIMIZER_TASK_TEMPERATURE
+
+    def test_task_params__explicit_null_max_tokens__is_defaulted(self):
+        params = ensure_default_model_params({"max_tokens": None})
+        assert params["max_tokens"] == optimizers_module.LLM_MAX_TOKENS
+
+    def test_optimizer_params__not_deterministic__temperature_untouched(self):
+        params = ensure_default_model_params({})
+        assert "temperature" not in params
+        assert "drop_params" not in params
+
+    def test_params__max_tokens_default_still_applied_either_way(self):
+        assert "max_tokens" in ensure_default_model_params({})
+        assert "max_tokens" in ensure_default_model_params({}, deterministic=True)
+
+    def test_params__caller_dict_not_mutated(self):
+        caller = {}
+        ensure_default_model_params(caller, deterministic=True)
+        assert caller == {}
+
+    def test_factory__optimizer_model_keeps_sampling_diversity(self):
+        """The factory builds the reflection model — it must not pin temperature."""
+        recorder = _make_recording_constructor()
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={},
+            )
+        assert "temperature" not in recorder.captured_kwargs["model_parameters"]
+
+
+class TestPerfectScoreValidation:
+    """The run's perfect_score comes from the studio config, so it can be absent,
+    explicitly null, or junk — it must be rejected here rather than blowing up
+    inside `baseline_score >= perfect_score` mid-run."""
+
+    def test_explicit_null__falls_back_to_default(self):
+        recorder = _make_recording_constructor()
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={"perfect_score": None},
+            )
+        assert recorder.captured_kwargs["perfect_score"] == 1.0
+
+    def test_zero__is_kept_not_treated_as_falsy(self):
+        """0 legitimately disables threshold stopping."""
+        recorder = _make_recording_constructor()
+        with patch.dict(OptimizerFactory._OPTIMIZERS, {"_test_rec": recorder}):
+            OptimizerFactory.build(
+                optimizer_type="_test_rec",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={"perfect_score": 0},
+            )
+        assert recorder.captured_kwargs["perfect_score"] == 0.0
+
+    @pytest.mark.parametrize(
+        "bad_value", [float("nan"), float("inf"), float("-inf"), "0.9", [], True]
+    )
+    def test_invalid_values__raise_invalid_optimizer_error(self, bad_value):
+        with pytest.raises(InvalidOptimizerError) as exc_info:
+            OptimizerFactory.build(
+                optimizer_type="gepa",
+                model="openai/gpt-4o",
+                model_params={},
+                optimizer_params={"perfect_score": bad_value},
+            )
+        assert "perfect_score" in str(exc_info.value)
+
+
 class TestOptimizerFactoryListAvailable:
     def test_list_available_returns_known_types(self):
         available = OptimizerFactory.list_available()
@@ -122,3 +295,13 @@ def _make_bad_constructor(exc: Exception):
         def __init__(self, *args, **kwargs):
             raise exc
     return _BadOptimizer
+
+
+def _make_recording_constructor():
+    """Return a fake optimizer class that records its constructor kwargs."""
+    class _RecordingOptimizer:
+        captured_kwargs: dict = {}
+
+        def __init__(self, *args, **kwargs):
+            type(self).captured_kwargs = kwargs
+    return _RecordingOptimizer

@@ -127,11 +127,19 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         var savedEvaluator = template.inTransaction(WRITE, handle -> {
             var evaluatorsDAO = handle.attach(AutomationRuleEvaluatorDAO.class);
             var projectsDAO = handle.attach(AutomationRuleProjectsDAO.class);
+            var ruleDAO = handle.attach(AutomationRuleDAO.class);
+
+            // Auto-suffix the name when it collides with existing rules in the same project(s) (OPIK-7371).
+            // Names are not unique at the DB layer, so re-running an SDK script would otherwise create
+            // rules that are indistinguishable in the UI.
+            String requestedName = inputRuleEvaluator.getName();
+            String uniqueName = resolveUniqueName(ruleDAO, requestedName, projectIds, workspaceId, null);
 
             AutomationRuleEvaluatorModel<?> evaluator = switch (inputRuleEvaluator) {
                 case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> {
                     var definition = llmAsJudge.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -145,6 +153,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -155,6 +164,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 case AutomationRuleEvaluatorTraceThreadLlmAsJudge traceThreadLlmAsJudge -> {
                     var definition = traceThreadLlmAsJudge.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -168,6 +178,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -178,6 +189,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmAsJudge -> {
                     var definition = spanLlmAsJudge.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -191,6 +203,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = spanUserDefinedMetricPython.toBuilder()
                             .id(id)
+                            .name(uniqueName)
                             .projectId(primaryProjectId)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -226,7 +239,33 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             }
         });
 
+        logSuffixApplied(inputRuleEvaluator.getName(), savedEvaluator.name(), workspaceId);
+
         return findById(savedEvaluator.id(), savedEvaluator.projectIds(), workspaceId);
+    }
+
+    /**
+     * Resolves a name that is free within the target project(s), appending a {@code -N} suffix on collision
+     * (OPIK-7371). Shared by create and update so the suffixing rules cannot drift between them.
+     * {@code excludeRuleId} is null on create; on update it is the rule being edited, so it is not treated
+     * as colliding with its own current name.
+     */
+    private String resolveUniqueName(AutomationRuleDAO ruleDAO, String requestedName, Set<UUID> projectIds,
+            String workspaceId, UUID excludeRuleId) {
+        // Only names sharing the requested prefix are fetched, so the candidate set stays small.
+        Set<String> candidates = ruleDAO.findCandidateNames(projectIds, workspaceId,
+                AutomationRuleNames.likePrefix(requestedName), excludeRuleId);
+        return AutomationRuleNames.generateUniqueName(requestedName, candidates);
+    }
+
+    // Logged after the write transaction commits (not inside it) so a rolled-back write never leaves a
+    // misleading line behind. Values trail the fixed text so the prefix stays greppable in production.
+    private void logSuffixApplied(String requestedName, String appliedName, String workspaceId) {
+        if (appliedName != null && !appliedName.equals(requestedName)) {
+            log.info("Automation rule name already existed in project scope, stored under a new name: "
+                    + "requestedName '{}', appliedName '{}', workspaceId '{}'",
+                    requestedName, appliedName, workspaceId);
+        }
     }
 
     @Override
@@ -239,18 +278,29 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         log.debug("Updating AutomationRuleEvaluator with id '{}' in projectIds '{}' and workspaceId '{}'", id,
                 projectIds,
                 workspaceId);
-        template.inTransaction(WRITE, handle -> {
+        String requestedName = evaluatorUpdate.getName();
+        String appliedName = template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var projectsDAO = handle.attach(AutomationRuleProjectsDAO.class);
+            var ruleDAO = handle.attach(AutomationRuleDAO.class);
 
             try {
                 String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
+
+                // Only resolve a unique name on an actual rename. A non-name edit (sampling rate, enabled,
+                // filters) must never rename the rule, even if a same-named rule already exists in the
+                // project (e.g. legacy duplicates). This guard stays outside resolveUniqueName because it is
+                // specific to update - a create has no current name to compare against (OPIK-7371).
+                String currentName = ruleDAO.findNameById(id, workspaceId).orElse(null);
+                String uniqueName = Objects.equals(requestedName, currentName)
+                        ? requestedName
+                        : resolveUniqueName(ruleDAO, requestedName, projectIds, workspaceId, id);
 
                 // Update base rule (project associations handled separately in junction table)
                 var triggerScope = evaluatorUpdate.getTriggerScope() != null
                         ? evaluatorUpdate.getTriggerScope()
                         : EvalTriggerScope.PRODUCTION;
-                int resultBase = dao.updateBaseRule(id, workspaceId, evaluatorUpdate.getName(),
+                int resultBase = dao.updateBaseRule(id, workspaceId, uniqueName,
                         evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(),
                         triggerScope, filtersJson);
 
@@ -316,6 +366,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 if (resultEval == 0 || resultBase == 0) {
                     throw newNotFoundException();
                 }
+
+                return uniqueName;
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                     log.info(EVALUATOR_ALREADY_EXISTS);
@@ -324,9 +376,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     throw e;
                 }
             }
-
-            return null;
         });
+
+        logSuffixApplied(requestedName, appliedName, workspaceId);
     }
 
     @Override

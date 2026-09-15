@@ -19,7 +19,7 @@ const PROMPT_VARIANTS = [
 
 test.describe(
   'Playground → save new prompt to library',
-  { tag: ['@t1-smoke', '@prompts', '@playground'] },
+  { tag: ['@t1-smoke', '@area:playground', '@cap:playground.save-new-prompt'] },
   () => {
     test.use({ viewport: { width: 1600, height: 900 } });
 

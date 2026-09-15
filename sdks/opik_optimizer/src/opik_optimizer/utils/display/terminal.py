@@ -621,6 +621,7 @@ def _format_stop_display(stop_reason: str | None) -> str:
         "perfect_score": "Perfect",
         "completed": "Completed",
         "no_improvement": "No improvement",
+        "reflection_budget": "Reflection budget",
         "error": "Error",
         "cancelled": "Cancelled",
     }.get(stop_display, stop_display)

@@ -6,6 +6,7 @@ import pytest
 
 from opik import exceptions
 from opik.evaluation.resume import context, state
+from opik.evaluation.types import ErrorTolerance
 
 
 def _metadata_with_blob(blob_dict):
@@ -76,6 +77,28 @@ class TestPrepareResumeContext:
         assert dict(ctx.completed_runs_by_item_id) == {"a": 2, "c": 1}
         # no checkpoint required → reader should not be touched
         unused_reader.assert_not_called()
+
+    def test_resumable_experiment__carries_the_persisted_error_tolerance(self):
+        # The only link between the tolerance read out of the blob and the one
+        # ``evaluate_resume`` hands to ``_evaluate_task``; without it a resumed
+        # run silently reverts to the default.
+        metadata = _metadata_with_blob(
+            {
+                "schema_version": 1,
+                "resumable": True,
+                "default_runs_per_item": 1,
+                "dataset_filter_string": None,
+                "dataset_version_name": "v1",
+                "nb_samples": None,
+                "requires_local_checkpoint": False,
+                "error_tolerance": int(ErrorTolerance.ALL_SCORING_ERRORS),
+            }
+        )
+        client, _ = _make_client(metadata)
+
+        ctx = context.prepare_resume_context(client, "exp-1")
+
+        assert ctx.error_tolerance is ErrorTolerance.ALL_SCORING_ERRORS
 
     def test_resumable_experiment__with_version_name__pins_dataset_version(self):
         metadata = _metadata_with_blob(

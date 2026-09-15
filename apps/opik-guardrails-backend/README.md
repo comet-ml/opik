@@ -71,7 +71,7 @@ to the container.
 This endpoint allows you to perform multiple validations on the same text in a single request.
 
 ```bash
-curl -X POST http://localhost:5000/api/validate \
+curl -X POST http://localhost:5000/api/v1/guardrails/validations \
   -H "Content-Type: application/json" \
   -d '{
     "text": "This text is about artificial intelligence. My name is John Doe and my email is john.doe@example.com.",

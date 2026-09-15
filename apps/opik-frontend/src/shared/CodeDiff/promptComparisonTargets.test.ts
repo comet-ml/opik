@@ -126,6 +126,31 @@ describe("buildPromptComparisonTargets", () => {
       expect(targets.map((t) => t.caption)).toEqual(["Trial #3", "Trial #2"]);
     });
 
+    it("gives an unnumbered (baseline) parent no trial tag", () => {
+      // v2 leaves the baseline unnumbered (OPIK-7589); a caption of
+      // "Trial #null" must never render.
+      const parent = createCandidate({
+        id: "p-base",
+        stepIndex: 1,
+        trialNumber: null,
+      });
+      const candidate = createCandidate({
+        id: "c-2",
+        trialNumber: 1,
+        parentCandidateIds: ["p-base"],
+      });
+
+      const targets = buildPromptComparisonTargets({
+        candidate,
+        candidates: [parent, candidate],
+        getPrompt: promptResolver({ "p-base": "parent", "c-2": "current" }),
+      });
+
+      expect(targets).toEqual([
+        { id: "p-base", label: "Parent", caption: undefined, prompt: "parent" },
+      ]);
+    });
+
     it("skips parent ids that are not present in the candidate list", () => {
       const candidate = createCandidate({
         id: "c-3",

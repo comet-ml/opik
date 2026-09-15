@@ -363,15 +363,22 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Batch updating dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
-                emptyIfNull(batchUpdate.ids()).size(), emptyIfNull(batchUpdate.filters()).size());
+        // Same validation gap as deleteDatasetItems: these filters reach the same query builder.
+        var validatedBatchUpdate = batchUpdate.toBuilder()
+                .filters(filtersFactory.validateFilter(batchUpdate.filters()))
+                .build();
 
-        itemService.batchUpdate(batchUpdate)
+        log.info("Batch updating dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
+                emptyIfNull(validatedBatchUpdate.ids()).size(),
+                emptyIfNull(validatedBatchUpdate.filters()).size());
+
+        itemService.batchUpdate(validatedBatchUpdate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
         log.info("Batch updated dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
-                emptyIfNull(batchUpdate.ids()).size(), emptyIfNull(batchUpdate.filters()).size());
+                emptyIfNull(validatedBatchUpdate.ids()).size(),
+                emptyIfNull(validatedBatchUpdate.filters()).size());
 
         return Response.noContent().build();
     }
@@ -734,6 +741,10 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        // Body-supplied filters need the same validation the query-param paths get. Without it an operator the
+        // field's type does not support reaches the query builder with no template behind it and fails as a 500.
+        var queryFilters = filtersFactory.validateFilter(request.filters());
+
         log.info(
                 "Deleting dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}', batchGroupId='{}'",
                 workspaceId,
@@ -742,7 +753,7 @@ public class DatasetsResource {
                 emptyIfNull(request.filters()).size(),
                 request.batchGroupId());
 
-        itemService.delete(request.itemIds(), request.datasetId(), request.filters(), request.batchGroupId())
+        itemService.delete(request.itemIds(), request.datasetId(), queryFilters, request.batchGroupId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

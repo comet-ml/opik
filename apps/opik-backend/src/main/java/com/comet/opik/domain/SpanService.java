@@ -23,6 +23,7 @@ import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
@@ -33,6 +34,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -143,6 +145,23 @@ public class SpanService {
                 .flatMap(span -> attachmentReinjectorService.reinjectAttachments(span, true));
     }
 
+    /**
+     * Cheap approximate serialized size (bytes) of all spans across the given trace ids. Used by the
+     * trace-thread online scorers to size the inline-vs-agentic-tools routing decision without fetching
+     * the spans into heap (OPIK-7454). No attachment reinjection — it's a pure aggregate, so it also
+     * skips the per-span attachment resolution that the full fetch pays. Returns 0 for empty input.
+     */
+    @WithSpan
+    public Mono<Long> getSpansSizeByTraceIds(Set<UUID> traceIds) {
+        if (CollectionUtils.isEmpty(traceIds)) {
+            return Mono.just(0L);
+        }
+
+        log.info("Estimating spans size for '{}' traces", traceIds.size());
+
+        return spanDAO.getSpansSizeByTraceIds(traceIds);
+    }
+
     @WithSpan
     public Flux<Span> getByIds(@NonNull Set<UUID> ids) {
         if (ids.isEmpty()) {
@@ -161,7 +180,7 @@ public class SpanService {
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
         return idGenerator
                 .validateIdAsync(id, SPAN_KEY)
-                .then(Mono.fromRunnable(() -> validateSpanReferences(span.traceId(), span.parentSpanId())))
+                .then(validateSpanReferencesAsync(span.traceId(), span.parentSpanId()))
                 .then(projectService.getOrCreate(projectName))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, SPAN_KEY),
@@ -224,8 +243,7 @@ public class SpanService {
 
             return idGenerator
                     .validateIdNotInFutureAsync(id, SPAN_KEY)
-                    .then(Mono.fromRunnable(
-                            () -> validateSpanReferences(spanUpdate.traceId(), spanUpdate.parentSpanId())))
+                    .then(validateSpanReferencesAsync(spanUpdate.traceId(), spanUpdate.parentSpanId()))
                     .then(Mono.defer(() -> getProjectById(spanUpdate)
                             .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                             .subscribeOn(Schedulers.boundedElastic()))
@@ -252,9 +270,8 @@ public class SpanService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return Mono
-                    .fromRunnable(() -> validateSpanReferences(batchUpdate.update().traceId(),
-                            batchUpdate.update().parentSpanId()))
+            return validateSpanReferencesAsync(batchUpdate.update().traceId(),
+                    batchUpdate.update().parentSpanId())
                     .then(spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags))
                     .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {
@@ -375,15 +392,6 @@ public class SpanService {
 
         List<Span> dedupedSpans = dedupSpans(batch.spans());
 
-        // Fail fast on invalid ids BEFORE any side effect below (auto-stripped attachment deletion, project
-        // creation), so a rejected batch never mutates state.
-        dedupedSpans.forEach(span -> {
-            if (span.id() != null) {
-                idGenerator.validateId(span.id(), SPAN_KEY);
-            }
-            validateSpanReferences(span.traceId(), span.parentSpanId());
-        });
-
         List<String> projectNames = dedupedSpans
                 .stream()
                 .map(Span::projectName)
@@ -401,7 +409,19 @@ public class SpanService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds)
+        // Fail fast on invalid ids BEFORE any side effect below (auto-stripped attachment deletion, project
+        // creation), so a rejected batch never mutates state. Runs inside deferContextual so the audit
+        // metric can attribute the batch's own ids to the request workspace.
+        return Mono.deferContextual(validationCtx -> {
+            String validationWorkspaceId = validationCtx.get(RequestContext.WORKSPACE_ID);
+            dedupedSpans.forEach(span -> {
+                if (span.id() != null) {
+                    idGenerator.validateId(span.id(), SPAN_KEY, validationWorkspaceId);
+                }
+                validateSpanReferences(span.traceId(), span.parentSpanId(), validationWorkspaceId);
+            });
+            return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds);
+        })
                 .then(Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
@@ -455,11 +475,29 @@ public class SpanService {
         return result;
     }
 
-    // Shared span reference-id policy: the trace (required) and parent (optional) must be time-ordered
-    // UUIDv7, past allowed. Used by every span write path so the rules can't drift between them.
-    private void validateSpanReferences(UUID traceId, UUID parentSpanId) {
-        idGenerator.validateIdNotInFuture(traceId, SPAN_TRACE_KEY);
-        idGenerator.validateIdNotInFutureIfPresent(parentSpanId, SPAN_PARENT_KEY);
+    /**
+     * Shared span reference-id policy: the trace (required) and parent (optional) must be time-ordered
+     * UUIDv7, past allowed. Used by every span write path so the rules can't drift between them.
+     * {@code workspaceId} attributes the check to the request workspace, which also lets an allow-listed
+     * demo workspace reference its own future-dated traces under the bypass window (OPIK-7794).
+     */
+    private void validateSpanReferences(UUID traceId, UUID parentSpanId, String workspaceId) {
+        idGenerator.validateIdNotInFuture(traceId, SPAN_TRACE_KEY, workspaceId);
+        idGenerator.validateIdNotInFutureIfPresent(parentSpanId, SPAN_PARENT_KEY, workspaceId);
+    }
+
+    /**
+     * Reactive adapter for the write paths that validate outside an existing {@code deferContextual},
+     * resolving the workspace from the Reactor context the same way {@link IdGenerator}'s own async
+     * overloads do. {@code deferContextual} already defers to subscription time and surfaces a throw as an
+     * error signal, so no inner publisher is needed.
+     */
+    private Mono<Void> validateSpanReferencesAsync(UUID traceId, UUID parentSpanId) {
+        return Mono.deferContextual(ctx -> {
+            validateSpanReferences(traceId, parentSpanId,
+                    ctx.getOrDefault(RequestContext.WORKSPACE_ID, ErrorMetricsResolver.UNKNOWN));
+            return Mono.empty();
+        });
     }
 
     private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects) {
@@ -482,9 +520,8 @@ public class SpanService {
                         throw new IllegalStateException("Project not found: %s".formatted(span.projectName()));
                     }
 
+                    // Ids are already validated up-front in create(SpanBatch); generated ids are inherently valid.
                     UUID id = span.id() == null ? idGenerator.generateId() : span.id();
-                    idGenerator.validateId(id, SPAN_KEY);
-                    // trace/parent references are validated up front in create(SpanBatch) before side effects.
 
                     return span.toBuilder().id(id).projectId(project.id()).build();
                 })
@@ -522,14 +559,16 @@ public class SpanService {
                         if (spanIds.isEmpty()) {
                             return Mono.empty();
                         }
-                        return commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds)
+                        return commentService.deleteByEntityIds(CommentDAO.EntityType.SPAN, spanIds, projectId)
                                 .then(Mono.defer(() -> feedbackScoreService.deleteBySpanIds(spanIds, projectId)))
-                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds)))
-                                .then(spanDAO.deleteByIds(spanIds, projectId)
+                                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(SPAN, spanIds, projectId)))
+                                .then(captureDeletions(spanIds, projectId, workspaceId, userName))
+                                // Deferred like the steps above it, so the delete is assembled after the capture
+                                // rather than alongside it.
+                                .then(Mono.defer(() -> spanDAO.deleteByIds(spanIds, projectId)
                                         .doOnSuccess(__ -> log.info(
                                                 "Deleted '{}' spans for workspace '{}', project '{}'",
-                                                spanIds.size(), workspaceId, projectId)))
-                                .then(captureDeletions(spanIds, projectId, workspaceId, userName))
+                                                spanIds.size(), workspaceId, projectId))))
                                 .thenReturn(spanIds);
                     })
                     .doOnSuccess(spanIds -> {
@@ -542,11 +581,12 @@ public class SpanService {
     }
 
     /**
-     * Records the span ids removed by the trace-delete cascade in the {@code deletion_events_local} bridge so they
-     * survive the {@code spans} table copy during the Slice 3 migration window. Best-effort and deferred: gated by
-     * {@code spanDeletionEventsCaptureEnabled} and run only after the delete succeeds, and any capture failure is
-     * logged and swallowed so it can never disrupt the delete. Spans have no standalone delete, so this cascade is the
-     * only capture path. Mirrors {@code TraceService.captureDeletions}.
+     * Records the span ids the trace-delete cascade is about to remove in the {@code deletion_events_local} bridge so
+     * they survive the {@code spans} table copy during its migration window. Runs <b>before</b> the span lightweight
+     * delete and is best-effort, for the reasons in {@code TraceServiceImpl.captureDeletions}. Sits immediately before
+     * {@code SpanDAO.deleteByIds} rather than at the top of the cascade: the bridge records rows of the {@code spans}
+     * table, and a child-entity delete failing upstream leaves those rows untouched, so there is nothing to record.
+     * No-op unless capture is enabled. Spans have no standalone delete, so this cascade is the only capture path.
      */
     private Mono<Void> captureDeletions(Set<UUID> ids, UUID projectId, String workspaceId, String userName) {
         return Mono.defer(() -> {

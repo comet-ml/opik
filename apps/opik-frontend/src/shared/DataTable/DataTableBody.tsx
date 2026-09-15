@@ -3,11 +3,16 @@ import { TableBody } from "@/ui/table";
 import { Row, Table } from "@tanstack/react-table";
 import { cn } from "@/lib/utils";
 
+export type RowVirtualizationConfig = {
+  enabled?: boolean;
+};
+
 export type DataTableBodyProps<TData> = {
   table: Table<TData>;
   renderRow: (row: Row<TData>) => React.ReactNode | null;
   renderNoData: () => React.ReactNode | null;
   showLoadingOverlay?: boolean;
+  rowVirtualization?: RowVirtualizationConfig;
 };
 
 export const DataTableBody = <TData,>({

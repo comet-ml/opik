@@ -2658,6 +2658,7 @@ export class DatasetsClient {
      * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.NotFoundError}
+     * @throws {@link OpikApi.ConflictError}
      *
      * @example
      *     await client.datasets.restoreDatasetVersion("id", {
@@ -2724,6 +2725,8 @@ export class DatasetsClient {
             switch (_response.error.statusCode) {
                 case 404:
                     throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,

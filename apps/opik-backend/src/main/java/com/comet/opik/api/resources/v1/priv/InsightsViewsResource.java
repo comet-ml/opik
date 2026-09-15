@@ -13,6 +13,8 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DashboardService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -69,6 +71,7 @@ public class InsightsViewsResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/insights-views/{insightsViewId}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = Dashboard.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_CREATE)
     @JsonView(Dashboard.View.Public.class)
     @RateLimited
     public Response createInsightsView(
@@ -93,6 +96,7 @@ public class InsightsViewsResource {
             @ApiResponse(responseCode = "200", description = "Insights view resource", content = @Content(schema = @Schema(implementation = Dashboard.class))),
             @ApiResponse(responseCode = "404", description = "Insights view not found")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_VIEW)
     @JsonView(Dashboard.View.Public.class)
     public Response getInsightsViewById(@PathParam("insightsViewId") UUID id) {
 
@@ -109,6 +113,7 @@ public class InsightsViewsResource {
     @Operation(operationId = "findInsightsViews", summary = "Find insights views", description = "Find insights views in a workspace", responses = {
             @ApiResponse(responseCode = "200", description = "Insights view page", content = @Content(schema = @Schema(implementation = DashboardPage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_VIEW)
     @JsonView(Dashboard.View.Public.class)
     public Response findInsightsViews(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
@@ -140,6 +145,7 @@ public class InsightsViewsResource {
             @ApiResponse(responseCode = "404", description = "Insights view not found"),
             @ApiResponse(responseCode = "409", description = "Conflict - insights view with this name already exists")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_EDIT)
     @JsonView(Dashboard.View.Public.class)
     @RateLimited
     public Response updateInsightsView(
@@ -162,6 +168,7 @@ public class InsightsViewsResource {
     @Operation(operationId = "deleteInsightsView", summary = "Delete insights view", description = "Delete insights view by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_DELETE)
     public Response deleteInsightsView(@PathParam("insightsViewId") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -178,6 +185,7 @@ public class InsightsViewsResource {
     @Operation(operationId = "deleteInsightsViewsBatch", summary = "Delete insights views", description = "Delete insights views batch", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_DELETE)
     public Response deleteInsightsViewsBatch(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
 

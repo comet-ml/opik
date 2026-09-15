@@ -319,15 +319,26 @@ class OptimizableAgent(ABC):
             )
             self._increment_llm_call_tools_counter()
 
+    def _owning_optimizer(self) -> Any | None:
+        """The optimizer this agent reports telemetry to, under either name.
+
+        ``BaseOptimizer._attach_agent_owner`` sets both ``optimizer`` and
+        ``_optimizer_owner``, but the two names were read in different places —
+        ``_apply_cost_usage_to_owner`` by one, the counters by the other — so a
+        caller that set only one silently lost half the telemetry. Resolving both
+        here keeps the owner a single concept (OPIK-7521).
+        """
+        return self.optimizer or getattr(self, "_optimizer_owner", None)
+
     def _increment_llm_counter(self) -> None:
-        optimizer_ref = self.optimizer
+        optimizer_ref = self._owning_optimizer()
         if optimizer_ref is not None and hasattr(
             optimizer_ref, "_increment_llm_counter"
         ):
             optimizer_ref._increment_llm_counter()
 
     def _increment_llm_call_tools_counter(self) -> None:
-        optimizer_ref = self.optimizer
+        optimizer_ref = self._owning_optimizer()
         if optimizer_ref is not None and hasattr(
             optimizer_ref, "_increment_llm_call_tools_counter"
         ):

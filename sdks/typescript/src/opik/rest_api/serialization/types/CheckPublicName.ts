@@ -5,8 +5,8 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 
 export const CheckPublicName: core.serialization.Schema<serializers.CheckPublicName.Raw, OpikApi.CheckPublicName> =
-    core.serialization.enum_(["TOPIC", "PII"]);
+    core.serialization.enum_(["TOPIC", "PII", "LLM_JUDGE", "PROMPT_INJECTION", "CUSTOM_CLASSIFIER"]);
 
 export declare namespace CheckPublicName {
-    export type Raw = "TOPIC" | "PII";
+    export type Raw = "TOPIC" | "PII" | "LLM_JUDGE" | "PROMPT_INJECTION" | "CUSTOM_CLASSIFIER";
 }

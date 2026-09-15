@@ -13,8 +13,33 @@ import { calcFormatterAwarePercentage } from "@/lib/percentage";
 import { PercentageTrendType } from "@/shared/PercentageTrend/PercentageTrend";
 import MetricTrendPill from "@/shared/PercentageTrend/MetricTrendPill";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import {
+  isInProgressTrialStatus,
+  type TrialStatus,
+} from "@/v2/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 
 type TrialCellContext = CellContext<AggregatedCandidate, unknown>;
+
+/**
+ * True while this row's evaluation is still in flight.
+ *
+ * Every metric on a mid-evaluation trial is computed over the items scored so
+ * far, so a delta against the (fully evaluated) baseline compares different
+ * denominators — a 5-of-30 partial average read "-75%" against a 30-item
+ * baseline in the OPIK-7460 repro. The provisional value itself is still worth
+ * showing; the comparison is not, so callers drop the trend pill (OPIK-7460).
+ */
+const getIsRowInProgress = (
+  context: TrialCellContext,
+  candidateId: string,
+): boolean => {
+  const { custom } = context.column.columnDef.meta ?? {};
+  const { statusMap } = (custom ?? {}) as {
+    statusMap?: Map<string, TrialStatus>;
+  };
+  const status = statusMap?.get(candidateId);
+  return status !== undefined && isInProgressTrialStatus(status);
+};
 
 // Plain helper (not memoized): call sites pass fresh inline accessors each
 // render, so a useMemo here would never hit its cache — and the calc is a
@@ -33,6 +58,33 @@ const getBaselinePercentage = (
     formatter,
   );
 };
+
+/**
+ * The baseline delta for a metric cell, withheld while the row is still
+ * evaluating.
+ *
+ * Score, cost and latency all answer the in-progress case the same way, so the
+ * policy lives here once rather than in each of the three cells — a future
+ * change to how provisional rows present their comparison then cannot land on
+ * one metric and miss the others (OPIK-7460).
+ */
+const getTrendPercentage = (
+  context: TrialCellContext,
+  baseline: AggregatedCandidate | undefined,
+  candidateId: string,
+  value: number | undefined,
+  baselineAccessor: (c: AggregatedCandidate) => number | undefined,
+  formatter?: (v: number) => string,
+): number | undefined =>
+  getIsRowInProgress(context, candidateId)
+    ? undefined
+    : getBaselinePercentage(
+        baseline,
+        candidateId,
+        value,
+        baselineAccessor,
+        formatter,
+      );
 
 type TrialMetricCellProps = {
   value?: number;
@@ -74,7 +126,10 @@ export const TrialNumberCell = (context: TrialCellContext) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className="min-w-0 truncate">Trial #{row.trialNumber}</span>
+      <span className="min-w-0 truncate">
+        {/* The baseline is not a trial and carries no number (OPIK-7589). */}
+        {row.trialNumber == null ? "Baseline" : `Trial #${row.trialNumber}`}
+      </span>
     </CellWrapper>
   );
 };
@@ -99,7 +154,8 @@ export const TrialAccuracyCell = (context: TrialCellContext) => {
     isTestSuite?: boolean;
   };
 
-  const percentage = getBaselinePercentage(
+  const percentage = getTrendPercentage(
+    context,
     baselineCandidate,
     row.candidateId,
     row.score,
@@ -135,7 +191,8 @@ export const TrialCandidateCostCell = (context: TrialCellContext) => {
     baselineCandidate?: AggregatedCandidate;
   };
 
-  const percentage = getBaselinePercentage(
+  const percentage = getTrendPercentage(
+    context,
     baselineCandidate,
     row.candidateId,
     row.runtimeCost,
@@ -166,7 +223,8 @@ export const TrialCandidateLatencyCell = (context: TrialCellContext) => {
     baselineCandidate?: AggregatedCandidate;
   };
 
-  const percentage = getBaselinePercentage(
+  const percentage = getTrendPercentage(
+    context,
     baselineCandidate,
     row.candidateId,
     row.latencyP50,

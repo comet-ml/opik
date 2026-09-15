@@ -16,10 +16,10 @@ from ..errors.unprocessable_entity_error import UnprocessableEntityError
 from ..types.breakdown_config import BreakdownConfig
 from ..types.result import Result
 from ..types.span_filter import SpanFilter
+from ..types.token_usage_names import TokenUsageNames
 from ..types.workspace_configuration import WorkspaceConfiguration
 from ..types.workspace_metric_response import WorkspaceMetricResponse
 from ..types.workspace_metrics_summary_response import WorkspaceMetricsSummaryResponse
-from ..types.workspace_version import WorkspaceVersion
 from .types.workspace_span_metric_request_interval import WorkspaceSpanMetricRequestInterval
 from .types.workspace_span_metric_request_metric_type import WorkspaceSpanMetricRequestMetricType
 
@@ -502,49 +502,60 @@ class RawWorkspacesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def get_workspace_version(
-        self, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[WorkspaceVersion]:
+    def get_workspace_token_usage_names(
+        self,
+        *,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[TokenUsageNames]:
         """
-        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
-        or Opik V2 (project-first) navigation. The backend is the single authority for this
-        determination, clients must never derive the version themselves.
-
-        Determination logic (priority order):
-        1) V2 workspace allowlist (TOGGLE_V2_WORKSPACE_ALLOWLIST)
-        2) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-        3) Auth one-way V2 gate (authenticated mode only)
-        4) Version 1 entity check (entities without project_id)
-        5) Fallback on failure
-
-        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
-        Called by the frontend on workspace load.
+        Gets the distinct span token usage key names aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
 
         Parameters
         ----------
+        project_ids : typing.Optional[typing.Sequence[str]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        HttpResponse[WorkspaceVersion]
-            Workspace version
+        HttpResponse[TokenUsageNames]
+            Token Usage names resource
         """
         _response = self._client_wrapper.httpx_client.request(
-            "v1/private/workspaces/versions",
-            method="GET",
+            "v1/private/workspaces/token-usage/names",
+            method="POST",
+            json={
+                "project_ids": project_ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
             request_options=request_options,
+            omit=OMIT,
         )
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    WorkspaceVersion,
+                    TokenUsageNames,
                     parse_obj_as(
-                        type_=WorkspaceVersion,  # type: ignore
+                        type_=TokenUsageNames,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -1097,49 +1108,60 @@ class AsyncRawWorkspacesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def get_workspace_version(
-        self, *, request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[WorkspaceVersion]:
+    async def get_workspace_token_usage_names(
+        self,
+        *,
+        project_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[TokenUsageNames]:
         """
-        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
-        or Opik V2 (project-first) navigation. The backend is the single authority for this
-        determination, clients must never derive the version themselves.
-
-        Determination logic (priority order):
-        1) V2 workspace allowlist (TOGGLE_V2_WORKSPACE_ALLOWLIST)
-        2) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-        3) Auth one-way V2 gate (authenticated mode only)
-        4) Version 1 entity check (entities without project_id)
-        5) Fallback on failure
-
-        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
-        Called by the frontend on workspace load.
+        Gets the distinct span token usage key names aggregated across the workspace. When project_ids is empty, all projects in the workspace are included; otherwise only the given projects.
 
         Parameters
         ----------
+        project_ids : typing.Optional[typing.Sequence[str]]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
         Returns
         -------
-        AsyncHttpResponse[WorkspaceVersion]
-            Workspace version
+        AsyncHttpResponse[TokenUsageNames]
+            Token Usage names resource
         """
         _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/workspaces/versions",
-            method="GET",
+            "v1/private/workspaces/token-usage/names",
+            method="POST",
+            json={
+                "project_ids": project_ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
             request_options=request_options,
+            omit=OMIT,
         )
         try:
             if 200 <= _response.status_code < 300:
                 _data = typing.cast(
-                    WorkspaceVersion,
+                    TokenUsageNames,
                     parse_obj_as(
-                        type_=WorkspaceVersion,  # type: ignore
+                        type_=TokenUsageNames,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

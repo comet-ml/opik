@@ -86,6 +86,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -941,7 +942,6 @@ class FindSpansResourceTest {
                     .sorted(stream
                             ? Comparator.comparing(Span::id).reversed()
                             : Comparator.comparing(Span::traceId)
-                                    .thenComparing(Span::parentSpanId)
                                     .thenComparing(Span::id)
                                     .reversed())
                     .toList();
@@ -1122,6 +1122,54 @@ class FindSpansResourceTest {
             var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
 
             assertSpan(actualSpans, expectedSpans, USER);
+        }
+
+        /**
+         * The cursor is whatever id the previous page ended on, so it can carry a far-future timestamp: a UUIDv7
+         * minted by a broken clock (litellm BerriAI/litellm#31294) sorts above every real id, so it comes back first
+         * under {@code ORDER BY id DESC} and becomes the cursor for page two.
+         *
+         * <p>Each id-range bound in the read path carries a parallel week-start bound on {@code id_at}, a pruning hint
+         * that must never exclude a row the id-range admits. When that bound was {@code toMonday} it broke exactly
+         * here (OPIK-8241): a far-future cursor folded into a past week and every ordinary span — whose week is later
+         * — failed {@code <=}, so the page came back empty and pagination stopped dead.
+         *
+         * <p>This reaches the <b>legacy</b> {@code spans} table, the default topology of this suite and of any install
+         * that has not cut over, because the wrap is on the <b>bound</b> side, which reads the id directly and is
+         * honest whatever width {@code spans.id_at} has. No far-future span is needed — {@code lastRetrievedId} is an
+         * unvalidated cursor on the request, so ingestion, which would reject such an id, is not involved.
+         */
+        @Test
+        void searchSpansStream__whenCursorCarriesAFarFutureTimestamp__thenSpansAreStillReturned() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    span.startTime(), span.endTime()))
+                            .build())
+                    .sorted(Comparator.comparing(Span::id).reversed())
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Sorts above every seeded id, so `id < :cursor` admits all of them and only the week bound can drop them.
+            var farFutureCursor = idGenerator.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+
+            var streamRequest = SpanSearchStreamRequest.builder()
+                    .projectName(projectName)
+                    .lastRetrievedId(farFutureCursor)
+                    .limit(spans.size())
+                    .build();
+            var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
+
+            assertSpan(actualSpans, spans, USER);
         }
 
         @ParameterizedTest
@@ -2211,6 +2259,102 @@ class FindSpansResourceTest {
                     .build());
 
             var values = testAssertion.transformTestParams(spans, expectedSpans.reversed(), unexpectedSpans);
+
+            testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
+                    values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"$..test", "$[abc]", "$.key with space", "[", "]", "[..]"})
+        @DisplayName("a malformed or non-matching metadata path returns empty stats rather than failing")
+        void whenFilterMetadataPathIsMalformedOrNonMatching__thenReturnEmptyStats(String key) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key(key)
+                    .value("gpt-4")
+                    .build());
+
+            var actualStats = spanResourceClient.getSpansStats(projectName, null, filters, apiKey, workspaceName,
+                    Map.of());
+
+            assertThat(actualStats.stats()).isEmpty();
+
+            // The list endpoint recovers on a different path than stats, so assert it separately
+            var actualPage = spanResourceClient.findSpans(workspaceName, apiKey, projectName, null, 1, 10, null, null,
+                    filters, null, null);
+
+            assertThat(actualPage.content()).isEmpty();
+            assertThat(actualPage.total()).isZero();
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterMetadataKeyHasSpecialCharacters__thenReturnSpansFiltered(String endpoint,
+                SpanPageTestAssertion testAssertion) {
+
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = generator.generate().toString();
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .metadata(JsonUtils.getJsonNodeFromString(
+                                    "{\"hidden_params\":{\"additional_headers\":{\"x-litellm-attempted-retries\":\"0\"}}}"))
+                            .feedbackScores(null)
+                            .totalEstimatedCost(null)
+                            .build())
+                    .collect(toCollection(ArrayList::new));
+            spans.set(0, spans.getFirst().toBuilder()
+                    .metadata(JsonUtils.getJsonNodeFromString(
+                            "{\"hidden_params\":{\"additional_headers\":{\"x-litellm-attempted-retries\":\"3\"}}}"))
+                    .build());
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            var expectedSpans = List.of(spans.getFirst());
+            var unexpectedSpans = List.of(podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(null)
+                    .build());
+
+            spanResourceClient.batchCreateSpans(unexpectedSpans, apiKey, workspaceName);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("hidden_params.additional_headers.x-litellm-attempted-retries")
+                    .value("3")
+                    .build());
+
+            var values = testAssertion.transformTestParams(spans, expectedSpans, unexpectedSpans);
 
             testAssertion.runTestAndAssert(projectName, null, apiKey, workspaceName, values.expected(),
                     values.unexpected(),
@@ -3856,6 +4000,26 @@ class FindSpansResourceTest {
 
         }
 
+        @Test
+        void whenSearchFilterElementIsNull__thenReturn422() {
+            // Bean validation has to reject a null element: validateFilter dereferences filter.field()
+            // and the endpoint would answer 500 rather than its documented 4xx.
+            var projectName = generator.generate().toString();
+
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("/search")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(SpanSearchStreamRequest.builder()
+                            .projectName(projectName)
+                            .filters(Collections.singletonList(null))
+                            .build()))) {
+
+                assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+
         @ParameterizedTest
         @MethodSource("getFilterInvalidValueOrKeyForFieldTypeArgs")
         void whenFilterInvalidValueOrKeyForFieldType__thenReturn400(String path, SpanFilter filter) {
@@ -5095,8 +5259,7 @@ class FindSpansResourceTest {
             return Stream.of(
                     Arguments.of("/spans/stats", statsTestAssertion, Comparator.comparing(Span::id).reversed()),
                     Arguments.of("/spans", spansTestAssertion,
-                            Comparator.comparing(Span::traceId).thenComparing(Span::parentSpanId)
-                                    .thenComparing(Span::id).reversed()),
+                            Comparator.comparing(Span::traceId).thenComparing(Span::id).reversed()),
                     Arguments.of("/spans/search", spanStreamTestAssertion, Comparator.comparing(Span::id).reversed()));
         }
 

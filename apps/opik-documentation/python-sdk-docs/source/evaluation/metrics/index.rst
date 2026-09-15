@@ -64,5 +64,5 @@ Use these aggregation pages to browse the extended catalog:
 
 Import any metric directly from :mod:`opik.evaluation.metrics`, and pair these API
 references with the Fern guides in
-``apps/opik-documentation/documentation/fern/docs/evaluation/metrics`` for workflow
+``apps/opik-documentation/documentation/fern/docs-v2/evaluation/metrics`` for workflow
 context.

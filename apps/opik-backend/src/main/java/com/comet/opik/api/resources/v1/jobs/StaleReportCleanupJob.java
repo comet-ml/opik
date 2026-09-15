@@ -7,7 +7,6 @@ import io.dropwizard.jobs.annotations.Every;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
@@ -21,13 +20,20 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
 @Singleton
 @DisallowConcurrentExecution
 @Every("15min")
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class StaleReportCleanupJob extends Job {
 
     private static final Lock JOB_LOCK = new Lock("stale_report_cleanup:lock");
 
-    private final @NonNull ReportService reportService;
-    private final @NonNull LockService lockService;
+    private final ReportService reportService;
+    private final LockService lockService;
+
+    @Inject
+    public StaleReportCleanupJob(
+            @NonNull ReportService reportService,
+            @NonNull LockService lockService) {
+        this.reportService = reportService;
+        this.lockService = lockService;
+    }
 
     @Override
     public void doJob(JobExecutionContext context) {

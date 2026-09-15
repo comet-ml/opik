@@ -22,8 +22,6 @@
     "lint": "eslint src --max-warnings=0 && stylelint src/**/*.{css,scss,sass}",
     "lint:fix": "eslint src --fix --max-warnings=0 && stylelint src/**/*.{css,scss,sass} --fix",
     "typecheck": "tsc --project tsconfig.json --noEmit",
-    "e2e": "playwright test && playwright show-report",
-    "e2e:debug": "playwright test --debug",
     "postinstall": "patch-package",
     "deps:validate": "depcruise src --config --ignore-known .dependency-cruiser-known-violations.json",
     "deps:baseline": "depcruise src --config --output-type baseline > .dependency-cruiser-known-violations.json"
@@ -131,7 +129,6 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.1",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/react-query-devtools": "^5.45.0",
     "@tanstack/router-devtools": "^1.36.3",

@@ -9,6 +9,7 @@ export interface OllieReport {
     content?: string;
     recommendedActions?: OpikApi.JsonNode;
     status?: OpikApi.OllieReportStatus;
+    failureReason?: string;
     createdAt?: Date;
     lastUpdatedAt?: Date;
 }

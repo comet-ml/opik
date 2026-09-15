@@ -1,9 +1,11 @@
 name: "Opik Optimizer - Publish SDK"
 run-name: "Opik Optimizer Publish SDK ${{ github.ref_name }} by @${{ github.actor }}"
 
+# PyPI Trusted Publishing (OIDC): no long-lived API token needed.
+# id-token: write lets the runner mint the short-lived OIDC token PyPI trusts.
 permissions:
     contents: read
-    packages: write
+    id-token: write
 
 on:
     workflow_dispatch:
@@ -17,18 +19,12 @@ jobs:
           HF_HUB_DISABLE_TELEMETRY: "1"
         steps:
         - name: Checkout
-          uses: actions/checkout@v6
+          uses: actions/checkout@v7
 
         - name: Set up Python 3.9
-          uses: actions/setup-python@v5
+          uses: actions/setup-python@v7
           with:
                 python-version: 3.9
-
-        - name: PyPI token preflight
-          uses: ./.github/actions/pypi-token-preflight
-          with:
-            pypi_token: ${{ secrets.PYPI_API_TOKEN }}
-            package_name: opik-optimizer
 
         - name: Build pip package
           run: |
@@ -37,9 +33,8 @@ jobs:
                 python3 -m build --sdist --wheel --outdir dist/ .
 
         - name: Publish package distributions to PyPI
-          uses: pypa/gh-action-pypi-publish@v1.12.4
+          uses: pypa/gh-action-pypi-publish@v1.14.2
           with:
-            password: ${{ secrets.PYPI_API_TOKEN }}
             packages-dir: sdks/opik_optimizer/dist
             # Symmetric to OPIK-6624's npm publish 403-skip: replays / races where
             # the version is already on PyPI should not fail the release.

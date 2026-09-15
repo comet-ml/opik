@@ -32,7 +32,7 @@ to its trace.
       <Step title="Run the integration">
         Once the skill is installed, you can integrate with Opik using the following prompt:
         ```
-        Version my prompts in Opik using the /instrument command.
+        Version my prompts in Opik using the /opik-instrument command.
         ```
       </Step>
     </Steps>
@@ -222,3 +222,15 @@ multimodal content, and template engines.
   });
   ```
 </CodeBlocks>
+
+<Tip>
+  **Recommended if you build with an AI coding assistant.** One command — `opik configure` —
+  installs both the [MCP server](/mcp-server) and the Opik skills, and your assistant can then
+  version prompts here as it edits them, and measure whether a change actually helped instead of
+  you judging by eye.
+
+  An example prompt:
+
+  *"Rewrite this system prompt to cut hallucinations, save each attempt to the Opik prompt library,
+  and evaluate every version against my dataset so we can see which one wins."*
+</Tip>

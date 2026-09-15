@@ -8,6 +8,8 @@ import {
   AGENT_ONBOARDING_STEPS,
   AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
   DEFAULT_ONBOARDING_FLOW,
+  GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY,
+  GUIDED_MOBILE_ONBOARDING_VARIANTS,
   MANUAL_ONBOARDING_KEY,
 } from "./AgentOnboarding/AgentOnboardingContext";
 import { useActiveWorkspaceName } from "@/store/AppStore";
@@ -66,6 +68,19 @@ const AgentOnboardingQuickstart: React.FC = () => {
 const NewQuickstart: React.FC = () => {
   const { isPhone } = useIsPhone();
 
+  // Guided mobile onboarding A/B test (OPIK-7476). On phones only, split between
+  // the guided MobileOnboarding flow ("test" / Group B, no Run button) and the
+  // legacy onboarding flow with the Run button ("control" / Group A, which falls
+  // through to the standard desktop logic below). `undefined` falls back to
+  // "control": PostHog is never initialized on self-hosted/OSS and can be
+  // blocked on cloud, where the flag would otherwise stay unresolved forever.
+  const mobileOnboardingVariant =
+    useFeatureFlagVariantKey(GUIDED_MOBILE_ONBOARDING_FLOW_FEATURE_FLAG_KEY) ??
+    GUIDED_MOBILE_ONBOARDING_VARIANTS.CONTROL;
+  const showGuidedMobileOnboarding =
+    isPhone &&
+    mobileOnboardingVariant === GUIDED_MOBILE_ONBOARDING_VARIANTS.TEST;
+
   // Variants: "control" = agent onboarding modal with Opik skills tab; "connect-to-ollie" = agent onboarding modal with Connect to Ollie tab; "manual" = skip the modal and render the full integrations page. Undefined (PostHog unavailable) falls back to "control".
   const variant =
     useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
@@ -98,10 +113,17 @@ const NewQuickstart: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!isPhone && variant === "manual" && !manualOnboardingDone) {
+    // Set the #manual step hash for the standard (legacy) manual flow. This
+    // covers desktop as well as the guided-mobile "control" arm (which renders
+    // the same flow on phones); it is skipped for the guided mobile flow.
+    if (
+      !showGuidedMobileOnboarding &&
+      variant === "manual" &&
+      !manualOnboardingDone
+    ) {
       window.history.replaceState(null, "", "#manual");
     }
-  }, [isPhone, variant, manualOnboardingDone]);
+  }, [showGuidedMobileOnboarding, variant, manualOnboardingDone]);
 
   const handleExplore = useCallback(() => {
     if (!firstTraceProjectId) return;
@@ -124,10 +146,13 @@ const NewQuickstart: React.FC = () => {
     });
   }, [demoDataEnabled, navigate, workspaceName, setManualOnboardingDone]);
 
-  if (isPhone) {
+  // Group B: guided mobile onboarding flow (no Run button).
+  if (showGuidedMobileOnboarding) {
     return <MobileOnboarding />;
   }
 
+  // Group A (control) falls through to the legacy onboarding flow below — the
+  // same path desktop users take, which includes the Run button.
   if (variant === "manual") {
     if (wasDoneOnMount.current) {
       return <Navigate to="/$workspaceName/home" params={{ workspaceName }} />;

@@ -6,6 +6,7 @@ from haystack import tracing
 
 from opik import tracing_runtime_config
 from . import opik_tracer
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -90,6 +91,7 @@ class OpikConnector:
             project_name: The name of the project to use for the tracing run. If not provided, the project name will be
                 set to the default project name.
         """
+        analytics.track_event("integration", "haystack")
         self.name = name
 
         if not tracing_runtime_config.is_tracing_active():

@@ -16,6 +16,7 @@ import {
 } from "@/ui/form";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import { RULE_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
@@ -50,8 +51,6 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -142,9 +141,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
-  const agenticToolsEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.AGENTIC_TOOLS_ENABLED,
-  );
 
   const templates = LLM_PROMPT_TEMPLATES[scope];
 
@@ -220,7 +216,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
             v,
             variables[v],
             currentScope,
-            agenticToolsEnabled,
             reservedVariables,
           );
         });
@@ -231,7 +226,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
         parsingVariablesError,
       );
     },
-    [agenticToolsEnabled],
+    [],
   );
 
   return (
@@ -292,6 +287,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                         provider={provider}
                         model={model}
                         configs={field.value}
+                        unsupportedParams={RULE_UNSUPPORTED_PARAMS}
                         onChange={(partialConfig) => {
                           field.onChange({ ...field.value, ...partialConfig });
                         }}
@@ -453,11 +449,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     type={autocompleteType}
                     includeIntermediateNodes
                     reservedSentinels={
-                      agenticToolsEnabled
-                        ? isSpanScope
-                          ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
-                          : RESERVED_TRACE_LLM_JUDGE_VARIABLES
-                        : undefined
+                      isSpanScope
+                        ? RESERVED_SPAN_LLM_JUDGE_VARIABLES
+                        : RESERVED_TRACE_LLM_JUDGE_VARIABLES
                     }
                   />
                 </>

@@ -13,51 +13,41 @@ import {
   formatAsCurrency,
 } from "@/lib/optimization-formatters";
 
-export const OptimizationPassRateCell = (
+/**
+ * The run's best objective score, rendered per run type.
+ *
+ * This replaces the former separate "Pass rate" and "Accuracy" columns. Those
+ * were mutually exclusive — each rendered a literal "-" for the run type it did
+ * not handle — so a test-suite run always had an empty Accuracy cell and, more
+ * visibly, every Studio dataset run always had an empty Pass rate cell.
+ *
+ * Note the header stays type-neutral ("Best score") rather than using
+ * getObjectiveLabel the way the trials table does: a single optimization run has
+ * one type, but this list can mix test-suite and dataset runs, so no static
+ * header can be per-row correct. Which metric produced the score is already
+ * carried by the sibling "Metric" column and, for dataset runs, by the score
+ * tag's own label.
+ */
+export const OptimizationObjectiveScoreCell = (
   context: CellContext<unknown, unknown>,
 ) => {
   const row = context.row.original as Optimization;
   const isTestSuite = (row.experiment_scores?.length ?? 0) > 0;
 
-  if (!isTestSuite) {
-    return (
-      <CellWrapper
-        metadata={context.column.columnDef.meta}
-        tableMetadata={context.table.options.meta}
-      >
-        <span className="comet-body-s text-muted-slate">-</span>
-      </CellWrapper>
-    );
-  }
-
-  return (
-    <CellWrapper
-      metadata={context.column.columnDef.meta}
-      tableMetadata={context.table.options.meta}
-    >
-      <MetricComparisonCell
-        baseline={row.baseline_objective_score}
-        current={row.best_objective_score}
-        formatter={formatAsPercentage}
-        compact
-      />
-    </CellWrapper>
-  );
-};
-
-export const OptimizationAccuracyCell = (
-  context: CellContext<unknown, unknown>,
-) => {
-  const row = context.row.original as Optimization;
-  const isTestSuite = (row.experiment_scores?.length ?? 0) > 0;
-
+  // Test-suite runs report a pass rate, which is meaningful as a
+  // baseline-vs-best delta.
   if (isTestSuite) {
     return (
       <CellWrapper
         metadata={context.column.columnDef.meta}
         tableMetadata={context.table.options.meta}
       >
-        <span className="comet-body-s text-muted-slate">-</span>
+        <MetricComparisonCell
+          baseline={row.baseline_objective_score}
+          current={row.best_objective_score}
+          formatter={formatAsPercentage}
+          compact
+        />
       </CellWrapper>
     );
   }

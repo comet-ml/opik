@@ -73,8 +73,9 @@ public class TraceDeletedListener {
         log.info("Starting deletion of related entities for traces, count '{}'", traceIds.size());
 
         return feedbackScoreService.deleteByTraceIds(traceIds, projectId)
-                .then(Mono.defer(() -> commentService.deleteByEntityIds(CommentDAO.EntityType.TRACE, traceIds)))
-                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, traceIds)))
+                .then(Mono.defer(() -> commentService.deleteByEntityIds(CommentDAO.EntityType.TRACE, traceIds,
+                        projectId)))
+                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, traceIds, projectId)))
                 .then(Mono.defer(() -> spanService.deleteByTraceIds(traceIds, projectId)));
     }
 }

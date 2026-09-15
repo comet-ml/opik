@@ -20,6 +20,11 @@ import {
   AIProviderFormSchema,
   AIProviderFormType,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
+import {
+  AuthConfigFormValues,
+  formValuesToAuthConfig,
+} from "@/v2/pages-shared/llm/ManageAIProviderDialog/customProviderConfig";
+import { ProviderAuthConfig } from "@/types/providers";
 import { convertCustomProviderModels } from "@/lib/provider";
 import { useProviderOptions } from "@/hooks/useProviderOptions";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
@@ -104,6 +109,8 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       const isOllama = data.provider === PROVIDER_TYPE.OLLAMA;
       const isVertex = data.provider === PROVIDER_TYPE.VERTEX_AI;
 
+      const isTokenMode = "authMode" in data && data.authMode === "token";
+
       const providerKeyData: Partial<{
         provider: PROVIDER_TYPE;
         provider_name: string;
@@ -111,9 +118,10 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         base_url: string;
         configuration: Record<string, string>;
         headers: Record<string, string>;
+        auth_config: ProviderAuthConfig;
       }> = {
         provider: data.provider as PROVIDER_TYPE,
-        ...(data.apiKey && { apiKey: data.apiKey }),
+        ...(!isTokenMode && data.apiKey && { apiKey: data.apiKey }),
       };
 
       if (
@@ -122,6 +130,12 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         "models" in data &&
         "providerName" in data
       ) {
+        if (isTokenMode) {
+          providerKeyData.auth_config = formValuesToAuthConfig(
+            data as Partial<AuthConfigFormValues>,
+            { isEditing: false, hadAuthConfig: false },
+          ) as ProviderAuthConfig;
+        }
         providerKeyData.base_url = data.url;
         providerKeyData.provider_name = data.providerName;
         providerKeyData.configuration = {

@@ -63,6 +63,10 @@ const useThreadBatchDeleteMutation = () => {
           },
         ],
       });
+      queryClient.invalidateQueries({ queryKey: ["threads-statistic"] });
+      queryClient.invalidateQueries({ queryKey: ["traces-statistic"] });
+      queryClient.invalidateQueries({ queryKey: ["spans-statistic"] });
+      queryClient.invalidateQueries({ queryKey: ["project-kpi-cards"] });
     },
   });
 };

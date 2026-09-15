@@ -1,12 +1,13 @@
 import functools
 import logging
-from typing import Optional, List, Callable, Dict, Literal
+from typing import Optional, List, Callable
 
 import opik
 import opik.exceptions as exceptions
 import opik.opik_context as opik_context
 from opik.evaluation.metrics.conversation import conversation_thread_metric
-from opik.rest_api import JsonListStringPublic, TraceThread
+from opik.evaluation.metrics.conversation import types as conversation_types
+from opik.rest_api import JsonListStringPublic, TracePublic, TraceThread
 
 from . import evaluation_result, helpers
 from ..engine import evaluation_tasks_executor
@@ -41,6 +42,9 @@ class ThreadsEvaluationEngine:
         metrics: List[conversation_thread_metric.ConversationThreadMetric],
         trace_input_transform: Callable[[JsonListStringPublic], str],
         trace_output_transform: Callable[[JsonListStringPublic], str],
+        trace_context_transform: Optional[
+            Callable[[TracePublic], Optional[List[str]]]
+        ] = None,
         max_traces_per_thread: int = 1000,
     ) -> evaluation_result.ThreadsEvaluationResult:
         if len(metrics) == 0:
@@ -65,6 +69,7 @@ class ThreadsEvaluationEngine:
                 metrics=metrics,
                 trace_input_transform=trace_input_transform,
                 trace_output_transform=trace_output_transform,
+                trace_context_transform=trace_context_transform,
                 max_traces_per_thread=max_traces_per_thread,
             )
             for thread in threads
@@ -91,15 +96,19 @@ class ThreadsEvaluationEngine:
         trace_input_transform: Callable[[JsonListStringPublic], str],
         trace_output_transform: Callable[[JsonListStringPublic], str],
         max_traces_per_thread: int,
+        trace_context_transform: Optional[
+            Callable[[TracePublic], Optional[List[str]]]
+        ] = None,
     ) -> evaluation_result.ThreadEvaluationResult:
         conversation_dict = helpers.load_conversation_thread(
             thread=thread,
             trace_input_transform=trace_input_transform,
             trace_output_transform=trace_output_transform,
+            trace_context_transform=trace_context_transform,
             max_results=max_traces_per_thread,
             project_name=self._project_name,
             client=self._client.opik_client,
-        ).model_dump()
+        ).model_dump(exclude_none=True)
 
         conversation = conversation_dict["discussion"]
         if len(conversation) == 0:
@@ -113,13 +122,14 @@ class ThreadsEvaluationEngine:
         if eval_project_name is None:
             eval_project_name = self._project_name
 
-        # Create a new trace for the evaluation
+        # Thread evaluation creates no experiment, and the UI only reaches
+        # `source="experiment"` traces through one, so they would be invisible.
         trace_data = trace.TraceData(
             input={"conversation": conversation, "metrics": metrics},
             name="evaluation_task",
             created_by="evaluation",
             project_name=eval_project_name,
-            source="experiment",
+            source="sdk",
         )
 
         with opik_context.trace_context(
@@ -143,7 +153,7 @@ class ThreadsEvaluationEngine:
     )
     def _evaluate_conversation(
         self,
-        conversation: List[Dict[Literal["role", "content"], str]],
+        conversation: conversation_types.Conversation,
         metrics: List[conversation_thread_metric.ConversationThreadMetric],
     ) -> List[score_result.ScoreResult]:
         score_results: List[score_result.ScoreResult] = []

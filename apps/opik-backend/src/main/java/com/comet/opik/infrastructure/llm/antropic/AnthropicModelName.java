@@ -15,6 +15,7 @@ import java.util.Set;
 public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_SONNET_3_7("claude-3-7-sonnet-20250219"),
     CLAUDE_FABLE_5("claude-fable-5"),
+    CLAUDE_FABLE_5_1("claude-fable-5-1"),
     CLAUDE_HAIKU_4_5("claude-haiku-4-5-20251001"),
     CLAUDE_OPUS_4_1("claude-opus-4-1-20250805"),
     CLAUDE_OPUS_4("claude-opus-4-20250514"),
@@ -22,6 +23,7 @@ public enum AnthropicModelName implements StructuredOutputSupported {
     CLAUDE_OPUS_4_6("claude-opus-4-6"),
     CLAUDE_OPUS_4_7("claude-opus-4-7"),
     CLAUDE_OPUS_4_8("claude-opus-4-8"),
+    CLAUDE_OPUS_5("claude-opus-5"),
     CLAUDE_SONNET_4("claude-sonnet-4-20250514"),
     CLAUDE_SONNET_4_5("claude-sonnet-4-5"),
     CLAUDE_SONNET_4_5_20250929("claude-sonnet-4-5-20250929"),

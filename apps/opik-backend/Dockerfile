@@ -12,8 +12,12 @@ COPY src ./src
 # Build artifact
 ARG OPIK_VERSION
 ENV MAVEN_OPTS="-Xmx1G -XX:MaxMetaspaceSize=265m"
+# The image only needs the shaded main jar. maven.test.skip drops test
+# compilation (nothing consumes a test-jar), and source/javadoc skip drops
+# artifacts the runtime image never uses — trimming the package stage without
+# changing what ships. (-T is a no-op here: single-module build, no reactor.)
 RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
-    mvn clean package -DskipTests -Dspotless.skip=true
+    mvn clean package -Dmaven.test.skip=true -Dmaven.source.skip=true -Dmaven.javadoc.skip=true -Dspotless.skip=true
 
 ###############################
 FROM amazoncorretto:25.0.3-al2023
@@ -27,6 +31,9 @@ LABEL org.opencontainers.image.vendor="Comet ML"
 # SHA256 checksum must match the official AWS RDS global bundle
 # Update this checksum when AWS updates the bundle: https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 ARG RDS_CERT_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
+# Not a secret: `changeit` is the stock JDK truststore password, and this truststore holds only
+# public AWS RDS CA certificates. Flagged because the variable name matches hadolint's heuristic.
+# hadolint ignore=DL3064
 ARG STORE_PASSWORD=changeit
 COPY install_rds_cert.sh /tmp/install_rds_cert.sh
 # perl is intentionally not installed: it pulls in perl-Archive-Tar, which is
@@ -54,7 +61,7 @@ RUN yum update -y && \
 WORKDIR /opt/opik
 
 # Copy application files
-COPY --chown=1001:1001 config.yml lombok.config entrypoint.sh run_db_migrations.sh provision_agent_insights_readonly_user.sh opik-otel-views.yaml ./
+COPY --chown=1001:1001 config.yml lombok.config entrypoint.sh run_db_migrations.sh rebaseline_db_changelog.sh provision_agent_insights_readonly_user.sh opik-otel-views.yaml ./
 COPY --chown=1001:1001 redoc/ redoc/
 
 # Prepare shell scripts

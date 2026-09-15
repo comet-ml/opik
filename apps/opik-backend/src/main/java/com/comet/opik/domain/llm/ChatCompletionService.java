@@ -3,7 +3,20 @@ package com.comet.opik.domain.llm;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.utils.ChunkedOutputHandlers;
+import com.comet.opik.utils.HttpStatusRetryability;
+import com.google.api.gax.rpc.ApiException;
+import com.google.api.gax.rpc.StatusCode;
 import com.google.common.base.Throwables;
+import com.openai.errors.OpenAIServiceException;
+import dev.langchain4j.exception.AuthenticationException;
+import dev.langchain4j.exception.HttpException;
+import dev.langchain4j.exception.InternalServerException;
+import dev.langchain4j.exception.InvalidRequestException;
+import dev.langchain4j.exception.ModelNotFoundException;
+import dev.langchain4j.exception.NonRetriableException;
+import dev.langchain4j.exception.RateLimitException;
+import dev.langchain4j.exception.TimeoutException;
+import dev.langchain4j.exception.UnsupportedFeatureException;
 import dev.langchain4j.internal.RetryUtils;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -20,12 +33,16 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.net.ConnectException;
 import java.nio.channels.ClosedChannelException;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 
@@ -33,6 +50,7 @@ import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 @Slf4j
 public class ChatCompletionService {
     public static final String UNEXPECTED_ERROR_CALLING_LLM_PROVIDER = "Unexpected error calling LLM provider";
+    public static final String UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER = "Unsupported feature for the selected LLM provider";
     public static final String ERROR_EMPTY_MESSAGES = "messages cannot be empty";
 
     private final LlmProviderClientConfig llmProviderClientConfig;
@@ -58,12 +76,17 @@ public class ChatCompletionService {
         ChatCompletionResponse chatCompletionResponse;
         try {
             log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
-            chatCompletionResponse = retryPolicy.withRetry(() -> llmProviderClient.generate(request, workspaceId));
+            chatCompletionResponse = retryPolicy.withRetry(
+                    () -> failFastOnUnsupportedFeature(() -> llmProviderClient.generate(request, workspaceId)));
         } catch (RuntimeException runtimeException) {
+            failIfUnsupportedFeature(runtimeException);
+
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(runtimeException);
 
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
+
+            failIfProviderReportedHttpStatus(runtimeException);
 
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
@@ -82,13 +105,27 @@ public class ChatCompletionService {
         log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
 
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
+        var errorHandler = getErrorHandler(handlers, llmProviderClient);
 
-        llmProviderClient.generateStream(
-                request,
-                workspaceId,
-                handlers::handleMessage,
-                handlers::handleClose,
-                getErrorHandler(handlers, llmProviderClient));
+        try {
+            llmProviderClient.generateStream(
+                    request,
+                    workspaceId,
+                    handlers::handleMessage,
+                    handlers::handleClose,
+                    errorHandler);
+        } catch (UnsupportedFeatureException unsupportedFeature) {
+            // Streaming clients get one contract: HTTP 200 with the error delivered in-stream. VertexAI and Gemini
+            // already guarantee that by catching everything inside their own boundedElastic task, but
+            // OpenAiResponses, OpenAI, CustomLlm and Anthropic run inline, so an unsupported feature raised before
+            // the provider engages would otherwise escape as an HTTP status and break the contract for those
+            // providers only. Caught by exact type rather than RuntimeException: no retry policy wraps this call, so
+            // these arrive unwrapped, and everything else keeps propagating to the resource layer untouched.
+            // BadRequestException is deliberately NOT caught: LlmProviderAnthropic.generateStream validates messages
+            // inline and throws it, and that must stay a real HTTP 400.
+            errorHandler.accept(unsupportedFeature);
+            return;
+        }
 
         log.info("Created and streaming chat completions, workspaceId '{}', model '{}'", workspaceId,
                 request.model());
@@ -103,22 +140,272 @@ public class ChatCompletionService {
         try {
             log.info("Initiating chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
-            chatResponse = retryPolicy
-                    .withRetry(() -> languageModelClient.chat(chatRequest));
+            chatResponse = retryPolicy.withRetry(
+                    () -> failFastOnNonRetriableFailure(() -> languageModelClient.chat(chatRequest)));
             log.info("Completed chat with model '{}' expecting structured response, workspaceId '{}'",
                     modelParameters.name(), workspaceId);
             return chatResponse;
         } catch (RuntimeException runtimeException) {
-            LlmProviderService provider = llmProviderFactory.getService(workspaceId, modelParameters.name());
+            failIfUnsupportedFeature(runtimeException);
 
-            Optional<ErrorMessage> providerError = provider.getLlmProviderError(runtimeException);
-
-            providerError
-                    .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
+            // Report the status the provider actually sent, same as create() and the streaming handler.
+            // BaseRedisSubscriber classifies a ClientErrorException by that status, so a truthful 429 is
+            // redelivered and a truthful 400 is retired; this no longer has to misreport either.
+            //
+            // Only a wire status is used. The provider mappers synthesize one when they cannot parse the body
+            // (CustomLlm 400, OpenAi 500) and nothing downstream can tell that from a real 400, so consulting
+            // them would retire every unparseable CustomLlm failure on its first delivery. An absent status
+            // falls through to 500 and stays retryable: burning maxRetries on a doomed request costs attempts,
+            // losing an unknown failure costs the evaluation.
+            var status = findProviderHttpStatus(runtimeException)
+                    .orElse(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
 
             log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
-            throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
+
+            var detail = buildDetailedErrorMessage(runtimeException);
+            // findProviderHttpStatus only yields error statuses, so these two families are exhaustive. The
+            // cause is carried through, unlike failHandlingLLMProviderError, because this exception is logged
+            // rather than serialized to an HTTP caller and the provider stack is the diagnostic.
+            if (familyOf(status) == Response.Status.Family.CLIENT_ERROR) {
+                throw new ClientErrorException(detail, status, runtimeException);
+            }
+            throw new ServerErrorException(detail, status, runtimeException);
+        } finally {
+            // Close the Vertex client (reused across retries) to release its GAX threads; other providers self-reclaim.
+            if (languageModelClient instanceof AutoCloseable closeable) {
+                try {
+                    closeable.close();
+                } catch (Exception e) {
+                    log.warn("Failed to close language model client", e);
+                }
+            }
         }
+    }
+
+    /**
+     * {@link UnsupportedFeatureException} extends {@code LangChain4jException}, not {@code NonRetriableException}, so
+     * {@code RetryPolicy.withRetry} treats it like any transient failure and burns the whole retry budget (plus its
+     * backoff delays) on a call that can never succeed. Re-throwing it as {@link NonRetriableException} makes
+     * {@code withRetry} give up on the first attempt while leaving genuinely transient provider errors retryable. The
+     * original exception is kept as the cause, so {@link #failIfUnsupportedFeature} still recognises it downstream.
+     */
+    private <T> T failFastOnUnsupportedFeature(Callable<T> action) throws Exception {
+        return failFastWhen(action, this::isUnsupportedFeature);
+    }
+
+    /**
+     * Fails fast for {@code scoreTrace} when the failure can never succeed, so the in-process retry budget is not
+     * spent on a doomed call.
+     *
+     * <p>Review finding on #8169: this used to be {@code failFastOnPermanentFailure} wrapped around
+     * {@code failFastOnUnsupportedFeature} at the call site — two levels of indirection for what is one decision,
+     * and awkward to reason about because neither level named what it was really asking. Both conditions mean the
+     * same thing and both are raised the same way by {@link #failFastWhen}, so they are one predicate here, with
+     * each reason its own named method so it can be read — and exercised — independently.
+     *
+     * <p>Permanence is deliberately narrow, and broadening it silently loses evaluations.
+     * {@link HttpStatusRetryability} carves 408, 425 and 429 out of the client-error family because they mean "not
+     * now" rather than "not ever" — diverging from langchain4j on 425 per RFC 8470 — and a failure that never
+     * reached the wire yields no status at all, so it stays retryable. Both carve-outs matter beyond this method:
+     * the status thrown from the catch block is also what {@code BaseRedisSubscriber} classifies by, so anything
+     * treated as permanent is acked and dropped on its first delivery instead of being redelivered.
+     *
+     * <p>Only scoreTrace fails fast on a permanent status: {@code create()} answers an HTTP caller, and narrowing
+     * its retry behaviour is not this change's business. The permanent check is mainly reached for VertexAI, whose
+     * GAX exceptions langchain4j does not model as {@code NonRetriableException}; the mapped providers already fail
+     * fast on their own. The cause is preserved either way, so the catch block still classifies from the same status.
+     */
+    private <T> T failFastOnNonRetriableFailure(Callable<T> action) throws Exception {
+        return failFastWhen(action, runtimeException -> isUnsupportedFeature(runtimeException)
+                || isPermanentProviderFailure(runtimeException));
+    }
+
+    /** A feature the selected provider cannot serve, so no number of attempts will change the answer. */
+    private boolean isUnsupportedFeature(RuntimeException runtimeException) {
+        return findUnsupportedFeature(runtimeException).isPresent();
+    }
+
+    /** A status the provider actually sent that {@link HttpStatusRetryability} classifies as never succeeding. */
+    private boolean isPermanentProviderFailure(RuntimeException runtimeException) {
+        return findProviderHttpStatus(runtimeException)
+                .filter(HttpStatusRetryability::isPermanent)
+                .isPresent();
+    }
+
+    /**
+     * Shared mechanism for the fail-fast wrappers: run the action, and rewrap a matching failure as
+     * {@link NonRetriableException} so {@code RetryPolicy.withRetry} gives up on the first attempt. Only the
+     * predicate differs between them, so keeping one copy of the propagation means a future change to how
+     * NonRetriableException is raised cannot apply to one and not the other. The cause is always preserved.
+     */
+    private <T> T failFastWhen(Callable<T> action, Predicate<RuntimeException> nonRetriable) throws Exception {
+        try {
+            return action.call();
+        } catch (RuntimeException runtimeException) {
+            if (nonRetriable.test(runtimeException)) {
+                throw new NonRetriableException(runtimeException);
+            }
+            throw runtimeException;
+        }
+    }
+
+    /**
+     * langchain4j raises {@link UnsupportedFeatureException} when the request asks for a capability the selected
+     * provider does not implement — e.g. {@code ToolChoice.REQUIRED} against Vertex AI Gemini. The provider is never
+     * reached, so {@code getLlmProviderError} has nothing to map and the call used to surface as a 500. That is
+     * misleading on two counts: nothing failed server-side, and no amount of retrying can make it succeed. Report it
+     * as a 400 so clients get an actionable error and the online-scoring consumers treat it as terminal instead of
+     * burning their retry budget on it.
+     */
+    private void failIfUnsupportedFeature(RuntimeException runtimeException) {
+        var unsupportedFeature = findUnsupportedFeature(runtimeException);
+        if (unsupportedFeature.isEmpty()) {
+            return;
+        }
+
+        var message = buildUnsupportedFeatureMessage(unsupportedFeature.get());
+        // Logged without the throwable: this is an expected, deterministic client error, and at production volumes a
+        // stack trace per rejection buries the genuine provider failures.
+        log.warn(message);
+        // The message is carried as an ErrorMessage entity, not just on the exception: Jersey renders
+        // WebApplicationException via its Response, so a message-only constructor would return a bodiless 400 and the
+        // caller would never learn which capability was rejected.
+        throw new BadRequestException(
+                message,
+                Response.status(Response.Status.BAD_REQUEST)
+                        .entity(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), message))
+                        .build(),
+                runtimeException);
+    }
+
+    /**
+     * Built from the {@link UnsupportedFeatureException}'s own message rather than the chain's root cause, so the
+     * client is told which capability was rejected and nothing deeper in the chain can leak into the response.
+     */
+    private String buildUnsupportedFeatureMessage(UnsupportedFeatureException unsupportedFeature) {
+        String detail = unsupportedFeature.getMessage();
+        return StringUtils.isNotBlank(detail)
+                ? UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER + ": " + detail
+                : UNSUPPORTED_FEATURE_CALLING_LLM_PROVIDER;
+    }
+
+    /**
+     * Walks the cause chain, so it matches whether the exception is thrown bare, wrapped by a provider client, or
+     * re-thrown by {@link #failFastOnUnsupportedFeature}. {@code ExceptionUtils} stops at the first already-visited
+     * throwable, so a self-referencing cause chain terminates rather than looping.
+     */
+    private Optional<UnsupportedFeatureException> findUnsupportedFeature(Throwable throwable) {
+        return ExceptionUtils.getThrowableList(throwable).stream()
+                .filter(UnsupportedFeatureException.class::isInstance)
+                .map(UnsupportedFeatureException.class::cast)
+                .findFirst();
+    }
+
+    /**
+     * Last resort before the blanket 500. {@code getLlmProviderError} only recognises payloads it can parse into the
+     * provider's own error envelope, so it comes back empty for a plain-text body (an upstream proxy's "service
+     * temporarily unavailable", a Cloudflare "error code: 1015") or for a typed exception nested under a retry
+     * wrapper — and a caller-side fault was then reported as an Opik fault. langchain4j has already classified the
+     * response by that point: {@code ExceptionMapper} reads {@link HttpException#statusCode()} and re-raises it as one
+     * of its typed exceptions, keeping the {@code HttpException} in the chain. That verdict is recovered here and run
+     * through the same {@link #failHandlingLLMProviderError} classification a parsed envelope gets, so a provider 4xx
+     * reaches the caller as a 4xx. Failures that never reached HTTP (connection refused, closed channel) carry no
+     * status and keep falling through to the 500 below.
+     */
+    private void failIfProviderReportedHttpStatus(RuntimeException runtimeException) {
+        findProviderHttpStatus(runtimeException)
+                .ifPresent(status -> failHandlingLLMProviderError(runtimeException,
+                        new ErrorMessage(status, buildDetailedErrorMessage(runtimeException))));
+    }
+
+    /**
+     * Walks the cause chain like {@link #findUnsupportedFeature}, so the status is found whether the provider client
+     * throws bare, wraps, or is re-thrown by the retry policy. {@link HttpException} is searched for across the whole
+     * chain before any typed exception is considered, because it carries the upstream code verbatim: langchain4j's
+     * {@code ExceptionMapper} raises {@code InternalServerException(HttpException(503))}, and taking the outermost
+     * match would collapse that 503 into the flat 500 the typed exception implies.
+     *
+     * <p>Review finding on #8170 asked whether an outer wrapper's status can shadow a nested provider one, since
+     * {@code ExceptionUtils} lists the chain outermost-first. It cannot: {@code HttpException}'s only constructor is
+     * {@code (int, String)}, so it never carries a cause and is always terminal in the chain. At most one can appear,
+     * and the {@code findFirst} here is therefore not a precedence choice between rival wire statuses.
+     */
+    private Optional<Integer> findProviderHttpStatus(Throwable throwable) {
+        List<Throwable> chain = ExceptionUtils.getThrowableList(throwable);
+
+        // Filtered at EACH stage, not once at the end. Filtering only the winner lets a non-error
+        // HttpException anywhere in the chain (a 302, or a synthetic 0) satisfy findFirst, suppress the
+        // typed fallback, and then be discarded -- losing the real status. That matters most for VertexAI
+        // and the OpenAI Responses SDK, whose statuses come only from that fallback.
+        return chain.stream()
+                .filter(HttpException.class::isInstance)
+                .map(HttpException.class::cast)
+                .map(HttpException::statusCode)
+                .filter(ChatCompletionService::isErrorStatus)
+                .findFirst()
+                .or(() -> chain.stream()
+                        .map(this::canonicalStatusOf)
+                        .flatMap(Optional::stream)
+                        .filter(ChatCompletionService::isErrorStatus)
+                        .findFirst());
+    }
+
+    /**
+     * {@link HttpException} takes any int, so an upstream that answers outside the error families — or a client that
+     * builds one for a failure that never carried a status — must not reach {@link #failHandlingLLMProviderError}:
+     * {@code ClientErrorException} and {@code ServerErrorException} both validate the family, and
+     * {@code Response.status} rejects anything outside 100-599, so an out-of-family code would leave the catch block
+     * as an {@code IllegalArgumentException} instead of the 500 the caller is promised. Anything not recognisably a
+     * 4xx or 5xx therefore keeps the existing fall-through.
+     */
+    private static boolean isErrorStatus(int status) {
+        var family = familyOf(status);
+        return family == Response.Status.Family.CLIENT_ERROR || family == Response.Status.Family.SERVER_ERROR;
+    }
+
+    /**
+     * VertexAI is one of two providers whose client raises no {@link HttpException}: the Google Cloud SDK throws GAX
+     * {@code ApiException}, which is also not a {@code NonRetriableException}, so without this a permanent Vertex
+     * failure consumed the whole retry budget. The status is GAX's own transport-neutral translation, identical for
+     * the gRPC and HTTP-JSON transports, rather than a table of our own.
+     *
+     * <p>An exception GAX marks retryable yields no status, so <em>within this method</em> the mapping can only
+     * prevent a drop, never cause one. That costs reporting fidelity — such a failure is reported as a flat 500
+     * rather than, say, the 503 GAX translated — and it is kept deliberately: returning the status regardless would
+     * let a GAX-retryable client-error code that {@link HttpStatusRetryability} does not carve out (ABORTED maps to
+     * 409, for instance) be classified permanent, and both this fail-fast and {@code BaseRedisSubscriber} would then
+     * drop an evaluation GAX itself says is worth retrying. Trading a precise status for that is not worth it. Scoped deliberately: {@link #findProviderHttpStatus} consults a real
+     * {@code HttpException} in the chain first, and a wire status legitimately outranks GAX's {@code isRetryable},
+     * which is a configured judgment rather than something the server said. Not reachable for VertexAI in any case —
+     * {@code VertexAiGeminiChatModel} goes through the Google Cloud SDK and never produces a langchain4j
+     * {@code HttpException} — but that is the intended precedence if it ever were.
+     */
+    private static Optional<Integer> gaxHttpStatus(ApiException apiException) {
+        if (apiException.isRetryable()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(apiException.getStatusCode())
+                .map(StatusCode::getCode)
+                .map(StatusCode.Code::getHttpStatusCode);
+    }
+
+    /**
+     * The status langchain4j's own exception types stand for, used for providers whose clients raise them without an
+     * {@link HttpException} in the chain. {@code ContentFilteredException} is covered by its
+     * {@link InvalidRequestException} supertype.
+     */
+    private Optional<Integer> canonicalStatusOf(Throwable throwable) {
+        return switch (throwable) {
+            case InvalidRequestException ignored -> Optional.of(Response.Status.BAD_REQUEST.getStatusCode());
+            case AuthenticationException ignored -> Optional.of(Response.Status.UNAUTHORIZED.getStatusCode());
+            case ModelNotFoundException ignored -> Optional.of(Response.Status.NOT_FOUND.getStatusCode());
+            case TimeoutException ignored -> Optional.of(Response.Status.REQUEST_TIMEOUT.getStatusCode());
+            case RateLimitException ignored -> Optional.of(Response.Status.TOO_MANY_REQUESTS.getStatusCode());
+            case InternalServerException ignored -> Optional.of(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode());
+            case ApiException apiException -> gaxHttpStatus(apiException);
+            case OpenAIServiceException responsesException -> Optional.of(responsesException.statusCode());
+            default -> Optional.empty();
+        };
     }
 
     private void failHandlingLLMProviderError(RuntimeException runtimeException, ErrorMessage llmProviderError) {
@@ -141,6 +428,16 @@ public class ChatCompletionService {
 
     private Consumer<Throwable> getErrorHandler(ChunkedOutputHandlers handlers, LlmProviderService llmProviderClient) {
         return throwable -> {
+            // Checked before the provider-error mapper so the classification matches create() and scoreTrace(): if a
+            // provider envelope and an unsupported feature ever collide, the deterministic capability failure wins.
+            var unsupportedFeature = findUnsupportedFeature(throwable);
+            if (unsupportedFeature.isPresent()) {
+                var message = buildUnsupportedFeatureMessage(unsupportedFeature.get());
+                log.warn(message);
+                handlers.handleError(new ErrorMessage(Response.Status.BAD_REQUEST.getStatusCode(), message));
+                return;
+            }
+
             Optional<ErrorMessage> providerError = llmProviderClient.getLlmProviderError(throwable);
 
             if (providerError.isPresent()) {
@@ -152,6 +449,16 @@ public class ChatCompletionService {
                     log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, userMessage);
                     handlers.handleError(
                             new ErrorMessage(userMessage.getResponse().getStatus(), userMessage.getMessage()));
+                    return;
+                }
+
+                // Same recovery as the non-streaming paths: an unparsed envelope must not downgrade a provider 4xx to
+                // the 500 that a bare ErrorMessage(String) defaults to.
+                var providerStatus = findProviderHttpStatus(throwable);
+                if (providerStatus.isPresent()) {
+                    log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, throwable);
+                    handlers.handleError(
+                            new ErrorMessage(providerStatus.get(), buildDetailedErrorMessage(throwable)));
                     return;
                 }
 

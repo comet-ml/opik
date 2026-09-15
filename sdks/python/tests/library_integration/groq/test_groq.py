@@ -17,7 +17,8 @@ from ...testlib import (
     assert_equal,
 )
 
-MODEL = "llama-3.3-70b-versatile"
+# Groq retired the Llama chat models; this is one of the current production ones.
+MODEL = "openai/gpt-oss-20b"
 
 
 @pytest.mark.usefixtures("ensure_groq_configured")

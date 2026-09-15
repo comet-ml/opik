@@ -13,7 +13,7 @@ from opik.api_objects.dataset import execution_policy as dataset_execution_polic
 from opik.evaluation import rest_operations, test_case, test_result
 from opik.evaluation.suite_evaluators.agentic import context as agentic_context
 from opik.evaluation.suite_evaluators.agentic.context import INTERNAL_SPAN_TAG
-from opik.evaluation.types import LLMTask, ScoringKeyMappingType
+from opik.evaluation.types import ErrorTolerance, LLMTask, ScoringKeyMappingType
 from opik.message_processing.emulation import models
 from opik.message_processing.processors import message_processors_chain
 from opik.types import TraceSource
@@ -79,6 +79,7 @@ class EvaluationEngine:
         workers: int,
         verbose: int,
         source: TraceSource,
+        error_tolerance: ErrorTolerance,
         flush_timeout: Optional[float] = None,
     ) -> None:
         self._client = client
@@ -86,6 +87,7 @@ class EvaluationEngine:
         self._workers = workers
         self._verbose = verbose
         self._source = source
+        self._error_tolerance = error_tolerance
         if flush_timeout is None:
             flush_timeout = DEFAULT_STREAMER_DRAIN_TIMEOUT_SECONDS
         self._flush_timeout = flush_timeout
@@ -121,6 +123,7 @@ class EvaluationEngine:
             regular_metrics=regular_metrics,
             scoring_key_mapping=scoring_key_mapping,
             evaluator_model=evaluator_model,
+            error_tolerance=self._error_tolerance,
         )
         # `trace_data` is the in-memory `TraceData` from the surrounding
         # `_compute_test_result_for_llm_task` call. When present, the
@@ -571,6 +574,10 @@ class EvaluationEngine:
         task_span_evaluator = metrics_evaluator.MetricsEvaluator(
             scoring_metrics=task_span_metrics,
             scoring_key_mapping=scoring_key_mapping,
+            # Item-level evaluators are a regular-metric concern; nothing can be
+            # skipped before this evaluator is built.
+            skipped_evaluator_scores=[],
+            error_tolerance=self._error_tolerance,
         )
 
         with local_recording.record_traces_locally(client=self._client) as recording:

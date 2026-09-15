@@ -176,11 +176,29 @@ export class CompareExperimentsPage {
    * still asserts on the rendered row order.
    */
   async sortByScoreDescending(metricName: string): Promise<void> {
-    await test.step(`sort the grid by "${metricName}" descending`, async () => {
+    await this.sortByColumn(`feedback_scores_${metricName}`, 'desc');
+  }
+
+  /**
+   * Sorts the grid by an arbitrary column id, in either direction.
+   *
+   * `columnId` is the id the table uses in its own `sorting` state — the same
+   * value a header click writes — so a dynamic JSON column is addressed exactly
+   * as the grid addresses it: `output.<key>`, `data.<key>`, `metadata.<key>`.
+   * The front end maps that id to the backend `sorting` field on the wire, so
+   * driving the query param exercises the real serialise → sort → render path,
+   * including the `+`-encoding of a key containing a space.
+   *
+   * Driven through the URL rather than by clicking the header for the reason
+   * given on sortByScoreDescending above: the header is sticky and overlaid by
+   * the statistics sub-row, so a click lands unreliably.
+   */
+  async sortByColumn(columnId: string, direction: 'asc' | 'desc'): Promise<void> {
+    await test.step(`sort the grid by "${columnId}" ${direction}ending`, async () => {
       const url = new URL(this.page.url());
       url.searchParams.set(
         'sorting',
-        JSON.stringify([{ id: `feedback_scores_${metricName}`, desc: true }]),
+        JSON.stringify([{ id: columnId, desc: direction === 'desc' }]),
       );
       await this.page.goto(url.toString());
       await this.itemRows.first().waitFor({ state: 'visible' });

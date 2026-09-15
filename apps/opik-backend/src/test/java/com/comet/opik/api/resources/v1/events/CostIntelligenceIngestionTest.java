@@ -10,17 +10,21 @@ import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.CipxTokenUtils;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
+import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -42,11 +46,18 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -82,8 +93,15 @@ class CostIntelligenceIngestionTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
-        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(AppContextConfig.builder()
+                .jdbcUrl(MYSQL.getJdbcUrl())
+                .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                .runtimeInfo(wireMock.runtimeInfo())
+                .redisUrl(REDIS.getRedisURI())
+                .customConfigs(List.of(
+                        new CustomConfig("cipxTokenValidation.enabled", "true"),
+                        new CustomConfig("cipxTokenValidation.url", wireMock.runtimeInfo().getHttpBaseUrl())))
+                .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -146,6 +164,17 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().thinkingType()).isEqualTo("adaptive");
                 assertThat(row.get().maxTokens()).isEqualTo(64000L);
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
+                // speed: selects the rate table, so it must survive ingestion
+                assertThat(row.get().speed()).isEqualTo("fast");
+                assertThat(row.get().aiuNano()).isNull();
+            });
+
+            // Carried on every block row too.
+            var blocks = getCipxBlocks(cipxSpan.id(), ws.workspaceId());
+            assertThat(blocks).isNotEmpty();
+            assertThat(blocks).allSatisfy(block -> {
+                assertThat(block.speed()).isEqualTo("fast");
+                assertThat(block.aiuNano()).isNull();
             });
 
             // The non-cipx span shared the same create event, so once the cipx row is present the
@@ -186,6 +215,11 @@ class CostIntelligenceIngestionTest {
                 assertThat(memory.isDefinition()).isEqualTo(1);
                 assertThat(memory.alloc()).isCloseTo(5.0, within(1e-9)); // 120 * 20 / 480
                 assertThat(memory.contentSha256()).isEqualTo("a1b2c3"); // block sha256 persisted verbatim
+                // Claude Code's `autoMemoryEnabled: false` removes only the auto-memory slice,
+                // not the CLAUDE.md / rules files sharing this lane. Neither that setting nor
+                // the savings lever pricing it lives here — see ai-cost-backend's auto_memory
+                // policy; this repo's job is just to persist the distinction.
+                assertThat(memory.subcategory()).isEqualTo("auto_memory");
 
                 var skills = rows.get(1);
                 assertThat(skills.blockIdx()).isEqualTo(2);
@@ -265,11 +299,182 @@ class CostIntelligenceIngestionTest {
                             assertThat(row.contentSha256()).isEqualTo("a1b2c3");
                         });
 
+                // subcategory is persisted per row in order: only the memory block carried one in
+                // the fixture, so every other row -- residuals included -- must read "".
+                // Guards against a dropped or misordered subcategory across the batch, and pins
+                // that '' stays the "unknown" sentinel rather than leaking a real value.
+                assertThat(rows).filteredOn(row -> !row.subcategory().isEmpty())
+                        .singleElement()
+                        .satisfies(row -> {
+                            assertThat(row.category()).isEqualTo("memory");
+                            assertThat(row.subcategory()).isEqualTo("auto_memory");
+                        });
+
                 // model and start_time ride on every block row.
                 assertThat(rows).allSatisfy(row -> {
                     assertThat(row.model()).isEqualTo("claude-sonnet-4-6");
                     assertThat(row.startMs()).isEqualTo(span.startTime().toEpochMilli());
                 });
+            });
+        }
+
+        @Test
+        @DisplayName("system_tools/system_tools_deferred land in built_in_tools; system_prompt/env_info stay in static_overhead")
+        void systemToolsLandInBuiltInToolsLane() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(systemToolsCipxMetadata("claude-sonnet-4-6", 200))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).hasSize(4);
+
+                // schema block for a named tool: reclassified out of static_overhead, keyed by
+                // tool_name instead of the bare category string (mirrors tool_io's own labeling).
+                var bash = rows.getFirst();
+                assertThat(bash.category()).isEqualTo("system_tools");
+                assertThat(bash.lane()).isEqualTo("built_in_tools");
+                assertThat(bash.bdLane()).isEqualTo("built_in_tools");
+                assertThat(bash.label()).isEqualTo("Bash");
+                assertThat(bash.isDefinition()).isEqualTo(1);
+
+                // deferred-tools reminder: one multi-tool text block, no single tool_name.
+                var deferred = rows.get(1);
+                assertThat(deferred.category()).isEqualTo("system_tools_deferred");
+                assertThat(deferred.lane()).isEqualTo("built_in_tools");
+                assertThat(deferred.bdLane()).isEqualTo("built_in_tools");
+                assertThat(deferred.label()).isEqualTo("(unattributed)");
+                assertThat(deferred.isDefinition()).isEqualTo(1);
+
+                // Regression guard: the other static_overhead categories (untouched by this
+                // change, but sharing the same dispatch table) still map correctly.
+                var systemPrompt = rows.get(2);
+                assertThat(systemPrompt.category()).isEqualTo("system_prompt");
+                assertThat(systemPrompt.lane()).isEqualTo("static_overhead");
+                assertThat(systemPrompt.bdLane()).isEqualTo("static_overhead");
+                assertThat(systemPrompt.label()).isEqualTo("system_prompt");
+                assertThat(systemPrompt.isDefinition()).isEqualTo(1);
+
+                var envInfo = rows.getLast();
+                assertThat(envInfo.category()).isEqualTo("env_info");
+                assertThat(envInfo.lane()).isEqualTo("static_overhead");
+                assertThat(envInfo.bdLane()).isEqualTo("static_overhead");
+                assertThat(envInfo.label()).isEqualTo("env_info");
+                assertThat(envInfo.isDefinition()).isEqualTo(1);
+            });
+        }
+
+        @Test
+        @DisplayName("slash_command lands in user_prompts keyed by command name; identity_context framing lands in static_overhead")
+        void slashCommandAndIdentityContextLanes() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(slashCommandCipxMetadata("claude-sonnet-4-6", 200))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                // raw idx 1 (identity_context/identity_context) is dropped at ingestion;
+                // the two remaining blocks must not fall to 'unattributed' (OPIK-8065).
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).hasSize(2);
+
+                var slashCommand = rows.getFirst();
+                assertThat(slashCommand.blockIdx()).isEqualTo(0);
+                assertThat(slashCommand.category()).isEqualTo("slash_command");
+                assertThat(slashCommand.lane()).isEqualTo("user_prompts");
+                assertThat(slashCommand.bdLane()).isEqualTo("user_prompts");
+                assertThat(slashCommand.label()).isEqualTo("commit-helper");
+                assertThat(slashCommand.isDefinition()).isEqualTo(0);
+
+                // identity_context whose parent is another category: framing carved out of
+                // that parent — kept, and folded under static_overhead like the other riders.
+                // blockIdx 2, not 1: the dropped row still consumes its raw index.
+                var identityContext = rows.getLast();
+                assertThat(identityContext.blockIdx()).isEqualTo(2);
+                assertThat(identityContext.category()).isEqualTo("identity_context");
+                assertThat(identityContext.lane()).isEqualTo("static_overhead");
+                assertThat(identityContext.bdLane()).isEqualTo("static_overhead");
+                assertThat(identityContext.label()).isEqualTo("identity_context");
+                assertThat(identityContext.isDefinition()).isEqualTo(0);
+            });
+        }
+
+        @Test
+        @DisplayName("span with usage units lands with the total on the span and a per-tier share on its blocks")
+        void copilotSpanLandsWithAiuOnSpendAndBlocks() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(copilotCipxMetadata(1, 13419, 22488, 687,
+                            180_000_000_000L, 18_000_000_000L, 225_000_000_000L, 900_000_000_000L,
+                            5_919_822_000L))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxSpend(span.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().model()).isEqualTo("github_copilot:claude-sonnet-5");
+                assertThat(row.get().aiuNano()).isEqualTo(5_919_822_000L);
+
+                // alloc x the tier's per-token rate: the read tier splits across its two blocks by
+                // chars, the write and output blocks absorb their tiers, input lands on a residual row.
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).hasSize(5);
+                var memory = rows.get(0);
+                assertThat(memory.tier()).isEqualTo("cache_read");
+                assertThat(memory.alloc()).isCloseTo(13419 * 100 / 400.0, within(1e-9));
+                assertThat(memory.aiuNano()).isCloseTo(13419 * 100 / 400.0 * 18_000, within(1e-3));
+                var skills = rows.get(1);
+                assertThat(skills.tier()).isEqualTo("cache_read");
+                assertThat(skills.aiuNano()).isCloseTo(13419 * 300 / 400.0 * 18_000, within(1e-3));
+                var write = rows.get(2);
+                assertThat(write.tier()).isEqualTo("cache_creation_5m");
+                assertThat(write.aiuNano()).isCloseTo(22488 * 225_000.0, within(1e-3));
+                var output = rows.get(3);
+                assertThat(output.tier()).isEqualTo("output");
+                assertThat(output.aiuNano()).isCloseTo(687 * 900_000.0, within(1e-3));
+                var residualInput = rows.get(4);
+                assertThat(residualInput.src()).isEqualTo("r");
+                assertThat(residualInput.tier()).isEqualTo("input");
+                assertThat(residualInput.aiuNano()).isCloseTo(1 * 180_000.0, within(1e-3));
+
+                double blockTotal = rows.stream().mapToDouble(CipxBlockRow::aiuNano).sum();
+                assertThat(blockTotal).isCloseTo(5_919_822_000.0, within(1e-3));
+            });
+        }
+
+        @Test
+        @DisplayName("span reporting 0 usage units lands as 0, not NULL")
+        void copilotZeroAiuLandsAsZero() {
+            var ws = newWorkspace();
+            String projectName = "cipx-" + UUID.randomUUID();
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .metadata(copilotCipxMetadata(254, 0, 0, 9, 0, 0, 0, 0, 0))
+                    .build();
+            spanResourceClient.createSpan(span, ws.apiKey(), ws.workspaceName());
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxSpend(span.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().aiuNano()).isZero();
+
+                var rows = getCipxBlocks(span.id(), ws.workspaceId());
+                assertThat(rows).isNotEmpty();
+                assertThat(rows).allSatisfy(block -> assertThat(block.aiuNano()).isZero());
             });
         }
 
@@ -335,6 +540,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().repository()).isEqualTo("git@github.com:acme/repo.git");
                 assertThat(row.get().sessionId()).isEqualTo("cc-session-abc");
                 assertThat(row.get().harness()).isEqualTo("codex");
+                // An API-key caller carries no device, and device_id is never read from metadata.
+                assertThat(row.get().deviceId()).isEmpty();
                 assertThat(row.get().schemaVersion()).isEqualTo(3);
                 assertThat(row.get().projectId()).isNotBlank();
                 assertThat(row.get().startMs()).isEqualTo(cipxTrace.startTime().toEpochMilli());
@@ -342,6 +549,10 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().billingMode()).isEqualTo("subscription");
                 assertThat(row.get().plan()).isEqualTo("max");
                 assertThat(row.get().planUsageStatus()).isEqualTo("within");
+                // seat-pricing fields parsed from cipx.session.identity (org seat class + cadence)
+                assertThat(row.get().organizationType()).isEqualTo("team");
+                assertThat(row.get().seatTier()).isEqualTo("priority");
+                assertThat(row.get().billingType()).isEqualTo("stripe_subscription_contracted");
                 // git info + per-turn committed delta parsed from cipx.session.repository (OPIK-7345)
                 assertThat(row.get().branch()).isEqualTo("main");
                 assertThat(row.get().headShaStart()).isEqualTo("aaaa1111");
@@ -357,6 +568,40 @@ class CostIntelligenceIngestionTest {
             });
 
             assertThat(getCipxIdentity(plainTrace.id(), ws.workspaceId())).isEmpty();
+        }
+
+        @Test
+        @DisplayName("CIPX-authenticated trace persists the validator-provided device id")
+        void cipxAuthenticatedTracePersistsValidatorDeviceId() {
+            var ws = newWorkspace();
+            String token = CipxTokenUtils.ACCESS_PREFIX + UUID.randomUUID();
+            String deviceId = UUID.randomUUID().toString();
+            String userUuid = UUID.randomUUID().toString();
+            String email = "dev-" + UUID.randomUUID() + "@acme.com";
+
+            wireMock.server().stubFor(post(urlPathEqualTo("/v1/internal/cipx-device-tokens/validate"))
+                    .withRequestBody(matchingJsonPath("$.token", equalTo(token)))
+                    .willReturn(okJson(JsonUtils.writeValueAsString(Map.of(
+                            "user_name", email,
+                            "workspace_id", ws.workspaceId(),
+                            "workspace_name", ws.workspaceName(),
+                            "device_id", deviceId)))));
+
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName("cipx-" + UUID.randomUUID())
+                    .metadata(traceCipxMetadata(userUuid, email, "Dev User", "git@github.com:acme/repo.git",
+                            "codex", 3))
+                    .build();
+
+            traceResourceClient.createTrace(trace, token, "ignored-for-device-token-auth");
+
+            await().atMost(30, SECONDS).untilAsserted(() -> {
+                var row = getCipxIdentity(trace.id(), ws.workspaceId());
+                assertThat(row).isPresent();
+                assertThat(row.get().deviceId()).isEqualTo(deviceId);
+            });
+            wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/internal/cipx-device-tokens/validate"))
+                    .withRequestBody(matchingJsonPath("$.token", equalTo(token))));
         }
 
         @Test
@@ -461,11 +706,12 @@ class CostIntelligenceIngestionTest {
                                 "effort": "high",
                                 "thinking_type": "adaptive",
                                 "max_tokens": 64000,
-                                "context_management": "clear_thinking_20251015"
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast"
                               }
                             },
                             "blocks": [
-                              {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","sha256":"a1b2c3"},
+                              {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","subcategory":"auto_memory","sha256":"a1b2c3"},
                               {"category":"identity_context","side":"input","cache_status":"none","parent_category":"identity_context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
                               {"category":"skills_loaded","side":"input","cache_status":"read","parent_category":"context","chars":360,"tool_name":"","tool_server":"","tool_use_id":"","resource":"dataviz","kind":"text"},
                               {"category":"mcp_tool_calls","side":"output","cache_status":"none","parent_category":"assistant","chars":30,"tool_name":"search","tool_server":"srv","tool_use_id":"tu1","resource":"res","kind":"tool"},
@@ -508,6 +754,113 @@ class CostIntelligenceIngestionTest {
                         .formatted(model, lump == 0 ? 50 : lump, cacheCreation5m, cacheCreation1h));
     }
 
+    private static JsonNode copilotCipxMetadata(long input, long cacheRead, long cacheCreation, long output,
+            long inputRate, long cacheReadRate, long cacheWriteRate, long outputRate, long totalNanoAiu) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "github_copilot:claude-sonnet-5",
+                              "usage": {
+                                "input_tokens": %d,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": %d,
+                                "cache_creation": {
+                                  "ephemeral_5m_input_tokens": %d,
+                                  "ephemeral_1h_input_tokens": 0
+                                },
+                                "output_tokens": %d
+                              }
+                            },
+                            "blocks": [
+                              {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":100,"tool_name":"","tool_server":"","tool_use_id":"","resource":"copilot-instructions.md","kind":"text"},
+                              {"category":"skills_loaded","side":"input","cache_status":"read","parent_category":"context","chars":300,"tool_name":"","tool_server":"","tool_use_id":"","resource":"dataviz","kind":"text"},
+                              {"category":"system_prompt","side":"input","cache_status":"write","parent_category":"context","chars":200,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
+                              {"category":"assistant_text","side":"output","cache_status":"none","parent_category":"assistant","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          },
+                          "github": {
+                            "usage": {
+                              "input_tokens": %d,
+                              "output_tokens": %d,
+                              "copilot_usage": {
+                                "token_details": [
+                                  {"batch_size": 1000000, "cost_per_batch": %d, "token_count": %d, "token_type": "input"},
+                                  {"batch_size": 1000000, "cost_per_batch": %d, "token_count": %d, "token_type": "cache_read"},
+                                  {"batch_size": 1000000, "cost_per_batch": %d, "token_count": %d, "token_type": "cache_write"},
+                                  {"batch_size": 1000000, "cost_per_batch": %d, "token_count": %d, "token_type": "output"}
+                                ],
+                                "total_nano_aiu": %d
+                              }
+                            }
+                          }
+                        }
+                        """
+                        .formatted(input, cacheRead, cacheCreation, cacheCreation, output,
+                                input, output,
+                                inputRate, input, cacheReadRate, cacheRead, cacheWriteRate, cacheCreation,
+                                outputRate, output, totalNanoAiu));
+    }
+
+    private static JsonNode systemToolsCipxMetadata(String model, long cacheRead) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "%s",
+                              "usage": {
+                                "input_tokens": 0,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": 0,
+                                "output_tokens": 0
+                              },
+                              "config": {
+                                "effort": "high",
+                                "thinking_type": "adaptive",
+                                "max_tokens": 64000,
+                                "context_management": "clear_thinking_20251015",
+                                "speed": "fast"
+                              }
+                            },
+                            "blocks": [
+                              {"category":"system_tools","side":"input","cache_status":"read","parent_category":"context","chars":150,"tool_name":"Bash","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
+                              {"category":"system_tools_deferred","side":"input","cache_status":"read","parent_category":"context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
+                              {"category":"system_prompt","side":"input","cache_status":"read","parent_category":"context","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
+                              {"category":"env_info","side":"input","cache_status":"read","parent_category":"context","chars":30,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model, cacheRead));
+    }
+
+    private static JsonNode slashCommandCipxMetadata(String model, long cacheRead) {
+        return JsonUtils.getJsonNodeFromString(
+                """
+                        {
+                          "cipx": {
+                            "call": {
+                              "model": "%s",
+                              "usage": {
+                                "input_tokens": 0,
+                                "cache_read_input_tokens": %d,
+                                "cache_creation_input_tokens": 0,
+                                "output_tokens": 0
+                              }
+                            },
+                            "blocks": [
+                              {"category":"slash_command","side":"input","cache_status":"read","parent_category":"user_prompts","chars":150,"tool_name":"","tool_server":"","tool_use_id":"","resource":"commit-helper","kind":"text"},
+                              {"category":"identity_context","side":"input","cache_status":"read","parent_category":"identity_context","chars":50,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"},
+                              {"category":"identity_context","side":"input","cache_status":"read","parent_category":"user_prompts","chars":40,"tool_name":"","tool_server":"","tool_use_id":"","resource":"","kind":"text"}
+                            ]
+                          }
+                        }
+                        """
+                        .formatted(model, cacheRead));
+    }
+
     private static JsonNode traceCipxMetadata(String userUuid, String email, String displayName, String repository,
             String harness, int schemaVersion) {
         return JsonUtils.getJsonNodeFromString("""
@@ -535,7 +888,10 @@ class CostIntelligenceIngestionTest {
                         "display_name": "%s",
                         "billing_mode": "subscription",
                         "plan": "max",
-                        "plan_usage_status": "within"
+                        "plan_usage_status": "within",
+                        "organization_type": "team",
+                        "seat_tier": "priority",
+                        "billing_type": "stripe_subscription_contracted"
                       }
                     }
                   }
@@ -550,7 +906,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management
+                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano
                 FROM cipx_spends FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
                 """;
@@ -572,7 +928,9 @@ class CostIntelligenceIngestionTest {
                             row.get("effort", String.class),
                             row.get("thinking_type", String.class),
                             row.get("max_tokens", Long.class),
-                            row.get("context_management", String.class)))));
+                            row.get("context_management", String.class),
+                            row.get("speed", String.class),
+                            row.get("aiu_nano", Long.class)))));
         }).blockOptional();
     }
 
@@ -584,9 +942,11 @@ class CostIntelligenceIngestionTest {
                     toInt32(is_definition) AS is_definition,
                     alloc,
                     model,
+                    speed,
                     side, cache_status, parent_category, chars,
-                    tool_name, tool_server, tool_use_id, resource, kind,
+                    tool_name, tool_server, tool_use_id, resource, kind, subcategory,
                     content_sha256,
+                    aiu_nano,
                     toUnixTimestamp64Milli(start_time) AS start_ms
                 FROM cipx_spend_blocks FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
@@ -608,6 +968,7 @@ class CostIntelligenceIngestionTest {
                             row.get("is_definition", Integer.class),
                             row.get("alloc", Double.class),
                             row.get("model", String.class),
+                            row.get("speed", String.class),
                             row.get("side", String.class),
                             row.get("cache_status", String.class),
                             row.get("parent_category", String.class),
@@ -617,7 +978,9 @@ class CostIntelligenceIngestionTest {
                             row.get("tool_use_id", String.class),
                             row.get("resource", String.class),
                             row.get("kind", String.class),
+                            row.get("subcategory", String.class),
                             row.get("content_sha256", String.class),
+                            row.get("aiu_nano", Double.class),
                             row.get("start_ms", Long.class))))
                     .collectList();
         }).block();
@@ -628,8 +991,9 @@ class CostIntelligenceIngestionTest {
                 SELECT
                     project_id AS project_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
-                    user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
-                    billing_mode, plan, plan_usage_status,
+                    user_uuid, user_email, user_display_name, repository, session_id, harness, device_id,
+                    schema_version,
+                    billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted
                 FROM cipx_trace_identities FINAL
@@ -640,28 +1004,33 @@ class CostIntelligenceIngestionTest {
                     .bind("workspace_id", workspaceId)
                     .bind("trace_id", traceId.toString());
             return Mono.from(statement.execute())
-                    .flatMap(result -> Mono.from(result.map((row, meta) -> new CipxIdentityRow(
-                            row.get("project_id", String.class),
-                            row.get("start_ms", Long.class),
-                            row.get("user_uuid", String.class),
-                            row.get("user_email", String.class),
-                            row.get("user_display_name", String.class),
-                            row.get("repository", String.class),
-                            row.get("session_id", String.class),
-                            row.get("harness", String.class),
-                            row.get("schema_version", Integer.class),
-                            row.get("billing_mode", String.class),
-                            row.get("plan", String.class),
-                            row.get("plan_usage_status", String.class),
-                            row.get("branch", String.class),
-                            row.get("head_sha_start", String.class),
-                            row.get("head_sha_end", String.class),
-                            row.get("dirty", Boolean.class),
-                            row.get("commits_in_trace", Integer.class),
-                            row.get("files_added", Integer.class),
-                            row.get("files_deleted", Integer.class),
-                            row.get("lines_added", Integer.class),
-                            row.get("lines_deleted", Integer.class)))));
+                    .flatMap(result -> Mono.from(result.map((row, meta) -> CipxIdentityRow.builder()
+                            .projectId(row.get("project_id", String.class))
+                            .startMs(row.get("start_ms", Long.class))
+                            .userUuid(row.get("user_uuid", String.class))
+                            .userEmail(row.get("user_email", String.class))
+                            .userDisplayName(row.get("user_display_name", String.class))
+                            .repository(row.get("repository", String.class))
+                            .sessionId(row.get("session_id", String.class))
+                            .harness(row.get("harness", String.class))
+                            .deviceId(row.get("device_id", String.class))
+                            .schemaVersion(row.get("schema_version", Integer.class))
+                            .billingMode(row.get("billing_mode", String.class))
+                            .plan(row.get("plan", String.class))
+                            .planUsageStatus(row.get("plan_usage_status", String.class))
+                            .organizationType(row.get("organization_type", String.class))
+                            .seatTier(row.get("seat_tier", String.class))
+                            .billingType(row.get("billing_type", String.class))
+                            .branch(row.get("branch", String.class))
+                            .headShaStart(row.get("head_sha_start", String.class))
+                            .headShaEnd(row.get("head_sha_end", String.class))
+                            .dirty(row.get("dirty", Boolean.class))
+                            .commitsInTrace(row.get("commits_in_trace", Integer.class))
+                            .filesAdded(row.get("files_added", Integer.class))
+                            .filesDeleted(row.get("files_deleted", Integer.class))
+                            .linesAdded(row.get("lines_added", Integer.class))
+                            .linesDeleted(row.get("lines_deleted", Integer.class))
+                            .build())));
         }).blockOptional();
     }
 
@@ -690,18 +1059,23 @@ class CostIntelligenceIngestionTest {
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
-            String thinkingType, Long maxTokens, String contextManagement) {
+            String thinkingType, Long maxTokens, String contextManagement, String speed, Long aiuNano) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
-            String bdLane, String label, Integer isDefinition, Double alloc, String model, String side,
+            String bdLane, String label, Integer isDefinition, Double alloc, String model, String speed,
+            String side,
             String cacheStatus, String parentCategory, Long chars, String toolName, String toolServer,
-            String toolUseId, String resource, String kind, String contentSha256, Long startMs) {
+            String toolUseId, String resource, String kind, String subcategory, String contentSha256,
+            Double aiuNano, Long startMs) {
     }
 
+    @Builder
     private record CipxIdentityRow(String projectId, Long startMs, String userUuid, String userEmail,
-            String userDisplayName, String repository, String sessionId, String harness, Integer schemaVersion,
-            String billingMode, String plan, String planUsageStatus,
+            String userDisplayName, String repository, String sessionId, String harness, String deviceId,
+            Integer schemaVersion,
+            String billingMode, String plan, String planUsageStatus, String organizationType, String seatTier,
+            String billingType,
             String branch, String headShaStart, String headShaEnd, Boolean dirty, Integer commitsInTrace,
             Integer filesAdded, Integer filesDeleted, Integer linesAdded, Integer linesDeleted) {
     }

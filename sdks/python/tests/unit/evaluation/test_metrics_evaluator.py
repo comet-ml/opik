@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 from opik.evaluation.engine.metrics_evaluator import build_metrics_evaluator
 from opik.evaluation.metrics import base_metric
+from opik.evaluation.types import ErrorTolerance
 from opik.evaluation.suite_evaluators import llm_judge
 
 
@@ -24,6 +25,7 @@ def _build(regular_metrics):
         regular_metrics=regular_metrics,
         scoring_key_mapping={},
         evaluator_model=None,
+        error_tolerance=ErrorTolerance.METRIC_ERRORS,
     )
     return evaluator.regular_metrics
 

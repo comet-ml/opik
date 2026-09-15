@@ -40,6 +40,7 @@ class ReportsClient:
         content: typing.Optional[str] = OMIT,
         session_id: typing.Optional[str] = OMIT,
         recommended_actions: typing.Optional[JsonNode] = OMIT,
+        failure_reason: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -58,6 +59,9 @@ class ReportsClient:
         session_id : typing.Optional[str]
 
         recommended_actions : typing.Optional[JsonNode]
+
+        failure_reason : typing.Optional[str]
+            Why the report failed. Only 'out_of_credits' is acted on; any other value is recorded but renders as a generic failure.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -79,6 +83,7 @@ class ReportsClient:
             content=content,
             session_id=session_id,
             recommended_actions=recommended_actions,
+            failure_reason=failure_reason,
             request_options=request_options,
         )
         return _response.data
@@ -255,6 +260,7 @@ class AsyncReportsClient:
         content: typing.Optional[str] = OMIT,
         session_id: typing.Optional[str] = OMIT,
         recommended_actions: typing.Optional[JsonNode] = OMIT,
+        failure_reason: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -273,6 +279,9 @@ class AsyncReportsClient:
         session_id : typing.Optional[str]
 
         recommended_actions : typing.Optional[JsonNode]
+
+        failure_reason : typing.Optional[str]
+            Why the report failed. Only 'out_of_credits' is acted on; any other value is recorded but renders as a generic failure.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -297,6 +306,7 @@ class AsyncReportsClient:
             content=content,
             session_id=session_id,
             recommended_actions=recommended_actions,
+            failure_reason=failure_reason,
             request_options=request_options,
         )
         return _response.data

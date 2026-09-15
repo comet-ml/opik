@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from opik.evaluation.resume import state
+from opik.evaluation.types import ErrorTolerance
 
 
 class TestEmbedResumableState:
@@ -15,6 +16,7 @@ class TestEmbedResumableState:
                 dataset_version_name="v7",
                 nb_samples=50,
                 requires_local_checkpoint=False,
+                error_tolerance=ErrorTolerance.METRIC_ERRORS,
             ),
         )
 
@@ -42,6 +44,7 @@ class TestEmbedResumableState:
                 dataset_version_name="v1",
                 nb_samples=None,
                 requires_local_checkpoint=False,
+                error_tolerance=ErrorTolerance.METRIC_ERRORS,
             ),
         )
 
@@ -61,6 +64,7 @@ class TestEmbedResumableState:
                 dataset_version_name="v1",
                 nb_samples=None,
                 requires_local_checkpoint=False,
+                error_tolerance=ErrorTolerance.METRIC_ERRORS,
             ),
         )
 
@@ -75,6 +79,7 @@ class TestEmbedResumableState:
                 dataset_version_name="v1",
                 nb_samples=None,
                 requires_local_checkpoint=True,
+                error_tolerance=ErrorTolerance.METRIC_ERRORS,
             ),
         )
 
@@ -205,6 +210,7 @@ class TestReadResumeState:
                 dataset_version_name="v3",
                 nb_samples=50,
                 requires_local_checkpoint=True,
+                error_tolerance=ErrorTolerance.METRIC_ERRORS,
             ),
         )
         experiment = self._experiment_with_metadata(embedded)
@@ -246,3 +252,69 @@ class TestReadResumeState:
         assert persisted.dataset_filter_string is None
         assert persisted.dataset_version_name == "v1"
         assert persisted.nb_samples is None
+
+
+class TestErrorTolerancePersistence:
+    def test_round_trip__tolerance_survives_embed_and_read(self):
+        config = state.embed_resumable_state(
+            {},
+            state.ResumableState(
+                default_runs_per_item=1,
+                dataset_filter_string=None,
+                dataset_version_name="v1",
+                nb_samples=None,
+                requires_local_checkpoint=False,
+                error_tolerance=ErrorTolerance.ALL_SCORING_ERRORS,
+            ),
+        )
+        experiment = mock.Mock()
+        experiment.get_experiment_data.return_value = SimpleNamespace(metadata=config)
+
+        decoded = state.read_resume_state(experiment)
+
+        assert decoded.error_tolerance is ErrorTolerance.ALL_SCORING_ERRORS
+
+    def test_blob_written_before_the_field_existed__reads_as_the_default(self):
+        # An experiment created by an older SDK has no error_tolerance key; that
+        # must resume at the default rather than failing to decode.
+        legacy_blob = {
+            "schema_version": 1,
+            "resumable": True,
+            "default_runs_per_item": 1,
+            "dataset_filter_string": None,
+            "dataset_version_name": "v1",
+            "nb_samples": None,
+            "requires_local_checkpoint": False,
+        }
+        experiment = mock.Mock()
+        experiment.get_experiment_data.return_value = SimpleNamespace(
+            metadata={state.RESUME_METADATA_KEY: json.dumps(legacy_blob)}
+        )
+
+        decoded = state.read_resume_state(experiment)
+
+        assert decoded.error_tolerance is ErrorTolerance.METRIC_ERRORS
+
+    def test_unrecognised_value__reads_as_the_default(self):
+        # A newer SDK could persist a level this one does not know about.
+        experiment = mock.Mock()
+        experiment.get_experiment_data.return_value = SimpleNamespace(
+            metadata={
+                state.RESUME_METADATA_KEY: json.dumps(
+                    {
+                        "schema_version": 1,
+                        "resumable": True,
+                        "default_runs_per_item": 1,
+                        "dataset_filter_string": None,
+                        "dataset_version_name": "v1",
+                        "nb_samples": None,
+                        "requires_local_checkpoint": False,
+                        "error_tolerance": 999,
+                    }
+                )
+            }
+        )
+
+        decoded = state.read_resume_state(experiment)
+
+        assert decoded.error_tolerance is ErrorTolerance.METRIC_ERRORS

@@ -2,21 +2,28 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanForLlm;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
+import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.SpanService;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
+import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ChatMessage;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.comet.opik.utils.JsonUtils;
 import io.dropwizard.util.Duration;
 import jakarta.ws.rs.NotFoundException;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -41,6 +48,7 @@ import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -48,17 +56,19 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
+import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ROLE_ASSISTANT;
+import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ROLE_USER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -85,7 +95,7 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
     @Mock
     private AutomationRuleEvaluatorService automationRuleEvaluatorService;
     @Mock
-    private com.comet.opik.domain.SpanService spanService;
+    private SpanService spanService;
 
     private OnlineScoringTraceThreadUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -121,6 +131,10 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
         when(onlineScoringConfig.getStreams()).thenReturn(List.of(streamConfig));
         when(onlineScoringConfig.getConsumerGroupName()).thenReturn("online_scoring");
 
+        // Real AgenticScoringServiceImpl (not a mock) so the bounded span preload runs for real over the
+        // stubbed spanService.getByTraceIds Flux — toggle-on tests exercise the actual preload path.
+        var agenticScoringService = new AgenticScoringServiceImpl(onlineScoringConfig, new ToolRegistry(Set.of()));
+
         scorer = new OnlineScoringTraceThreadUserDefinedMetricPythonScorer(
                 onlineScoringConfig,
                 serviceTogglesConfig,
@@ -131,7 +145,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                 traceThreadService,
                 projectService,
                 automationRuleEvaluatorService,
-                spanService);
+                spanService,
+                agenticScoringService);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
@@ -175,6 +190,26 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
     @Nested
     class ScoringTests {
 
+        // Common happy-path stubs shared by the scoring tests: everything except the agentic toggle, the
+        // SpanService size/fetch, and the pythonEvaluatorService stub (captor vs plain), which each test
+        // drives itself. Used only by tests that reach full scoring, not the short-circuit error cases.
+        private void stubPythonScoringHappyPath(Trace trace, Project project) {
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
+                    .thenReturn(ruleFor(ruleName));
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            // The scorer always probes the thread's span size before deciding whether to enrich, so every
+            // scoring test reaches the SpanService and needs a preload cap. Lenient defaults keep tests
+            // that don't care about the enrichment routing terse; the routing tests below re-stub these
+            // with real sizes/caps/spans.
+            lenient().when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64);
+            lenient().when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(0L));
+            lenient().when(spanService.getByTraceIds(Set.of(trace.id()))).thenReturn(Flux.empty());
+        }
+
         @Test
         void scoresThreadAndPersistsScores() {
             var message = sampleMessage();
@@ -185,31 +220,82 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     .value(BigDecimal.valueOf(0.95))
                     .reason("test reason")
                     .build();
-
-            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
-                    .thenReturn(Flux.just(trace), Flux.empty());
-            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
-            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
-                    .thenReturn(ruleFor(ruleName));
-            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            stubPythonScoringHappyPath(trace, project);
             when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
                     .thenReturn(Mono.just(List.of(pythonScore)));
-            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
             var captor = ArgumentCaptor.forClass(List.class);
             verify(feedbackScoreService).scoreBatchOfThreads(captor.capture());
-
             assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
                     threadScore("test_score", BigDecimal.valueOf(0.95), "test reason", project)));
         }
 
         @Test
-        void skipsSpanFetchWhenAgenticToolsDisabled() {
-            // Locks the toggle gate for the Python thread path: when isAgenticToolsEnabled
-            // is false, the scorer must NOT call spanService.getByTraceIds — preserves
-            // today's [{role, content}, ...] wire shape to the Python runner exactly.
+        void dropsAScoreTheMetricFlaggedAsFailedBeforeStoring() {
+            // The thread path maps through FeedbackScoresMapper rather than building items inline, so the
+            // wiring from the split to storage is worth pinning here too.
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            stubPythonScoringHappyPath(trace, project);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(
+                            PythonScoreResult.builder()
+                                    .name("test_score")
+                                    .value(BigDecimal.valueOf(0.95))
+                                    .reason("test reason")
+                                    .build(),
+                            PythonScoreResult.builder()
+                                    .name("failed_score")
+                                    .value(BigDecimal.ZERO)
+                                    .scoringFailed(true)
+                                    .reason("upstream call failed")
+                                    .build())));
+
+            scorer.score(message).block();
+
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService).scoreBatchOfThreads(captor.capture());
+            assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
+                    threadScore("test_score", BigDecimal.valueOf(0.95), "test reason", project)));
+        }
+
+        @Test
+        void dropsScoresWithoutValueAndPersistsTheRest() {
+            // A thread metric returning ScoreResult(value=None) cannot be stored — the value column is not
+            // nullable — but the score next to it must still land: binding the valueless one used to throw
+            // an NPE that failed the whole insert for the thread.
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            stubPythonScoringHappyPath(trace, project);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(
+                            PythonScoreResult.builder()
+                                    .name("test_score")
+                                    .value(BigDecimal.valueOf(0.95))
+                                    .reason("test reason")
+                                    .build(),
+                            PythonScoreResult.builder()
+                                    .name("undecided_score")
+                                    .reason("metric could not decide")
+                                    .build())));
+
+            scorer.score(message).block();
+
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService).scoreBatchOfThreads(captor.capture());
+            assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
+                    threadScore("test_score", BigDecimal.valueOf(0.95), "test reason", project)));
+        }
+
+        @Test
+        void stillScoresWhenSpanSizeAggregateFails() {
+            // Sizing is advisory: a failed aggregate must not abort the evaluation, because
+            // BaseRedisSubscriber would retry maxRetries times and then acknowledge the message,
+            // permanently dropping the thread. Degrade to the unenriched context and still persist.
             var message = sampleMessage();
             var trace = sampleTrace();
             var project = Project.builder().id(projectId).name("test-project").build();
@@ -218,31 +304,30 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     .value(BigDecimal.valueOf(0.95))
                     .reason("ok")
                     .build();
-
-            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
-                    .thenReturn(Flux.just(trace), Flux.empty());
-            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
-            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
-                    .thenReturn(ruleFor(ruleName));
-            when(projectService.get(projectId, workspaceId)).thenReturn(project);
-            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
+            stubPythonScoringHappyPath(trace, project);
+            when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
+                    .thenReturn(Mono.error(new IllegalStateException("clickhouse unavailable")));
+            ArgumentCaptor<List<ChatMessage>> contextCaptor = ArgumentCaptor.forClass(List.class);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), contextCaptor.capture()))
                     .thenReturn(Mono.just(List.of(pythonScore)));
-            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
-            // Toggle off — the scorer should not even ask the SpanService.
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
 
             scorer.score(message).block();
 
-            verifyNoInteractions(spanService);
+            // No bulk fetch follows a failed aggregate — without a size we can't bound the heap cost.
+            verify(spanService, never()).getByTraceIds(any());
+            verify(feedbackScoreService).scoreBatchOfThreads(any());
+            // Assert the WHOLE ordered payload, not a few fields of it: ChatMessage is a record, so
+            // isEqualTo covers role, content and spans together — and keeps covering any component
+            // added later. Spot-checking only `spans` let a swapped or emptied content through.
+            assertThat(contextCaptor.getValue()).isEqualTo(unenrichedContext(trace));
         }
 
         @Test
-        void fetchesSpansAndEnrichesConversationWhenAgenticToolsEnabled() {
-            // Toggle on: scorer fetches every span across the thread and the captured
-            // ChatMessage list sent to the Python evaluator carries the spans nested under
-            // the assistant entry. Locks in the end-to-end enrichment contract — a future
-            // refactor that quietly drops the SpanService fetch or routes through
-            // fromTraceToThread (legacy) would break this test loudly.
+        void fetchesSpansAndEnrichesConversation() {
+            // The scorer fetches every span across the thread and the captured ChatMessage list sent to
+            // the Python evaluator carries the spans nested under the assistant entry. Locks in the
+            // end-to-end enrichment contract — a future refactor that quietly drops the SpanService
+            // fetch or routes through fromTraceToThread (legacy) would break this test loudly.
             var message = sampleMessage();
             var trace = sampleTrace();
             var project = Project.builder().id(projectId).name("test-project").build();
@@ -251,42 +336,119 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     .value(BigDecimal.valueOf(0.9))
                     .reason("ok")
                     .build();
-            var toolSpan = com.comet.opik.api.Span.builder()
+            // input/output are populated so the assertion below covers the SpanForLlm projection
+            // carrying the span's payload through, not merely its name.
+            var toolSpan = Span.builder()
                     .id(UUID.randomUUID())
                     .name("fetch_weather")
-                    .type(com.comet.opik.domain.SpanType.tool)
-                    .startTime(java.time.Instant.now())
+                    .type(SpanType.tool)
+                    .startTime(Instant.now())
                     .traceId(trace.id())
                     .projectId(projectId)
+                    .input(JsonUtils.readTree("{\"city\":\"Lisbon\"}"))
+                    .output(JsonUtils.readTree("{\"tempC\":21}"))
                     .build();
 
-            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
-            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
-                    .thenReturn(Flux.just(trace), Flux.empty());
+            stubPythonScoringHappyPath(trace, project);
+            when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64);
+            // Cheap size probe (route-before-fetch): under the cap → enrich → fetch spans.
+            when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(1_000L));
             when(spanService.getByTraceIds(Set.of(trace.id()))).thenReturn(Flux.just(toolSpan));
-            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
-            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
-                    .thenReturn(ruleFor(ruleName));
-            when(projectService.get(projectId, workspaceId)).thenReturn(project);
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<List<com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ChatMessage>> contextCaptor = ArgumentCaptor
-                    .forClass(List.class);
+            ArgumentCaptor<List<ChatMessage>> contextCaptor = ArgumentCaptor.forClass(List.class);
             when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), contextCaptor.capture()))
                     .thenReturn(Mono.just(List.of(pythonScore)));
-            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
 
             scorer.score(message).block();
 
             verify(spanService).getByTraceIds(Set.of(trace.id()));
-            var captured = contextCaptor.getValue();
-            // Conversation contains user + assistant per trace (one trace here).
-            assertThat(captured).hasSize(2);
-            assertThat(captured.get(0).role()).isEqualTo("user");
-            assertThat(captured.get(0).spans()).isNull(); // user entry never carries spans
-            assertThat(captured.get(1).role()).isEqualTo("assistant");
-            assertThat(captured.get(1).spans()).isNotNull();
-            assertThat(captured.get(1).spans()).extracting(com.comet.opik.api.SpanForLlm::name)
-                    .containsExactly("fetch_weather");
+            // The whole ordered conversation: user turn carries the trace input and never any spans,
+            // assistant turn carries the trace output plus the span tree with the span's own payload.
+            // Built from the fixture's fields rather than through the production mapper, so the
+            // projection itself is under test.
+            assertThat(contextCaptor.getValue()).isEqualTo(List.of(
+                    ChatMessage.builder().role(ROLE_USER).content(trace.input()).build(),
+                    ChatMessage.builder().role(ROLE_ASSISTANT).content(trace.output())
+                            .spans(List.of(SpanForLlm.builder()
+                                    .name(toolSpan.name())
+                                    .type(toolSpan.type())
+                                    .startTime(toolSpan.startTime())
+                                    .input(toolSpan.input())
+                                    .output(toolSpan.output())
+                                    .build()))
+                            .build()));
+        }
+
+        @Test
+        void scoresWithUnenrichedContextWhenThreadExceedsPreloadCap() {
+            // Toggle on, but the thread's span size exceeds the preload cap: the scorer must NOT bulk-fetch
+            // spans (that is the heap-OOM path) — it degrades to the legacy unenriched {role, content}
+            // context and still scores. This is the OPIK-7454 safeguard for the Python thread path.
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var pythonScore = PythonScoreResult.builder()
+                    .name("tool_use_score")
+                    .value(BigDecimal.valueOf(0.9))
+                    .reason("ok")
+                    .build();
+
+            stubPythonScoringHappyPath(trace, project);
+            when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64); // cap = 64 MiB
+            // Size probe reports 200 MiB — over the cap → no bulk fetch, unenriched context.
+            when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
+                    .thenReturn(Mono.just(200L * 1024 * 1024));
+            ArgumentCaptor<List<ChatMessage>> contextCaptor = ArgumentCaptor.forClass(List.class);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), contextCaptor.capture()))
+                    .thenReturn(Mono.just(List.of(pythonScore)));
+
+            scorer.score(message).block();
+
+            // The OOM path is the bulk span fetch — it must not run when over the cap.
+            verify(spanService, never()).getByTraceIds(any());
+            assertThat(contextCaptor.getValue()).isEqualTo(unenrichedContext(trace));
+        }
+
+        @Test
+        void warnsAndScoresUnenrichedWhenPreloadOverflowsDespiteFittingSizeEstimate() {
+            // Toggle on and the cheap aggregate reports UNDER the cap, so the scorer chooses to enrich and
+            // issues the bulk fetch — but the actual streamed spans exceed the byte cap, so the bounded
+            // preload overflows and drops the buffer. The scorer must still score with the unenriched
+            // context AND surface the estimate/actual mismatch with a warning (not fall back silently).
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var pythonScore = PythonScoreResult.builder()
+                    .name("tool_use_score")
+                    .value(BigDecimal.valueOf(0.9))
+                    .reason("ok")
+                    .build();
+            var hugeSpan = Span.builder()
+                    .id(UUID.randomUUID())
+                    .name("huge-tool-call")
+                    .type(SpanType.tool)
+                    .startTime(Instant.now())
+                    .traceId(trace.id())
+                    .projectId(projectId)
+                    .input(JsonUtils.readTree("{\"payload\":\"" + "x".repeat(2_000_000) + "\"}"))
+                    .build();
+
+            stubPythonScoringHappyPath(trace, project);
+            when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(1); // cap = 1 MiB
+            // Aggregate under-counts (500 B, under the cap) → enrich is chosen...
+            when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(500L));
+            // ...but the real span streams ~2 MiB, so the bounded preload overflows and drops the buffer.
+            when(spanService.getByTraceIds(Set.of(trace.id()))).thenReturn(Flux.just(hugeSpan));
+            ArgumentCaptor<List<ChatMessage>> contextCaptor = ArgumentCaptor.forClass(List.class);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), contextCaptor.capture()))
+                    .thenReturn(Mono.just(List.of(pythonScore)));
+
+            scorer.score(message).block();
+
+            // The fetch was attempted (enrich chosen from the estimate) but the buffer was dropped on
+            // overflow, and the mismatch is surfaced rather than silent.
+            verify(spanService).getByTraceIds(Set.of(trace.id()));
+            verify(userFacingLogger).warn(contains("exceeded the enrichment cap"), eq(threadId), any(), any());
+            assertThat(contextCaptor.getValue()).isEqualTo(unenrichedContext(trace));
         }
 
         @Test
@@ -379,6 +541,11 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     .thenReturn(ruleFor(ruleName));
             when(projectService.get(projectId, workspaceId))
                     .thenReturn(Project.builder().id(projectId).name("test-project").build());
+            // The span-size probe runs before the evaluator call, so it has to resolve for the
+            // evaluator's failure to be the one that surfaces.
+            when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64);
+            when(spanService.getSpansSizeByTraceIds(any())).thenReturn(Mono.just(0L));
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
             when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
                     .thenReturn(Mono.error(error));
 
@@ -402,6 +569,17 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                 .workspaceId(workspaceId)
                 .userName(userName)
                 .build();
+    }
+
+    /**
+     * The legacy {@code [{role, content}, ...]} conversation the Python runner must receive whenever
+     * enrichment is skipped: the trace's input as the user turn, its output as the assistant turn, and
+     * no {@code spans} on either — the shape rules written before enrichment existed depend on.
+     */
+    private static List<ChatMessage> unenrichedContext(Trace trace) {
+        return List.of(
+                ChatMessage.builder().role(ROLE_USER).content(trace.input()).build(),
+                ChatMessage.builder().role(ROLE_ASSISTANT).content(trace.output()).build());
     }
 
     private Trace sampleTrace() {

@@ -184,6 +184,37 @@ data:
             {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
         {{- end }}
         }
+
+        # cost-api's build version, so release tooling can read the deployed
+        # cost-api version the same way it reads opik's from
+        # {{ $rootPath }}/api/is-alive/ver.
+        #
+        # `=` makes this an EXACT match: only the version endpoint is reachable,
+        # not the rest of {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/*. The
+        # ai-spend API above stays the only other way in, so cost-api's private
+        # routes still require the platform session cookie.
+        #
+        # The response is public and unauthenticated by design on cost-api's side
+        # ({{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver returns just {"version": "x.y.z"}).
+        location = {{ $rootPath }}{{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver {
+            try_files /dev/null @ai_spend_version;
+        }
+        location @ai_spend_version {
+            # The rewrite carries the target URI, because nginx refuses a
+            # proxy_pass with a URI part inside a named location. Strips the opik
+            # rootPath so the upstream sees its own {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver;
+            # a no-op when rootPath is empty, and `break` stops further rewriting.
+            rewrite ^{{ $rootPath }}{{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver$ {{ .Values.component.frontend.aiSpendBackend.costApiRootPath }}/ver break;
+            proxy_pass http://ai-cost-backend;
+            proxy_redirect  off;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        {{- range $k, $v := .Values.component.frontend.upstreamConfig }}
+            {{ $k }}{{- if eq (printf "%v" $v) "true" }} on{{- else if eq (printf "%v" $v) "false" }} off{{- else }} {{ $v }}{{- end }};
+        {{- end }}
+        }
         {{- end }}
 
         location {{ $rootPath }}/api/ {

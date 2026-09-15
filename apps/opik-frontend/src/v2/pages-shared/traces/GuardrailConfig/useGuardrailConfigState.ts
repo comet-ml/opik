@@ -1,21 +1,24 @@
 import { useReducer } from "react";
-import { GuardrailsState, guardrailsDefaultState } from "./guardrailsConfig";
+import {
+  GuardrailFields,
+  GuardrailsState,
+  guardrailsDefaultState,
+} from "./guardrailsConfig";
 import { GuardrailTypes } from "@/types/guardrails";
 
 enum ActionType {
-  UPDATE_THRESHOLD = "UPDATE_THRESHOLD",
-  UPDATE_ENTITIES = "UPDATE_ENTITIES",
+  UPDATE_FIELD = "UPDATE_FIELD",
   TOGGLE_ENABLED = "TOGGLE_ENABLED",
 }
 
 type GuardrailAction =
   | {
-      type: ActionType.UPDATE_THRESHOLD;
-      payload: { guardrailType: GuardrailTypes; threshold: number };
-    }
-  | {
-      type: ActionType.UPDATE_ENTITIES;
-      payload: { guardrailType: GuardrailTypes; entities: string[] };
+      type: ActionType.UPDATE_FIELD;
+      payload: {
+        guardrailType: GuardrailTypes;
+        field: keyof GuardrailFields;
+        value: GuardrailFields[keyof GuardrailFields];
+      };
     }
   | {
       type: ActionType.TOGGLE_ENABLED;
@@ -29,20 +32,12 @@ const guardrailReducer = (
   const { type, payload } = action;
 
   switch (type) {
-    case ActionType.UPDATE_THRESHOLD:
+    case ActionType.UPDATE_FIELD:
       return {
         ...state,
         [payload.guardrailType]: {
           ...state[payload.guardrailType],
-          threshold: payload.threshold,
-        },
-      };
-    case ActionType.UPDATE_ENTITIES:
-      return {
-        ...state,
-        [payload.guardrailType]: {
-          ...state[payload.guardrailType],
-          entities: payload.entities,
+          [payload.field]: payload.value,
         },
       };
     case ActionType.TOGGLE_ENABLED:
@@ -63,23 +58,14 @@ export const useGuardrailConfigState = (
 ) => {
   const [state, dispatch] = useReducer(guardrailReducer, initialState);
 
-  const updateThreshold = (
+  const updateField = <K extends keyof GuardrailFields>(
     guardrailType: GuardrailTypes,
-    threshold: number,
+    field: K,
+    value: GuardrailFields[K],
   ) => {
     dispatch({
-      type: ActionType.UPDATE_THRESHOLD,
-      payload: { guardrailType, threshold },
-    });
-  };
-
-  const updateEntities = (
-    guardrailType: GuardrailTypes,
-    entities: string[],
-  ) => {
-    dispatch({
-      type: ActionType.UPDATE_ENTITIES,
-      payload: { guardrailType, entities },
+      type: ActionType.UPDATE_FIELD,
+      payload: { guardrailType, field, value },
     });
   };
 
@@ -98,8 +84,7 @@ export const useGuardrailConfigState = (
 
   return {
     state,
-    updateThreshold,
-    updateEntities,
+    updateField,
     toggleEnabled,
     getEnabledGuardrailTypes,
   };

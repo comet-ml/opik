@@ -21,7 +21,6 @@ public class InstructionStrategy implements StructuredOutputStrategy {
 
     private static final ObjectMapper OBJECT_MAPPER = JsonUtils.getMapper();
     private static final String INSTRUCTION = """
-
             IMPORTANT:
             You must respond with ONLY a single valid JSON object that conforms to the structure of the example below.
             Pay attention to the field names and data types (boolean, integer, double).
@@ -41,7 +40,8 @@ public class InstructionStrategy implements StructuredOutputStrategy {
             return chatRequestBuilder;
         }
 
-        String instruction = INSTRUCTION.formatted(generateJsonExample(schema), generateJsonDescriptions(schema));
+        String instruction = "\n\n"
+                + INSTRUCTION.formatted(generateJsonExample(schema), generateJsonDescriptions(schema));
 
         // Create a mutable copy to work with
         List<ChatMessage> modifiableMessages = new ArrayList<>(messages);

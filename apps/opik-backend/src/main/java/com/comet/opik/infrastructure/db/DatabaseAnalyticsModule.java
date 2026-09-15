@@ -41,7 +41,7 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
         });
 
         // Read-only client used for Agent Insights freeform SQL. The v2 client connects lazily, so building it is
-        // cheap and never contacts ClickHouse until a query runs; the agentInsightsEnabled toggle gates all usage.
+        // cheap and never contacts ClickHouse until a query runs; the ollieEnabled toggle gates all usage.
         readOnlyFreeFormSqlClickHouseClient = buildReadOnlyFreeFormSqlClient();
         environment().lifecycle().manage(new Managed() {
             @Override

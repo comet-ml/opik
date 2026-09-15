@@ -193,6 +193,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
                                 validationErrors?.message,
                               ),
                             })}
+                            data-testid="alert-name-input"
                             placeholder="Name"
                             {...field}
                           />

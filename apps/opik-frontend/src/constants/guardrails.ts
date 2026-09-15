@@ -47,6 +47,9 @@ export const PIIEntitiesLabelMap = {
 export const GuardrailNamesLabelMap = {
   [GuardrailTypes.TOPIC]: "Topic guardrail",
   [GuardrailTypes.PII]: "PII guardrail",
+  [GuardrailTypes.LLM_JUDGE]: "LLM judge guardrail",
+  [GuardrailTypes.PROMPT_INJECTION]: "Prompt injection guardrail",
+  [GuardrailTypes.CUSTOM_CLASSIFIER]: "Custom guardrail",
 };
 
 export const getGuardrailComputedResult = (

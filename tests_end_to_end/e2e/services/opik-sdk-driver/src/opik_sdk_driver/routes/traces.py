@@ -1,5 +1,7 @@
 import atexit
 import datetime
+import secrets
+import uuid
 
 import opik
 from fastapi import APIRouter, Header, HTTPException
@@ -13,6 +15,25 @@ from ..schemas import (
 )
 
 router = APIRouter(prefix="/traces", tags=["traces"])
+
+
+def _uuid7_at(moment: datetime.datetime) -> str:
+    """Build a UUIDv7 whose embedded timestamp is `moment`.
+
+    The backend requires trace ids to be version 7 and reads the creation
+    instant back out of them, so a backdated trace needs a backdated id — a
+    fresh id would keep the trace inside any recent time window no matter what
+    start_time says. Python's uuid module has no uuid7 generator (3.14 adds
+    one), hence the bit layout here: 48-bit big-endian millisecond timestamp,
+    4-bit version 7, 12 random bits, 2-bit RFC 4122 variant, 62 random bits.
+    """
+    millis = int(moment.timestamp() * 1000)
+    value = (millis & ((1 << 48) - 1)) << 80
+    value |= 0x7 << 76
+    value |= secrets.randbits(12) << 64
+    value |= 0b10 << 62
+    value |= secrets.randbits(62)
+    return str(uuid.UUID(int=value))
 
 
 @router.post("", response_model=TraceResponse, status_code=201)
@@ -77,13 +98,24 @@ def create_nested_trace(
     # SDK is translated to HTTP by the app-wide exception handler.
     client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
     try:
+        # The instant the trace "happened": now, or age_days in the past.
+        anchor = datetime.datetime.now(datetime.timezone.utc)
+        if body.age_days is not None:
+            anchor -= datetime.timedelta(days=body.age_days)
+
         start_time: datetime.datetime | None = None
         end_time: datetime.datetime | None = None
         if body.duration_seconds is not None:
-            end_time = datetime.datetime.now(datetime.timezone.utc)
-            start_time = end_time - datetime.timedelta(seconds=body.duration_seconds)
+            end_time = anchor
+            start_time = anchor - datetime.timedelta(seconds=body.duration_seconds)
+        elif body.age_days is not None:
+            # A backdated trace with no duration still needs a start_time, or it
+            # renders as never-started at today's date. end_time stays unset,
+            # matching a non-backdated trace with no duration.
+            start_time = anchor
 
         trace = client.trace(
+            id=_uuid7_at(anchor) if body.age_days is not None else None,
             project_name=body.project_name,
             name=body.name,
             input=body.input,
@@ -125,7 +157,16 @@ def create_nested_trace(
             # an immediate end() update races the create in the same batch and
             # clobbers the rich fields (name/input/output/usage/model/cost) with
             # nulls. See the SDK note on batching-and-updates.
+            # A backdated trace carries its spans back with it — id, start and
+            # end — so per-span aggregations (cost, tokens) fall in the same
+            # time window as the trace they belong to. Left untouched (SDK
+            # default: fresh id, start now, no end) when age_days is unset, so
+            # existing seeds keep the exact shape they had.
+            backdated = body.age_days is not None
             span = parent.span(
+                id=_uuid7_at(anchor) if backdated else None,
+                start_time=start_time if backdated else None,
+                end_time=end_time if backdated else None,
                 name=span_seed.name,
                 type=span_seed.type,
                 input=span_seed.input,

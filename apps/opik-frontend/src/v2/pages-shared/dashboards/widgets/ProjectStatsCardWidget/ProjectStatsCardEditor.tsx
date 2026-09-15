@@ -268,6 +268,11 @@ const ProjectStatsCardEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
           control={form.control}
           name="projectIds"
           render={({ field, formState }) => {
+            // When the dashboard is pinned to a single project (runtime context), the widget's scope is fixed to that
+            // project, so the "all projects" toggle and project selector don't apply — hide the whole block.
+            if (hasRuntimeProjectId) {
+              return <></>;
+            }
             const validationErrors = get(formState.errors, ["projectIds"]);
             return (
               <FormItem>

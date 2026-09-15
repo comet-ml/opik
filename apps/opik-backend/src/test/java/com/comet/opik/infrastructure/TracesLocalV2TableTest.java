@@ -163,11 +163,44 @@ class TracesLocalV2TableTest {
 
         var partitionId = getPartitionId(storedTrace);
 
-        // PARTITION BY toMonday(id_at): the row must land in the partition for the Monday of the week its UUIDv7 id
-        // encodes — not the current week. Backdated ids prove the partition follows id_at, not wall-clock (the reason
-        // the design chose an id-derived key over created_at). ClickHouse names a Date partition YYYYMMDD.
+        // PARTITION BY the honest Date32 weekly Monday of id_at: the row must land in the partition for the Monday of the
+        // week its UUIDv7 id encodes — not the current week. Backdated ids prove the partition follows id_at, not
+        // wall-clock (the reason for an id-derived key over created_at). The partition id is that Monday's YYYYMMDD.
         var expectedMonday = idAt.atZone(ZoneOffset.UTC).toLocalDate()
                 .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        assertThat(partitionId).isEqualTo(expectedMonday.format(DateTimeFormatter.BASIC_ISO_DATE));
+    }
+
+    /**
+     * The far-future id guard (OPIK-7456). A litellm bug (BerriAI/litellm#31294) mints UUIDv7 ids whose embedded
+     * timestamp is ~2201 — the rows are legitimate customer data, just carrying a future timestamp. {@code id_at} as
+     * DateTime64 (000114) makes it read back as the honest 2201 (so the {@code id_at > now()} audit surfaces it, where a
+     * 32-bit DateTime would wrap it to ~2065 or even into the past), and the honest Date32 weekly partition places the
+     * row in its own honest ~2201 week — not the ~2021 that a 16-bit {@code toMonday} would wrap it into. Pins both the id_at
+     * year and the partition.
+     */
+    @Test
+    void farFutureIdLandsInHonestPartitionNotAWrappedYear() {
+        var badId = ID_GENERATOR.generateId(Instant.parse("2201-06-01T00:00:00Z"));
+        var storedTrace = newStoredTrace(Instant.now().truncatedTo(ChronoUnit.MICROS),
+                randomFutureInstantFrom(Instant.now().truncatedTo(ChronoUnit.MICROS)), DEFAULT_TRUNCATION_THRESHOLD)
+                .toBuilder()
+                .id(badId)
+                .idAt(idAtOf(badId))
+                .build();
+        insert(storedTrace);
+
+        var idAt = getById(storedTrace).idAt();
+        var partitionId = getPartitionId(storedTrace);
+
+        // id_at is honest 2201, not a wrapped ~2065 (32-bit DateTime) — and it is in the future, so the audit catches it.
+        assertThat(idAt.atZone(ZoneOffset.UTC).getYear()).isEqualTo(2201);
+        assertThat(idAt).isEqualTo(idAtOf(badId)).isAfter(Instant.now());
+        // partition is the honest 2201 Monday (YYYYMMDD ~22010601), not the ~2021 that a 16-bit toMonday would wrap it into —
+        // the Date32 weekly expression never wraps.
+        var expectedMonday = idAt.atZone(ZoneOffset.UTC).toLocalDate()
+                .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        assertThat(expectedMonday.getYear()).isEqualTo(2201);
         assertThat(partitionId).isEqualTo(expectedMonday.format(DateTimeFormatter.BASIC_ISO_DATE));
     }
 
@@ -308,7 +341,7 @@ class TracesLocalV2TableTest {
 
     /**
      * SELECT * omits MATERIALIZED columns, so the materialized ones are listed explicitly; output_keys (Array(Tuple))
-     * is split into two Array(String) projections and id_at (DateTime) is read as an Instant.
+     * is split into two Array(String) projections and id_at (DateTime64) is read as an Instant.
      */
     private StoredTrace getById(StoredTrace trace) {
         return transactionTemplateAsync.nonTransaction(connection -> {

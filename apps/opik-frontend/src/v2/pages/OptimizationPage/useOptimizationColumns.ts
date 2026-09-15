@@ -98,20 +98,30 @@ export const useOptimizationColumns = ({
         horizontalAlignment: CELL_HORIZONTAL_ALIGNMENT.end,
         accessorFn: (row) => row.score,
         cell: TrialAccuracyCell,
+        // statusMap lets the metric cells drop the baseline delta while a trial
+        // is still evaluating — a partial average is not comparable to the
+        // fully evaluated baseline (OPIK-7460).
         customMeta: {
           baselineCandidate,
           isTestSuite,
+          statusMap,
         },
       },
       {
         id: "runtime_cost",
-        label: "Opt. cost",
+        // Per-trial cost of a single evaluated case, which is what runtimeCost
+        // holds — the same figure the Overview card labels "Runtime cost". It
+        // was labelled "Opt. cost" here, the name the runs list uses for a whole
+        // run's total spend, so one header stood for a per-case rate on this
+        // page and a lifetime total one screen away (OPIK-8060).
+        label: "Runtime cost",
         type: COLUMN_TYPE.cost,
         size: 130,
         accessorFn: (row) => row.runtimeCost,
         cell: TrialCandidateCostCell,
         customMeta: {
           baselineCandidate,
+          statusMap,
         },
       },
       {
@@ -123,6 +133,7 @@ export const useOptimizationColumns = ({
         cell: TrialCandidateLatencyCell,
         customMeta: {
           baselineCandidate,
+          statusMap,
         },
       },
       {

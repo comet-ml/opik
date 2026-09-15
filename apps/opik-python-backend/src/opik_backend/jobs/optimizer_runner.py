@@ -254,7 +254,11 @@ def build_optimizer_and_prompt(config):
     prompt = ChatPrompt(
         messages=config.prompt_messages,
         model=task_model,
-        model_parameters=ensure_default_model_params(task_params),
+        # deterministic: this model's completions are what the metric scores, so
+        # pin its temperature where the provider honours it. Best-effort, not a
+        # guarantee — models that fix their own temperature (the gpt-5 family)
+        # stay sampled, so the stop conditions tolerate score noise themselves.
+        model_parameters=ensure_default_model_params(task_params, deterministic=True),
     )
     return optimizer, prompt
 
@@ -282,7 +286,7 @@ def main():
         from opik_backend.studio.types import (
             OptimizationConfig,
             OptimizationRunResult,
-            extract_scoring_health,
+            extract_completion_metadata,
         )
         from opik_backend.studio.helpers import (
             initialize_opik_client,
@@ -318,7 +322,9 @@ def main():
         # Run optimization with lifecycle management
         with optimization_lifecycle(status_manager):
             # Load dataset
-            dataset = load_and_validate_dataset(client, config.dataset_name)
+            dataset, dataset_size = load_and_validate_dataset(
+                client, config.dataset_name
+            )
 
             # Build the optimizer + prompt: resolves the gateway-routed prompt
             # (task) model and the optimizer (algorithm) model, each with their
@@ -342,6 +348,7 @@ def main():
                 dataset=dataset,
                 metric_fn=metric_fn,
                 project_name=context.project_name,
+                dataset_size=dataset_size,
             )
 
             # Build result dict
@@ -362,20 +369,17 @@ def main():
                 else:
                     output["optimized_prompt"] = str(result.prompt)
 
-            # Extract scoring_health from the SDK result and forward it to the
-            # backend as metadata.scoring_health so the UI can show an exact
-            # failed/total count. The helper returns None for older SDKs or
-            # malformed data and never raises.
-            scoring_health = extract_scoring_health(result)
-            if scoring_health is not None:
-                output["scoring_health"] = scoring_health
-                status_manager.set_completion_metadata(
-                    {"scoring_health": scoring_health}
-                )
+            # Forward scoring_health and finish_reason from the SDK result to
+            # the backend as metadata.scoring_health / metadata.finish_reason
+            # so the UI can show an exact failed/total count and the
+            # authoritative stop cause (OPIK-7511/OPIK-7458). The extractor
+            # returns {} for older SDKs or malformed data and never raises.
+            completion_metadata = extract_completion_metadata(result)
+            output.update(completion_metadata)
+            if completion_metadata:
+                status_manager.set_completion_metadata(completion_metadata)
                 logger.debug(
-                    "Queued scoring_health metadata for completion: failed=%d total=%d",
-                    scoring_health["failed_count"],
-                    scoring_health["total_count"],
+                    "Queued completion metadata: %s", sorted(completion_metadata)
                 )
 
         # Output result as JSON on last line of stdout

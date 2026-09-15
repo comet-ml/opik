@@ -1,10 +1,49 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 export class ExperimentDetailPage {
   constructor(
     private readonly page: Page,
     private readonly experimentId: string,
   ) {}
+
+  /** The "Logs" tab trigger, which replaced the old "Go to logs" tag (OPIK-6739). */
+  get logsTab(): Locator {
+    return this.page.getByRole('tab', { name: 'Logs' });
+  }
+
+  /** The removed "Go to logs" tag — kept as a locator so tests can assert it is gone. */
+  get goToLogsTag(): Locator {
+    return this.page.getByText('Go to logs');
+  }
+
+  /** Open the Logs tab and wait for the URL to reflect it. */
+  async openLogsTab(): Promise<void> {
+    return test.step('open the Logs tab', async () => {
+      await this.logsTab.click();
+      await this.page.waitForURL((url) => url.searchParams.get('tab') === 'logs');
+    });
+  }
+
+  /** Trace rows inside the Logs tab, scoped to the tab so they can't match the items table. */
+  get logsTraceRows(): Locator {
+    return this.page
+      .getByRole('tabpanel')
+      .locator('tbody tr[data-row-id]');
+  }
+
+  /**
+   * Poll until the Logs tab settles on exactly `expected` trace rows.
+   *
+   * An exact count, not a lower bound: the experiment scope is the point of the tab, so a run of
+   * N items must show N traces. More would mean the scope leaked and the whole project is listed.
+   */
+  async waitForLogsTraceRows(expected: number, timeoutMs = 30_000): Promise<void> {
+    return test.step(`wait for ${expected} trace rows in the Logs tab`, async () => {
+      await expect(this.logsTraceRows).toHaveCount(expected, {
+        timeout: timeoutMs,
+      });
+    });
+  }
 
   async waitForReady(): Promise<void> {
     // The page renders the experiment name as the h1.

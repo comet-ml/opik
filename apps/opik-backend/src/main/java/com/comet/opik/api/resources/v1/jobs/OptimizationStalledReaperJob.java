@@ -29,10 +29,21 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  * If the worker never runs (worker down, Redis/queue unreachable, job lost) or crashes before it can
  * report, the run is frozen on {@code INITIALIZED} (or {@code RUNNING}) forever with no error surfaced.
  * This reaper is the environment-independent safety net that guarantees a run can never stay stuck
- * indefinitely: it finds runs whose latest status is non-terminal and older than the configured
- * threshold and asks {@link OptimizationService#reconcileStalledStudioOptimizations} to mark them
- * failed with a clear reason. A distributed lock with hold-until-expiry keeps only one instance
- * reconciling per cycle.
+ * indefinitely. It selects a non-terminal run on either of two independent conditions and asks
+ * {@link OptimizationService#reconcileStalledStudioOptimizations} to mark it failed with a clear reason:
+ * <ul>
+ * <li><b>No liveness</b> — the newest of the row's {@code last_updated_at}, the latest trial experiment's
+ * {@code created_at} and the latest experiment item's {@code created_at} (OPIK-7459) is older than
+ * {@code initializedTimeout} / {@code runningTimeout}, per the status the row is stuck on.</li>
+ * <li><b>Past the hard ceiling</b> — the run started more than {@code runningHardTimeout} ago, reaped
+ * <em>even if</em> trial and item writes are still arriving. The liveness rule alone weakened the
+ * never-stuck-indefinitely guarantee asserted above, because a zombie worker that keeps writing rows
+ * without ever reporting a terminal status would satisfy it forever; this ceiling is what restores it.</li>
+ * </ul>
+ * The two are checked in that order everywhere, and the ceiling wins: {@code OptimizationService} short
+ * circuits its pre-update activity veto for a hard-capped run, and reports the ceiling as the reason.
+ * <p>
+ * A distributed lock with hold-until-expiry keeps only one instance reconciling per cycle.
  */
 @Slf4j
 @Singleton
@@ -80,8 +91,10 @@ public class OptimizationStalledReaperJob extends Job implements InterruptableJo
                     return optimizationService.reconcileStalledStudioOptimizations(
                             config.initializedTimeout().toJavaDuration(),
                             config.runningTimeout().toJavaDuration(),
+                            config.runningHardTimeout().toJavaDuration(),
                             config.lookbackMargin().toJavaDuration(),
-                            config.batchSize())
+                            config.batchSize(),
+                            config.candidateScanFactor())
                             .doOnSuccess(count -> {
                                 if (count > 0) {
                                     log.warn("Optimization stalled reaper marked '{}' stalled studio run(s) as ERROR",

@@ -218,7 +218,14 @@ export type AggregatedCandidate = {
   candidateId: string;
   stepIndex: number;
   parentCandidateIds: string[];
-  trialNumber: number;
+  /**
+   * 1-based "Trial #N" identity, assigned in creation order. `null` marks the
+   * baseline in v2 numbering — the baseline is not a trial, so numbering it
+   * shifted every candidate by one and made the last trial exceed the
+   * configured max_trials (OPIK-7589). v1 is frozen on the old numbering
+   * (baseline = #1), so there the field is always a number.
+   */
+  trialNumber: number | null;
   score: number | undefined;
   runtimeCost: number | undefined;
   latencyP50: number | undefined;

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import first from "lodash/first";
 import last from "lodash/last";
@@ -6,6 +6,7 @@ import last from "lodash/last";
 import { TableBody } from "@/ui/table";
 import { DataTableBodyProps } from "@/shared/DataTable/DataTableBody";
 import usePageBodyScrollContainer from "@/contexts/usePageBodyScrollContainer";
+import { observeOwnAxisOffset } from "@/shared/DataTable/virtualizerOptions";
 import { cn } from "@/lib/utils";
 
 const ROW_BORDER_SIZE = 1;
@@ -18,11 +19,13 @@ export const DataTableVirtualBody = <TData,>({
   renderRow,
   renderNoData,
   showLoadingOverlay = false,
+  rowVirtualization,
 }: DataTableBodyProps<TData>) => {
   const { scrollContainer, tableOffset } = usePageBodyScrollContainer();
   const { height } = table.options.meta?.rowHeightStyle ?? { height: "44" };
 
-  const rows = table.getRowModel().rows ?? [];
+  const enabled = rowVirtualization?.enabled ?? true;
+  const rows = table.getRowModel().rows;
   const virtualRowHeight = parseInt(height as string, 10) + ROW_BORDER_SIZE;
   const overscan = Math.max(
     MIN_OVER_SCAN_ROWS,
@@ -32,13 +35,20 @@ export const DataTableVirtualBody = <TData,>({
     ),
   );
 
+  const getItemKey = useCallback(
+    (index: number) => rows[index]?.id ?? index,
+    [rows],
+  );
+
   const { getVirtualItems, measure } = useVirtualizer({
+    enabled,
     count: rows.length,
     getScrollElement: () => scrollContainer,
-    getItemKey: (index: number) => rows[index].id ?? index,
+    getItemKey,
     estimateSize: () => virtualRowHeight,
     paddingStart: tableOffset,
     overscan,
+    observeElementOffset: observeOwnAxisOffset,
   });
   const virtualRows = getVirtualItems();
   const firsRowHeight = (first(virtualRows)?.index ?? 0) * virtualRowHeight;
@@ -75,7 +85,11 @@ export const DataTableVirtualBody = <TData,>({
     <TableBody
       className={cn(showLoadingOverlay && "comet-table-body-loading-overlay")}
     >
-      {rows?.length ? renderVirtualRows() : renderNoData()}
+      {rows.length
+        ? enabled
+          ? renderVirtualRows()
+          : rows.map(renderRow)
+        : renderNoData()}
     </TableBody>
   );
 };

@@ -169,7 +169,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   return (
     <>
       <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
       >
@@ -178,8 +178,8 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
             searchText={search as string}
             setSearchText={setSearch}
             placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
+            className="w-[200px] shrink-0"
+            dimension="xs"
           ></SearchInput>
           {promptVersions.map((pv) => (
             <NavigationTag
