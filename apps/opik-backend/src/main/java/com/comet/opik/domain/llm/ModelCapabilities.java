@@ -42,7 +42,7 @@ public class ModelCapabilities {
      * — so the match is deliberately loose. A false positive only drops top_p when temperature is
      * also set, which is what Anthropic recommends regardless.
      */
-    private static final Pattern EXCLUSIVE_SAMPLING_PARAMS_PATTERN = Pattern.compile(".*claude.*",
+    private static final Pattern EXCLUSIVE_SAMPLING_MODEL_PATTERN = Pattern.compile(".*claude.*",
             Pattern.CASE_INSENSITIVE);
 
     private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = loadCapabilities();
@@ -67,8 +67,12 @@ public class ModelCapabilities {
         // Match the model, not the route to it. Custom ids carry the gateway in the prefix
         // (custom-llm/<provider_name>/<model>), so a provider someone called "claude-gw" would
         // otherwise make every model behind it — Mistral, Llama — look like Claude and lose its top_p.
-        var model = StringUtils.defaultIfEmpty(StringUtils.substringAfterLast(modelName, "/"), modelName);
-        return EXCLUSIVE_SAMPLING_PARAMS_PATTERN.matcher(model).matches();
+        // An id with no separator is the model; one that ends in a separator names no model at all,
+        // and must not fall back to the gateway — the frontend reads the same id the same way.
+        var model = StringUtils.contains(modelName, "/")
+                ? StringUtils.substringAfterLast(modelName, "/")
+                : modelName;
+        return EXCLUSIVE_SAMPLING_MODEL_PATTERN.matcher(model).matches();
     }
 
     public boolean supportsVision(String modelName) {

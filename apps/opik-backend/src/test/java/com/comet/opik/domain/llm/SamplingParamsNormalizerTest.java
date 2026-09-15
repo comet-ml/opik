@@ -54,6 +54,19 @@ class SamplingParamsNormalizerTest {
         assertThat(normalized.topP()).isEqualTo(0.9);
     }
 
+    /**
+     * A trailing separator leaves no model segment at all. Falling back to the whole id here would
+     * classify it by the gateway's name, and would disagree with the frontend, which reads the same
+     * id as having no model.
+     */
+    @Test
+    void doesNotClassifyAnIdWithNoModelSegment() {
+        var normalized = SamplingParamsNormalizer
+                .normalizeRequest(request("custom-llm/claude-gw/", 0.7, 0.9));
+
+        assertThat(normalized.topP()).isEqualTo(0.9);
+    }
+
     @Test
     void stillMatchesClaudeBehindSuchAGateway() {
         var normalized = SamplingParamsNormalizer

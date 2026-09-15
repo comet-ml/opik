@@ -1442,6 +1442,16 @@ describe("Claude sampling exclusivity across providers", () => {
     ).toEqual({ temperature: 0.7 });
   });
 
+  it("does not classify an id whose model segment is empty", () => {
+    // Must agree with the backend, which sees the same id and must not fall back to the gateway.
+    expect(
+      resolveSamplingParams("custom-llm/claude-gw/" as PROVIDER_MODEL_TYPE, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({ temperature: 0.7, topP: 0.9 });
+  });
+
   it("leaves a non-Claude model on the same provider alone", () => {
     expect(
       resolveSamplingParams("mistral-large-2411" as PROVIDER_MODEL_TYPE, {

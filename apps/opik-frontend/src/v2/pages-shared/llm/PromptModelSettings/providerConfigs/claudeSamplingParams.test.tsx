@@ -90,6 +90,42 @@ describe("a Claude model behind another provider", () => {
   });
 });
 
+describe("a Claude config that carries neither half", () => {
+  // Only the Anthropic provider restores a default when a config carries neither half. A Claude
+  // model reached another way resolves to neither, and the request then carries neither — so
+  // rendering a slider on its default would claim a value that never leaves.
+  it("shows no sampling control rather than a default the request drops", () => {
+    renderPanel(
+      <CustomModelConfigs
+        configs={{ maxCompletionTokens: 4000 } as LLMCustomConfigsType}
+        model={"custom-llm/gw/claude-opus-4-6" as PROVIDER_MODEL_TYPE}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Sampling")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
+  });
+
+  it("still shows the half the config does carry", () => {
+    renderPanel(
+      <CustomModelConfigs
+        configs={
+          {
+            maxCompletionTokens: 4000,
+            temperature: 0.4,
+          } as LLMCustomConfigsType
+        }
+        model={"custom-llm/gw/claude-opus-4-6" as PROVIDER_MODEL_TYPE}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("temperature-input")).toHaveValue("0.4");
+  });
+});
+
 describe("a model without the constraint on the same panels", () => {
   it("keeps both sliders independent on the custom panel", () => {
     renderPanel(

@@ -41,6 +41,10 @@ const ExclusiveSamplingParams = ({
   offerChoice = true,
 }: ExclusiveSamplingParamsProps) => {
   const topPLive = !isNil(topP) && offerChoice;
+  // The resolver settles which half is live, and yields neither when the config carries neither.
+  // Rendering a slider on its default in that case would claim a value the request omits, which is
+  // the defect this control exists to prevent.
+  const hasLiveHalf = !isNil(temperature) || !isNil(topP);
 
   const handleTemperatureChange = useCallback(
     (v: number) => onChange({ temperature: v, topP: undefined }),
@@ -62,6 +66,10 @@ const ExclusiveSamplingParams = ({
     },
     [onChange, temperatureDefault, topPDefault],
   );
+
+  if (!hasLiveHalf) {
+    return null;
+  }
 
   return (
     <div className="space-y-2">
