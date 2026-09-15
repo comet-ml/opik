@@ -4,8 +4,9 @@ import { LogsPage } from '@e2e/pom/logs.page';
 import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
 
 /**
- * Server-side LLM cost resolution: dated model ids (OPIK-8242) and
- * reasoning-token billing (OPIK-7791).
+ * Server-side LLM cost resolution: dated model ids (OPIK-8242), reasoning-token
+ * billing, per-character pricing and the cache-read calculator branch
+ * (OPIK-7791).
  *
  * Every other cost assertion in the estate seeds `total_cost` from the client,
  * so the backend never has to look a price up — which means the resolution path
@@ -14,7 +15,7 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  * too eagerly reads as some other model's price. Both render as a perfectly
  * ordinary number on a page people read to decide what their LLM spend is.
  *
- * The fixture logs twelve LLM spans with `usage` and **no** `total_cost`:
+ * The fixture logs fourteen LLM spans with `usage` and **no** `total_cost`:
  *
  *  - Five for id normalisation. Three carry ids that must resolve, covering
  *    four steps between them (provider-prefix strip, dot-normalising,
@@ -28,6 +29,11 @@ import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
  *    price key the backend does not read is the same silent failure as a model
  *    id it cannot resolve: no cost chip on the span, and a trace total that
  *    still looks like a number.
+ *  - Two for a model billed for cache reads (OPIK-7791), differing only in
+ *    whether the cache-read count is there. A published cache rate routes the
+ *    model away from `textGenerationCost` to a per-provider cache calculator
+ *    that the other twelve spans never reach, and in the OpenAI-shaped one the
+ *    cached tokens have to come out of the input bucket before it bills them.
  *
  * The expected amounts are the shipped price table's own numbers — see the
  * fixture. They are asserted at both surfaces because that is where the two can
@@ -274,6 +280,60 @@ test.describe('Span cost — server-side price resolution', { tag: ['@t2-cuj', '
         attributedCost(span!),
         `characters-absent: ${control!.zeroCostReason}`,
       ).toBe(0);
+    });
+  });
+
+  test('A model billed for cache reads takes the cached tokens out of the input bucket', { tag: ['@cap:traces.span-model-cost-tokens'] }, async ({
+    modelCostSpans,
+    project,
+    backendClient,
+  }) => {
+    // No page, for the same reason as the two tests above: the subject is which
+    // calculator `CostService.resolveCalculator` picked and what it did with the
+    // prompt bucket. The panel's rendering of both vectors is covered by the UI
+    // test below, which walks every priced span.
+
+    const byName = await test.step('Read the seeded spans back once all of them are queryable', async () =>
+      readSeededSpans(backendClient, project.id, modelCostSpans));
+
+    const cost = (key: string) => costOf(byName, modelCostSpans, key);
+
+    await test.step('Both vectors are priced at the hand-computed table amount', async () => {
+      // A positive cache-read rate is what routes a model away from
+      // `textGenerationCost` to its provider's cache calculator, and
+      // `fireworks_ai` maps to the OpenAI-shaped one. The model publishes
+      // $1.2/M in, $1.2/M out and $0.6/M cache read; both vectors carry 1M
+      // prompt + 1M completion tokens and differ only in whether 400k of that
+      // prompt is declared as cache reads — see the fixture.
+      const expected: Array<[string, number, string]> = [
+        [
+          'cache-read-reported',
+          2.16,
+          '600k x $1.2/M in + 1.0M x $1.2/M out + 400k x $0.6/M cache read',
+        ],
+        ['cache-read-absent', 2.4, '1.0M x $1.2/M in + 1.0M x $1.2/M out, no cache term'],
+      ];
+      for (const [key, amount, workings] of expected) {
+        expect(cost(key), `${key}: ${workings}`).toBeCloseTo(amount, 6);
+      }
+    });
+
+    await test.step('Cached tokens are billed once, not at both rates', async () => {
+      // The discriminating comparison, and the reason the no-cache control is
+      // seeded. Both spans report the identical 1M prompt total, so leaving the
+      // cached 400k in the input bucket AND billing them at the cache rate
+      // would price this vector at $2.64 — MORE than the control rather than
+      // less. An absolute assertion alone could not tell that apart from the
+      // price table moving.
+      //
+      // It is also what proves the seed discriminates at all: this model's
+      // cache key has to arrive bare for the OpenAI-shaped calculator to read
+      // it, and a fixture that let the SDK re-prefix it would price the two
+      // vectors identically. That is a failure here, not a silent pass.
+      expect(
+        cost('cache-read-reported'),
+        'a span reporting cache reads must cost LESS than an identical one that reports none, because those tokens pay $0.6/M instead of the $1.2/M input rate',
+      ).toBeLessThan(cost('cache-read-absent'));
     });
   });
 
