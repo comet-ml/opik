@@ -516,8 +516,6 @@ def test_add__item_at_the_cap__gets_its_own_request():
 def test_add__batch_never_exceeds_the_payload_cap():
     """Closing the batch before the item that would overflow it, not after."""
     bodies, flush_callback = _collect()
-    # On the standard library, so the size the assertion recomputes below is the one the
-    # writer measured; the cap arithmetic itself does not depend on the serialiser.
     writer = _writer(flush_callback, max_payload_bytes=300)
 
     for i in range(10):
@@ -526,7 +524,10 @@ def test_add__batch_never_exceeds_the_payload_cap():
 
     for body, _ in bodies:
         payload = json.loads(body)
-        assert len(json.dumps(payload["items"]).encode("utf-8")) <= 300 or (
+        # Re-encoded through the writer's own encoder rather than the standard library:
+        # the cap arithmetic does not depend on the serialiser, but the size does, and
+        # measuring it a second way would test the second way instead.
+        assert len(streaming_writer.dumps(payload["items"])) <= 300 or (
             len(payload["items"]) == 1
         ), "Only a single oversized item may fill a request past the cap"
 
