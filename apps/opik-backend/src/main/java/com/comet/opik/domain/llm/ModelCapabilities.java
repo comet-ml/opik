@@ -61,8 +61,14 @@ public class ModelCapabilities {
      * Whether the model rejects temperature and top_p in the same request, so that only one may be sent.
      */
     public boolean requiresExclusiveSamplingParams(String modelName) {
-        return StringUtils.isNotBlank(modelName)
-                && EXCLUSIVE_SAMPLING_PARAMS_PATTERN.matcher(modelName).matches();
+        if (StringUtils.isBlank(modelName)) {
+            return false;
+        }
+        // Match the model, not the route to it. Custom ids carry the gateway in the prefix
+        // (custom-llm/<provider_name>/<model>), so a provider someone called "claude-gw" would
+        // otherwise make every model behind it — Mistral, Llama — look like Claude and lose its top_p.
+        var model = StringUtils.defaultIfEmpty(StringUtils.substringAfterLast(modelName, "/"), modelName);
+        return EXCLUSIVE_SAMPLING_PARAMS_PATTERN.matcher(model).matches();
     }
 
     public boolean supportsVision(String modelName) {

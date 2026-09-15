@@ -38,6 +38,30 @@ class SamplingParamsNormalizerTest {
         assertThat(normalized.topP()).isNull();
     }
 
+    /**
+     * A custom id carries the gateway in its prefix, so the model itself is what decides — otherwise
+     * a provider someone named "claude-gw" strips top_p from every model behind it.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "custom-llm/claude-gw/mistral-large-2411",
+            "custom-llm/anthropic-proxy/llama-3.3-70b",
+            "claude-router/gpt-4o"
+    })
+    void doesNotTreatAGatewayNamedAfterClaudeAsClaude(String model) {
+        var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, 0.9));
+
+        assertThat(normalized.topP()).isEqualTo(0.9);
+    }
+
+    @Test
+    void stillMatchesClaudeBehindSuchAGateway() {
+        var normalized = SamplingParamsNormalizer
+                .normalizeRequest(request("custom-llm/claude-gw/claude-opus-4-6", 0.7, 0.9));
+
+        assertThat(normalized.topP()).isNull();
+    }
+
     @Test
     void keepsTopPForClaudeWhenTemperatureIsAbsent() {
         var normalized = SamplingParamsNormalizer.normalizeRequest(request("claude-opus-4-6", null, 0.9));

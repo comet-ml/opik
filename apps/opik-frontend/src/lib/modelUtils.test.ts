@@ -1423,6 +1423,25 @@ describe("Claude sampling exclusivity across providers", () => {
     ).toEqual({ temperature: undefined, topP: 0.9 });
   });
 
+  it("does not treat a gateway named after Claude as Claude", () => {
+    // The custom id carries the gateway in its prefix, so the model itself has to decide.
+    expect(
+      resolveSamplingParams(
+        "custom-llm/claude-gw/mistral-large-2411" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7, topP: 0.9 },
+      ),
+    ).toEqual({ temperature: 0.7, topP: 0.9 });
+  });
+
+  it("still matches a Claude model behind such a gateway", () => {
+    expect(
+      resolveSamplingParams(
+        "custom-llm/claude-gw/claude-opus-4-6" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7, topP: 0.9 },
+      ),
+    ).toEqual({ temperature: 0.7 });
+  });
+
   it("leaves a non-Claude model on the same provider alone", () => {
     expect(
       resolveSamplingParams("mistral-large-2411" as PROVIDER_MODEL_TYPE, {

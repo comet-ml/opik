@@ -440,12 +440,14 @@ export type SamplingParams = { temperature?: number; topP?: number };
  *
  * The family name is the only signal common to every route: Anthropic's own ids
  * (`claude-opus-4-6`), Bedrock's decorated ids (`us.anthropic.claude-…-v1:0`), OpenRouter's
- * (`anthropic/claude-…`) and whatever an OpenAI-compatible proxy is configured to call them. The
- * match is deliberately loose — a false positive only drops topP when temperature is also set,
- * which is what Anthropic recommends regardless.
+ * (`anthropic/claude-…`) and whatever an OpenAI-compatible proxy is configured to call them.
+ *
+ * Only the last segment is matched, because a custom id carries the gateway in its prefix
+ * (`custom-llm/<provider_name>/<model>`) — a provider someone called "claude-gw" must not make
+ * every model behind it, Mistral included, look like Claude and lose its Top P.
  */
 export const isClaudeModel = (model: PROVIDER_MODEL_TYPE | ""): boolean =>
-  /claude/i.test(model);
+  /claude/i.test(model.split("/").pop() ?? "");
 
 /**
  * The single interpreter of temperature/topP for a model: capability gating plus Anthropic's
