@@ -1,4 +1,9 @@
-import React, { useCallback, useMemo, useState, useEffect } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   JsonParam,
   NumberParam,
@@ -9,7 +14,6 @@ import useLocalStorageState from "use-local-storage-state";
 import {
   ColumnPinningState,
   ColumnSort,
-  RowSelectionState,
 } from "@tanstack/react-table";
 import { ExternalLink } from "lucide-react";
 import findIndex from "lodash/findIndex";
@@ -73,7 +77,11 @@ import {
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
 import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
-import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  migrateSelectedColumns,
+} from "@/lib/table";
+import useRetainedRowSelection from "@/hooks/useRetainedRowSelection";
 import { getJSONPaths } from "@/lib/utils";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import {
@@ -796,8 +804,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return [...chipFilters, ...generateEnvironmentFilter(environment)];
   }, [chipFilters, environment, envIsValid]);
 
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
 
   // Declare selectedColumns early so it can be used in excludeFields computation
@@ -1112,9 +1118,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return fieldColumns;
   }, [dynamicMetadataColumns]);
 
-  const selectedRows: Array<Trace | Span> = useMemo(() => {
-    return rows.filter((row) => rowSelection[row.id]);
-  }, [rowSelection, rows]);
+  const { rowSelection, setRowSelection, selectedRows, clearRowSelection } =
+    useRetainedRowSelection<Trace | Span>({
+      rows,
+      scope: {
+        projectId,
+        type,
+        search: trimmedSearch,
+        filters: effectiveFilters,
+        intervalStart,
+        intervalEnd,
+      },
+    });
 
   const getDataForExport = useCallback(async (): Promise<
     Array<Trace | Span>
@@ -1515,7 +1530,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       {selectedRows.length > 0 ? (
         <SelectionActionBar
           selectedCount={selectedRows.length}
-          onDeselectAll={() => setRowSelection({})}
+          onDeselectAll={clearRowSelection}
         >
           <TracesActionsPanel
             projectId={projectId}
@@ -1526,6 +1541,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             type={type as TRACE_DATA_TYPE}
             buttonVariant="ghostInverted"
             buttonSize="2xs"
+            onAfterDelete={clearRowSelection}
           />
         </SelectionActionBar>
       ) : (
