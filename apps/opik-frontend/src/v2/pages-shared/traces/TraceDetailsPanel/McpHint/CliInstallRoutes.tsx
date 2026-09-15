@@ -1,65 +1,34 @@
-import React, { useMemo } from "react";
+import React from "react";
 
-import claudeCodeLogo from "/images/integrations/claude_code.svg";
-import codexLogo from "/images/integrations/codex.svg";
-import cursorLogo from "/images/integrations/cursor.svg";
-import vscodeLogo from "/images/integrations/vscode.svg";
-
-import InstallRoutesLayout from "./InstallRoutesLayout";
-import { cliConfigureCommand } from "./serverUrl";
+import McpPromptBlock from "./McpPromptBlock";
+import useMcpInstallMode from "./useMcpInstallMode";
+import useMcpPrompt from "./useMcpPrompt";
 import { buildLocalInstallPrompt } from "./prompt";
-import {
-  MCP_CLIENT,
-  MCP_ROUTE_METHOD,
-  McpClient,
-  McpInstallRoute,
-  McpInstallRoutesProps,
-} from "./types";
-
-const CLIENTS: Array<{ client: McpClient; label: string; logo: string }> = [
-  {
-    client: MCP_CLIENT.CLAUDE_CODE,
-    label: "Claude Code",
-    logo: claudeCodeLogo,
-  },
-  { client: MCP_CLIENT.CURSOR, label: "Cursor", logo: cursorLogo },
-  { client: MCP_CLIENT.VSCODE, label: "VS Code", logo: vscodeLogo },
-  { client: MCP_CLIENT.CODEX, label: "Codex", logo: codexLogo },
-];
+import { McpInstallRoutesProps } from "./types";
 
 /**
- * One CLI command per client, for deployments with no hosted MCP server. A
- * deeplink cannot safely encode a local stdio server carrying an API key.
+ * The prompt, and nothing else, for deployments with no hosted MCP server.
  *
- * The workspace is left to the CLI's own configuration: an `OPIK_WORKSPACE=`
- * prefix is POSIX-only and would fail when pasted into PowerShell.
+ * There is no deeplink to offer: a local server is a stdio process holding an
+ * API key, which no URL describes. That leaves `opik mcp configure`, which the
+ * prompt has the agent run — one route rather than one tile per client that all
+ * copied a variation of the same command.
  */
-const CliInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
-  props,
-) => {
-  const routes = useMemo<McpInstallRoute[]>(
-    () =>
-      CLIENTS.map(({ client, label, logo }) => {
-        const command = cliConfigureCommand(client);
-        return {
-          client,
-          label,
-          logo,
-          tooltip: `Copies the ${label} setup command. Paste it in your terminal.`,
-          method: MCP_ROUTE_METHOD.COPY,
-          clipboard: command,
-          confirmation: "Copied — paste it in your terminal",
-          snippet: command,
-        };
-      }),
-    [],
-  );
+const CliInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = ({
+  target,
+  isCopied,
+  onCopied,
+}) => {
+  const installMode = useMcpInstallMode();
+  const prompt = useMcpPrompt(target, buildLocalInstallPrompt);
 
   return (
-    <InstallRoutesLayout
-      {...props}
-      routes={routes}
-      buildPrompt={buildLocalInstallPrompt}
+    <McpPromptBlock
+      prompt={prompt}
+      installMode={installMode}
+      entityType={target.entityType}
+      isCopied={isCopied}
+      onCopied={onCopied}
     />
   );
 };

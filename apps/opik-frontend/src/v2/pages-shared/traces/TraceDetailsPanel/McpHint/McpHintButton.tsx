@@ -110,6 +110,10 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
     [close],
   );
 
+  // A copied confirmation asks to be dismissed once it has been read, which is
+  // the same thing as clicking away: the pin goes with it.
+  const handleDone = useCallback(() => close(), [close]);
+
   return (
     <HoverCard
       open={isOpen}
@@ -146,7 +150,11 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
         onEscapeKeyDown={close}
         onClick={stopPointerPropagation}
       >
-        <McpHintPopover onAction={markAction} target={target} />
+        <McpHintPopover
+          onAction={markAction}
+          onDone={handleDone}
+          target={target}
+        />
       </HoverCardContent>
     </HoverCard>
   );

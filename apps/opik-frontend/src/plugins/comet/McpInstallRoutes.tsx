@@ -7,16 +7,11 @@ import vscodeLogo from "/images/integrations/vscode.svg";
 
 import InstallRoutesLayout from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/InstallRoutesLayout";
 import { buildHostedInstallPrompt } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/prompt";
+import { getMcpServerUrl } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/serverUrl";
 import {
-  cliConfigureCommand,
-  getMcpServerUrl,
-} from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/serverUrl";
-import {
-  claudeCodeCommand,
   claudeCodeDeeplink,
   codexCommand,
   cursorDeeplink,
-  vscodeAddCommand,
   vscodeDeeplink,
 } from "./mcpDeeplinks";
 import {
@@ -25,8 +20,6 @@ import {
   McpInstallRoute,
   McpInstallRoutesProps,
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/types";
-
-const NOTHING_OPENED = "Nothing opened? Run this instead.";
 
 const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
   props,
@@ -43,10 +36,8 @@ const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
           "Opens a terminal with the setup command ready. You press Enter.",
         method: MCP_ROUTE_METHOD.DEEPLINK,
         href: claudeCodeDeeplink(url),
+        kind: "opened" as const,
         confirmation: "Opening a terminal…",
-        snippet: claudeCodeCommand(url),
-        // The deeplinked session starts before the server is registered.
-        note: `Restart Claude Code once it finishes. ${NOTHING_OPENED}`,
       },
       {
         client: MCP_CLIENT.CURSOR,
@@ -55,9 +46,8 @@ const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
         tooltip: "Opens Cursor and asks you to approve adding the Opik server.",
         method: MCP_ROUTE_METHOD.DEEPLINK,
         href: cursorDeeplink(url),
+        kind: "opened" as const,
         confirmation: "Opening Cursor…",
-        snippet: cliConfigureCommand(MCP_CLIENT.CURSOR),
-        note: NOTHING_OPENED,
       },
       {
         client: MCP_CLIENT.VSCODE,
@@ -66,9 +56,8 @@ const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
         tooltip: "Opens VS Code and asks you to allow adding the Opik server.",
         method: MCP_ROUTE_METHOD.DEEPLINK,
         href: vscodeDeeplink(url),
+        kind: "opened" as const,
         confirmation: "Opening VS Code…",
-        snippet: vscodeAddCommand(url),
-        note: NOTHING_OPENED,
       },
       {
         client: MCP_CLIENT.CODEX,
@@ -77,6 +66,7 @@ const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
         tooltip: "Copies the setup command. Paste it in your terminal.",
         method: MCP_ROUTE_METHOD.COPY,
         clipboard: codexCommand(url),
+        kind: "copied" as const,
         confirmation: "Copied — paste it in your terminal",
         snippet: codexCommand(url),
       },

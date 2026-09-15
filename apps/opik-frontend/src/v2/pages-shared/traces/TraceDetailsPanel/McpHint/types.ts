@@ -26,10 +26,17 @@ export type McpInstallMode =
 
 /** What the popover shows once the user has left through one of the routes. */
 export type McpRouteOutcome = {
+  /**
+   * A copy is done, so the card can get out of the way. An opened deeplink is
+   * not: the hand-off cannot be observed from here, so that view stands and
+   * carries the fallback.
+   */
+  kind: "copied" | "opened";
   confirmation: string;
-  /** For a deeplink, the recovery path; for a copy, what was copied. */
-  snippet?: string;
+  /** Sits above the snippet. */
   note?: string;
+  /** For a deeplink, the fallback to use; for a copy, what was copied. */
+  snippet?: string;
 };
 
 export type McpInstallRoute = McpRouteOutcome & {
@@ -61,6 +68,14 @@ export type McpPromptContext = {
 };
 
 export type McpInstallRoutesProps = {
+  /** Reported by a route whose outcome takes over the card. */
   onRouteUsed: (outcome: McpRouteOutcome) => void;
+  /**
+   * The prompt block confirms in place instead, so the description and the docs
+   * link stay put and the card keeps its size. The card owns the flag rather
+   * than the block, so there is one copy of it.
+   */
+  isCopied: boolean;
+  onCopied: () => void;
   target: McpHintTarget;
 };

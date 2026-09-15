@@ -3,11 +3,9 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@/api/api", () => ({ BASE_API_URL: "/api" }));
 
 import {
-  claudeCodeCommand,
   claudeCodeDeeplink,
   codexCommand,
   cursorDeeplink,
-  vscodeAddCommand,
   vscodeDeeplink,
 } from "./mcpDeeplinks";
 
@@ -42,9 +40,7 @@ describe("the hosted install routes", () => {
       cursorDeeplink(local),
       vscodeDeeplink(local),
       claudeCodeDeeplink(local),
-      claudeCodeCommand(local),
       codexCommand(local),
-      vscodeAddCommand(local),
     ]) {
       expect(link).not.toContain("www.comet.com");
     }
@@ -57,24 +53,14 @@ describe("the hosted install routes", () => {
     );
   });
 
-  it("fall back to VS Code's own non-interactive CLI, not the interactive one", () => {
-    const command = vscodeAddCommand(SERVER_URL);
-
-    expect(command).toBe(
-      `code --add-mcp '{"name":"opik-mcp","type":"http","url":"${SERVER_URL}"}'`,
-    );
-    expect(command).not.toContain("opik mcp configure");
-  });
-
   it("give the terminal clients a command that names the server", () => {
-    expect(claudeCodeCommand(SERVER_URL)).toBe(
-      `claude mcp add --transport http --scope user opik-mcp ${SERVER_URL}`,
-    );
     expect(codexCommand(SERVER_URL)).toBe(
       `codex mcp add opik-mcp --url ${SERVER_URL}`,
     );
     expect(claudeCodeDeeplink(SERVER_URL)).toContain(
-      encodeURIComponent(`!${claudeCodeCommand(SERVER_URL)}`),
+      encodeURIComponent(
+        `!claude mcp add --transport http --scope user opik-mcp ${SERVER_URL}`,
+      ),
     );
   });
 });

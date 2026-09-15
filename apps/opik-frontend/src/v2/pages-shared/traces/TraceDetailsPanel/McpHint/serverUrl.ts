@@ -9,6 +9,3 @@ export const MCP_SERVER_NAME = "opik-mcp";
  */
 export const getMcpServerUrl = (): string =>
   new URL(`${BASE_API_URL}/v1/mcp`, window.location.origin).toString();
-
-export const cliConfigureCommand = (client: string) =>
-  `uvx opik mcp configure --ai-client ${client}`;

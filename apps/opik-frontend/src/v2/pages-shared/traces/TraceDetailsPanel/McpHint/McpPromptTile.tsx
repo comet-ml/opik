@@ -5,6 +5,7 @@ import copy from "clipboard-copy";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { McpHintEntityType, McpInstallMode, McpRouteOutcome } from "./types";
+import { MCP_PROMPT_COPIED } from "./constants";
 import { MCP_TILE_CLASS } from "./tileStyles";
 
 type McpPromptTileProps = {
@@ -32,10 +33,7 @@ const McpPromptTile: React.FunctionComponent<McpPromptTileProps> = ({
       install_mode: installMode,
       entity_type: entityType,
     });
-    onUsed({
-      confirmation: "Copied — paste it into your coding agent",
-      note: "It will set up the server, then debug this trace for you.",
-    });
+    onUsed({ kind: "copied", confirmation: MCP_PROMPT_COPIED });
   };
 
   return (

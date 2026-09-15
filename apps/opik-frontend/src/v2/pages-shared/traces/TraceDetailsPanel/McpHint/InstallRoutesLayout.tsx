@@ -1,13 +1,13 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback } from "react";
 
-import { useActiveWorkspaceName } from "@/store/AppStore";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import McpRouteTile from "./McpRouteTile";
 import McpPromptTile from "./McpPromptTile";
 import useMcpInstallMode from "./useMcpInstallMode";
-import useMcpPromptContext from "./useMcpPromptContext";
-import { getMcpServerUrl } from "./serverUrl";
+import useMcpPrompt from "./useMcpPrompt";
+import { MCP_DEEPLINK_FALLBACK_NOTE } from "./constants";
 import {
+  MCP_ROUTE_METHOD,
   McpHintTarget,
   McpInstallRoute,
   McpPromptContext,
@@ -27,20 +27,7 @@ const InstallRoutesLayout: React.FunctionComponent<
   InstallRoutesLayoutProps
 > = ({ routes, buildPrompt, target, onRouteUsed }) => {
   const installMode = useMcpInstallMode();
-  const workspaceName = useActiveWorkspaceName();
-  const { projectName } = useMcpPromptContext(target.projectId);
-
-  const prompt = useMemo(
-    () =>
-      buildPrompt({
-        traceId: target.traceId,
-        spanId: target.spanId,
-        projectName,
-        workspaceName,
-        serverUrl: getMcpServerUrl(),
-      }),
-    [buildPrompt, target.traceId, target.spanId, projectName, workspaceName],
-  );
+  const prompt = useMcpPrompt(target, buildPrompt);
 
   const handleRouteUse = useCallback(
     (route: McpInstallRoute) => {
@@ -50,9 +37,16 @@ const InstallRoutesLayout: React.FunctionComponent<
         install_mode: installMode,
         entity_type: target.entityType,
       });
-      onRouteUsed(route);
+
+      // A deeplink's fallback is the prompt, which only this layer can build,
+      // so the route describes the hand-off and the fallback is filled in here.
+      onRouteUsed(
+        route.method === MCP_ROUTE_METHOD.DEEPLINK
+          ? { ...route, note: MCP_DEEPLINK_FALLBACK_NOTE, snippet: prompt }
+          : route,
+      );
     },
-    [installMode, onRouteUsed, target.entityType],
+    [installMode, onRouteUsed, prompt, target.entityType],
   );
 
   return (

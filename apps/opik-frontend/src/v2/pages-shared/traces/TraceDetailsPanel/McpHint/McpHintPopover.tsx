@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, Plug } from "lucide-react";
 
 import { buildDocsUrl } from "@/lib/utils";
@@ -8,6 +8,7 @@ import McpRouteConfirmation from "./McpRouteConfirmation";
 import useMcpInstallMode from "./useMcpInstallMode";
 import { McpHintTarget, McpRouteOutcome } from "./types";
 import {
+  MCP_COPIED_DISMISS_MS,
   MCP_HINT_DESCRIPTION,
   MCP_HINT_DOCS_PATH,
   MCP_HINT_TITLE,
@@ -16,16 +17,22 @@ import {
 type McpHintPopoverProps = {
   /** Called when the user leaves through the card rather than abandoning it. */
   onAction: () => void;
+  /** Asked for when a copied confirmation has had its time and nobody is reading. */
+  onDone: () => void;
   target: McpHintTarget;
 };
 
 const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   onAction,
+  onDone,
   target,
 }) => {
   // Unmounted with the popover, so closing resets the view and a user who comes
   // back lands on the routes rather than a stale receipt.
   const [outcome, setOutcome] = useState<McpRouteOutcome | null>(null);
+  // The prompt block's own confirmation, which stands in place of the block
+  // rather than taking the card over.
+  const [isCopied, setIsCopied] = useState(false);
   const installMode = useMcpInstallMode();
 
   const handleRouteUsed = useCallback(
@@ -36,6 +43,31 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
     [onAction],
   );
 
+  const handleCopied = useCallback(() => {
+    onAction();
+    setIsCopied(true);
+  }, [onAction]);
+
+  // A copy is finished business, so the confirmation stands for a few seconds
+  // and then the card gets out of the way — unless the pointer is still on it,
+  // in which case it goes back to the routes rather than vanishing under them.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const hasCopied = isCopied || outcome?.kind === "copied";
+  useEffect(() => {
+    if (!hasCopied) return;
+
+    const timer = setTimeout(() => {
+      if (cardRef.current?.matches(":hover")) {
+        setOutcome(null);
+        setIsCopied(false);
+        return;
+      }
+      onDone();
+    }, MCP_COPIED_DISMISS_MS);
+
+    return () => clearTimeout(timer);
+  }, [hasCopied, onDone]);
+
   const handleLearnMoreClick = () => {
     onAction();
     trackEvent(OpikEvent.MCP_LEARN_MORE_CLICKED, {
@@ -45,7 +77,10 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   };
 
   return (
-    <div className="w-[279px] rounded-md border bg-background p-1 font-mono shadow-lg">
+    <div
+      ref={cardRef}
+      className="w-[279px] rounded-md border bg-background p-1 font-mono shadow-lg"
+    >
       <div className="flex items-center gap-1.5 px-1.5 pb-1">
         <Plug className="size-4 shrink-0 text-[var(--color-ollie)]" />
         <span className="comet-body-xs leading-4 text-foreground">
@@ -63,7 +98,12 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
               {MCP_HINT_DESCRIPTION}
             </p>
 
-            <InstallRoutes onRouteUsed={handleRouteUsed} target={target} />
+            <InstallRoutes
+              onRouteUsed={handleRouteUsed}
+              isCopied={isCopied}
+              onCopied={handleCopied}
+              target={target}
+            />
 
             <a
               href={buildDocsUrl(MCP_HINT_DOCS_PATH)}

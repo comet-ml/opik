@@ -13,22 +13,13 @@ export const cursorDeeplink = (url: string) =>
 // VS Code goes through its https redirector, which 302s to
 // `vscode:mcp/install?<entry>`. Same destination as linking the scheme
 // directly, but the browser navigates first, so Chrome offers to open the app
-// instead of swallowing the link. Whether that handler is registered is still
-// the machine's business, which is what `vscodeAddCommand` is there for.
+// instead of swallowing the link.
 export const vscodeDeeplink = (url: string) =>
   `https://insiders.vscode.dev/redirect/mcp/install?name=${MCP_SERVER_NAME}&config=${encodeURIComponent(
     JSON.stringify({ type: "http", url }),
   )}`;
 
-// The fallback when nothing opened: VS Code's own non-interactive CLI.
-export const vscodeAddCommand = (url: string) =>
-  `code --add-mcp '${JSON.stringify({
-    name: MCP_SERVER_NAME,
-    type: "http",
-    url,
-  })}'`;
-
-export const claudeCodeCommand = (url: string) =>
+const claudeCodeCommand = (url: string) =>
   `claude mcp add --transport http --scope user ${MCP_SERVER_NAME} ${url}`;
 
 export const codexCommand = (url: string) =>
@@ -37,6 +28,6 @@ export const codexCommand = (url: string) =>
 // Claude Code has no install deeplink. `claude-cli://open` prefills a fresh
 // session's prompt box; the `!` makes it a shell command to press Enter on. Its
 // OS handler is registered lazily, so the link can do nothing at all, which is
-// why every tile lands in a confirmation carrying the command too.
+// what the confirmation's fallback prompt is for.
 export const claudeCodeDeeplink = (url: string) =>
   `claude-cli://open?q=${encodeURIComponent(`!${claudeCodeCommand(url)}`)}`;

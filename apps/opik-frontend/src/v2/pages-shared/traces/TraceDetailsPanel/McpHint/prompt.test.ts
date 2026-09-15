@@ -3,7 +3,6 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@/api/api", () => ({ BASE_API_URL: "/api" }));
 
 import { buildHostedInstallPrompt, buildLocalInstallPrompt } from "./prompt";
-import { cliConfigureCommand } from "./serverUrl";
 import { MCP_CLIENT } from "./types";
 
 const TRACE_ID = "01a0a497-12f6-73e2-bb3d-56f286348309";
@@ -83,11 +82,8 @@ describe("the install prompts", () => {
   });
 });
 
-describe("the CLI route", () => {
-  it("passes the client through as the CLI's own key", () => {
-    expect(cliConfigureCommand(MCP_CLIENT.CLAUDE_CODE)).toBe(
-      "uvx opik mcp configure --ai-client claude-code",
-    );
+describe("the client keys", () => {
+  it("are the ones the Opik CLI accepts for --ai-client", () => {
     expect(Object.values(MCP_CLIENT)).toEqual([
       "claude-code",
       "cursor",
