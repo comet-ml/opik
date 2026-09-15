@@ -47,6 +47,9 @@ public class ModelCapabilities {
     private static final Pattern EXCLUSIVE_SAMPLING_MODEL_PATTERN = Pattern.compile(".*claude.*",
             Pattern.CASE_INSENSITIVE);
 
+    /** Anthropic dates a release as yyyyMMdd, e.g. claude-sonnet-4-5-20250929. */
+    private static final int DATE_SUFFIX_LENGTH = 8;
+
     private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = loadCapabilities();
 
     /**
@@ -119,10 +122,14 @@ public class ModelCapabilities {
      * would claim {@code claude-opus-4-8}.
      */
     private boolean namesModel(String canonical, String modelId) {
-        return canonical.equals(modelId)
-                || canonical.startsWith(modelId + "-")
-                || modelId.startsWith(canonical + "-")
-                        && modelId.substring(canonical.length() + 1).matches("\\d{8}");
+        if (canonical.equals(modelId) || canonical.startsWith(modelId + "-")) {
+            return true;
+        }
+        if (!modelId.startsWith(canonical + "-")) {
+            return false;
+        }
+        var suffix = modelId.substring(canonical.length() + 1);
+        return suffix.length() == DATE_SUFFIX_LENGTH && StringUtils.isNumeric(suffix);
     }
 
     /**
