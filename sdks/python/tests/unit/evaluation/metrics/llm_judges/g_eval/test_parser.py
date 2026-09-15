@@ -386,6 +386,41 @@ def test_unparseable_reconstruction_keeps_the_positional_match():
     )
 
 
+def test_unparseable_reconstruction_still_resolves_duplicate_keys_last():
+    # The test above carries a single score key, so it cannot tell a
+    # first-match locator from a last-match one. Here the stream stops
+    # mid-object, so there is no parsed value to agree with and the positional
+    # default is the only rule left standing; it has to keep picking the last
+    # key, as json.loads does for duplicate keys. A matches[0] locator scores
+    # the stale 9 instead.
+    entries = [
+        _entry('{"', -0.01),
+        _entry("score", -0.01),
+        _entry('": ', -0.01),
+        _entry(
+            "9",
+            -0.1,
+            top=[{"token": "9", "logprob": -0.1}, {"token": "5", "logprob": -3.0}],
+        ),
+        _entry(', "score": ', -0.01),
+        _entry(
+            "7",
+            -0.1,
+            top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.0}],
+        ),
+    ]
+    content = '{"score": 7, "reason": "ok"}'
+    assert parser._locate_score_entries(entries) == [5]
+    result = parser.parse_litellm_model_output(
+        _response(content, entries),
+        name="g_eval",
+        log_probs_supported=True,
+    )
+    assert result.value == pytest.approx(0.6219349153822014, abs=1e-9), (
+        f"scored from the stale key: {result.value}"
+    )
+
+
 # --- provider-shaped GEval coverage ----------------------------------------
 # The tests above call parse_litellm_model_output directly with hand-built
 # token dicts. These go through the public GEval.score LiteLLM branch with
