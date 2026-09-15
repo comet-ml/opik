@@ -7,13 +7,9 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.tuple.Pair;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -42,24 +38,6 @@ public class DemoDataExclusionUtils {
     /** A previous-day count for one project — the granularity the usage queries return. */
     @Builder(toBuilder = true)
     public record WorkspaceProjectCount(@NonNull String workspaceId, @NonNull UUID projectId, long count) {
-    }
-
-    /**
-     * Calculates the demo data created at timestamp by finding the maximum creation time
-     * from the excluded project IDs and adding 1 minute to ensure all demo data is excluded.
-     *
-     * <p>Used only by the span usage queries, which still carry the exclusion in SQL. The cutoff assumes a demo set
-     * created once at install time; where demo projects are created continuously it is effectively "now", so the
-     * {@code OR created_at > :demo_data_created_at} branch it feeds cannot match a row in the previous-day window.
-     *
-     * @param excludedProjectIds map of project ID to creation timestamp
-     * @return Optional containing the calculated timestamp, or empty if no projects exist
-     */
-    public Optional<Instant> calculateDemoDataCreatedAt(@NonNull Map<UUID, Instant> excludedProjectIds) {
-        return excludedProjectIds.values()
-                .stream()
-                .max(Comparator.naturalOrder())
-                .map(createAt -> createAt.plus(1, ChronoUnit.MINUTES));
     }
 
     /**
@@ -98,6 +76,20 @@ public class DemoDataExclusionUtils {
                         .user(entry.getKey().getRight())
                         .count(entry.getValue())
                         .build())
+                .toList();
+    }
+
+    /**
+     * Drops demo projects without re-aggregating, for the consumer that reports the per-project rows as they are.
+     *
+     * @param rows           per-project, per-user counts, in the order the query returned them
+     * @param demoProjectIds ids of the demo projects to exclude; ids absent from {@code rows} are simply unused
+     * @return the rows that are not a demo project's, in the order they arrived
+     */
+    public List<WorkspaceProjectUserCount> excludeDemoProjects(@NonNull List<WorkspaceProjectUserCount> rows,
+            @NonNull Set<UUID> demoProjectIds) {
+        return rows.stream()
+                .filter(row -> !demoProjectIds.contains(row.projectId()))
                 .toList();
     }
 }

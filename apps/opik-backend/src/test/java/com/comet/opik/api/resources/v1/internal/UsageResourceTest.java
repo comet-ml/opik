@@ -2,9 +2,12 @@ package com.comet.opik.api.resources.v1.internal;
 
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceCountResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -16,10 +19,13 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.resources.UsageResourceClient;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -52,10 +58,12 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -116,6 +124,8 @@ class UsageResourceTest {
     private TransactionTemplate mySqlTemplate;
     private ExperimentResourceClient experimentResourceClient;
     private TraceResourceClient traceResourceClient;
+    private SpanResourceClient spanResourceClient;
+    private ProjectResourceClient projectResourceClient;
     private UsageResourceClient usageResourceClient;
 
     @BeforeAll
@@ -130,6 +140,8 @@ class UsageResourceTest {
 
         this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
+        this.spanResourceClient = new SpanResourceClient(client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.usageResourceClient = new UsageResourceClient(client, baseURI);
     }
 
@@ -334,13 +346,19 @@ class UsageResourceTest {
             awaitBiInformation(biType, workspaceId, entitiesCount);
         }
 
-        @Test
-        @DisplayName("Get spans count excluding demo data projects")
-        void spansCountExcludingDemoData() {
-            var regularSpans = spansInProject("project-" + ID_GENERATOR.generateId());
-            var demoSpans = spansInProject(DemoData.PROJECTS.get(1));
+        private Stream<Arguments> spansCountExcludesDemoProjects() {
+            return Stream.of(
+                    arguments(named("a demo project", List.of(DemoData.PROJECTS.get(1)))),
+                    arguments(named("every demo project", DemoData.PROJECTS)));
+        }
 
-            // Setup workspace with both regular and demo spans
+        /** Demo-project activity is excluded whether the workspace touched one demo project or every one of them. */
+        @ParameterizedTest
+        @MethodSource
+        void spansCountExcludesDemoProjects(List<String> demoProjectNames) {
+            var regularSpans = spansInProjects("project-" + ID_GENERATOR.generateId());
+            var demoSpans = spansInProjects(demoProjectNames.toArray(String[]::new));
+
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = "apiKey-" + UUID.randomUUID();
             var workspaceName = "test-workspace-" + UUID.randomUUID();
@@ -351,28 +369,33 @@ class UsageResourceTest {
             // Change created_at to the previous day to capture in usage query
             subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
 
-            // Should only count regular spans, not demo spans
             awaitSpanCount(workspaceId, regularSpans.size());
         }
 
+        /**
+         * The span counterpart of {@link #tracesCountExcludesDemoProjectsPredatingTheDemoCutoff()}, and separate
+         * from {@link #spansCountExcludesDemoProjects(List)} for the same reason: only this one backdates the demo
+         * projects, which is the state the removed cutoff needed in order to matter.
+         */
         @Test
-        @DisplayName("Span count includes activity in demo projects created after the demo cutoff")
-        void spansCountIncludesPostCutoffActivityInDemoProjects() {
-            var demoSpans = spansInProject(DemoData.PROJECTS.getFirst());
+        void spansCountExcludesDemoProjectsPredatingTheDemoCutoff() {
+            var regularSpans = spansInProjects("project-" + ID_GENERATOR.generateId());
+            var demoSpans = spansInProjects(DemoData.PROJECTS.getFirst());
 
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = "apiKey-" + UUID.randomUUID();
             var workspaceName = "test-workspace-" + UUID.randomUUID();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            createSpans(demoSpans, apiKey, workspaceName);
+            createSpans(concat(regularSpans, demoSpans), apiKey, workspaceName);
 
-            // Project created today → cutoff = today + 1 min, in the future. Push the project two days back so
-            // cutoff lands ~2 days ago, then move spans to yesterday — they end up post-cutoff and must be counted.
+            // Moves demo project creation before the window, where the removed OR branch would have counted it
             backdateDemoProjectsCreatedAtTwoDays();
+            // Change created_at to the previous day to capture in usage query. Waiting on the regular count keeps
+            // the assertion from passing on an unfinished mutation.
             subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
 
-            awaitSpanCount(workspaceId, demoSpans.size());
+            awaitSpanCount(workspaceId, regularSpans.size());
         }
 
         /** Demo-project activity is excluded whether the workspace touched one demo project or every one of them. */
@@ -402,12 +425,12 @@ class UsageResourceTest {
         }
 
         /**
-         * The case whose behaviour changed, kept separate because the cutoff move is what it is about. The trace
-         * exclusion used to carry an {@code OR created_at > demoDataCreatedAt} branch, which counted activity in a
-         * demo project once that project predated the cutoff — what
-         * {@link #spansCountIncludesPostCutoffActivityInDemoProjects()} still pins for spans. That branch cannot
-         * match where demo projects are created continuously, since the cutoff is then effectively now, and it only
-         * existed alongside the inlined project-id literal the trace usage queries no longer carry.
+         * Demo-project activity is excluded even where the demo project predates the {@code demoDataCreatedAt}
+         * cutoff the exclusion used to compute. That cutoff was {@code max(project.created_at) + 1 minute}, so
+         * where demo projects are created continuously it is effectively now and can spare no row in the
+         * previous-day window; it existed only alongside the inlined project-id literal the usage queries no longer
+         * carry. Separate from {@link #tracesCountExcludesDemoProjects(List)} because only this one backdates the
+         * projects, which is the state the cutoff needed in order to matter.
          */
         @Test
         void tracesCountExcludesDemoProjectsPredatingTheDemoCutoff() {
@@ -542,6 +565,178 @@ class UsageResourceTest {
                             .build());
         }
 
+        /**
+         * The premise the span fold rests on: summing per-project counts equals the distinct-id total the
+         * workspace-grouped query used to return, because a span id belongs to exactly one project. Both ways of
+         * presenting an existing id under another project are covered, since either producing a row would make the
+         * sum double-count: a create is ignored, the span already existing, and a patch is refused by the
+         * 40-character sentinel {@code SpanDAO.PARTIAL_INSERT} writes into a {@code FixedString(36)} when the
+         * stored project differs.
+         */
+        @Test
+        void spansCountIncludesEachSpanOnceBecauseItsIdCannotMoveBetweenProjects() {
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "test-workspace-" + UUID.randomUUID();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var span = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .getFirst()
+                    .toBuilder()
+                    .id(ID_GENERATOR.generateId())
+                    .projectName("project-" + ID_GENERATOR.generateId())
+                    .build();
+            createSpans(List.of(span), apiKey, workspaceName);
+
+            var createInAnotherProject = span.toBuilder()
+                    .projectName("project-" + ID_GENERATOR.generateId())
+                    .build();
+            try (var response = spanResourceClient.callCreateSpan(createInAnotherProject, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+            }
+
+            var patchInAnotherProject = factory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .projectId(null)
+                    .projectName("project-" + ID_GENERATOR.generateId())
+                    .traceId(span.traceId())
+                    .parentSpanId(span.parentSpanId())
+                    .build();
+            // The message, not just the status: handleSpanDBError maps the trace-id and parent-span-id sentinels to
+            // 409 as well, and this test is only about the project one
+            try (var response = spanResourceClient.callUpdateSpan(span.id(), patchInAnotherProject, apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CONFLICT);
+                assertThat(response.readEntity(ErrorMessage.class).errors())
+                        .containsExactly(SpanService.PROJECT_AND_WORKSPACE_NAME_MISMATCH);
+            }
+
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            awaitSpanCount(workspaceId, 1);
+        }
+
+        /**
+         * The per-workspace count is folded from per-project rows, so a workspace spanning several projects has to
+         * sum back to the total the workspace-grouped query returned.
+         */
+        @Test
+        void spansCountSumsAWorkspacesProjectsIntoOneRow() {
+            var spans = spansInProjects("project-" + ID_GENERATOR.generateId(),
+                    "project-" + ID_GENERATOR.generateId());
+
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "test-workspace-" + UUID.randomUUID();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            createSpans(spans, apiKey, workspaceName);
+
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            awaitSpanCount(workspaceId, spans.size());
+        }
+
+        /**
+         * The span BI fold, which re-aggregates the per-project rows by workspace and user. One user across two
+         * regular projects plus a demo project must come back as a single row counting only the regular projects,
+         * so losing the exclusion and losing the re-aggregation are both caught.
+         */
+        @Test
+        void spanBiInfoSumsAUsersProjectsAndExcludesDemoProjects() {
+            var regularSpans = spansInProjects("project-" + ID_GENERATOR.generateId(),
+                    "project-" + ID_GENERATOR.generateId());
+            var demoSpans = spansInProjects(DemoData.PROJECTS.get(2));
+
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "test-workspace-" + UUID.randomUUID();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            createSpans(concat(regularSpans, demoSpans), apiKey, workspaceName);
+
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            awaitBiInformation("spans", workspaceId, regularSpans.size());
+        }
+
+        /**
+         * The BI fold keys on workspace and user, so two users in one workspace have to come back as two rows.
+         * Every other span test here runs as a single user, and collapsing the two would misreport both.
+         */
+        @Test
+        void spanBiInfoKeepsUsersInTheSameWorkspaceApart() {
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = "test-workspace-" + UUID.randomUUID();
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var otherApiKey = "apiKey-" + UUID.randomUUID();
+            var otherUser = "user-" + UUID.randomUUID();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            mockTargetWorkspace(otherApiKey, workspaceName, workspaceId, otherUser);
+
+            var spans = spansInProjects("project-" + ID_GENERATOR.generateId());
+            var otherUserSpans = spansInProjects("project-" + ID_GENERATOR.generateId());
+            createSpans(spans, apiKey, workspaceName);
+            createSpans(otherUserSpans, otherApiKey, workspaceName);
+
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            awaitBiInformation("spans", workspaceId,
+                    BiInformationResponse.BiInformation.builder()
+                            .workspaceId(workspaceId)
+                            .user(USER)
+                            .count(spans.size())
+                            .build(),
+                    BiInformationResponse.BiInformation.builder()
+                            .workspaceId(workspaceId)
+                            .user(otherUser)
+                            .count(otherUserSpans.size())
+                            .build());
+        }
+
+        /**
+         * The breakdown is the one span consumer that keeps project granularity, so the same input the BI fold
+         * collapses into one row has to come back as one row per regular project — with the demo project gone.
+         */
+        @Test
+        void spanBreakdownKeepsAUsersProjectsApartAndExcludesDemoProjects() {
+            var firstProject = "project-" + ID_GENERATOR.generateId();
+            var secondProject = "project-" + ID_GENERATOR.generateId();
+            var firstProjectSpans = spansInProjects(firstProject);
+            var secondProjectSpans = spansInProjects(secondProject);
+            var demoSpans = spansInProjects(DemoData.PROJECTS.get(1));
+
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "test-workspace-" + UUID.randomUUID();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            createSpans(concat(concat(firstProjectSpans, secondProjectSpans), demoSpans), apiKey, workspaceName);
+
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            // The project ids are assigned by the backend, so each project's expected count is keyed by the id it
+            // was given rather than by position
+            var expectedCountsByProjectId = Map.of(
+                    projectResourceClient.getByName(firstProject, apiKey, workspaceName).id(),
+                    (long) firstProjectSpans.size(),
+                    projectResourceClient.getByName(secondProject, apiKey, workspaceName).id(),
+                    (long) secondProjectSpans.size());
+
+            await().atMost(10, SECONDS).untilAsserted(() -> {
+                var actualRows = usageResourceClient.getWorkspaceSpanCountsBreakdown()
+                        .breakdown()
+                        .stream()
+                        .filter(row -> row.workspaceId().equals(workspaceId))
+                        .toList();
+
+                assertThat(actualRows).allSatisfy(row -> assertThat(row.user()).isEqualTo(USER));
+                assertThat(actualRows.stream()
+                        .collect(Collectors.toMap(WorkspaceProjectUserCount::projectId,
+                                WorkspaceProjectUserCount::count)))
+                        .isEqualTo(expectedCountsByProjectId);
+            });
+        }
+
         private List<Trace> tracesInProjects(String... projectNames) {
             return Arrays.stream(projectNames)
                     .flatMap(projectName -> PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
@@ -550,10 +745,11 @@ class UsageResourceTest {
                     .toList();
         }
 
-        private List<Span> spansInProject(String projectName) {
-            return PodamFactoryUtils.manufacturePojoList(factory, Span.class)
-                    .stream()
-                    .map(span -> span.toBuilder().id(null).projectName(projectName).build())
+        private List<Span> spansInProjects(String... projectNames) {
+            return Arrays.stream(projectNames)
+                    .flatMap(projectName -> PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                            .stream()
+                            .map(span -> span.toBuilder().id(null).projectName(projectName).build()))
                     .toList();
         }
 
@@ -670,11 +866,10 @@ class UsageResourceTest {
     }
 
     private void backdateDemoProjectsCreatedAtTwoDays() {
-        // Push demo-named project creation timestamps far enough into the past that the
-        // computed demoDataCreatedAt cutoff (= max(project.created_at) + 1 min) precedes
-        // spans/traces backdated to yesterday — exercising the `OR created_at > cutoff`
-        // branch of the span exclusion predicate. The service resolves demo projects
-        // by global name across all workspaces, so the update must span workspaces too.
+        // Push demo-named project creation far enough into the past that the demoDataCreatedAt cutoff the exclusion
+        // used to compute (= max(project.created_at) + 1 min) would precede spans/traces backdated to yesterday —
+        // the only state in which that cutoff could have spared a row, and so what the two tests asserting it no
+        // longer does need. Demo projects are resolved by global name, so the update must span workspaces too.
         mySqlTemplate.inTransaction(WRITE, handle -> {
             handle.createUpdate(
                     "UPDATE projects SET created_at = TIMESTAMPADD(DAY, -2, created_at) WHERE name IN (<names>)")
