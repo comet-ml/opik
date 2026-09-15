@@ -5,7 +5,7 @@ import { loadEnvConfig } from '../config/env.config';
 export interface CreateRuleDialogLLMJudgeFields {
   name: string;
   /** Canned-template label as shown in the dialog. */
-  template: 'Moderation' | 'Hallucination' | 'AnswerRelevance' | 'Custom LLM-as-judge';
+  template: 'Moderation' | 'Hallucination' | 'Answer relevance' | 'Custom LLM-as-judge';
   /** Model display name as shown in the model picker (e.g. "Claude Haiku 4.5"). */
   modelDisplayName: string;
 }
@@ -213,7 +213,29 @@ export class OnlineEvaluationPage {
     });
   }
 
-  /** The "Enable rule" switch inside the add/edit dialog. */
+  /** The "Advanced settings" accordion trigger inside the add/edit dialog. */
+  get advancedSettingsTrigger(): Locator {
+    return this.dialog.getByTestId('add-edit-rule-dialog-advanced-settings-trigger');
+  }
+
+  /**
+   * Expand the collapsed "Advanced settings" section (max cost, trigger scope,
+   * enable switch). Idempotent: a section the dialog already opened — it does so
+   * when editing a rule with non-default values there — is left alone.
+   */
+  async expandAdvancedSettings(): Promise<void> {
+    return test.step('expand the Advanced settings accordion', async () => {
+      const trigger = this.advancedSettingsTrigger;
+      await trigger.waitFor({ state: 'visible' });
+      if ((await trigger.getAttribute('aria-expanded')) !== 'true') {
+        await trigger.click();
+      }
+      await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      await this.enableRuleSwitch.waitFor({ state: 'visible' });
+    });
+  }
+
+  /** The "Enable rule" switch inside the add/edit dialog (under Advanced settings). */
   get enableRuleSwitch(): Locator {
     return this.dialog.getByRole('switch', { name: 'Enable rule' });
   }
@@ -261,6 +283,7 @@ export class OnlineEvaluationPage {
   async setRuleEnabledByName(name: string, enabled: boolean): Promise<void> {
     return test.step(`set rule "${name}" enabled=${enabled} via edit dialog`, async () => {
       await this.openEditRuleDialogByName(name);
+      await this.expandAdvancedSettings();
       const toggle = this.enableRuleSwitch;
       await expect(toggle, 'edit dialog hydrates the switch from the persisted value').toBeChecked({
         checked: !enabled,
@@ -373,7 +396,7 @@ export class OnlineEvaluationPage {
     // Pick the template FIRST — selecting it rebuilds the prompt + variable
     // mapping section, so any prior tweaks would be wiped out.
     const promptCombobox = d.getByRole('combobox').filter({
-      hasText: /^(Custom LLM-as-judge|Hallucination|Moderation|AnswerRelevance|Structured Output Compliance|Meaning Match)$/,
+      hasText: /^(Custom LLM-as-judge|Hallucination|Moderation|Answer relevance|Structured Output Compliance|Meaning Match)$/,
     });
     await promptCombobox.click();
     await this.page.getByRole('option', { name: fields.template, exact: true }).click();

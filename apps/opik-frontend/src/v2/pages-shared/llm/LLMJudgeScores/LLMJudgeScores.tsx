@@ -24,8 +24,8 @@ const LLMJudgeScores = ({
     onChange([
       ...scores,
       {
-        name: "Score name",
-        description: "Score description",
+        name: "",
+        description: "",
         type: LLM_SCHEMA_TYPE.INTEGER,
         unsaved: false,
       },
@@ -51,7 +51,7 @@ const LLMJudgeScores = ({
       <div className="flex flex-col gap-2 overflow-hidden">
         {scores.map((score, index) => (
           <LLMJudgeScore
-            key={score.name + index}
+            key={index}
             hideRemoveButton={scores?.length === 1}
             error={get(validationErrors, [index])}
             onRemoveScore={() => handleRemoveScore(index)}

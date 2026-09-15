@@ -20,7 +20,6 @@ import {
 import { Label } from "@/ui/label";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
 import { Input } from "@/ui/input";
-import { Switch } from "@/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import {
   Select,
@@ -49,6 +48,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import PythonCodeRuleDetails from "@/v2/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/v2/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
+import RuleAdvancedSettingsSection from "@/v2/pages-shared/automations/AddEditRuleDialog/RuleAdvancedSettingsSection";
 import RuleFilteringSection, {
   TRACE_FILTER_COLUMNS,
   THREAD_FILTER_COLUMNS,
@@ -239,6 +239,17 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
 
   const formProjectIds = form.watch("projectIds");
+
+  // Open the collapsed Advanced settings when editing a rule that actually uses
+  // them, so a disabled rule or a non-default trigger scope is not hidden.
+  const advancedDefaultOpen = Boolean(
+    defaultRule &&
+      (defaultRule.enabled === false ||
+        (defaultRule.trigger_scope != null &&
+          defaultRule.trigger_scope !== EVAL_TRIGGER_SCOPE.production) ||
+        (isLLMJudgeRule(defaultRule) &&
+          (defaultRule.code as LLMJudgeObject).max_cost_usd != null)),
+  );
 
   // Reset form to default values when dialog opens for creating a new rule
   useEffect(() => {
@@ -600,82 +611,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   )}
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="enabled"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between space-y-0">
-                      <div className="flex flex-col">
-                        <Label
-                          htmlFor="enabled"
-                          className="text-sm font-medium"
-                        >
-                          Enable rule
-                        </Label>
-                        <Description>
-                          Enable or disable this evaluation rule
-                        </Description>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          id="enabled"
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                {!isThreadScope && !isSpanScope && (
-                  <FormField
-                    control={form.control}
-                    name="triggerScope"
-                    render={({ field }) => (
-                      <FormItem>
-                        <Label className="flex items-center">
-                          Trigger scope{" "}
-                          <TooltipWrapper content="Choose whether this rule fires on production traces, experiment traces, or both.">
-                            <Info className="ml-1 size-4 text-light-slate" />
-                          </TooltipWrapper>
-                        </Label>
-                        <FormControl>
-                          <div className="flex">
-                            <ToggleGroup
-                              type="single"
-                              data-testid="add-edit-rule-dialog-trigger-scope"
-                              value={field.value}
-                              onValueChange={(value: EVAL_TRIGGER_SCOPE) => {
-                                if (!value) return;
-                                field.onChange(value);
-                              }}
-                            >
-                              <ToggleGroupItem
-                                value={EVAL_TRIGGER_SCOPE.production}
-                                aria-label="Production traces"
-                              >
-                                Production traces
-                              </ToggleGroupItem>
-                              <ToggleGroupItem
-                                value={EVAL_TRIGGER_SCOPE.experiment}
-                                aria-label="Experiment traces"
-                              >
-                                Experiment traces
-                              </ToggleGroupItem>
-                              <ToggleGroupItem
-                                value={EVAL_TRIGGER_SCOPE.both}
-                                aria-label="Both"
-                              >
-                                Both
-                              </ToggleGroupItem>
-                            </ToggleGroup>
-                          </div>
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                )}
-
                 {!isEdit && (
                   <FormField
                     control={form.control}
@@ -758,6 +693,13 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     datasetColumnNames={datasetColumnNames}
                   />
                 )}
+
+                <RuleAdvancedSettingsSection
+                  form={form}
+                  showMaxCost={isLLMJudge && !isSpanScope}
+                  showTriggerScope={!isThreadScope && !isSpanScope}
+                  defaultOpen={advancedDefaultOpen}
+                />
 
                 {/* Filtering Section */}
                 <RuleFilteringSection
