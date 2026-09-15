@@ -63,6 +63,17 @@ import lombok.Builder;
  * {@code clickhouse-traces-topology} probe with a message naming the flag and the observed engine, so an install whose
  * flag and database disagree is pulled from rotation instead of discovering it on its first trace delete. The flag
  * stays the source of truth — the probe only reports, it never re-routes.</p>
+ *
+ * <p>{@code spansDistributedWrapEnabled}: the {@code spans} sibling of {@code tracesDistributedWrapEnabled}. The
+ * Slice 3 cutover wraps {@code spans} as a {@code Distributed} table over the {@code spans_local} shard, co-located
+ * with traces on {@code sipHash64(project_id)}. Left {@code false} at deploy time (and while {@code spans} is still a
+ * {@code MergeTree}, where deletes work directly); set {@code true} in lockstep with applying the spans wrap. While
+ * {@code true}, {@code SpanDAO} routes its cascade and retention deletes to {@code spans_local} while reads and
+ * inserts continue through the Distributed {@code spans}. The same split by kind applies as for traces: row mutations
+ * ({@code DELETE}) and {@code MATERIALIZE COLUMN} / {@code ADD INDEX} / {@code MODIFY TTL} target {@code spans_local}
+ * only, while {@code ADD}/{@code DROP}/{@code MODIFY COLUMN} must be applied to <b>both</b> {@code spans_local} and
+ * the {@code Distributed} {@code spans}. Independent of the trace flag so the two cutovers can flip separately, and
+ * <b>not</b> covered by the {@code clickhouse-traces-topology} readiness probe, which asserts the trace flag only.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
@@ -71,5 +82,6 @@ public record DatabaseAnalyticsDataModelConfig(
         boolean traceDeletionEventsCaptureEnabled,
         boolean spanDeletionEventsCaptureEnabled,
         @Min(1) @Max(2_000) int deletionEventsInsertBatchSize,
-        boolean tracesDistributedWrapEnabled) {
+        boolean tracesDistributedWrapEnabled,
+        boolean spansDistributedWrapEnabled) {
 }

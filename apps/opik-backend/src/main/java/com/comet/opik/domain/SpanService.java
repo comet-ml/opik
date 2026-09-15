@@ -544,8 +544,19 @@ public class SpanService {
                                 !resolvedCriteria.stripAttachments())));
     }
 
+    /**
+     * Cascade entry point for the trace delete: removes every span of {@code traceIds} within {@code projectId}.
+     * <p>
+     * The project is required. Its only caller is {@code TraceDeletedListener}, fed by {@code TracesDeleted}, which
+     * always carries the resolved owning project — one event per project group, so an id reused across projects
+     * cascades per project rather than once workspace-wide (OPIK-7483). Requiring it here makes that guarantee
+     * structural rather than incidental: every span delete, and every deletion-events bridge row it emits, carries a
+     * non-null {@code project_id}, which is also what keeps the delete routable once {@code spans} is distributed on
+     * {@code project_id}. Retention sweeps are deliberately outside this: they are keyed on {@code workspace_id} plus a
+     * {@code trace_id} range and are separate methods.
+     */
     @WithSpan
-    public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, UUID projectId) {
+    public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
         if (traceIds.isEmpty()) {
             return Mono.empty();
         }
