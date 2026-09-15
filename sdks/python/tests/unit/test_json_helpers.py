@@ -22,21 +22,26 @@ except (
 ):  # no wheel for this platform; only the standard-library branch exists
     orjson = None
 
-pytestmark = pytest.mark.skipif(
-    orjson is None,
-    reason="orjson ships no wheel for this platform, so there is no second mode to pin",
+# Deliberately NOT a module-level skip. The standard-library assertions are worth most
+# on a platform with no orjson wheel, because there the standard library is the only
+# encoder there is -- skipping the whole module when orjson is missing would drop that
+# coverage exactly where it matters. Only the accelerated half stands down.
+requires_orjson = pytest.mark.skipif(
+    orjson is None, reason="orjson ships no wheel for this platform"
 )
 
 
 @pytest.fixture
 def stdlib(monkeypatch):
-    """Force the standard-library branch."""
+    """Force the standard-library branch. Runs everywhere."""
     monkeypatch.setattr(json_helpers, "_orjson", None)
 
 
 @pytest.fixture
 def accelerated(monkeypatch):
-    """Force the orjson branch, in case something earlier cleared it."""
+    """Force the orjson branch, skipping where there is none to force."""
+    if orjson is None:
+        pytest.skip("orjson ships no wheel for this platform")
     monkeypatch.setattr(json_helpers, "_orjson", orjson)
 
 
@@ -177,6 +182,7 @@ def test_dumps__default_raises__is_not_called_twice(accelerated):
 @pytest.mark.parametrize(
     "value", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
 )
+@requires_orjson
 def test_dumps__non_finite_float__differs_by_encoder(value, monkeypatch):
     """Pinned because it is a real divergence, not because either side is wrong.
 
@@ -228,6 +234,7 @@ def _with_orjson_unavailable(probe):
         importlib.reload(json_helpers)
 
 
+@requires_orjson
 def test_import__orjson_present__accelerated_is_true():
     assert json_helpers.ACCELERATED is True
     assert json_helpers._orjson is not None
@@ -252,6 +259,7 @@ def test_import__orjson_unavailable__still_encodes():
     assert json.loads(encoded) == {"a": 2, "b": 1}
 
 
+@requires_orjson
 def test_import__restored_afterwards():
     """The helper must leave the module as it found it, or every later test lies."""
     _with_orjson_unavailable(lambda module: None)
