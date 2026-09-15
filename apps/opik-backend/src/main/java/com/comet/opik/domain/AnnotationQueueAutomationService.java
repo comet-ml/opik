@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
@@ -81,8 +82,8 @@ public class AnnotationQueueAutomationService {
                     .triggerScope(EvalTriggerScope.PRODUCTION)
                     .queueId(queueId)
                     .scope(scope)
-                    .conditions(resolved.conditions())
-                    .maxItemsInQueue(resolved.maxItemsInQueue())
+                    .conditions(resolved.getLeft())
+                    .maxItemsInQueue(resolved.getRight())
                     .build();
 
             if (existing.isEmpty()) {
@@ -93,8 +94,8 @@ public class AnnotationQueueAutomationService {
                         EvalTriggerScope.PRODUCTION, null);
             }
 
-            routerDao.save(ruleId, queueId, scope.getValue(), resolved.conditions(),
-                    resolved.maxItemsInQueue(), userName);
+            routerDao.save(ruleId, queueId, scope.getValue(), resolved.getLeft(),
+                    resolved.getRight(), userName);
             return null;
         });
 
@@ -148,10 +149,11 @@ public class AnnotationQueueAutomationService {
     }
 
     /**
-     * The stored form of an automation payload: what is kept from the request and what is carried over
-     * from the existing row. Shared by {@link #save} and {@link #validate} so the rules cannot drift apart.
+     * The stored form of an automation payload — the conditions JSON and the item ceiling — being what is
+     * kept from the request and what is carried over from the existing row. Shared by {@link #save} and
+     * {@link #validate} so the rules cannot drift apart.
      */
-    private ResolvedAutomation resolve(Optional<AutomationRuleAnnotationQueueRouterModel> existing,
+    private Pair<String, Integer> resolve(Optional<AutomationRuleAnnotationQueueRouterModel> existing,
             AnnotationQueueAutomation automation) {
 
         rejectNonFiniteThresholds(automation.conditions());
@@ -174,10 +176,7 @@ public class AnnotationQueueAutomationService {
                 ? automation.maxItemsInQueue()
                 : existing.map(AutomationRuleAnnotationQueueRouterModel::maxItemsInQueue).orElse(null);
 
-        return new ResolvedAutomation(conditions, maxItemsInQueue);
-    }
-
-    private record ResolvedAutomation(String conditions, Integer maxItemsInQueue) {
+        return Pair.of(conditions, maxItemsInQueue);
     }
 
     /**
