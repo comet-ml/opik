@@ -1,8 +1,13 @@
 import React from "react";
 import isUndefined from "lodash/isUndefined";
+import { isClaudeModel, resolveSamplingParams } from "@/lib/modelUtils";
+import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
-import { LLMOpenRouterConfigsType } from "@/types/providers";
+import {
+  LLMOpenRouterConfigsType,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
 import { DEFAULT_OPEN_ROUTER_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -10,31 +15,51 @@ import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/mode
 interface OpenRouterModelConfigsProps {
   configs: LLMOpenRouterConfigsType;
   onChange: (configs: Partial<LLMOpenRouterConfigsType>) => void;
+  model?: PROVIDER_MODEL_TYPE | "";
   unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
 const OpenRouterModelConfigs = ({
   configs,
   onChange,
+  model,
   unsupportedParams,
 }: OpenRouterModelConfigsProps) => {
   const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
+  // Claude rejects temperature and top_p together whoever is serving it, so this panel has to
+  // offer the same either/or choice the Anthropic one does.
+  const exclusiveSampling = isClaudeModel(model ?? "");
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   return (
     <div className="flex w-72 flex-col gap-4">
-      {!isUndefined(configs.temperature) && (
-        <SliderInputControl
-          value={configs.temperature}
-          onChange={(v) => onChange({ temperature: v })}
-          id="temperature"
-          min={-1}
-          max={1}
-          step={0.01}
-          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
-          label="Temperature"
-          tooltip={
-            <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
-          }
+      {exclusiveSampling ? (
+        <ExclusiveSamplingParams
+          temperature={temperature}
+          topP={topP}
+          temperatureDefault={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
+          topPDefault={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P}
+          temperatureMin={-1}
+          offerChoice={supports("topP")}
+          onChange={onChange}
         />
+      ) : (
+        <>
+          {!isUndefined(configs.temperature) && (
+            <SliderInputControl
+              value={configs.temperature}
+              onChange={(v) => onChange({ temperature: v })}
+              id="temperature"
+              min={-1}
+              max={1}
+              step={0.01}
+              defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
+              label="Temperature"
+              tooltip={
+                <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
+              }
+            />
+          )}
+        </>
       )}
       {!isUndefined(configs.maxTokens) && (
         <SliderInputControl
@@ -51,7 +76,7 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {supports("topP") && !isUndefined(configs.topP) && (
+      {!exclusiveSampling && supports("topP") && !isUndefined(configs.topP) && (
         <SliderInputControl
           value={configs.topP}
           onChange={(v) => onChange({ topP: v })}

@@ -5,13 +5,15 @@ import { jsonLanguage } from "@codemirror/lang-json";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { LLMCustomConfigsType } from "@/types/providers";
+import { LLMCustomConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { DEFAULT_CUSTOM_CONFIGS } from "@/constants/llm";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import useJsonInput from "@/hooks/useJsonInput";
 import { Label } from "@/ui/label";
 import { FormErrorSkeleton } from "@/ui/form";
 import isUndefined from "lodash/isUndefined";
+import { isClaudeModel, resolveSamplingParams } from "@/lib/modelUtils";
+import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Info } from "lucide-react";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -19,15 +21,21 @@ import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/mode
 interface CustomModelConfigProps {
   configs: Partial<LLMCustomConfigsType>;
   onChange: (configs: Partial<LLMCustomConfigsType>) => void;
+  model?: PROVIDER_MODEL_TYPE | "";
   unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
 const CustomModelConfig = ({
   configs,
   onChange,
+  model,
   unsupportedParams,
 }: CustomModelConfigProps) => {
   const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
+  // Claude rejects temperature and top_p together whoever is serving it, so this panel has to
+  // offer the same either/or choice the Anthropic one does.
+  const exclusiveSampling = isClaudeModel(model ?? "");
+  const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const theme = useCodemirrorTheme({ editable: true });
 
   const handleExtraBodyParametersChange = useCallback(
@@ -45,20 +53,34 @@ const CustomModelConfig = ({
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {!isUndefined(configs.temperature) && (
-        <SliderInputControl
-          value={configs.temperature}
-          onChange={(v) => onChange({ temperature: v })}
-          id="temperature"
-          min={0}
-          max={1}
-          step={0.01}
-          defaultValue={DEFAULT_CUSTOM_CONFIGS.TEMPERATURE}
-          label="Temperature"
-          tooltip={
-            <PromptModelSettingsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
-          }
+      {exclusiveSampling ? (
+        <ExclusiveSamplingParams
+          temperature={temperature}
+          topP={topP}
+          temperatureDefault={DEFAULT_CUSTOM_CONFIGS.TEMPERATURE}
+          topPDefault={DEFAULT_CUSTOM_CONFIGS.TOP_P}
+          temperatureMin={0}
+          offerChoice={supports("topP")}
+          onChange={onChange}
         />
+      ) : (
+        <>
+          {!isUndefined(configs.temperature) && (
+            <SliderInputControl
+              value={configs.temperature}
+              onChange={(v) => onChange({ temperature: v })}
+              id="temperature"
+              min={0}
+              max={1}
+              step={0.01}
+              defaultValue={DEFAULT_CUSTOM_CONFIGS.TEMPERATURE}
+              label="Temperature"
+              tooltip={
+                <PromptModelSettingsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
+              }
+            />
+          )}
+        </>
       )}
 
       {!isUndefined(configs.maxCompletionTokens) && (
@@ -77,7 +99,7 @@ const CustomModelConfig = ({
         />
       )}
 
-      {supports("topP") && !isUndefined(configs.topP) && (
+      {!exclusiveSampling && supports("topP") && !isUndefined(configs.topP) && (
         <SliderInputControl
           value={configs.topP}
           onChange={(v) => onChange({ topP: v })}
