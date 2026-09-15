@@ -102,6 +102,25 @@ public class AnnotationQueueAutomationService {
     }
 
     /**
+     * Renames the rule to follow its queue.
+     *
+     * <p>The rule's name is the queue's, so a queue renamed on its own would otherwise leave the rule
+     * carrying the old one. Only the name changes: everything else is read back and rewritten as-is, so
+     * this cannot disturb an automation the caller did not mention.
+     */
+    public void renameRule(@NonNull String workspaceId, @NonNull UUID queueId, @NonNull String queueName) {
+        transactionTemplate.inTransaction(WRITE, handle -> {
+            var routerDao = handle.attach(AutomationRuleAnnotationQueueRouterDAO.class);
+
+            routerDao.findByQueueIdForUpdate(workspaceId, queueId)
+                    .ifPresent(rule -> handle.attach(AutomationRuleDAO.class).updateBaseRule(rule.id(),
+                            workspaceId, queueName, rule.samplingRate(), rule.enabled(), rule.triggerScope(),
+                            rule.filters()));
+            return null;
+        });
+    }
+
+    /**
      * Rejects an automation the same way {@link #save} would, without writing anything.
      *
      * <p>Exists so a caller can check the payload before it commits the queue itself. Queue storage and

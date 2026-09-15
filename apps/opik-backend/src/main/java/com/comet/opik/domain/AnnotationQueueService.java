@@ -193,6 +193,14 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                                                             updateRequest.automation()))
                                                     .subscribeOn(Schedulers.boundedElastic())
                                                     .then());
+                                } else if (updateRequest.name() != null) {
+                                    // No automation in the payload, but the rule is named after its queue,
+                                    // so a rename still has to reach it.
+                                    updateMono = updateMono
+                                            .then(Mono.fromRunnable(() -> automationService.renameRule(
+                                                    workspaceId, id, updateRequest.name()))
+                                                    .subscribeOn(Schedulers.boundedElastic())
+                                                    .then());
                                 }
 
                                 if (updateRequest.annotatorsPerItem() == null) {

@@ -7,7 +7,7 @@
 -- name, sampling rate — and the subtype below supplies only what is specific to populating a queue.
 ALTER TABLE automation_rules MODIFY COLUMN `action` ENUM('evaluator', 'annotation_queue_router') NOT NULL;
 
---rollback ALTER TABLE automation_rules MODIFY COLUMN `action` ENUM('evaluator') NOT NULL;
+--rollback empty
 
 --changeset aliaksandrk:000097_create_automation_rule_annotation_queue_routers
 --comment: Create automation_rule_annotation_queue_routers — the queue-population subtype of automation_rules (OPIK-6303)

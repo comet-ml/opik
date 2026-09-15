@@ -11,7 +11,7 @@ import java.util.UUID;
 
 /**
  * The {@code annotation_queue} flavour of an automation rule: the parent row in {@code automation_rules}
- * plus the queue-specific columns from {@code automation_rules_annotation_queue}.
+ * plus the queue-specific columns from {@code automation_rule_annotation_queue_routers}.
  *
  * <p>Unlike the evaluator models this one has no API twin. A queue automation is configured through its
  * queue's own endpoints rather than the automation-rules API, so the rule is a storage arrangement — it
