@@ -26,9 +26,13 @@ type CodeBlockProps = {
   search?: string;
   withSearch?: boolean;
   defaultOpen?: boolean;
+  /** Controlled open state. Omit to let the block own it. */
+  open?: boolean;
   disabled?: boolean;
   className?: string;
   quickFilterSection?: QuickFilterSection;
+  /** Notified when the user toggles the section. Never called on mount. */
+  onOpenChange?: (open: boolean) => void;
 };
 
 const CodeBlock: React.FC<CodeBlockProps> = ({
@@ -39,11 +43,14 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   search,
   withSearch,
   defaultOpen = true,
+  open,
   disabled,
   className,
   quickFilterSection,
+  onOpenChange,
 }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [uncontrolledIsOpen, setUncontrolledIsOpen] = useState(defaultOpen);
+  const isOpen = open ?? uncontrolledIsOpen;
   const [localSearch, setLocalSearch] = useState("");
 
   const api = useQuickAttributeFilter();
@@ -71,7 +78,11 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
 
   const handleToggle = () => {
     if (disabled) return;
-    setIsOpen((prev) => !prev);
+    const nextIsOpen = !isOpen;
+    // Only when this block owns the state. Writing it while controlled would
+    // leave a shadow copy behind to drift from whoever actually owns it.
+    if (open === undefined) setUncontrolledIsOpen(nextIsOpen);
+    onOpenChange?.(nextIsOpen);
   };
 
   return (
