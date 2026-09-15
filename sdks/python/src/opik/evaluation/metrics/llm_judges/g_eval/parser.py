@@ -131,9 +131,10 @@ def _locate_score_entries(entries: list) -> list[int] | None:
     top-level ``score`` of the response. Text order is not that order — a
     nested key (a per-criterion breakdown, say) can come later than the
     top-level one while ``json.loads`` still resolves the top-level value.
-    So the last match is only taken as-is when it agrees with the parsed
-    value; otherwise the last agreeing match wins, which keeps duplicate
-    top-level keys resolving to the final one as ``json.loads`` does.
+    So a match is taken only when it agrees with the parsed value, and
+    among agreeing matches only at the shallowest brace depth. The last of
+    those keeps duplicate top-level keys resolving to the final one, as
+    ``json.loads`` does.
     """
     token_texts = [str(_to_dict(entry).get("token", "")) for entry in entries]
     full_text = "".join(token_texts)
@@ -143,12 +144,24 @@ def _locate_score_entries(entries: list) -> list[int] | None:
     match = matches[-1]
     try:
         expected = str(int(json.loads(full_text)["score"]))
-        match = next((m for m in reversed(matches) if m.group(1) == expected), match)
     except Exception:
         # The reconstruction can differ from the message content (a truncated
         # stream, for instance); without a parsed value to agree with, keep
         # the positional choice instead of failing the locator.
-        pass
+        expected = None
+    if expected is not None:
+        agreed = [
+            (m, full_text[: m.start()].count("{") - full_text[: m.start()].count("}"))
+            for m in matches
+            if m.group(1) == expected
+        ]
+        if agreed:
+            # Equal values do not identify a position: a breakdown object can
+            # restate the top-level score, and its digits come later in the
+            # stream. Unclosed braces before a key count its depth, so the
+            # shallowest agreeing matches are the top-level ones.
+            shallowest = min(depth for _, depth in agreed)
+            match = [m for m, depth in agreed if depth == shallowest][-1]
     start, end = match.start(1), match.end(1)
     offsets = []
     position = 0

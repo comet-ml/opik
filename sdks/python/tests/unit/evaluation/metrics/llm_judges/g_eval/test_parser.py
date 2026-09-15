@@ -314,6 +314,52 @@ def test_nested_score_key_does_not_capture_the_located_token():
     )
 
 
+def test_nested_score_key_with_the_same_value_does_not_win_the_locator():
+    # The previous test differs in value, so comparing against the parsed
+    # score is enough to reject the nested key. A breakdown whose criteria all
+    # agree with the total restates the same digit, so value agreement holds
+    # for both positions and only depth identifies the top-level one. Here the
+    # two tokens carry different distributions, so the wrong position yields a
+    # plausible score that matches neither `main` nor the text path: measured
+    # on `0e48cce` this returned 0.7809998433984686 (the nested distribution)
+    # where `main` returns 0.6219349153822014.
+    entries = [
+        _entry('{"', -0.01),
+        _entry("score", -0.01),
+        _entry('":', -0.01),
+        _entry(
+            "7",
+            -0.1,
+            top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.0}],
+        ),
+        _entry(", ", -0.01),
+        _entry('"reason', -0.01),
+        _entry('": ', -0.01),
+        _entry('"ok"', -0.01),
+        _entry(", ", -0.01),
+        _entry('"breakdown"', -0.01),
+        _entry(": {", -0.01),
+        _entry('"score"', -0.01),
+        _entry(": ", -0.01),
+        _entry(
+            "7",
+            -0.05,
+            top=[{"token": "7", "logprob": -1.5}, {"token": "8", "logprob": -0.05}],
+        ),
+        _entry("}}", -0.01),
+    ]
+    content = '{"score":7, "reason": "ok", "breakdown": {"score":7}}'
+    assert parser._locate_score_entries(entries) == [3]
+    result = parser.parse_litellm_model_output(
+        _response(content, entries),
+        name="g_eval",
+        log_probs_supported=True,
+    )
+    assert result.value == pytest.approx(0.6219349153822014, abs=1e-9), (
+        f"weighted from the nested key's tokens: {result.value}"
+    )
+
+
 def test_unparseable_reconstruction_keeps_the_positional_match():
     # A partial token stream reconstructs to text that is not valid JSON, so
     # there is no parsed value to agree with. That must not turn a locatable
