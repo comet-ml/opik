@@ -413,20 +413,27 @@ def test_kl_divergence_avg_direction():
 
 
 @pytest.mark.parametrize(
-    "direction,output,reference",
+    "direction,output,reference,missing_token",
     [
-        ("pq", "cat dog", "cat"),
-        ("qp", "cat", "cat dog"),
-        ("avg", "cat dog", "cat bird"),
+        ("pq", "cat dog", "cat", "dog"),
+        ("qp", "cat", "cat dog", "dog"),
+        ("avg", "cat dog", "cat bird", "dog"),
     ],
 )
 def test_kl_divergence__zero_smoothing_and_missing_token__raises_metric_error(
-    direction, output, reference
+    direction, output, reference, missing_token
 ):
     metric = KLDivergence(direction=direction, smoothing=0.0, track=False)
 
-    with pytest.raises(MetricComputationError, match="smoothing"):
+    with pytest.raises(MetricComputationError) as exc_info:
         metric.score(output=output, reference=reference)
+
+    assert (
+        str(exc_info.value)
+        == f"Token '{missing_token}' is absent from the other text, so the KL "
+        "divergence is undefined with smoothing=0.0. Pass a positive smoothing "
+        "value (KL divergence metric)."
+    )
 
 
 def test_kl_divergence__zero_smoothing_and_shared_support__computes_exact_value():
