@@ -327,5 +327,14 @@ class KLDivergence(_DistributionMetricBase):
         for token, p_val in p_dist.items():
             p_val = self._smooth(p_val)
             q_val = self._smooth(q_dist.get(token, 0.0))
+            if q_val == 0.0:
+                # Without smoothing the divergence is undefined (infinite) whenever a
+                # token of one text is absent from the other; report that instead of
+                # letting a ZeroDivisionError escape.
+                raise MetricComputationError(
+                    f"Token {token!r} is absent from the other text, so the KL "
+                    "divergence is undefined with smoothing=0.0. Pass a positive "
+                    "smoothing value (KL divergence metric)."
+                )
             divergence += p_val * math.log(p_val / q_val)
         return divergence
