@@ -214,8 +214,11 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                                     return updateMono.then();
                                 }
                                 int delta = updateRequest.annotatorsPerItem() - queueInfo.annotatorsPerItem();
+                                // Guarded for the same reason as the automation save above: a queue that
+                                // is gone should not have its permits adjusted.
                                 return updateMono
-                                        .then(lockService.updateCapacity(workspaceId, id, delta));
+                                        .filter(rows -> rows > 0)
+                                        .flatMap(rows -> lockService.updateCapacity(workspaceId, id, delta));
                             });
                 }));
     }
