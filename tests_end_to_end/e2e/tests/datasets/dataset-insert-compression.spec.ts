@@ -70,8 +70,18 @@ test.describe('Dataset insert — request compression arms', { tag: ['@area:data
     `Compressed and uncompressed uploads of the same ${SEED_SIZE} items store identical items, report identical version counters, and render the same Item count`,
     // `list-datasets` as well as the round trip: the last step asserts the
     // Datasets list's Item count cell, which is that capability's surface.
-    // Untagged, that assertion would be invisible coverage.
-    { tag: ['@t2-cuj', '@cap:datasets.sdk-round-trip', '@cap:datasets.list-datasets'] },
+    // Untagged, that assertion would be invisible coverage. `version-history-
+    // view` for the same reason one step earlier — both arms' version counters
+    // are compared in full, which is that capability's contract and what
+    // `dataset-insert-deduplication.spec.ts` tags for the same assertion.
+    {
+      tag: [
+        '@t2-cuj',
+        '@cap:datasets.sdk-round-trip',
+        '@cap:datasets.list-datasets',
+        '@cap:datasets.version-history-view',
+      ],
+    },
     async ({ project, sdkClient, backendClient, registerDatasetCleanup, testNamespace, page }) => {
       /**
        * Two multi-batch inserts against a cloud backend outrun the default

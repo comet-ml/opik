@@ -59,7 +59,15 @@ function counters(versions: DatasetVersionRef[]) {
 test.describe('Dataset insert — write thread count', { tag: ['@area:datasets'] }, () => {
   test(
     `insert(num_threads=${OVER_CAP_THREADS}) is clamped rather than rejected, and still stores every item`,
-    { tag: ['@t2-cuj', '@cap:datasets.create-dataset-sdk'] },
+    // `sdk-round-trip` is where the estate files Dataset.insert's own argument
+    // semantics — the deduplication flag and get_items' documented ValueErrors
+    // sit under it already — and `version-history-view` covers the version
+    // counters the last step compares, as the API-level
+    // `dataset-version-concurrent-writes.spec.ts` does. Not
+    // `create-dataset-sdk`: this creates a dataset only to have somewhere to
+    // insert into, and tagging that would file the insert coverage under a
+    // capability nothing here exercises.
+    { tag: ['@t2-cuj', '@cap:datasets.sdk-round-trip', '@cap:datasets.version-history-view'] },
     async ({ project, sdkClient, backendClient, registerDatasetCleanup, testNamespace }) => {
       /**
        * A multi-batch insert against a cloud backend outruns the default budget
@@ -131,7 +139,10 @@ test.describe('Dataset insert — write thread count', { tag: ['@area:datasets']
 
   test(
     'insert() rejects a non-positive num_threads and writes nothing when it does',
-    { tag: ['@t2-cuj', '@cap:datasets.create-dataset-sdk'] },
+    // Same pair, and for the same reasons: the rejection is insert's own
+    // argument validation, and the last two steps compare the whole version
+    // list either side of it.
+    { tag: ['@t2-cuj', '@cap:datasets.sdk-round-trip', '@cap:datasets.version-history-view'] },
     async ({ dataset, project, sdkClient, backendClient }) => {
       // Validation runs before the shape pre-pass and before the first request,
       // so the shared 3-item dataset fixture is enough — the size of the
