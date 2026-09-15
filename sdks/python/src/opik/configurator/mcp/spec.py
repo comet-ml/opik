@@ -10,7 +10,7 @@ Two transports are supported:
 - :class:`RemoteServerSpec` — the Opik-hosted MCP server reached over HTTP, with
   the AI host handling browser-based OAuth. Used when the configured deployment
   advertises an MCP auth server (see ``detection.detect_hosted_mcp_server``).
-- :class:`StdioServerSpec` — a local server run via ``uvx --isolated opik-mcp`` and
+- :class:`StdioServerSpec` — a local server run via ``uvx opik-mcp`` and
   authenticated with an API key passed through the environment. Used as the
   fallback when no hosted server is available.
 """
@@ -23,20 +23,6 @@ from typing import Any, Dict, List
 from opik.configurator.mcp import env as mcp_env
 
 SERVER_NAME = "opik-mcp"
-
-#: What the registered stdio command passes to ``uvx``. ``--isolated`` makes uv
-#: ignore a leftover ``uv tool install opik-mcp``, which otherwise decides what
-#: the client launches: per ``uv help tool run`` an installed tool is used
-#: "unless a version is requested" or ``--isolated`` is passed. SDK 2.0.60-2.2.44
-#: created such installs while trying to warm a cache, freezing those clients on
-#: whatever was current that day.
-#:
-#: The package stays unpinned on purpose. A version request (``opik-mcp@latest``)
-#: escapes the same install, but makes uv revalidate every package in the tree on
-#: every launch — 39 conditional requests and ~590ms per start, to buy at most the
-#: ten minutes the index cache holds. ``--isolated`` reads through that cache, so a
-#: release still lands within ten minutes and a launch costs nothing extra.
-PACKAGE_ARGS = ["--isolated", SERVER_NAME]
 
 _SECRET_ENV_SUFFIXES = ("_KEY", "_TOKEN", "_SECRET", "PASSWORD")
 _REDACTED = "***REDACTED***"
