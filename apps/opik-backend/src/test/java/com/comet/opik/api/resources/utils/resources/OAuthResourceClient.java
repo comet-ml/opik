@@ -101,17 +101,34 @@ public class OAuthResourceClient {
         }
     }
 
-    /** Registers a client, walks consent + PKCE, and exchanges the code for the raw code and the token pair. */
-    public Minted mintArtifacts() {
-        String clientId = registerClient();
-        String codeVerifier = RandomStringUtils.secure().nextAlphanumeric(64);
-        String code = authorize(clientId, codeVerifier);
-        return new Minted(clientId, code, exchangeCode(clientId, code, codeVerifier));
+    /** A consented, not-yet-exchanged authorization: everything the token endpoint needs. */
+    public record Authorized(String clientId, String code, String codeVerifier) {
     }
 
-    private String registerClient() {
+    /** Registers a client, walks consent + PKCE, and exchanges the code for the raw code and the token pair. */
+    public Minted mintArtifacts() {
+        var authorized = authorizeArtifacts(RandomStringUtils.secure().nextAlphanumeric(10));
+        return new Minted(authorized.clientId(), authorized.code(),
+                exchangeCode(authorized.clientId(), authorized.code(), authorized.codeVerifier()));
+    }
+
+    /**
+     * Registers a client under the given display name and walks consent + PKCE, stopping short of the exchange —
+     * for tests that want to drive the exchange through the service and inspect what it decided.
+     */
+    public Authorized authorizeArtifacts(String clientName) {
+        return reauthorize(registerClient(clientName));
+    }
+
+    /** Walks consent + PKCE again for a client that is already registered — a host reusing its client_id. */
+    public Authorized reauthorize(String clientId) {
+        String codeVerifier = RandomStringUtils.secure().nextAlphanumeric(64);
+        return new Authorized(clientId, authorize(clientId, codeVerifier), codeVerifier);
+    }
+
+    private String registerClient(String clientName) {
         var request = ClientRegistrationRequest.builder()
-                .clientName(RandomStringUtils.secure().nextAlphanumeric(10))
+                .clientName(clientName)
                 .redirectUris(Set.of(redirectUri))
                 .build();
 
