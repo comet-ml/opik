@@ -94,9 +94,10 @@ export class AlertEditorPage {
   /**
    * A selected trigger's config block.
    *
-   * Scoped by testid rather than by the trigger's visible title: the title also
-   * appears in the Test-alert panel's accordion, so a text lookup resolves
-   * there instead and finds none of the config controls.
+   * Scoped by testid rather than by the trigger's visible title: the titles are
+   * not unique enough to select on — the "Add trigger" popover lists every
+   * event type under the same copy, so a text lookup made while it is open
+   * resolves there instead of on the block holding the config controls.
    */
   triggerConfig(eventType: AlertEventType): Locator {
     // Mirrors `alertTriggerTestId` in the alerts page helpers: the wire values
@@ -131,6 +132,19 @@ export class AlertEditorPage {
   async fillName(name: string): Promise<void> {
     return test.step(`fill the alert name "${name}"`, async () => {
       await this.nameInput.fill(name);
+    });
+  }
+
+  /**
+   * Empties the name field.
+   *
+   * Distinct from `fillName('')` only in intent: the form treats an empty name
+   * as untouched and resumes suggesting one from the triggers, so this is the
+   * step that hands naming back rather than a way to blank the field.
+   */
+  async clearName(): Promise<void> {
+    return test.step('clear the alert name', async () => {
+      await this.nameInput.fill('');
     });
   }
 
