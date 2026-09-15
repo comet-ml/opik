@@ -397,71 +397,13 @@ export const LLM_PROMPT_CUSTOM_THREAD_TEMPLATE: LLMPromptTemplate = {
     {
       id: "kYZIGB4",
       role: LLM_MESSAGE_ROLE.user,
+      // Output format is not part of the prompt on purpose: the backend derives it from the
+      // Score definition (JSON schema on providers that support it, an appended instruction
+      // otherwise). Describe only what to judge and how to score it.
       content:
-        'Based on the given list of message exchanges between a User and an LLM, generate a JSON object that indicates **{WHAT_YOU_WANT_TO_MEASURE}** (e.g. "whether the last assistant message is relevant", "whether the user is frustrated", "overall hallucination severity", etc.).\n' +
+        "You are an impartial AI judge. Read the conversation below and evaluate whether the assistant's responses are relevant and helpful throughout. Consider the whole conversation: earlier turns, topic changes, follow-up questions and whether each response addresses what the user actually asked. Provide a binary score (true/false) and explain your reasoning in one clear sentence, quoting the turns that support it.\n" +
         "\n" +
-        "** Example Binary Scoring Scale: **\n" +
-        "For each evaluation dimension, provide a binary score (true/false), where:\n" +
-        "- true = The measured quality is present or the condition is met\n" +
-        "- false = The measured quality is absent or the condition is not met\n" +
-        "\n" +
-        "** Context Analysis Guidelines: **\n" +
-        "- Consider the full conversational context and nuances from all messages\n" +
-        "- Pay attention to conversational flow, topic continuity, and implicit context\n" +
-        "- Account for different communication styles and expressions\n" +
-        "- Evaluate patterns across the conversation, not just isolated messages\n" +
-        "- Factor in the appropriateness of responses relative to the conversation\n" +
-        "\n" +
-        "** Internal Evaluation Process: **\n" +
-        "For each dimension you're measuring, internally generate an evaluation that includes:\n" +
-        "- A binary decision (true/false) based on the criteria above\n" +
-        "- Brief reasoning for the decision based on specific evidence from the conversation\n" +
-        "- These internal evaluations are for analysis only - do NOT include them in the final output\n" +
-        "\n" +
-        "After generating internal evaluations, calculate the final binary scores for each dimension.\n" +
-        "\n" +
-        "** Guidelines for Final Results: **\n" +
-        "- Make sure to only return in JSON format\n" +
-        "- The JSON must contain exactly the fields specified for your evaluation\n" +
-        "- Always quote WHICH MESSAGE and the INFORMATION in the reason\n" +
-        "- You should CONCISELY summarize the evidence to justify the score\n" +
-        "- Be confident in your reasoning, referencing specific messages that support your evaluation\n" +
-        "- You should mention LLM response instead of `assistant`, and User instead of `user`\n" +
-        "- You should format scores as true/false in the reason\n" +
-        "- You MUST provide a 'reason' for each score in the format: 'The score is <score_value> because <your_reason>.'\n" +
-        "\n" +
-        "** Final Output Format: **\n" +
-        "Return ONLY a JSON object in this exact format:\n" +
-        "\n" +
-        "** Example for single score: **\n" +
-        "```json\n" +
-        "{\n" +
-        '    "{score_name}": {\n' +
-        '        "score": <true_or_false>,\n' +
-        '        "reason": "The score is <true_or_false> because <your_reason>."\n' +
-        "    }\n" +
-        "}\n" +
-        "```\n" +
-        "\n" +
-        "** Example for multiple scores: **\n" +
-        "```json\n" +
-        "{\n" +
-        '    "{score_name_1}": {\n' +
-        '        "score": <true_or_false_1>,\n' +
-        '        "reason": "The score is <true_or_false_1> because <your_reason_1>."\n' +
-        "    },\n" +
-        '    "{score_name_2}": {\n' +
-        '        "score": <true_or_false_2>,\n' +
-        '        "reason": "The score is <true_or_false_2> because <your_reason_2>."\n' +
-        "    },\n" +
-        '    "{score_name_3}": {\n' +
-        '        "score": <true_or_false_3>,\n' +
-        '        "reason": "The score is <true_or_false_3> because <your_reason_3>."\n' +
-        "    }\n" +
-        "}\n" +
-        "```\n" +
-        "\n" +
-        "** Turns: **\n" +
+        "CONVERSATION:\n" +
         "{{context}}",
     },
   ],
@@ -472,7 +414,7 @@ export const LLM_PROMPT_CUSTOM_THREAD_TEMPLATE: LLMPromptTemplate = {
     {
       name: "Relevance",
       description:
-        "Whether the LLM response is relevant to the conversation context",
+        "Whether the assistant's responses are relevant to the conversation",
       type: LLM_SCHEMA_TYPE.BOOLEAN,
       unsaved: false,
     },
@@ -582,7 +524,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
     ],
   },
   {
-    label: "AnswerRelevance",
+    label: "Answer relevance",
     description: "Check if the output is relevant to the input",
     value: LLM_JUDGE.answer_relevance,
     messages: [
@@ -590,51 +532,24 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
         id: "kYZITG4",
         role: LLM_MESSAGE_ROLE.user,
         content:
-          "YOU ARE AN EXPERT IN NLP EVALUATION METRICS, SPECIALLY TRAINED TO ASSESS ANSWER RELEVANCE IN RESPONSES\n" +
-          "        PROVIDED BY LANGUAGE MODELS. YOUR TASK IS TO EVALUATE THE RELEVANCE OF A GIVEN ANSWER FROM\n" +
-          "        ANOTHER LLM BASED ON THE USER'S INPUT AND CONTEXT PROVIDED.\n" +
+          "You are an expert judge evaluating answer relevance. Decide how well the OUTPUT answers the user's INPUT, taking the CONTEXT into account.\n" +
           "\n" +
-          "        ###INSTRUCTIONS###\n" +
+          "Guidelines:\n" +
+          "1. Identify the key question or request in the INPUT.\n" +
+          "2. Check whether the OUTPUT directly addresses it and stays consistent with the CONTEXT.\n" +
+          "3. Penalise off-topic, padded or extraneous content that does not serve the request.\n" +
+          "4. Do not give a perfect score unless the OUTPUT is fully relevant and free of irrelevant information.\n" +
           "\n" +
-          "        - YOU MUST ANALYZE THE GIVEN CONTEXT AND USER INPUT TO DETERMINE THE MOST RELEVANT RESPONSE.\n" +
-          "        - EVALUATE THE ANSWER FROM THE OTHER LLM BASED ON ITS ALIGNMENT WITH THE USER'S QUERY AND THE CONTEXT.\n" +
-          "        - ASSIGN A RELEVANCE SCORE BETWEEN 0.0 (COMPLETELY IRRELEVANT) AND 1.0 (HIGHLY RELEVANT).\n" +
-          "        - RETURN THE RESULT AS A JSON OBJECT, INCLUDING THE SCORE AND A BRIEF EXPLANATION OF THE RATING.\n" +
+          "Assign a relevance score between 0.0 (completely irrelevant) and 1.0 (highly relevant) and explain briefly which parts of the OUTPUT drove the score.\n" +
           "\n" +
-          "        ###CHAIN OF THOUGHTS###\n" +
+          "INPUT:\n" +
+          "{{input}}\n" +
           "\n" +
-          "        1. **Understanding the Context and Input:**\n" +
-          "           1.1. READ AND COMPREHEND THE CONTEXT PROVIDED.\n" +
-          "           1.2. IDENTIFY THE KEY POINTS OR QUESTIONS IN THE USER'S INPUT THAT THE ANSWER SHOULD ADDRESS.\n" +
+          "OUTPUT:\n" +
+          "{{output}}\n" +
           "\n" +
-          "        2. **Evaluating the Answer:**\n" +
-          "           2.1. COMPARE THE CONTENT OF THE ANSWER TO THE CONTEXT AND USER INPUT.\n" +
-          "           2.2. DETERMINE WHETHER THE ANSWER DIRECTLY ADDRESSES THE USER'S QUERY OR PROVIDES RELEVANT INFORMATION.\n" +
-          "           2.3. CONSIDER ANY EXTRANEOUS OR OFF-TOPIC INFORMATION THAT MAY DECREASE RELEVANCE.\n" +
-          "\n" +
-          "        3. **Assigning a Relevance Score:**\n" +
-          "           3.1. ASSIGN A SCORE BASED ON HOW WELL THE ANSWER MATCHES THE USER'S NEEDS AND CONTEXT.\n" +
-          "           3.2. JUSTIFY THE SCORE WITH A BRIEF EXPLANATION THAT HIGHLIGHTS THE STRENGTHS OR WEAKNESSES OF THE ANSWER.\n" +
-          "\n" +
-          "        ###WHAT NOT TO DO###\n" +
-          "\n" +
-          "        - DO NOT GIVE A SCORE WITHOUT FULLY ANALYZING BOTH THE CONTEXT AND THE USER INPUT.\n" +
-          "        - AVOID SCORES THAT DO NOT MATCH THE EXPLANATION PROVIDED.\n" +
-          "        - DO NOT INCLUDE ADDITIONAL FIELDS OR INFORMATION IN THE JSON OUTPUT BEYOND THE SCORE AND THE REASON.\n" +
-          "        - NEVER ASSIGN A PERFECT SCORE UNLESS THE ANSWER IS FULLY RELEVANT AND FREE OF ANY IRRELEVANT INFORMATION.\n" +
-          "\n" +
-          "\n" +
-          "        ###INPUTS:###\n" +
-          "        ***\n" +
-          "        Input:\n" +
-          "        {{input}}\n" +
-          "\n" +
-          "        Output:\n" +
-          "        {{output}}\n" +
-          "\n" +
-          "        Context:\n" +
-          "        {{context}}\n" +
-          "        ***",
+          "CONTEXT:\n" +
+          "{{context}}",
       },
     ],
     variables: {
@@ -767,73 +682,18 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
         id: "kYZITG5",
         role: LLM_MESSAGE_ROLE.user,
         content:
-          "Based on the given list of message exchanges between a user and an LLM, evaluate the relevance of each `assistant` message to its conversational context. For each assistant message, assign a relevance score between 0.0 and 1.0, where:\n" +
-          "- 1.0 = Perfectly relevant and directly addresses the user's message/context\n" +
-          "- 0.8-0.9 = Highly relevant with minor contextual gaps\n" +
-          "- 0.6-0.7 = Moderately relevant but may miss some nuances\n" +
-          "- 0.4-0.5 = Somewhat relevant but contains significant irrelevancies\n" +
-          "- 0.2-0.3 = Mostly irrelevant with minimal connection to context\n" +
-          "- 0.0-0.1 = Completely irrelevant to the user's message/context\n" +
+          "You are an impartial AI judge evaluating conversational coherence. Read the conversation below and judge how well each assistant response fits its conversational context: whether it addresses the user's latest message, keeps track of earlier turns, handles topic changes and follow-up questions, and matches the tone of the conversation.\n" +
           "\n" +
-          "** Context Analysis Guidelines: **\n" +
-          "- Consider the FULL conversational context, not just the immediate user-assistant pair\n" +
-          "- Pay attention to conversational flow, topic continuity, and implicit context\n" +
-          "- Account for nuanced references to earlier parts of the conversation\n" +
-          "- Consider whether the assistant appropriately acknowledges context shifts or topic changes\n" +
-          "- Evaluate if the assistant maintains coherence with established conversation themes\n" +
-          "- Factor in the appropriateness of the response style relative to the conversation tone\n" +
-          "- Consider whether the assistant properly addresses follow-up questions or clarifications\n" +
+          "Score the conversation as a whole from 0.0 to 1.0:\n" +
+          "- 1.0 = every response is relevant and coherent with the conversation so far\n" +
+          "- 0.7-0.9 = responses are relevant with minor gaps in context (a brief, generic reply to a greeting still counts as coherent)\n" +
+          "- 0.4-0.6 = some responses ignore important context or drift off topic\n" +
+          "- 0.1-0.3 = most responses are only loosely connected to the conversation\n" +
+          "- 0.0 = responses are unrelated to what the user said\n" +
           "\n" +
-          "** Scoring Considerations: **\n" +
-          "- Vague responses to vague inputs (like greetings) should score moderately high (0.7-0.8) as they maintain conversational flow\n" +
-          "- Responses that acknowledge context but pivot appropriately should score well (0.7-0.9)\n" +
-          "- Responses that ignore important context cues should score lower (0.3-0.6)\n" +
-          "- Completely off-topic responses should score very low (0.0-0.2)\n" +
-          "- Consider implicit context and conversational subtext, not just explicit question-answering\n" +
+          'In your reason, quote the turns that most affected the score and say why. Refer to the participants as "User" and "LLM response".\n' +
           "\n" +
-          "** Internal Evaluation Process: **\n" +
-          "For each assistant message, internally generate a verdict that includes:\n" +
-          "- A relevance score (0.0-1.0) based on the criteria above\n" +
-          "- A brief reasoning explaining the score\n" +
-          "\n" +
-          "** Guidelines for Internal Verdicts: **\n" +
-          "- Evaluate each assistant message using all previous conversation context\n" +
-          "- Consider the full conversational nuances and context\n" +
-          "- These verdicts are for your internal analysis only - do NOT include them in the final output\n" +
-          "\n" +
-          "After generating internal verdicts for all assistant messages, calculate the overall conversation relevance score as the average of all individual scores.\n" +
-          "\n" +
-          "** Final Output Format: **\n" +
-          "Return ONLY a JSON object in this exact format:\n" +
-          "\n" +
-          "```json\n" +
-          "{\n" +
-          '    "Answer relevance": {\n' +
-          '        "score": <average_relevance_score>,\n' +
-          '        "reason": "The score is <average_relevance_score> because <detailed_explanation_of_scoring_rationale>."\n' +
-          "    }\n" +
-          "}\n" +
-          "```\n" +
-          "\n" +
-          "** Reason Guidelines: **\n" +
-          "- Quote specific messages and explain how they contributed to the score\n" +
-          "- Mention patterns of relevance/irrelevance across the conversation\n" +
-          "- Reference how well the LLM maintained contextual awareness\n" +
-          '- Use "LLM response" instead of "assistant" and "User" instead of "user"\n' +
-          "- Format the score to 1 decimal place\n" +
-          "- Be specific about which messages were particularly relevant or irrelevant and why\n" +
-          "\n" +
-          "** Example: **\n" +
-          "```json\n" +
-          "{\n" +
-          '    "Answer relevance": {\n' +
-          '        "score": 0.6,\n' +
-          '        "reason": "The score is 0.6 because while the LLM appropriately responded to the initial greeting and maintained context in the first exchange, it completely ignored the User\'s medical question about sore throat treatment and instead commented about the weather, showing a significant breakdown in contextual awareness that lowered the overall conversation relevance."\n' +
-          "    }\n" +
-          "}\n" +
-          "```\n" +
-          "\n" +
-          "** Turns: **\n" +
+          "CONVERSATION:\n" +
           "{{context}}",
       },
     ],
@@ -842,9 +702,9 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
     },
     schema: [
       {
-        name: "Answer relevance",
+        name: "Conversational coherence",
         description:
-          "Answer relevance score checks if the output is relevant to the question",
+          "How well the assistant's responses stay relevant and coherent with the conversation (0 to 1)",
         type: LLM_SCHEMA_TYPE.DOUBLE,
         unsaved: false,
       },
@@ -852,71 +712,26 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
   },
   {
     label: "User frustration",
-    description: "Check if the output is frustrating to the user",
+    description:
+      "Check whether the user shows frustration in their last message",
     value: LLM_JUDGE.user_frustration,
     messages: [
       {
         id: "kYZITG6",
         role: LLM_MESSAGE_ROLE.user,
         content:
-          "Based on the given list of message exchanges between a user and an LLM, generate an internal 'verdict' evaluation to indicate whether the LAST `user` message shows that the user experiences confusion, annoyance, or disengagement during the conversation session given in the context of the last messages.\n" +
+          "You are an impartial AI judge evaluating user frustration. Read the conversation below and judge whether the user's LAST message shows confusion, annoyance, impatience or disengagement, using the earlier turns to understand what led to it.\n" +
           "\n" +
-          "For the last user message, assign a frustration score between 0.0 and 1.0, where:\n" +
-          "- 1.0 = Extreme frustration, anger, or complete disengagement\n" +
-          "- 0.8-0.9 = High frustration with clear expressions of annoyance or confusion\n" +
-          "- 0.6-0.7 = Moderate frustration with subtle signs of impatience or dissatisfaction\n" +
-          "- 0.4-0.5 = Mild frustration with gentle corrections or clarifications\n" +
-          "- 0.2-0.3 = Minimal frustration with neutral redirections\n" +
-          "- 0.0-0.1 = No frustration, positive or neutral engagement\n" +
+          "Score from 0.0 to 1.0:\n" +
+          "- 0.0-0.1 = no frustration; neutral or positive engagement\n" +
+          "- 0.2-0.3 = minimal frustration, e.g. a neutral redirection or clarification\n" +
+          "- 0.4-0.6 = mild to moderate frustration, e.g. gentle corrections, repeated requests, signs of impatience\n" +
+          "- 0.7-0.9 = clear frustration, e.g. explicit complaints about the responses or about being misunderstood\n" +
+          "- 1.0 = extreme frustration, anger or the user giving up\n" +
           "\n" +
-          "After generating the internal verdict evaluation, you MUST return the final result in JSON format. You MUST NOT return anything else. The final result MUST have a frustration score as a decimal value between 0.0 and 1.0 indicating how much frustration the user expressed in their last message (higher the more frustrating).\n" +
+          'Only score the last user message, but use the whole conversation as context. Do not treat a brief or generic response to a vague message (such as a greeting) as a cause of frustration. In your reason, quote the messages that show the frustration and what in the LLM responses led to it. Refer to the participants as "User" and "LLM response".\n' +
           "\n" +
-          "** Guidelines for Internal Verdict Evaluation: **\n" +
-          "- The internal verdict should have a score between 0.0 and 1.0 and a reason\n" +
-          "- The score should indicate whether the last `user` message shows that the user experienced confusion, annoyance, or disengagement during the conversation session given in the context of the last messages\n" +
-          "- Provide internal reasoning when the user shows signs of frustration\n" +
-          "- You MUST USE the previous messages (if any) provided in the list of messages to make an informed judgement on user frustration\n" +
-          "- You MUST ONLY evaluate the LAST message on the list but MUST USE context from the previous messages\n" +
-          "- ONLY assign higher scores if the LLM response caused the user to express COMPLETE frustration or confusion in their input messages\n" +
-          "- Vague LLM responses to vague inputs, such as greetings DOES NOT count as causes of frustration\n" +
-          "- This internal verdict evaluation should NOT be included in your final output\n" +
-          "\n" +
-          "** Context Analysis Guidelines: **\n" +
-          "- Consider the full conversational context and nuances from previous messages\n" +
-          "- Evaluate whether user frustration is justified by LLM performance\n" +
-          "- Account for different communication styles and expressions of frustration\n" +
-          "\n" +
-          "** Final Output Format: **\n" +
-          "Return ONLY a JSON object in this exact format:\n" +
-          "\n" +
-          "```json\n" +
-          "{\n" +
-          '    "User frustration": {\n' +
-          '        "score": <frustration_score>,\n' +
-          '        "reason": "The score is <frustration_score> because <detailed_explanation_of_scoring_rationale>."\n' +
-          "    }\n" +
-          "}\n" +
-          "```\n" +
-          "\n" +
-          "** Reason Guidelines: **\n" +
-          "- Be confident in your reasoning, as if you're aware of the LLM responses from the messages in a conversation that led to user issues\n" +
-          "- You should CONCISELY summarize the user experience to justify the score\n" +
-          "- You should NOT mention concrete frustration in your reason, and make the reason sound convincing\n" +
-          "- You should mention LLM response instead of `assistant`, and User instead of `user`\n" +
-          "- You should format the score to use 1 decimal place in the reason\n" +
-          "- Make sure to only return final result in JSON format, with the 'reason' key providing the reason and 'score' key providing the frustration score\n" +
-          "\n" +
-          "** Example: **\n" +
-          "```json\n" +
-          "{\n" +
-          '    "User frustration": {\n' +
-          '        "score": 1.0,\n' +
-          "        \"reason\": \"The score is 1.0 because the User repeatedly clarifies their intent and expresses dissatisfaction with the LLM's initial responses, indicating a mismatch between the User's expectations and the LLM's output. Despite asking a clear question, the LLM initially provides an overly simplistic solution, requiring the User to iterate and request obvious improvements. The User's tone becomes increasingly critical, with statements like 'Why didn't you just give me this the first time?' and 'Why is it so hard to get a straight answer?', signaling rising issues due to perceived inefficiency and lack of responsiveness from the LLM.\"\n" +
-          "    }\n" +
-          "}\n" +
-          "```\n" +
-          "\n" +
-          "** Turns: **\n" +
+          "CONVERSATION:\n" +
           "{{context}}",
       },
     ],
@@ -927,7 +742,7 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
       {
         name: "User frustration",
         description:
-          "User frustration score checks if the output is frustrating to the user",
+          "How much frustration the user expressed in their last message (0 to 1)",
         type: LLM_SCHEMA_TYPE.DOUBLE,
         unsaved: false,
       },

@@ -336,39 +336,48 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
   }
 });
 
+export const THREAD_CONTEXT_VARIABLE = "{{context}}";
+
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
-  const contextCount = data.messages.filter((m) => {
-    const content = getTextFromMessageContent(m.content);
-    return content.includes("{{context}}");
-  }).length;
+  const contextMessageIndexes = data.messages.reduce<number[]>(
+    (acc, m, index) => {
+      const content = getTextFromMessageContent(m.content);
+      return content.includes(THREAD_CONTEXT_VARIABLE) ? [...acc, index] : acc;
+    },
+    [],
+  );
 
-  if (contextCount < 1) {
+  if (contextMessageIndexes.length < 1) {
+    // Nothing to point at, so anchor to the last message — that is where a
+    // missing variable is most naturally added.
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "At least one message should contain the {{context}} variable",
-      path: ["messages", data.messages.length - 1, "content"],
+      message: `Add ${THREAD_CONTEXT_VARIABLE} to one message so the judge receives the conversation`,
+      path: ["messages", Math.max(data.messages.length - 1, 0), "content"],
     });
   }
 
-  if (contextCount > 1) {
+  // Flag every duplicate on the message that carries it, not on the last
+  // message, so the error sits next to the text the user has to remove.
+  contextMessageIndexes.slice(1).forEach((index) => {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Only one message can contain the {{context}} variable.",
-      path: ["messages", data.messages.length - 1, "content"],
+      message: `Only one message can contain ${THREAD_CONTEXT_VARIABLE}. Remove it here or from the earlier message.`,
+      path: ["messages", index, "content"],
     });
-  }
+  });
 
   data.messages.forEach((message, index) => {
     const content = getTextFromMessageContent(message.content);
     const matches = content.match(/{{([^}]+)}}/g);
     if (matches) {
       matches.forEach((match) => {
-        if (match !== "{{context}}") {
+        if (match !== THREAD_CONTEXT_VARIABLE) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: `Template variable ${match} is not allowed. Only {{context}} is supported.`,
+            message: `Template variable ${match} is not allowed. Only ${THREAD_CONTEXT_VARIABLE} is supported.`,
             path: ["messages", index, "content"],
           });
         }
