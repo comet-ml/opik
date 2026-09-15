@@ -497,8 +497,13 @@ slightly *slower* than 8, because the SDK saturates a CPU core serializing and c
 long before thread count becomes the limit. Past 8, extra workers mostly add scheduling overhead.
 
 **Lower it** when you are sharing a rate limit with other jobs, when the client machine is small, or
-when individual items are large enough that memory matters — both directions keep up to
-`2 * num_threads` payloads in flight, chunks on a read and request bodies on a write.
+when individual items are large enough that memory matters. On the dataset paths, `num_threads`
+bounds memory as well as concurrency: a read holds up to `2 * num_threads` chunks and an upload up
+to `2 * num_threads` request bodies, whatever the dataset's size. `experiment.batch_upload_items()`
+does not work that way — it builds every batch up front and queues them all, so its peak memory
+tracks the total number of items and lowering `num_threads` will not contain it. Split the records
+across calls if an experiment upload is too large to hold.
+
 `num_threads=1` makes the operation fully sequential, which is the only setting that guarantees
 batches arrive in order.
 
@@ -517,11 +522,17 @@ batches arrive in order.
 </Note>
 
 <Warning>
-  On a failed upload, the worker count decides what was already written. With `num_threads=1`
-  nothing after the failed batch is sent. In parallel, batches already in flight are left to
-  finish and only those not yet started are dropped, so batches *after* the failed one may still
-  have landed. Neither case rolls back what already succeeded. Use `num_threads=1` when you need a
-  failure to stop at a predictable point.
+  On a failed upload, the worker count decides what was already written, and the two write paths
+  differ. With `num_threads=1` both stop cleanly: nothing after the failed batch is sent.
+
+  In parallel, `dataset.insert()` still **sends everything it has already queued** — the call drains
+  the in-flight work and waits for it before re-raising, so the exception surfaces after those
+  batches have landed, not before. `experiment.batch_upload_items()` does the opposite: batches that
+  have not started are dropped and the ones already running are not waited for, so a few batches
+  after the failed one may or may not have landed.
+
+  Neither path rolls back what already succeeded. Use `num_threads=1` when you need a failure to
+  stop at a predictable point.
 </Warning>
 
 <Warning>

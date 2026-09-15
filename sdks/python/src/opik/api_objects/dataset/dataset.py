@@ -1026,7 +1026,9 @@ class Dataset(DatasetExportOperations):
                 ``1`` to upload sequentially, or a higher number to push a
                 large upload harder. All batches land in a single
                 dataset version. If a batch fails the call raises, and the
-                batches that already succeeded stay persisted. Older Opik
+                batches that already succeeded stay persisted; above ``1`` the
+                bodies already queued are drained and awaited first, so they
+                land too and the exception surfaces after them. Older Opik
                 backends do not support parallel upload and fall back to a
                 sequential one.
 
