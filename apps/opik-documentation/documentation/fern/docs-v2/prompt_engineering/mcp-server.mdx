@@ -157,39 +157,6 @@ from the latest published version. Assistants read their skills at session start
 so start a new session afterwards.
 </Note>
 
-### Which version is actually running
-
-`opik mcp status` reports what each config *says*. To see what it *does* — which
-matters when an `opik-mcp` installed as a uv tool has taken over a registration —
-run:
-
-```bash
-uvx opik mcp doctor
-```
-
-It starts each configured local server once, reports the version that came back
-and the version published on PyPI, and tells you whether they match:
-
-```text
-  Claude Code
-    Config      ~/.claude.json
-    Connection  Local (uvx)
-    Launches    /opt/homebrew/bin/uvx --isolated opik-mcp
-    Running     opik-mcp 0.2.35 (resolved from the package index)
-    Published   opik-mcp 0.2.35
-    Verdict     ✓ running the published version
-```
-
-A client served by a leftover tool install is reported as
-`(from \`uv tool install\` — pinned)` with a `STALE` verdict and the fix.
-
-<Note>
-Doctor's launches are excluded from Opik's usage analytics, so checking does not
-register as real sessions. Don't use the MCP `initialize` handshake to check this
-yourself — the `serverInfo.version` it returns is the `mcp` library's version, not
-opik-mcp's.
-</Note>
-
 ### From a script or CI
 
 Setup writes into your AI client's own configuration, so a run with no terminal
