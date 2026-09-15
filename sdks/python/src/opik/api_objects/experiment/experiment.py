@@ -172,9 +172,12 @@ class Experiment:
         Unlike :meth:`insert`, which only links already-existing traces to dataset
         items, this method creates the traces and spans as part of the same request.
 
-        Items are validated up front, split into batches that respect the backend's
-        1000-item and 4MB-per-request limits, and sent with automatic retry on rate
-        limiting (HTTP 429).
+        Items are split into batches that respect the backend's 1000-item and
+        4MB-per-request limits, and sent with automatic retry on rate limiting
+        (HTTP 429). By default every item is validated before the first batch is
+        sent; with ``validate_before_upload=False`` each is validated as it is
+        reached instead, so a later invalid item is found with earlier batches
+        already delivered.
 
         If a batch fails the exception propagates and the experiment is left
         partially populated, but what "remaining" means depends on the worker
@@ -282,10 +285,13 @@ class Experiment:
         first_error: List[BaseException] = []
 
         def _released(future: "futures.Future") -> None:
-            slots.release()
+            # Record before releasing: a producer blocked in `acquire` wakes on the
+            # release, and would pass the `first_error` check and submit one more batch
+            # if the failure were not already visible.
             error = future.exception()
             if error is not None and not first_error:
                 first_error.append(error)
+            slots.release()
 
         submitted = []
         try:

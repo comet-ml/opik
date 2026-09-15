@@ -716,7 +716,22 @@ class TestBulkUploadItemsValidation:
                 records, num_threads=4, validate_before_upload=False
             )
 
+        # Concurrency is the subject, but a test that only counts batches would also
+        # pass if items were dropped or duplicated, so check delivery too. Batches are
+        # sent from several workers, so the ids are compared as a set with a count
+        # rather than as a sequence -- arrival order is not defined here.
+        sent = [
+            item.dataset_item_id
+            for call in mock_rest_client.experiments.experiment_items_bulk.call_args_list
+            for item in call.kwargs["items"]
+        ]
+        assert len(sent) == 12
+        assert set(sent) == {f"item-{i}" for i in range(12)}
         assert len(_sent_batch_sizes(mock_rest_client)) > 1
+        assert (
+            max(_sent_batch_sizes(mock_rest_client))
+            <= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE
+        )
         assert captured_max_workers == [4]
 
     def test_batch_upload_items__streaming_validation__sends_until_the_bad_item(
