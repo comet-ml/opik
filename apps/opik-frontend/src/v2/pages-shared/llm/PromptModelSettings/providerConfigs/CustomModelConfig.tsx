@@ -12,12 +12,10 @@ import useJsonInput from "@/hooks/useJsonInput";
 import { Label } from "@/ui/label";
 import { FormErrorSkeleton } from "@/ui/form";
 import isUndefined from "lodash/isUndefined";
-import {
-  isClaudeModel,
-  resolveSamplingParams,
-  supportsSamplingParams,
-} from "@/lib/modelUtils";
-import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
+import { resolveSamplingParams } from "@/lib/modelUtils";
+import ExclusiveSamplingParams, {
+  resolveSamplingPresentation,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Info } from "lucide-react";
 import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -36,12 +34,7 @@ const CustomModelConfig = ({
   unsupportedParams,
 }: CustomModelConfigProps) => {
   const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
-  // Claude rejects temperature and top_p together whoever is serving it, so this panel has to
-  // offer the same either/or choice the Anthropic one does — and the models that take neither get
-  // no control at all, as they do on the Anthropic panel.
-  const claudeSampling = isClaudeModel(model ?? "");
-  const exclusiveSampling = claudeSampling && supportsSamplingParams(model);
-  const hideSampling = claudeSampling && !supportsSamplingParams(model);
+  const sampling = resolveSamplingPresentation(model);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   const theme = useCodemirrorTheme({ editable: true });
 
@@ -60,7 +53,7 @@ const CustomModelConfig = ({
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      {hideSampling ? null : exclusiveSampling ? (
+      {sampling === "none" ? null : sampling === "exclusive" ? (
         <ExclusiveSamplingParams
           temperature={temperature}
           topP={topP}
@@ -106,21 +99,23 @@ const CustomModelConfig = ({
         />
       )}
 
-      {!claudeSampling && supports("topP") && !isUndefined(configs.topP) && (
-        <SliderInputControl
-          value={configs.topP}
-          onChange={(v) => onChange({ topP: v })}
-          id="topP"
-          min={0}
-          max={1}
-          step={0.01}
-          defaultValue={DEFAULT_CUSTOM_CONFIGS.TOP_P}
-          label="Top P"
-          tooltip={
-            <PromptModelSettingsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered" />
-          }
-        />
-      )}
+      {sampling === "independent" &&
+        supports("topP") &&
+        !isUndefined(configs.topP) && (
+          <SliderInputControl
+            value={configs.topP}
+            onChange={(v) => onChange({ topP: v })}
+            id="topP"
+            min={0}
+            max={1}
+            step={0.01}
+            defaultValue={DEFAULT_CUSTOM_CONFIGS.TOP_P}
+            label="Top P"
+            tooltip={
+              <PromptModelSettingsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered" />
+            }
+          />
+        )}
 
       {!isUndefined(configs.frequencyPenalty) && (
         <SliderInputControl

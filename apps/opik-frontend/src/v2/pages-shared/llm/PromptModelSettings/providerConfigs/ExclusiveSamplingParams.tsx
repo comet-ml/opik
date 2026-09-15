@@ -6,6 +6,30 @@ import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import isNil from "lodash/isNil";
+import { isClaudeModel, supportsSamplingParams } from "@/lib/modelUtils";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+
+/**
+ * Which sampling control a model warrants:
+ *
+ * - `independent` — no constraint, so the panel's own two sliders apply.
+ * - `exclusive` — Claude, which takes one of the pair: {@link ExclusiveSamplingParams}.
+ * - `none` — Claude that takes neither, so the panel offers nothing rather than a choice the
+ *   request builder would strip.
+ *
+ * Stated once because every panel that can serve Claude has to reach the same answer; deriving it
+ * per panel is how the rule this control exists for came to be implemented twice in the first place.
+ */
+export type SamplingPresentation = "independent" | "exclusive" | "none";
+
+export const resolveSamplingPresentation = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): SamplingPresentation => {
+  if (!isClaudeModel(model ?? "")) {
+    return "independent";
+  }
+  return supportsSamplingParams(model) ? "exclusive" : "none";
+};
 
 interface ExclusiveSamplingParamsProps {
   temperature?: number;

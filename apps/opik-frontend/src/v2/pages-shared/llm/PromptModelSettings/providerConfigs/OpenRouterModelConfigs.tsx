@@ -1,11 +1,9 @@
 import React from "react";
 import isUndefined from "lodash/isUndefined";
-import {
-  isClaudeModel,
-  resolveSamplingParams,
-  supportsSamplingParams,
-} from "@/lib/modelUtils";
-import ExclusiveSamplingParams from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
+import { resolveSamplingParams } from "@/lib/modelUtils";
+import ExclusiveSamplingParams, {
+  resolveSamplingPresentation,
+} from "@/v2/pages-shared/llm/PromptModelSettings/providerConfigs/ExclusiveSamplingParams";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import {
@@ -30,16 +28,11 @@ const OpenRouterModelConfigs = ({
   unsupportedParams,
 }: OpenRouterModelConfigsProps) => {
   const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
-  // Claude rejects temperature and top_p together whoever is serving it, so this panel has to
-  // offer the same either/or choice the Anthropic one does — and the models that take neither get
-  // no control at all, as they do on the Anthropic panel.
-  const claudeSampling = isClaudeModel(model ?? "");
-  const exclusiveSampling = claudeSampling && supportsSamplingParams(model);
-  const hideSampling = claudeSampling && !supportsSamplingParams(model);
+  const sampling = resolveSamplingPresentation(model);
   const { temperature, topP } = resolveSamplingParams(model ?? "", configs);
   return (
     <div className="flex w-72 flex-col gap-4">
-      {hideSampling ? null : exclusiveSampling ? (
+      {sampling === "none" ? null : sampling === "exclusive" ? (
         <ExclusiveSamplingParams
           temperature={temperature}
           topP={topP}
@@ -83,21 +76,23 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
-      {!claudeSampling && supports("topP") && !isUndefined(configs.topP) && (
-        <SliderInputControl
-          value={configs.topP}
-          onChange={(v) => onChange({ topP: v })}
-          id="topP"
-          min={0}
-          max={1}
-          step={0.01}
-          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P}
-          label="Top P"
-          tooltip={
-            <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered" />
-          }
-        />
-      )}
+      {sampling === "independent" &&
+        supports("topP") &&
+        !isUndefined(configs.topP) && (
+          <SliderInputControl
+            value={configs.topP}
+            onChange={(v) => onChange({ topP: v })}
+            id="topP"
+            min={0}
+            max={1}
+            step={0.01}
+            defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P}
+            label="Top P"
+            tooltip={
+              <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered" />
+            }
+          />
+        )}
       {!isUndefined(configs.topK) && (
         <SliderInputControl
           value={configs.topK}

@@ -75,7 +75,8 @@ class AnthropicClientGeneratorTest {
          */
         @ParameterizedTest
         @EnumSource(value = AnthropicModelName.class, names = {"CLAUDE_SONNET_5", "CLAUDE_OPUS_4_7",
-                "CLAUDE_OPUS_4_8", "CLAUDE_OPUS_5", "CLAUDE_FABLE_5"}, mode = EnumSource.Mode.INCLUDE)
+                "CLAUDE_OPUS_4_8", "CLAUDE_OPUS_5", "CLAUDE_FABLE_5",
+                "CLAUDE_FABLE_5_1"}, mode = EnumSource.Mode.INCLUDE)
         void modelsTakingNoSamplingParamsRejectThem(AnthropicModelName model) {
             assertThat(ModelCapabilities.rejectsSamplingParams(model.getValue())).isTrue();
         }

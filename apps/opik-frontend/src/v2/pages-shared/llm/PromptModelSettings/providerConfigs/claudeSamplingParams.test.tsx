@@ -10,6 +10,7 @@ vi.mock("@uiw/react-codemirror", () => ({
 
 import CustomModelConfigs from "./CustomModelConfig";
 import OpenRouterModelConfigs from "./OpenRouterModelConfigs";
+import { resolveSamplingPresentation } from "./ExclusiveSamplingParams";
 import {
   LLMCustomConfigsType,
   LLMOpenRouterConfigsType,
@@ -43,6 +44,23 @@ const OPEN_ROUTER_CONFIG = {
 // Claude rejects temperature and top_p together whoever serves it, so the panel has to present the
 // same either/or choice it presents under the Anthropic provider — otherwise a Top P set here is
 // silently dropped from the request.
+describe("resolveSamplingPresentation", () => {
+  it.each([
+    ["mistral-large-2411", "independent"],
+    ["gpt-4o", "independent"],
+    ["claude-opus-4-6", "exclusive"],
+    ["custom-llm/gw/claude-opus-4-6", "exclusive"],
+    ["us.anthropic.claude-sonnet-4-5-20250929-v1:0", "exclusive"],
+    ["claude-sonnet-5", "none"],
+    ["custom-llm/gw/claude-sonnet-5", "none"],
+    ["custom-llm/claude-gw/mistral-large-2411", "independent"],
+  ])("resolves %s to %s", (model, expected) => {
+    expect(resolveSamplingPresentation(model as PROVIDER_MODEL_TYPE)).toBe(
+      expected,
+    );
+  });
+});
+
 describe("a Claude model behind another provider", () => {
   it("offers the sampling choice on the custom panel", () => {
     renderPanel(
