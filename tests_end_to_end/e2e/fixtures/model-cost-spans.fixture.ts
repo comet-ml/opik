@@ -265,9 +265,13 @@ const CHARACTER_PRICE_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
  * reporting cache reads costs LESS than an identical one that reports none.
  * Billing the cached tokens twice would make it cost more.
  *
- * Release 2.2.62 moved this model's cache rate 4x (1.45e-07 -> 6e-07) and its
- * input rate down (1.74e-06 -> 1.2e-06). Neither move is visible to any of the
- * vectors above, all of which price through `textGenerationCost`.
+ * Release 2.2.62 moved all three of this model's rates — cache read 4x up
+ * (1.45e-07 -> 6e-07), input down (1.74e-06 -> 1.2e-06) and output down
+ * (3.48e-06 -> 1.2e-06) — so all three amounts above are pinned to a row the
+ * daily LiteLLM sync has just rewritten. None of it is visible to any of the
+ * vectors above, all of which price through `textGenerationCost`; and if the
+ * sync moves this row again, the `toBeLessThan` comparison in the spec is the
+ * half that still holds while the absolute amounts are re-derived.
  */
 const CACHE_READ_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
   {

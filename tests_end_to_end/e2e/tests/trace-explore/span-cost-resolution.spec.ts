@@ -4,8 +4,9 @@ import { LogsPage } from '@e2e/pom/logs.page';
 import type { BackendClient, SpanCostRef } from '@e2e/core/backend';
 
 /**
- * Server-side LLM cost resolution: dated model ids (OPIK-8242) and
- * reasoning-token billing (OPIK-7791).
+ * Server-side LLM cost resolution: dated model ids (OPIK-8242), reasoning-token
+ * billing, per-character pricing and the cache-read calculator branch
+ * (OPIK-7791).
  *
  * Every other cost assertion in the estate seeds `total_cost` from the client,
  * so the backend never has to look a price up — which means the resolution path
