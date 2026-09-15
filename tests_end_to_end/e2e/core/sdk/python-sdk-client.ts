@@ -385,9 +385,39 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     }
   }
 
+  /**
+   * Run a bridge write, standing off and retrying while it is rate-limited.
+   *
+   * Project creation is the first call almost every SDK-seeded spec makes, so
+   * on a shared cloud workspace a burst of parallel workers can spend the
+   * per-workspace budget before any of them reaches its subject. A 429 there
+   * fails the whole spec in `Before Hooks`, reporting an ingestion budget as a
+   * product defect.
+   *
+   * Matched on the typed `status`, not the message: a generated id containing
+   * `429` would otherwise make an unrelated 4xx look retryable. Only 429 is
+   * retried — any other status is a real error and must surface at once — and a
+   * rate limit outlasting the whole backoff still throws, because by then it is
+   * not a burst.
+   */
+  async function withRateLimitRetry<T>(write: () => Promise<T>): Promise<T> {
+    const backoffMs = [2_000, 5_000, 10_000, 20_000];
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await write();
+      } catch (err) {
+        const rateLimited = err instanceof PythonSdkBridgeError && err.status === 429;
+        if (!rateLimited || attempt >= backoffMs.length) throw err;
+        await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
+      }
+    }
+  }
+
   return {
     async createProject({ name, workspace }) {
-      return request<{ id: string; name: string }>('POST', '/projects', { name, workspace });
+      return withRateLimitRetry(() =>
+        request<{ id: string; name: string }>('POST', '/projects', { name, workspace }),
+      );
     },
     async createTrace(args) {
       return request<{ id: string; name: string; project_id: string }>('POST', '/traces', args);
