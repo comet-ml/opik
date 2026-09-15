@@ -61,6 +61,10 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   // A copy is finished business, so the confirmation stands for a few seconds
   // and then the card gets out of the way — unless the pointer is still on it,
   // in which case it goes back to the routes rather than vanishing under them.
+  //
+  // A timer, not something an action can do on its own: it has to be cleared
+  // when the card unmounts, and restarted rather than stacked when a second
+  // copy lands. That cleanup is the whole reason this is an effect.
   const cardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!copiedAt) return;

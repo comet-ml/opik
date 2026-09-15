@@ -1,6 +1,5 @@
 import React, {
   useCallback,
-  useEffect,
   useRef,
   useState,
   type SyntheticEvent,
@@ -56,51 +55,62 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
     isPinnedRef.current = true;
   }, []);
 
-  // Driven off the resulting state, not each handler: hover, click and keyboard
-  // all land here, and only the transition is an event.
-  const wasOpenRef = useRef(false);
-  useEffect(() => {
-    if (isOpen === wasOpenRef.current) return;
-    wasOpenRef.current = isOpen;
+  const contentRef = useRef<HTMLDivElement>(null);
 
-    if (isOpen) {
-      hasActedRef.current = false;
-      isPinnedRef.current = false;
-      trackEvent(OpikEvent.MCP_POPOVER_OPENED, {
-        install_mode: installMode,
-        entity_type: target.entityType,
-      });
-      return;
-    }
-    if (!hasActedRef.current) {
-      trackEvent(OpikEvent.MCP_POPOVER_CLOSED, {
-        install_mode: installMode,
-        entity_type: target.entityType,
-      });
-    }
-  }, [isOpen, installMode, target.entityType]);
+  // Every way the card opens and closes goes through here, so the event is
+  // reported where the change is made rather than derived from it afterwards.
+  //
+  // The guard reads a ref rather than the state it mirrors: a dismissal calls
+  // this and Radix's own close follows in the same event, and state that has
+  // not re-rendered yet would let both of them report the same close.
+  const isOpenRef = useRef(false);
+  const openCard = useCallback(
+    (nextIsOpen: boolean) => {
+      if (isOpenRef.current === nextIsOpen) return;
+      isOpenRef.current = nextIsOpen;
+      setIsOpen(nextIsOpen);
+
+      if (nextIsOpen) {
+        hasActedRef.current = false;
+        isPinnedRef.current = false;
+        trackEvent(OpikEvent.MCP_POPOVER_OPENED, {
+          install_mode: installMode,
+          entity_type: target.entityType,
+        });
+        return;
+      }
+      if (!hasActedRef.current) {
+        trackEvent(OpikEvent.MCP_POPOVER_CLOSED, {
+          install_mode: installMode,
+          entity_type: target.entityType,
+        });
+      }
+    },
+    [installMode, target.entityType],
+  );
 
   // HoverCard covers pointer and focus. Click is ours, for touch.
-  const handleClick = useCallback(() => setIsOpen(true), []);
-
-  const contentRef = useRef<HTMLDivElement>(null);
+  const handleClick = useCallback(() => openCard(true), [openCard]);
 
   // Two reasons to decline an implicit close: the pin above, and the trigger's
   // blur, which is what a keyboard user does on their way into the card.
-  const handleOpenChange = useCallback((nextIsOpen: boolean) => {
-    if (!nextIsOpen) {
-      if (isPinnedRef.current) return;
-      if (contentRef.current?.contains(document.activeElement)) return;
-    }
-    setIsOpen(nextIsOpen);
-  }, []);
+  const handleOpenChange = useCallback(
+    (nextIsOpen: boolean) => {
+      if (!nextIsOpen) {
+        if (isPinnedRef.current) return;
+        if (contentRef.current?.contains(document.activeElement)) return;
+      }
+      openCard(nextIsOpen);
+    },
+    [openCard],
+  );
 
   // Deliberate dismissals outrank both. Clearing the pin first lets Radix's own
   // close, which follows in the same event, through.
   const close = useCallback(() => {
     isPinnedRef.current = false;
-    setIsOpen(false);
-  }, []);
+    openCard(false);
+  }, [openCard]);
 
   const handleContentBlur = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {

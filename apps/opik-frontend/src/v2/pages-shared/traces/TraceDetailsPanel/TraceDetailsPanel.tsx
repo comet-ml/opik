@@ -240,6 +240,12 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
 
   // The panel stays mounted when it closes, so without this it would reopen on
   // the same node with the error expanded and the hint already shown.
+  //
+  // The one effect here that is not an action in disguise: `open` belongs to
+  // the caller, and the panel has three close paths into it — its own chrome,
+  // the keyboard, and the caller clearing the id — so there is no single
+  // handler to hang this on. The alternative is moving both values into
+  // something that unmounts with the sheet, which is how they used to drift.
   useEffect(() => {
     if (open) return;
     setErrorOpenFor(null);

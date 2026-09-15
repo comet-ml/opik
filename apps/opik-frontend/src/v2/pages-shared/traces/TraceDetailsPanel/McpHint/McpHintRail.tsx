@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 
 import McpHintButton from "./McpHintButton";
 import { MCP_HINT_REVEAL_DELAY_MS } from "./constants";
@@ -15,26 +15,22 @@ const McpHintRail: React.FunctionComponent<McpHintRailProps> = ({
   isVisible,
   target,
 }) => {
-  // A beat after the error opens, so the pill reads as a response to it rather
-  // than as part of the same layout. Presentational, which is why the delay
-  // lives here rather than in the state the panel owns.
-  const [hasWaited, setHasWaited] = useState(false);
-  useEffect(() => {
-    if (!isVisible) {
-      setHasWaited(false);
-      return;
-    }
-    const timer = setTimeout(
-      () => setHasWaited(true),
-      MCP_HINT_REVEAL_DELAY_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [isVisible]);
-
-  if (!isVisible || !hasWaited) return null;
+  if (!isVisible) return null;
 
   return (
-    <div className="pointer-events-none absolute right-4 top-4 z-10 flex justify-end motion-safe:duration-300 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1">
+    <div
+      // A beat after the error opens, so the pill reads as a response to it
+      // rather than as part of the same layout. The delay is the animation's
+      // own, held at its first frame by fill-mode backwards, which costs no
+      // state and no render: a timer here would only re-render to say "now".
+      // Both sit inside motion-safe, so nobody who turned animation off waits.
+      className="pointer-events-none absolute right-4 top-4 z-10 flex justify-end motion-safe:duration-300 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:[animation-delay:var(--mcp-hint-reveal-delay)] motion-safe:[animation-fill-mode:backwards]"
+      style={
+        {
+          "--mcp-hint-reveal-delay": `${MCP_HINT_REVEAL_DELAY_MS}ms`,
+        } as React.CSSProperties
+      }
+    >
       <McpHintButton target={target} />
     </div>
   );
