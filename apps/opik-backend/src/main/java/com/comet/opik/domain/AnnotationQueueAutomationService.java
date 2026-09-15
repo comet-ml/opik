@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueAutomation;
 import com.comet.opik.api.evaluators.EvalTriggerScope;
+import com.comet.opik.domain.evaluators.AnnotationQueueAutomationMapper;
 import com.comet.opik.domain.evaluators.AutomationRuleAnnotationQueueRouterDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleAnnotationQueueRouterModel;
 import com.comet.opik.domain.evaluators.AutomationRuleDAO;
@@ -217,7 +218,7 @@ public class AnnotationQueueAutomationService {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(AutomationRuleAnnotationQueueRouterDAO.class)
                         .findByQueueId(workspaceId, queueId))
-                .map(this::toApi);
+                .map(AnnotationQueueAutomationMapper.INSTANCE::map);
     }
 
     public Map<UUID, AnnotationQueueAutomation> findByQueueIds(@NonNull String workspaceId,
@@ -232,7 +233,7 @@ public class AnnotationQueueAutomationService {
                 handle -> handle.attach(AutomationRuleAnnotationQueueRouterDAO.class)
                         .findByQueueIds(workspaceId, queueIds)
                         .collect(Collectors.toMap(AutomationRuleAnnotationQueueRouterModel::queueId,
-                                this::toApi)));
+                                AnnotationQueueAutomationMapper.INSTANCE::map)));
     }
 
     /**
@@ -308,11 +309,4 @@ public class AnnotationQueueAutomationService {
         });
     }
 
-    private AnnotationQueueAutomation toApi(AutomationRuleAnnotationQueueRouterModel model) {
-        return AnnotationQueueAutomation.builder()
-                .enabled(model.enabled())
-                .conditions(JsonUtils.readValue(model.conditions(), AnnotationQueueAutomation.Conditions.class))
-                .maxItemsInQueue(model.maxItemsInQueue())
-                .build();
-    }
 }
