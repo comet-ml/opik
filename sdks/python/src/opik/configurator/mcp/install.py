@@ -22,7 +22,6 @@ from opik.configurator.mcp import detection as mcp_detection
 from opik.configurator.mcp import env as mcp_env
 from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp import targets as mcp_targets
-from opik.configurator.mcp import uv_tool
 from opik.configurator.mcp import verification as mcp_verification
 from opik.configurator.mcp import view as mcp_view
 
@@ -191,11 +190,6 @@ def setup_mcp_server(
         ]
     )
 
-    if isinstance(server_spec, mcp_spec.StdioServerSpec) and any(
-        result.succeeded for result in results
-    ):
-        _report_uv_tool_install(display)
-
     # One verification per run: it exercises the credentials, which are identical
     # for every host, so running it once and reporting once is enough.
     if any(result.succeeded for result in results):
@@ -219,26 +213,6 @@ def setup_mcp_server(
         for target, result in zip(selected_targets, results)
         if result.succeeded
     ]
-
-
-def _report_uv_tool_install(display: mcp_view.InstallView) -> None:
-    """Tell the user about an ``opik-mcp`` installed as a uv tool, and stop there.
-
-    Reported rather than removed: an unannounced write into someone's environment
-    is the bug this change exists to undo (see ``uv_tool``), so which remedy to
-    run is theirs to pick.
-    """
-    installed = uv_tool.installed_version()
-    if installed is None:
-        return
-
-    display.note(
-        f"Note: opik-mcp {installed} is also installed as a uv tool. The server "
-        f"registered here runs `uvx --isolated opik-mcp`, so it is unaffected — but "
-        f"that install can still take precedence over a bare `uvx opik-mcp` you run "
-        f"yourself. `uv tool upgrade opik-mcp` updates it; `uv tool uninstall "
-        f"opik-mcp` removes it."
-    )
 
 
 def _deployment_label(
@@ -416,7 +390,9 @@ def _prefetch_opik_mcp() -> None:
     warm of some neighbouring environment.
 
     Not ``uv tool install opik-mcp``: that builds a persistent tool environment
-    rather than warming a cache, and is how machines froze (see ``uv_tool``).
+    rather than warming a cache, and a bare ``uvx opik-mcp`` then resolves to it
+    instead of the index — which is how clients configured by SDK 2.0.60-2.2.44
+    froze on the version current the day they ran it.
 
     The request must stay identical to :data:`spec.PACKAGE_ARGS`, down to the
     flag — uv caches per resolved environment, so warming one the client will not

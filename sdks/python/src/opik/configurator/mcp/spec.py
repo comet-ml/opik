@@ -26,7 +26,10 @@ SERVER_NAME = "opik-mcp"
 
 #: What the registered stdio command passes to ``uvx``. ``--isolated`` makes uv
 #: ignore a leftover ``uv tool install opik-mcp``, which otherwise decides what
-#: the client launches — see ``uv_tool`` for how those came to exist.
+#: the client launches: per ``uv help tool run`` an installed tool is used
+#: "unless a version is requested" or ``--isolated`` is passed. SDK 2.0.60-2.2.44
+#: created such installs while trying to warm a cache, freezing those clients on
+#: whatever was current that day.
 #:
 #: The package stays unpinned on purpose. A version request (``opik-mcp@latest``)
 #: escapes the same install, but makes uv revalidate every package in the tree on

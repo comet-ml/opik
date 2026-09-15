@@ -705,8 +705,7 @@ client. Most problems end there.
     than the published one, on every restart.
 
     - Re-run `uvx opik mcp configure`. It registers `uvx --isolated opik-mcp`,
-      which ignores an installed tool, and reports the leftover install if it finds
-      one. `uvx opik mcp status` reports it too.
+      which ignores an installed tool, then start a new session in your client.
     - To clear the install itself: `uv tool upgrade opik-mcp` to update it, or
       `uv tool uninstall opik-mcp` to remove it. Opik will not do either for you —
       it is your environment.

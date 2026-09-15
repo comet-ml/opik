@@ -11,9 +11,7 @@ import pathlib
 from typing import Any, Dict, List, Optional
 
 import opik.config as opik_config
-from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp import targets as mcp_targets
-from opik.configurator.mcp import uv_tool
 
 # The Opik REST base implied by a local (uvx) server block that carries an API
 # key but no URL override — i.e. an Opik Cloud target.
@@ -34,10 +32,6 @@ class HostStatus:
     points_to: Optional[str] = None
     workspace: Optional[str] = None
     in_sync: Optional[bool] = None
-    # Local (uvx) registrations only: whether the recorded command escapes an
-    # `opik-mcp` installed as a uv tool. `None` for a hosted registration, which
-    # runs no local package at all.
-    bypasses_tool_install: Optional[bool] = None
 
 
 def collect_host_statuses(config: opik_config.OpikConfig) -> List[HostStatus]:
@@ -84,7 +78,6 @@ def _describe_block(
     env = block.get("env") or {}
     status.transport = TRANSPORT_LOCAL
     status.workspace = env.get("COMET_WORKSPACE")
-    status.bypasses_tool_install = _bypasses_tool_install(block)
 
     if "OPIK_URL" in env:
         api_url = str(env["OPIK_URL"])
@@ -101,75 +94,6 @@ def _describe_block(
         status.workspace is None or status.workspace == current_workspace
     )
     status.in_sync = _normalize_url(api_url) == current_api_url and workspace_in_sync
-
-
-def _bypasses_tool_install(block: Dict[str, Any]) -> bool:
-    """Whether a recorded stdio block escapes an ``opik-mcp`` uv tool install.
-
-    Two things do: the ``--isolated`` flag this installer writes, and any version
-    request (``opik-mcp@latest``, ``opik-mcp==1.2.3``) — uv uses an installed tool
-    "unless a version is requested". A hand-pinned config is therefore not
-    reported as frozen, because it is not.
-
-    Reads ``args`` and ``command`` both: most hosts split the executable from its
-    arguments, while opencode records one ``command`` list holding both.
-    """
-    words: List[str] = []
-    for key in ("args", "command"):
-        value = block.get(key)
-        if isinstance(value, list):
-            words.extend(str(item) for item in value)
-    if "--isolated" in words:
-        return True
-    return any(
-        word.startswith(mcp_spec.SERVER_NAME) and word != mcp_spec.SERVER_NAME
-        for word in words
-    )
-
-
-def uv_tool_install_note(host_statuses: List[HostStatus]) -> Optional[str]:
-    """What to say about an ``opik-mcp`` installed as a uv tool, if anything.
-
-    Only meaningful alongside a local (uvx) registration — a hosted server runs no
-    local package.
-
-    Both messages say an install *may* win rather than does, because that depends
-    on the interpreter uv picks for a given launch: a tool environment built under
-    CPython 3.13 is discarded on a platform-tag mismatch when uv resolves with
-    3.11. A flat claim is one the reader can disprove in one command. Neither is
-    phrased as an error, because a deliberate pin is rare but real.
-    """
-    installed = uv_tool.installed_version()
-    if installed is None:
-        return None
-
-    local_hosts = [
-        host
-        for host in host_statuses
-        if host.registered and host.transport == TRANSPORT_LOCAL
-    ]
-    if len(local_hosts) == 0:
-        return None
-
-    frozen = [
-        host.display_name for host in local_hosts if not host.bypasses_tool_install
-    ]
-    if len(frozen) > 0:
-        return (
-            f"opik-mcp {installed} is installed as a uv tool, and "
-            f"{', '.join(frozen)} still launches it as a bare `uvx opik-mcp` with no "
-            f"escape — so it may start {installed} every time, whatever has been "
-            f"released since. Re-run `opik mcp configure` to update the "
-            f"registration."
-        )
-
-    return (
-        f"opik-mcp {installed} is installed as a uv tool. Your registrations run "
-        f"`uvx --isolated opik-mcp`, so the MCP server is unaffected — but that "
-        f"install can still take precedence over a bare `uvx opik-mcp` you run "
-        f"yourself. `uv tool upgrade opik-mcp` updates it; `uv tool uninstall "
-        f"opik-mcp` removes it."
-    )
 
 
 def _api_url_from_mcp_url(mcp_url: str) -> str:
