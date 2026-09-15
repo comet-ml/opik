@@ -679,6 +679,73 @@ class TestBulkUploadItemsValidation:
         assert "items[0].evaluate_task_result must be a dict" in message
         assert "items[1].dataset_item_id must be a non-empty string" in message
 
+    def test_batch_upload_items__streaming_validation__sends_until_the_bad_item(
+        self,
+    ) -> None:
+        """validate_before_upload=False trades the pre-check for a single pass.
+
+        The whole point of the parameter: the bad item is still reported, but only when
+        it is reached, and what came before it has already been sent.
+        """
+        experiment, mock_rest_client = _create_experiment()
+        records = [_record(dataset_item_id=f"item-{i}") for i in range(1500)]
+        records.append(_record(evaluate_task_result="not-a-dict"))
+
+        with pytest.raises(exceptions.ValidationError) as exc_info:
+            experiment.batch_upload_items(
+                records, num_threads=1, validate_before_upload=False
+            )
+
+        assert "items[1500].evaluate_task_result must be a dict" in str(exc_info.value)
+        # The first 1000 filled a batch and went out before the bad item was reached.
+        assert _sent_batch_sizes(mock_rest_client) == [1000]
+
+    def test_batch_upload_items__validate_before_upload__sends_nothing_on_a_bad_item(
+        self,
+    ) -> None:
+        """The default keeps the pre-check, which is the only reason to pay for it."""
+        experiment, mock_rest_client = _create_experiment()
+        records = [_record(dataset_item_id=f"item-{i}") for i in range(1500)]
+        records.append(_record(evaluate_task_result="not-a-dict"))
+
+        with pytest.raises(exceptions.ValidationError):
+            experiment.batch_upload_items(records, num_threads=1)
+
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
+    @pytest.mark.parametrize("validate_before_upload", [True, False])
+    def test_batch_upload_items__batches_are_identical_either_way(
+        self, validate_before_upload: bool
+    ) -> None:
+        """Both modes batch by the same rule, so the wire form cannot depend on it."""
+        experiment, mock_rest_client = _create_experiment()
+        records = [_record(dataset_item_id=f"item-{i}") for i in range(2500)]
+
+        experiment.batch_upload_items(
+            records,
+            num_threads=1,
+            validate_before_upload=validate_before_upload,
+        )
+
+        assert _sent_batch_sizes(mock_rest_client) == [1000, 1000, 500]
+
+    def test_batch_upload_items__streaming_validation__rejects_an_oversized_item(
+        self,
+    ) -> None:
+        """The size check moves with the validation, rather than being skipped."""
+        experiment, mock_rest_client = _create_experiment()
+        oversized_trace = bulk_item.ExperimentItemBulkTrace(
+            start_time=START_TIME, output={"padding": "x" * 5_000_000}
+        )
+
+        with pytest.raises(exceptions.ValidationError) as exc_info:
+            experiment.batch_upload_items(
+                [_record(trace=oversized_trace)], validate_before_upload=False
+            )
+
+        assert "at or above the" in str(exc_info.value)
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
     def test_batch_upload_items__single_item_larger_than_request_limit__raises_validation_error(
         self,
     ) -> None:

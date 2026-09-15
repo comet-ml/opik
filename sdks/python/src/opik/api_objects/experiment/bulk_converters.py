@@ -117,8 +117,9 @@ def _validate_record(
         )
 
 
-def _validate_project_name_consistency(
-    records: List[bulk_item.ExperimentItemBulkRecord],
+def _validate_project_name_match(
+    record: bulk_item.ExperimentItemBulkRecord,
+    index: int,
     project_name: Optional[str],
     failure_reasons: List[str],
 ) -> None:
@@ -130,19 +131,45 @@ def _validate_project_name_consistency(
     if project_name is None or not project_name.strip():
         return
 
+    trace = record.trace
+    if trace is None or trace.project_name is None or not trace.project_name.strip():
+        return
+
+    if trace.project_name.casefold() != project_name.casefold():
+        failure_reasons.append(
+            f"items[{index}].trace.project_name ({trace.project_name!r}) does not match "
+            f"the upload project_name ({project_name!r})"
+        )
+
+
+def _validate_project_name_consistency(
+    records: List[bulk_item.ExperimentItemBulkRecord],
+    project_name: Optional[str],
+    failure_reasons: List[str],
+) -> None:
     for index, record in enumerate(records):
-        trace = record.trace
-        if (
-            trace is None
-            or trace.project_name is None
-            or not trace.project_name.strip()
-        ):
-            continue
-        if trace.project_name.casefold() != project_name.casefold():
-            failure_reasons.append(
-                f"items[{index}].trace.project_name ({trace.project_name!r}) does not match "
-                f"the upload project_name ({project_name!r})"
-            )
+        _validate_project_name_match(record, index, project_name, failure_reasons)
+
+
+def validate_record(
+    record: bulk_item.ExperimentItemBulkRecord,
+    index: int,
+    project_name: Optional[str],
+) -> None:
+    """Validate one record, for callers that validate as they stream.
+
+    Same checks as :func:`validate_records`, which keeps the whole upload in memory to
+    run them. Both per-record checks are per-record, so neither needs the full list.
+    """
+    failure_reasons: List[str] = []
+
+    _validate_record(record, index, failure_reasons)
+    _validate_project_name_match(record, index, project_name, failure_reasons)
+
+    if failure_reasons:
+        raise exceptions.ValidationError(
+            prefix="batch_upload_items", failure_reasons=failure_reasons
+        )
 
 
 def validate_records(
