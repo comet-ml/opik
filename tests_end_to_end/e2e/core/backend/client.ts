@@ -2079,10 +2079,28 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         status,
         message: detail,
         experiments: (body?.experiments ?? [])
-          .map((entry) => ({
-            experimentId: String(entry.experiment_id),
-            promptIndex: Number(entry.prompt_index),
-          }))
+          .map((entry) => {
+            // Validated rather than coerced. `String(undefined)` is the string
+            // `"undefined"` and `Number(undefined)` is `NaN`, and both survive
+            // as far as the caller: the first registers a teardown id that
+            // deletes nothing, the second sorts arbitrarily and silently
+            // scrambles the prompt-to-experiment mapping this whole call
+            // exists to establish. Fail where the bad field is.
+            if (typeof entry.experiment_id !== 'string' || entry.experiment_id === '') {
+              throw new Error(
+                `executeExperiments: response entry carried no experiment_id: ${JSON.stringify(entry)}`,
+              );
+            }
+            if (!Number.isInteger(entry.prompt_index)) {
+              throw new Error(
+                `executeExperiments: response entry carried a non-integer prompt_index: ${JSON.stringify(entry)}`,
+              );
+            }
+            return {
+              experimentId: entry.experiment_id,
+              promptIndex: entry.prompt_index as number,
+            };
+          })
           .sort((a, b) => a.promptIndex - b.promptIndex),
         totalItems: typeof body?.total_items === 'number' ? body.total_items : null,
       };

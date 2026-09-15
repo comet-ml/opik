@@ -1,21 +1,28 @@
 import { test, expect } from '@e2e/fixtures';
 import { ExperimentsPage } from '@e2e/pom/experiments.page';
+import { PlaygroundPage } from '@e2e/pom/playground.page';
 
 /**
  * OPIK-3268 — a Playground run against a test suite can name each prompt
  * variant's experiment, instead of every run landing under a generated name
  * like `nosy_hamster_5229`.
  *
- * Driven at `POST /v1/private/experiments/execute`, the write path the
- * Playground's test-suite mode posts to, with the resulting names read back
- * through the Experiments page a user would actually look at. The API is the
- * right level for the pairing assertion specifically: `createExperiments` runs
- * to completion — and the names are decided — strictly before any LLM call, so
- * the whole contract (which name reached which variant, what a blank one does,
- * what an omitted one does) is observable with no provider key, no paid model
- * and no model output anywhere in the assertion. The Playground UI that drives
- * this endpoint is covered from the other side by
- * `playground/playground-experiment-name.spec.ts`.
+ * Three of the four tests drive `POST /v1/private/experiments/execute`, the
+ * write path the Playground's test-suite mode posts to, with the resulting
+ * names read back through the Experiments page a user would actually look at.
+ * The API is the right level for the server-side half specifically:
+ * `createExperiments` runs to completion — and the names are decided — strictly
+ * before any LLM call, so that whole contract (which name reached which
+ * variant, what a blank one does, what an omitted one does) is observable with
+ * no provider key, no paid model and no model output anywhere in the assertion.
+ *
+ * The fourth drives the Playground itself, because the frontend half of suite
+ * mode is its own line of code: `useRunExperimentExecution` puts
+ * `experiment_name` on each variant of the execute request, and
+ * `playground/playground-experiment-name.spec.ts` cannot stand in for it — that
+ * spec runs the Playground in DATASET mode, which posts experiments one at a
+ * time through `createLogPlaygroundProcessor` and never reaches this endpoint.
+ * Without the UI test, deleting the suite-mode line leaves the estate green.
  *
  * `test-suites-smoke.spec.ts` already runs a suite from the Playground, but it
  * only counts output rows, so nothing in the estate joins the name that was
@@ -161,6 +168,99 @@ test.describe('Test Suites — experiment naming from a suite run', { tag: ['@t2
       await test.step('No experiment landed against the suite', async () => {
         const forSuite = await backendClient.listExperimentsForDataset(testSuite.id);
         expect(forSuite).toHaveLength(0);
+      });
+    },
+  );
+
+  test(
+    'a name typed into the Playground reaches the suite run\'s execute request',
+    { tag: ['@cap:test-suites.run-suite-playground'] },
+    async ({
+      project,
+      testSuite,
+      providerKeys,
+      backendClient,
+      registerExperimentCleanup,
+      testNamespace,
+      page,
+    }) => {
+      test.setTimeout(180_000);
+
+      const experimentName = `${testNamespace}-suite-ui`;
+      const modelDisplayName = 'unreachable-model';
+
+      /** The execute request bodies the page sent, in the shape that matters here. */
+      const executed: Array<{ prompts?: Array<{ experiment_name?: string }> }> = [];
+      page.on('request', (request) => {
+        if (request.method() !== 'POST') return;
+        if (!/\/v1\/private\/experiments\/execute$/.test(new URL(request.url()).pathname)) return;
+        executed.push((request.postDataJSON() ?? {}) as { prompts?: Array<{ experiment_name?: string }> });
+      });
+
+      await test.step('Seed a selectable provider that refuses every connection', async () => {
+        // The model has to be pickable for Run to enable, but nothing here
+        // depends on its output: the experiments are named and created before
+        // the first completion is attempted, so an unreachable provider keeps
+        // this deterministic and free of a provider key.
+        await providerKeys.createUnreachable({
+          providerName: `${testNamespace}-provider`,
+          modelName: modelDisplayName,
+        });
+      });
+
+      const playground = new PlaygroundPage(page, project.id);
+
+      await test.step('Open the Playground on the seeded suite', async () => {
+        await playground.goto();
+        await playground.waitForReady();
+        await playground.configureVariant(0, {
+          userPrompt: '{{question}}',
+          modelDisplayName,
+        });
+        await playground.clickRunExperiment();
+        await playground.selectRunExperimentSource({
+          mode: 'test_suite',
+          entityName: testSuite.name,
+        });
+        await expect(playground.loadedSourcePill()).toBeVisible();
+      });
+
+      await test.step('Name the variant and re-run', async () => {
+        await playground.setExperimentName(0, experimentName);
+        await playground.clickReRun();
+        await expect
+          .poll(() => executed.length, { timeout: 120_000, intervals: [500, 1000, 2000] })
+          .toBeGreaterThanOrEqual(1);
+      });
+
+      await test.step('The request carried the typed name on that variant', async () => {
+        // Asserted on the request rather than only on what was stored: suite
+        // mode sends every variant in ONE body, so the position of the name
+        // inside `prompts` is the whole binding, and it is only visible here.
+        expect(executed).toHaveLength(1);
+        expect(executed[0].prompts?.map((p) => p.experiment_name)).toEqual([experimentName]);
+      });
+
+      await test.step('The suite holds exactly that one experiment, under that name', async () => {
+        const seen = new Set<string>();
+        await expect
+          .poll(
+            async () => {
+              const found = await backendClient.listExperimentsForDataset(testSuite.id);
+              for (const experiment of found) {
+                if (seen.has(experiment.id)) continue;
+                seen.add(experiment.id);
+                // Registered from inside the poll: the run creates the id, and
+                // an extra experiment the run should not have written is
+                // exactly what fails the assertion below — it has to be swept
+                // even, especially, when that happens.
+                registerExperimentCleanup(experiment.id, experiment.name);
+              }
+              return found.map((e) => e.name);
+            },
+            { timeout: 60_000, intervals: [500, 1000, 2000, 5000] },
+          )
+          .toEqual([experimentName]);
       });
     },
   );

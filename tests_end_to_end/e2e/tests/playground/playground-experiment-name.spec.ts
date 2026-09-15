@@ -1,5 +1,6 @@
 import { test, expect } from '@e2e/fixtures';
 import type { Page } from '@playwright/test';
+import type { BackendClient } from '@e2e/core/backend';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 import { ExperimentsPage } from '@e2e/pom/experiments.page';
 
@@ -30,7 +31,42 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
   interface PostedExperiment {
     name?: string;
     dataset_name?: string;
+    /**
+     * `getExperimentFromRun` stringifies the variant's own rendered prompt into
+     * `metadata.messages`. It is the only field on this POST that says which
+     * variant produced it, and so the only way to assert that a name reached
+     * the variant it was typed into rather than merely reaching *some* variant.
+     */
+    metadata?: { messages?: string };
   }
+
+  /**
+   * List the dataset's experiments, registering each id for teardown the first
+   * time it appears.
+   *
+   * Registering from inside the poll rather than after it is the point. The ids
+   * do not exist until the run creates them, and the assertions these polls
+   * feed are precisely the ones that fail when the run created something
+   * unexpected — an extra, server-named experiment carries no run prefix, so
+   * `global-teardown.ts`'s sweep can never reach it. Registering only after the
+   * assertion passes would leak exactly the rows a failure left behind.
+   */
+  const listerRegistering = (
+    backendClient: BackendClient,
+    datasetId: string,
+    registerExperimentCleanup: (id: string, name: string) => void,
+  ) => {
+    const seen = new Set<string>();
+    return async () => {
+      const found = await backendClient.listExperimentsForDataset(datasetId);
+      for (const experiment of found) {
+        if (seen.has(experiment.id)) continue;
+        seen.add(experiment.id);
+        registerExperimentCleanup(experiment.id, experiment.name);
+      }
+      return found;
+    };
+  };
 
   /**
    * Collect every experiment-creation POST the page makes, from before the run
@@ -68,6 +104,9 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
 
       const nameA = `${testNamespace}-variant-a`;
       const nameB = `${testNamespace}-variant-b`;
+      // A literal only variant B's prompt carries, so that B's experiment POST
+      // is identifiable as B's no matter which order the two POSTs land in.
+      const variantBMarker = 'second-variant-marker';
       const modelDisplayName = 'unreachable-model';
 
       await test.step('Seed a selectable provider that refuses every connection', async () => {
@@ -100,6 +139,12 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         // indistinguishable in the Experiments list, which is the whole problem
         // this feature exists to fix.
         expect(await playground.readExperimentName(1)).toBe('');
+        // Give B a prompt of its own. Two byte-identical variants post two
+        // indistinguishable bodies, and then the only thing separating them is
+        // arrival order — which races. With a marker the name-to-variant
+        // pairing below is assertable, and a build that swapped the two names
+        // between prompt ids fails instead of passing on a set comparison.
+        await playground.configureVariant(1, { userPrompt: `${variantBMarker} {{input}}` });
         await playground.setExperimentName(1, nameB);
         expect(await playground.readExperimentName(0)).toBe(nameA);
       });
@@ -109,34 +154,38 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
         await expect
           .poll(() => posted.length, { timeout: 120_000, intervals: [500, 1000, 2000] })
           .toBeGreaterThanOrEqual(2);
-        // Sorted rather than indexed: the two POSTs race each other, so their
-        // arrival order carries no meaning and asserting on it would be flake.
-        // Which name went with which variant is established server-side below,
-        // via the experiment each POST actually created.
-        expect(posted.map((p) => p.name).sort()).toEqual([nameA, nameB].sort());
+        // Keyed by name rather than compared as two sorted lists: the two POSTs
+        // race each other, so their arrival order carries no meaning, but the
+        // pairing does. A build that attached A's name to B's variant is the
+        // bug `setPromptExperimentName`'s promptId keying exists to prevent,
+        // and a set comparison cannot see it — the sorted names match either
+        // way. The prompt each POST carries is what tells them apart.
+        const promptByName = new Map(posted.map((p) => [p.name, p.metadata?.messages ?? '']));
+        expect([...promptByName.keys()].sort()).toEqual([nameA, nameB].sort());
+        expect(promptByName.get(nameB)).toContain(variantBMarker);
+        expect(promptByName.get(nameA)).not.toContain(variantBMarker);
         expect(posted.map((p) => p.dataset_name)).toEqual([dataset.name, dataset.name]);
       });
 
       const experiments = await test.step('The dataset carries exactly those two experiments', async () => {
+        const listExperiments = listerRegistering(
+          backendClient,
+          dataset.id,
+          registerExperimentCleanup,
+        );
+
         // The full set for this dataset, not a `find()` of the two expected
         // names: a run that also wrote a third, auto-named experiment would
         // satisfy a lookup-by-name and is exactly the regression worth failing
         // on. The dataset is fixture-seeded, so nothing else writes to it.
         await expect
-          .poll(
-            async () =>
-              (await backendClient.listExperimentsForDataset(dataset.id))
-                .map((e) => e.name)
-                .sort(),
-            { timeout: 60_000, intervals: [500, 1000, 2000, 5000] },
-          )
+          .poll(async () => (await listExperiments()).map((e) => e.name).sort(), {
+            timeout: 60_000,
+            intervals: [500, 1000, 2000, 5000],
+          })
           .toEqual([nameA, nameB].sort());
 
-        const created = await backendClient.listExperimentsForDataset(dataset.id);
-        for (const experiment of created) {
-          registerExperimentCleanup(experiment.id, experiment.name);
-        }
-        return created;
+        return listExperiments();
       });
 
       await test.step('Both names render on the project Experiments page', async () => {
@@ -209,20 +258,24 @@ test.describe('Playground — experiment naming', { tag: ['@t2-cuj', '@area:play
       });
 
       await test.step('The experiment landed under a generated name', async () => {
+        // This is the one experiment in the PR that the run-prefix sweep in
+        // `global-teardown.ts` can never reach: the whole point of the test is
+        // that the server named it, so its name carries no run prefix to match
+        // on. `listerRegistering` is what keeps it from outliving a failed run.
+        const listExperiments = listerRegistering(
+          backendClient,
+          dataset.id,
+          registerExperimentCleanup,
+        );
+
         await expect
-          .poll(
-            async () => (await backendClient.listExperimentsForDataset(dataset.id)).length,
-            { timeout: 60_000, intervals: [500, 1000, 2000, 5000] },
-          )
+          .poll(async () => (await listExperiments()).length, {
+            timeout: 60_000,
+            intervals: [500, 1000, 2000, 5000],
+          })
           .toBe(1);
 
-        const [experiment] = await backendClient.listExperimentsForDataset(dataset.id);
-        // Registered here and not earlier because the id does not exist until
-        // the run has created it. This is the one experiment in the PR that the
-        // run-prefix sweep in `global-teardown.ts` can never reach: the whole
-        // point of the test is that the server named it, so its name carries no
-        // run prefix to match on. Without this it outlives the run.
-        registerExperimentCleanup(experiment.id, experiment.name);
+        const [experiment] = await listExperiments();
         expect(experiment.name.trim()).not.toBe('');
         // The generated names are `<adjective>_<animal>_<digits>`; anything
         // carrying the run namespace would mean the whitespace was forwarded
