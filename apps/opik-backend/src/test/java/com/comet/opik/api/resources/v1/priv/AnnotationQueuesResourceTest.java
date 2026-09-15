@@ -34,10 +34,12 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.AnnotationQueueItemHistoryDAO;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -153,9 +155,11 @@ class AnnotationQueuesResourceTest {
     private AnnotationQueuesResourceClient annotationQueuesResourceClient;
     private TraceResourceClient traceResourceClient;
     private TransactionTemplateAsync clickHouseTemplate;
+    private AnnotationQueueItemHistoryDAO itemHistoryDAO;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, TransactionTemplateAsync clickHouseTemplate) {
+    void setUpAll(ClientSupport client, TransactionTemplateAsync clickHouseTemplate,
+            AnnotationQueueItemHistoryDAO itemHistoryDAO) {
         this.baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
@@ -164,6 +168,7 @@ class AnnotationQueuesResourceTest {
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.clickHouseTemplate = clickHouseTemplate;
+        this.itemHistoryDAO = itemHistoryDAO;
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
     }
@@ -851,7 +856,7 @@ class AnnotationQueuesResourceTest {
             // History is what stops automation re-adding an item a reviewer deliberately removed, so it
             // has to survive the removal that makes it matter.
             assertThat(getItemsCount(WORKSPACE_ID, annotationQueue.id())).isZero();
-            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(itemIds.size());
+            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id(), projectId)).isEqualTo(itemIds.size());
         }
 
         @Test
@@ -868,12 +873,12 @@ class AnnotationQueuesResourceTest {
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
                     annotationQueue.id(), itemIds, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id())).isEqualTo(itemIds.size());
+            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id(), projectId)).isEqualTo(itemIds.size());
 
             annotationQueuesResourceClient.deleteAnnotationQueueBatch(
                     Set.of(annotationQueue.id()), API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id())).isZero();
+            assertThat(getItemHistoryCount(WORKSPACE_ID, annotationQueue.id(), projectId)).isZero();
         }
 
         @Test
@@ -2442,17 +2447,12 @@ class AnnotationQueuesResourceTest {
                 .build();
     }
 
-    private int getItemHistoryCount(String workspaceId, UUID queueId) {
-        String historyCountQuery = "SELECT count(*) as cnt FROM annotation_queue_item_history WHERE workspace_id=:workspace_id AND queue_id=:queue_id";
-
-        return clickHouseTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(historyCountQuery)
-                    .bind("workspace_id", workspaceId)
-                    .bind("queue_id", queueId.toString());
-            return Mono.from(statement.execute())
-                    .flatMapMany(result -> result.map((row, metadata) -> row.get("cnt", Integer.class)))
-                    .singleOrEmpty();
-        }).block();
+    private long getItemHistoryCount(String workspaceId, UUID queueId, UUID projectId) {
+        return itemHistoryDAO.countByQueueId(queueId, projectId)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
     }
 
     private int getItemsCount(String workspaceId, UUID queueId) {

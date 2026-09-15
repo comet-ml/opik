@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.utils.template.TemplateUtils;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
@@ -39,6 +40,16 @@ public interface AnnotationQueueItemHistoryDAO {
     Mono<Set<UUID>> findPreviouslyAddedItems(UUID queueId, UUID projectId, Set<UUID> itemIds);
 
     Mono<Long> deleteByQueueIds(Set<UUID> queueIds, Set<UUID> projectIds);
+
+    /**
+     * How many items this queue has ever held.
+     *
+     * <p>Nothing in production asks this — the history is only ever queried for a specific set of item
+     * ids. It exists so a test can assert the ledger's contents through the DAO that owns it rather than
+     * by reaching into ClickHouse itself.
+     */
+    @VisibleForTesting
+    Mono<Long> countByQueueId(UUID queueId, UUID projectId);
 }
 
 @Singleton
@@ -83,6 +94,14 @@ class AnnotationQueueItemHistoryDAOImpl implements AnnotationQueueItemHistoryDAO
     // Scoped by project as well as queue because the sort key is (workspace_id, project_id, queue_id,
     // item_id): without project_id the predicate cannot use the key past workspace_id, turning a queue
     // deletion into a scan of every history row in the workspace.
+    private static final String COUNT_BY_QUEUE_ID = """
+            SELECT count(DISTINCT item_id) AS count
+            FROM annotation_queue_item_history
+            WHERE workspace_id = :workspace_id
+            AND project_id = :project_id
+            AND queue_id = :queue_id
+            """;
+
     private static final String DELETE_BY_QUEUE_IDS = """
             DELETE FROM annotation_queue_item_history
             WHERE workspace_id = :workspace_id
@@ -138,6 +157,20 @@ class AnnotationQueueItemHistoryDAOImpl implements AnnotationQueueItemHistoryDAO
                 .flatMap(result -> result.map(
                         (row, metadata) -> UUID.fromString(row.get("item_id", String.class))))
                 .collect(Collectors.toSet());
+    }
+
+    @Override
+    public Mono<Long> countByQueueId(@NonNull UUID queueId, @NonNull UUID projectId) {
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(COUNT_BY_QUEUE_ID)
+                            .bind("project_id", projectId.toString())
+                            .bind("queue_id", queueId.toString());
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                .reduce(0L, Long::sum);
     }
 
     @Override
