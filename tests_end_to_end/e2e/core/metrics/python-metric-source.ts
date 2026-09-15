@@ -130,6 +130,16 @@ export interface PythonScoreSpec {
 function toPythonLiteral(value: number | string | boolean | null): string {
   if (value === null) return 'None';
   if (typeof value === 'boolean') return value ? 'True' : 'False';
+  // JSON.stringify renders NaN and ±Infinity as `null`, which would silently
+  // emit `value=null` — not Python's `None` but a name Python cannot resolve,
+  // so the metric would die on a NameError that looks nothing like the caller's
+  // mistake. Refuse here, where the bad value is still attributable.
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    throw new Error(
+      `buildScoreResultMetric: ${value} has no Python literal form. ` +
+        'Use a finite number, or `value: null` for the "metric returned no value" drop.',
+    );
+  }
   // JSON's string and number grammars are both Python literal grammars for the
   // ASCII names and finite values these specs use.
   return JSON.stringify(value);
