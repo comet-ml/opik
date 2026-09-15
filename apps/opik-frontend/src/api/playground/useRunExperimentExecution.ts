@@ -25,6 +25,7 @@ interface UseRunExperimentExecutionParams {
   versionHash?: string;
   prompts: PlaygroundPromptType[];
   projectName?: string;
+  experimentNames?: Record<string, string>;
 }
 
 const runExperimentExecution = async ({
@@ -34,6 +35,7 @@ const runExperimentExecution = async ({
   versionHash,
   prompts,
   projectName,
+  experimentNames,
 }: UseRunExperimentExecutionParams): Promise<ExperimentExecutionResponse> => {
   const promptVariants = prompts.map((prompt) => {
     const versionRefs = collectPromptVersionRefs(prompt);
@@ -49,7 +51,7 @@ const runExperimentExecution = async ({
         prompt.configs as Record<string, unknown>,
       ),
       prompt_versions: promptVersions,
-      experiment_name: prompt.experimentName?.trim() || undefined,
+      experiment_name: experimentNames?.[prompt.id],
     };
   });
 

@@ -4,6 +4,8 @@ import { ExternalLink } from "lucide-react";
 import { Button } from "@/ui/button";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import PlaygroundProgressIndicator from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import useResolvedExperimentNames from "@/v2/pages/PlaygroundPage/useResolvedExperimentNames";
 import { useCreatedExperiments, useIsRunning } from "@/store/PlaygroundStore";
 import { useNavigateToExperiment } from "@/v2/pages-shared/experiments/useNavigateToExperiment";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
@@ -17,6 +19,32 @@ interface PlaygroundExperimentOutputActionsProps {
   total: number;
   isLoadingTotal?: boolean;
 }
+
+const CreatesExperimentsLabel = () => {
+  const { namesByPromptId } = useResolvedExperimentNames(true);
+  const names = Object.values(namesByPromptId);
+
+  if (names.length === 0) {
+    return (
+      <span className="py-[6px] pl-3 text-sm text-muted-slate">
+        Experiment results
+      </span>
+    );
+  }
+
+  const [first, ...rest] = names;
+
+  return (
+    <TooltipWrapper content={names.join(", ")}>
+      <span className="truncate py-[6px] pl-3 text-sm text-muted-slate">
+        Creates experiments: {first}
+        {rest.length > 0 && (
+          <span className="ml-1 underline">+{rest.length} more</span>
+        )}
+      </span>
+    </TooltipWrapper>
+  );
+};
 
 const PlaygroundExperimentOutputActions = ({
   datasetId,
@@ -67,9 +95,7 @@ const PlaygroundExperimentOutputActions = ({
               <ExternalLink className="ml-1 size-3.5 shrink-0" />
             </Button>
           ) : (
-            <span className="py-[6px] pl-3 text-sm text-muted-slate">
-              Experiment results
-            </span>
+            <CreatesExperimentsLabel />
           )}
           <DataTablePagination
             page={page}

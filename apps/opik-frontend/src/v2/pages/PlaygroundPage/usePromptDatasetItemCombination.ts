@@ -153,6 +153,7 @@ interface UsePromptDatasetItemCombinationArgs {
   ) => void;
   deleteAbortController: (key: string) => void;
   throttlingSeconds: number;
+  experimentNames?: Record<string, string>;
 }
 
 const usePromptDatasetItemCombination = ({
@@ -164,6 +165,7 @@ const usePromptDatasetItemCombination = ({
   addAbortController,
   deleteAbortController,
   throttlingSeconds,
+  experimentNames,
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
@@ -271,7 +273,7 @@ const usePromptDatasetItemCombination = ({
           providerMessages,
           promptLibraryVersions,
           promptLibraryMetadata,
-          experimentName: prompt.experimentName?.trim() || undefined,
+          experimentName: experimentNames?.[prompt.id],
           configs: prompt.configs,
           model: prompt.model,
           provider: prompt.provider,
@@ -323,6 +325,7 @@ const usePromptDatasetItemCombination = ({
       deleteAbortController,
       selectedRuleIds,
       throttlingSeconds,
+      experimentNames,
     ],
   );
 

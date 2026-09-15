@@ -31,7 +31,7 @@ import {
   useSetSelectedRuleIds,
   useResetDatasetFilters,
   useResetOutputMap,
-  useClearPromptExperimentNames,
+  useClearPromptExperimentLabels,
   useSetExperimentNamePrefix,
   useSetDatasetType,
   useDatasetType,
@@ -81,7 +81,7 @@ const PlaygroundHeader = ({
   const resetDatasetFilters = useResetDatasetFilters();
   const resetOutputMap = useResetOutputMap();
   const setExperimentNamePrefix = useSetExperimentNamePrefix();
-  const clearPromptExperimentNames = useClearPromptExperimentNames();
+  const clearPromptExperimentLabels = useClearPromptExperimentLabels();
   const isRunning = useIsRunning();
   const setDatasetType = useSetDatasetType();
   const currentDatasetType = useDatasetType();
@@ -248,7 +248,7 @@ const PlaygroundHeader = ({
     resetDatasetFilters();
     setSelectedRuleIds(null);
     setExperimentNamePrefix(null);
-    clearPromptExperimentNames();
+    clearPromptExperimentLabels();
     setDatasetType(null);
   }, [
     clearCreatedExperiments,
@@ -257,7 +257,7 @@ const PlaygroundHeader = ({
     resetDatasetFilters,
     setSelectedRuleIds,
     setExperimentNamePrefix,
-    clearPromptExperimentNames,
+    clearPromptExperimentLabels,
     setDatasetType,
   ]);
 

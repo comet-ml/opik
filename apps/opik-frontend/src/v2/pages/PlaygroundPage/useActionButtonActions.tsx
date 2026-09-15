@@ -46,6 +46,7 @@ import {
   TraceMapping,
   buildLogProcessor,
 } from "@/api/playground/createLogPlaygroundProcessor";
+import useResolvedExperimentNames from "@/v2/pages/PlaygroundPage/useResolvedExperimentNames";
 import usePromptDatasetItemCombination, {
   DatasetItemPromptCombination,
 } from "@/v2/pages/PlaygroundPage/usePromptDatasetItemCombination";
@@ -101,6 +102,8 @@ const useActionButtonActions = ({
     new Map<string, { controller: AbortController; promptId: string }>(),
   );
   const runExperimentExecution = useRunExperimentExecution();
+  const { namesByPromptId: experimentNames } =
+    useResolvedExperimentNames(!!datasetId);
 
   const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
 
@@ -246,6 +249,7 @@ const useActionButtonActions = ({
       addAbortController,
       deleteAbortController,
       throttlingSeconds,
+      experimentNames,
     });
 
   const handlePollTimeout = useCallback(
@@ -547,6 +551,7 @@ const useActionButtonActions = ({
         versionHash,
         prompts,
         projectName,
+        experimentNames,
       });
 
       // Build experiment-to-prompt mapping from BE response
@@ -593,6 +598,7 @@ const useActionButtonActions = ({
     setProgressPhase,
     queryClient,
     projectName,
+    experimentNames,
     pollExperimentCompletion,
   ]);
 
@@ -721,6 +727,7 @@ const useActionButtonActions = ({
           versionHash,
           prompts: [prompt],
           projectName,
+          experimentNames,
         });
 
         const experiment = response.experiments[0];
@@ -761,6 +768,7 @@ const useActionButtonActions = ({
       datasetVersionId,
       versionHash,
       projectName,
+      experimentNames,
       runExperimentExecution,
       setPromptRunning,
       setExperimentByPromptId,

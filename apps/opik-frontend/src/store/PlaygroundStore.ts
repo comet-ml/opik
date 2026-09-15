@@ -128,8 +128,8 @@ export type PlaygroundStore = {
     changes: Partial<PlaygroundPromptType>,
   ) => void;
   addPrompt: (prompt: PlaygroundPromptType, position?: number) => void;
-  setPromptExperimentName: (promptId: string, name: string) => void;
-  clearPromptExperimentNames: () => void;
+  setPromptExperimentLabel: (promptId: string, label: string) => void;
+  clearPromptExperimentLabels: () => void;
   deletePrompt: (promptId: string) => void;
   resetOutputMap: () => void;
   updateOutput: (
@@ -239,25 +239,25 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
-      setPromptExperimentName: (promptId, name) => {
+      setPromptExperimentLabel: (promptId, label) => {
         set((state) => ({
           ...state,
           promptMap: {
             ...state.promptMap,
             [promptId]: {
               ...state.promptMap[promptId],
-              experimentName: name,
+              experimentLabel: label,
             },
           },
         }));
       },
-      clearPromptExperimentNames: () => {
+      clearPromptExperimentLabels: () => {
         set((state) => ({
           ...state,
           promptMap: Object.fromEntries(
             Object.entries(state.promptMap).map(([id, prompt]) => [
               id,
-              { ...prompt, experimentName: undefined },
+              { ...prompt, experimentLabel: undefined },
             ]),
           ),
         }));
@@ -607,11 +607,11 @@ export const useAddPrompt = () =>
 export const useDeletePrompt = () =>
   usePlaygroundStore((state) => state.deletePrompt);
 
-export const useSetPromptExperimentName = () =>
-  usePlaygroundStore((state) => state.setPromptExperimentName);
+export const useSetPromptExperimentLabel = () =>
+  usePlaygroundStore((state) => state.setPromptExperimentLabel);
 
-export const useClearPromptExperimentNames = () =>
-  usePlaygroundStore((state) => state.clearPromptExperimentNames);
+export const useClearPromptExperimentLabels = () =>
+  usePlaygroundStore((state) => state.clearPromptExperimentLabels);
 
 export const useResetOutputMap = () =>
   usePlaygroundStore((state) => state.resetOutputMap);

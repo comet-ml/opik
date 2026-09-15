@@ -31,14 +31,12 @@ import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptMod
 import { cn, getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
-import PromptExperimentName from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/PromptExperimentName";
 import {
   useDatasetVariables,
   useDatasetSampleData,
   useDeletePrompt,
   usePromptById,
   usePromptCount,
-  useSetPromptExperimentName,
   useUpdateOutput,
   useUpdatePrompt,
   useProviderValidationTrigger,
@@ -72,7 +70,6 @@ interface PlaygroundPromptProps {
   modelResolver: ModelResolver;
   onRun?: () => void;
   onStop?: () => void;
-  isExperimentMode?: boolean;
 }
 
 const PlaygroundPrompt = ({
@@ -85,7 +82,6 @@ const PlaygroundPrompt = ({
   modelResolver,
   onRun,
   onStop,
-  isExperimentMode,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
   const activeProjectId = useActiveProjectId();
@@ -101,10 +97,9 @@ const PlaygroundPrompt = ({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
 
-  const { model, messages, configs, name, experimentName } = prompt;
+  const { model, messages, configs, name } = prompt;
 
   const updatePrompt = useUpdatePrompt();
-  const setPromptExperimentName = useSetPromptExperimentName();
   const deletePrompt = useDeletePrompt();
   const updateOutput = useUpdateOutput();
 
@@ -375,13 +370,6 @@ const PlaygroundPrompt = ({
             size="icon-xs"
             variant="ghost"
           />
-          {isExperimentMode && (
-            <PromptExperimentName
-              promptId={promptId}
-              value={experimentName}
-              onChange={(value) => setPromptExperimentName(promptId, value)}
-            />
-          )}
         </div>
 
         <div
