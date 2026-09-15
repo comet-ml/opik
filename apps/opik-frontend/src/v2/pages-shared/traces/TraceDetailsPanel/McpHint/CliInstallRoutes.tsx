@@ -30,7 +30,7 @@ const CLIENTS: Array<{ client: McpClient; label: string; logo: string }> = [
 /**
  * One CLI command per client, for deployments with no hosted MCP server.
  *
- * These are the install route here, not a convenience: a local server is a
+ * These are the install routes here, not a convenience: a local server is a
  * stdio process holding an API key, which no deeplink can encode, and the CLI
  * is what reads that key from the developer's own configuration or asks for it
  * in their terminal. The prompt beside them hands the same job to an agent,

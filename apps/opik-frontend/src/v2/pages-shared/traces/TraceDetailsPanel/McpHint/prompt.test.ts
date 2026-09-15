@@ -32,8 +32,21 @@ describe("the install prompts", () => {
   it("name the workspace for the local CLI but never carry a key", () => {
     const prompt = local();
 
-    expect(prompt).toContain('workspace "my-workspace"');
+    expect(prompt).toContain('the workspace I am looking at is "my-workspace"');
     expect(prompt).not.toMatch(/api[_-]?key/i);
+  });
+
+  it("has the agent check the workspace the CLI actually configured", () => {
+    // `opik mcp configure` reuses ~/.opik.config, which can point elsewhere
+    // than the workspace the page is showing.
+    expect(local()).toContain("stop and tell me if they differ");
+  });
+
+  it("has the agent verify the server before it debugs", () => {
+    for (const prompt of [hosted(), local()]) {
+      expect(prompt).toContain("entity_type project");
+      expect(prompt).toContain("verified or pending");
+    }
   });
 
   it("leave the client's install route to the agent on the hosted server", () => {

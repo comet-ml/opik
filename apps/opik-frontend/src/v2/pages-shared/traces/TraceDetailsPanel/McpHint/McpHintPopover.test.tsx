@@ -95,4 +95,20 @@ describe("the hint card without a hosted server", () => {
     expect(onDone).not.toHaveBeenCalled();
     expect(screen.getByTestId("mcp-route-prompt")).toBeInTheDocument();
   });
+
+  it("restarts the clock when the user copies again", () => {
+    const { onDone } = renderCard();
+    fireEvent.click(screen.getByTestId("mcp-route-cursor"));
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS - 200));
+    fireEvent.click(screen.getByLabelText("Copy it"));
+
+    // The original deadline passes without closing: a copy made just before it
+    // used to be followed by the card vanishing.
+    act(() => void vi.advanceTimersByTime(300));
+    expect(onDone).not.toHaveBeenCalled();
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
 });

@@ -1,4 +1,10 @@
-/** Values are the keys the Opik CLI accepts for `--ai-client`. */
+/**
+ * The clients the card offers a tile for. Values are the keys the Opik CLI
+ * accepts for `--ai-client`, so analytics join against SDK-side events without
+ * a lookup table — but this is a subset of them: the CLI also takes `opencode`,
+ * which has no logo in the repo to put on a tile. The prompt route covers it,
+ * and every other client we never enumerated.
+ */
 export const MCP_CLIENT = {
   CLAUDE_CODE: "claude-code",
   CURSOR: "cursor",

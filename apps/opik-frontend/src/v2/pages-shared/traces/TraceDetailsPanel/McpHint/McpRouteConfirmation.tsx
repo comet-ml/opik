@@ -8,18 +8,21 @@ import { MCP_SNIPPET_ROW_CLASS } from "./tileStyles";
 
 type McpRouteConfirmationProps = {
   route: McpRouteOutcome;
+  /** Reported so the copy reaches the funnel and the dismissal clock restarts. */
+  onRecopy: () => void;
 };
 
 /** What the card shows once the user has left through one of the routes. */
 const McpRouteConfirmation: React.FunctionComponent<
   McpRouteConfirmationProps
-> = ({ route }) => {
+> = ({ route, onRecopy }) => {
   const [hasRecopied, setHasRecopied] = useState(false);
 
   const handleRecopy = () => {
     if (!route.snippet) return;
     copy(route.snippet);
     setHasRecopied(true);
+    onRecopy();
   };
 
   return (

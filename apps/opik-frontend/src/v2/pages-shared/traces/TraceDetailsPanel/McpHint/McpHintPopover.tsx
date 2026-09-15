@@ -36,14 +36,28 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
     (route: McpRouteOutcome) => {
       onAction();
       setOutcome(route);
+      setCopiedAt(Date.now());
     },
     [onAction],
   );
+
+  // The fallback under a confirmation copies the prompt, so it belongs in the
+  // same funnel step as the prompt route itself.
+  const handleRecopy = useCallback(() => {
+    trackEvent(OpikEvent.MCP_PROMPT_COPIED, {
+      install_mode: installMode,
+      entity_type: target.entityType,
+    });
+    setCopiedAt(Date.now());
+  }, [installMode, target.entityType]);
 
   // A copy is finished business, so the confirmation stands for a few seconds
   // and then the card gets out of the way — unless the pointer is still on it,
   // in which case it goes back to the routes rather than vanishing under them.
   const cardRef = useRef<HTMLDivElement>(null);
+  // Bumped by a recopy, which restarts the clock below: without it a copy made
+  // just before the deadline was followed by the card closing.
+  const [copiedAt, setCopiedAt] = useState(0);
   useEffect(() => {
     if (outcome?.kind !== "copied") return;
 
@@ -56,7 +70,7 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
     }, MCP_COPIED_DISMISS_MS);
 
     return () => clearTimeout(timer);
-  }, [outcome, onDone]);
+  }, [outcome, copiedAt, onDone]);
 
   const handleLearnMoreClick = () => {
     onAction();
@@ -81,7 +95,7 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
 
       <div className="px-2 pb-1 pt-0.5">
         {outcome ? (
-          <McpRouteConfirmation route={outcome} />
+          <McpRouteConfirmation route={outcome} onRecopy={handleRecopy} />
         ) : (
           <>
             <p className="comet-body-xs mb-3 leading-4 text-muted-slate">

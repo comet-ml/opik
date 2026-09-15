@@ -34,8 +34,12 @@ const DETECT_STEP =
 
 // A newly registered MCP server is not available in the session that registered
 // it, and that restart is where people lose the thread. The agent owns it.
+//
+// The verification is not ceremony: a failed write, a pending sign-in and a
+// stale connection all look like success from the outside, and step 4 would
+// then report that it cannot see the trace rather than that nothing installed.
 const RELOAD_STEP =
-  "3. Reload your MCP servers and finish the browser sign-in if prompted. If the server only loads in a new session, say so, ask me to restart you, and repeat step 4 verbatim so I can paste it back.";
+  "3. Reload your MCP servers and finish the browser sign-in if prompted. Then verify, per agent, by calling the Opik `list` tool with entity_type project and showing me the result; report each agent as verified or pending, and do not go on from an agent that is neither. If the server only loads in a new session, say so, ask me to restart you, and repeat step 4 verbatim so I can paste it back.";
 
 const SKILLS =
   "Install the Opik skills the same way: `npx skills add comet-ml/opik-skills -g -y -a <agent>`.";
@@ -73,9 +77,9 @@ export const buildLocalInstallPrompt = (
     "Connect me to Opik MCP, then debug a failing trace.",
     "",
     DETECT_STEP,
-    `2. Install uv if it is missing, then run \`uvx opik mcp configure --ai-client <agent> --skills\` for each chosen agent, against workspace "${inlineValue(
+    `2. Install uv if it is missing, then run \`uvx opik mcp configure --ai-client <agent> --skills\` for each chosen agent. It reuses my existing Opik configuration, which may point somewhere else: the workspace I am looking at is "${inlineValue(
       context.workspaceName,
-    )}". It reuses my existing Opik configuration. If it needs a terminal, or asks for anything you cannot answer, stop and ask me to run it myself, then carry on from step 3. ${NO_SECRETS}`,
+    )}", so check the one it configured and stop and tell me if they differ rather than debugging the wrong workspace. If it needs a terminal, or asks for anything you cannot answer, stop and ask me to run it myself, then carry on from step 3. ${NO_SECRETS}`,
     RELOAD_STEP,
     debugStep(context),
   ].join("\n");

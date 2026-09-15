@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 vi.mock("clipboard-copy", () => ({ default: vi.fn() }));
 
@@ -8,12 +8,14 @@ import McpRouteConfirmation from "./McpRouteConfirmation";
 import { MCP_DEEPLINK_FALLBACK_NOTE } from "./constants";
 import { McpRouteOutcome } from "./types";
 
-const renderConfirmation = (route: McpRouteOutcome) =>
-  render(
+const renderConfirmation = (route: McpRouteOutcome, onRecopy = vi.fn()) => ({
+  onRecopy,
+  ...render(
     <TooltipProvider>
-      <McpRouteConfirmation route={route} />
+      <McpRouteConfirmation route={route} onRecopy={onRecopy} />
     </TooltipProvider>,
-  );
+  ),
+});
 
 const tick = (container: HTMLElement) =>
   container.querySelector("svg.mt-0\\.5");
@@ -56,5 +58,17 @@ describe("the route confirmation", () => {
       note.compareDocumentPosition(snippet) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(note.className).toContain("text-foreground");
+  });
+
+  it("reports a recopy, so the funnel sees it and the clock restarts", () => {
+    const { onRecopy } = renderConfirmation({
+      kind: "opened",
+      confirmation: "Opening VS Code…",
+      snippet: "Connect me to Opik MCP",
+    });
+
+    fireEvent.click(screen.getByLabelText("Copy it"));
+
+    expect(onRecopy).toHaveBeenCalledTimes(1);
   });
 });
