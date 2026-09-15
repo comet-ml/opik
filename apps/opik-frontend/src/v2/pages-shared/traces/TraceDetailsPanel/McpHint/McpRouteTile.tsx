@@ -19,6 +19,9 @@ const McpRouteTile: React.FunctionComponent<McpRouteTileProps> = ({
 }) => {
   const isDeeplink = route.method === MCP_ROUTE_METHOD.DEEPLINK;
   const TrailingIcon = isDeeplink ? ExternalLink : Copy;
+  // A custom scheme hands off without navigating, but an https route (VS Code's
+  // redirector) would otherwise take the page with it.
+  const opensInNewTab = route.href?.startsWith("http") ?? false;
 
   const handleUse = () => {
     if (!isDeeplink && route.clipboard) {
@@ -43,6 +46,8 @@ const McpRouteTile: React.FunctionComponent<McpRouteTileProps> = ({
         <a
           href={route.href}
           onClick={handleUse}
+          target={opensInNewTab ? "_blank" : undefined}
+          rel={opensInNewTab ? "noreferrer" : undefined}
           className={className}
           data-testid={`mcp-route-${route.client}`}
         >

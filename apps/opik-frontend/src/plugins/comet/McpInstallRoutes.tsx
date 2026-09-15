@@ -10,41 +10,20 @@ import { buildHostedInstallPrompt } from "@/v2/pages-shared/traces/TraceDetailsP
 import {
   cliConfigureCommand,
   getMcpServerUrl,
-  MCP_SERVER_NAME,
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/serverUrl";
+import {
+  claudeCodeCommand,
+  claudeCodeDeeplink,
+  codexCommand,
+  cursorDeeplink,
+  vscodeDeeplink,
+} from "./mcpDeeplinks";
 import {
   MCP_CLIENT,
   MCP_ROUTE_METHOD,
   McpInstallRoute,
   McpInstallRoutesProps,
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/types";
-
-// Cursor: `cursor://anysphere.cursor-deeplink/mcp/install`, with the mcp.json
-// entry base64'd into `config`.
-const cursorDeeplink = (url: string) =>
-  `cursor://anysphere.cursor-deeplink/mcp/install?name=${MCP_SERVER_NAME}&config=${btoa(
-    JSON.stringify({ url }),
-  )}`;
-
-// VS Code: one unnamed query parameter carrying the whole entry, `name`
-// included, not the older `?name=&config=` badge shape.
-const vscodeDeeplink = (url: string) =>
-  `vscode:mcp/install?${encodeURIComponent(
-    JSON.stringify({ name: MCP_SERVER_NAME, type: "http", url }),
-  )}`;
-
-const claudeCodeCommand = (url: string) =>
-  `claude mcp add --transport http --scope user ${MCP_SERVER_NAME} ${url}`;
-
-const codexCommand = (url: string) =>
-  `codex mcp add ${MCP_SERVER_NAME} --url ${url}`;
-
-// Claude Code has no install deeplink. `claude-cli://open` prefills a fresh
-// session's prompt box; the `!` makes it a shell command to press Enter on. Its
-// OS handler is registered lazily, so the link can do nothing at all, which is
-// why every tile lands in a confirmation carrying the command too.
-const claudeCodeDeeplink = (url: string) =>
-  `claude-cli://open?q=${encodeURIComponent(`!${claudeCodeCommand(url)}`)}`;
 
 const NOTHING_OPENED = "Nothing opened? Run this instead.";
 
