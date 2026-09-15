@@ -152,6 +152,12 @@ uuidValidation:
   #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
   #   embedded timestamp more than this far in the past or future are rejected.
   window: 24h
+  #  Default: 30d
+  #  Description: Wider override of `window` (between 12h and 45d) for a centrally managed set of
+  #   workspaces. That set is empty by default, which leaves this setting inert; the workspaces in it are
+  #   still rejected beyond this override. A value at or below `window` is ignored, since the override
+  #   only ever widens.
+  bypassWindow: 30d
 
 # Description: credentials for the Agent Insights read-only free-form SQL user. The connection params are reused
 #   from databaseAnalytics (overridden to the test container). The username/password match the production-shape user

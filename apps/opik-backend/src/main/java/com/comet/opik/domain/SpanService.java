@@ -23,6 +23,7 @@ import com.comet.opik.domain.attachment.AttachmentUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
+import com.comet.opik.infrastructure.metrics.ErrorMetricsResolver;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
@@ -179,7 +180,7 @@ public class SpanService {
         var projectName = WorkspaceUtils.getProjectName(span.projectName());
         return idGenerator
                 .validateIdAsync(id, SPAN_KEY)
-                .then(Mono.fromRunnable(() -> validateSpanReferences(span.traceId(), span.parentSpanId())))
+                .then(validateSpanReferencesAsync(span.traceId(), span.parentSpanId()))
                 .then(projectService.getOrCreate(projectName))
                 .flatMap(project -> lockService.executeWithLock(
                         new LockService.Lock(id, SPAN_KEY),
@@ -242,8 +243,7 @@ public class SpanService {
 
             return idGenerator
                     .validateIdNotInFutureAsync(id, SPAN_KEY)
-                    .then(Mono.fromRunnable(
-                            () -> validateSpanReferences(spanUpdate.traceId(), spanUpdate.parentSpanId())))
+                    .then(validateSpanReferencesAsync(spanUpdate.traceId(), spanUpdate.parentSpanId()))
                     .then(Mono.defer(() -> getProjectById(spanUpdate)
                             .switchIfEmpty(Mono.defer(() -> projectService.getOrCreate(projectName)))
                             .subscribeOn(Schedulers.boundedElastic()))
@@ -270,9 +270,8 @@ public class SpanService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return Mono
-                    .fromRunnable(() -> validateSpanReferences(batchUpdate.update().traceId(),
-                            batchUpdate.update().parentSpanId()))
+            return validateSpanReferencesAsync(batchUpdate.update().traceId(),
+                    batchUpdate.update().parentSpanId())
                     .then(spanDAO.bulkUpdate(batchUpdate.ids(), batchUpdate.update(), mergeTags))
                     .onErrorResume(TagOperations::mapTagLimitError)
                     .doOnSuccess(__ -> {
@@ -419,7 +418,7 @@ public class SpanService {
                 if (span.id() != null) {
                     idGenerator.validateId(span.id(), SPAN_KEY, validationWorkspaceId);
                 }
-                validateSpanReferences(span.traceId(), span.parentSpanId());
+                validateSpanReferences(span.traceId(), span.parentSpanId(), validationWorkspaceId);
             });
             return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds);
         })
@@ -476,11 +475,29 @@ public class SpanService {
         return result;
     }
 
-    // Shared span reference-id policy: the trace (required) and parent (optional) must be time-ordered
-    // UUIDv7, past allowed. Used by every span write path so the rules can't drift between them.
-    private void validateSpanReferences(UUID traceId, UUID parentSpanId) {
-        idGenerator.validateIdNotInFuture(traceId, SPAN_TRACE_KEY);
-        idGenerator.validateIdNotInFutureIfPresent(parentSpanId, SPAN_PARENT_KEY);
+    /**
+     * Shared span reference-id policy: the trace (required) and parent (optional) must be time-ordered
+     * UUIDv7, past allowed. Used by every span write path so the rules can't drift between them.
+     * {@code workspaceId} attributes the check to the request workspace, which also lets an allow-listed
+     * demo workspace reference its own future-dated traces under the bypass window (OPIK-7794).
+     */
+    private void validateSpanReferences(UUID traceId, UUID parentSpanId, String workspaceId) {
+        idGenerator.validateIdNotInFuture(traceId, SPAN_TRACE_KEY, workspaceId);
+        idGenerator.validateIdNotInFutureIfPresent(parentSpanId, SPAN_PARENT_KEY, workspaceId);
+    }
+
+    /**
+     * Reactive adapter for the write paths that validate outside an existing {@code deferContextual},
+     * resolving the workspace from the Reactor context the same way {@link IdGenerator}'s own async
+     * overloads do. {@code deferContextual} already defers to subscription time and surfaces a throw as an
+     * error signal, so no inner publisher is needed.
+     */
+    private Mono<Void> validateSpanReferencesAsync(UUID traceId, UUID parentSpanId) {
+        return Mono.deferContextual(ctx -> {
+            validateSpanReferences(traceId, parentSpanId,
+                    ctx.getOrDefault(RequestContext.WORKSPACE_ID, ErrorMetricsResolver.UNKNOWN));
+            return Mono.empty();
+        });
     }
 
     private List<Span> bindSpanToProjectAndId(List<Span> spans, List<Project> projects) {
