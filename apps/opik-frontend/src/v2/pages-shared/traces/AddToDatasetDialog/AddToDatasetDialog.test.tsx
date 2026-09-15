@@ -54,12 +54,6 @@ vi.mock("@/api/datasets/useProjectDatasetsList", () => ({
   ),
 }));
 
-vi.mock("@/api/datasets/useDatasetVersionsList", () => ({
-  default: vi.fn(() => ({
-    data: { content: [], total: 0 },
-  })),
-}));
-
 vi.mock("@/api/datasets/useAddTracesToDatasetMutation", () => ({
   default: () => ({
     mutate: mockAddTracesToDataset,
@@ -87,13 +81,6 @@ vi.mock("@/ui/use-toast", () => ({
     toast: vi.fn(),
   }),
 }));
-
-vi.mock(
-  "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog",
-  () => ({
-    default: () => <div data-testid="add-edit-test-suite-dialog" />,
-  }),
-);
 
 vi.mock(
   "@/v2/pages-shared/datasets/AddEditDatasetDialog/AddEditDatasetDialog",
@@ -168,35 +155,25 @@ describe("AddToDatasetDialog", () => {
     setOpen: vi.fn(),
   };
 
-  const datasetModeProps = {
-    ...baseProps,
-    datasetType: DATASET_TYPE.DATASET,
-  };
-
-  const testSuiteModeProps = {
-    ...baseProps,
-    datasetType: DATASET_TYPE.TEST_SUITE,
-  };
-
   const openDropdownAndSelect = (itemName: string) => {
     const trigger = screen.getByRole("button", {
-      name: new RegExp(`Select a|${itemName}`),
+      name: new RegExp(`Select a dataset|${itemName}`),
     });
     fireEvent.click(trigger);
     const items = screen.getAllByText(itemName);
     fireEvent.click(items[items.length - 1]);
   };
 
-  it("should render the test suite dialog when open", () => {
-    render(<AddToDatasetDialog {...testSuiteModeProps} />, { wrapper });
+  it("should render the dataset dialog when open", () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     expect(
-      screen.getByRole("button", { name: /Select a test suite/i }),
+      screen.getByRole("button", { name: /Select a dataset/i }),
     ).toBeInTheDocument();
   });
 
   it("should display enrichment checkboxes when selecting a dataset with traces", () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
 
@@ -209,7 +186,7 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should have all enrichment checkboxes checked by default", () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
 
@@ -222,7 +199,7 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should allow unchecking enrichment options", async () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
 
@@ -241,7 +218,7 @@ describe("AddToDatasetDialog", () => {
 
   it("should display span enrichment checkboxes when selecting a dataset with spans", () => {
     const propsWithSpan = {
-      ...datasetModeProps,
+      ...baseProps,
       selectedRows: [mockSpan],
     };
 
@@ -259,7 +236,7 @@ describe("AddToDatasetDialog", () => {
 
   it("should have all span enrichment checkboxes checked by default", () => {
     const propsWithSpan = {
-      ...datasetModeProps,
+      ...baseProps,
       selectedRows: [mockSpan],
     };
 
@@ -276,7 +253,7 @@ describe("AddToDatasetDialog", () => {
 
   it("should allow unchecking span enrichment options", async () => {
     const propsWithSpan = {
-      ...datasetModeProps,
+      ...baseProps,
       selectedRows: [mockSpan],
     };
 
@@ -298,7 +275,7 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should list only datasets matching dataset type when adding to a dataset", () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     const trigger = screen.getByRole("button", {
       name: /Select a dataset/i,
@@ -310,21 +287,8 @@ describe("AddToDatasetDialog", () => {
     expect(screen.queryByText("Test Suite 1")).not.toBeInTheDocument();
   });
 
-  it("should list only test suites when adding to a test suite", () => {
-    render(<AddToDatasetDialog {...testSuiteModeProps} />, { wrapper });
-
-    const trigger = screen.getByRole("button", {
-      name: /Select a test suite/i,
-    });
-    fireEvent.click(trigger);
-
-    expect(screen.getByText("Test Suite 1")).toBeInTheDocument();
-    expect(screen.getByText("First test suite")).toBeInTheDocument();
-    expect(screen.queryByText("Test Dataset 1")).not.toBeInTheDocument();
-  });
-
   it("should display search input in dropdown", () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     const trigger = screen.getByRole("button", {
       name: /Select a dataset/i,
@@ -335,20 +299,20 @@ describe("AddToDatasetDialog", () => {
     expect(searchInput).toBeInTheDocument();
   });
 
-  it("should display add test suite option in dropdown", () => {
-    render(<AddToDatasetDialog {...testSuiteModeProps} />, { wrapper });
+  it("should display add dataset option in dropdown", () => {
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     const trigger = screen.getByRole("button", {
-      name: /Select a test suite/i,
+      name: /Select a dataset/i,
     });
     fireEvent.click(trigger);
 
-    expect(screen.getByText("Add test suite")).toBeInTheDocument();
+    expect(screen.getByText("Add dataset")).toBeInTheDocument();
   });
 
   it("should show alert when no valid rows are present", () => {
     const propsWithInvalidRows = {
-      ...testSuiteModeProps,
+      ...baseProps,
       selectedRows: [{ ...mockTrace, input: undefined as unknown as object }],
     };
 
@@ -356,14 +320,14 @@ describe("AddToDatasetDialog", () => {
 
     expect(
       screen.getByText(
-        "There are no rows that can be added as test suite items. The input field is missing.",
+        "There are no rows that can be added as dataset items. The input field is missing.",
       ),
     ).toBeInTheDocument();
   });
 
   it("should show alert when only some rows are valid", () => {
     const propsWithPartialValid = {
-      ...testSuiteModeProps,
+      ...baseProps,
       selectedRows: [
         mockTrace,
         { ...mockTrace, id: "trace-2", input: undefined as unknown as object },
@@ -374,27 +338,27 @@ describe("AddToDatasetDialog", () => {
 
     expect(
       screen.getByText(
-        "Only rows with input fields will be added as test suite items.",
+        "Only rows with input fields will be added as dataset items.",
       ),
     ).toBeInTheDocument();
   });
 
   it("should disable dropdown when no valid rows", () => {
     const propsWithInvalidRows = {
-      ...testSuiteModeProps,
+      ...baseProps,
       selectedRows: [{ ...mockTrace, input: undefined as unknown as object }],
     };
 
     render(<AddToDatasetDialog {...propsWithInvalidRows} />, { wrapper });
 
     const trigger = screen.getByRole("button", {
-      name: /Select a test suite/i,
+      name: /Select a dataset/i,
     });
     expect(trigger).toBeDisabled();
   });
 
   it("should call addTracesToDataset mutation when clicking on dataset with only traces", async () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
 
@@ -422,7 +386,7 @@ describe("AddToDatasetDialog", () => {
 
   it("should call addSpansToDataset mutation when clicking on dataset with only spans", async () => {
     const propsWithSpan = {
-      ...datasetModeProps,
+      ...baseProps,
       selectedRows: [mockSpan],
     };
 
@@ -452,7 +416,7 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should respect unchecked enrichment options when adding traces", async () => {
-    render(<AddToDatasetDialog {...datasetModeProps} />, { wrapper });
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
 
@@ -481,7 +445,7 @@ describe("AddToDatasetDialog", () => {
 
   it("should respect unchecked enrichment options when adding spans", async () => {
     const propsWithSpan = {
-      ...datasetModeProps,
+      ...baseProps,
       selectedRows: [mockSpan],
     };
 
