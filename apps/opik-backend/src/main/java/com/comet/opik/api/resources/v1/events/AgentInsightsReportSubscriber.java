@@ -109,11 +109,26 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
         String reason = throwable instanceof AgentInsightsTriggerException triggerFailure
                 ? triggerFailure.getReason()
                 : AgentInsightsJob.FailureReason.DID_NOT_START;
+        if (AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED.equals(reason)) {
+            cancelAutoFirstRunRollout(message);
+            return;
+        }
         try {
             jobService.markRunFailed(message.workspaceId(), message.projectId(), reason, throwable.getMessage());
         } catch (Exception e) {
             log.warn("Failed to record run failure for reportId='{}', project='{}'",
                     message.reportId(), message.projectId(), e);
+        }
+    }
+
+    // Comet's free-run budget is spent: cancel the rollout for everyone still owed a run
+    private void cancelAutoFirstRunRollout(AgentInsightsReportMessage message) {
+        try {
+            int cancelled = jobService.cancelAutoFirstRunRollout(message.workspaceId(), message.projectId());
+            log.warn("Free Agent Insights budget exhausted on reportId='{}', project='{}'; cancelled the "
+                    + "auto-first-run rollout for {} projects", message.reportId(), message.projectId(), cancelled);
+        } catch (Exception e) {
+            log.error("Failed to cancel the auto-first-run rollout after the free budget ran out", e);
         }
     }
 

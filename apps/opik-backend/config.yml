@@ -1117,6 +1117,12 @@ agentInsightsReport:
   # Default: 0 5 0 * * ? (daily at 00:05 UTC)
   # Description: Quartz cron expression (UTC) for the daily Agent Insights report sweep
   schedule: ${AGENT_INSIGHTS_REPORT_SCHEDULE:-'0 5 0 * * ?'}
+  # Default: 0 */10 * * * ? (every 10 minutes)
+  # Description: Quartz cron expression (UTC) for the Agent Insights auto-first-run sweep, which runs the first diagnostic for projects enrolled in the rollout (auto_first_run_enrolled set) once they pass the trace threshold
+  autoFirstRunSchedule: ${AGENT_INSIGHTS_REPORT_AUTO_FIRST_RUN_SCHEDULE:-'0 */10 * * * ?'}
+  # Default: 10
+  # Description: Maximum projects onboarded per auto-first-run sweep. Nothing downstream bounds how many diagnostics run at once (the Redis consumer, the platform executor and the Ollie pod all hand off and return), so this is the only control: runs arrive at this rate and last several minutes, so raising it raises concurrent runs proportionally. Must be between 1 and 1000.
+  autoFirstRunMaxPerRun: ${AGENT_INSIGHTS_REPORT_AUTO_FIRST_RUN_MAX_PER_RUN:-10}
   # Default: 5m
   # Description: Timeout for the daily Agent Insights report job sweep (distributed lock hold time)
   jobTimeout: ${AGENT_INSIGHTS_REPORT_JOB_TIMEOUT:-5m}
@@ -1130,7 +1136,7 @@ agentInsightsReport:
   # Description: Consumer group name for Agent Insights report trigger processing
   consumerGroupName: ${AGENT_INSIGHTS_REPORT_CONSUMER_GROUP_NAME:-'agent-insights-report-consumers'}
   # Default: 5
-  # Description: Maximum number of report triggers to process in a single batch (caps concurrent runs)
+  # Description: Maximum number of report triggers read and dispatched concurrently. Caps concurrent trigger calls, not concurrent runs: the trigger is acked once the platform accepts it, and the analysis runs detached on the Ollie pod.
   consumerBatchSize: ${AGENT_INSIGHTS_REPORT_CONSUMER_BATCH_SIZE:-5}
   # Default: 1s
   # Description: How often to poll Redis for new report triggers

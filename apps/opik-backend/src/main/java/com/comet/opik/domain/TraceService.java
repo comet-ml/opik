@@ -117,6 +117,9 @@ public interface TraceService {
     Mono<Set<UUID>> getProjectsWithTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
             @NonNull Instant from, @NonNull Instant to);
 
+    Mono<Set<UUID>> getProjectsWithMinTracesInRange(@NonNull Collection<Pair<String, UUID>> workspaceProjectPairs,
+            @NonNull Instant from, @NonNull Instant to, int minTraces);
+
     Mono<Void> deleteTraceThreads(DeleteTraceThreads traceThreads);
 
     Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
@@ -766,6 +769,17 @@ class TraceServiceImpl implements TraceService {
         }
         return template.nonTransaction(
                 connection -> dao.getProjectsWithTracesInRange(workspaceProjectPairs, from, to, connection));
+    }
+
+    @Override
+    public Mono<Set<UUID>> getProjectsWithMinTracesInRange(
+            @NonNull Collection<Pair<String, UUID>> workspaceProjectPairs, @NonNull Instant from, @NonNull Instant to,
+            int minTraces) {
+        if (workspaceProjectPairs.isEmpty()) {
+            return Mono.just(Set.of());
+        }
+        return template.nonTransaction(connection -> dao.getProjectsWithMinTracesInRange(workspaceProjectPairs, from,
+                to, minTraces, connection));
     }
 
     @Override

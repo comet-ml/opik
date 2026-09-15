@@ -6,6 +6,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -13,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -55,7 +57,7 @@ public class PlatformAgentInsightsReportClient implements AgentInsightsReportCli
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(payload))) {
             if (response.getStatus() == Response.Status.PAYMENT_REQUIRED.getStatusCode()) {
-                throw new AgentInsightsTriggerException(AgentInsightsJob.FailureReason.OUT_OF_CREDITS,
+                throw new AgentInsightsTriggerException(readPaymentRequiredReason(response),
                         "Agent Insights trigger rejected for report '%s': insufficient credits"
                                 .formatted(reportId));
             }
@@ -66,6 +68,19 @@ public class PlatformAgentInsightsReportClient implements AgentInsightsReportCli
                                 reportId));
             }
             log.info("Agent Insights trigger accepted for report '{}', project '{}'", reportId, projectId);
+        }
+    }
+
+    private String readPaymentRequiredReason(Response response) {
+        try {
+            var body = response.readEntity(new GenericType<Map<String, Object>>() {
+            });
+            return AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED.equals(body.get("error_code"))
+                    ? AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED
+                    : AgentInsightsJob.FailureReason.OUT_OF_CREDITS;
+        } catch (Exception e) {
+            log.warn("Could not read the error code off an Agent Insights 402", e);
+            return AgentInsightsJob.FailureReason.OUT_OF_CREDITS;
         }
     }
 }
