@@ -412,6 +412,7 @@ openrouter:
     label: "anthropic/claude-opus-4.5:batch"
   - id: "anthropic/claude-opus-4.6"
     label: "anthropic/claude-opus-4.6"
+    structuredOutput: true
   - id: "anthropic/claude-opus-4.6-fast"
     label: "anthropic/claude-opus-4.6-fast"
   - id: "anthropic/claude-opus-4.6:batch"
@@ -588,6 +589,7 @@ openrouter:
     label: "deepseek/deepseek-v3.1-terminus:exacto"
   - id: "deepseek/deepseek-v3.2"
     label: "deepseek/deepseek-v3.2"
+    structuredOutput: true
   - id: "deepseek/deepseek-v3.2-exp"
     label: "deepseek/deepseek-v3.2-exp"
   - id: "deepseek/deepseek-v3.2-speciale"
@@ -617,6 +619,7 @@ openrouter:
     label: "deepseek/deepseek-v4-pro-0813:batch"
   - id: "deepseek/deepseek-v4.1-flash"
     label: "deepseek/deepseek-v4.1-flash"
+    structuredOutput: true
   - id: "dots-studio/dots-3-note-preview:free"
     label: "dots-studio/dots-3-note-preview:free"
   - id: "eleutherai/llemma_7b"
@@ -782,6 +785,7 @@ openrouter:
     structuredOutput: true
   - id: "inception/mercury-2.5"
     label: "inception/mercury-2.5"
+    structuredOutput: true
   - id: "inception/mercury-2.5-preview"
     label: "inception/mercury-2.5-preview"
   - id: "inception/mercury-coder"
@@ -1376,14 +1380,17 @@ openrouter:
     structuredOutput: true
   - id: "openai/gpt-5.6-luna-pro"
     label: "openai/gpt-5.6-luna-pro"
+    structuredOutput: true
   - id: "openai/gpt-5.6-luna-pro:batch"
     label: "openai/gpt-5.6-luna-pro:batch"
   - id: "openai/gpt-5.6-luna:batch"
     label: "openai/gpt-5.6-luna:batch"
   - id: "openai/gpt-5.6-sol"
     label: "openai/gpt-5.6-sol"
+    structuredOutput: true
   - id: "openai/gpt-5.6-sol-pro"
     label: "openai/gpt-5.6-sol-pro"
+    structuredOutput: true
   - id: "openai/gpt-5.6-sol-pro:batch"
     label: "openai/gpt-5.6-sol-pro:batch"
   - id: "openai/gpt-5.6-sol:batch"
@@ -1393,6 +1400,7 @@ openrouter:
     structuredOutput: true
   - id: "openai/gpt-5.6-terra-pro"
     label: "openai/gpt-5.6-terra-pro"
+    structuredOutput: true
   - id: "openai/gpt-5.6-terra-pro:batch"
     label: "openai/gpt-5.6-terra-pro:batch"
   - id: "openai/gpt-5.6-terra:batch"
@@ -1404,6 +1412,7 @@ openrouter:
     structuredOutput: true
   - id: "openai/gpt-6-astra-pro"
     label: "openai/gpt-6-astra-pro"
+    structuredOutput: true
   - id: "openai/gpt-6-astra-pro:batch"
     label: "openai/gpt-6-astra-pro:batch"
   - id: "openai/gpt-6-astra:batch"
@@ -1416,6 +1425,7 @@ openrouter:
     structuredOutput: true
   - id: "openai/gpt-chat-latest"
     label: "openai/gpt-chat-latest"
+    structuredOutput: true
   - id: "openai/gpt-oss-120b"
     label: "openai/gpt-oss-120b"
     structuredOutput: true
@@ -1739,6 +1749,7 @@ openrouter:
     structuredOutput: true
   - id: "qwen/qwen3.8-max-0902"
     label: "qwen/qwen3.8-max-0902"
+    structuredOutput: true
   - id: "qwen/qwq-32b"
     label: "qwen/qwq-32b"
     structuredOutput: true
@@ -1961,6 +1972,10 @@ openrouter:
     label: "~anthropic/claude-opus-latest"
   - id: "~anthropic/claude-sonnet-latest"
     label: "~anthropic/claude-sonnet-latest"
+  - id: "~deepseek/deepseek-flash-latest"
+    label: "~deepseek/deepseek-flash-latest"
+  - id: "~deepseek/deepseek-pro-latest"
+    label: "~deepseek/deepseek-pro-latest"
   - id: "~deepseek/deepseek-v4-flash-latest"
     label: "~deepseek/deepseek-v4-flash-latest"
   - id: "~google/gemini-flash-latest"
