@@ -92,6 +92,16 @@ const SDK_REASONING_KEY = 'original_usage.completion_tokens_details.reasoning_to
 const OTEL_REASONING_KEY = 'completion_tokens_details.reasoning_tokens';
 
 /**
+ * The bare OTel GenAI key for cache-read input tokens.
+ *
+ * `textGenerationWithCacheCostOpenAI` reads three keys in order —
+ * `original_usage.prompt_tokens_details.cached_tokens`,
+ * `original_usage.input_tokens_details.cached_tokens`, then this one — so a
+ * LiteLLM/OTel span reaches the cache branch through the bare key alone.
+ */
+const OTEL_CACHE_READ_KEY = 'cache_read_input_tokens';
+
+/**
  * Five vectors over one model, covering reasoning-token billing
  * (`SpanCostCalculator.textGenerationCost`).
  *
@@ -181,7 +191,7 @@ const REASONING_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
  *
  * `mistral/voxtral-mini-tts-latest` is priced at $1.6e-05 per INPUT CHARACTER
  * and publishes no input or output token rate, so its cost comes from a usage
- * key the other eleven spans do not carry. This is the class of price entry
+ * key the other thirteen spans do not carry. This is the class of price entry
  * `ModelCostData` has to model field by field: a key it does not declare reads
  * as no price at all, and the span renders with a token count and no cost chip
  * while the trace above it still rolls up a plausible-looking total. Release
@@ -223,11 +233,78 @@ const CHARACTER_PRICE_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
 ];
 
 /**
- * Twelve LLM spans: five that exercise server-side price resolution from the
+ * Two vectors over one model whose price routes away from `textGenerationCost`
+ * entirely (`SpanCostCalculator.textGenerationWithCacheCostOpenAI`).
+ *
+ * A positive `cache_read_input_token_cost` is what `CostService.resolveCalculator`
+ * branches on: any model publishing one is priced by its provider's cache
+ * calculator instead, and `fireworks_ai` maps to the OpenAI-shaped one. That
+ * shape's defining property is stated in its own comment — "in OpenAI usage
+ * format, input tokens includes the cached input tokens" — so the cached count
+ * must be SUBTRACTED from the prompt bucket before the input rate is applied,
+ * and then billed once at the cache rate. Get the subtraction wrong and the
+ * span renders a perfectly ordinary, wrong dollar amount: the cached tokens are
+ * simply billed twice, at full price and again at the cache price.
+ *
+ * `fireworks_ai/accounts/fireworks/models/deepseek-v4-pro` is picked because its
+ * three rates make the arithmetic discriminating rather than merely consistent:
+ *
+ *   $1.2/M in, $1.2/M out, $0.6/M cache read
+ *
+ * The cache rate is half the input rate and not equal to it, so a cached token
+ * billed at the wrong one of the two changes the total. At 1M prompt (of which
+ * 400k cached) + 1M completion:
+ *
+ *   cached, subtracted correctly   600k x 1.2/M + 1.0M x 1.2/M + 400k x 0.6/M -> $2.16
+ *   cached, NOT subtracted         1.0M x 1.2/M + 1.0M x 1.2/M + 400k x 0.6/M -> $2.64
+ *   no cache key at all            1.0M x 1.2/M + 1.0M x 1.2/M                -> $2.40
+ *
+ * Those three are pairwise distinct, which is the point of seeding the second
+ * vector: the no-cache control is what turns "$2.16" from an absolute number
+ * that moves with the price table into the statement that matters — a span
+ * reporting cache reads costs LESS than an identical one that reports none.
+ * Billing the cached tokens twice would make it cost more.
+ *
+ * Release 2.2.62 moved this model's cache rate 4x (1.45e-07 -> 6e-07) and its
+ * input rate down (1.74e-06 -> 1.2e-06). Neither move is visible to any of the
+ * vectors above, all of which price through `textGenerationCost`.
+ */
+const CACHE_READ_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
+  {
+    key: 'cache-read-reported',
+    model: 'fireworks_ai/accounts/fireworks/models/deepseek-v4-pro',
+    provider: 'fireworks_ai',
+    usageExtras: { [OTEL_CACHE_READ_KEY]: 400_000 },
+    expectedCost: 2.16,
+    // Not `python-sdk`: the SDK re-emits a bare OTel key under the
+    // `original_usage.` prefix, and `original_usage.cache_read_input_tokens` is
+    // the ANTHROPIC calculator's key — the OpenAI-shaped one does not read it.
+    // The vector would arrive carrying a count nothing bills and price
+    // identically to the control below. See ModelCostSpanWriter.
+    writer: 'otel-rest',
+  },
+  {
+    key: 'cache-read-absent',
+    model: 'fireworks_ai/accounts/fireworks/models/deepseek-v4-pro',
+    provider: 'fireworks_ai',
+    // Priced, not a zero control: this model has token rates, so the same
+    // calculator bills it in full. It isolates the cache term — it differs from
+    // the vector above ONLY in the cache key.
+    expectedCost: 2.4,
+    // Same writer as its pair, so the two differ in the usage key and nothing
+    // else. A control seeded down a different path would confound the
+    // comparison the pair exists to make.
+    writer: 'otel-rest',
+  },
+];
+
+/**
+ * Fourteen LLM spans: five that exercise server-side price resolution from the
  * model id — three ids that must resolve, covering four normalisation steps
  * between them, and two controls for the two ways it could go wrong — five
- * that cover reasoning-token billing over a single model, and two over a model
- * priced per input character rather than per token.
+ * that cover reasoning-token billing over a single model, two over a model
+ * priced per input character rather than per token, and two over a model whose
+ * cache-read rate routes it to a different calculator altogether.
  *
  * Costs are the shipped price table's own numbers at 1M prompt + 1M completion
  * tokens (`model_prices_and_context_window.json` / `model_prices_overrides.json`):
@@ -241,7 +318,8 @@ const CHARACTER_PRICE_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
  * them would silently bill another model's rate, and the failure would look
  * exactly like an ordinary cost.
  *
- * See REASONING_SEEDS and CHARACTER_PRICE_SEEDS above for the other two halves.
+ * See REASONING_SEEDS, CHARACTER_PRICE_SEEDS and CACHE_READ_SEEDS above for the
+ * other three groups.
  */
 const SPAN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
   {
@@ -292,10 +370,11 @@ const SPAN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
   },
   ...REASONING_SEEDS,
   ...CHARACTER_PRICE_SEEDS,
+  ...CACHE_READ_SEEDS,
 ];
 
 /**
- * One trace carrying twelve LLM spans that report `usage` and **no**
+ * One trace carrying fourteen LLM spans that report `usage` and **no**
  * `total_cost`, so the backend has to price them itself.
  *
  * Every other cost fixture in the estate (`tracedAgent`, the thread seeds)
@@ -306,7 +385,7 @@ const SPAN_SEEDS: Array<Omit<ModelCostSpanSeed, 'name'>> = [
  * Most spans go through the bridge; the ones whose usage key the SDK would
  * normalise or drop are written straight to `POST /v1/private/spans`
  * afterwards, because that key is exactly what they exist to test. Both land on
- * the same trace, so the rolled-up total covers all twelve either way.
+ * the same trace, so the rolled-up total covers all fourteen either way.
  *
  * Teardown deletes the trace (and with it its spans) here rather than in the
  * test: an assertion failure must not leave priced spans behind, since the
