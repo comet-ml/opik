@@ -213,4 +213,36 @@ class ThreadDAOImplTest {
             return sql.substring(start, end);
         }
     }
+
+    @Nested
+    @DisplayName("thread-by-id spans aggregation")
+    class ThreadByIdSpansDedup {
+
+        @Test
+        @DisplayName("SELECT_TRACES_THREAD_BY_ID dedups spans with LIMIT 1 BY id instead of FINAL")
+        void threadByIdDoesNotUseSpansFinal() {
+            String sql = ThreadDAOImpl.SELECT_TRACES_THREAD_BY_ID;
+
+            assertThat(sql).doesNotContain("FROM spans final");
+
+            String spansDeduped = cte(sql, "spans_deduped AS (", "), spans_agg AS (");
+            assertThat(spansDeduped).contains("FROM spans");
+            assertThat(spansDeduped).contains("AND trace_id IN (SELECT DISTINCT id FROM traces_ids)");
+            assertThat(spansDeduped)
+                    .contains("ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC");
+            assertThat(spansDeduped).contains("LIMIT 1 BY id");
+
+            String spansAgg = cte(sql, "spans_agg AS (", "), trace_threads_ids AS (");
+            assertThat(spansAgg).contains("FROM spans_deduped");
+            assertThat(spansAgg).doesNotContain("FROM spans final");
+        }
+
+        private static String cte(String sql, String startMarker, String endMarker) {
+            int start = sql.indexOf(startMarker);
+            assertThat(start).isNotNegative();
+            int end = sql.indexOf(endMarker, start);
+            assertThat(end).isGreaterThan(start);
+            return sql.substring(start, end);
+        }
+    }
 }
