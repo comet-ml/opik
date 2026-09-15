@@ -7,6 +7,7 @@ import {
   claudeCodeDeeplink,
   codexCommand,
   cursorDeeplink,
+  vscodeAddCommand,
   vscodeDeeplink,
 } from "./mcpDeeplinks";
 
@@ -43,6 +44,7 @@ describe("the hosted install routes", () => {
       claudeCodeDeeplink(local),
       claudeCodeCommand(local),
       codexCommand(local),
+      vscodeAddCommand(local),
     ]) {
       expect(link).not.toContain("www.comet.com");
     }
@@ -53,6 +55,15 @@ describe("the hosted install routes", () => {
     expect(new URL(vscodeDeeplink(local)).searchParams.get("config")).toBe(
       JSON.stringify({ type: "http", url: local }),
     );
+  });
+
+  it("fall back to VS Code's own non-interactive CLI, not the interactive one", () => {
+    const command = vscodeAddCommand(SERVER_URL);
+
+    expect(command).toBe(
+      `code --add-mcp '{"name":"opik-mcp","type":"http","url":"${SERVER_URL}"}'`,
+    );
+    expect(command).not.toContain("opik mcp configure");
   });
 
   it("give the terminal clients a command that names the server", () => {

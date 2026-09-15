@@ -33,9 +33,9 @@ describe("the install prompts", () => {
   it("name the workspace for the local CLI but never carry a key", () => {
     const prompt = local();
 
-    expect(prompt).toContain('workspace "my-workspace"');
-    expect(prompt).toContain("ask me for it");
-    expect(prompt).not.toMatch(/api[_-]?key\s*[:=]/i);
+    expect(prompt).toContain('OPIK_WORKSPACE="my-workspace"');
+    expect(prompt).toContain("ask me for my API key");
+    expect(prompt).not.toMatch(/api[_-]?key\s*[:=]\s*\S/i);
   });
 
   it("identify the trace when the failure is the trace's", () => {
@@ -84,5 +84,23 @@ describe("the CLI route", () => {
       "vscode",
       "codex",
     ]);
+  });
+});
+
+describe("the local prompt's install step", () => {
+  it("names the client so the CLI can run without a terminal", () => {
+    expect(local()).toContain(
+      "uvx opik mcp configure --ai-client <agent> --skills",
+    );
+  });
+
+  it("routes an unconfigured Opik through env vars rather than a prompt", () => {
+    // `opik mcp configure` fails instead of asking when there is no config and
+    // no terminal, so telling the agent to wait for a question dead-ends it.
+    const prompt = local();
+
+    expect(prompt).toContain("OPIK_API_KEY");
+    expect(prompt).toContain('OPIK_WORKSPACE="my-workspace"');
+    expect(prompt).not.toContain("If it asks for an API key");
   });
 });

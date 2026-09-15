@@ -57,8 +57,9 @@ export const buildHostedInstallPrompt = (
 
 /**
  * For deployments where the MCP server is a local stdio process. Names the
- * workspace but never the API key, which the CLI reads from the developer's own
- * configuration or asks for.
+ * workspace but never the API key: the CLI reads that from the developer's own
+ * configuration, and when it cannot, it fails rather than prompting, so the
+ * prompt has to tell the agent what to do about it.
  */
 export const buildLocalInstallPrompt = (
   context: PromptContext & { workspaceName: string },
@@ -67,9 +68,9 @@ export const buildLocalInstallPrompt = (
     "Connect me to Opik MCP, then debug a failing trace.",
     "",
     DETECT_STEP,
-    `2. Install uv if it is missing, then run \`uvx opik mcp configure --ai-client <agent> --skills\` for each chosen agent, against workspace "${inlineValue(
+    `2. Install uv if it is missing, then run \`uvx opik mcp configure --ai-client <agent> --skills\` for each chosen agent. Naming the client is what lets it run without a terminal. It reuses my existing Opik configuration; if it reports that Opik is not configured yet, you cannot answer that for me — ask me for my API key, then re-run with OPIK_API_KEY set and OPIK_WORKSPACE="${inlineValue(
       context.workspaceName,
-    )}". If it asks for an API key, ask me for it — do not guess. ${NO_SECRETS}`,
+    )}" in that command's environment. Do not guess the key. ${NO_SECRETS}`,
     RELOAD_STEP,
     debugStep(context),
   ].join("\n");

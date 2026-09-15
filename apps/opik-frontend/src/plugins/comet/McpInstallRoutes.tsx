@@ -16,6 +16,7 @@ import {
   claudeCodeDeeplink,
   codexCommand,
   cursorDeeplink,
+  vscodeAddCommand,
   vscodeDeeplink,
 } from "./mcpDeeplinks";
 import {
@@ -66,7 +67,7 @@ const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
         method: MCP_ROUTE_METHOD.DEEPLINK,
         href: vscodeDeeplink(url),
         confirmation: "Opening VS Code…",
-        snippet: cliConfigureCommand(MCP_CLIENT.VSCODE),
+        snippet: vscodeAddCommand(url),
         note: NOTHING_OPENED,
       },
       {

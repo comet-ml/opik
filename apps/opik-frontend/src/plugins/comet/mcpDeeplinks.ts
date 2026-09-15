@@ -10,13 +10,19 @@ export const cursorDeeplink = (url: string) =>
     JSON.stringify({ url }),
   )}`;
 
-// VS Code goes through its https redirector rather than the `vscode:` scheme.
-// The scheme needs a registered OS handler the page cannot count on, and the
-// redirector also picks between stable and Insiders.
+// VS Code goes through its https redirector, which 302s to
+// `vscode:mcp/install?<entry>`. Same destination as linking the scheme
+// directly, but the browser navigates first, so Chrome offers to open the app
+// instead of swallowing the link. Whether that handler is registered is still
+// the machine's business, which is what `vscodeAddCommand` is there for.
 export const vscodeDeeplink = (url: string) =>
   `https://insiders.vscode.dev/redirect/mcp/install?name=${MCP_SERVER_NAME}&config=${encodeURIComponent(
     JSON.stringify({ type: "http", url }),
   )}`;
+
+// The fallback when nothing opened: VS Code's own non-interactive CLI.
+export const vscodeAddCommand = (url: string) =>
+  `code --add-mcp '${JSON.stringify({ name: MCP_SERVER_NAME, type: "http", url })}'`;
 
 export const claudeCodeCommand = (url: string) =>
   `claude mcp add --transport http --scope user ${MCP_SERVER_NAME} ${url}`;
