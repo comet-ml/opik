@@ -251,12 +251,12 @@ areas:
     routes: ["/projects/$projectId/logs?type=traces", "/logs?type=spans"]
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
+      - trace-explore/mcp-hint.spec.ts
       - trace-explore/span-cost-resolution.spec.ts
       - trace-explore/span-kpi-cards.spec.ts
       - trace-explore/spans-view-pagination.spec.ts
       - trace-explore/trace-attachments.spec.ts
       - trace-explore/trace-delete.spec.ts
-      - trace-explore/mcp-hint.spec.ts
       - trace-explore/trace-explore-smoke.spec.ts
       - trace-explore/trace-filters.spec.ts
       - trace-explore/trace-id-time-window.spec.ts
@@ -274,7 +274,7 @@ areas:
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: true,  tier: t2-cuj, note: "the Spans toggle and paging the table it renders: 130 seeded spans read back as an exact set through offset paging, through the /spans/search cursor and through the rendered table, plus a span whose UUIDv7 id embeds mid-2200 used as the cursor. Also the four KPI cards above the Spans table — count, error rate, avg duration and total cost — and their period-over-period deltas, asserted against the kpi-cards read for both periods" }
       filter-traces:          { covered: true,  tier: t2-cuj }
-      mcp-hint-install:       { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green locally — the SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way. CI is its first real run." }
+      mcp-hint-install:       { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
       configure-columns:      { covered: false }
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
