@@ -512,38 +512,44 @@ export class PlaygroundPage {
     return this.page.getByTestId('playground-scroll-container');
   }
 
-  /** Dataset rows currently mounted in the body table — under virtualization this is the window, not the page. */
-  async renderedRowCount(): Promise<number> {
-    return this.resultsTable()
-      .locator('tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]')
-      .count();
+  /**
+   * The output grid is two side-by-side `StickyScrollTable`s — dataset variables on the
+   * left, prompt outputs on the right — each split into a sticky header half and a
+   * scrollable body half. Both bodies render the same rows, so virtualization assertions
+   * must name one surface rather than querying the grid as a whole.
+   */
+  variablesPanel(half: 'header' | 'body'): Locator {
+    return this.page.getByTestId(`playground-variables-table-${half}`);
+  }
+
+  outputsPanel(half: 'header' | 'body'): Locator {
+    return this.page.getByTestId(`playground-outputs-table-${half}`);
   }
 
   /** Scroll the Playground page body to a ratio of its scrollable height (0 = top, 1 = bottom). */
   async scrollResultsTo(ratio: number): Promise<void> {
-    await this.scrollContainer().evaluate((el, r) => {
-      el.scrollTop = (el.scrollHeight - el.clientHeight) * r;
-    }, ratio);
-    // Two frames: one for the scroll event, one for the virtualizer's re-render.
-    await this.page.evaluate(
-      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
-    );
+    return test.step(`scroll results to ${ratio} of the page height`, async () => {
+      await this.scrollContainer().evaluate((el, r) => {
+        el.scrollTop = (el.scrollHeight - el.clientHeight) * r;
+      }, ratio);
+      await this.settle();
+    });
   }
 
   /**
-   * Labels of the dataset rows currently mounted, in DOM order. Callers should not assume a
-   * particular dataset ordering — the grid renders items newest-first.
+   * Ids of the dataset rows currently mounted in the outputs body. Ids rather than cell
+   * text: they are unique per dataset item and independent of what a run has painted into
+   * the cells. Callers should not assume a dataset ordering — the grid renders items
+   * newest-first.
    */
-  async mountedRowLabels(pattern = /row-\d{3}/g): Promise<string[]> {
-    const texts = await this.resultsTable()
-      .locator('tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]')
-      .allInnerTexts();
-    return texts.map((t) => t.match(pattern)?.[0]).filter((v): v is string => Boolean(v));
-  }
-
-  /** The results grid, for text assertions against whichever rows are currently mounted. */
-  resultsTableBody(): Locator {
-    return this.resultsTable();
+  async mountedRowIds(): Promise<string[]> {
+    return test.step('read mounted row ids', async () => {
+      return this.outputsPanel('body')
+        .locator('tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]')
+        .evaluateAll((rows) =>
+          rows.map((r) => r.getAttribute('data-row-id')).filter((v): v is string => Boolean(v)),
+        );
+    });
   }
 
   /**
@@ -553,39 +559,75 @@ export class PlaygroundPage {
    * land below where the scroll position says they should.
    */
   async hasBlankBandAboveRows(): Promise<boolean> {
-    return this.scrollContainer().evaluate((scroller) => {
-      const wrapper = scroller.querySelector('[data-table-wrapper]');
-      const firstRow = wrapper?.querySelector('tbody tr[data-row-id]');
-      if (!(wrapper instanceof HTMLElement) || !(firstRow instanceof HTMLElement)) return false;
+    return test.step('check for a blank band above the mounted rows', async () => {
+      const viewportTop = await this.scrollContainer().evaluate(
+        (el) => el.getBoundingClientRect().top,
+      );
 
-      const viewportTop = scroller.getBoundingClientRect().top;
-      // Only meaningful once the grid's own top has scrolled above the viewport.
-      if (wrapper.getBoundingClientRect().top >= viewportTop) return false;
+      return this.outputsPanel('body').evaluate((body, top) => {
+        const wrapper = body.querySelector('[data-table-wrapper]');
+        const firstRow = body.querySelector('tbody tr[data-row-id]');
+        if (!(wrapper instanceof HTMLElement) || !(firstRow instanceof HTMLElement)) return false;
 
-      return firstRow.getBoundingClientRect().top > viewportTop + 1;
+        // Only meaningful once the grid's own top has scrolled above the viewport.
+        if (wrapper.getBoundingClientRect().top >= top) return false;
+
+        return firstRow.getBoundingClientRect().top > top + 1;
+      }, viewportTop);
     });
   }
 
-  /** Whether every sticky-header half is horizontally aligned with its body half. */
-  async headerBodyColumnsAligned(): Promise<boolean> {
-    return this.resultsTable().evaluate((root) => {
-      const scrollers = [...root.querySelectorAll('div.overflow-x-auto')].filter((e) =>
-        e.querySelector('table'),
-      ) as HTMLElement[];
-      for (let i = 0; i + 1 < scrollers.length; i += 2) {
-        if (scrollers[i].scrollLeft !== scrollers[i + 1].scrollLeft) return false;
-      }
-      return scrollers.length > 0;
+  /**
+   * Drive a horizontal scroll on one panel's body half and report what it actually reached.
+   * Returns the achieved `scrollLeft`, so a caller can fail loudly when the panel is too
+   * narrow to overflow instead of silently comparing two zeroes.
+   */
+  async scrollPanelHorizontallyTo(
+    panel: 'variables' | 'outputs',
+    offset: number,
+  ): Promise<number> {
+    return test.step(`scroll the ${panel} panel horizontally to ${offset}px`, async () => {
+      const body = panel === 'variables' ? this.variablesPanel('body') : this.outputsPanel('body');
+      const reached = await body.evaluate((el, x) => {
+        el.scrollLeft = x;
+        return el.scrollLeft;
+      }, offset);
+      await this.settle();
+      return reached;
+    });
+  }
+
+  /** The `scrollLeft` of a panel's sticky header half and its body half. */
+  async panelScrollOffsets(
+    panel: 'variables' | 'outputs',
+  ): Promise<{ header: number; body: number }> {
+    return test.step(`read ${panel} panel header/body scroll offsets`, async () => {
+      const half = (h: 'header' | 'body') =>
+        panel === 'variables' ? this.variablesPanel(h) : this.outputsPanel(h);
+      const [header, body] = await Promise.all([
+        half('header').evaluate((el) => el.scrollLeft),
+        half('body').evaluate((el) => el.scrollLeft),
+      ]);
+      return { header, body };
     });
   }
 
   /** Choose a "rows per page" value from the results pagination. */
   async setPageSize(size: number): Promise<void> {
-    await this.resultsTable()
-      .locator('..')
-      .getByRole('button', { name: /^(10|50|100|200|500|1000)$/ })
-      .click();
-    await this.page.getByRole('menuitemcheckbox', { name: String(size), exact: true }).click();
+    return test.step(`set page size to ${size}`, async () => {
+      await this.resultsTable()
+        .locator('..')
+        .getByRole('button', { name: /^(10|50|100|200|500|1000)$/ })
+        .click();
+      await this.page.getByRole('menuitemcheckbox', { name: String(size), exact: true }).click();
+    });
+  }
+
+  /** Two frames: one for the scroll event to dispatch, one for the virtualizer to re-render. */
+  private async settle(): Promise<void> {
+    await this.page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
   }
 
   private resultsTable(): Locator {
