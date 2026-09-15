@@ -1,3 +1,4 @@
+import inspect
 import threading
 import time
 from typing import Optional
@@ -575,9 +576,11 @@ def test_insert__sequential__uploads_sequentially_without_probing_version(monkey
     mock_rest_client.version.assert_not_called()
 
 
-# 4 batches, which is the default worker count — so all of them fit in flight
-# together and the barrier can prove the default really uses the pool.
-_DEFAULT_THREADS_ITEM_COUNT = _GATE_BATCH_SIZE * 4
+# One batch per default worker, so all of them fit in flight together and the
+# barrier can prove the default really uses the pool.
+_DEFAULT_THREADS_ITEM_COUNT = (
+    _GATE_BATCH_SIZE * constants.DATASET_ITEMS_WRITE_NUM_THREADS
+)
 
 
 def test_insert__num_threads_not_given__uploads_concurrently_by_default(monkeypatch):
@@ -588,6 +591,23 @@ def test_insert__num_threads_not_given__uploads_concurrently_by_default(monkeypa
         expect_overlap=True,
         item_count=_DEFAULT_THREADS_ITEM_COUNT,
     ), "insert() must upload in parallel without being asked to"
+
+
+def test_insert_paths__share_one_default_worker_count():
+    """Every dataset write path must default to the same worker count.
+
+    `TestSuite.insert` and the pytest experiment runner call the funnel without
+    `num_threads`, so a default that drifts from `insert()`'s leaves those
+    uploads silently sequential while the public API fans out.
+    """
+    funnel_default = (
+        inspect.signature(Dataset.__internal_api__insert_items_as_dataclasses__)
+        .parameters["num_threads"]
+        .default
+    )
+    public_default = inspect.signature(Dataset.insert).parameters["num_threads"].default
+
+    assert funnel_default == public_default == constants.DATASET_ITEMS_WRITE_NUM_THREADS
 
 
 def test_insert__repeated_inserts__backend_version_probed_once(monkeypatch):
