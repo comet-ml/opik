@@ -2961,6 +2961,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "~anthropic/claude-sonnet-latest",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_FLASH_LATEST,
+      label: "~deepseek/deepseek-flash-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_PRO_LATEST,
+      label: "~deepseek/deepseek-pro-latest",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_LATEST,
       label: "~deepseek/deepseek-v4-flash-latest",
     },

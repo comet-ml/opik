@@ -817,6 +817,8 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_HAIKU_LATEST = "~anthropic/claude-haiku-latest",
   ANTHROPIC_CLAUDE_OPUS_LATEST = "~anthropic/claude-opus-latest",
   ANTHROPIC_CLAUDE_SONNET_LATEST = "~anthropic/claude-sonnet-latest",
+  DEEPSEEK_DEEPSEEK_FLASH_LATEST = "~deepseek/deepseek-flash-latest",
+  DEEPSEEK_DEEPSEEK_PRO_LATEST = "~deepseek/deepseek-pro-latest",
   DEEPSEEK_DEEPSEEK_V4_FLASH_LATEST = "~deepseek/deepseek-v4-flash-latest",
   GOOGLE_GEMINI_FLASH_LATEST = "~google/gemini-flash-latest",
   GOOGLE_GEMINI_PRO_LATEST = "~google/gemini-pro-latest",

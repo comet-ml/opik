@@ -14,13 +14,20 @@ import { FormErrorSkeleton } from "@/ui/form";
 import isUndefined from "lodash/isUndefined";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Info } from "lucide-react";
+import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
 interface CustomModelConfigProps {
   configs: Partial<LLMCustomConfigsType>;
   onChange: (configs: Partial<LLMCustomConfigsType>) => void;
+  unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
-const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
+const CustomModelConfig = ({
+  configs,
+  onChange,
+  unsupportedParams,
+}: CustomModelConfigProps) => {
+  const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
   const theme = useCodemirrorTheme({ editable: true });
 
   const handleExtraBodyParametersChange = useCallback(
@@ -70,7 +77,7 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
         />
       )}
 
-      {!isUndefined(configs.topP) && (
+      {supports("topP") && !isUndefined(configs.topP) && (
         <SliderInputControl
           value={configs.topP}
           onChange={(v) => onChange({ topP: v })}
@@ -118,36 +125,40 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
         />
       )}
 
-      <SliderInputControl
-        value={configs.throttling ?? DEFAULT_CUSTOM_CONFIGS.THROTTLING}
-        onChange={(v) => onChange({ throttling: v })}
-        id="throttling"
-        min={0}
-        max={10}
-        step={0.1}
-        defaultValue={DEFAULT_CUSTOM_CONFIGS.THROTTLING}
-        label="Throttling (seconds)"
-        tooltip={
-          <PromptModelSettingsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
-        }
-      />
+      {supports("throttling") && (
+        <SliderInputControl
+          value={configs.throttling ?? DEFAULT_CUSTOM_CONFIGS.THROTTLING}
+          onChange={(v) => onChange({ throttling: v })}
+          id="throttling"
+          min={0}
+          max={10}
+          step={0.1}
+          defaultValue={DEFAULT_CUSTOM_CONFIGS.THROTTLING}
+          label="Throttling (seconds)"
+          tooltip={
+            <PromptModelSettingsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
+          }
+        />
+      )}
 
-      <SliderInputControl
-        value={
-          configs.maxConcurrentRequests ??
-          DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS
-        }
-        onChange={(v) => onChange({ maxConcurrentRequests: v })}
-        id="maxConcurrentRequests"
-        min={1}
-        max={20}
-        step={1}
-        defaultValue={DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS}
-        label="Max concurrent requests"
-        tooltip={
-          <PromptModelSettingsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
-        }
-      />
+      {supports("maxConcurrentRequests") && (
+        <SliderInputControl
+          value={
+            configs.maxConcurrentRequests ??
+            DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS
+          }
+          onChange={(v) => onChange({ maxConcurrentRequests: v })}
+          id="maxConcurrentRequests"
+          min={1}
+          max={20}
+          step={1}
+          defaultValue={DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS}
+          label="Max concurrent requests"
+          tooltip={
+            <PromptModelSettingsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
+          }
+        />
+      )}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="custom_parameters" className="flex items-center gap-1">
