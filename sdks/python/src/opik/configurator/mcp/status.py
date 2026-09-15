@@ -35,9 +35,9 @@ class HostStatus:
     workspace: Optional[str] = None
     in_sync: Optional[bool] = None
     # Local (uvx) registrations only: whether the recorded command asks for a
-    # version. Without one, an `opik-mcp` installed as a uv tool wins and the
-    # client starts that version forever. ``None`` for a hosted registration,
-    # which runs no local package at all.
+    # version. Without one, an `opik-mcp` installed as a uv tool can win, leaving
+    # the client starting that version indefinitely. ``None`` for a hosted
+    # registration, which runs no local package at all.
     requests_latest: Optional[bool] = None
 
 
@@ -125,11 +125,18 @@ def uv_tool_install_note(host_statuses: List[HostStatus]) -> Optional[str]:
     local package, so an install on the same machine is beside the point.
 
     The two cases read very differently to the person on the other end, so they
-    are worded differently. A registration with no version request is *currently
-    frozen* on the installed version and has a fix; one that asks for
-    ``@latest`` is fine, and the install is merely shadowing a command they might
-    type themselves. Neither is phrased as an error: a deliberate pin is rare but
-    real, and this is the only signal that distinguishes it from the accident.
+    are worded differently. A registration with no version request is *at risk of*
+    starting the installed version forever and has a fix; one that asks for
+    ``@latest`` is fine, and the install can at most take precedence over a bare
+    ``uvx opik-mcp`` they type themselves.
+
+    Both are hedged rather than asserted, because whether uv actually reuses an
+    existing tool environment varies by uv version: a uv that declines to reuse an
+    environment an older uv built re-resolves instead, leaving the same install
+    inert. Claiming a freeze that the reader can disprove in one command would
+    cost the message its credibility. Neither is phrased as an error either: a
+    deliberate pin is rare but real, and this is the only signal that
+    distinguishes it from the accident.
     """
     installed = uv_tool.installed_version()
     if installed is None:
@@ -148,7 +155,7 @@ def uv_tool_install_note(host_statuses: List[HostStatus]) -> Optional[str]:
         return (
             f"opik-mcp {installed} is installed as a uv tool, and "
             f"{', '.join(frozen)} still launches it as `uvx opik-mcp` with no "
-            f"version — so it starts {installed} every time, whatever has been "
+            f"version — so it may start {installed} every time, whatever has been "
             f"released since. Re-run `opik mcp configure` to update the "
             f"registration."
         )
@@ -156,8 +163,9 @@ def uv_tool_install_note(host_statuses: List[HostStatus]) -> Optional[str]:
     return (
         f"opik-mcp {installed} is installed as a uv tool. Your registrations ask "
         f"for `{mcp_spec.PACKAGE_REQUEST}`, so the MCP server is unaffected — but "
-        f"that install shadows a bare `uvx opik-mcp` you run yourself. `uv tool "
-        f"upgrade opik-mcp` updates it; `uv tool uninstall opik-mcp` removes it."
+        f"depending on your uv version that install can take precedence over a "
+        f"bare `uvx opik-mcp` you run yourself. `uv tool upgrade opik-mcp` updates "
+        f"it; `uv tool uninstall opik-mcp` removes it."
     )
 
 

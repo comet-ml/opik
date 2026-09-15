@@ -225,10 +225,13 @@ def _report_uv_tool_install(display: mcp_view.InstallView) -> None:
     """Tell the user about an ``opik-mcp`` installed as a uv tool, and stop there.
 
     Older SDKs created these (see ``uv_tool``), and while ``@latest`` means one no
-    longer decides what the MCP server runs, it still shadows a bare ``uvx
-    opik-mcp`` typed by hand. Both remedies are the user's to choose: removing
-    something from their environment without asking is the bug this whole change
-    exists to undo.
+    longer decides what the MCP server runs, it can still take precedence over a
+    bare ``uvx opik-mcp`` typed by hand — "can" rather than "does" because whether
+    uv reuses an existing tool environment varies: a uv new enough to reject an
+    environment an older uv built re-resolves instead, so the same install shadows
+    on one machine and not on another. Both remedies are the user's to choose:
+    removing something from their environment without asking is the bug this whole
+    change exists to undo.
     """
     installed = uv_tool.installed_version()
     if installed is None:
@@ -237,9 +240,10 @@ def _report_uv_tool_install(display: mcp_view.InstallView) -> None:
     display.note(
         f"Note: opik-mcp {installed} is also installed as a uv tool. The server "
         f"registered here asks for `{mcp_spec.PACKAGE_REQUEST}`, so it is "
-        f"unaffected — but that install still shadows a bare `uvx opik-mcp` you "
-        f"run yourself. `uv tool upgrade opik-mcp` updates it; `uv tool uninstall "
-        f"opik-mcp` removes it so uvx always resolves the published version."
+        f"unaffected — but depending on your uv version that install can take "
+        f"precedence over a bare `uvx opik-mcp` you run yourself. `uv tool upgrade "
+        f"opik-mcp` updates it; `uv tool uninstall opik-mcp` removes it so uvx "
+        f"always resolves the published version."
     )
 
 
