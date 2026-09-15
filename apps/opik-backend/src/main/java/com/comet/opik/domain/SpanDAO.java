@@ -20,6 +20,7 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -27,6 +28,7 @@ import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.UsageUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -1853,6 +1855,7 @@ public class SpanDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull WorkspacesService workspacesService;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @WithSpan
     public Mono<Void> insert(@NonNull Span span) {
@@ -1866,10 +1869,115 @@ public class SpanDAO {
 
         Preconditions.checkArgument(!spans.isEmpty(), "Spans list must not be empty");
 
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(spans);
+        }
+
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> insert(spans, connection))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
+    }
+
+    /**
+     * The {@link #BULK_INSERT} rows streamed as JSONEachRow through the v2 client rather than bound as
+     * 27 named parameters per row — the widest of the three bulk write paths, and so the one where the
+     * driver's per-name linear scan costs most.
+     *
+     * <p>Values come from the same helpers the R2DBC binder uses, including the batch-wide
+     * {@code nowForBatch} fallback and the cost-version rule, so both paths write identical cells.
+     */
+    private Mono<Long> insertJsonEachRow(List<Span> spans) {
+        return makeMonoContextAware((userName, workspaceId) -> {
+            Instant nowForBatch = Instant.now();
+
+            return jsonBulkInsert.insert(
+                    "spans",
+                    getLogComment("batch_insert_spans", workspaceId, userName, spans.size()),
+                    spans,
+                    span -> toJsonRow(span, userName, workspaceId, nowForBatch));
+        });
+    }
+
+    private ObjectNode toJsonRow(Span span, String userName, String workspaceId, Instant nowForBatch) {
+
+        String inputValue = TruncationUtils.toJsonString(span.input());
+        String outputValue = TruncationUtils.toJsonString(span.output());
+
+        var node = JsonUtils.createObjectNode();
+
+        node.put("id", span.id().toString());
+        node.put("project_id", span.projectId().toString());
+        node.put("workspace_id", workspaceId);
+        node.put("trace_id", span.traceId().toString());
+        node.put("parent_span_id", span.parentSpanId() != null ? span.parentSpanId().toString() : "");
+        node.put("name", StringUtils.defaultIfBlank(span.name(), ""));
+        node.put("type", Objects.toString(span.type(), SpanType.UNKNOWN_VALUE));
+        node.put("start_time", ClickHouseDateTimeFormat.formatNanos(span.startTime()));
+
+        // Mirrors bindEpochSentinel: epoch sentinel once the column is non-nullable, NULL while still
+        // Nullable.
+        if (spanColumnsNonNullable()) {
+            node.put("end_time", ClickHouseDateTimeFormat.formatNanos(nullToEpoch(span.endTime())));
+        } else if (span.endTime() != null) {
+            node.put("end_time", ClickHouseDateTimeFormat.formatNanos(span.endTime()));
+        } else {
+            node.putNull("end_time");
+        }
+
+        node.put("input", inputValue);
+        node.put("output", outputValue);
+        // Parity with the R2DBC binder, which uses metadata.toString() here rather than toJsonString.
+        node.put("metadata", span.metadata() != null ? span.metadata().toString() : "");
+        node.put("model", StringUtils.defaultIfBlank(span.model(), ""));
+        node.put("provider", StringUtils.defaultIfBlank(span.provider(), ""));
+
+        // Decimal128(12) written as a quoted plain string, as ExperimentAggregatesDAOImpl does for
+        // total_estimated_cost — no exponent notation, and no float round-tripping.
+        BigDecimal cost = span.totalEstimatedCost() != null ? span.totalEstimatedCost() : calculateCost(span);
+        node.put("total_estimated_cost", cost.toPlainString());
+        node.put("total_estimated_cost_version",
+                span.totalEstimatedCost() == null && cost.compareTo(BigDecimal.ZERO) > 0
+                        ? ESTIMATED_COST_VERSION
+                        : "");
+
+        var tags = node.putArray("tags");
+        Optional.ofNullable(span.tags()).ifPresent(values -> values.forEach(tags::add));
+
+        var usage = node.putObject("usage");
+        UsageUtils.sanitizeUsage(span.usage()).forEach(usage::put);
+
+        node.put("last_updated_at", ClickHouseDateTimeFormat.formatMicros(
+                span.lastUpdatedAt() != null ? span.lastUpdatedAt() : nowForBatch));
+        node.put("error_info", span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "");
+        node.put("created_by", userName);
+        node.put("last_updated_by", userName);
+        node.put("input_slim", TruncationUtils.createSlimJsonString(inputValue));
+        node.put("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+
+        // Mirrors bindNanSentinel; Jackson quotes NaN, hence input_format_json_read_numbers_as_strings
+        // on the insert.
+        if (spanColumnsNonNullable()) {
+            node.put("ttft", nullToNaN(span.ttft()));
+        } else if (span.ttft() != null) {
+            node.put("ttft", span.ttft());
+        } else {
+            node.putNull("ttft");
+        }
+
+        node.put("environment", StringUtils.defaultString(span.environment()));
+
+        // Omitted rather than null when absent, so the column DEFAULT applies directly — see the same
+        // note in TraceDAO#toJsonRow.
+        if (configuration.getResponseFormatting().getTruncationSize() > 0) {
+            node.put("truncation_threshold", configuration.getResponseFormatting().getTruncationSize());
+        }
+
+        if (span.source() != null) {
+            node.put("source", span.source().getValue());
+        }
+
+        return node;
     }
 
     private Publisher<? extends Result> insert(List<Span> spans, Connection connection) {

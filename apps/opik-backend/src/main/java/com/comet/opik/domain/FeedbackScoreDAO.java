@@ -5,8 +5,12 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -280,6 +284,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull OpikConfiguration configuration;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @Override
     @WithSpan
@@ -313,6 +319,11 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     private Mono<Long> insertFeedbackScores(@NonNull EntityType entityType,
             @NonNull List<? extends FeedbackScoreItem> scores, @Nullable String author) {
+
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(entityType, scores, author);
+        }
+
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
             var logComment = getLogComment("bulk_insert_feedback_score", workspaceId, userName, scores.size());
@@ -329,6 +340,62 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .flatMap(Result::getRowsUpdated)
                     .reduce(Long::sum);
         }));
+    }
+
+    /**
+     * The {@link #BULK_INSERT_FEEDBACK_SCORE} rows streamed as JSONEachRow through the v2 client rather
+     * than bound as 8 named parameters per row — 10 for the authored table.
+     *
+     * <p>Batch size here is not capped the way the other bulk paths are: a feedback score batch is 1000
+     * items at most on its own endpoints, but {@code ExperimentItemBulkIngestionService} accumulates up
+     * to 100 scores per record over up to 1000 records into a single call, so this insert can be an
+     * order of magnitude wider than the {@code experiment_items} one it runs beside.
+     *
+     * <p>The table is chosen by {@code author != null}, exactly as {@code <if(author)>} does on the R2DBC
+     * template — {@code feedback_scores} has no {@code author}/{@code source_queue_id} columns, so those
+     * two fields are emitted only for the authored table.
+     */
+    private Mono<Long> insertJsonEachRow(EntityType entityType, List<? extends FeedbackScoreItem> scores,
+            @Nullable String author) {
+        return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
+                author != null ? "authored_feedback_scores" : "feedback_scores",
+                getLogComment("bulk_insert_feedback_score", workspaceId, userName, scores.size()),
+                scores,
+                score -> toJsonRow(score, entityType, author, userName, workspaceId)));
+    }
+
+    private ObjectNode toJsonRow(FeedbackScoreItem score, EntityType entityType, @Nullable String author,
+            String userName, String workspaceId) {
+        var node = JsonUtils.createObjectNode();
+
+        node.put("entity_type", entityType.getType());
+        node.put("entity_id", score.id().toString());
+        node.put("project_id", score.projectId().toString());
+        node.put("workspace_id", workspaceId);
+        node.put("name", score.name());
+        node.put("category_name", getValueOrDefault(score.categoryName()));
+        // Decimal(18, 9) written as a quoted plain string, as SpanDAO#toJsonRow does for
+        // total_estimated_cost — no exponent notation, and no float round-tripping.
+        node.put("value", score.value().toPlainString());
+        node.put("reason", getValueOrDefault(score.reason()));
+        node.put("source", score.source().getValue());
+
+        if (author != null) {
+            node.put("author", getValueOrDefault(author));
+            // FixedString(36) with no DEFAULT: "" for an absent queue id, which the column zero-pads —
+            // the same cell the R2DBC bind writes.
+            node.put("source_queue_id",
+                    Optional.ofNullable(score.sourceQueueId()).map(UUID::toString).orElse(""));
+        }
+
+        node.put("created_by", userName);
+        node.put("last_updated_by", userName);
+
+        // created_at and last_updated_at stay absent so their column DEFAULTs stamp them server-side,
+        // exactly as the R2DBC column list does — last_updated_at is the ReplacingMergeTree version, so
+        // a zero there would make every later score for the same key lose to the original row. This is
+        // why the insert sets input_format_defaults_for_omitted_fields.
+        return node;
     }
 
     @Override
