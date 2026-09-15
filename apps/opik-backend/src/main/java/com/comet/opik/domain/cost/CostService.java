@@ -57,7 +57,9 @@ public class CostService {
             Map.entry("nebius", "nebius"),
             Map.entry("snowflake", "snowflake"),
             Map.entry("deepinfra", "deepinfra"),
-            Map.entry("cerebras", "cerebras"));
+            Map.entry("cerebras", "cerebras"),
+            Map.entry("novita", "novita"),
+            Map.entry("databricks", "databricks"));
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
@@ -90,6 +92,7 @@ public class CostService {
                     Map.entry("moonshot", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
                     Map.entry("snowflake", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
                     Map.entry("deepinfra", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
+                    Map.entry("novita", SpanCostCalculator::textGenerationWithCacheCostOpenAI),
                     Map.entry("bedrock", SpanCostCalculator::textGenerationWithCacheCostBedrock),
                     Map.entry("bedrock_converse", SpanCostCalculator::textGenerationWithCacheCostBedrock),
                     Map.entry("vertex_ai-language-models", SpanCostCalculator::textGenerationWithCacheCostGoogle),
