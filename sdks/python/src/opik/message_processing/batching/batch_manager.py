@@ -55,10 +55,8 @@ class BatchManager:
     def is_empty(self) -> bool:
         with self._lock:
             return all(
-                [
-                    batcher.is_empty()
-                    for batcher in self._message_to_batcher_mapping.values()
-                ]
+                batcher.is_empty()
+                for batcher in self._message_to_batcher_mapping.values()
             )
 
     def flush(self) -> None:

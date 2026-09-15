@@ -555,5 +555,15 @@ describe("convertTerminalOutputToHtml", () => {
       expect(result).not.toContain("[2J");
       expect(result).not.toContain("[H");
     });
+
+    it("should sanitize unsafe protocols like javascript: in OSC 8 hyperlinks", () => {
+      const input = "Click \x1b]8;;javascript:alert(1)\x07here\x1b]8;;\x07 for details";
+      const result = convertTerminalOutputToHtml(input);
+
+      // Must not create an anchor tag with javascript: URI
+      expect(result).not.toContain('href="javascript:alert(1)"');
+      expect(result).not.toContain("<a ");
+      expect(result).toContain("here");
+    });
   });
 });

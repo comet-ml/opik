@@ -116,14 +116,22 @@ export const restoreOsc8Links = (
   let result = html;
 
   links.forEach(({ url, text }, placeholder) => {
-    // Escape URL for href attribute
-    const safeUrl = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-
-    // Text was already escaped by ansi-to-html, use as-is
+    const trimmedUrl = url.trim();
+    // Escape text for HTML
     const safeText = text
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
+
+    // Strictly validate protocol to prevent javascript: or data: XSS payloads
+    const isSafeProtocol = /^https?:\/\//i.test(trimmedUrl) || /^mailto:/i.test(trimmedUrl);
+    if (!isSafeProtocol) {
+      result = result.replace(placeholder, safeText);
+      return;
+    }
+
+    // Escape URL for href attribute
+    const safeUrl = trimmedUrl.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 
     const link = `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-400 underline hover:text-blue-300">${safeText}</a>`;
     result = result.replace(placeholder, link);
