@@ -15,6 +15,7 @@ from opik.cli import install_view
 from opik.cli import status_view
 from opik.configurator import consent
 from opik.configurator import interactive_helpers
+from opik.configurator.mcp import doctor as mcp_doctor
 from opik.configurator.mcp import status as mcp_status
 from opik.configurator.mcp import targets as mcp_targets
 
@@ -253,3 +254,21 @@ def status() -> None:
     status_view.render_mcp_status(
         config, host_statuses, tool_note=mcp_status.uv_tool_install_note(host_statuses)
     )
+
+
+@mcp.command(name="doctor")
+def doctor() -> None:
+    """Check which opik-mcp version your AI clients actually start.
+
+    `opik mcp status` reports what each config says. This runs what it says, and
+    reports what comes back — the two disagree when an `opik-mcp` installed as a
+    uv tool takes over a registration that asks for no version, which leaves a
+    client starting a months-old build with nothing on disk looking wrong.
+
+    Each local server is launched once and closed immediately. Those launches are
+    excluded from Opik's usage analytics, so running this does not look like real
+    sessions.
+    """
+    with install_view.RichInstallView().step("Starting each configured MCP server"):
+        diagnosis = mcp_doctor.collect_diagnosis()
+    status_view.render_mcp_doctor(diagnosis)
