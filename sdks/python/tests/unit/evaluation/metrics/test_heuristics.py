@@ -1,4 +1,7 @@
+import concurrent.futures
 import re
+import threading
+import warnings
 
 import pytest
 
@@ -973,3 +976,126 @@ def test_rouge_score_using_custom_tokenizer(
         f"For candidate='{candidate}' vs reference='{reference}', "
         f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
     )
+
+
+class _RecordingTextStat:
+    """Minimal textstat-compatible stub that records how the locale is applied."""
+
+    def __init__(self, syllables_per_lang: dict) -> None:
+        self.lang = "en_US"
+        self.calls: list = []
+        self._syllables_per_lang = syllables_per_lang
+
+    def set_lang(self, lang: str) -> None:
+        self.calls.append(("set_lang", lang))
+        self.lang = lang
+
+    def sentence_count(self, text: str) -> int:
+        self.calls.append(("sentence_count",))
+        return 1
+
+    def lexicon_count(self, text: str, removepunct: bool = True) -> int:
+        self.calls.append(("lexicon_count",))
+        return 4
+
+    def syllable_count(self, text: str, *args, **kwargs) -> int:
+        self.calls.append(("syllable_count", args, kwargs))
+        return self._syllables_per_lang[self.lang]
+
+    def flesch_reading_ease(self, text: str) -> float:
+        return 60.0
+
+    def flesch_kincaid_grade(self, text: str) -> float:
+        return 8.0
+
+
+def test_readability__language__applied_through_set_lang_before_counting():
+    stub = _RecordingTextStat(syllables_per_lang={"en_US": 4, "de_DE": 7})
+    metric = Readability(language="de_DE", track=False, textstat_module=stub)
+
+    result = metric.score(output="Vier kurze Wörter hier.")
+
+    assert stub.calls[0] == ("set_lang", "de_DE")
+    syllable_calls = [call for call in stub.calls if call[0] == "syllable_count"]
+    # The deprecated `lang` keyword must no longer be forwarded to textstat.
+    assert syllable_calls == [("syllable_count", (), {})]
+    assert result.metadata is not None
+    assert result.metadata["syllable_count"] == 7
+
+
+def test_readability__textstat_module_without_set_lang__still_scores():
+    class LegacyTextStat(_RecordingTextStat):
+        set_lang = None  # type: ignore[assignment]
+
+    stub = LegacyTextStat(syllables_per_lang={"en_US": 4})
+    metric = Readability(language="fr_FR", track=False, textstat_module=stub)
+
+    result = metric.score(output="Four short words here.")
+
+    assert result.metadata is not None
+    assert result.metadata["syllable_count"] == 4
+
+
+def test_readability__language__changes_real_textstat_result_without_warning():
+    textstat = pytest.importorskip("textstat")
+    german = (
+        "Die Donaudampfschifffahrtsgesellschaft veröffentlichte "
+        "Freundschaftsbezeugungen."
+    )
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "error", message=".*set_lang.*", category=DeprecationWarning
+            )
+            english = Readability(language="en_US", track=False).score(output=german)
+            deutsch = Readability(language="de_DE", track=False).score(output=german)
+    finally:
+        textstat.set_lang("en_US")
+
+    assert english.metadata is not None and deutsch.metadata is not None
+    assert deutsch.metadata["syllable_count"] != english.metadata["syllable_count"]
+    assert (
+        deutsch.metadata["flesch_reading_ease"]
+        != english.metadata["flesch_reading_ease"]
+    )
+
+
+def test_readability__concurrent_metrics_with_different_languages__each_scores_with_own_locale():
+    ease_per_lang = {"en_US": 60.0, "de_DE": 30.0}
+    arrived = {lang: threading.Event() for lang in ease_per_lang}
+
+    class HandoffTextStat(_RecordingTextStat):
+        """After applying a locale, gives the competing call a chance to overwrite it."""
+
+        def set_lang(self, lang: str) -> None:
+            super().set_lang(lang)
+            arrived[lang].set()
+            other = next(event for key, event in arrived.items() if key != lang)
+            # With the locale change serialised, the competing call cannot arrive while
+            # this one is in progress, so this wait just times out. Without it, the
+            # competing call arrives immediately and switches the locale before the
+            # values below are read, which is the regression being guarded against.
+            other.wait(timeout=0.5)
+
+        def flesch_reading_ease(self, text: str) -> float:
+            return ease_per_lang[self.lang]
+
+    shared = HandoffTextStat(syllables_per_lang={"en_US": 4, "de_DE": 7})
+    english = Readability(language="en_US", track=False, textstat_module=shared)
+    german = Readability(language="de_DE", track=False, textstat_module=shared)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        english_result, german_result = pool.map(
+            lambda metric: metric.score(output="Four short words here."),
+            [english, german],
+        )
+
+    assert english_result.metadata is not None
+    assert english_result.metadata["syllable_count"] == 4
+    assert english_result.metadata["flesch_reading_ease"] == 60.0
+    assert english_result.value == pytest.approx(0.6)
+
+    assert german_result.metadata is not None
+    assert german_result.metadata["syllable_count"] == 7
+    assert german_result.metadata["flesch_reading_ease"] == 30.0
+    assert german_result.value == pytest.approx(0.3)
