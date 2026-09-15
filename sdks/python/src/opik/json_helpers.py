@@ -51,14 +51,22 @@ ACCELERATED: bool = _orjson is not None
 
 def dumps(
     value: Any,
-    default: Optional[Callable[[Any], Any]] = None,
-    sort_keys: bool = False,
+    *,
+    default: Optional[Callable[[Any], Any]],
+    sort_keys: bool,
 ) -> bytes:
     """Encode one value as UTF-8 JSON bytes.
 
     `default` receives whatever the encoder cannot represent and is expected to return
-    something it can, or raise. `sort_keys` orders mapping keys, which a caller needs
-    when the bytes are hashed rather than sent.
+    something it can, or raise; pass None where the caller wants the encoder's own
+    refusal. `sort_keys` orders mapping keys, which a caller needs when the bytes are
+    hashed rather than sent.
+
+    Both are required, and keyword-only so a call site cannot be misread. This is
+    internal and its two callers want opposite things -- the wire path wants the
+    flexible encoder and insertion order, the digest path wants sorted keys -- so a
+    default here would quietly decide for whichever call site forgot to say. Defaults
+    belong further up, where a user or a config source sets them.
     """
     if _orjson is None:
         return json.dumps(value, default=default, sort_keys=sort_keys).encode("utf-8")

@@ -70,14 +70,17 @@ VALUES = [
 def test_dumps__round_trips_in_both_modes(value, mode, request):
     request.getfixturevalue(mode)
 
-    assert json.loads(json_helpers.dumps(value, default=flexible)) == value
+    assert (
+        json.loads(json_helpers.dumps(value, default=flexible, sort_keys=False))
+        == value
+    )
 
 
 @pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
 def test_dumps__sort_keys__orders_keys(mode, request):
     request.getfixturevalue(mode)
 
-    encoded = json_helpers.dumps({"b": 1, "a": 2}, sort_keys=True)
+    encoded = json_helpers.dumps({"b": 1, "a": 2}, default=None, sort_keys=True)
 
     assert list(json.loads(encoded)) == ["a", "b"]
 
@@ -86,7 +89,7 @@ def test_dumps__sort_keys__orders_keys(mode, request):
 def test_dumps__without_sort_keys__keeps_insertion_order(mode, request):
     request.getfixturevalue(mode)
 
-    encoded = json_helpers.dumps({"b": 1, "a": 2})
+    encoded = json_helpers.dumps({"b": 1, "a": 2}, default=None, sort_keys=False)
 
     assert list(json.loads(encoded)) == ["b", "a"]
 
@@ -96,7 +99,7 @@ def test_dumps__default_handles_what_the_encoder_cannot(mode, request):
     request.getfixturevalue(mode)
     when = datetime.datetime(2024, 1, 2, 3, 4, 5, tzinfo=datetime.timezone.utc)
 
-    encoded = json_helpers.dumps({"when": when}, default=flexible)
+    encoded = json_helpers.dumps({"when": when}, default=flexible, sort_keys=False)
 
     assert json.loads(encoded) == {"when": "2024-01-02T03:04:05+00:00"}, (
         "orjson renders datetime natively unless told to pass it through; if this "
@@ -112,7 +115,7 @@ def test_dumps__unserialisable_value__raises_type_error(mode, request):
         pass
 
     with pytest.raises(TypeError):
-        json_helpers.dumps({"v": Opaque()}, default=flexible)
+        json_helpers.dumps({"v": Opaque()}, default=flexible, sort_keys=False)
 
 
 @pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
@@ -123,7 +126,7 @@ def test_dumps__no_default__unserialisable_value_still_raises(mode, request):
         pass
 
     with pytest.raises(TypeError):
-        json_helpers.dumps({"v": Opaque()})
+        json_helpers.dumps({"v": Opaque()}, default=None, sort_keys=False)
 
 
 # --------------------------------------------------------------------------- #
@@ -137,7 +140,7 @@ def test_dumps__integer_beyond_range__falls_back_without_calling_default(acceler
         calls.append(value)
         raise TypeError("unreachable")
 
-    encoded = json_helpers.dumps({"v": 2**64}, default=counting)
+    encoded = json_helpers.dumps({"v": 2**64}, default=counting, sort_keys=False)
 
     assert json.loads(encoded) == {"v": 2**64}
     assert calls == [], "`default` has no say in an out-of-range integer"
@@ -156,7 +159,7 @@ def test_dumps__default_raises__propagates_the_callers_exception(accelerated):
         raise Sentinel("the caller's own message")
 
     with pytest.raises(Sentinel, match="the caller's own message"):
-        json_helpers.dumps({"v": Opaque()}, default=exploding)
+        json_helpers.dumps({"v": Opaque()}, default=exploding, sort_keys=False)
 
 
 def test_dumps__default_raises__is_not_called_twice(accelerated):
@@ -171,7 +174,7 @@ def test_dumps__default_raises__is_not_called_twice(accelerated):
         raise TypeError("no")
 
     with pytest.raises(TypeError):
-        json_helpers.dumps({"v": Opaque()}, default=counting)
+        json_helpers.dumps({"v": Opaque()}, default=counting, sort_keys=False)
 
     assert len(calls) == 1, f"`default` ran {len(calls)} times, expected once"
 
@@ -192,10 +195,10 @@ def test_dumps__non_finite_float__differs_by_encoder(value, monkeypatch):
     value that changes shape deserves to fail loudly here if either side ever moves.
     """
     monkeypatch.setattr(json_helpers, "_orjson", orjson)
-    accelerated_bytes = json_helpers.dumps({"v": value})
+    accelerated_bytes = json_helpers.dumps({"v": value}, default=None, sort_keys=False)
 
     monkeypatch.setattr(json_helpers, "_orjson", None)
-    stdlib_bytes = json_helpers.dumps({"v": value})
+    stdlib_bytes = json_helpers.dumps({"v": value}, default=None, sort_keys=False)
 
     assert accelerated_bytes == b'{"v":null}'
     assert stdlib_bytes != accelerated_bytes
@@ -253,7 +256,7 @@ def test_import__orjson_unavailable__falls_back_at_import_time():
 def test_import__orjson_unavailable__still_encodes():
     """A platform with no wheel gets a working encoder, not a broken import."""
     encoded = _with_orjson_unavailable(
-        lambda module: module.dumps({"b": 1, "a": 2}, sort_keys=True)
+        lambda module: module.dumps({"b": 1, "a": 2}, default=None, sort_keys=True)
     )
 
     assert json.loads(encoded) == {"a": 2, "b": 1}
@@ -308,7 +311,10 @@ def test_dumps__builtin_subclass__serialises_as_its_builtin(
     """
     request.getfixturevalue(mode)
 
-    assert json.loads(json_helpers.dumps(value, default=flexible)) == expected
+    assert (
+        json.loads(json_helpers.dumps(value, default=flexible, sort_keys=False))
+        == expected
+    )
 
 
 @pytest.mark.parametrize("value, expected", SUBCLASSES)
@@ -322,4 +328,7 @@ def test_dumps__builtin_subclass__default_is_never_consulted(
             f"`default` must not see {type(unencodable).__name__}; it has no case for it"
         )
 
-    assert json.loads(json_helpers.dumps(value, default=explode)) == expected
+    assert (
+        json.loads(json_helpers.dumps(value, default=explode, sort_keys=False))
+        == expected
+    )

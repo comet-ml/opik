@@ -124,7 +124,7 @@ def dumps(value: Any) -> bytes:
     `default=` carries the flexible types the generated client used to accept, so only a
     value that needs the normalisation pays for it.
     """
-    return json_helpers.dumps(value, default=encode_flexible)
+    return json_helpers.dumps(value, default=encode_flexible, sort_keys=False)
 
 
 class StreamingBatchWriter:

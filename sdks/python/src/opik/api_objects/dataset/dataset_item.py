@@ -103,7 +103,7 @@ class DatasetItem(pydantic.BaseModel):
             content["execution_policy"] = self.execution_policy.model_dump()
 
         try:
-            encoded = json_helpers.dumps(content, sort_keys=True)
+            encoded = json_helpers.dumps(content, default=None, sort_keys=True)
         except TypeError:
             # Only where the line above already raised, never instead of it: every digest
             # that can be produced without the encoder keeps its exact bytes, because a
