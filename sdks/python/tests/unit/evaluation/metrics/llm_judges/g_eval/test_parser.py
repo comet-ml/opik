@@ -270,6 +270,76 @@ def test_escaped_quote_echo_is_not_a_matchable_key():
     )
 
 
+def test_nested_score_key_does_not_capture_the_located_token():
+    # A per-criterion breakdown object carries its own "score". It comes later
+    # in the stream than the top-level key, so a purely positional scan locates
+    # the nested digits and weights the average from them -- while json.loads,
+    # and therefore the text path, read the top-level 7. Before the value check
+    # this scored 0.27397830512740046 (the nested 3's distribution).
+    entries = [
+        _entry('{"', -0.01),
+        _entry("score", -0.01),
+        _entry('":', -0.01),
+        _entry(
+            "7",
+            -0.1,
+            top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.0}],
+        ),
+        _entry(", ", -0.01),
+        _entry('"reason', -0.01),
+        _entry('": ', -0.01),
+        _entry('"ok"', -0.01),
+        _entry(", ", -0.01),
+        _entry('"breakdown"', -0.01),
+        _entry(": {", -0.01),
+        _entry('"score"', -0.01),
+        _entry(": ", -0.01),
+        _entry(
+            "3",
+            -0.1,
+            top=[{"token": "3", "logprob": -0.1}, {"token": "1", "logprob": -2.0}],
+        ),
+        _entry("}}", -0.01),
+    ]
+    content = '{"score":7, "reason": "ok", "breakdown": {"score":3}}'
+    result = parser.parse_litellm_model_output(
+        _response(content, entries),
+        name="g_eval",
+        log_probs_supported=True,
+    )
+    # Same derivation as the duplicate-key test: the top-level key's
+    # candidates are 7 @ -0.1 and 1 @ -2.0.
+    assert result.value == pytest.approx(0.6219349153822014, abs=1e-9), (
+        f"scored from the nested key: {result.value}"
+    )
+
+
+def test_unparseable_reconstruction_keeps_the_positional_match():
+    # A partial token stream reconstructs to text that is not valid JSON, so
+    # there is no parsed value to agree with. That must not turn a locatable
+    # score into a failed metric.
+    entries = [
+        _entry('{"', -0.01),
+        _entry("score", -0.01),
+        _entry('":', -0.01),
+        _entry(
+            "7",
+            -0.1,
+            top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.0}],
+        ),
+        _entry(", ", -0.01),
+    ]
+    content = '{"score":7, "reason": "ok"}'
+    result = parser.parse_litellm_model_output(
+        _response(content, entries),
+        name="g_eval",
+        log_probs_supported=True,
+    )
+    assert result.value == pytest.approx(0.6219349153822014, abs=1e-9), (
+        f"unexpected value {result.value}"
+    )
+
+
 # --- provider-shaped GEval coverage ----------------------------------------
 # The tests above call parse_litellm_model_output directly with hand-built
 # token dicts. These go through the public GEval.score LiteLLM branch with

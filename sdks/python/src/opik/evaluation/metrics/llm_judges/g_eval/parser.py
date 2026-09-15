@@ -50,9 +50,9 @@ def parse_litellm_model_output(
     between 0 and 10.
 
     In order to make the score computation more robust, we look at the top logprobs of the score token and compute
-    a weighted average of the scores. The score token is located by content (the digits after the `"score":` key,
-    last-wins on duplicates, mirroring json.loads); only when the key cannot be located do we fall back to the
-    legacy fixed token offset for backwards compatibility.
+    a weighted average of the scores. The score token is located by the digits of the top-level `score` key (the one
+    json.loads resolves), so a nested `"score"` later in the stream does not capture the position; only when the key
+    cannot be located at all do we fall back to the legacy fixed token offset for backwards compatibility.
     """
     try:
         choice_dict = _normalise_first_choice(content)
@@ -127,9 +127,13 @@ def _locate_score_entries(entries: list) -> list[int] | None:
     or None when the key cannot be found in the reconstructed text (the
     caller then falls back to the legacy fixed offset).
 
-    Uses the LAST match so duplicate `"score"` keys resolve the same way
-    json.loads does — to the final one, which is also what the no-logprob
-    text path reads via `dict_content["score"]`.
+    The located digits must be the ones every other path reads: the
+    top-level ``score`` of the response. Text order is not that order — a
+    nested key (a per-criterion breakdown, say) can come later than the
+    top-level one while ``json.loads`` still resolves the top-level value.
+    So the last match is only taken as-is when it agrees with the parsed
+    value; otherwise the last agreeing match wins, which keeps duplicate
+    top-level keys resolving to the final one as ``json.loads`` does.
     """
     token_texts = [str(_to_dict(entry).get("token", "")) for entry in entries]
     full_text = "".join(token_texts)
@@ -137,6 +141,14 @@ def _locate_score_entries(entries: list) -> list[int] | None:
     if not matches:
         return None
     match = matches[-1]
+    try:
+        expected = str(int(json.loads(full_text)["score"]))
+        match = next((m for m in reversed(matches) if m.group(1) == expected), match)
+    except Exception:
+        # The reconstruction can differ from the message content (a truncated
+        # stream, for instance); without a parsed value to agree with, keep
+        # the positional choice instead of failing the locator.
+        pass
     start, end = match.start(1), match.end(1)
     offsets = []
     position = 0
