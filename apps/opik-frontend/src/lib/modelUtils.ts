@@ -444,7 +444,7 @@ export type SamplingParams = { temperature?: number; topP?: number };
  * match is deliberately loose — a false positive only drops topP when temperature is also set,
  * which is what Anthropic recommends regardless.
  */
-const isClaudeModel = (model: PROVIDER_MODEL_TYPE | ""): boolean =>
+export const isClaudeModel = (model: PROVIDER_MODEL_TYPE | ""): boolean =>
   /claude/i.test(model);
 
 /**
