@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { BooleanParam, JsonParam, useQueryParam } from "use-query-params";
 import find from "lodash/find";
@@ -48,6 +48,10 @@ import {
 } from "@/constants/traces";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useVisibleSpans } from "@/v2/pages-shared/traces/hiddenSpans";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+import McpHintRail from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/McpHintRail";
+import useMcpInstallMode from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/useMcpInstallMode";
+import { McpHintTarget } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/types";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
 const EMPTY_FILTERS: unknown[] = [];
@@ -103,6 +107,8 @@ export type TraceDetailsPanelProps = {
   container?: HTMLElement | null;
   refetchInterval?: number | false;
   hideAnnotateActions?: boolean;
+  /** Opt-in: the MCP hint ships on the Logs page only. */
+  showMcpHint?: boolean;
 };
 
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
@@ -119,6 +125,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   container,
   refetchInterval,
   hideAnnotateActions,
+  showMcpHint,
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
@@ -129,6 +136,12 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     { updateType: "replaceIn" },
   );
   const [isGraphFullscreen, setIsGraphFullscreen] = useState(false);
+  // Scoped to a node, not a bare boolean: the section is one component reused
+  // across the tree, so a flag would read as open on a node nobody opened.
+  const [errorOpenFor, setErrorOpenFor] = useState<string | null>(null);
+  // Opening the error is the ask and it stands, so this outlives a collapse.
+  const [hintShownFor, setHintShownFor] = useState<string | null>(null);
+  const mcpInstallMode = useMcpInstallMode();
 
   const [search = undefined, setSearch] = useQueryParam(
     `trace_panel_search`,
@@ -209,6 +222,63 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   const treeData = useMemo(() => {
     return [...(trace ? [trace] : []), ...(spansData?.content || [])];
   }, [spansData?.content, trace]);
+
+  // The node being inspected. Switching it resets the hint.
+  const mcpHintSubject = `${traceId}:${spanId}`;
+  const mcpHintTarget = useMemo<McpHintTarget>(
+    () => ({
+      traceId,
+      spanId: spanId || undefined,
+      projectId,
+      entityType: spanId ? "span" : "trace",
+    }),
+    [traceId, projectId, spanId],
+  );
+
+  const isErrorOpen = errorOpenFor === mcpHintSubject;
+  const isHintVisible = hintShownFor === mcpHintSubject;
+
+  // The panel stays mounted when it closes, so without this it would reopen on
+  // the same node with the error expanded and the hint already shown.
+  //
+  // The one effect here that is not an action in disguise: `open` belongs to
+  // the caller, and the panel has three close paths into it — its own chrome,
+  // the keyboard, and the caller clearing the id — so there is no single
+  // handler to hang this on. The alternative is moving both values into
+  // something that unmounts with the sheet, which is how they used to drift.
+  useEffect(() => {
+    if (open) return;
+    setErrorOpenFor(null);
+    setHintShownFor(null);
+  }, [open]);
+
+  const handleErrorExpandedChange = useCallback(
+    (expanded: boolean) => {
+      setErrorOpenFor(expanded ? mcpHintSubject : null);
+      if (!expanded) return;
+
+      // Emitted here, not from the shared error section: only this knows the
+      // hint is switched on, and the funnel must not count surfaces without it.
+      const properties = {
+        entity_type: mcpHintTarget.entityType,
+        install_mode: mcpInstallMode,
+      };
+      trackEvent(OpikEvent.TRACE_ERROR_EXPANDED, properties);
+
+      // One impression per node: the hint stays through a collapse, so this
+      // avoids counting a second showing of a button that never went away.
+      if (!showMcpHint || hintShownFor === mcpHintSubject) return;
+      setHintShownFor(mcpHintSubject);
+      trackEvent(OpikEvent.MCP_BUTTON_SHOWN, properties);
+    },
+    [
+      mcpHintSubject,
+      mcpHintTarget.entityType,
+      mcpInstallMode,
+      showMcpHint,
+      hintShownFor,
+    ],
+  );
 
   const spanCount = spansData?.content?.length ?? 0;
 
@@ -381,6 +451,16 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     setActiveSection={setActiveSection}
                     isSpansLazyLoading={isSpansLazyLoading}
                     search={search}
+                    isErrorExpanded={showMcpHint ? isErrorOpen : undefined}
+                    onErrorExpandedChange={
+                      showMcpHint ? handleErrorExpandedChange : undefined
+                    }
+                  />
+                )}
+                {showMcpHint && (
+                  <McpHintRail
+                    isVisible={isHintVisible}
+                    target={mcpHintTarget}
                   />
                 )}
               </div>
