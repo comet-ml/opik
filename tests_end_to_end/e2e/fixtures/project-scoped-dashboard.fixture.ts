@@ -101,6 +101,25 @@ export const test = baseTest.extend<ProjectScopedDashboardFixtures>({
           } catch (err) {
             console.warn(`[projectScopedDashboard fixture] view delete warning:`, err);
           }
+        } else {
+          // No id came back — which is not the same as nothing having been
+          // created. `insights-views` stamps its own id (the field is read-only
+          // server-side), so unlike the trace in `cachedTokenSpans` there is
+          // nothing to pre-generate and hand to the write; a POST that commits
+          // and then loses its response can only be found again by name. Nothing
+          // else would find it: no cascade reaches a view from the project it
+          // names, and `global-teardown`'s prefix sweep does not know this
+          // collection at all, so the leak would be permanent.
+          try {
+            const orphans = (
+              await backendClient.listInsightsViews({ projectId: project.id })
+            ).filter((d) => d.name === viewName);
+            for (const orphan of orphans) {
+              await backendClient.deleteInsightsView(orphan.id);
+            }
+          } catch (err) {
+            console.warn(`[projectScopedDashboard fixture] orphan view sweep warning:`, err);
+          }
         }
         if (workspaceDashboard !== null) {
           try {

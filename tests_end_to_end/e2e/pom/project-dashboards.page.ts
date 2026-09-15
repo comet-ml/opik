@@ -42,8 +42,8 @@ export class ProjectDashboardsPage {
    * project: resolving a foreign id is a case this page has to handle, and a POM
    * that validated it away could not drive it.
    *
-   * Waits for the project's own view list to come back, not just for the
-   * navigation. `ProjectDashboardViewSelector` builds its options as
+   * Waits for the project's own view list to come back SUCCESSFULLY, not just
+   * for the navigation. `ProjectDashboardViewSelector` builds its options as
    * `[...TEMPLATE_OPTIONS, ...dashboards]`, where the templates are a module
    * constant and only `dashboards` comes from `useInsightsViewsList` — so every
    * built-in option is on screen a full request before any custom view is, and
@@ -59,9 +59,10 @@ export class ProjectDashboardsPage {
         const query = opts.dashboardId
           ? `?${new URLSearchParams({ dashboardId: opts.dashboardId })}`
           : '';
-        // Any status: a backend that refuses this read should surface as the
-        // caller's own picker assertion, which says what the user would see,
-        // rather than as an opaque wait timeout here.
+        // Matched on the URL and asserted on the status afterwards, rather than
+        // narrowed to a 2xx in the predicate: a refused read then fails saying
+        // what actually came back, instead of as an opaque "no response
+        // matched" timeout thirty seconds later.
         const viewsListed = this.page.waitForResponse(
           (res) =>
             res.url().includes('/v1/private/insights-views') &&
@@ -70,7 +71,18 @@ export class ProjectDashboardsPage {
         await this.page.goto(
           `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/dashboards${query}`,
         );
-        await viewsListed;
+        const listed = await viewsListed;
+        // The list has to have SUCCEEDED, not merely answered. The consumer this
+        // wait exists for is an absence assertion — "another project's view is
+        // not offered here" — and the selector renders a failed read and a
+        // genuinely empty one identically, since only the custom views come from
+        // the request and the built-in options do not. So a 500 or a 403 would
+        // satisfy `toHaveCount(0)` exactly as a correct backend does, which is
+        // the one outcome an absence assertion must never be allowed to have.
+        expect(
+          listed.ok(),
+          `the project's insights-views list must load before the picker is read — got ${listed.status()} from ${listed.url()}`,
+        ).toBe(true);
       },
     );
   }

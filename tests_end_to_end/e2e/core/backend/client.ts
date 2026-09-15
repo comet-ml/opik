@@ -1064,8 +1064,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * them stores a view the app then has to cope with: `areSectionsEqual`
      * hands `section.layout` to `areLayoutsEqual`, which reads `prev.length`
      * unguarded, and the unmount path in `useDashboardPersistence` only skips
-     * that comparison when `lastModified === 0` — so an absent one is truthy
-     * and walks straight into it. A seed should look like what the product's
+     * that comparison when `lastModified === 0` — an absent one is `undefined`,
+     * which is not `0`, so the guard does not fire and the unguarded read
+     * happens anyway. A seed should look like what the product's
      * own create dialog writes, not like the minimum the API will accept.
      */
     async createInsightsView(args: {
