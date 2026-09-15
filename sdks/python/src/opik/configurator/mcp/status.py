@@ -140,12 +140,14 @@ def uv_tool_install_note(host_statuses: List[HostStatus]) -> Optional[str]:
     the install can at most take precedence over a bare ``uvx opik-mcp`` they type
     themselves.
 
-    Both are hedged rather than asserted. uv reusing an existing tool environment
-    is the normal case — reproduced on uv 0.8.12 and 0.11.7 alike — but not a
-    certainty: at least one real environment was found being re-resolved past for
-    reasons never established. Claiming a freeze the reader can disprove in one
-    command would cost the message its credibility. Neither is phrased as an error
-    either: a deliberate pin is rare but real, and this is the only signal that
+    Both are hedged rather than asserted, because whether an install actually wins
+    depends on which interpreter uv selects for that launch. A tool environment is
+    reused only when its compiled wheels match: one built under CPython 3.13 is
+    discarded on a platform-tag mismatch when uv resolves with 3.11, and the launch
+    silently gets the published version instead. So the same machine can be frozen
+    or not from one invocation to the next, and a flat claim is one the reader may
+    be able to disprove in a single command. Neither is phrased as an error either:
+    a deliberate pin is rare but real, and this is the only signal that
     distinguishes it from the accident.
     """
     installed = uv_tool.installed_version()
