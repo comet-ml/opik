@@ -68,7 +68,7 @@ public class ChatCompletionService {
 
     public ChatCompletionResponse create(@NonNull ChatCompletionRequest rawRequest, @NonNull String workspaceId) {
         // must be final or effectively final for lambda
-        var request = MessageContentNormalizer.normalizeRequest(rawRequest);
+        var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
 
         var llmProviderClient = llmProviderFactory.getService(workspaceId, request.model());
         llmProviderClient.validateRequest(request);
@@ -100,7 +100,7 @@ public class ChatCompletionService {
             @NonNull ChatCompletionRequest rawRequest,
             @NonNull String workspaceId,
             @NonNull ChunkedOutputHandlers handlers) {
-        var request = MessageContentNormalizer.normalizeRequest(rawRequest);
+        var request = SamplingParamsNormalizer.normalizeRequest(MessageContentNormalizer.normalizeRequest(rawRequest));
 
         log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
 

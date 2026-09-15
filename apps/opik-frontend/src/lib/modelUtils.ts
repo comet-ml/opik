@@ -436,6 +436,18 @@ export const updateProviderConfig = <
 export type SamplingParams = { temperature?: number; topP?: number };
 
 /**
+ * Whether a model is an Anthropic Claude model, whatever provider is serving it.
+ *
+ * The family name is the only signal common to every route: Anthropic's own ids
+ * (`claude-opus-4-6`), Bedrock's decorated ids (`us.anthropic.claude-…-v1:0`), OpenRouter's
+ * (`anthropic/claude-…`) and whatever an OpenAI-compatible proxy is configured to call them. The
+ * match is deliberately loose — a false positive only drops topP when temperature is also set,
+ * which is what Anthropic recommends regardless.
+ */
+const isClaudeModel = (model: PROVIDER_MODEL_TYPE | ""): boolean =>
+  /claude/i.test(model);
+
+/**
  * The single interpreter of temperature/topP for a model: capability gating plus Anthropic's
  * temperature-XOR-topP rule.
  *
@@ -482,6 +494,13 @@ export const resolveSamplingParams = (
   // there is nothing to tune and omitting both is the one payload that always works.
   if (provider === PROVIDER_TYPE.OPEN_AI && isReasoningModel(model)) {
     return {};
+  }
+
+  // Claude rejects the pair wherever it is served from, not only under the Anthropic provider —
+  // Bedrock answers "temperature and top_p cannot both be specified for this model". Temperature
+  // wins, as it does in the Anthropic branch above.
+  if (temperature !== undefined && topP !== undefined && isClaudeModel(model)) {
+    return { temperature };
   }
 
   return { temperature, topP };
@@ -553,17 +572,12 @@ export const sanitizeConfigForRequest = (
   const sanitized: Record<string, unknown> = { ...configs };
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
-  if (
-    provider === PROVIDER_TYPE.ANTHROPIC ||
-    provider === PROVIDER_TYPE.OPEN_AI
-  ) {
-    const sampling = resolveSamplingParams(model, configs as SamplingParams);
-    for (const key of ["temperature", "topP"] as const) {
-      if (sampling[key] === undefined) {
-        delete sanitized[key];
-      } else {
-        sanitized[key] = sampling[key];
-      }
+  const sampling = resolveSamplingParams(model, configs as SamplingParams);
+  for (const key of ["temperature", "topP"] as const) {
+    if (sampling[key] === undefined) {
+      delete sanitized[key];
+    } else {
+      sanitized[key] = sampling[key];
     }
   }
 

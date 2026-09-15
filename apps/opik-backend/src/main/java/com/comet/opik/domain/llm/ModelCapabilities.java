@@ -35,6 +35,16 @@ public class ModelCapabilities {
             // Qwen Omni models support multimodal (audio, video, images)
             Pattern.compile(".*qwen.*omni.*", Pattern.CASE_INSENSITIVE));
 
+    /**
+     * Anthropic's Claude models reject temperature and top_p together. The family name is the only
+     * signal common to every way they are routed — Anthropic's own ids ({@code claude-opus-4-6}),
+     * Bedrock's decorated ids ({@code us.anthropic.claude-…-v1:0}) and OpenAI-compatible proxy names
+     * — so the match is deliberately loose. A false positive only drops top_p when temperature is
+     * also set, which is what Anthropic recommends regardless.
+     */
+    private static final Pattern EXCLUSIVE_SAMPLING_PARAMS_PATTERN = Pattern.compile(".*claude.*",
+            Pattern.CASE_INSENSITIVE);
+
     private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = loadCapabilities();
 
     /**
@@ -45,6 +55,14 @@ public class ModelCapabilities {
             return false;
         }
         return VISION_MODEL_PATTERNS.stream().anyMatch(pattern -> pattern.matcher(modelName).matches());
+    }
+
+    /**
+     * Whether the model rejects temperature and top_p in the same request, so that only one may be sent.
+     */
+    public boolean requiresExclusiveSamplingParams(String modelName) {
+        return StringUtils.isNotBlank(modelName)
+                && EXCLUSIVE_SAMPLING_PARAMS_PATTERN.matcher(modelName).matches();
     }
 
     public boolean supportsVision(String modelName) {

@@ -1395,3 +1395,58 @@ describe("the settings panel and the request agree on effort", () => {
     ).toBe("high");
   });
 });
+
+describe("Claude sampling exclusivity across providers", () => {
+  // The constraint is the model's, not the provider's: Bedrock answers a request carrying both with
+  // "temperature and top_p cannot both be specified for this model", and the same Claude models
+  // reach us through Bedrock, OpenRouter and OpenAI-compatible proxies under decorated names.
+  it.each([
+    ["us.anthropic.claude-sonnet-4-5-20250929-v1:0", "Bedrock"],
+    ["bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0", "Bedrock via proxy"],
+    ["claude-opus-4-6", "an OpenAI-compatible proxy"],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_5, "OpenRouter"],
+  ])("drops topP for %s served by %s", (model) => {
+    expect(
+      resolveSamplingParams(model as PROVIDER_MODEL_TYPE, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({ temperature: 0.7 });
+  });
+
+  it("keeps topP for a Claude model when temperature is not set", () => {
+    expect(
+      resolveSamplingParams(
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0" as PROVIDER_MODEL_TYPE,
+        { topP: 0.9 },
+      ),
+    ).toEqual({ temperature: undefined, topP: 0.9 });
+  });
+
+  it("leaves a non-Claude model on the same provider alone", () => {
+    expect(
+      resolveSamplingParams("mistral-large-2411" as PROVIDER_MODEL_TYPE, {
+        temperature: 0.7,
+        topP: 0.9,
+      }),
+    ).toEqual({ temperature: 0.7, topP: 0.9 });
+  });
+
+  it("keeps topP off the request for a Claude model on a non-Anthropic provider", () => {
+    expect(
+      sanitizeConfigForRequest(
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7, topP: 0.9, maxCompletionTokens: 4000 },
+      ),
+    ).toMatchObject({ temperature: 0.7, maxCompletionTokens: 4000 });
+  });
+
+  it("does not leave topP on the request for a Claude model on a non-Anthropic provider", () => {
+    expect(
+      sanitizeConfigForRequest(
+        "us.anthropic.claude-sonnet-4-5-20250929-v1:0" as PROVIDER_MODEL_TYPE,
+        { temperature: 0.7, topP: 0.9 },
+      ).topP,
+    ).toBeUndefined();
+  });
+});
