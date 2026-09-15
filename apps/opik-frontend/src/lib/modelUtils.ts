@@ -302,6 +302,42 @@ const KNOWN_ANTHROPIC_MODELS = (
 ).map((model) => model.value as string);
 
 /**
+ * The Anthropic id a routed model name denotes, when we know it.
+ *
+ * One model arrives spelled three ways: Anthropic's own `claude-opus-4-6`, Bedrock's
+ * `us.anthropic.claude-sonnet-4-5-20250929-v1:0` and OpenRouter's dotted `anthropic/claude-opus-4.7`.
+ * Reducing all three to the bare id lets the match be anchored at the start rather than found
+ * anywhere in the string, and the longest match wins so a later `claude-opus-4-9` reads as itself
+ * rather than as the `claude-opus-4` it begins with. The backend canonicalizes identically.
+ */
+const knownAnthropicId = (model: string): string | undefined => {
+  const segment = (model.split("/").pop() ?? "")
+    .toLowerCase()
+    .replace(/\./g, "-");
+  const claudeAt = segment.indexOf("claude-");
+  if (claudeAt < 0) {
+    return undefined;
+  }
+  // Bedrock appends an inference profile (-v1:0); OpenRouter, a :free or :beta variant.
+  const canonical = segment
+    .slice(claudeAt)
+    .split(":")[0]
+    .replace(/-v\d+$/, "");
+
+  // A prefix names the model only when it ends where a segment does, so `claude-opus-4-1` is not
+  // `claude-opus-4`. The release date is optional on either side, because providers drop it as often
+  // as they add it — but only a whole date is matched across, or `claude-opus-4` would claim
+  // `claude-opus-4-8`.
+  return KNOWN_ANTHROPIC_MODELS.filter(
+    (id) =>
+      canonical === id ||
+      canonical.startsWith(`${id}-`) ||
+      (id.startsWith(`${canonical}-`) &&
+        /^\d{8}$/.test(id.slice(canonical.length + 1))),
+  ).sort((a, b) => b.length - a.length)[0];
+};
+
+/**
  * Whether the model accepts temperature/top_p at all.
  *
  * The capability map names the models that do, so a Claude we recognise without a row is assumed to
@@ -309,8 +345,8 @@ const KNOWN_ANTHROPIC_MODELS = (
  * instead of having the provider reject the request. A name we cannot place stays permissive: it may
  * be a capable Claude a proxy renamed, and dropping a temperature someone set is worse there.
  *
- * Matching is on the model segment and by containment, because the same models arrive through
- * Bedrock and OpenAI-compatible proxies under prefixed and dated ids.
+ * Matching goes through knownAnthropicId, because the same models arrive through Bedrock and
+ * OpenAI-compatible proxies under prefixed, dotted and dated ids.
  */
 export const supportsSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
@@ -326,11 +362,8 @@ export const supportsSamplingParams = (
     return declared;
   }
 
-  const segment = model.split("/").pop() ?? "";
-  if (SAMPLING_CAPABLE_MODELS.some((id) => segment.includes(id))) {
-    return true;
-  }
-  return !KNOWN_ANTHROPIC_MODELS.some((id) => segment.includes(id));
+  const known = knownAnthropicId(model);
+  return known === undefined || SAMPLING_CAPABLE_MODELS.includes(known);
 };
 
 export const supportsAnthropicThinkingEffort = (

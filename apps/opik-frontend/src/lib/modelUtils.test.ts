@@ -93,6 +93,22 @@ describe("supportsSamplingParams", () => {
       false,
     );
   });
+
+  // OpenRouter dots the version, sometimes drops the release date and sometimes appends a variant;
+  // Bedrock adds a region and an inference profile. The same model must answer the same either way.
+  it.each([
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7, false],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_1, false],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_FABLE_5_1_BATCH, false],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6, true],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6_FAST, true],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_5, true],
+    [PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_4_5, true],
+    ["us.anthropic.claude-sonnet-4-5-20250929-v1:0", true],
+    ["us.anthropic.claude-sonnet-5-20250101-v1:0", false],
+  ])("reads %s the same as the id it decorates", (model, expected) => {
+    expect(supportsSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(expected);
+  });
 });
 
 describe("updateProviderConfig — Anthropic", () => {

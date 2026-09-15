@@ -88,7 +88,10 @@ class SamplingParamsNormalizerTest {
             "anthropic/claude-sonnet-5",
             "us.anthropic.claude-sonnet-5-20250101-v1:0",
             "custom-llm/gw/claude-opus-4-7",
-            "custom-llm/gw/claude-opus-4-8"
+            "custom-llm/gw/claude-opus-4-8",
+            // OpenRouter spells the version with a dot.
+            "anthropic/claude-opus-4.7",
+            "anthropic/claude-opus-4.8"
     })
     void dropsBothForModelsThatTakeNeither(String model) {
         var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, 0.9));
@@ -107,7 +110,9 @@ class SamplingParamsNormalizerTest {
             "claude-fable-5-1",
             "custom-llm/gw/claude-fable-5-1",
             "claude-opus-5",
-            "custom-llm/gw/claude-opus-5"
+            "custom-llm/gw/claude-opus-5",
+            "anthropic/claude-fable-5.1",
+            "anthropic/claude-fable-5.1:batch"
     })
     void dropsBothForARecognisedClaudeNotMarkedCapable(String model) {
         var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, 0.9));
@@ -135,6 +140,25 @@ class SamplingParamsNormalizerTest {
                 .normalizeRequest(request("custom-llm/gw/claude-sonnet-5", 0.7, null));
 
         assertThat(normalized.temperature()).isNull();
+    }
+
+    /**
+     * The capable models reach us decorated: OpenRouter dots the version, sometimes drops the release
+     * date and sometimes appends a variant; Bedrock adds a region and an inference profile. All of
+     * them must still keep the temperature the user set.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "anthropic/claude-opus-4.6",
+            "anthropic/claude-opus-4.6-fast",
+            "anthropic/claude-opus-4.5",
+            "anthropic/claude-haiku-4.5",
+            "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    })
+    void keepsTemperatureForACapableClaudeHoweverItIsSpelled(String model) {
+        var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, null));
+
+        assertThat(normalized.temperature()).isEqualTo(0.7);
     }
 
     @Test
