@@ -437,6 +437,7 @@ areas:
     routes: ["/projects/$projectId/playground"]
     spec_dir: playground
     specs:
+      - playground/playground-model-parameters.spec.ts
       - playground/playground-providers.spec.ts
       - playground/playground-smoke.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
@@ -452,7 +453,18 @@ areas:
       load-prompt-version:       { covered: true,  tier: t2-cuj }
       verify-trace-from-run:     { covered: true,  tier: t2-cuj }
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
-      configure-model-settings:  { covered: false, note: "PromptModelSettings / providerConfigs" }
+      # Scoped: the Anthropic panel only, and only the two controls whose display
+      # and whose request value can disagree. On claude-sonnet-4-6 the spec
+      # asserts the sampling pair is one choice with one MOUNTED control (the
+      # outgoing half leaves the DOM rather than dimming), then compares the
+      # panel's own Top P and Thinking effort against the outbound
+      # POST /v1/private/chat/completions body — which is the only place the
+      # disagreement is observable, since neither surface alone can see it.
+      #
+      # Still uncovered here: the OpenAI / Gemini / Vertex / OpenRouter / Custom
+      # panels, max output tokens, throttling, max concurrent requests, and
+      # whether a persisted prompt re-hydrates its settings on reload.
+      configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs — Anthropic only (playground-model-parameters.spec.ts): sampling pair is a single choice with exactly one mounted slider, and the displayed Top P and Thinking effort are asserted against the outbound chat/completions body, which must carry top_p and no temperature. Other providers' panels, the token/throttling/concurrency sliders, and settings surviving a prompt reload are all still uncovered" }
 
     visual:
       playground-default: { covered: false, state: default }
@@ -685,6 +697,7 @@ areas:
       - online-evaluation/online-evaluation-oversized-payload.spec.ts
       - online-evaluation/online-evaluation-provider-error-classification.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
+      - online-evaluation/online-evaluation-python-score-usability.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-smoke.spec.ts
       - online-evaluation/online-evaluation-thread-judge-provider-failure.spec.ts
@@ -693,8 +706,8 @@ areas:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe; t2 also covers provider-failure classification (OPIK-8262) — a permanent status costs exactly one upstream call, a transient one the whole retry budget, and neither writes a score" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
-      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line; t3 covers a span-scope rule still scoring the spans logged AFTER a 21M-character span, which is the OPIK-8164 wedge — the oversized span's own score is deliberately not asserted, since whether it is scored depends on the deployment's Jackson stream-read limits; t2 also covers the THREAD-scope metric contract, where the runner hands the metric the whole conversation positionally instead of a mapped argument map (online-evaluation-thread-scope-batch-close.spec.ts)" }
-      scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
+      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line; t3 covers a span-scope rule still scoring the spans logged AFTER a 21M-character span, which is the OPIK-8164 wedge — the oversized span's own score is deliberately not asserted, since whether it is scored depends on the deployment's Jackson stream-read limits; t2 also covers the THREAD-scope metric contract, where the runner hands the metric the whole conversation positionally instead of a mapped argument map (online-evaluation-thread-scope-batch-close.spec.ts); t2 also covers per-score USABILITY (online-evaluation-python-score-usability.spec.ts), which is a different question from every clause above — those all ask whether the evaluator ran, this asks which of a run's scores survived: four rules judge one trace, so a ScoreResult(value=None) and a scoring_failed=True 0.0 each answer 400 once and store nothing, a mixed list keeps its usable score while naming each dropped one by its own cause on the rule log, and a deliberate 0.0 still lands — the flagged and the deliberate zero being the same number on the same trace is what separates over-dropping from under-dropping" }
+      scores-in-trace-panel:   { covered: true,  tier: t1-smoke, note: "t1 reads an LLM-judge score's value back off the panel; t2 also pins the row set by EXHAUSTION on a trace whose rules dropped scores server-side (online-evaluation-python-score-usability.spec.ts) — exactly two rows for two stored scores, addressed by data-row-id, with no row for any of the four dropped names, so a panel that rendered a score the backend refused fails here" }
       list-rules:              { covered: true,  tier: t2-cuj, note: "project-scoped and workspace-wide listing over a project holding six bracket-opening judge prompts, plus the rules page rendering a row for each" }
       # Now true, and only because BOTH halves are exercised — which is what the
       # previous note here was holding out for. Span scope:
