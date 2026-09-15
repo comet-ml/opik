@@ -91,6 +91,22 @@ describe("restoreMissingConfigKeys", () => {
     expect((restored.configs as LLMAnthropicConfigsType).topP).toBe(0.9);
   });
 
+  it("leaves a Claude on another provider unselected rather than picking temperature", () => {
+    // The exclusive rule follows the model, not the route: filling in OpenRouter's own temperature
+    // and topP defaults would turn a deliberate "send neither" back into temperature-at-default.
+    const restored = restoreMissingConfigKeys(
+      prompt(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6,
+        { maxTokens: 0 },
+      ),
+    );
+
+    expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
+    expect(restored.configs).not.toHaveProperty("temperature");
+    expect(restored.configs).not.toHaveProperty("topP");
+  });
+
   it("returns the same prompt when nothing is missing", () => {
     const complete = prompt(
       PROVIDER_TYPE.OPEN_AI,

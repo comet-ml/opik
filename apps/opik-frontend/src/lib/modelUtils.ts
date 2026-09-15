@@ -18,6 +18,7 @@ import {
 } from "@/lib/provider";
 import omit from "lodash/omit";
 import { getLatestModelFlags } from "@/lib/modelRegistryStore";
+import { PROVIDER_MODELS } from "@/constants/providerModels";
 
 export const getRoutableProviderModelValue = (
   composedProviderType: COMPOSED_PROVIDER_TYPE,
@@ -291,11 +292,79 @@ const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
   max: "Max",
 };
 
+// Derived from the capability map so the two cannot drift.
+const SAMPLING_CAPABLE_MODELS = Object.entries(ANTHROPIC_MODEL_CAPABILITIES)
+  .filter(([, capabilities]) => capabilities?.supportsSamplingParams)
+  .map(([model]) => model);
+
+const KNOWN_ANTHROPIC_MODELS = (
+  PROVIDER_MODELS[PROVIDER_TYPE.ANTHROPIC] ?? []
+).map((model) => model.value as string);
+
+/**
+ * The Anthropic id a routed model name denotes, when we know it.
+ *
+ * One model arrives spelled three ways: Anthropic's own `claude-opus-4-6`, Bedrock's
+ * `us.anthropic.claude-sonnet-4-5-20250929-v1:0` and OpenRouter's dotted `anthropic/claude-opus-4.7`.
+ * Reducing all three to the bare id lets the match be anchored at the start rather than found
+ * anywhere in the string, and the longest match wins so a later `claude-opus-4-9` reads as itself
+ * rather than as the `claude-opus-4` it begins with. The backend canonicalizes identically.
+ */
+const knownAnthropicId = (model: string): string | undefined => {
+  const segment = (model.split("/").pop() ?? "")
+    .toLowerCase()
+    .replace(/\./g, "-");
+  const claudeAt = segment.indexOf("claude-");
+  if (claudeAt < 0) {
+    return undefined;
+  }
+  // Bedrock appends an inference profile (-v1:0); OpenRouter, a :free or :beta variant.
+  const canonical = segment
+    .slice(claudeAt)
+    .split(":")[0]
+    .replace(/-v\d+$/, "");
+
+  // A prefix names the model only when it ends where a segment does, so `claude-opus-4-1` is not
+  // `claude-opus-4`. The release date is optional on either side, because providers drop it as often
+  // as they add it — but only a whole date is matched across, or `claude-opus-4` would claim
+  // `claude-opus-4-8`.
+  return KNOWN_ANTHROPIC_MODELS.filter(
+    (id) =>
+      canonical === id ||
+      canonical.startsWith(`${id}-`) ||
+      (id.startsWith(`${canonical}-`) &&
+        /^\d{8}$/.test(id.slice(canonical.length + 1))),
+  ).sort((a, b) => b.length - a.length)[0];
+};
+
+/**
+ * Whether the model accepts temperature/top_p at all.
+ *
+ * The capability map names the models that do, so a Claude we recognise without a row is assumed to
+ * take none — newer ones increasingly don't, and that way a newly added model omits a parameter
+ * instead of having the provider reject the request. A name we cannot place stays permissive: it may
+ * be a capable Claude a proxy renamed, and dropping a temperature someone set is worse there.
+ *
+ * Matching goes through knownAnthropicId, because the same models arrive through Bedrock and
+ * OpenAI-compatible proxies under prefixed, dotted and dated ids.
+ */
 export const supportsSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean =>
-  ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-    ?.supportsSamplingParams ?? true;
+): boolean => {
+  if (!model) {
+    return true;
+  }
+
+  const declared =
+    ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+      ?.supportsSamplingParams;
+  if (declared !== undefined) {
+    return declared;
+  }
+
+  const known = knownAnthropicId(model);
+  return known === undefined || SAMPLING_CAPABLE_MODELS.includes(known);
+};
 
 export const supportsAnthropicThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
@@ -436,6 +505,20 @@ export const updateProviderConfig = <
 export type SamplingParams = { temperature?: number; topP?: number };
 
 /**
+ * Whether a model is an Anthropic Claude model, whatever provider is serving it.
+ *
+ * The family name is the only signal common to every route: Anthropic's own ids
+ * (`claude-opus-4-6`), Bedrock's decorated ids (`us.anthropic.claude-…-v1:0`), OpenRouter's
+ * (`anthropic/claude-…`) and whatever an OpenAI-compatible proxy is configured to call them.
+ *
+ * Only the last segment is matched, because a custom id carries the gateway in its prefix
+ * (`custom-llm/<provider_name>/<model>`) — a provider someone called "claude-gw" must not make
+ * every model behind it, Mistral included, look like Claude and lose its Top P.
+ */
+export const isClaudeModel = (model: PROVIDER_MODEL_TYPE | ""): boolean =>
+  /claude/i.test(model.split("/").pop() ?? "");
+
+/**
  * The single interpreter of temperature/topP for a model: capability gating plus Anthropic's
  * temperature-XOR-topP rule.
  *
@@ -460,12 +543,15 @@ export const resolveSamplingParams = (
     return { temperature, topP };
   }
 
+  // Some Claude models refuse both outright. Checked ahead of the provider branches because it
+  // holds wherever the model is served from, not only under the Anthropic provider.
+  if (isClaudeModel(model) && !supportsSamplingParams(model)) {
+    return {};
+  }
+
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
   if (provider === PROVIDER_TYPE.ANTHROPIC) {
-    if (!supportsSamplingParams(model)) {
-      return {};
-    }
     // Anthropic takes one of the pair, never both: temperature wins a config carrying both, and
     // takes over when neither is set so the panel can't offer two live sliders.
     if (temperature !== undefined) {
@@ -482,6 +568,13 @@ export const resolveSamplingParams = (
   // there is nothing to tune and omitting both is the one payload that always works.
   if (provider === PROVIDER_TYPE.OPEN_AI && isReasoningModel(model)) {
     return {};
+  }
+
+  // Claude rejects the pair wherever it is served from, not only under the Anthropic provider —
+  // Bedrock answers "temperature and top_p cannot both be specified for this model". Temperature
+  // wins, as it does in the Anthropic branch above.
+  if (temperature !== undefined && topP !== undefined && isClaudeModel(model)) {
+    return { temperature };
   }
 
   return { temperature, topP };
@@ -553,17 +646,12 @@ export const sanitizeConfigForRequest = (
   const sanitized: Record<string, unknown> = { ...configs };
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
-  if (
-    provider === PROVIDER_TYPE.ANTHROPIC ||
-    provider === PROVIDER_TYPE.OPEN_AI
-  ) {
-    const sampling = resolveSamplingParams(model, configs as SamplingParams);
-    for (const key of ["temperature", "topP"] as const) {
-      if (sampling[key] === undefined) {
-        delete sanitized[key];
-      } else {
-        sanitized[key] = sampling[key];
-      }
+  const sampling = resolveSamplingParams(model, configs as SamplingParams);
+  for (const key of ["temperature", "topP"] as const) {
+    if (sampling[key] === undefined) {
+      delete sanitized[key];
+    } else {
+      sanitized[key] = sampling[key];
     }
   }
 
