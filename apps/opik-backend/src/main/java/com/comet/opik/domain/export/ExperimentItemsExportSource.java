@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Exports the results of one or more experiments over a dataset: one row per dataset item, with each compared
@@ -111,7 +112,26 @@ public class ExperimentItemsExportSource implements ExportSource {
                 .versionHashOrTag(null)
                 .build();
 
-        return streamPage(criteria, 1, batchSize);
+        // The DAO turns some query failures into an empty page, which is indistinguishable from "no more rows".
+        // Without this guard a ClickHouse hiccup mid-export silently produces a short file and the job still
+        // reports COMPLETED. Compare what we streamed against the total the first page reported, and fail loudly.
+        AtomicLong expected = new AtomicLong(-1);
+        AtomicLong streamed = new AtomicLong();
+
+        return streamPage(criteria, 1, batchSize, expected)
+                .doOnNext(item -> streamed.incrementAndGet())
+                .concatWith(Flux.defer(() -> {
+                    long total = expected.get();
+                    long seen = streamed.get();
+
+                    if (total >= 0 && seen != total) {
+                        return Flux.error(new IllegalStateException(
+                                "Export streamed %d of %d expected rows; refusing to upload a truncated file"
+                                        .formatted(seen, total)));
+                    }
+
+                    return Flux.empty();
+                }));
     }
 
     /**
@@ -119,10 +139,13 @@ public class ExperimentItemsExportSource implements ExportSource {
      * experiment items are joined against versioned dataset items, and querying the draft table directly returns rows
      * whose {@code data} is empty. Going through the service keeps the export identical to what the table shows.
      */
-    private Flux<DatasetItem> streamPage(DatasetItemSearchCriteria criteria, int page, int batchSize) {
+    private Flux<DatasetItem> streamPage(DatasetItemSearchCriteria criteria, int page, int batchSize,
+            AtomicLong expected) {
         return Flux.defer(() -> datasetItemService.getItems(page, batchSize, criteria)
                 .flatMapMany(result -> {
                     List<DatasetItem> items = result.content();
+
+                    expected.compareAndSet(-1, result.total());
 
                     if (items == null || items.isEmpty()) {
                         return Flux.empty();
@@ -132,7 +155,7 @@ public class ExperimentItemsExportSource implements ExportSource {
 
                     // A full page means there may be more; a partial page is the last one.
                     return items.size() == batchSize
-                            ? current.concatWith(streamPage(criteria, page + 1, batchSize))
+                            ? current.concatWith(streamPage(criteria, page + 1, batchSize, expected))
                             : current;
                 }));
     }
