@@ -124,6 +124,24 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
+
+
+def user_facing_stacktrace(skip_frames: int = 1) -> str:
+    """Format the current exception with the runner's own frames dropped.
+
+    Walks frames rather than slicing a fixed number of leading lines, so the
+    exception line survives however short the traceback is. A failure raised while
+    binding the call arguments has no user frame at all, and how many lines pad the
+    traceback depends on how the runner was packaged, so a fixed slice could remove
+    the message itself and report a cause of "".
+    """
+    exc_type, exc, tb = sys.exc_info()
+    for _ in range(skip_frames):
+        if tb is None:
+            break
+        tb = tb.tb_next
+    return "".join(traceback.format_exception(exc_type, exc, tb)).strip()
+
 code = argv[1]
 data = json.loads(argv[2])
 payload_type = argv[3] if len(argv) > 3 else None
@@ -133,7 +151,7 @@ module = types.ModuleType(str(uuid.uuid4()))
 try:
     exec(code, module.__dict__)
 except Exception:  
-    stacktrace = "\\n".join(traceback.format_exc().splitlines()[3:])  
+    stacktrace = user_facing_stacktrace()  
     print(json.dumps({"error": f"Field 'code' contains invalid Python code: {stacktrace}"}))
     exit(1)
 
@@ -153,7 +171,7 @@ try:
         # Regular scoring - unpack data as keyword arguments
         score_result = metric.score(**data)
 except Exception:
-    stacktrace = "\\n".join(traceback.format_exc().splitlines()[3:])
+    stacktrace = user_facing_stacktrace()
     print(json.dumps({"error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}))
     exit(1)
         

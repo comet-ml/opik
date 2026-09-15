@@ -267,6 +267,22 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
+def user_facing_stacktrace(skip_frames: int = 1) -> str:
+    """Format the current exception with this module's own frames dropped.
+
+    Walks frames rather than slicing a fixed number of leading lines, so the
+    exception line survives however short the traceback is. A failure raised while
+    binding the call arguments has no user frame at all, so a fixed slice could
+    remove the message itself and report a cause of "".
+    """
+    exc_type, exc, tb = sys.exc_info()
+    for _ in range(skip_frames):
+        if tb is None:
+            break
+        tb = tb.tb_next
+    return "".join(traceback.format_exception(exc_type, exc, tb)).strip()
+
+
 def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
     """
     Run the scoring logic with the provided code and data.
@@ -277,7 +293,7 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
     try:
         exec(code, module.__dict__)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        stacktrace = user_facing_stacktrace()
         return {
             "code": 400,
             "error": f"Field 'code' contains invalid Python code: {stacktrace}",
@@ -301,7 +317,7 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
             # Regular scoring - unpack data as keyword arguments
             score_result = metric.score(**data)
     except Exception as e:
-        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        stacktrace = user_facing_stacktrace()
         return {
             "code": 400,
             "error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}",
@@ -384,6 +400,45 @@ def validate_user_code(code: str) -> dict:
         "score_params": _score_params_ast(metric_class),
     }
 
+
+def required_score_params(code: str) -> List[str]:
+    """``score()`` parameters with no default, read statically from the code.
+
+    Static because this runs before any user code does, and outside the sandbox:
+    the metric object is never constructed here. Empty when the signature isn't
+    statically resolvable (``score()`` inherited from an imported base), which
+    the callers treat as "fill nothing" rather than guessing.
+    """
+    try:
+        tree = ast.parse(code)
+    except Exception:
+        # Anything unparseable yields no names, so the call is dispatched exactly as
+        # it would have been. Deliberately broad: this runs in the request thread,
+        # ahead of the executor, and `code` is untyped JSON -- a non-string raises
+        # TypeError, not SyntaxError. Narrowing it would turn the executor's 400 for
+        # invalid code into a 500 from here.
+        return []
+    metric_class = _find_basemetric_classdef(tree)
+    if metric_class is None:
+        scored = sorted(
+            (c for c in _top_level_classdefs(tree) if _score_funcdef(c) is not None),
+            key=lambda node: node.name,
+        )
+        if not scored:
+            return []
+        metric_class = scored[0]
+    score = _score_funcdef(metric_class)
+    if score is None:
+        return []
+    args = [a.arg for a in score.args.args if a.arg != "self"]
+    # Defaults bind to the tail of args; only the untailed ones are required.
+    required = args[: len(args) - len(score.args.defaults)] if score.args.defaults else args
+    kwonly = [
+        a.arg
+        for a, default in zip(score.args.kwonlyargs, score.args.kw_defaults)
+        if default is None
+    ]
+    return required + kwonly
 
 def worker_process_main(connection):
     # Workers should ignore SIGINT; parent ProcessExecutor will manage shutdown.
