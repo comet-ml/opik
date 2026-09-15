@@ -39,13 +39,18 @@ const target: McpHintTarget = {
   entityType: "trace",
 };
 
-const renderCard = (onDone = vi.fn()) => {
+const renderCard = (onDone = vi.fn(), onConfirmationChange = vi.fn()) => {
   const result = render(
     <TooltipProvider>
-      <McpHintPopover onAction={vi.fn()} onDone={onDone} target={target} />
+      <McpHintPopover
+        onAction={vi.fn()}
+        onConfirmationChange={onConfirmationChange}
+        onDone={onDone}
+        target={target}
+      />
     </TooltipProvider>,
   );
-  return { onDone, ...result };
+  return { onDone, onConfirmationChange, ...result };
 };
 
 describe("the hint card without a hosted server", () => {
@@ -181,5 +186,23 @@ describe("the hint card with a hosted server", () => {
     act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
 
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the card when it goes back to the routes", () => {
+    // The pointer is reading it, so the confirmation reverts rather than
+    // closing — and the hold has to go with it, or hover could never close
+    // the card again.
+    const { onDone, onConfirmationChange, container } = renderCard();
+    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
+    expect(onConfirmationChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(screen.getByLabelText("Copy it"));
+    const card = container.querySelector("[class*='w-[279px]']") as HTMLElement;
+    card.matches = ((selector: string) =>
+      selector === ":hover") as HTMLElement["matches"];
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
+
+    expect(onDone).not.toHaveBeenCalled();
+    expect(onConfirmationChange).toHaveBeenLastCalledWith(false);
   });
 });

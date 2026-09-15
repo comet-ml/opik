@@ -43,16 +43,22 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
   // themselves, so only the first is worth an event.
   const hasActedRef = useRef(false);
 
-  // The confirmation is shorter than the routes it replaces, so the card used
-  // to shrink out from under the pointer and the pointer-leave closed it before
-  // it could be read. Once a route is used, only an explicit dismissal closes
-  // the card. A ref, not state: the dismissal handlers clear it and Radix's own
-  // close has to see the new value within the same event.
+  // Set for as long as a confirmation is on screen. It is shorter than the
+  // routes it replaces, so the card used to shrink out from under the pointer
+  // and the pointer-leave closed it before it could be read; while it shows,
+  // only an explicit dismissal closes the card. A ref, not state: the dismissal
+  // handlers clear it and Radix's own close has to see the new value within the
+  // same event.
   const isPinnedRef = useRef(false);
 
   const markAction = useCallback(() => {
     hasActedRef.current = true;
-    isPinnedRef.current = true;
+  }, []);
+
+  // Released when the card goes back to the routes, or hover would never get
+  // to close it again.
+  const handleConfirmationChange = useCallback((isShowing: boolean) => {
+    isPinnedRef.current = isShowing;
   }, []);
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -162,6 +168,7 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
       >
         <McpHintPopover
           onAction={markAction}
+          onConfirmationChange={handleConfirmationChange}
           onDone={handleDone}
           target={target}
         />

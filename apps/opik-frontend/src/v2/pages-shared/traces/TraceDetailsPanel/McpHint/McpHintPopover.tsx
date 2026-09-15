@@ -17,6 +17,8 @@ import {
 type McpHintPopoverProps = {
   /** Called when the user leaves through the card rather than abandoning it. */
   onAction: () => void;
+  /** Whether a confirmation is on screen, which is what holds the card open. */
+  onConfirmationChange: (isShowing: boolean) => void;
   /** Asked for when a copied confirmation has had its time and nobody is reading. */
   onDone: () => void;
   target: McpHintTarget;
@@ -24,6 +26,7 @@ type McpHintPopoverProps = {
 
 const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   onAction,
+  onConfirmationChange,
   onDone,
   target,
 }) => {
@@ -42,10 +45,11 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   const handleRouteUsed = useCallback(
     (route: McpRouteOutcome) => {
       onAction();
+      onConfirmationChange(true);
       setOutcome(route);
       setCopiedAt(route.kind === "copied" ? Date.now() : 0);
     },
-    [onAction],
+    [onAction, onConfirmationChange],
   );
 
   // The fallback under a confirmation copies the prompt, so it belongs in the
@@ -73,13 +77,14 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
       if (cardRef.current?.matches(":hover")) {
         setOutcome(null);
         setCopiedAt(0);
+        onConfirmationChange(false);
         return;
       }
       onDone();
     }, MCP_COPIED_DISMISS_MS);
 
     return () => clearTimeout(timer);
-  }, [copiedAt, onDone]);
+  }, [copiedAt, onConfirmationChange, onDone]);
 
   const handleLearnMoreClick = () => {
     onAction();
