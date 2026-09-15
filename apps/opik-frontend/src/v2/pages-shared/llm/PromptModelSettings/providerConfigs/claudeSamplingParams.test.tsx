@@ -144,6 +144,38 @@ describe("a Claude config that carries neither half", () => {
   });
 });
 
+describe("a Claude model that takes neither parameter", () => {
+  // The Anthropic panel already hides both for these. Offering the choice elsewhere would let
+  // someone pick a half that sanitizeConfigForRequest then strips.
+  it("offers nothing on the custom panel", () => {
+    renderPanel(
+      <CustomModelConfigs
+        configs={CUSTOM_CONFIG}
+        model={"custom-llm/gw/claude-sonnet-5" as PROVIDER_MODEL_TYPE}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Sampling")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
+  });
+
+  it("offers nothing on the openrouter panel", () => {
+    renderPanel(
+      <OpenRouterModelConfigs
+        configs={OPEN_ROUTER_CONFIG}
+        model={PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_5}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Sampling")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
+  });
+});
+
 describe("a model without the constraint on the same panels", () => {
   it("keeps both sliders independent on the custom panel", () => {
     renderPanel(

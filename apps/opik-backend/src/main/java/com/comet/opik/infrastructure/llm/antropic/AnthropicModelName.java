@@ -3,7 +3,6 @@ package com.comet.opik.infrastructure.llm.antropic;
 import com.comet.opik.infrastructure.llm.StructuredOutputSupported;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.Arrays;
 import java.util.Set;
@@ -78,18 +77,6 @@ public enum AnthropicModelName implements StructuredOutputSupported {
 
     public static Set<String> allModelIds() {
         return ALL_MODEL_IDS;
-    }
-
-    /**
-     * Whether the model accepts sampling params. A model we recognise but have not marked capable
-     * takes none. A name we cannot place at all stays permissive — it may be a capable Claude that a
-     * proxy renamed, and silently dropping a temperature someone set is worse there than sending one.
-     */
-    public static boolean supportsSamplingParams(String modelName) {
-        if (StringUtils.isBlank(modelName) || SAMPLING_CAPABLE_MODEL_IDS.contains(modelName)) {
-            return true;
-        }
-        return !ALL_MODEL_IDS.contains(modelName);
     }
 
     @Override
