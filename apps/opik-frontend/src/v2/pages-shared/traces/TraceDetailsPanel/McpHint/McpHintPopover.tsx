@@ -32,11 +32,18 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   const [outcome, setOutcome] = useState<McpRouteOutcome | null>(null);
   const installMode = useMcpInstallMode();
 
+  // When the last copy landed, and 0 for none. One signal for both ways a copy
+  // can happen — a copy route, or the fallback under an opened deeplink — so
+  // the clock below cannot start for one and not the other, and a second copy
+  // restarts it rather than leaving the first deadline to close the card under
+  // the user.
+  const [copiedAt, setCopiedAt] = useState(0);
+
   const handleRouteUsed = useCallback(
     (route: McpRouteOutcome) => {
       onAction();
       setOutcome(route);
-      setCopiedAt(Date.now());
+      setCopiedAt(route.kind === "copied" ? Date.now() : 0);
     },
     [onAction],
   );
@@ -55,22 +62,20 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   // and then the card gets out of the way — unless the pointer is still on it,
   // in which case it goes back to the routes rather than vanishing under them.
   const cardRef = useRef<HTMLDivElement>(null);
-  // Bumped by a recopy, which restarts the clock below: without it a copy made
-  // just before the deadline was followed by the card closing.
-  const [copiedAt, setCopiedAt] = useState(0);
   useEffect(() => {
-    if (outcome?.kind !== "copied") return;
+    if (!copiedAt) return;
 
     const timer = setTimeout(() => {
       if (cardRef.current?.matches(":hover")) {
         setOutcome(null);
+        setCopiedAt(0);
         return;
       }
       onDone();
     }, MCP_COPIED_DISMISS_MS);
 
     return () => clearTimeout(timer);
-  }, [outcome, copiedAt, onDone]);
+  }, [copiedAt, onDone]);
 
   const handleLearnMoreClick = () => {
     onAction();

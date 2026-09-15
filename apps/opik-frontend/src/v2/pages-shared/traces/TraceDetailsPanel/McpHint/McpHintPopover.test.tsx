@@ -14,6 +14,20 @@ vi.mock("@/api/projects/useProjectById", () => ({
   default: () => ({ data: { name: "my-agent" } }),
 }));
 
+// A deployment with a hosted server supplies its own routes, and only those can
+// hand off to another app. Swapped in per test rather than per file.
+const { plugin } = vi.hoisted(() => ({
+  plugin: { McpInstallRoutes: null as unknown },
+}));
+vi.mock("@/store/PluginsStore", async (importOriginal) => {
+  const actual = await importOriginal<{ default: unknown }>();
+  return {
+    ...actual,
+    default: (selector: (state: Record<string, unknown>) => unknown) =>
+      selector({ McpInstallRoutes: plugin.McpInstallRoutes }),
+  };
+});
+
 import { TooltipProvider } from "@/ui/tooltip";
 import McpHintPopover from "./McpHintPopover";
 import { MCP_COPIED_DISMISS_MS } from "./constants";
@@ -109,6 +123,63 @@ describe("the hint card without a hosted server", () => {
     expect(onDone).not.toHaveBeenCalled();
 
     act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the hint card with a hosted server", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const HostedRoutes = ({
+      onRouteUsed,
+    }: {
+      onRouteUsed: (outcome: {
+        kind: "opened";
+        confirmation: string;
+        snippet: string;
+      }) => void;
+    }) => (
+      <button
+        type="button"
+        data-testid="mcp-route-vscode"
+        onClick={() =>
+          onRouteUsed({
+            kind: "opened",
+            confirmation: "Opening VS Code…",
+            snippet: "Connect me to Opik MCP",
+          })
+        }
+      >
+        VS Code
+      </button>
+    );
+    HostedRoutes.displayName = "HostedRoutes";
+    plugin.McpInstallRoutes = HostedRoutes;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    plugin.McpInstallRoutes = null;
+  });
+
+  it("leaves an opened deeplink on screen, since nothing was copied", () => {
+    // The fallback under it is the only recovery when the hand-off silently
+    // did nothing, so this view waits to be dismissed.
+    const { onDone } = renderCard();
+    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS * 2));
+
+    expect(screen.getByText("Opening VS Code…")).toBeInTheDocument();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("puts it on the clock once the fallback is copied", () => {
+    const { onDone } = renderCard();
+    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
+    fireEvent.click(screen.getByLabelText("Copy it"));
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
+
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 });
