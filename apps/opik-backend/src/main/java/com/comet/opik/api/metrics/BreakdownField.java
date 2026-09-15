@@ -13,7 +13,7 @@ import java.util.Set;
  * Compatibility with metric types is based on entity type:
  * - Trace metrics: DURATION, TRACE_COUNT, TOKEN_USAGE, COST, FEEDBACK_SCORES, GUARDRAILS_FAILED_COUNT
  * - Thread metrics: THREAD_COUNT, THREAD_DURATION, THREAD_FEEDBACK_SCORES
- * - Span metrics: SPAN_COUNT, SPAN_DURATION, SPAN_TOKEN_USAGE, SPAN_FEEDBACK_SCORES
+ * - Span metrics: SPAN_COUNT, SPAN_DURATION, SPAN_TOKEN_USAGE, SPAN_FEEDBACK_SCORES, SPAN_COST
  */
 @RequiredArgsConstructor
 @Getter
@@ -55,7 +55,8 @@ public enum BreakdownField {
             MetricType.SPAN_COUNT,
             MetricType.SPAN_DURATION,
             MetricType.SPAN_TOKEN_USAGE,
-            MetricType.SPAN_FEEDBACK_SCORES);
+            MetricType.SPAN_FEEDBACK_SCORES,
+            MetricType.SPAN_COST);
 
     /**
      * Check if this group by field is compatible with the given metric type.
