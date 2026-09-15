@@ -42,6 +42,10 @@ DATASET_ITEMS_READ_MAX_CHUNK_SIZE = DATASET_STREAM_BATCH_SIZE
 # connections, so a caller passing an arbitrarily large num_threads would
 # otherwise queue pages behind the pool instead of speeding anything up.
 DATASET_ITEMS_READ_MAX_THREADS = 32
+# Ceiling on dataset write threads, the counterpart to the read one above. One
+# knob sizes both the compressor pool and the upload's byte budget (two batches
+# per worker), so an unbounded value authorises an unbounded resident bound.
+DATASET_ITEMS_WRITE_MAX_THREADS = 32
 
 # Parallel dataset insert requires a backend that serializes concurrent dataset
 # version writes. On backends older than this version, concurrent batches

@@ -846,9 +846,15 @@ class Dataset(DatasetExportOperations):
             retry_decorator.opik_rest_retry(send)
         )
 
-    def _open_send_pool(self, num_threads: int) -> streaming_writer.BoundedSendPool:
+    def _open_send_pool(
+        self, num_threads: int, gzip_level: Optional[int]
+    ) -> streaming_writer.BoundedSendPool:
         """Upload sink for one insert. Split out so the worker count is observable."""
-        return streaming_writer.build_send_pool(self._send_prepared_body, num_threads)
+        return streaming_writer.BoundedSendPool(
+            send=self._send_prepared_body,
+            num_threads=num_threads,
+            gzip_level=gzip_level,
+        )
 
     @property
     def _parallel_insert_supported(self) -> bool:
@@ -923,6 +929,9 @@ class Dataset(DatasetExportOperations):
             raise ValueError("num_threads must be a positive integer")
         if num_threads < 1:
             raise ValueError("num_threads must be a positive integer")
+        # Clamped, not rejected, to match the read path: the count is a request for
+        # parallelism, and it also sizes the upload's byte budget.
+        num_threads = min(num_threads, constants.DATASET_ITEMS_WRITE_MAX_THREADS)
 
         # Gated here rather than in `insert` so every caller of this funnel is
         # covered: older backends race on concurrent batches that share a
@@ -956,17 +965,19 @@ class Dataset(DatasetExportOperations):
                 upload_client, default=opik_config.enable_json_request_compression
             )
 
-            pool = self._open_send_pool(num_threads)
-            writer = streaming_writer.build_batch_writer(
-                dataset_name=self._name,
-                project_name=self._project_name,
-                batch_group_id=batch_group_id,
-                flush_callback=pool.submit,
+            pool = self._open_send_pool(
+                num_threads,
                 gzip_level=(
                     opik_config.dataset_upload_compression_level
                     if compressing
                     else None
                 ),
+            )
+            writer = streaming_writer.build_batch_writer(
+                dataset_name=self._name,
+                project_name=self._project_name,
+                batch_group_id=batch_group_id,
+                flush_callback=pool.submit,
             )
 
             try:
@@ -979,7 +990,16 @@ class Dataset(DatasetExportOperations):
                 # explains why the upload stopped here.
                 try:
                     pool.close()
-                except Exception:
+                except KeyboardInterrupt:
+                    # The user, not a failed body: CPython delivers it to this thread,
+                    # which is sitting in `close` joining workers, so swallowing it would
+                    # drop the signal mid-join.
+                    raise
+                except (Exception, SystemExit):
+                    # `SystemExit` named explicitly because it is not an `Exception`. Out
+                    # of a send it is still just a body that failed, and a failed body
+                    # must not replace the producer's error -- that error is why the
+                    # upload stopped.
                     LOGGER.debug(
                         "A dataset upload batch also failed while closing the pool",
                         exc_info=True,
@@ -1024,11 +1044,17 @@ class Dataset(DatasetExportOperations):
             num_threads: Number of worker threads used to upload the item
                 batches. Must be a positive integer, defaults to ``8``; pass
                 ``1`` to upload sequentially, or a higher number to push a
-                large upload harder. All batches land in a single
-                dataset version. If a batch fails the call raises, and the
-                batches that already succeeded stay persisted; above ``1`` the
-                bodies already queued are drained and awaited first, so they
-                land too and the exception surfaces after them. Older Opik
+                large upload harder, up to ``32`` -- beyond that it is clamped
+                rather than rejected, as on the read path. It also sizes how
+                much the upload holds: request bodies are queued uncompressed,
+                up to ``2 * num_threads`` of them at ``MAX_BATCH_SIZE_MB``
+                each -- about 80 MB at the default ``8``, and about 320 MB at
+                ``32``. Raise it for throughput, lower it where memory is
+                tight. All batches land in a single dataset version. If a batch
+                fails the call raises, and the batches that already succeeded
+                stay persisted; above ``1`` the bodies already queued are
+                drained and awaited first, so they land too and the exception
+                surfaces after them. Older Opik
                 backends do not support parallel upload and fall back to a
                 sequential one.
 

@@ -536,12 +536,14 @@ def test_spearman_ranking_metric():
 @pytest.mark.parametrize(
     "output,reference",
     [
-        # Both cases have equal-length, equal-set output/reference despite
+        # Each case has equal-length, equal-set output/reference despite
         # the repeats, so before this fix they reached the correlation
-        # formula and returned a numeric score (0.625 and 0.875
-        # respectively) instead of raising.
+        # formula and returned a score (0.625, 0.875, and -0.125) instead
+        # of raising.
         (["a", "b", "a"], ["a", "a", "b"]),
         (["a", "a", "b"], ["a", "b", "b"]),
+        # This one drove rho to -1.25, outside the documented [-1, 1] range.
+        (["a", "a", "b"], ["b", "a", "a"]),
     ],
 )
 def test_spearman_ranking_rejects_duplicate_items(output, reference):

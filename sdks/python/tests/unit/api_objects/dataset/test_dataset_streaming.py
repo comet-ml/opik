@@ -141,8 +141,11 @@ def test_insert__generator__consumed_lazily_not_drained_up_front():
     assert len(drawn) == 6
 
 
-def test_insert__peak_memory__does_not_grow_with_item_count():
+def test_insert__peak_memory__does_not_grow_with_item_count(monkeypatch):
     """Asserts the slope, not an absolute number, so it does not depend on the machine."""
+    # Both sizes have to run past the batch cap for the slope to mean anything: what is
+    # held is one batch, and a run that fits in a single batch measures the input instead.
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.05)
 
     def peak_for(count: int) -> int:
         capture = UploadCapture()
@@ -259,9 +262,9 @@ def test_insert__streaming__worker_count_gated_by_backend_version(monkeypatch):
     used_workers = []
     original = Dataset._open_send_pool
 
-    def spy(self, num_threads):
+    def spy(self, num_threads, **kwargs):
         used_workers.append(num_threads)
-        return original(self, num_threads)
+        return original(self, num_threads, **kwargs)
 
     monkeypatch.setattr(Dataset, "_open_send_pool", spy)
     dataset.insert(_items(4), num_threads=4)
@@ -321,13 +324,13 @@ def test_insert__streaming__uses_the_dataset_upload_compression_level(monkeypatc
     monkeypatch.setenv("OPIK_DATASET_UPLOAD_COMPRESSION_LEVEL", "2")
 
     levels = []
-    original = streaming_writer.StreamingBatchWriter
+    original = streaming_writer.BoundedSendPool
 
-    def spy(**kwargs):
+    def spy(*args, **kwargs):
         levels.append(kwargs["gzip_level"])
-        return original(**kwargs)
+        return original(*args, **kwargs)
 
-    monkeypatch.setattr(streaming_writer, "StreamingBatchWriter", spy)
+    monkeypatch.setattr(streaming_writer, "BoundedSendPool", spy)
     capture = UploadCapture()
     dataset = make_dataset(Dataset, Mock(), capture)
 
@@ -405,6 +408,38 @@ def test_insert__parallel_upload__a_failing_request_raises_to_the_caller(
 
     with pytest.raises(ApiError):
         dataset.insert(_items(50), num_threads=4)
+
+
+def test_insert__parallel_upload__each_request_carries_the_rows_it_was_built_from(
+    monkeypatch,
+):
+    """Batches are assembled by the producer and compressed by a worker, so they can slip.
+
+    Order survives only if each body still holds its own rows, in the order they arrived.
+    """
+    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.0005)  # a few items per request
+    mock_rest_client = Mock()
+    mock_rest_client.version.return_value = {"version": "99.0.0"}  # allow parallelism
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, mock_rest_client, capture)
+
+    dataset.insert(
+        [{"input": {"i": i, "pad": "x" * 100}} for i in range(40)], num_threads=4
+    )
+
+    batches = [
+        [item["data"]["input"]["i"] for item in batch] for batch in capture.batches
+    ]
+    assert sorted(i for batch in batches for i in batch) == list(range(40)), (
+        "Every row must be sent exactly once"
+    )
+    assert len(batches) > 1, (
+        "The batch cap should have split this into several requests"
+    )
+    for batch in batches:
+        assert batch == list(range(batch[0], batch[0] + len(batch))), (
+            f"A request carried rows that were not built together: {batch}"
+        )
 
 
 @pytest.mark.parametrize("materialised", [True, False], ids=["list", "generator"])

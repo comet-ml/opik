@@ -36,7 +36,7 @@ class SpearmanRanking(BaseMetric):
         ...     reference=["a", "b", "c"],
         ... )
         >>> round(result.metadata["rho"], 2)  # doctest: +SKIP
-        -0.5
+        0.5
     """
 
     def __init__(
