@@ -23,8 +23,8 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   onAction,
   target,
 }) => {
-  // Unmounted with the popover, so closing it is what resets the view — a user
-  // who comes back always lands on the routes rather than on a stale receipt.
+  // Unmounted with the popover, so closing resets the view and a user who comes
+  // back lands on the routes rather than a stale receipt.
   const [outcome, setOutcome] = useState<McpRouteOutcome | null>(null);
   const installMode = useMcpInstallMode();
 

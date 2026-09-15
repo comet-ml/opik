@@ -8,14 +8,8 @@ type McpHintRailProps = {
   target: McpHintTarget;
 };
 
-/**
- * The rail the hint lives in: an overlay pinned directly below the sticky
- * inspect bar, right-aligned.
- *
- * Overlay rather than a row in the scroll flow, for two reasons — it stays put
- * while a long traceback scrolls under it, and it cannot shift the layout when
- * it appears.
- */
+// An overlay rather than a row in the scroll flow: it stays put while a long
+// traceback scrolls under it, and cannot shift the layout when it appears.
 const McpHintRail: React.FunctionComponent<McpHintRailProps> = ({
   isVisible,
   target,

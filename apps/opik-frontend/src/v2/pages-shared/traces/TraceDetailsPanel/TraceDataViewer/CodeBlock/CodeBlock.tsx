@@ -79,8 +79,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
   const handleToggle = () => {
     if (disabled) return;
     const nextIsOpen = !isOpen;
-    // Only when this block owns the state. Writing it while controlled would
-    // leave a shadow copy behind to drift from whoever actually owns it.
+    // Only when this block owns the state, so no shadow copy can drift.
     if (open === undefined) setUncontrolledIsOpen(nextIsOpen);
     onOpenChange?.(nextIsOpen);
   };

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Check, Copy } from "lucide-react";
+import copy from "clipboard-copy";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { McpRouteOutcome } from "./types";
@@ -9,12 +10,9 @@ type McpRouteConfirmationProps = {
 };
 
 /**
- * What the card shows after a route is used.
- *
  * Persistent while the card is open rather than reverting on a timer: it
- * carries a command the user has to read and paste, and for a deeplink it is
- * the only recovery there is — the OS hand-off cannot be observed from the
- * page, so a link that opened nothing looks exactly like one that worked.
+ * carries a command to read and paste, and for a deeplink it is the only
+ * recovery when the OS hand-off silently did nothing.
  */
 const McpRouteConfirmation: React.FunctionComponent<
   McpRouteConfirmationProps
@@ -23,7 +21,7 @@ const McpRouteConfirmation: React.FunctionComponent<
 
   const handleRecopy = () => {
     if (!route.snippet) return;
-    navigator.clipboard.writeText(route.snippet);
+    copy(route.snippet);
     setHasRecopied(true);
   };
 
@@ -36,10 +34,8 @@ const McpRouteConfirmation: React.FunctionComponent<
 
       {route.snippet && (
         <div className="flex items-start gap-1.5 rounded border border-border bg-soft-background px-2 py-1">
-          {/* break-words, not break-all: the card is narrow enough that
-              break-all split the command mid-token, so "claude-code" wrapped as
-              "c" / "laude-code". This wraps at the spaces and only breaks a
-              token that cannot fit on a line of its own, such as a server URL. */}
+          {/* break-words, not break-all: break-all split the command mid-token
+              on this width ("c" / "laude-code"). */}
           <code className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs leading-4 text-muted-slate">
             {route.snippet}
           </code>

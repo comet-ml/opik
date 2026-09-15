@@ -8,7 +8,7 @@ const ERROR_INFO = {
 };
 
 test.describe('Trace Explore — MCP hint on expanded errors', { tag: ['@t2-cuj', '@area:traces'] }, () => {
-  test('the hint is offered only once the user opens the error, and survives closing it again', { tag: ['@cap:traces.mcp-hint-install'] }, async ({
+  test('the hint is offered only once the user opens the error, and survives closing it again', { tag: ['@cap:traces.mcp-hint-on-trace-error'] }, async ({
     project,
     sdkClient,
     testNamespace,
@@ -52,7 +52,7 @@ test.describe('Trace Explore — MCP hint on expanded errors', { tag: ['@t2-cuj'
     });
   });
 
-  test('the popover explains Opik MCP and links to its documentation', { tag: ['@cap:traces.mcp-hint-install'] }, async ({
+  test('the popover explains Opik MCP and links to its documentation', { tag: ['@cap:traces.mcp-hint-on-trace-error'] }, async ({
     project,
     sdkClient,
     testNamespace,

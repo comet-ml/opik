@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { BooleanParam, JsonParam, useQueryParam } from "use-query-params";
 import find from "lodash/find";
@@ -107,10 +107,7 @@ export type TraceDetailsPanelProps = {
   container?: HTMLElement | null;
   refetchInterval?: number | false;
   hideAnnotateActions?: boolean;
-  /**
-   * Opt-in: the MCP hint ships on the Logs page only. Off by default so a new
-   * surface cannot acquire it — or start feeding its funnel — by accident.
-   */
+  /** Opt-in: the MCP hint ships on the Logs page only. */
   showMcpHint?: boolean;
 };
 
@@ -139,12 +136,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     { updateType: "replaceIn" },
   );
   const [isGraphFullscreen, setIsGraphFullscreen] = useState(false);
-  // Which node the error section is open on. Scoped rather than a bare boolean:
-  // the section is one component reused across the tree, so a flag would read as
-  // open on a node nobody opened.
+  // Scoped to a node, not a bare boolean: the section is one component reused
+  // across the tree, so a flag would read as open on a node nobody opened.
   const [errorOpenFor, setErrorOpenFor] = useState<string | null>(null);
-  // Which node the hint has been asked for. Opening the error is the ask and it
-  // stands, so this outlives a collapse; switching node leaves it behind.
+  // Opening the error is the ask and it stands, so this outlives a collapse.
   const [hintShownFor, setHintShownFor] = useState<string | null>(null);
   const mcpInstallMode = useMcpInstallMode();
 
@@ -231,30 +226,41 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   // The node being inspected. Switching it resets the hint.
   const mcpHintSubject = `${traceId}:${spanId}`;
   const mcpHintTarget = useMemo<McpHintTarget>(
-    () => ({ traceId, projectId, entityType: spanId ? "span" : "trace" }),
+    () => ({
+      traceId,
+      spanId: spanId || undefined,
+      projectId,
+      entityType: spanId ? "span" : "trace",
+    }),
     [traceId, projectId, spanId],
   );
 
   const isErrorOpen = errorOpenFor === mcpHintSubject;
   const isHintVisible = hintShownFor === mcpHintSubject;
 
+  // The panel stays mounted when it closes, so without this it would reopen on
+  // the same node with the error expanded and the hint already shown.
+  useEffect(() => {
+    if (open) return;
+    setErrorOpenFor(null);
+    setHintShownFor(null);
+  }, [open]);
+
   const handleErrorExpandedChange = useCallback(
     (expanded: boolean) => {
       setErrorOpenFor(expanded ? mcpHintSubject : null);
       if (!expanded) return;
 
-      // Emitted here rather than from the shared error section: this is the only
-      // place that knows the hint is switched on, and the funnel's first step
-      // must not count surfaces where the hint never appears.
+      // Emitted here, not from the shared error section: only this knows the
+      // hint is switched on, and the funnel must not count surfaces without it.
       const properties = {
         entity_type: mcpHintTarget.entityType,
         install_mode: mcpInstallMode,
       };
       trackEvent(OpikEvent.TRACE_ERROR_EXPANDED, properties);
 
-      // One impression per node. The hint stays through a collapse, so a
-      // collapse-and-expand would otherwise count a second showing of a button
-      // that never went away.
+      // One impression per node: the hint stays through a collapse, so this
+      // avoids counting a second showing of a button that never went away.
       if (!showMcpHint || hintShownFor === mcpHintSubject) return;
       setHintShownFor(mcpHintSubject);
       trackEvent(OpikEvent.MCP_BUTTON_SHOWN, properties);

@@ -2,20 +2,38 @@ import { MCP_SERVER_NAME } from "./serverUrl";
 
 type PromptContext = {
   traceId: string;
+  spanId?: string;
   projectName: string;
 };
 
-// Step 4 is deliberately worded the same as the `Debug this trace` payload the
-// connected-user popover will carry, so the two never drift apart.
-const debugStep = ({ traceId, projectName }: PromptContext) =>
-  `4. Then read Opik trace ${traceId} in project "${projectName}" — the error and its spans — work out what caused it, and fix it in the code.`;
+// Project and workspace names are user-controlled and land in a prompt a coding
+// agent will act on, so a newline plus an imperative would read there as a new
+// instruction. Collapse to a single line and cap the length.
+const inlineValue = (value: string, maxLength = 120) =>
+  value
+    .replace(/["\\]/g, "'")
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\s\u0000-\u001f\u007f]+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+
+// Worded the same as the `Debug this trace` payload the connected-user popover
+// will carry, so the two do not drift apart.
+const debugStep = ({ traceId, spanId, projectName }: PromptContext) => {
+  const entity = spanId
+    ? `span ${spanId} of trace ${traceId}`
+    : `trace ${traceId}`;
+
+  return `4. Then read Opik ${entity} in project "${inlineValue(
+    projectName,
+  )}" — the error and its spans — work out what caused it, and fix it in the code.`;
+};
 
 const DETECT_STEP =
   '1. Detect which coding agents are installed here and which one you are; ask me "only you, or all of them?" and wait.';
 
-// The hand-off, and the reason this prompt exists in this shape: a newly
-// registered MCP server is not available in the session that registered it, and
-// that restart is exactly where people lose the thread. The agent owns it.
+// A newly registered MCP server is not available in the session that registered
+// it, and that restart is where people lose the thread. The agent owns it.
 const RELOAD_STEP =
   "3. Reload your MCP servers and finish the browser sign-in if prompted. If the server only loads in a new session, say so, ask me to restart you, and repeat step 4 verbatim so I can paste it back.";
 
@@ -24,13 +42,7 @@ const SKILLS =
 
 const NO_SECRETS = "Never print secrets you find in config files.";
 
-/**
- * For deployments with a hosted MCP server.
- *
- * Step 2 registers through each client's own command, which is what keeps `uv`
- * off this path entirely — the one prerequisite a developer is most likely to
- * be missing.
- */
+/** Registers through each client's own command, which keeps `uv` off this path. */
 export const buildHostedInstallPrompt = (
   context: PromptContext & { serverUrl: string },
 ): string =>
@@ -44,12 +56,9 @@ export const buildHostedInstallPrompt = (
   ].join("\n");
 
 /**
- * For self-hosted and local deployments, where the MCP server is a local stdio
- * process rather than something a client can be pointed at.
- *
- * Names the workspace but never the API key: the CLI reads the key from the
- * developer's own Opik configuration, or asks for it. A prompt on the clipboard
- * is not a place to put credentials.
+ * For deployments where the MCP server is a local stdio process. Names the
+ * workspace but never the API key, which the CLI reads from the developer's own
+ * configuration or asks for.
  */
 export const buildLocalInstallPrompt = (
   context: PromptContext & { workspaceName: string },
@@ -58,7 +67,9 @@ export const buildLocalInstallPrompt = (
     "Connect me to Opik MCP, then debug a failing trace.",
     "",
     DETECT_STEP,
-    `2. Install uv if it is missing, then run \`uvx opik mcp configure --ai-client <agent> --skills\` for each chosen agent, against workspace "${context.workspaceName}". If it asks for an API key, ask me for it — do not guess. ${NO_SECRETS}`,
+    `2. Install uv if it is missing, then run \`uvx opik mcp configure --ai-client <agent> --skills\` for each chosen agent, against workspace "${inlineValue(
+      context.workspaceName,
+    )}". If it asks for an API key, ask me for it — do not guess. ${NO_SECRETS}`,
     RELOAD_STEP,
     debugStep(context),
   ].join("\n");

@@ -1,5 +1,6 @@
 import React from "react";
 import { Copy, Sparkles } from "lucide-react";
+import copy from "clipboard-copy";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
@@ -14,13 +15,8 @@ type McpPromptTileProps = {
 };
 
 /**
- * The route for the agent the developer already has open.
- *
- * First-class rather than a footnote, because it is the only route with no
- * prerequisite they might be missing: a deeplink needs a registered OS handler,
- * the CLI needs `uv`, a native command needs that client's CLI — while having a
- * coding agent open is the premise of the whole feature. It is also the only
- * route that covers editors we never enumerated.
+ * The route for the agent the developer already has open: the only one with no
+ * prerequisite, and the only one that covers editors we never enumerated.
  */
 const McpPromptTile: React.FunctionComponent<McpPromptTileProps> = ({
   prompt,
@@ -29,10 +25,9 @@ const McpPromptTile: React.FunctionComponent<McpPromptTileProps> = ({
   onUsed,
 }) => {
   const handlePromptCopy = () => {
-    navigator.clipboard.writeText(prompt);
-    // Its own event, and deliberately not `mcp_connect_clicked`: counting it as
-    // both would double-count the funnel's "chose a route" step. Whoever builds
-    // the funnel needs the union of the two.
+    copy(prompt);
+    // Not `mcp_connect_clicked`: the funnel's "chose a route" step is the union
+    // of the two, and counting this as both would double it.
     trackEvent(OpikEvent.MCP_PROMPT_COPIED, {
       install_mode: installMode,
       entity_type: entityType,

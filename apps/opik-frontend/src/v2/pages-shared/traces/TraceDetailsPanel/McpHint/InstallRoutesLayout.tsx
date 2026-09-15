@@ -21,15 +21,8 @@ type InstallRoutesLayoutProps = {
   onRouteUsed: (outcome: McpRouteOutcome) => void;
 };
 
-/**
- * Everything the two deployments share: the layout, the reporting, and the
- * prompt's context.
- *
- * A deployment only ever differs in *which* routes it can offer and how the
- * prompt asks for them to be installed — so that is all either side supplies.
- * Keeping the rest here is what stops a fix landing on one deployment and not
- * the other.
- */
+// Everything the two deployments share. Either side supplies only its routes
+// and its prompt builder.
 const InstallRoutesLayout: React.FunctionComponent<
   InstallRoutesLayoutProps
 > = ({ routes, buildPrompt, target, onRouteUsed }) => {
@@ -41,11 +34,12 @@ const InstallRoutesLayout: React.FunctionComponent<
     () =>
       buildPrompt({
         traceId: target.traceId,
+        spanId: target.spanId,
         projectName,
         workspaceName,
         serverUrl: getMcpServerUrl(),
       }),
-    [buildPrompt, target.traceId, projectName, workspaceName],
+    [buildPrompt, target.traceId, target.spanId, projectName, workspaceName],
   );
 
   const handleRouteUse = useCallback(

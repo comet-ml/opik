@@ -19,17 +19,15 @@ import {
   McpInstallRoutesProps,
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/McpHint/types";
 
-// Only two of the four clients have a real one-click MCP install deeplink.
-//
-// Cursor: documented as `cursor://anysphere.cursor-deeplink/mcp/install`, with
-// the mcp.json entry base64'd into `config`.
+// Cursor: `cursor://anysphere.cursor-deeplink/mcp/install`, with the mcp.json
+// entry base64'd into `config`.
 const cursorDeeplink = (url: string) =>
   `cursor://anysphere.cursor-deeplink/mcp/install?name=${MCP_SERVER_NAME}&config=${btoa(
     JSON.stringify({ url }),
   )}`;
 
 // VS Code: one unnamed query parameter carrying the whole entry, `name`
-// included — not the older `?name=&config=` badge shape.
+// included, not the older `?name=&config=` badge shape.
 const vscodeDeeplink = (url: string) =>
   `vscode:mcp/install?${encodeURIComponent(
     JSON.stringify({ name: MCP_SERVER_NAME, type: "http", url }),
@@ -41,11 +39,10 @@ const claudeCodeCommand = (url: string) =>
 const codexCommand = (url: string) =>
   `codex mcp add ${MCP_SERVER_NAME} --url ${url}`;
 
-// Claude Code has no install deeplink at all. `claude-cli://open` prefills the
-// prompt box of a fresh session — the `!` makes it a shell command the user only
-// has to press Enter on. Its OS handler is also registered lazily, on the user's
-// first interactive prompt, so the link can do nothing at all; that is why every
-// tile lands in a confirmation carrying the command as well.
+// Claude Code has no install deeplink. `claude-cli://open` prefills a fresh
+// session's prompt box; the `!` makes it a shell command to press Enter on. Its
+// OS handler is registered lazily, so the link can do nothing at all, which is
+// why every tile lands in a confirmation carrying the command too.
 const claudeCodeDeeplink = (url: string) =>
   `claude-cli://open?q=${encodeURIComponent(`!${claudeCodeCommand(url)}`)}`;
 
@@ -68,8 +65,7 @@ const McpInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
         href: claudeCodeDeeplink(url),
         confirmation: "Opening a terminal…",
         snippet: claudeCodeCommand(url),
-        // The deeplinked session starts before the server is registered, so it
-        // will not have loaded it — without this the user concludes it is broken.
+        // The deeplinked session starts before the server is registered.
         note: `Restart Claude Code once it finishes. ${NOTHING_OPENED}`,
       },
       {

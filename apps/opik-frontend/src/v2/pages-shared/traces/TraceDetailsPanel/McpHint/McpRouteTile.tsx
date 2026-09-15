@@ -1,5 +1,6 @@
 import React from "react";
 import { Copy, ExternalLink } from "lucide-react";
+import copy from "clipboard-copy";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { McpInstallRoute, MCP_ROUTE_METHOD } from "./types";
@@ -10,14 +11,8 @@ type McpRouteTileProps = {
   onUse: (route: McpInstallRoute) => void;
 };
 
-/**
- * One install route.
- *
- * A deeplink is an anchor so it keeps the browser's own affordances, but it
- * still reports itself on click: the OS hand-off is unobservable from here, so
- * "clicked" is the only thing we can honestly record — and the confirmation it
- * opens is the recovery path when nothing happened.
- */
+// A deeplink stays an anchor to keep the browser's own affordances. The OS
+// hand-off is unobservable from here, so "clicked" is all we can record.
 const McpRouteTile: React.FunctionComponent<McpRouteTileProps> = ({
   route,
   onUse,
@@ -27,7 +22,7 @@ const McpRouteTile: React.FunctionComponent<McpRouteTileProps> = ({
 
   const handleUse = () => {
     if (!isDeeplink && route.clipboard) {
-      navigator.clipboard.writeText(route.clipboard);
+      copy(route.clipboard);
     }
     onUse(route);
   };

@@ -6,10 +6,7 @@ import CodeBlock from "./CodeBlock";
 type ErrorCalloutProps = {
   error?: BaseTraceDataErrorInfo;
   search?: string;
-  /**
-   * Controlled open state. Passed straight through — the section deliberately
-   * keeps no copy, so nothing can drift from whoever owns it.
-   */
+  /** Controlled open state, passed straight through; no local copy. */
   isExpanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
 };

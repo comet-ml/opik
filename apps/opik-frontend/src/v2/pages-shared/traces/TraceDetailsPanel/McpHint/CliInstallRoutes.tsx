@@ -28,22 +28,13 @@ const CLIENTS: Array<{ client: McpClient; label: string; logo: string }> = [
 ];
 
 /**
- * One command per client, for deployments with no hosted MCP server.
+ * One CLI command per client, for deployments with no hosted MCP server. A
+ * deeplink cannot safely encode a local stdio server carrying an API key.
  *
- * The CLI is the only route that works here: the local server is a stdio
- * process carrying an API key, so there is nothing a deeplink could safely
- * encode. It also probes the deployment itself and picks the hosted server
- * where one exists, which is why this is a working fallback on Opik Cloud too
- * rather than a degraded one.
- *
- * The workspace is left to the CLI's own configuration rather than prefixed
- * onto the command: an `OPIK_WORKSPACE=…` prefix is POSIX-only and would simply
- * fail when pasted into PowerShell, and the CLI already refuses, with
- * instructions, when the configured workspace is ambiguous. The prompt route
- * names it instead, where prose can.
+ * The workspace is left to the CLI's own configuration: an `OPIK_WORKSPACE=`
+ * prefix is POSIX-only and would fail when pasted into PowerShell.
  */
-
-const LocalInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
+const CliInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
   props,
 ) => {
   const routes = useMemo<McpInstallRoute[]>(
@@ -73,4 +64,4 @@ const LocalInstallRoutes: React.FunctionComponent<McpInstallRoutesProps> = (
   );
 };
 
-export default LocalInstallRoutes;
+export default CliInstallRoutes;
