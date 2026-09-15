@@ -23,15 +23,22 @@ def try_get_token_usage(run_dict: Dict[str, Any]) -> langchain_usage.LangChainUs
 def try_get_streaming_token_usage(
     run_dict: Dict[str, Any],
 ) -> Optional[langchain_usage.LangChainUsage]:
-    if "message" in run_dict["outputs"]["generations"][-1][-1]:
-        usage_metadata = run_dict["outputs"]["generations"][-1][-1]["message"][
-            "kwargs"
-        ].get("usage_metadata")
+    try:
+        last_gen = run_dict["outputs"]["generations"][-1][-1]
+    except (IndexError, KeyError, TypeError):
+        return None
 
-        if usage_metadata is not None:
-            return langchain_usage.LangChainUsage.from_original_usage_dict(
-                usage_metadata
-            )
+    if "message" not in last_gen:
+        return None
+
+    message = last_gen["message"]
+    # usage_metadata can live directly on message or nested under message["kwargs"]
+    usage_metadata = message.get("usage_metadata") or (
+        message.get("kwargs") or {}
+    ).get("usage_metadata")
+
+    if usage_metadata is not None:
+        return langchain_usage.LangChainUsage.from_original_usage_dict(usage_metadata)
 
     return None
 
