@@ -68,26 +68,29 @@ describe("the hint card without a hosted server", () => {
     expect(screen.getByTestId("mcp-route-prompt")).toBeInTheDocument();
   });
 
-  it("confirms a copy with a tick", () => {
+  it("confirms a copy in place, keeping the description and the docs link", () => {
     renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-prompt"));
 
     expect(
-      screen.getByText("Copied — paste it into your agent"),
+      screen.getByText("Copied - paste into your agent"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Instead of writing a script for each question/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Learn more")).toBeInTheDocument();
+    // The routes it was taken from are what it stands in for.
+    expect(screen.queryByTestId("mcp-route-prompt")).toBeNull();
   });
 
-  it("shows the copied command back, on one line", () => {
+  it("says where a copied command goes, without echoing it back", () => {
     const { container } = renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-cursor"));
 
     expect(
       screen.getByText("Copied — paste it in your terminal"),
     ).toBeInTheDocument();
-    expect(container.querySelector("code")?.textContent).toBe(
-      "uvx opik mcp configure --ai-client cursor",
-    );
-    expect(container.querySelector(".h-7")).toBeTruthy();
+    expect(container.querySelector("code")).toBeNull();
   });
 
   it("gets out of the way once the confirmation has been read", () => {
@@ -113,22 +116,6 @@ describe("the hint card without a hosted server", () => {
 
     expect(onDone).not.toHaveBeenCalled();
     expect(screen.getByTestId("mcp-route-prompt")).toBeInTheDocument();
-  });
-
-  it("restarts the clock when the user copies again", () => {
-    const { onDone } = renderCard();
-    fireEvent.click(screen.getByTestId("mcp-route-cursor"));
-
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS - 200));
-    fireEvent.click(screen.getByLabelText("Copy it"));
-
-    // The original deadline passes without closing: a copy made just before it
-    // used to be followed by the card vanishing.
-    act(() => void vi.advanceTimersByTime(300));
-    expect(onDone).not.toHaveBeenCalled();
-
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
-    expect(onDone).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -185,6 +172,23 @@ describe("the hint card with a hosted server", () => {
 
     act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
 
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("restarts the clock when the user copies again", () => {
+    const { onDone } = renderCard();
+    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
+    fireEvent.click(screen.getByLabelText("Copy it"));
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS - 200));
+    fireEvent.click(screen.getByLabelText("Copy it"));
+
+    // The original deadline passes without closing: a copy made just before it
+    // used to be followed by the card vanishing.
+    act(() => void vi.advanceTimersByTime(300));
+    expect(onDone).not.toHaveBeenCalled();
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 

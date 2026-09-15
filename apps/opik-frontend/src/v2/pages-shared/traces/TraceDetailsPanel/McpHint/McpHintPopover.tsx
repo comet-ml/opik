@@ -4,6 +4,7 @@ import { ArrowRight, Plug } from "lucide-react";
 import { buildDocsUrl } from "@/lib/utils";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import InstallRoutes from "./InstallRoutes";
+import McpCopyConfirmation from "./McpCopyConfirmation";
 import McpRouteConfirmation from "./McpRouteConfirmation";
 import useMcpInstallMode from "./useMcpInstallMode";
 import { McpHintTarget, McpRouteOutcome } from "./types";
@@ -108,7 +109,11 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
       <div className="my-1 h-px w-full bg-border" />
 
       <div className="px-2 pb-1 pt-0.5">
-        {outcome ? (
+        {/* An opened deeplink takes the card over: it has nothing to do with
+            the routes any more, and carries the fallback for a hand-off that
+            may have done nothing. A copy only replaces the routes it came
+            from. */}
+        {outcome?.kind === "opened" ? (
           <McpRouteConfirmation route={outcome} onRecopy={handleRecopy} />
         ) : (
           <>
@@ -116,7 +121,11 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
               {MCP_HINT_DESCRIPTION}
             </p>
 
-            <InstallRoutes onRouteUsed={handleRouteUsed} target={target} />
+            {outcome ? (
+              <McpCopyConfirmation confirmation={outcome.confirmation} />
+            ) : (
+              <InstallRoutes onRouteUsed={handleRouteUsed} target={target} />
+            )}
 
             <a
               href={buildDocsUrl(MCP_HINT_DOCS_PATH)}

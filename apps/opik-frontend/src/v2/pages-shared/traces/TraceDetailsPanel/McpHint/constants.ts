@@ -20,4 +20,4 @@ export const MCP_HINT_DESCRIPTION =
 export const MCP_DEEPLINK_FALLBACK_NOTE =
   "Nothing opened? Use the prompt instead:";
 
-export const MCP_PROMPT_COPIED = "Copied — paste it into your agent";
+export const MCP_PROMPT_COPIED = "Copied - paste into your agent";
