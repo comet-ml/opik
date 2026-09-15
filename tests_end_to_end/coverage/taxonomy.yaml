@@ -450,7 +450,18 @@ areas:
       load-prompt-version:       { covered: true,  tier: t2-cuj }
       verify-trace-from-run:     { covered: true,  tier: t2-cuj }
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
-      configure-model-settings:  { covered: false, note: "PromptModelSettings / providerConfigs" }
+      # Scoped: the Custom LLM panel only, and only the sampling pair. On a `custom-llm`
+      # gateway serving both, the spec asserts that claude-opus-4-6 gets the exclusive
+      # Temperature/Top P choice with exactly one MOUNTED control while mistral-large-2411
+      # keeps two independent sliders — i.e. the rule follows the model, not the provider —
+      # and then compares the panel's own displayed value against the outbound
+      # POST /v1/private/chat/completions body in both positions.
+      #
+      # Still uncovered here: the OpenAI / Gemini / Vertex / OpenRouter panels, max output
+      # tokens, throttling, max concurrent requests, thinking effort, a Claude that takes
+      # NEITHER sampling parameter, and whether a persisted prompt re-hydrates its settings
+      # on reload.
+      configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs — Custom LLM only (playground-claude-sampling-any-provider.spec.ts): a Claude and a non-Claude model on ONE custom gateway, asserting the exclusive sampling choice follows the model rather than the provider, and that the chosen half is what the outbound chat/completions body carries — top_p with no temperature, and temperature with no top_p. Other providers' panels, the token/throttling/concurrency sliders, thinking effort, and settings surviving a prompt reload are all still uncovered" }
 
     visual:
       playground-default: { covered: false, state: default }

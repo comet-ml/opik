@@ -29,6 +29,18 @@ export interface UnreachableProviderSeed {
   modelName?: string;
 }
 
+export interface UnreachableProviderModelsSeed {
+  providerName: string;
+  /**
+   * Models the gateway declares, in the order the caller wants them back.
+   *
+   * Several models on ONE provider is how a spec asserts that a per-model rule really is
+   * per-model: the gateway, its name and its base URL are then the constants, and the model
+   * segment of the id is the only thing that differs between the two observations.
+   */
+  modelNames: string[];
+}
+
 /**
  * Base URL for a provider that can never answer.
  *
@@ -64,6 +76,11 @@ export interface ProviderKeysFixture {
    */
   createUnreachable(seed: UnreachableProviderSeed): Promise<string>;
   /**
+   * {@link createUnreachable} for a gateway declaring more than one model; registered for
+   * teardown deletion the same way. Returns the fully-qualified model ids in the order given.
+   */
+  createUnreachableModels(seed: UnreachableProviderModelsSeed): Promise<string[]>;
+  /**
    * Makes the mock gateway answer `status` for every chat request naming `modelName`,
    * and clears it at teardown.
    *
@@ -93,6 +110,24 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
     const registered: string[] = [];
     const forcedStatusModels: string[] = [];
 
+    const seedUnreachable = async (
+      providerName: string,
+      modelNames: string[],
+    ): Promise<string[]> => {
+      registered.push(providerName);
+      const models = modelNames.map((model) => `custom-llm/${providerName}/${model}`);
+      await createProviderKey({
+        provider: 'custom-llm',
+        provider_name: providerName,
+        base_url: UNREACHABLE_BASE_URL,
+        // Required whenever `auth_config` is absent. Never sent anywhere: the
+        // connection is refused before a request is written.
+        api_key: 'unused-the-connection-is-refused',
+        configuration: { models: models.join(',') },
+      });
+      return models;
+    };
+
     await use({
       async createOauth({ providerName, modelNames = ['mock-model'] }) {
         registered.push(providerName);
@@ -115,18 +150,11 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
         });
       },
       async createUnreachable({ providerName, modelName = 'unreachable-model' }) {
-        registered.push(providerName);
-        const model = `custom-llm/${providerName}/${modelName}`;
-        await createProviderKey({
-          provider: 'custom-llm',
-          provider_name: providerName,
-          base_url: UNREACHABLE_BASE_URL,
-          // Required whenever `auth_config` is absent. Never sent anywhere: the
-          // connection is refused before a request is written.
-          api_key: 'unused-the-connection-is-refused',
-          configuration: { models: model },
-        });
+        const [model] = await seedUnreachable(providerName, [modelName]);
         return model;
+      },
+      async createUnreachableModels({ providerName, modelNames }) {
+        return seedUnreachable(providerName, modelNames);
       },
       async forceChatStatus(modelName, status) {
         forcedStatusModels.push(modelName);
