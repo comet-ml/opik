@@ -2,6 +2,7 @@ export { test, expect } from './weekly-metric-spans.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
+  UnreachableProviderModelsSeed,
   ProviderKeysFixture,
   ProviderKeyFixtures,
 } from './provider-key.fixture';
