@@ -440,6 +440,7 @@ areas:
       - playground/playground-model-parameters.spec.ts
       - playground/playground-providers.spec.ts
       - playground/playground-smoke.spec.ts
+      - playground/playground-virtualized-grid.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
       - prompts/prompt-playground-save.spec.ts
       - prompts/prompt-playground-traces.spec.ts

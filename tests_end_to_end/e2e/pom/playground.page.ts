@@ -627,6 +627,167 @@ export class PlaygroundPage {
       .and(this.page.locator('[data-mode="run"], [data-mode="re-run"]'));
   }
 
+  /**
+   * The Playground's own page scroller. Row virtualization measures the table's offset
+   * inside this element, so scrolling for virtualization assertions must drive it rather
+   * than the window.
+   */
+  scrollContainer(): Locator {
+    return this.page.getByTestId('playground-scroll-container');
+  }
+
+  /**
+   * The output grid is two side-by-side `StickyScrollTable`s — dataset variables on the
+   * left, prompt outputs on the right — each split into a sticky header half and a
+   * scrollable body half. Both bodies render the same rows, so virtualization assertions
+   * must name one surface rather than querying the grid as a whole.
+   */
+  variablesPanel(half: 'header' | 'body'): Locator {
+    return this.page.getByTestId(`playground-variables-table-${half}`);
+  }
+
+  outputsPanel(half: 'header' | 'body'): Locator {
+    return this.page.getByTestId(`playground-outputs-table-${half}`);
+  }
+
+  /** Scroll the Playground page body to a ratio of its scrollable height (0 = top, 1 = bottom). */
+  async scrollResultsTo(ratio: number): Promise<void> {
+    return test.step(`scroll results to ${ratio} of the page height`, async () => {
+      await this.scrollContainer().evaluate((el, r) => {
+        el.scrollTop = (el.scrollHeight - el.clientHeight) * r;
+      }, ratio);
+      await this.settle();
+    });
+  }
+
+  /**
+   * Row ids currently mounted in the outputs body. The grid does not set `getRowId`, so
+   * these are TanStack's positional ids within the page, not dataset item ids — enough to
+   * tell one mounted window from another, which is all the virtualization assertions need.
+   * Callers should not assume a dataset ordering: the grid renders items newest-first.
+   */
+  async mountedRowIds(): Promise<string[]> {
+    return test.step('read mounted row ids', async () => {
+      return this.outputsPanel('body')
+        .locator('tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]')
+        .evaluateAll((rows) =>
+          rows.map((r) => r.getAttribute('data-row-id')).filter((v): v is string => Boolean(v)),
+        );
+    });
+  }
+
+  /**
+   * Whether a gap sits between the top of the scroller's viewport and the first mounted row,
+   * once the grid itself has been scrolled past. That is what a stale table offset looks
+   * like: the virtual window is positioned from the wrong origin, so the rows it renders
+   * land below where the scroll position says they should.
+   */
+  async hasBlankBandAboveRows(): Promise<boolean> {
+    return test.step('check for a blank band above the mounted rows', async () => {
+      const viewportTop = await this.scrollContainer().evaluate(
+        (el) => el.getBoundingClientRect().top,
+      );
+
+      return this.outputsPanel('body').evaluate((body, top) => {
+        const wrapper = body.querySelector('[data-table-wrapper]');
+        const firstRow = body.querySelector('tbody tr[data-row-id]');
+        if (!(wrapper instanceof HTMLElement) || !(firstRow instanceof HTMLElement)) return false;
+
+        // Only meaningful once the grid's own top has scrolled above the viewport.
+        if (wrapper.getBoundingClientRect().top >= top) return false;
+
+        return firstRow.getBoundingClientRect().top > top + 1;
+      }, viewportTop);
+    });
+  }
+
+  /**
+   * Drive a horizontal scroll on one panel's body half and report what it actually reached.
+   * Returns the achieved `scrollLeft`, so a caller can fail loudly when the panel is too
+   * narrow to overflow instead of silently comparing two zeroes.
+   */
+  async scrollPanelHorizontallyTo(
+    panel: 'variables' | 'outputs',
+    offset: number,
+  ): Promise<number> {
+    return test.step(`scroll the ${panel} panel horizontally to ${offset}px`, async () => {
+      const body = panel === 'variables' ? this.variablesPanel('body') : this.outputsPanel('body');
+      const reached = await body.evaluate((el, x) => {
+        el.scrollLeft = x;
+        return el.scrollLeft;
+      }, offset);
+      await this.settle();
+      return reached;
+    });
+  }
+
+  /** The `scrollLeft` of a panel's sticky header half and its body half. */
+  async panelScrollOffsets(
+    panel: 'variables' | 'outputs',
+  ): Promise<{ header: number; body: number }> {
+    return test.step(`read ${panel} panel header/body scroll offsets`, async () => {
+      const half = (h: 'header' | 'body') =>
+        panel === 'variables' ? this.variablesPanel(h) : this.outputsPanel(h);
+      const [header, body] = await Promise.all([
+        half('header').evaluate((el) => el.scrollLeft),
+        half('body').evaluate((el) => el.scrollLeft),
+      ]);
+      return { header, body };
+    });
+  }
+
+  /**
+   * Choose a "rows per page" value from the results pagination, then wait for the
+   * replacement body. Changing the size refetches, and `mountedRowIds()` deliberately
+   * ignores the loading tbody, so returning early would let a caller assert against an
+   * empty or stale window.
+   */
+  async setPageSize(size: number): Promise<void> {
+    return test.step(`set page size to ${size}`, async () => {
+      await this.pageSizeTrigger().click();
+      await this.page.getByRole('menuitemcheckbox', { name: String(size), exact: true }).click();
+
+      await expect(this.pageSizeTrigger()).toHaveText(String(size));
+      await expect(
+        this.outputsPanel('body').locator(
+          'tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]',
+        ),
+      ).not.toHaveCount(0);
+      await this.settle();
+    });
+  }
+
+  /** The current "rows per page" value shown by the pagination trigger. */
+  async pageSize(): Promise<number> {
+    return test.step('read the current page size', async () => {
+      return Number((await this.pageSizeTrigger().innerText()).trim());
+    });
+  }
+
+  /**
+   * Scrollable height of the page scroller. Under virtualization this tracks the row count
+   * the virtualizer is sizing for, so it moves when the page size changes even though the
+   * mounted window stays the same size.
+   */
+  async resultsScrollHeight(): Promise<number> {
+    return test.step('read the results scroll height', async () => {
+      return this.scrollContainer().evaluate((el) => el.scrollHeight);
+    });
+  }
+
+  private pageSizeTrigger(): Locator {
+    return this.resultsTable()
+      .locator('..')
+      .getByRole('button', { name: /^(10|50|100|200|500|1000)$/ });
+  }
+
+  /** Two frames: one for the scroll event to dispatch, one for the virtualizer to re-render. */
+  private async settle(): Promise<void> {
+    await this.page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+  }
+
   private resultsTable(): Locator {
     return this.page.getByTestId('playground-results-table');
   }
