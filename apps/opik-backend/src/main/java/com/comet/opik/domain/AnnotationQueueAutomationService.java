@@ -62,7 +62,7 @@ public class AnnotationQueueAutomationService {
             @NonNull UUID projectId, @NonNull AnnotationQueue.AnnotationScope scope,
             @NonNull String queueName, @NonNull AnnotationQueueAutomation automation) {
 
-        boolean enabled = Boolean.TRUE.equals(automation.enabled());
+        boolean enabled = automation.enabled();
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             var routerDao = handle.attach(AutomationRuleAnnotationQueueRouterDAO.class);
@@ -167,7 +167,7 @@ public class AnnotationQueueAutomationService {
                         .orElseThrow(() -> new BadRequestException(
                                 "Annotation queue automation requires conditions"));
 
-        if (Boolean.TRUE.equals(automation.enabled()) && !hasAnyCondition(conditions)) {
+        if (automation.enabled() && !hasAnyCondition(conditions)) {
             throw new BadRequestException("An enabled annotation queue automation requires at least one condition");
         }
 

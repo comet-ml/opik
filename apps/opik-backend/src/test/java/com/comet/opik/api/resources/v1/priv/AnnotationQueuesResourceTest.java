@@ -701,6 +701,20 @@ class AnnotationQueuesResourceTest {
         }
 
         @Test
+        @DisplayName("should read an omitted enabled flag as disabled")
+        void omittedEnabledFlagReadsAsDisabled() {
+            // enabled is a primitive, so an absent field deserialises to false rather than being rejected.
+            // Pinning it here because it is the observable consequence of that choice.
+            var automation = AnnotationQueueAutomation.builder()
+                    .conditions(conditionsOn("safety", 0.5))
+                    .build();
+
+            var queue = createQueue(automation, HttpStatus.SC_NO_CONTENT);
+
+            assertThat(readBack(queue.id()).automation().enabled()).isFalse();
+        }
+
+        @Test
         @DisplayName("should reject a null condition group rather than failing on it")
         void nullConditionGroupIsRejected() {
             var conditions = AnnotationQueueAutomation.Conditions.builder()

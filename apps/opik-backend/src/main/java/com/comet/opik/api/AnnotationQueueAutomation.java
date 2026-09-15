@@ -31,9 +31,14 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AnnotationQueueAutomation(
+        /**
+         * Primitive, so the type carries the non-nullability rather than an annotation. Note the
+         * consequence at the API edge: a payload that omits the field is read as disabled rather than
+         * rejected, which is why an automation is only ever created alongside its queue.
+         */
         @JsonView({
                 AnnotationQueue.View.Public.class,
-                AnnotationQueue.View.Write.class}) @NotNull Boolean enabled,
+                AnnotationQueue.View.Write.class}) boolean enabled,
 
         /**
          * Nullable so flipping the toggle off is a one-field request: {@code {"enabled": false}} keeps the
