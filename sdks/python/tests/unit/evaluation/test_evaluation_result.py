@@ -118,7 +118,7 @@ def test_group_by_dataset_item_view__multiple_metrics_and_items():
 
 
 def test_group_by_dataset_item_view__failed_and_invalid_scores():
-    """Test that failed and invalid scores are properly excluded."""
+    """Test that failed scores count at 0.0 while non-finite scores are excluded."""
     # Create test data with various score types
     valid_score = score_result.ScoreResult(
         name="accuracy", value=0.8, scoring_failed=False
@@ -164,13 +164,13 @@ def test_group_by_dataset_item_view__failed_and_invalid_scores():
         trial_count=1,
     )
 
-    # Test that only valid scores are included
+    # Test that only valid scores are included (failed 0.0 counts, nan/inf excluded)
     view = eval_result.group_by_dataset_item_view()
     accuracy_stats = view.dataset_items["item1"].scores["accuracy"]
 
-    # Should only include the two valid scores
-    assert accuracy_stats.values == [0.8, 0.9]
-    assert accuracy_stats.mean == pytest.approx(0.85, rel=1e-9)
+    # The failed 0.0 plus the two valid scores
+    assert accuracy_stats.values == [0.8, 0.0, 0.9]
+    assert accuracy_stats.mean == pytest.approx((0.8 + 0.0 + 0.9) / 3, rel=1e-9)
 
 
 def test_group_by_dataset_item_view__empty_results():
@@ -396,7 +396,7 @@ def test_aggregate_evaluation_scores__multiple_metrics():
 
 
 def test_aggregate_evaluation_scores__failed_and_invalid_scores():
-    """Test that failed and invalid scores are excluded from aggregation."""
+    """Test that failed scores count at 0.0 while non-finite scores are excluded."""
     test_results_list = []
 
     # Create scores with various states
@@ -452,14 +452,14 @@ def test_aggregate_evaluation_scores__failed_and_invalid_scores():
     # Test aggregation
     aggregated_view = eval_result.aggregate_evaluation_scores()
 
-    # Should only include valid scores (0.8, 0.9)
+    # Should include valid scores plus the failed 0.0 (0.8, 0.9, 0.0)
     assert len(aggregated_view.aggregated_scores) == 1
     accuracy_stats = aggregated_view.aggregated_scores["accuracy"]
 
-    assert accuracy_stats.values == [0.8, 0.9]
-    assert accuracy_stats.mean == pytest.approx(0.85, rel=1e-9)
+    assert accuracy_stats.values == [0.8, 0.9, 0.0]
+    assert accuracy_stats.mean == pytest.approx((0.8 + 0.9 + 0.0) / 3, rel=1e-9)
     assert accuracy_stats.max == 0.9
-    assert accuracy_stats.min == 0.8
+    assert accuracy_stats.min == 0.0
 
 
 def test_aggregate_evaluation_scores__empty_results():
@@ -566,12 +566,12 @@ def test_aggregate_evaluation_scores__zero_and_negative_values():
 
 
 def test_aggregate_evaluation_scores__all_scores_filtered_out():
-    """Test when all scores are invalid or failed - should result in empty aggregation."""
+    """Test when all scores are invalid - should result in empty aggregation."""
     failed_score1 = score_result.ScoreResult(
-        name="accuracy", value=0.5, scoring_failed=True
+        name="accuracy", value=float("nan"), scoring_failed=True
     )
     failed_score2 = score_result.ScoreResult(
-        name="accuracy", value=0.8, scoring_failed=True
+        name="accuracy", value=float("inf"), scoring_failed=True
     )
     nan_score = score_result.ScoreResult(
         name="precision", value=float("nan"), scoring_failed=False

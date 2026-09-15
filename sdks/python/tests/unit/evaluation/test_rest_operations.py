@@ -103,16 +103,21 @@ class TestLogTestResultFeedbackScoresRouting:
         assert assertion_results[0]["name"] == "must mention paris"
         assert assertion_results[0]["status"] == "passed"
 
-    def test_scoring_failed_records__excluded_from_both_endpoints(self):
+    def test_scoring_failed_records__uploaded_with_error_reason(self):
+        # #8134 defect 1: failed scores count at their recorded 0.0 instead of
+        # being silently dropped, so backend averages match local aggregates.
         client = _client_mock()
         results = [
             score_result.ScoreResult(
                 name="must mention paris",
                 value=False,
+                reason="boom",
                 category_name="suite_assertion",
                 scoring_failed=True,
             ),
-            score_result.ScoreResult(name="precision", value=0.0, scoring_failed=True),
+            score_result.ScoreResult(
+                name="precision", value=0.0, reason="boom", scoring_failed=True
+            ),
         ]
 
         rest_operations.log_test_result_feedback_scores(
@@ -122,5 +127,17 @@ class TestLogTestResultFeedbackScoresRouting:
             project_name="proj-A",
         )
 
-        client.log_traces_feedback_scores.assert_not_called()
-        client.log_assertion_results.assert_not_called()
+        client.log_traces_feedback_scores.assert_called_once()
+        feedback_scores = client.log_traces_feedback_scores.call_args.kwargs["scores"]
+        assert len(feedback_scores) == 1
+        assert feedback_scores[0]["name"] == "precision"
+        assert feedback_scores[0]["value"] == 0.0
+        assert feedback_scores[0]["reason"] == "boom"
+
+        client.log_assertion_results.assert_called_once()
+        assertion_results = client.log_assertion_results.call_args.kwargs[
+            "assertion_results"
+        ]
+        assert len(assertion_results) == 1
+        assert assertion_results[0]["name"] == "must mention paris"
+        assert assertion_results[0]["status"] == "failed"
