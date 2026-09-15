@@ -1,6 +1,7 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.AnnotationQueueAutomation;
+import com.comet.opik.api.annotationqueue.Conditions;
 import com.comet.opik.utils.JsonUtils;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -22,9 +23,9 @@ public interface AnnotationQueueAutomationMapper {
     @Mapping(target = "maxItemsInQueue", expression = "java(model.maxItemsInQueue())")
     AnnotationQueueAutomation map(AutomationRuleAnnotationQueueRouterModel model);
 
-    default AnnotationQueueAutomation.Conditions toConditions(String conditions) {
+    default Conditions toConditions(String conditions) {
         return conditions == null
                 ? null
-                : JsonUtils.readValue(conditions, AnnotationQueueAutomation.Conditions.class);
+                : JsonUtils.readValue(conditions, Conditions.class);
     }
 }

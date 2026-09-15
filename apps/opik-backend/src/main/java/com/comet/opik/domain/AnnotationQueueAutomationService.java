@@ -2,6 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueAutomation;
+import com.comet.opik.api.annotationqueue.Conditions;
+import com.comet.opik.api.annotationqueue.ScoreCondition;
 import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.domain.evaluators.AnnotationQueueAutomationMapper;
 import com.comet.opik.domain.evaluators.AutomationRuleAnnotationQueueRouterDAO;
@@ -188,7 +190,7 @@ public class AnnotationQueueAutomationService {
      * every comparison against NaN is false, so the automation would be saved, shown back as configured,
      * and quietly never match.
      */
-    private void rejectNonFiniteThresholds(AnnotationQueueAutomation.Conditions conditions) {
+    private void rejectNonFiniteThresholds(Conditions conditions) {
         if (conditions == null || conditions.groups() == null) {
             return;
         }
@@ -196,10 +198,10 @@ public class AnnotationQueueAutomationService {
         boolean nonFinite = conditions.groups().stream()
                 .filter(Objects::nonNull)
                 .flatMap(group -> group.conditions() == null
-                        ? Stream.<AnnotationQueueAutomation.ScoreCondition>empty()
+                        ? Stream.<ScoreCondition>empty()
                         : group.conditions().stream())
                 .filter(Objects::nonNull)
-                .map(AnnotationQueueAutomation.ScoreCondition::value)
+                .map(ScoreCondition::value)
                 .anyMatch(value -> value != null && !Double.isFinite(value));
 
         if (nonFinite) {
@@ -208,7 +210,7 @@ public class AnnotationQueueAutomationService {
     }
 
     private boolean hasAnyCondition(String conditionsJson) {
-        var conditions = JsonUtils.readValue(conditionsJson, AnnotationQueueAutomation.Conditions.class);
+        var conditions = JsonUtils.readValue(conditionsJson, Conditions.class);
 
         return conditions != null && CollectionUtils.isNotEmpty(conditions.groups())
                 && conditions.groups().stream().anyMatch(group -> CollectionUtils.isNotEmpty(group.conditions()));
@@ -253,7 +255,7 @@ public class AnnotationQueueAutomationService {
                                 model.queueId(),
                                 model.projectId(),
                                 JsonUtils.readValue(model.conditions(),
-                                        AnnotationQueueAutomation.Conditions.class)))
+                                        Conditions.class)))
                         .toList());
     }
 
@@ -284,7 +286,7 @@ public class AnnotationQueueAutomationService {
     /**
      * An enabled router reduced to what routing needs: which queue, which project, and what to match.
      */
-    public record QueueAutomation(UUID queueId, UUID projectId, AnnotationQueueAutomation.Conditions conditions) {
+    public record QueueAutomation(UUID queueId, UUID projectId, Conditions conditions) {
     }
 
     public void deleteByQueueIds(@NonNull String workspaceId, List<UUID> queueIds) {

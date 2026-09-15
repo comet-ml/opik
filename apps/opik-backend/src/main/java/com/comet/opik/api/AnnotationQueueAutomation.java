@@ -1,24 +1,14 @@
 package com.comet.opik.api;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
+import com.comet.opik.api.annotationqueue.Conditions;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.annotation.Nullable;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
-import jakarta.validation.constraints.Size;
 import lombok.Builder;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-
-import java.util.Arrays;
-import java.util.List;
 
 /**
  * Rules for automatically populating an annotation queue from feedback scores. Rides on the annotation
@@ -60,76 +50,4 @@ public record AnnotationQueueAutomation(
     public static final int MAX_GROUPS = 5;
     public static final int MAX_CONDITIONS_PER_GROUP = 5;
 
-    /**
-     * Disjunction of conjunctions: an item matches when <em>any</em> group matches, and a group matches
-     * when <em>all</em> of its conditions do. Mirrors the "Add AND condition" / "Add OR group" controls.
-     */
-    @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record Conditions(
-            @JsonView({
-                    AnnotationQueue.View.Public.class,
-                    AnnotationQueue.View.Write.class}) @NotEmpty @Size(max = MAX_GROUPS, message = "cannot exceed "
-                            + MAX_GROUPS + " groups") @Valid List<@NotNull ConditionGroup> groups) {
-    }
-
-    @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record ConditionGroup(
-            @JsonView({
-                    AnnotationQueue.View.Public.class,
-                    AnnotationQueue.View.Write.class}) @NotEmpty @Size(max = MAX_CONDITIONS_PER_GROUP, message = "cannot exceed "
-                            + MAX_CONDITIONS_PER_GROUP
-                            + " conditions") @Valid List<@NotNull ScoreCondition> conditions) {
-    }
-
-    /**
-     * A single threshold on a named feedback score. The name is deliberately not validated against the
-     * workspace's feedback definitions — configuring an automation before the score exists is a legitimate
-     * order of operations.
-     */
-    @Builder(toBuilder = true)
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record ScoreCondition(
-            @JsonView({
-                    AnnotationQueue.View.Public.class,
-                    AnnotationQueue.View.Write.class}) @NotBlank @Size(max = 255) String scoreName,
-
-            @JsonView({AnnotationQueue.View.Public.class,
-                    AnnotationQueue.View.Write.class}) @NotNull Operator operator,
-
-            @JsonView({AnnotationQueue.View.Public.class,
-                    AnnotationQueue.View.Write.class}) @NotNull Double value) {
-    }
-
-    /**
-     * {@code EQUAL} is for categorical scores — a boolean written as 0/1, or a rating coded as an integer.
-     * Note what it compares: the <em>effective</em> score, which is averaged across authors, so an equality
-     * that matches while one annotator has scored an item can stop matching once a second one disagrees
-     * (1 and 0 average to 0.5). Exact matching is dependable where a single author writes the score, which
-     * is the case for LLM judges and SDK-written scores.
-     */
-    @Getter
-    @RequiredArgsConstructor
-    public enum Operator {
-
-        GREATER_THAN(">"),
-        LESS_THAN("<"),
-        EQUAL("=");
-
-        @JsonValue
-        private final String value;
-
-        @JsonCreator
-        public static Operator fromString(String value) {
-            return Arrays.stream(values())
-                    .filter(operator -> operator.value.equals(value))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Unknown score condition operator '%s'".formatted(value)));
-        }
-    }
 }

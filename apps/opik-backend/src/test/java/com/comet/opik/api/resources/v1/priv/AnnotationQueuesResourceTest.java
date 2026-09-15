@@ -11,6 +11,10 @@ import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread.TraceThreadPage;
+import com.comet.opik.api.annotationqueue.ConditionGroup;
+import com.comet.opik.api.annotationqueue.Conditions;
+import com.comet.opik.api.annotationqueue.ScoreCondition;
+import com.comet.opik.api.annotationqueue.ScoreConditionOperator;
 import com.comet.opik.api.filter.AnnotationQueueField;
 import com.comet.opik.api.filter.AnnotationQueueFilter;
 import com.comet.opik.api.filter.Operator;
@@ -561,12 +565,12 @@ class AnnotationQueuesResourceTest {
                     queueId, API_KEY, TEST_WORKSPACE, HttpStatus.SC_OK);
         }
 
-        private AnnotationQueueAutomation.Conditions conditionsOn(String score, double value) {
-            return AnnotationQueueAutomation.Conditions.builder()
-                    .groups(List.of(AnnotationQueueAutomation.ConditionGroup.builder()
-                            .conditions(List.of(AnnotationQueueAutomation.ScoreCondition.builder()
+        private Conditions conditionsOn(String score, double value) {
+            return Conditions.builder()
+                    .groups(List.of(ConditionGroup.builder()
+                            .conditions(List.of(ScoreCondition.builder()
                                     .scoreName(score)
-                                    .operator(AnnotationQueueAutomation.Operator.LESS_THAN)
+                                    .operator(ScoreConditionOperator.LESS_THAN)
                                     .value(value)
                                     .build()))
                             .build()))
@@ -681,11 +685,11 @@ class AnnotationQueuesResourceTest {
         @MethodSource("nonFiniteThresholds")
         @DisplayName("should reject a threshold that is not a finite number:")
         void nonFiniteThresholdIsRejected(double value, String label) {
-            var conditions = AnnotationQueueAutomation.Conditions.builder()
-                    .groups(List.of(AnnotationQueueAutomation.ConditionGroup.builder()
-                            .conditions(List.of(AnnotationQueueAutomation.ScoreCondition.builder()
+            var conditions = Conditions.builder()
+                    .groups(List.of(ConditionGroup.builder()
+                            .conditions(List.of(ScoreCondition.builder()
                                     .scoreName("safety")
-                                    .operator(AnnotationQueueAutomation.Operator.LESS_THAN)
+                                    .operator(ScoreConditionOperator.LESS_THAN)
                                     .value(value)
                                     .build()))
                             .build()))
@@ -717,8 +721,8 @@ class AnnotationQueuesResourceTest {
         @Test
         @DisplayName("should reject a null condition group rather than failing on it")
         void nullConditionGroupIsRejected() {
-            var conditions = AnnotationQueueAutomation.Conditions.builder()
-                    .groups(Collections.<AnnotationQueueAutomation.ConditionGroup>singletonList(null))
+            var conditions = Conditions.builder()
+                    .groups(Collections.<ConditionGroup>singletonList(null))
                     .build();
 
             createQueue(AnnotationQueueAutomation.builder()
@@ -731,9 +735,9 @@ class AnnotationQueuesResourceTest {
         @Test
         @DisplayName("should reject a null score condition rather than failing on it")
         void nullScoreConditionIsRejected() {
-            var conditions = AnnotationQueueAutomation.Conditions.builder()
-                    .groups(List.of(AnnotationQueueAutomation.ConditionGroup.builder()
-                            .conditions(Collections.<AnnotationQueueAutomation.ScoreCondition>singletonList(null))
+            var conditions = Conditions.builder()
+                    .groups(List.of(ConditionGroup.builder()
+                            .conditions(Collections.<ScoreCondition>singletonList(null))
                             .build()))
                     .build();
 
