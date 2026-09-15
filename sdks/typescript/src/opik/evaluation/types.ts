@@ -88,6 +88,13 @@ export type EvaluationScoreResult = {
 
   /** Optional category name for grouping scores */
   categoryName?: string;
+
+  /**
+   * Optional caller-supplied metadata persisted with the score, e.g.
+   * evaluator provenance such as a rubric revision or config fingerprint.
+   * Matches Python SDK's `ScoreResult.metadata`.
+   */
+  metadata?: Record<string, unknown>;
 };
 
 /**
