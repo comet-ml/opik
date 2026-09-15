@@ -140,7 +140,16 @@ def user_facing_stacktrace(skip_frames: int = 1) -> str:
         if tb is None:
             break
         tb = tb.tb_next
-    return "".join(traceback.format_exception(exc_type, exc, tb)).strip()
+    # Lead with the cause. The caller truncates this message to its first 500
+    # characters and format_exception puts the exception last, so a failure raised a
+    # few frames deep would have its cause cut off -- the same empty-cause outcome
+    # this helper exists to prevent. Frames follow, and are what gets lost instead.
+    # format_exception_only rather than slicing the formatted list: for a
+    # SyntaxError the first entry is the offending location, not a header, so
+    # dropping it by position would discard the very line the user needs.
+    cause = "".join(traceback.format_exception_only(exc_type, exc)).rstrip()
+    frames = "".join(traceback.format_tb(tb)).rstrip()
+    return f"{cause}\n{frames}" if frames else cause
 
 code = argv[1]
 data = json.loads(argv[2])

@@ -3,6 +3,9 @@ from typing import Any, Dict
 from opik_backend.payload_types import PayloadType
 from opik_backend.process_worker import required_score_params
 
+# Built-ins the scorer injects rather than resolving from a trace/span path.
+RESERVED_BUILT_INS = frozenset({"spans"})
+
 from flask import request, abort, jsonify, Blueprint, current_app
 from werkzeug.exceptions import HTTPException
 
@@ -51,6 +54,12 @@ def execute_evaluator_python():
     code: str = payload.get("code")
     if code is None:
         abort(400, "Field 'code' is missing in the request")
+    if not isinstance(code, str):
+        # Checked here rather than left to the executor: the two strategies disagree
+        # on a non-string. ProcessExecutor reaches exec() and comes back 400, while
+        # DockerExecutor sizes the payload before its try block and raises
+        # AttributeError, which surfaces as a 500 the Java caller then retries.
+        abort(400, "Field 'code' must be a string")
 
     data: Dict[Any, Any] = payload.get("data")
     if data is None:
@@ -68,9 +77,14 @@ def execute_evaluator_python():
     # and requires the opposite -- score(**data) must raise, so the item is reported
     # as an explained 0.0 rather than a silent score (OPIK_7172). Same shape, two
     # contracts, and only the caller separates them.
+    #
+    # `spans` is excluded because it is not path-resolved: the scorer injects it only
+    # when the rule declares it, so its absence always means the rule never asked for
+    # it -- a configuration error that should keep failing by name, not be filled.
     if isinstance(data, dict) and payload_type != PayloadType.TRACE_THREAD.value:
         for name in required_score_params(code):
-            data.setdefault(name, None)
+            if name not in RESERVED_BUILT_INS:
+                data.setdefault(name, None)
 
     # Get the executor from app context and run the code
     response = get_executor().run_scoring(code, data, payload_type)

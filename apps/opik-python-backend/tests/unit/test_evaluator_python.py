@@ -670,23 +670,153 @@ class NoKwargs(base_metric.BaseMetric):
     )
 
 
-# `code` is untyped JSON and is parsed in the request thread, ahead of the executor,
-# to read the score() signature. A non-string raises TypeError rather than
-# SyntaxError there, which would surface as a 500 instead of the executor's 400 for
-# invalid code.
+# `code` is untyped JSON. Left to the executors they disagree on a non-string:
+# ProcessExecutor reaches exec() and answers 400, while DockerExecutor sizes the
+# payload before its try block, raises AttributeError, and surfaces as a 500 that
+# the Java caller then retries. Runs on the shared fixture, so both strategies are
+# covered -- the check is ahead of dispatch, so neither executor is reached.
 @pytest.mark.parametrize("code", [42, ["x"], {"a": 1}])
-def test_non_string_code_is_rejected_as_bad_request(process_client, code):
-    response = process_client.post(EVALUATORS_URL, json={
+def test_non_string_code_is_rejected_as_bad_request(client, code):
+    response = client.post(EVALUATORS_URL, json={
         "data": {"output": "abc"},
         "code": code
     })
 
-    assert response.status_code == 400, "must not surface as a 500"
-    error = str(response.json["error"])
+    assert response.status_code == 400, "must not surface as a 500 on either strategy"
     # Pin the cause, not just the status: an unrelated 400 would otherwise pass.
-    assert "Field 'code' contains invalid Python code" in error, (
-        "the rejection must come from the executor's invalid-code path"
-    )
-    # exec() raises with no user frame, so this is also the shortest traceback
-    # there is -- the shape a fixed-length slice used to leave empty.
-    assert "TypeError" in error
+    assert "Field 'code' must be a string" in str(response.json["error"])
+
+
+INHERITED_SCORE_METRIC = """
+from mylib import SomeBase
+
+
+class Helper:
+    def score(self, unrelated_param):
+        return None
+
+
+class MyMetric(SomeBase):
+    def score(self, output):
+        pass
+"""
+
+TWO_METRIC_CLASSES = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class AlphaMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "alpha_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        return score_result.ScoreResult(value=1.0, name=self.name)
+
+
+class BetaMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "beta_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str, beta_only: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        return score_result.ScoreResult(value=0.0, name=self.name)
+"""
+
+RENAMED_RECEIVER_METRIC = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class RenamedReceiver(base_metric.BaseMetric):
+    def __init__(self, name: str = "renamed_receiver_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(this, output: str, metadata, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            value=1.0, name=this.name, reason=f"metadata={metadata!r}"
+        )
+"""
+
+
+# `self` is a convention, not a rule. Filling the receiver would make the call pass
+# two values for the same parameter and 400 every trace.
+def test_receiver_is_not_filled_when_it_is_not_named_self(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": RENAMED_RECEIVER_METRIC
+    })
+
+    assert response.status_code == 200
+    assert response.json["scores"][0]["reason"] == "metadata=None"
+
+
+# The signature read must pick the class the executor will instantiate, or it injects
+# a keyword the real metric rejects. When no class statically resolves to BaseMetric
+# it must fill nothing rather than guess from another class that declares score().
+def test_unresolvable_metric_class_fills_nothing(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": INHERITED_SCORE_METRIC
+    })
+
+    # The import fails in the sandbox, so this is a 400 either way -- what matters is
+    # which one: a guessed fill would name Helper's parameter instead.
+    assert response.status_code == 400
+    assert "unrelated_param" not in str(response.json["error"])
+
+
+# With several metric classes, the statically-read signature must agree with the
+# class runtime actually instantiates, or the fill injects a parameter it rejects.
+def test_multiple_metric_classes_do_not_inject_a_foreign_parameter(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": TWO_METRIC_CLASSES
+    })
+
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert scores[0]["name"] == "alpha_metric", "runtime picks the name-sorted first class"
+    assert scores[0]["value"] == 1.0
+
+
+# The trace-thread contract: data goes to score() positionally as one conversation
+# argument, so the fill-in must not run. Without this the `payload_type` half of the
+# guard is executed by no test and could be deleted with the suite still green.
+def test_trace_thread_payload_is_not_filled(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "type": PayloadType.TRACE_THREAD.value,
+        "code": REQUIRED_METADATA_METRIC
+    })
+
+    # score(data) is called positionally, so `metadata` is never supplied and the
+    # call fails. A fill-in leaking into this path would turn it into a score.
+    assert response.status_code == 400
+    error = str(response.json["error"])
+    assert "can't be evaluated" in error
+    assert "metadata" in error
+
+
+# `spans` is injected by the scorer only when the rule declares it, so its absence
+# always means the rule never asked for it -- a configuration error that must keep
+# failing by name rather than being filled with None.
+def test_reserved_spans_builtin_is_not_filled(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": """
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class NeedsSpans(base_metric.BaseMetric):
+    def __init__(self, name: str = "needs_spans_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str, spans):
+        return score_result.ScoreResult(value=1.0, name=self.name)
+"""
+    })
+
+    assert response.status_code == 400
+    assert "spans" in str(response.json["error"])

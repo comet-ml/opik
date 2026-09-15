@@ -280,7 +280,16 @@ def user_facing_stacktrace(skip_frames: int = 1) -> str:
         if tb is None:
             break
         tb = tb.tb_next
-    return "".join(traceback.format_exception(exc_type, exc, tb)).strip()
+    # Lead with the cause. The caller truncates this message to its first 500
+    # characters and format_exception puts the exception last, so a failure raised a
+    # few frames deep would have its cause cut off -- the same empty-cause outcome
+    # this helper exists to prevent. Frames follow, and are what gets lost instead.
+    # format_exception_only rather than slicing the formatted list: for a
+    # SyntaxError the first entry is the offending location, not a header, so
+    # dropping it by position would discard the very line the user needs.
+    cause = "".join(traceback.format_exception_only(exc_type, exc)).rstrip()
+    frames = "".join(traceback.format_tb(tb)).rstrip()
+    return f"{cause}\n{frames}" if frames else cause
 
 
 def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
@@ -402,43 +411,45 @@ def validate_user_code(code: str) -> dict:
 
 
 def required_score_params(code: str) -> List[str]:
-    """``score()`` parameters with no default, read statically from the code.
+    """``score()`` parameters with no default that can be passed by keyword.
 
     Static because this runs before any user code does, and outside the sandbox:
-    the metric object is never constructed here. Empty when the signature isn't
-    statically resolvable (``score()`` inherited from an imported base), which
-    the callers treat as "fill nothing" rather than guessing.
+    the metric object is never constructed here. Returns nothing whenever the class
+    cannot be resolved the way :func:`get_metric_class` resolves it at runtime --
+    guessing from another class that merely declares ``score()`` would inject a
+    keyword the real metric rejects, turning a working rule into a 400.
+
+    The receiver is dropped by position rather than by the name ``self``, which is
+    only a convention: filling it would make the call pass two values for the same
+    parameter. Positional-only parameters are excluded because ``score(**data)``
+    cannot supply them at all.
     """
     try:
         tree = ast.parse(code)
     except Exception:
-        # Anything unparseable yields no names, so the call is dispatched exactly as
-        # it would have been. Deliberately broad: this runs in the request thread,
-        # ahead of the executor, and `code` is untyped JSON -- a non-string raises
-        # TypeError, not SyntaxError. Narrowing it would turn the executor's 400 for
-        # invalid code into a 500 from here.
+        # Anything unparseable yields no names, so the call dispatches exactly as it
+        # would have. Deliberately broad: this runs in the request thread, ahead of
+        # the executor, and `code` is untyped JSON.
         return []
     metric_class = _find_basemetric_classdef(tree)
     if metric_class is None:
-        scored = sorted(
-            (c for c in _top_level_classdefs(tree) if _score_funcdef(c) is not None),
-            key=lambda node: node.name,
-        )
-        if not scored:
-            return []
-        metric_class = scored[0]
+        return []
     score = _score_funcdef(metric_class)
     if score is None:
         return []
-    args = [a.arg for a in score.args.args if a.arg != "self"]
-    # Defaults bind to the tail of args; only the untailed ones are required.
-    required = args[: len(args) - len(score.args.defaults)] if score.args.defaults else args
-    kwonly = [
+    # posonlyargs precede args; the receiver is the first of the two combined.
+    positional = score.args.posonlyargs + score.args.args
+    fillable = positional[max(len(score.args.posonlyargs), 1):]
+    defaults = score.args.defaults
+    required = fillable[: len(fillable) - len(defaults)] if defaults else fillable
+    names = [a.arg for a in required]
+    names += [
         a.arg
         for a, default in zip(score.args.kwonlyargs, score.args.kw_defaults)
         if default is None
     ]
-    return required + kwonly
+    return names
+
 
 def worker_process_main(connection):
     # Workers should ignore SIGINT; parent ProcessExecutor will manage shutdown.
