@@ -35,9 +35,8 @@ class HostStatus:
     workspace: Optional[str] = None
     in_sync: Optional[bool] = None
     # Local (uvx) registrations only: whether the recorded command escapes an
-    # `opik-mcp` installed as a uv tool. Without that, such an install can win,
-    # leaving the client starting that version indefinitely. ``None`` for a hosted
-    # registration, which runs no local package at all.
+    # `opik-mcp` installed as a uv tool. `None` for a hosted registration, which
+    # runs no local package at all.
     bypasses_tool_install: Optional[bool] = None
 
 
@@ -132,23 +131,13 @@ def uv_tool_install_note(host_statuses: List[HostStatus]) -> Optional[str]:
     """What to say about an ``opik-mcp`` installed as a uv tool, if anything.
 
     Only meaningful alongside a local (uvx) registration — a hosted server runs no
-    local package, so an install on the same machine is beside the point.
+    local package.
 
-    The two cases read very differently to the person on the other end, so they
-    are worded differently. A registration that cannot escape the install is *at
-    risk of* starting that version forever and has a fix; one that can is fine, and
-    the install can at most take precedence over a bare ``uvx opik-mcp`` they type
-    themselves.
-
-    Both are hedged rather than asserted, because whether an install actually wins
-    depends on which interpreter uv selects for that launch. A tool environment is
-    reused only when its compiled wheels match: one built under CPython 3.13 is
-    discarded on a platform-tag mismatch when uv resolves with 3.11, and the launch
-    silently gets the published version instead. So the same machine can be frozen
-    or not from one invocation to the next, and a flat claim is one the reader may
-    be able to disprove in a single command. Neither is phrased as an error either:
-    a deliberate pin is rare but real, and this is the only signal that
-    distinguishes it from the accident.
+    Both messages say an install *may* win rather than does, because that depends
+    on the interpreter uv picks for a given launch: a tool environment built under
+    CPython 3.13 is discarded on a platform-tag mismatch when uv resolves with
+    3.11. A flat claim is one the reader can disprove in one command. Neither is
+    phrased as an error, because a deliberate pin is rare but real.
     """
     installed = uv_tool.installed_version()
     if installed is None:

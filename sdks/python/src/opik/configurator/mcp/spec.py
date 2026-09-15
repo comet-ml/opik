@@ -24,21 +24,15 @@ from opik.configurator.mcp import env as mcp_env
 
 SERVER_NAME = "opik-mcp"
 
-#: What the registered stdio command passes to ``uvx``.
+#: What the registered stdio command passes to ``uvx``. ``--isolated`` makes uv
+#: ignore a leftover ``uv tool install opik-mcp``, which otherwise decides what
+#: the client launches — see ``uv_tool`` for how those came to exist.
 #:
-#: ``--isolated`` makes uv ignore a persistent ``uv tool install opik-mcp`` and
-#: resolve normally — the thing that unfreezes machines configured by SDK
-#: 2.0.60-2.2.44, which otherwise launch whatever that install pinned, forever
-#: (see ``uv_tool``). Verified against uv 0.8.12, the version that created those
-#: installs, as well as current uv.
-#:
-#: The package itself stays unpinned, deliberately. A version request such as
-#: ``opik-mcp@latest`` would also bypass the install, but it makes uv revalidate
-#: every package in the tree on every launch — measured at 39 conditional
-#: requests and ~590ms per server start, to buy at most the index cache's ten
-#: minutes of freshness. ``--isolated`` reads through that cache like a bare
-#: ``uvx opik-mcp`` does, so a release still lands within ten minutes and a
-#: launch costs nothing extra.
+#: The package stays unpinned on purpose. A version request (``opik-mcp@latest``)
+#: escapes the same install, but makes uv revalidate every package in the tree on
+#: every launch — 39 conditional requests and ~590ms per start, to buy at most the
+#: ten minutes the index cache holds. ``--isolated`` reads through that cache, so a
+#: release still lands within ten minutes and a launch costs nothing extra.
 PACKAGE_ARGS = ["--isolated", SERVER_NAME]
 
 _SECRET_ENV_SUFFIXES = ("_KEY", "_TOKEN", "_SECRET", "PASSWORD")

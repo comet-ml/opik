@@ -60,11 +60,7 @@ def installed_version() -> Optional[str]:
         LOGGER.debug("`uv tool list` exited %s", result.returncode)
         return None
 
-    return _parse_version(result.stdout)
-
-
-def _parse_version(output: str) -> Optional[str]:
-    for line in (output or "").splitlines():
+    for line in result.stdout.splitlines():
         match = _TOOL_LINE.match(line.strip())
         if match is not None:
             return match.group("version")

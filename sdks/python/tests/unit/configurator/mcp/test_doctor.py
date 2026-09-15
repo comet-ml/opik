@@ -40,7 +40,9 @@ def _patch(monkeypatch, tmp_path, *, block, trace="", version="0.2.35"):
         mock.Mock(return_value=subprocess.CompletedProcess([], 0, "", trace)),
     )
     monkeypatch.setattr(doctor, "_installed_version_in", lambda env_dir: version)
-    monkeypatch.setattr(doctor, "_tool_install_dir", lambda: tmp_path)
+    # The tool-install branch checks the directory exists before reading it.
+    monkeypatch.setattr(doctor.pathlib.Path, "home", staticmethod(lambda: tmp_path))
+    (tmp_path / ".local/share/uv/tools/opik-mcp").mkdir(parents=True, exist_ok=True)
 
 
 _LOCAL_BLOCK = {

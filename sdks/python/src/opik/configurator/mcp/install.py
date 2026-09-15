@@ -224,14 +224,9 @@ def setup_mcp_server(
 def _report_uv_tool_install(display: mcp_view.InstallView) -> None:
     """Tell the user about an ``opik-mcp`` installed as a uv tool, and stop there.
 
-    Older SDKs created these (see ``uv_tool``), and while ``@latest`` means one no
-    longer decides what the MCP server runs, it can still take precedence over a
-    bare ``uvx opik-mcp`` typed by hand — "can" rather than "does" because whether
-    uv reuses an existing tool environment varies: a uv new enough to reject an
-    environment an older uv built re-resolves instead, so the same install shadows
-    on one machine and not on another. Both remedies are the user's to choose:
-    removing something from their environment without asking is the bug this whole
-    change exists to undo.
+    Reported rather than removed: an unannounced write into someone's environment
+    is the bug this change exists to undo (see ``uv_tool``), so which remedy to
+    run is theirs to pick.
     """
     installed = uv_tool.installed_version()
     if installed is None:
@@ -239,11 +234,10 @@ def _report_uv_tool_install(display: mcp_view.InstallView) -> None:
 
     display.note(
         f"Note: opik-mcp {installed} is also installed as a uv tool. The server "
-        f"registered here runs `uvx --isolated opik-mcp`, so it is unaffected "
-        f"— but that install can still take "
-        f"precedence over a bare `uvx opik-mcp` you run yourself. `uv tool upgrade "
-        f"opik-mcp` updates it; `uv tool uninstall opik-mcp` removes it so uvx "
-        f"always resolves the published version."
+        f"registered here runs `uvx --isolated opik-mcp`, so it is unaffected — but "
+        f"that install can still take precedence over a bare `uvx opik-mcp` you run "
+        f"yourself. `uv tool upgrade opik-mcp` updates it; `uv tool uninstall "
+        f"opik-mcp` removes it."
     )
 
 
@@ -421,19 +415,12 @@ def _prefetch_opik_mcp() -> None:
     to the ``--isolated`` flag, which is what makes it a cache warm rather than a
     warm of some neighbouring environment.
 
-    Not ``uv tool install opik-mcp``, which was doing more than warming a cache:
-    it builds a persistent tool environment and puts an ``opik-mcp`` shim on the
-    user's PATH — an install into their environment that nothing announced, and
-    one that silently keeps an older copy if there already was one. Worse, a bare
-    ``uvx opik-mcp`` then resolves to that environment forever rather than to the
-    index, which is how machines configured by SDK 2.0.60–2.2.44 froze on the
-    version current the day they ran it (see ``uv_tool``). ``uv tool run``
-    populates the cache that the registered command actually reads.
+    Not ``uv tool install opik-mcp``: that builds a persistent tool environment
+    rather than warming a cache, and is how machines froze (see ``uv_tool``).
 
-    The request here must stay identical to :data:`spec.PACKAGE_ARGS`, because an
-    isolated run and a tool-install-backed run resolve to different environments:
-    warming the one the client will not use leaves the first real launch doing the
-    download this function exists to have already done.
+    The request must stay identical to :data:`spec.PACKAGE_ARGS`, down to the
+    flag — uv caches per resolved environment, so warming one the client will not
+    use leaves the first real launch doing the download this exists to avoid.
 
     Output is captured rather than streamed because the caller runs this inside a
     rich status spinner: both write to the same terminal, and uv's progress bars

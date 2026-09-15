@@ -1,26 +1,18 @@
 """Answer "is my AI client actually running a current opik-mcp?" by launching it.
 
-``status`` reports what a config *says*; this reports what it *does*. The two can
-disagree, and the gap is the whole point: a registration reading ``uvx opik-mcp``
-resolves to a persistent ``uv tool install`` when one exists, so the client can
-start a build from months ago while every file on disk looks correct.
+``status`` reports what a config *says*; this reports what it *does*. Only a
+launch settles it, because the answer is not a property of the machine: uv reuses
+a tool environment only when its compiled wheels match the interpreter it picks
+for that launch, so one config can start a months-old build and the published one
+on alternate runs (see ``uv_tool``).
 
-Nothing short of running the command settles it, because the answer is not a
-property of the machine. uv reuses a tool environment only when its compiled
-wheels match the interpreter it selects for *that launch*: an environment built
-under CPython 3.13 is discarded on a platform-tag mismatch when uv resolves with
-3.11, and the same config then quietly gets the published version instead. So a
-launch is the unit of truth, and this module performs one.
+Two cheaper-looking checks are wrong, and are not worth reimplementing:
 
-Two traps this deliberately avoids:
-
-- The MCP ``initialize`` handshake looks like the obvious source. It is not:
-  opik-mcp builds its server as ``FastMCP("opik-mcp", ...)`` with no ``version=``,
-  so ``serverInfo.version`` reports the ``mcp`` library's version rather than the
-  package's.
+- The MCP ``initialize`` handshake reports the ``mcp`` library's version, not the
+  package's — opik-mcp builds ``FastMCP("opik-mcp", ...)`` with no ``version=``.
 - ``uvx --from opik-mcp python -c ...`` re-resolves instead of short-circuiting,
-  because ``python`` is not an entry point of the installed tool — so it reports a
-  current version even on a client that is frozen.
+  because ``python`` is not an entry point of the installed tool, so it reports a
+  current version even on a frozen client.
 """
 
 import dataclasses
@@ -32,7 +24,7 @@ import pathlib
 import re
 import subprocess
 import urllib.request
-from typing import Any, Dict, Final, List, Optional
+from typing import Any, Dict, Final, List, Optional, Tuple
 
 from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp import targets as mcp_targets
@@ -73,28 +65,24 @@ class Diagnosis:
     uv_tool_version: Optional[str]
 
 
-def collect_diagnosis(probe_launches: bool = True) -> Diagnosis:
-    """Inspect every registered host, launching each local server to see what it runs.
-
-    ``probe_launches`` exists for callers that want the cheap half — the same
-    reporting without starting anything.
-    """
+def collect_diagnosis() -> Diagnosis:
+    """Inspect every registered host, launching each local server to see what it runs."""
     hosts: List[HostDiagnosis] = []
     for target in mcp_targets.HOST_TARGETS:
         block = mcp_targets.read_registered_block(target)
         if block is None:
             continue
-        hosts.append(_diagnose_host(target, block, probe_launches))
+        hosts.append(_diagnose_host(target, block))
 
     return Diagnosis(
         hosts=hosts,
-        latest_version=latest_published_version() if probe_launches else None,
+        latest_version=latest_published_version(),
         uv_tool_version=uv_tool.installed_version(),
     )
 
 
 def _diagnose_host(
-    target: mcp_targets.HostTarget, block: Dict[str, Any], probe_launches: bool
+    target: mcp_targets.HostTarget, block: Dict[str, Any]
 ) -> HostDiagnosis:
     diagnosis = HostDiagnosis(
         display_name=target.display_name, config_path=target.config_path()
@@ -110,9 +98,6 @@ def _diagnose_host(
         return diagnosis
 
     diagnosis.launches = " ".join(argv)
-    if not probe_launches:
-        return diagnosis
-
     version, source, problem = _probe(argv, block)
     diagnosis.running_version = version
     diagnosis.source = source
@@ -134,7 +119,9 @@ def _launch_argv(block: Dict[str, Any]) -> Optional[List[str]]:
     return None
 
 
-def _probe(argv: List[str], block: Dict[str, Any]) -> tuple:
+def _probe(
+    argv: List[str], block: Dict[str, Any]
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """Run the launch and report ``(version, source, problem)``.
 
     ``-v`` goes immediately after the executable so uv names the environment it
@@ -175,7 +162,7 @@ def _probe(argv: List[str], block: Dict[str, Any]) -> tuple:
         env_dir = pathlib.Path.home() / ".cache" / "uv" / environments[-1]
         source = SOURCE_INDEX
     else:
-        env_dir = _tool_install_dir()
+        env_dir = pathlib.Path.home() / ".local/share/uv/tools" / mcp_spec.SERVER_NAME
         source = SOURCE_TOOL_INSTALL
         if not env_dir.exists():
             return None, None, "could not tell which environment uv used"
@@ -184,12 +171,6 @@ def _probe(argv: List[str], block: Dict[str, Any]) -> tuple:
     if version is None:
         return None, source, f"no opik-mcp found in the environment uv used ({env_dir})"
     return version, source, None
-
-
-def _tool_install_dir() -> pathlib.Path:
-    return (
-        pathlib.Path.home() / ".local" / "share" / "uv" / "tools" / mcp_spec.SERVER_NAME
-    )
 
 
 def _installed_version_in(env_dir: pathlib.Path) -> Optional[str]:
