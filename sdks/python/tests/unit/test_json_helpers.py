@@ -258,3 +258,60 @@ def test_import__restored_afterwards():
 
     assert json_helpers.ACCELERATED is True
     assert json_helpers._orjson is not None
+
+
+# --------------------------------------------------------------------------- #
+# builtin subclasses, which `default` has no case for
+# --------------------------------------------------------------------------- #
+class _Str(str):
+    pass
+
+
+class _Int(int):
+    pass
+
+
+class _List(list):
+    pass
+
+
+class _Dict(dict):
+    pass
+
+
+SUBCLASSES = [
+    pytest.param({"v": _Str("hello")}, {"v": "hello"}, id="str-subclass"),
+    pytest.param({"v": _Int(7)}, {"v": 7}, id="int-subclass"),
+    pytest.param({"v": _List([1, 2])}, {"v": [1, 2]}, id="list-subclass"),
+    pytest.param({"v": _Dict({"a": 1})}, {"v": {"a": 1}}, id="dict-subclass"),
+]
+
+
+@pytest.mark.parametrize("value, expected", SUBCLASSES)
+@pytest.mark.parametrize("mode", ["stdlib", "accelerated"])
+def test_dumps__builtin_subclass__serialises_as_its_builtin(
+    value, expected, mode, request
+):
+    """A subclass of str/int/list/dict must encode as the builtin it derives from.
+
+    `OPT_PASSTHROUGH_SUBCLASS` would route these to `default`, which has no case for
+    them and raises -- failing an upload the standard library accepts. This is the
+    assertion that keeps that option off.
+    """
+    request.getfixturevalue(mode)
+
+    assert json.loads(json_helpers.dumps(value, default=flexible)) == expected
+
+
+@pytest.mark.parametrize("value, expected", SUBCLASSES)
+def test_dumps__builtin_subclass__default_is_never_consulted(
+    value, expected, accelerated
+):
+    """Both encoders handle these natively; reaching `default` at all is the bug."""
+
+    def explode(unencodable):
+        raise AssertionError(
+            f"`default` must not see {type(unencodable).__name__}; it has no case for it"
+        )
+
+    assert json.loads(json_helpers.dumps(value, default=explode)) == expected

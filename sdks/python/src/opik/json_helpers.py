@@ -29,10 +29,14 @@ try:
         # renders natively never reaches `default`. That would quietly replace the
         # SDK's own encoding -- a datetime would go out as `...05Z` where every
         # previous release sent `...05+00:00`. Passing them through keeps one encoder
-        # of record for these types: the SDK's.
+        # of record for these two: the SDK's, which handles both.
         | _orjson.OPT_PASSTHROUGH_DATETIME
         | _orjson.OPT_PASSTHROUGH_DATACLASS
-        | _orjson.OPT_PASSTHROUGH_SUBCLASS
+        # OPT_PASSTHROUGH_SUBCLASS is deliberately NOT set. `encode_flexible` has no
+        # case for a subclass of str/int/list/dict, so passing one through reaches its
+        # final `raise` and fails an upload that works today -- the standard library
+        # serialises them as their builtin form. Letting orjson do the same is what
+        # keeps the two encoders agreeing.
     )
     _SORTED_OPTIONS = _BASE_OPTIONS | _orjson.OPT_SORT_KEYS
 except ImportError:  # pragma: no cover - the path taken where no orjson wheel exists
