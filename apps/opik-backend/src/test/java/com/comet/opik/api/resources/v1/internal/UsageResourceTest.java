@@ -488,6 +488,45 @@ class UsageResourceTest {
         }
 
         /**
+         * The known limit of the fold, pinned rather than left undefined. {@code BULK_INSERT} binds the project the
+         * request asked for without reading the stored row, so a client reusing an id across two project names
+         * writes two rows, and the fold counts it once per project. That is the value the per-project breakdown has
+         * always reported — its query has always grouped by project — so the three consumers agree here; before the
+         * fold the workspace and BI totals said one while the breakdown said two. Counting it once instead would
+         * mean deduplicating inside the usage queries, which exist to stay cheap and constant, so the behaviour is
+         * documented on {@code DemoDataExclusionUtils} rather than changed. Assert the breakdown alongside the
+         * count: they agreeing is the property worth keeping if this is ever revisited.
+         */
+        @Test
+        void spansCountCountsABatchDuplicatedIdOncePerProject() {
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "test-workspace-" + UUID.randomUUID();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var inFirstProject = PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                    .getFirst()
+                    .toBuilder()
+                    .id(ID_GENERATOR.generateId())
+                    .projectName("project-" + ID_GENERATOR.generateId())
+                    .feedbackScores(null)
+                    .build();
+            var sameIdInSecondProject = inFirstProject.toBuilder()
+                    .projectName("project-" + ID_GENERATOR.generateId())
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(inFirstProject), apiKey, workspaceName);
+            spanResourceClient.batchCreateSpans(List.of(sameIdInSecondProject), apiKey, workspaceName);
+
+            subtractClickHouseTableRecordsCreatedAtOneDay("spans").accept(workspaceId);
+
+            awaitSpanCount(workspaceId, 2);
+            assertThat(usageResourceClient.getWorkspaceSpanCountsBreakdown().breakdown())
+                    .filteredOn(row -> row.workspaceId().equals(workspaceId))
+                    .hasSize(2);
+        }
+
+        /**
          * The per-workspace count is folded from per-project rows, so a workspace spanning several projects has to
          * sum back to the total the workspace-grouped query returned.
          */
@@ -566,15 +605,14 @@ class UsageResourceTest {
         }
 
         /**
-         * The premise the span fold rests on: summing per-project counts equals the distinct-id total the
-         * workspace-grouped query used to return, because a span id belongs to exactly one project. Both ways of
-         * presenting an existing id under another project are covered, since either producing a row would make the
-         * sum double-count: a create is ignored, the span already existing, and a patch is refused by the
-         * 40-character sentinel {@code SpanDAO.PARTIAL_INSERT} writes into a {@code FixedString(36)} when the
-         * stored project differs.
+         * The single-span write paths keep an id in one project, which is what makes summing per-project counts
+         * equal the distinct-id total the workspace-grouped query used to return. A create is ignored, the span
+         * already existing, and a patch is refused by the 40-character sentinel {@code SpanDAO.PARTIAL_INSERT}
+         * writes into a {@code FixedString(36)} when the stored project differs. The batch path does not enforce
+         * this — see {@link #spansCountCountsABatchDuplicatedIdOncePerProject()}.
          */
         @Test
-        void spansCountIncludesEachSpanOnceBecauseItsIdCannotMoveBetweenProjects() {
+        void spansCountIncludesEachSpanOnceOnTheSingleSpanWritePaths() {
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = "apiKey-" + UUID.randomUUID();
             var workspaceName = "test-workspace-" + UUID.randomUUID();

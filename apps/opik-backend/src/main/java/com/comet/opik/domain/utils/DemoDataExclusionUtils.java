@@ -25,12 +25,20 @@ import java.util.stream.Collectors;
  * <p>The usage queries therefore {@code GROUP BY project_id} and the exclusion is applied here, which keeps the
  * query text constant however many demo projects exist.
  *
- * <p>Aggregating after the exclusion preserves the totals a workspace- or user-grouped query returns, because an
- * id has exactly one project. {@code project_id} is part of the sorting key of both {@code traces} and
- * {@code spans}, so two rows for one id under different projects would both survive deduplication and be summed
- * twice — what stops them existing is the write path, which rejects an upsert presenting an existing id with a
- * different project rather than moving it. The folds are insertion-ordered, so the result keeps the order the
- * query returned its rows in.
+ * <p>Aggregating after the exclusion matches the totals a workspace- or user-grouped query returns for every id
+ * that belongs to one project, which the single-entity write paths enforce: presenting an existing id under another
+ * project is a conflict, not a move.
+ *
+ * <p><b>The batch write path does not enforce it.</b> {@code BULK_INSERT} is a plain {@code VALUES} insert that
+ * binds the project the request asked for without reading the stored row, so a client reusing an id across two
+ * project names writes two rows. {@code project_id} is part of the sorting key of both {@code traces} and
+ * {@code spans}, so those rows have different sort keys, survive deduplication, and are counted once per project
+ * here. That is the same value the per-project usage breakdown has always reported — its query has always grouped
+ * by project — so the folds make the workspace and BI totals agree with it rather than introducing a number of
+ * their own. Counting such an id once instead would mean deduplicating inside the usage queries, which are the
+ * queries this whole design exists to keep cheap and constant, so it is deliberately not done here.
+ *
+ * <p>The folds are insertion-ordered, so the result keeps the order the query returned its rows in.
  */
 @UtilityClass
 public class DemoDataExclusionUtils {

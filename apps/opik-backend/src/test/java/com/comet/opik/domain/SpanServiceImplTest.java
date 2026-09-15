@@ -368,7 +368,7 @@ class SpanServiceImplTest {
         }
 
         @Test
-        void countSpansPerWorkspace__whenNoSpans__thenReturnsEmptyResponseWithoutLookingUpDemoProjects() {
+        void countSpansPerWorkspace__whenNoSpans__thenReturnsEmptyResponse() {
             when(spanDAO.countSpansPerWorkspaceProject()).thenReturn(Flux.empty());
             when(projectService.getDemoProjectIdsInWorkspaces(Set.of())).thenReturn(Mono.just(Set.of()));
 
