@@ -11,6 +11,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * The {@code annotation_queue_router} subtype of {@code automation_rules}.
@@ -66,11 +67,14 @@ public interface AutomationRuleAnnotationQueueRouterDAO {
 
     /**
      * Batch lookup for the queue list endpoint, so a page of queues costs one query rather than one per row.
+     *
+     * <p>Streamed rather than listed so the caller maps each row as it arrives. The stream is tied to the
+     * handle, so it must be consumed inside the transaction that opened it.
      */
     @SqlQuery(SELECT_COLUMNS + """
             WHERE rule.workspace_id = :workspaceId AND router.queue_id IN (<queueIds>)
             """)
-    List<AutomationRuleAnnotationQueueRouterModel> findByQueueIds(@Bind("workspaceId") String workspaceId,
+    Stream<AutomationRuleAnnotationQueueRouterModel> findByQueueIds(@Bind("workspaceId") String workspaceId,
             @BindList("queueIds") List<UUID> queueIds);
 
     /**
@@ -83,7 +87,8 @@ public interface AutomationRuleAnnotationQueueRouterDAO {
               AND router.scope = :scope
               AND arp.project_id IN (<projectIds>)
             """)
-    List<AutomationRuleAnnotationQueueRouterModel> findEnabledByProjects(@Bind("workspaceId") String workspaceId,
+    Stream<AutomationRuleAnnotationQueueRouterModel> findEnabledByProjects(
+            @Bind("workspaceId") String workspaceId,
             @BindList("projectIds") List<UUID> projectIds,
             @Bind("scope") String scope);
 

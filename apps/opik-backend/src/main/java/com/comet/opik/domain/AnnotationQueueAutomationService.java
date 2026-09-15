@@ -139,8 +139,8 @@ public class AnnotationQueueAutomationService {
             Map<UUID, AutomationRuleAnnotationQueueRouterModel> existing = handle
                     .attach(AutomationRuleAnnotationQueueRouterDAO.class)
                     .findByQueueIds(workspaceId, List.copyOf(automations.keySet()))
-                    .stream()
-                    .collect(Collectors.toMap(AutomationRuleAnnotationQueueRouterModel::queueId, model -> model));
+                    .collect(Collectors.toMap(AutomationRuleAnnotationQueueRouterModel::queueId,
+                            model -> model));
 
             automations.forEach(
                     (queueId, automation) -> resolve(Optional.ofNullable(existing.get(queueId)), automation));
@@ -226,11 +226,13 @@ public class AnnotationQueueAutomationService {
             return Map.of();
         }
 
+        // Mapped inside the transaction: the rows are converted as they arrive rather than held as a
+        // list first, and the stream is only valid while the handle is open.
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(AutomationRuleAnnotationQueueRouterDAO.class)
-                        .findByQueueIds(workspaceId, queueIds))
-                .stream()
-                .collect(Collectors.toMap(AutomationRuleAnnotationQueueRouterModel::queueId, this::toApi));
+                        .findByQueueIds(workspaceId, queueIds)
+                        .collect(Collectors.toMap(AutomationRuleAnnotationQueueRouterModel::queueId,
+                                this::toApi)));
     }
 
     /**
@@ -245,13 +247,13 @@ public class AnnotationQueueAutomationService {
 
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(AutomationRuleAnnotationQueueRouterDAO.class)
-                        .findEnabledByProjects(workspaceId, List.copyOf(projectIds), scope.getValue()))
-                .stream()
-                .map(model -> new QueueAutomation(
-                        model.queueId(),
-                        model.projectId(),
-                        JsonUtils.readValue(model.conditions(), AnnotationQueueAutomation.Conditions.class)))
-                .toList();
+                        .findEnabledByProjects(workspaceId, List.copyOf(projectIds), scope.getValue())
+                        .map(model -> new QueueAutomation(
+                                model.queueId(),
+                                model.projectId(),
+                                JsonUtils.readValue(model.conditions(),
+                                        AnnotationQueueAutomation.Conditions.class)))
+                        .toList());
     }
 
     /**
