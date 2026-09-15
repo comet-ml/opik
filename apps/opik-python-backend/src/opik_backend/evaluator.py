@@ -1,16 +1,16 @@
 import os
 from typing import Any, Dict
-from opik_backend.payload_types import PayloadType
-from opik_backend.process_worker import required_score_params
-
-# Built-ins the scorer injects rather than resolving from a trace/span path.
-RESERVED_BUILT_INS = frozenset({"spans"})
 
 from flask import request, abort, jsonify, Blueprint, current_app
 from werkzeug.exceptions import HTTPException
 
 from opik_backend.executor import CodeExecutorBase
 from opik_backend.http_utils import build_error_response
+from opik_backend.payload_types import PayloadType
+from opik_backend.process_worker import required_score_params
+
+# Built-ins the scorer injects rather than resolving from a trace/span path.
+RESERVED_BUILT_INS = frozenset({"spans"})
 
 # Environment variable to control execution strategy
 EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "process")

@@ -124,8 +124,6 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
-
-
 def user_facing_stacktrace(skip_frames: int = 1) -> str:
     """Format the current exception with the runner's own frames dropped.
 
