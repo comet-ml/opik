@@ -33,9 +33,19 @@ describe("the install prompts", () => {
   it("name the workspace for the local CLI but never carry a key", () => {
     const prompt = local();
 
-    expect(prompt).toContain('OPIK_WORKSPACE="my-workspace"');
-    expect(prompt).toContain("ask me for my API key");
-    expect(prompt).not.toMatch(/api[_-]?key\s*[:=]\s*\S/i);
+    expect(prompt).toContain('workspace "my-workspace"');
+    expect(prompt).not.toMatch(/api[_-]?key/i);
+  });
+
+  it("leave the client's install route to the agent on the hosted server", () => {
+    const prompt = hosted();
+
+    // Enumerating each client's command only dated the prompt. The agent
+    // detects itself in step 1 and knows its own config.
+    expect(prompt).toContain("register the MCP server `opik-mcp`");
+    expect(prompt).not.toContain("claude mcp add");
+    expect(prompt).not.toContain("codex mcp add");
+    expect(prompt).not.toContain("npx add-mcp");
   });
 
   it("identify the trace when the failure is the trace's", () => {
@@ -94,13 +104,13 @@ describe("the local prompt's install step", () => {
     );
   });
 
-  it("routes an unconfigured Opik through env vars rather than a prompt", () => {
-    // `opik mcp configure` fails instead of asking when there is no config and
-    // no terminal, so telling the agent to wait for a question dead-ends it.
+  it("hands the interactive case back to the human", () => {
+    // `opik mcp configure` raises rather than asking when there is no Opik
+    // configuration and no terminal, so the agent has to stop rather than wait
+    // for a question that never comes.
     const prompt = local();
 
-    expect(prompt).toContain("OPIK_API_KEY");
-    expect(prompt).toContain('OPIK_WORKSPACE="my-workspace"');
-    expect(prompt).not.toContain("If it asks for an API key");
+    expect(prompt).toContain("ask me to run it myself");
+    expect(prompt).toContain("carry on from step 3");
   });
 });

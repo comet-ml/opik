@@ -42,7 +42,12 @@ const SKILLS =
 
 const NO_SECRETS = "Never print secrets you find in config files.";
 
-/** Registers through each client's own command, which keeps `uv` off this path. */
+/**
+ * The hosted server needs no credentials, so the prompt can hand over the URL
+ * and leave the how to the agent. Enumerating each client's install command
+ * only dated the prompt: the agent knows its own config, and a client we never
+ * listed is the common case.
+ */
 export const buildHostedInstallPrompt = (
   context: PromptContext & { serverUrl: string },
 ): string =>
@@ -50,16 +55,16 @@ export const buildHostedInstallPrompt = (
     "Connect me to Opik MCP, then debug a failing trace.",
     "",
     DETECT_STEP,
-    `2. For each chosen agent, add the MCP server \`${MCP_SERVER_NAME}\` (Streamable HTTP, ${context.serverUrl}, no credentials) to its user-level config, using that client's own command where it has one (\`claude mcp add --transport http --scope user ...\`, \`codex mcp add ... --url ...\`), otherwise \`npx add-mcp <url> --name ${MCP_SERVER_NAME} -g -a <agent>\`. Skip an agent that already has a server with that URL. ${SKILLS} ${NO_SECRETS}`,
+    `2. For each chosen agent, register the MCP server \`${MCP_SERVER_NAME}\` with it: Streamable HTTP at ${context.serverUrl}, no credentials. Use that client's own way in — its CLI where it has one, otherwise its user-level config. Skip an agent that already has a server with that URL. ${SKILLS} ${NO_SECRETS}`,
     RELOAD_STEP,
     debugStep(context),
   ].join("\n");
 
 /**
- * For deployments where the MCP server is a local stdio process. Names the
- * workspace but never the API key: the CLI reads that from the developer's own
- * configuration, and when it cannot, it fails rather than prompting, so the
- * prompt has to tell the agent what to do about it.
+ * A local server is a stdio process holding an API key, so there is no URL to
+ * hand over and `opik mcp configure` is the only way in. It runs unattended
+ * once a client is named, but only while an Opik configuration already exists;
+ * without one it needs a terminal, and that is mine, not the agent's.
  */
 export const buildLocalInstallPrompt = (
   context: PromptContext & { workspaceName: string },
@@ -68,9 +73,9 @@ export const buildLocalInstallPrompt = (
     "Connect me to Opik MCP, then debug a failing trace.",
     "",
     DETECT_STEP,
-    `2. Install uv if it is missing, then run \`uvx opik mcp configure --ai-client <agent> --skills\` for each chosen agent. Naming the client is what lets it run without a terminal. It reuses my existing Opik configuration; if it reports that Opik is not configured yet, you cannot answer that for me — ask me for my API key, then re-run with OPIK_API_KEY set and OPIK_WORKSPACE="${inlineValue(
+    `2. Install uv if it is missing, then run \`uvx opik mcp configure --ai-client <agent> --skills\` for each chosen agent, against workspace "${inlineValue(
       context.workspaceName,
-    )}" in that command's environment. Do not guess the key. ${NO_SECRETS}`,
+    )}". It reuses my existing Opik configuration. If it needs a terminal, or asks for anything you cannot answer, stop and ask me to run it myself, then carry on from step 3. ${NO_SECRETS}`,
     RELOAD_STEP,
     debugStep(context),
   ].join("\n");
