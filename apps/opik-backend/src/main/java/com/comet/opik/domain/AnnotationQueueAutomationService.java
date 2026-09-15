@@ -258,19 +258,25 @@ public class AnnotationQueueAutomationService {
     /**
      * Whether anything could route for this event, as the listener's guard.
      *
-     * <p>Checks the specific project when the event names one. The batch score path cannot name one — a
-     * batch may span several projects — so there it falls back to the workspace. That fallback is only a
-     * pre-filter against publishing for workspaces with no automation at all; the project scope itself is
-     * enforced by {@link #findEnabledByProjects} once the consumer knows the entities' projects.
+     * <p>This is the project-scoped form, used when the event names its project.
      */
-    public boolean hasEnabledAutomation(@NonNull String workspaceId, UUID projectId,
+    public boolean hasEnabledAutomation(@NonNull String workspaceId, @NonNull UUID projectId,
             @NonNull AnnotationQueue.AnnotationScope scope) {
-        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(AutomationRuleAnnotationQueueRouterDAO.class);
-            return projectId != null
-                    ? dao.existsEnabledByProject(workspaceId, projectId, scope.getValue())
-                    : dao.existsEnabledByWorkspace(workspaceId, scope.getValue());
-        });
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(AutomationRuleAnnotationQueueRouterDAO.class)
+                        .existsEnabledByProject(workspaceId, projectId, scope.getValue()));
+    }
+
+    /**
+     * The same guard for the batch score path, which cannot name a project because one batch may span
+     * several. A pre-filter only: it answers whether the workspace has any router at all, and the project
+     * scope is enforced by {@link #findEnabledByProjects} once the consumer knows the entities' projects.
+     */
+    public boolean hasEnabledAutomation(@NonNull String workspaceId,
+            @NonNull AnnotationQueue.AnnotationScope scope) {
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(AutomationRuleAnnotationQueueRouterDAO.class)
+                        .existsEnabledByWorkspace(workspaceId, scope.getValue()));
     }
 
     /**
