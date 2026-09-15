@@ -56,7 +56,12 @@ public interface AnnotationQueueDAO {
 
     Mono<AnnotationQueueInfo> findQueueInfoById(UUID id);
 
-    Mono<Void> update(UUID id, AnnotationQueueUpdate update);
+    /**
+     * Rows written by the update, which is zero when the queue has been deleted in the meantime: the
+     * statement is an {@code INSERT ... SELECT} from the queue's own row, so a vanished queue selects
+     * nothing. Callers use the count to avoid acting on a queue that is no longer there.
+     */
+    Mono<Long> update(UUID id, AnnotationQueueUpdate update);
 
     Mono<AnnotationQueue.AnnotationQueuePage> find(int page, int size, AnnotationQueueSearchCriteria searchCriteria);
 
@@ -534,10 +539,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     @Override
-    public Mono<Void> update(@NonNull UUID id, @NonNull AnnotationQueueUpdate update) {
+    public Mono<Long> update(@NonNull UUID id, @NonNull AnnotationQueueUpdate update) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> update(id, update, connection))
-                .then();
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum);
     }
 
     @Override

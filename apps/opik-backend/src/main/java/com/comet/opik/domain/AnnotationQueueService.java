@@ -172,7 +172,7 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                     return annotationQueueDAO.findQueueInfoById(id)
                             .switchIfEmpty(Mono.error(createNotFoundError(id)))
                             .flatMap(queueInfo -> {
-                                Mono<Void> updateMono = annotationQueueDAO.update(id, updateRequest);
+                                Mono<Long> updateMono = annotationQueueDAO.update(id, updateRequest);
 
                                 if (updateRequest.automation() != null) {
                                     // Same reason as on create: reject the payload before the queue row is
@@ -182,29 +182,36 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                                                     Map.of(id, updateRequest.automation())))
                                             .subscribeOn(Schedulers.boundedElastic())
                                             .then(updateMono)
-                                            .then(Mono.fromRunnable(
-                                                    () -> automationService.save(workspaceId, userName, id,
-                                                            queueInfo.projectId(), queueInfo.scope(),
-                                                            // The rule is named after its queue, so a
-                                                            // renamed queue renames the rule with it.
-                                                            updateRequest.name() != null
-                                                                    ? updateRequest.name()
-                                                                    : queueInfo.name(),
-                                                            updateRequest.automation()))
-                                                    .subscribeOn(Schedulers.boundedElastic())
-                                                    .then());
+                                            // No rows means the queue was deleted between the lookup above
+                                            // and the write. Saving now would create rule rows for a queue
+                                            // that is gone, and deleting the queue is the only thing that
+                                            // ever removes them, so nothing could reach them again.
+                                            .flatMap(rows -> rows == 0
+                                                    ? Mono.just(rows)
+                                                    : Mono.fromRunnable(
+                                                            () -> automationService.save(workspaceId, userName,
+                                                                    id, queueInfo.projectId(), queueInfo.scope(),
+                                                                    // The rule is named after its queue, so a
+                                                                    // renamed queue renames the rule with it.
+                                                                    updateRequest.name() != null
+                                                                            ? updateRequest.name()
+                                                                            : queueInfo.name(),
+                                                                    updateRequest.automation()))
+                                                            .subscribeOn(Schedulers.boundedElastic())
+                                                            .thenReturn(rows));
                                 } else if (updateRequest.name() != null) {
                                     // No automation in the payload, but the rule is named after its queue,
-                                    // so a rename still has to reach it.
+                                    // so a rename still has to reach it. No row-count guard needed: the
+                                    // rename only touches a rule that is already there.
                                     updateMono = updateMono
-                                            .then(Mono.fromRunnable(() -> automationService.renameRule(
+                                            .flatMap(rows -> Mono.fromRunnable(() -> automationService.renameRule(
                                                     workspaceId, id, updateRequest.name()))
                                                     .subscribeOn(Schedulers.boundedElastic())
-                                                    .then());
+                                                    .thenReturn(rows));
                                 }
 
                                 if (updateRequest.annotatorsPerItem() == null) {
-                                    return updateMono;
+                                    return updateMono.then();
                                 }
                                 int delta = updateRequest.annotatorsPerItem() - queueInfo.annotatorsPerItem();
                                 return updateMono
