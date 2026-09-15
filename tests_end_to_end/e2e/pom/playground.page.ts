@@ -481,7 +481,136 @@ export class PlaygroundPage {
     });
   }
 
+  /**
+   * Whether the model picker offers a model, by display name. Leaves the picker
+   * closed either way.
+   *
+   * The option list comes from the deployment's own model registry and from the
+   * provider keys configured on the workspace, so a model this suite names may
+   * simply not be there. Probing lets a spec skip on that rather than spend
+   * `setModelForVariant`'s retry budget failing to click an option that will
+   * never appear.
+   */
+  async isModelOffered(index: number, modelDisplayName: string): Promise<boolean> {
+    return test.step(`check whether "${modelDisplayName}" is offered`, async () => {
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await this.modelPicker(index).click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
+      const offered = await listbox
+        .getByRole('option', { name: modelDisplayName, exact: true })
+        .first()
+        .waitFor({ state: 'visible', timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
+
+      await this.page.keyboard.press('Escape');
+      await expect(listbox).toBeHidden();
+      return offered;
+    });
+  }
+
+  /** Open a variant's model-parameters popover and wait for it to render. */
+  async openModelParameters(index: number): Promise<void> {
+    return test.step(`open model parameters for variant ${index}`, async () => {
+      await this.modelParametersTrigger(index).click();
+      await this.modelParametersPanel().waitFor({ state: 'visible' });
+    });
+  }
+
+  /** Close the model-parameters popover, and wait until it is really gone. */
+  async closeModelParameters(): Promise<void> {
+    return test.step('close model parameters', async () => {
+      await this.page.keyboard.press('Escape');
+      await this.modelParametersPanel().waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * The open model-parameters popover.
+   *
+   * One is open at a time — it is a `DropdownMenu`, and Radix unmounts the
+   * content of a closed one — so this needs no variant scoping.
+   */
+  modelParametersPanel(): Locator {
+    return this.page.getByRole('menu');
+  }
+
+  /**
+   * The Sampling choice's two options. Anthropic takes Temperature or Top P and
+   * never both, so which one carries `data-state="on"` is the panel's claim
+   * about what the request will contain.
+   */
+  samplingOption(label: 'Temperature' | 'Top P'): Locator {
+    return this.modelParametersPanel().getByRole('radio', { name: label, exact: true });
+  }
+
+  /** Every Sampling option currently selected — asserted to be exactly one. */
+  selectedSamplingOptions(): Locator {
+    return this.modelParametersPanel().locator('[role="radio"][data-state="on"]');
+  }
+
+  /**
+   * The number input of a named slider control, e.g. `temperature` or `topP`.
+   *
+   * Presence is the assertion, not just the value: the panel renders the live
+   * half of the sampling pair and unmounts the other, so a control that is
+   * merely dimmed — or two that are both mounted — is the regression.
+   */
+  sliderInput(controlId: string): Locator {
+    return this.page.getByTestId(`${controlId}-input`);
+  }
+
+  /** The Thinking effort dropdown. Its text is the effort the panel claims. */
+  thinkingEffortSelect(): Locator {
+    return this.modelParametersPanel().getByLabel('Thinking effort');
+  }
+
+  /** Pick a Thinking effort by its displayed label. */
+  async selectThinkingEffort(label: string): Promise<void> {
+    return test.step(`select thinking effort "${label}"`, async () => {
+      await this.thinkingEffortSelect().click();
+      await this.page.getByRole('option', { name: label, exact: true }).click();
+      await expect(this.thinkingEffortSelect()).toHaveText(label);
+    });
+  }
+
+  /** Type a prompt into variant 0's first message row. */
+  async fillFirstMessage(text: string): Promise<void> {
+    return test.step('fill the first message of variant 0', async () => {
+      await this.fillMessageBody(this.variantMessages(0).first(), text);
+    });
+  }
+
+  /** Click Run (free mode) without waiting for the completion to come back. */
+  async clickRun(): Promise<void> {
+    return test.step('click Run', async () => {
+      await this.runButton().click();
+    });
+  }
+
   // ── private helpers ─────────────────────────────────────────────────────
+
+  /**
+   * The gear button that opens a variant's model parameters.
+   *
+   * Anchored to the model picker rather than addressed directly: the trigger
+   * carries no testid and no accessible name (its tooltip is a Radix
+   * `TooltipContent`, not an `aria-label`), and the variant card holds other
+   * `aria-haspopup="menu"` buttons — every message row's role selector is one.
+   * "The menu button immediately after the model picker" is the one stable
+   * description available. A `data-testid` on `PromptModelConfigs`' trigger
+   * would be better, but these specs run against a deployed Opik, where an
+   * attribute added alongside them would not exist in the version under test.
+   */
+  private modelParametersTrigger(index: number): Locator {
+    return this.variantCard(index).locator(
+      'button:has(> [data-testid="select-a-llm-model"]) + button[aria-haspopup="menu"]',
+    );
+  }
 
   private runExperimentTriggerButton(): Locator {
     return this.page
@@ -496,6 +625,167 @@ export class PlaygroundPage {
     return this.page
       .getByTestId('playground-run-button')
       .and(this.page.locator('[data-mode="run"], [data-mode="re-run"]'));
+  }
+
+  /**
+   * The Playground's own page scroller. Row virtualization measures the table's offset
+   * inside this element, so scrolling for virtualization assertions must drive it rather
+   * than the window.
+   */
+  scrollContainer(): Locator {
+    return this.page.getByTestId('playground-scroll-container');
+  }
+
+  /**
+   * The output grid is two side-by-side `StickyScrollTable`s — dataset variables on the
+   * left, prompt outputs on the right — each split into a sticky header half and a
+   * scrollable body half. Both bodies render the same rows, so virtualization assertions
+   * must name one surface rather than querying the grid as a whole.
+   */
+  variablesPanel(half: 'header' | 'body'): Locator {
+    return this.page.getByTestId(`playground-variables-table-${half}`);
+  }
+
+  outputsPanel(half: 'header' | 'body'): Locator {
+    return this.page.getByTestId(`playground-outputs-table-${half}`);
+  }
+
+  /** Scroll the Playground page body to a ratio of its scrollable height (0 = top, 1 = bottom). */
+  async scrollResultsTo(ratio: number): Promise<void> {
+    return test.step(`scroll results to ${ratio} of the page height`, async () => {
+      await this.scrollContainer().evaluate((el, r) => {
+        el.scrollTop = (el.scrollHeight - el.clientHeight) * r;
+      }, ratio);
+      await this.settle();
+    });
+  }
+
+  /**
+   * Row ids currently mounted in the outputs body. The grid does not set `getRowId`, so
+   * these are TanStack's positional ids within the page, not dataset item ids — enough to
+   * tell one mounted window from another, which is all the virtualization assertions need.
+   * Callers should not assume a dataset ordering: the grid renders items newest-first.
+   */
+  async mountedRowIds(): Promise<string[]> {
+    return test.step('read mounted row ids', async () => {
+      return this.outputsPanel('body')
+        .locator('tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]')
+        .evaluateAll((rows) =>
+          rows.map((r) => r.getAttribute('data-row-id')).filter((v): v is string => Boolean(v)),
+        );
+    });
+  }
+
+  /**
+   * Whether a gap sits between the top of the scroller's viewport and the first mounted row,
+   * once the grid itself has been scrolled past. That is what a stale table offset looks
+   * like: the virtual window is positioned from the wrong origin, so the rows it renders
+   * land below where the scroll position says they should.
+   */
+  async hasBlankBandAboveRows(): Promise<boolean> {
+    return test.step('check for a blank band above the mounted rows', async () => {
+      const viewportTop = await this.scrollContainer().evaluate(
+        (el) => el.getBoundingClientRect().top,
+      );
+
+      return this.outputsPanel('body').evaluate((body, top) => {
+        const wrapper = body.querySelector('[data-table-wrapper]');
+        const firstRow = body.querySelector('tbody tr[data-row-id]');
+        if (!(wrapper instanceof HTMLElement) || !(firstRow instanceof HTMLElement)) return false;
+
+        // Only meaningful once the grid's own top has scrolled above the viewport.
+        if (wrapper.getBoundingClientRect().top >= top) return false;
+
+        return firstRow.getBoundingClientRect().top > top + 1;
+      }, viewportTop);
+    });
+  }
+
+  /**
+   * Drive a horizontal scroll on one panel's body half and report what it actually reached.
+   * Returns the achieved `scrollLeft`, so a caller can fail loudly when the panel is too
+   * narrow to overflow instead of silently comparing two zeroes.
+   */
+  async scrollPanelHorizontallyTo(
+    panel: 'variables' | 'outputs',
+    offset: number,
+  ): Promise<number> {
+    return test.step(`scroll the ${panel} panel horizontally to ${offset}px`, async () => {
+      const body = panel === 'variables' ? this.variablesPanel('body') : this.outputsPanel('body');
+      const reached = await body.evaluate((el, x) => {
+        el.scrollLeft = x;
+        return el.scrollLeft;
+      }, offset);
+      await this.settle();
+      return reached;
+    });
+  }
+
+  /** The `scrollLeft` of a panel's sticky header half and its body half. */
+  async panelScrollOffsets(
+    panel: 'variables' | 'outputs',
+  ): Promise<{ header: number; body: number }> {
+    return test.step(`read ${panel} panel header/body scroll offsets`, async () => {
+      const half = (h: 'header' | 'body') =>
+        panel === 'variables' ? this.variablesPanel(h) : this.outputsPanel(h);
+      const [header, body] = await Promise.all([
+        half('header').evaluate((el) => el.scrollLeft),
+        half('body').evaluate((el) => el.scrollLeft),
+      ]);
+      return { header, body };
+    });
+  }
+
+  /**
+   * Choose a "rows per page" value from the results pagination, then wait for the
+   * replacement body. Changing the size refetches, and `mountedRowIds()` deliberately
+   * ignores the loading tbody, so returning early would let a caller assert against an
+   * empty or stale window.
+   */
+  async setPageSize(size: number): Promise<void> {
+    return test.step(`set page size to ${size}`, async () => {
+      await this.pageSizeTrigger().click();
+      await this.page.getByRole('menuitemcheckbox', { name: String(size), exact: true }).click();
+
+      await expect(this.pageSizeTrigger()).toHaveText(String(size));
+      await expect(
+        this.outputsPanel('body').locator(
+          'tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]',
+        ),
+      ).not.toHaveCount(0);
+      await this.settle();
+    });
+  }
+
+  /** The current "rows per page" value shown by the pagination trigger. */
+  async pageSize(): Promise<number> {
+    return test.step('read the current page size', async () => {
+      return Number((await this.pageSizeTrigger().innerText()).trim());
+    });
+  }
+
+  /**
+   * Scrollable height of the page scroller. Under virtualization this tracks the row count
+   * the virtualizer is sizing for, so it moves when the page size changes even though the
+   * mounted window stays the same size.
+   */
+  async resultsScrollHeight(): Promise<number> {
+    return test.step('read the results scroll height', async () => {
+      return this.scrollContainer().evaluate((el) => el.scrollHeight);
+    });
+  }
+
+  private pageSizeTrigger(): Locator {
+    return this.resultsTable()
+      .locator('..')
+      .getByRole('button', { name: /^(10|50|100|200|500|1000)$/ });
+  }
+
+  /** Two frames: one for the scroll event to dispatch, one for the virtualizer to re-render. */
+  private async settle(): Promise<void> {
+    await this.page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
   }
 
   private resultsTable(): Locator {

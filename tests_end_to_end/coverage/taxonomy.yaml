@@ -251,6 +251,7 @@ areas:
     routes: ["/projects/$projectId/logs?type=traces", "/logs?type=spans"]
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
+      - trace-explore/span-cached-token-cost.spec.ts
       - trace-explore/span-cost-resolution.spec.ts
       - trace-explore/span-kpi-cards.spec.ts
       - trace-explore/spans-view-pagination.spec.ts
@@ -268,7 +269,7 @@ areas:
       trace-ordering:         { covered: true,  tier: t1-smoke }
       open-trace-panel:       { covered: true,  tier: t1-smoke }
       span-tree-expand:       { covered: true,  tier: t2-cuj }
-      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls; also reasoning-token billing on perplexity/sonar-deep-research (the only shipped-price-table model that can observe it) — the reasoning rate applied and subtracted from the standard-output bucket, the bare OTel usage key as a fallback for the original_usage one, and both clamps; also a non-token price key (mistral/voxtral-mini-tts-latest, priced per input character) billed from usage.input_characters, against an identical span carrying the same token counts and no character count as the negative control" }
+      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls; also reasoning-token billing on perplexity/sonar-deep-research (the only shipped-price-table model that can observe it) — the reasoning rate applied and subtracted from the standard-output bucket, the bare OTel usage key as a fallback for the original_usage one, and both clamps; also a non-token price key (mistral/voxtral-mini-tts-latest, priced per input character) billed from usage.input_characters, against an identical span carrying the same token counts and no character count as the negative control; also the cache-read branch of resolveCalculator, as two with/without-cached-tokens pairs — one on a model that publishes no cache_read rate (gpt-5.5-pro, re-priced in 2.2.60), where the pair must price identically because every cached token is billed at the full input rate, and one on a model that does (gpt-4.1), where the discount must be exactly the rate difference; asserted at the API and rendered in the panel" }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
       toggle-spans-view:      { covered: true,  tier: t2-cuj, note: "the Spans toggle and paging the table it renders: 130 seeded spans read back as an exact set through offset paging, through the /spans/search cursor and through the rendered table, plus a span whose UUIDv7 id embeds mid-2200 used as the cursor. Also the four KPI cards above the Spans table — count, error rate, avg duration and total cost — and their period-over-period deltas, asserted against the kpi-cards read for both periods" }
@@ -383,13 +384,14 @@ areas:
     spec_dir: dashboards
     specs:
       - dashboards/dashboards-list-filters.spec.ts
+      - dashboards/project-dashboard-scoping.spec.ts
       - dashboards/project-metrics-weekly-interval.spec.ts
       - dashboards/project-span-metrics.spec.ts
       - dashboards/workspace-span-metrics.spec.ts
     capabilities:
-      list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list is filtered by the Description column; the other operators and columns are uncovered" }
+      list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list is filtered by the Description column; the other operators and columns are uncovered. Also the split between the two collections a dashboard can live in: a project-scoped view (insights-views, keyed on project_id) is returned by its own project's scoped read and by no other project's, and never by the workspace-scoped /dashboards list a Name filter on the workspace page reads — asserted with a workspace-scoped dashboard nobody touches as the positive control at both ends" }
       create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
-      open-dashboard:       { covered: false }
+      open-dashboard:       { covered: true,  tier: t2-cuj, note: "the project Dashboards page's view picker: it offers a project-scoped view in the project that owns it and not in another, selecting it renders that dashboard's own section rather than the built-in template's, and a ?dashboardId= belonging to another project is declined — the URL settles on template:project-overview and neither the foreign dashboard's name nor its section appears anywhere on the page. NOT covered: opening a workspace dashboard through /dashboards/$dashboardId, and the Experiments-type view" }
       edit-dashboard:       { covered: false }
       delete-dashboard:     { covered: false }
       add-widget:           { covered: true,  tier: t2-cuj, note: "Time series widget added through the widget dialog by workspace-span-metrics; other widget types and the config dialog's remaining options are uncovered" }
@@ -435,8 +437,10 @@ areas:
     routes: ["/projects/$projectId/playground"]
     spec_dir: playground
     specs:
+      - playground/playground-model-parameters.spec.ts
       - playground/playground-providers.spec.ts
       - playground/playground-smoke.spec.ts
+      - playground/playground-virtualized-grid.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
       - prompts/prompt-playground-save.spec.ts
       - prompts/prompt-playground-traces.spec.ts
@@ -450,7 +454,18 @@ areas:
       load-prompt-version:       { covered: true,  tier: t2-cuj }
       verify-trace-from-run:     { covered: true,  tier: t2-cuj }
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
-      configure-model-settings:  { covered: false, note: "PromptModelSettings / providerConfigs" }
+      # Scoped: the Anthropic panel only, and only the two controls whose display
+      # and whose request value can disagree. On claude-sonnet-4-6 the spec
+      # asserts the sampling pair is one choice with one MOUNTED control (the
+      # outgoing half leaves the DOM rather than dimming), then compares the
+      # panel's own Top P and Thinking effort against the outbound
+      # POST /v1/private/chat/completions body — which is the only place the
+      # disagreement is observable, since neither surface alone can see it.
+      #
+      # Still uncovered here: the OpenAI / Gemini / Vertex / OpenRouter / Custom
+      # panels, max output tokens, throttling, max concurrent requests, and
+      # whether a persisted prompt re-hydrates its settings on reload.
+      configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs — Anthropic only (playground-model-parameters.spec.ts): sampling pair is a single choice with exactly one mounted slider, and the displayed Top P and Thinking effort are asserted against the outbound chat/completions body, which must carry top_p and no temperature. Other providers' panels, the token/throttling/concurrency sliders, and settings surviving a prompt reload are all still uncovered" }
 
     visual:
       playground-default: { covered: false, state: default }
@@ -683,6 +698,7 @@ areas:
       - online-evaluation/online-evaluation-oversized-payload.spec.ts
       - online-evaluation/online-evaluation-provider-error-classification.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
+      - online-evaluation/online-evaluation-python-score-usability.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-smoke.spec.ts
       - online-evaluation/online-evaluation-thread-judge-provider-failure.spec.ts
@@ -691,8 +707,8 @@ areas:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
       llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe; t2 also covers provider-failure classification (OPIK-8262) — a permanent status costs exactly one upstream call, a transient one the whole retry budget, and neither writes a score" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
-      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line; t3 covers a span-scope rule still scoring the spans logged AFTER a 21M-character span, which is the OPIK-8164 wedge — the oversized span's own score is deliberately not asserted, since whether it is scored depends on the deployment's Jackson stream-read limits; t2 also covers the THREAD-scope metric contract, where the runner hands the metric the whole conversation positionally instead of a mapped argument map (online-evaluation-thread-scope-batch-close.spec.ts)" }
-      scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
+      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line; t3 covers a span-scope rule still scoring the spans logged AFTER a 21M-character span, which is the OPIK-8164 wedge — the oversized span's own score is deliberately not asserted, since whether it is scored depends on the deployment's Jackson stream-read limits; t2 also covers the THREAD-scope metric contract, where the runner hands the metric the whole conversation positionally instead of a mapped argument map (online-evaluation-thread-scope-batch-close.spec.ts); t2 also covers per-score USABILITY (online-evaluation-python-score-usability.spec.ts), which is a different question from every clause above — those all ask whether the evaluator ran, this asks which of a run's scores survived: four rules judge one trace, so a ScoreResult(value=None) and a scoring_failed=True 0.0 each answer 400 once and store nothing, a mixed list keeps its usable score while naming each dropped one by its own cause on the rule log, and a deliberate 0.0 still lands — the flagged and the deliberate zero being the same number on the same trace is what separates over-dropping from under-dropping" }
+      scores-in-trace-panel:   { covered: true,  tier: t1-smoke, note: "t1 reads an LLM-judge score's value back off the panel; t2 also pins the row set by EXHAUSTION on a trace whose rules dropped scores server-side (online-evaluation-python-score-usability.spec.ts) — exactly two rows for two stored scores, addressed by data-row-id, with no row for any of the four dropped names, so a panel that rendered a score the backend refused fails here" }
       list-rules:              { covered: true,  tier: t2-cuj, note: "project-scoped and workspace-wide listing over a project holding six bracket-opening judge prompts, plus the rules page rendering a row for each" }
       # Now true, and only because BOTH halves are exercised — which is what the
       # previous note here was holding out for. Span scope:

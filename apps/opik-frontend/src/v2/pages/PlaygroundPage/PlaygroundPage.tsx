@@ -10,6 +10,7 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { Separator } from "@/ui/separator";
 import { Skeleton } from "@/ui/skeleton";
 import PlaygroundOutputs from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
+import PlaygroundScrollContainer from "@/v2/pages/PlaygroundPage/PlaygroundScrollContainer";
 import PlaygroundAddVariant from "@/v2/pages/PlaygroundPage/PlaygroundAddVariant";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -89,7 +90,6 @@ const PlaygroundPage = () => {
   const triggerProviderValidation = useTriggerProviderValidation();
   const isRunning = useIsRunning();
   const promptCount = usePromptCount();
-  const ref = useRef<HTMLDivElement>(null);
 
   const { datasetId, versionName, versionHash, setDatasetId } =
     usePlaygroundDataset();
@@ -244,8 +244,7 @@ const PlaygroundPage = () => {
     : `calc(${promptCount} * var(--max-prompt-width) + var(--add-variant-width))`;
 
   return (
-    <div
-      ref={ref}
+    <PlaygroundScrollContainer
       className="-mx-6 h-full overflow-y-auto overflow-x-hidden"
       style={
         {
@@ -343,7 +342,7 @@ const PlaygroundPage = () => {
       />
 
       {DialogComponent}
-    </div>
+    </PlaygroundScrollContainer>
   );
 };
 
