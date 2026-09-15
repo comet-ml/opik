@@ -22,7 +22,11 @@ export const vscodeDeeplink = (url: string) =>
 
 // The fallback when nothing opened: VS Code's own non-interactive CLI.
 export const vscodeAddCommand = (url: string) =>
-  `code --add-mcp '${JSON.stringify({ name: MCP_SERVER_NAME, type: "http", url })}'`;
+  `code --add-mcp '${JSON.stringify({
+    name: MCP_SERVER_NAME,
+    type: "http",
+    url,
+  })}'`;
 
 export const claudeCodeCommand = (url: string) =>
   `claude mcp add --transport http --scope user ${MCP_SERVER_NAME} ${url}`;
