@@ -4,22 +4,15 @@ import useTraceById from "@/api/traces/useTraceById";
 import useRulesList from "@/api/automations/useRulesList";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { getScoreNamesFromRule } from "@/lib/rules";
+import { EvaluatorsRule } from "@/types/automations";
 import {
-  EVAL_TRIGGER_SCOPE,
-  EVALUATORS_RULE_TYPE,
-  EvaluatorsRule,
-} from "@/types/automations";
+  isAlwaysRunRule,
+  isTraceRule,
+} from "@/v2/pages/PlaygroundPage/metricSelection";
 import PlaygroundOutputScores, { ScoreData } from "./PlaygroundOutputScores";
 
 const REFETCH_INTERVAL = 5000;
 const MAX_REFETCH_TIME = 300000;
-
-// Thread and span rules write their scores elsewhere, so their names would never arrive on the
-// trace and would keep the cell polling to the timeout.
-const TRACE_RULE_TYPES: string[] = [
-  EVALUATORS_RULE_TYPE.llm_judge,
-  EVALUATORS_RULE_TYPE.python_code,
-];
 
 const scoreNamesOf = (rules: EvaluatorsRule[]) =>
   [...new Set(rules.flatMap((rule) => getScoreNamesFromRule(rule)))].sort(
@@ -67,24 +60,15 @@ const PlaygroundOutputScoresContainer: React.FC<
     [selectedRuleIds],
   );
 
-  // Only the selected rules are known to run up front, so only they get a pending tag.
-  const selectedRules = useMemo(
-    () => rules.filter((rule) => selectedRuleIdsSet.has(rule.id)),
-    [rules, selectedRuleIdsSet],
-  );
-
   // A dataset run is logged as an experiment trace, so every enabled rule targeting experiments
-  // scores it too. Those scores arrive without being announced, so polling has to wait for them
-  // as well or the cell stops refetching before they land.
+  // scores it alongside the picked ones. Both sets are known up front, so both get a pending tag
+  // and both are awaited, or the cell would stop refetching before the unpicked scores land.
   const scoringRules = useMemo(
     () =>
       rules.filter(
         (rule) =>
-          TRACE_RULE_TYPES.includes(rule.type) &&
-          (selectedRuleIdsSet.has(rule.id) ||
-            (rule.enabled !== false &&
-              (rule.trigger_scope === EVAL_TRIGGER_SCOPE.experiment ||
-                rule.trigger_scope === EVAL_TRIGGER_SCOPE.both))),
+          isTraceRule(rule) &&
+          (selectedRuleIdsSet.has(rule.id) || isAlwaysRunRule(rule)),
       ),
     [rules, selectedRuleIdsSet],
   );
@@ -98,13 +82,13 @@ const PlaygroundOutputScoresContainer: React.FC<
     rulesPending || rulesTruncated || scoringRules.length > 0;
 
   const expectedMetricNames = useMemo(
-    () => scoreNamesOf(selectedRules),
-    [selectedRules],
+    () => scoreNamesOf(scoringRules),
+    [scoringRules],
   );
 
   const awaitedScoreNames = useMemo(
-    () => new Set(scoreNamesOf(scoringRules)),
-    [scoringRules],
+    () => new Set(expectedMetricNames),
+    [expectedMetricNames],
   );
 
   const awaitedScoreNamesRef = useRef(awaitedScoreNames);

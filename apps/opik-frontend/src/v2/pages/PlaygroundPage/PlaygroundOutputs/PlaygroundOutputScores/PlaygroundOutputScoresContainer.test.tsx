@@ -174,19 +174,25 @@ describe("PlaygroundOutputScoresContainer", () => {
       expect(traceQueryOptions.enabled).toBe(true);
     });
 
-    it("should ignore a thread rule, whose scores never reach the trace", () => {
-      rulesState.content = [
-        makeRule("r1", ["Relevance"], {
-          type: EVALUATORS_RULE_TYPE.thread_llm_judge,
-          trigger_scope: EVAL_TRIGGER_SCOPE.experiment,
-        }),
-      ];
-      rulesState.total = 1;
+    it.each([
+      ["thread", EVALUATORS_RULE_TYPE.thread_llm_judge],
+      ["span", EVALUATORS_RULE_TYPE.span_llm_judge],
+    ])(
+      "should ignore a %s rule, whose scores never reach the trace",
+      (_, type) => {
+        rulesState.content = [
+          makeRule("r1", ["Relevance"], {
+            type,
+            trigger_scope: EVAL_TRIGGER_SCOPE.experiment,
+          }),
+        ];
+        rulesState.total = 1;
 
-      renderContainer(null);
+        renderContainer(null);
 
-      expect(traceQueryOptions.enabled).toBe(false);
-    });
+        expect(traceQueryOptions.enabled).toBe(false);
+      },
+    );
   });
 
   describe("refetch interval", () => {
@@ -241,6 +247,34 @@ describe("PlaygroundOutputScoresContainer", () => {
       renderContainer(null);
 
       expect(screen.getByTestId("metric-names")).toHaveTextContent("");
+    });
+
+    it.each([
+      ["thread", EVALUATORS_RULE_TYPE.thread_llm_judge],
+      ["span", EVALUATORS_RULE_TYPE.span_llm_judge],
+    ])(
+      "should not show a pending metric for a picked %s rule, whose scores never reach the trace",
+      (_, type) => {
+        rulesState.content = [makeRule("r1", ["Relevance"], { type })];
+        rulesState.total = 1;
+
+        renderContainer(["r1"]);
+
+        expect(screen.getByTestId("metric-names")).toHaveTextContent("");
+      },
+    );
+
+    it("should show a pending metric for an unpicked rule that targets experiments", () => {
+      rulesState.content = [
+        makeRule("r1", ["Relevance"], {
+          trigger_scope: EVAL_TRIGGER_SCOPE.experiment,
+        }),
+      ];
+      rulesState.total = 1;
+
+      renderContainer(null);
+
+      expect(screen.getByTestId("metric-names")).toHaveTextContent("Relevance");
     });
   });
 });

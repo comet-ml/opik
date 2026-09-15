@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 
-import { toggleAllMetrics, toggleMetricSelection } from "./metricSelection";
+import { EVAL_TRIGGER_SCOPE, EvaluatorsRule } from "@/types/automations";
+
+import {
+  isAlwaysRunRule,
+  toggleAllMetrics,
+  toggleMetricSelection,
+} from "./metricSelection";
 
 const ALL = ["a", "b", "c"];
 
@@ -37,5 +43,44 @@ describe("toggleAllMetrics", () => {
 
   it("selects every rule when not everything is selected", () => {
     expect(toggleAllMetrics(false, ALL)).toEqual(ALL);
+  });
+});
+
+describe("isAlwaysRunRule", () => {
+  const rule = (overrides: Partial<EvaluatorsRule>) =>
+    ({ id: "r", enabled: true, ...overrides }) as EvaluatorsRule;
+
+  it("is true for an enabled rule scoped to experiments", () => {
+    expect(
+      isAlwaysRunRule(rule({ trigger_scope: EVAL_TRIGGER_SCOPE.experiment })),
+    ).toBe(true);
+  });
+
+  it("is true for an enabled rule scoped to both", () => {
+    expect(
+      isAlwaysRunRule(rule({ trigger_scope: EVAL_TRIGGER_SCOPE.both })),
+    ).toBe(true);
+  });
+
+  it("is false for a production-scoped rule", () => {
+    expect(
+      isAlwaysRunRule(rule({ trigger_scope: EVAL_TRIGGER_SCOPE.production })),
+    ).toBe(false);
+  });
+
+  it("is false for a disabled rule whatever its scope", () => {
+    expect(
+      isAlwaysRunRule(
+        rule({ trigger_scope: EVAL_TRIGGER_SCOPE.experiment, enabled: false }),
+      ),
+    ).toBe(false);
+  });
+
+  it("treats a missing enabled flag as enabled", () => {
+    expect(
+      isAlwaysRunRule(
+        rule({ trigger_scope: EVAL_TRIGGER_SCOPE.both, enabled: undefined }),
+      ),
+    ).toBe(true);
   });
 });
