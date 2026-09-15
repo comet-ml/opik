@@ -5,7 +5,12 @@ import pytest
 
 from opik import evaluation, exceptions, url_helpers
 from opik.api_objects import opik_client
-from opik.evaluation import metrics, rest_operations, test_case
+from opik.evaluation import (
+    evaluator as evaluator_module,
+    metrics,
+    rest_operations,
+    test_case,
+)
 from opik.evaluation.engine import engine
 from opik.evaluation.metrics import score_result
 
@@ -124,6 +129,257 @@ def test_evaluate_experiment__happyflow(fake_backend):
     assert result.experiment_name == "exp-name"
     assert result.dataset_id == "dataset-id"
     assert result.test_results == mock_test_results
+
+
+def test_evaluate_experiment__returns_preserved_scores(fake_backend):
+    mock_experiment = _make_mock_experiment()
+    mock_dataset = _make_mock_dataset()
+    test_cases = [_make_test_case()]
+    mock_test_results = [mock.Mock(score_results=[])]
+    computed_score = score_result.ScoreResult(
+        name="accuracy", value=0.9, metadata={"_fabricated": True}
+    )
+    effective_scores = [
+        score_result.ScoreResult(name="existing", value=0.4),
+        computed_score,
+    ]
+    mock_experiment.log_experiment_scores.return_value = effective_scores
+
+    def compute_score(_):
+        return computed_score
+
+    with mock.patch.object(
+        rest_operations,
+        "get_experiment_with_unique_name",
+        return_value=mock_experiment,
+    ):
+        with mock.patch.object(
+            opik_client.Opik, "get_dataset", return_value=mock_dataset
+        ):
+            with mock.patch.object(
+                rest_operations, "get_experiment_test_cases", return_value=test_cases
+            ):
+                with mock.patch.object(
+                    rest_operations,
+                    "get_trace_project_name",
+                    return_value="test-project",
+                ):
+                    with mock.patch.object(
+                        url_helpers,
+                        "get_experiment_url_by_id",
+                        return_value="http://example.com/exp",
+                    ):
+                        with mock.patch.object(
+                            engine.EvaluationEngine,
+                            "score_test_cases",
+                            return_value=mock_test_results,
+                        ):
+                            result = evaluation.evaluate_experiment(
+                                experiment_name="exp-name",
+                                scoring_metrics=[],
+                                experiment_scoring_functions=[compute_score],
+                                verbose=0,
+                            )
+
+    assert result.experiment_scores == effective_scores
+    mock_experiment.log_experiment_scores.assert_called_once_with(
+        score_results=[computed_score],
+        preserve_unrelated=True,
+    )
+
+
+def test_evaluate_experiment__deduplicates_successful_scores(fake_backend):
+    mock_experiment = _make_mock_experiment()
+    mock_dataset = _make_mock_dataset()
+    test_cases = [_make_test_case()]
+    mock_test_results = [mock.Mock(score_results=[])]
+    first_score = score_result.ScoreResult(name="accuracy", value=0.4)
+    last_score = score_result.ScoreResult(name="accuracy", value=0.9)
+    other_score = score_result.ScoreResult(name="precision", value=0.8)
+    effective_scores = [last_score, other_score]
+    mock_experiment.log_experiment_scores.return_value = effective_scores
+
+    def compute_scores(_):
+        return [first_score, last_score, other_score]
+
+    with mock.patch.object(
+        rest_operations,
+        "get_experiment_with_unique_name",
+        return_value=mock_experiment,
+    ):
+        with mock.patch.object(
+            opik_client.Opik, "get_dataset", return_value=mock_dataset
+        ):
+            with mock.patch.object(
+                rest_operations, "get_experiment_test_cases", return_value=test_cases
+            ):
+                with mock.patch.object(
+                    rest_operations,
+                    "get_trace_project_name",
+                    return_value="test-project",
+                ):
+                    with mock.patch.object(
+                        url_helpers,
+                        "get_experiment_url_by_id",
+                        return_value="http://example.com/exp",
+                    ):
+                        with mock.patch.object(
+                            engine.EvaluationEngine,
+                            "score_test_cases",
+                            return_value=mock_test_results,
+                        ):
+                            result = evaluation.evaluate_experiment(
+                                experiment_name="exp-name",
+                                scoring_metrics=[],
+                                experiment_scoring_functions=[compute_scores],
+                                verbose=0,
+                            )
+
+    assert result.experiment_scores == effective_scores
+    mock_experiment.log_experiment_scores.assert_called_once_with(
+        score_results=effective_scores,
+        preserve_unrelated=True,
+    )
+
+
+@pytest.mark.parametrize("invalid_score", [None, object()])
+def test_evaluate_experiment__records_invalid_scores(fake_backend, invalid_score):
+    mock_experiment = _make_mock_experiment()
+    mock_dataset = _make_mock_dataset()
+    test_cases = [_make_test_case()]
+    mock_test_results = [mock.Mock(score_results=[])]
+
+    def compute_scores(_):
+        return [invalid_score]
+
+    with mock.patch.object(
+        rest_operations,
+        "get_experiment_with_unique_name",
+        return_value=mock_experiment,
+    ):
+        with mock.patch.object(
+            opik_client.Opik, "get_dataset", return_value=mock_dataset
+        ):
+            with mock.patch.object(
+                rest_operations, "get_experiment_test_cases", return_value=test_cases
+            ):
+                with mock.patch.object(
+                    rest_operations,
+                    "get_trace_project_name",
+                    return_value="test-project",
+                ):
+                    with mock.patch.object(
+                        url_helpers,
+                        "get_experiment_url_by_id",
+                        return_value="http://example.com/exp",
+                    ):
+                        with mock.patch.object(
+                            engine.EvaluationEngine,
+                            "score_test_cases",
+                            return_value=mock_test_results,
+                        ):
+                            result = evaluation.evaluate_experiment(
+                                experiment_name="exp-name",
+                                scoring_metrics=[],
+                                experiment_scoring_functions=[compute_scores],
+                                verbose=0,
+                            )
+
+    assert len(result.experiment_scores) == 1
+    score = result.experiment_scores[0]
+    assert score.name == "compute_scores"
+    assert score.value == 0.0
+    assert score.scoring_failed is True
+    assert (
+        score.reason
+        == f"Experiment scoring function returned {type(invalid_score).__name__}; expected ScoreResult."
+    )
+    assert score.metadata == {"_fabricated": True}
+    mock_experiment.log_experiment_scores.assert_called_once_with(
+        score_results=result.experiment_scores,
+        preserve_unrelated=False,
+    )
+
+
+def test_evaluate_experiment__deduplicates_duplicate_score_names(fake_backend):
+    mock_experiment = _make_mock_experiment()
+    mock_dataset = _make_mock_dataset()
+    test_cases = [_make_test_case()]
+    mock_test_results = [mock.Mock(score_results=[])]
+
+    def scorer_a(_):
+        return score_result.ScoreResult(name="accuracy", value=0.5)
+
+    def scorer_b(_):
+        return score_result.ScoreResult(name="accuracy", value=0.9)
+
+    with mock.patch.object(
+        rest_operations,
+        "get_experiment_with_unique_name",
+        return_value=mock_experiment,
+    ):
+        with mock.patch.object(
+            opik_client.Opik, "get_dataset", return_value=mock_dataset
+        ):
+            with mock.patch.object(
+                rest_operations, "get_experiment_test_cases", return_value=test_cases
+            ):
+                with mock.patch.object(
+                    rest_operations,
+                    "get_trace_project_name",
+                    return_value="test-project",
+                ):
+                    with mock.patch.object(
+                        url_helpers,
+                        "get_experiment_url_by_id",
+                        return_value="http://example.com/exp",
+                    ):
+                        with mock.patch.object(
+                            engine.EvaluationEngine,
+                            "score_test_cases",
+                            return_value=mock_test_results,
+                        ):
+                            result = evaluation.evaluate_experiment(
+                                experiment_name="exp-name",
+                                scoring_metrics=[],
+                                experiment_scoring_functions=[scorer_a, scorer_b],
+                                verbose=0,
+                            )
+
+    assert len(result.experiment_scores) == 1
+    assert result.experiment_scores[0].name == "accuracy"
+    assert result.experiment_scores[0].value == 0.9
+    mock_experiment.log_experiment_scores.assert_called_once_with(
+        score_results=result.experiment_scores,
+        preserve_unrelated=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "scores, expected",
+    [
+        (
+            [
+                score_result.ScoreResult(name="accuracy", value=0.5),
+                score_result.ScoreResult(
+                    name="accuracy", value=0.0, scoring_failed=True
+                ),
+            ],
+            [score_result.ScoreResult(name="accuracy", value=0.0, scoring_failed=True)],
+        ),
+        (
+            [
+                score_result.ScoreResult(
+                    name="accuracy", value=0.0, scoring_failed=True
+                ),
+                score_result.ScoreResult(name="accuracy", value=0.9),
+            ],
+            [score_result.ScoreResult(name="accuracy", value=0.9)],
+        ),
+    ],
+)
+def test_deduplicate_experiment_scores__last_result_wins(scores, expected):
+    assert evaluator_module._deduplicate_experiment_scores(scores) == expected
 
 
 def test_evaluate_experiment__with_experiment_id__uses_get_by_id(fake_backend):
