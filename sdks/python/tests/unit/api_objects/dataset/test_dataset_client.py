@@ -1,5 +1,5 @@
+import asyncio
 import inspect
-import threading
 import time
 from typing import Optional
 from unittest.mock import Mock, patch
@@ -307,22 +307,16 @@ _GATE_BATCH_SIZE = 2
 _GATE_ITEM_COUNT = 10
 _GATE_BATCH_COUNT = _GATE_ITEM_COUNT // _GATE_BATCH_SIZE
 
-# Only has to outlast thread-pool startup, so it is generous even on a loaded
+# Only has to outlast the pool starting up, so it is generous even on a loaded
 # CI runner. It is never reached on a healthy run — it is the deadline by which
 # a wrongly-sequential upload gives up and fails the test.
 _OVERLAP_TIMEOUT_SECONDS = 10.0
-
-# Sequential expectations cannot use the barrier (it would deadlock), so each
-# upload holds this long instead. Long enough that wrongly-parallel uploads
-# overlap and get caught; a correct sequential run pays it once per batch.
-_SEQUENTIAL_HOLD_SECONDS = 0.05
 
 
 def _batches_overlapped(
     monkeypatch,
     mock_rest_client: Mock,
     num_threads: Optional[int],
-    expect_overlap: bool,
     item_count: int = _GATE_ITEM_COUNT,
 ) -> bool:
     """Insert through the public API and report whether batches ran concurrently.
@@ -335,50 +329,69 @@ def _batches_overlapped(
     ``item_count`` sets how many batches there are, which must not exceed the
     worker count when overlap is expected — the barrier is sized to it.
 
-    ``expect_overlap`` selects how uploads are held, because the two
-    expectations fail in opposite directions and need opposite instruments.
+    How an upload is held is decided by where it is running, not by what the
+    test expects -- so the same instrument proves both directions and neither
+    depends on timing.
 
-    When overlap is expected, every upload waits on a barrier sized to the
-    batch count, so the peak is deterministic no matter how the scheduler
-    interleaves workers: no sleep to tune, and no way for a slow runner to let
-    one upload finish before its sibling starts. A wrongly-sequential run can
-    never fill that barrier, so it trips the timeout and fails rather than
-    hanging.
+    An upload on the event loop can have siblings, so it waits there for all of
+    them to arrive. The peak is then deterministic however the loop interleaves
+    them: no sleep to tune, and no way for a slow runner to let one upload
+    finish before its sibling starts. This is also what catches an upload that
+    runs concurrently when it must not -- it holds cooperatively, its siblings
+    arrive, and the peak records them. A run that never reaches the count trips
+    the timeout and fails rather than hanging.
 
-    When overlap is *not* expected a barrier would deadlock, but returning
-    immediately is no good either: uploads that wrongly run in parallel would
-    finish too fast to catch, and the test would pass on a real regression.
-    Each upload instead holds briefly, which is enough for concurrent workers
-    to pile up and be counted, while a genuinely sequential run only pays that
-    hold once per batch.
+    An upload off the loop is on the producer thread, which sends one body at a
+    time by construction, so there is nothing to wait for and nothing it could
+    overlap with. It returns immediately. Holding it would prove nothing, and
+    the blocking hold this used to do was worse than nothing: in the one case
+    it was meant to catch -- uploads wrongly sharing a loop -- it ran *on* that
+    loop and serialised the very overlap it was looking for.
+
+    It has to wait on the loop rather than on a `threading.Barrier`, which is
+    what the thread-pool version of this helper used: every upload here is a
+    coroutine on one loop thread, so the first `Barrier.wait()` would block the
+    only thread that could deliver the siblings it is waiting for, and a
+    barrier sized above one would never trip.
     """
     _small_batches(monkeypatch, size=_GATE_BATCH_SIZE)
     batch_count = item_count // _GATE_BATCH_SIZE
 
-    lock = threading.Lock()
     in_flight = 0
     peak_in_flight = 0
-    barrier = (
-        threading.Barrier(batch_count, timeout=_OVERLAP_TIMEOUT_SECONDS)
-        if expect_overlap
-        else None
-    )
+    # Counted separately from `in_flight` and never decremented. Gating the barrier on
+    # the live count makes it not a barrier: the first upload to see the count reached
+    # leaves, which drops it below the threshold again, and every remaining waiter spins
+    # to the deadline. The tests still passed on `peak > 1`, but each paid the full
+    # timeout and none of them proved the barrier was ever reached.
+    arrived = 0
 
-    def tracked_upload() -> None:
-        nonlocal in_flight, peak_in_flight
-        with lock:
-            in_flight += 1
-            peak_in_flight = max(peak_in_flight, in_flight)
-        if barrier is not None:
-            # Hold every upload until all of them have arrived, so the observed
-            # peak reflects real concurrency instead of a timing guess.
-            barrier.wait()
-        else:
-            # No rendezvous available, so hold long enough that uploads which
-            # wrongly overlap are still in flight together and get counted.
-            time.sleep(_SEQUENTIAL_HOLD_SECONDS)
-        with lock:
-            in_flight -= 1
+    async def held() -> None:
+        deadline = time.monotonic() + _OVERLAP_TIMEOUT_SECONDS
+        while arrived < batch_count and time.monotonic() < deadline:
+            await asyncio.sleep(0.005)
+        _leave()
+
+    def _leave() -> None:
+        nonlocal in_flight
+        in_flight -= 1
+
+    def on_event_loop() -> bool:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return False
+        return True
+
+    def tracked_upload():
+        nonlocal in_flight, peak_in_flight, arrived
+        in_flight += 1
+        arrived += 1
+        peak_in_flight = max(peak_in_flight, in_flight)
+        if on_event_loop():
+            return held()
+        _leave()
+        return None
 
     capture = UploadCapture(on_request=tracked_upload)
     dataset = make_dataset(Dataset, mock_rest_client, capture)
@@ -403,7 +416,6 @@ def test_insert__backend_supports_parallel__batches_uploaded_concurrently(
         monkeypatch,
         _mock_rest_client(backend_version),
         num_threads=_GATE_BATCH_COUNT,
-        expect_overlap=True,
     ), f"Backend {backend_version} supports parallel insert, uploads must overlap"
 
 
@@ -415,7 +427,6 @@ def test_insert__backend_older_than_minimum__uploads_sequentially(
         monkeypatch,
         _mock_rest_client(backend_version),
         num_threads=_GATE_BATCH_COUNT,
-        expect_overlap=False,
     ), (
         f"Backend {backend_version} predates parallel insert support, uploads must "
         "not overlap"
@@ -429,7 +440,6 @@ def test_insert__self_hosted_build_version__uploads_concurrently(monkeypatch):
         monkeypatch,
         _mock_rest_client("2.2.12-7671-merge-2777"),
         num_threads=_GATE_BATCH_COUNT,
-        expect_overlap=True,
     )
 
 
@@ -438,7 +448,6 @@ def test_insert__unparseable_backend_version__uploads_sequentially(monkeypatch):
         monkeypatch,
         _mock_rest_client("dev-local"),
         num_threads=_GATE_BATCH_COUNT,
-        expect_overlap=False,
     ), "An undeterminable backend version must fall back to a sequential upload"
 
 
@@ -450,7 +459,6 @@ def test_insert__version_endpoint_unreachable__uploads_sequentially(monkeypatch)
         monkeypatch,
         mock_rest_client,
         num_threads=_GATE_BATCH_COUNT,
-        expect_overlap=False,
     ), "A failing version probe must not break insert; it falls back to sequential"
 
 
@@ -590,9 +598,9 @@ def test_insert__non_bool_deduplication__raises_before_any_request(bad_value):
 def test_insert__sequential__uploads_sequentially_without_probing_version(monkeypatch):
     mock_rest_client = _mock_rest_client()
 
-    assert not _batches_overlapped(
-        monkeypatch, mock_rest_client, num_threads=1, expect_overlap=False
-    ), "num_threads=1 must upload sequentially"
+    assert not _batches_overlapped(monkeypatch, mock_rest_client, num_threads=1), (
+        "num_threads=1 must upload sequentially"
+    )
 
     # An explicitly sequential upload cannot race, so it must not pay the probe.
     mock_rest_client.version.assert_not_called()
@@ -610,7 +618,6 @@ def test_insert__num_threads_not_given__uploads_concurrently_by_default(monkeypa
         monkeypatch,
         _mock_rest_client(),
         num_threads=None,
-        expect_overlap=True,
         item_count=_DEFAULT_THREADS_ITEM_COUNT,
     ), "insert() must upload in parallel without being asked to"
 

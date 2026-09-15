@@ -2,7 +2,6 @@ from unittest.mock import Mock
 
 import pytest
 
-import opik.config as config
 from opik.api_objects import constants
 from opik.api_objects.dataset.dataset import Dataset
 
@@ -109,7 +108,7 @@ def test_update__invalidates_cached_count():
         description="Test description",
         project_name="Test project",
         rest_client=mock_rest_client,
-        rest_httpx_client=capture,
+        rest_httpx_client=capture.client,
         url_override=capture.base_url,
         dataset_items_count=5,
     )
@@ -142,7 +141,7 @@ def test_insert__invalidates_cached_count():
         description="Test description",
         project_name="Test project",
         rest_client=mock_rest_client,
-        rest_httpx_client=capture,
+        rest_httpx_client=capture.client,
         url_override=capture.base_url,
         dataset_items_count=5,
     )
@@ -229,8 +228,8 @@ def test_from_public__response_without_id__falls_back_to_the_lookup():
 class _FailAfterFirstRequest(UploadCapture):
     """Accepts the first request, then dies -- a partial upload."""
 
-    def request(self, method, url, **kwargs):
-        response = super().request(method, url, **kwargs)
+    def handle(self, request):
+        response = super().handle(request)
         if self.request_count >= 2:
             raise RuntimeError("connection lost mid-upload")
         return response
@@ -251,7 +250,7 @@ def test_insert__upload_fails_after_earlier_items_landed__still_invalidates_coun
     mock_rest_client = Mock()
     capture = _FailAfterFirstRequest()
     transport = {
-        "rest_httpx_client": capture,
+        "rest_httpx_client": capture.client,
         "url_override": capture.base_url,
     }
 
@@ -265,15 +264,16 @@ def test_insert__upload_fails_after_earlier_items_landed__still_invalidates_coun
     )
     assert dataset.dataset_items_count == 5
 
-    original_max_batch_size_MB = config.MAX_BATCH_SIZE_MB
-    config.MAX_BATCH_SIZE_MB = 1e-9  # one item per request, so the failure is partial
+    original_max_batch_size_MB = constants.DATASET_ITEMS_MAX_BATCH_SIZE_MB
+    # one item per request, so the failure is partial
+    constants.DATASET_ITEMS_MAX_BATCH_SIZE_MB = 1e-9
     try:
         with pytest.raises(RuntimeError):
             dataset.insert(
                 [{"input": {"key": f"value{i}"}} for i in range(4)], num_threads=1
             )
     finally:
-        config.MAX_BATCH_SIZE_MB = original_max_batch_size_MB
+        constants.DATASET_ITEMS_MAX_BATCH_SIZE_MB = original_max_batch_size_MB
 
     assert dataset._dataset_items_count is None, (
         "A failed insert that persisted earlier items must clear the cached count"

@@ -8,6 +8,7 @@ Serialisation here is for the wire only. Content hashes are computed elsewhere, 
 standard library, so item identity never depends on which serialiser is in use.
 """
 
+import asyncio
 import dataclasses
 import datetime
 import decimal
@@ -15,14 +16,16 @@ import enum
 import json
 import logging
 import pathlib
+import threading
 import uuid
 import zlib
 from concurrent import futures
-from typing import Any, Callable, Dict, List, Mapping, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional
 
+import httpx
 import pydantic
 
-from ... import config
+from ... import httpx_client
 from .. import constants
 from . import identifiers
 from ...rest_api.core.jsonable_encoder import jsonable_encoder
@@ -32,7 +35,7 @@ LOGGER = logging.getLogger(__name__)
 
 def _max_batch_bytes() -> int:
     """One request body's byte cap. The writer splits on it, the pool budgets in it."""
-    return int(config.MAX_BATCH_SIZE_MB * 1024 * 1024)
+    return int(constants.DATASET_ITEMS_MAX_BATCH_SIZE_MB * 1024 * 1024)
 
 
 # gzip container rather than a raw deflate stream, matching what the server expects.
@@ -160,7 +163,11 @@ class StreamingBatchWriter:
 
     def _start_buffer(self) -> None:
         self._chunks = [self._prefix]
-        self._logical_bytes = 0
+        # Seeded with the envelope, not zero: the cap bounds the request the backend
+        # receives, and a reverse proxy in front of a self-hosted install measures the
+        # whole body. Counting only the items lets a batch land over the limit by the
+        # envelope's width.
+        self._logical_bytes = len(self._prefix) + len(self._suffix)
         self._items = 0
 
     def _serialize(self, item: Mapping[str, Any]) -> bytes:
@@ -212,20 +219,46 @@ class StreamingBatchWriter:
 
         self._chunks.append(self._suffix)
         chunks, item_count = self._chunks, self._items
-        # The pool would otherwise re-derive this by summing every chunk, on the very
-        # thread this class exists to keep free.
-        body_bytes = self._logical_bytes + len(self._prefix) + len(self._suffix)
+        # Already whole: `_start_buffer` seeds the count with the envelope, so the cap
+        # and this both measure the request the backend receives. The pool would
+        # otherwise re-derive it by summing every chunk, on the very thread this class
+        # exists to keep free.
+        body_bytes = self._logical_bytes
 
         self._start_buffer()
         self._flush_callback(chunks, item_count, body_bytes)
 
 
+# Given a body and the pool's client: build the request, send it, retry it, and raise
+# what retrying could not fix. Leaves URL, headers and retry policy with the caller, the
+# same division the thread-backed pool had.
+AsyncSend = Callable[[bytes, httpx.AsyncClient], Awaitable[None]]
+
+
+@dataclasses.dataclass
+class _Running:
+    """What one upload starts: the loop, its thread, the client and the compressors.
+
+    One optional field rather than four, so "has the pool started" is a single question
+    and no half-started combination can be represented. They are created together by
+    `_start` and torn down together by `_shutdown`.
+    """
+
+    loop: asyncio.AbstractEventLoop
+    thread: threading.Thread
+    client: httpx.AsyncClient
+    compressors: futures.ThreadPoolExecutor
+
+
 class BoundedSendPool:
     """Compress finished bodies and send them, with only so many outstanding at once.
 
-    Compression is where a producer thread spends most of its time, and zlib releases the
-    GIL, so a batch is gzipped by the worker that will send it rather than by the thread
-    that built it. One gzip stream per request body, as before. `gzip_level` of None sends
+    The requests run as coroutines on one background event loop, so `num_threads` bounds
+    requests in flight rather than threads blocked in a socket read. Compression does not
+    run there: gzip is CPU work, and on the loop thread it would serialise both the
+    compression and every send sharing that loop. It goes to a small pool of worker
+    threads instead -- zlib releases the GIL, so that is where it parallelises -- and the
+    loop awaits the result. One gzip stream per request body. `gzip_level` of None sends
     the body uncompressed, for a client configured with `enable_json_request_compression`
     off.
 
@@ -241,9 +274,19 @@ class BoundedSendPool:
     every worker behind it. For oversized items the real bound is therefore `num_threads`
     of them, not the byte budget.
 
-    `ThreadPoolExecutor` grows a worker per submitted body up to `num_threads`, so a small
-    upload never starts the full ceiling; a single worker compresses and sends inline and
-    starts no thread at all. The first failure is re-raised to the producer. There is no
+    A single worker takes none of this: it compresses and sends inline through
+    `inline_send`, starting no loop, no thread and no client, which is what a backend
+    older than `MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT` needs. So does an upload whose
+    client sends through a transport an async client cannot use: rather than send around
+    whatever that transport enforces, the pool falls back to the same inline path.
+
+    Neither does an upload that turns out to be one request, whatever the worker count.
+    The first body is held rather than sent, and goes inline at `close` if no second body
+    follows -- so `insert` of a handful of items pays for no loop, no thread and no second
+    connection pool, and a caller inserting in a loop keeps the sync client's keepalive
+    rather than opening a connection per call.
+
+    The first failure is re-raised to the producer, from `submit` or `close`. There is no
     rollback, so bodies already accepted stay persisted.
     """
 
@@ -257,27 +300,35 @@ class BoundedSendPool:
     def __init__(
         self,
         *,
-        send: Callable[[bytes], None],
+        send: AsyncSend,
+        inline_send: Callable[[bytes], None],
         num_threads: int,
+        transport: httpx.Client,
         gzip_level: Optional[int],
     ) -> None:
         self._send = send
+        self._inline_send = inline_send
         self._gzip_level = gzip_level
+        self._transport = transport
+        self._single_worker = num_threads == 1
+        self._num_threads = num_threads
         # Two bodies per worker, so one is always ready as the network drains the last.
         self._max_pending = num_threads * 2
         self._max_pending_bytes = self._max_pending * _max_batch_bytes()
         # Never fewer bodies than workers, whatever the bytes say.
         self._min_pending = num_threads
+        # Touched only by the producing thread, so it needs no lock of its own.
         self._pending: Dict["futures.Future[None]", int] = {}
         self._pending_bytes = 0
-        self._pool: Optional[futures.ThreadPoolExecutor] = (
-            futures.ThreadPoolExecutor(max_workers=num_threads)
-            if num_threads > 1
-            else None
-        )
+        # Nothing is started here: an insert that never produces a second body must not
+        # cost a loop, and a constructor that starts one leaks it if the caller's next
+        # line raises before the try that closes this.
+        self._held: Optional[List[bytes]] = None
+        self._held_bytes = 0
+        self._running: Optional[_Running] = None
 
-    def _compress_and_send(self, chunks: List[bytes]) -> None:
-        """Send one body. Takes ownership of `chunks` and empties it."""
+    def _compress(self, chunks: List[bytes]) -> bytes:
+        """One request body. Takes ownership of `chunks` and empties it."""
         if self._gzip_level is None:
             # The join needs every piece at once, so this one copy is transient rather
             # than progressive. It is freed before the send, like the compressed path.
@@ -294,11 +345,82 @@ class BoundedSendPool:
             parts.append(compressor.flush(zlib.Z_FINISH))
             body = b"".join(parts)
             parts.clear()
-        # Emptied before the send, never after: the executor holds this list for the whole
-        # call, so a send parked in a read timeout, a retry or a 429 wait would otherwise
-        # pin a second copy of the body.
+        # Emptied before returning, never after: the work item holds this list for the
+        # whole call, so a send parked in a read timeout, a retry or a 429 wait would
+        # otherwise pin a second copy of the body.
         chunks.clear()
-        self._send(body)
+        return body
+
+    def _start(self) -> "_Running":
+        """Open the loop, its thread, the client and the compressors, or leave nothing.
+
+        The thread is what fails here in practice -- this path exists to avoid a thread
+        per in-flight request, so a process short of them is exactly where it runs -- and
+        an unclosed loop is a leaked selector descriptor, one per insert for a caller
+        inserting in a loop.
+        """
+        # Built from the client the sync path sends through, so the upload keeps the same
+        # identity, base URL, timeouts and TLS settings. Raises rather than returning a
+        # client that would send around the caller's transport.
+        client = httpx_client.async_twin(
+            self._transport, max_connections=self._max_pending
+        )
+        loop = None
+        compressors = None
+        try:
+            loop = asyncio.new_event_loop()
+            # Sized to the workers, not to the bodies in flight: compression is CPU-bound,
+            # so more threads than that only add scheduling overhead.
+            compressors = futures.ThreadPoolExecutor(
+                max_workers=self._num_threads,
+                thread_name_prefix="opik-dataset-compress",
+            )
+            thread = threading.Thread(
+                target=loop.run_forever,
+                name="opik-dataset-send-pool",
+                daemon=True,
+            )
+            thread.start()
+        except BaseException:
+            if compressors is not None:
+                compressors.shutdown(wait=False)
+            if loop is not None:
+                loop.close()
+            # The client is dropped rather than closed: `aclose` is a coroutine and no loop
+            # is left to run it on. It never sent a request, so it holds no connection.
+            raise
+
+        return _Running(
+            loop=loop, thread=thread, client=client, compressors=compressors
+        )
+
+    async def _guarded_send(
+        self, chunks: List[bytes], running: "_Running", sent: "futures.Future[None]"
+    ) -> None:
+        # Every outcome is put on the future here rather than left to the one
+        # `run_coroutine_threadsafe` returns: a `BaseException` out of a task takes the
+        # loop down with it, and the future it would have resolved never resolves, so a
+        # producer waiting at the bound would wait forever.
+        try:
+            # Off the loop: gzipping here would block every other send sharing it, and
+            # serialise the compression this pool exists to keep parallel.
+            body = await running.loop.run_in_executor(
+                running.compressors, self._compress, chunks
+            )
+            await self._send(body, running.client)
+        except BaseException as exception:
+            sent.set_exception(exception)
+        else:
+            sent.set_result(None)
+
+    def _at_capacity(self, body_bytes: int) -> bool:
+        """Whether one more body would exceed either bound, with the worker floor applied."""
+        if len(self._pending) < self._min_pending:
+            return False
+        return (
+            len(self._pending) >= self._max_pending
+            or self._pending_bytes + body_bytes > self._max_pending_bytes
+        )
 
     def _collect(self) -> None:
         """Wait for at least one body to land, and re-raise whatever it failed with."""
@@ -314,45 +436,122 @@ class BoundedSendPool:
         if failure is not None:
             raise failure
 
-    def _at_capacity(self, body_bytes: int) -> bool:
-        """Whether one more body would exceed either bound, with the worker floor applied."""
-        if len(self._pending) < self._min_pending:
-            return False
-        return (
-            len(self._pending) >= self._max_pending
-            or self._pending_bytes + body_bytes > self._max_pending_bytes
-        )
-
-    def submit(self, chunks: List[bytes], item_count: int, body_bytes: int) -> None:
-        """Send one body, blocking while the pool is at capacity.
-
-        Takes ownership of `chunks`: it is emptied on a worker thread at an unpredictable
-        time, so a caller that reuses the list gets an empty request body.
-        """
-        LOGGER.debug("Sending dataset items batch of size %d", item_count)
-        if self._pool is None:
-            self._compress_and_send(chunks)
-            return
-
+    def _enqueue(
+        self, chunks: List[bytes], body_bytes: int, running: "_Running"
+    ) -> None:
         # Waiting here is the back-pressure: the producer cannot run ahead of the network
         # by more than these bounds hold.
         while self._at_capacity(body_bytes):
             self._collect()
 
-        # Charged only once there is a future to discharge it, so a submit that fails to
-        # start a thread does not strand the bytes in the budget.
-        future = self._pool.submit(self._compress_and_send, chunks)
-        self._pending[future] = body_bytes
+        sent: "futures.Future[None]" = futures.Future()
+        # Charged only once the loop has accepted it: a future recorded before a failed
+        # `run_coroutine_threadsafe` -- a submit after close, against a loop already shut
+        # -- is one nothing will ever resolve, and every later wait would block forever.
+        asyncio.run_coroutine_threadsafe(
+            self._guarded_send(chunks, running, sent), running.loop
+        )
+        self._pending[sent] = body_bytes
         self._pending_bytes += body_bytes
 
+    def _promote_held(self, held: List[bytes], held_bytes: int) -> Optional["_Running"]:
+        """Second body: the upload is worth a loop after all, so start and send the first.
+
+        Returns the started state, or None when the caller's transport carries policy an
+        async client cannot use -- in which case the upload stays on the sync client,
+        which is slower and the only option that does not send around that policy.
+
+        The held body is released only once its destination is settled. Clearing it first
+        would drop it if `_start` raised, and there is nowhere left to send it from by then.
+        """
+        try:
+            running = self._start()
+        except httpx_client.AsyncTransportUnavailable as exception:
+            LOGGER.warning(
+                "Uploading dataset items sequentially: %s, so the parallel upload would "
+                "have had to send around it. Other requests are unaffected.",
+                exception,
+            )
+            self._single_worker = True
+            self._held = None
+            self._inline_send(self._compress(held))
+            return None
+
+        self._running, self._held = running, None
+        self._enqueue(held, held_bytes, running)
+        return running
+
+    def submit(self, chunks: List[bytes], item_count: int, body_bytes: int) -> None:
+        """Send one body, blocking while the pool is at capacity.
+
+        Takes ownership of `chunks`: it is emptied on another thread at an unpredictable
+        time, so a caller that reuses the list gets an empty request body.
+        """
+        LOGGER.debug("Sending dataset items batch of size %d", item_count)
+        if self._single_worker:
+            self._inline_send(self._compress(chunks))
+            return
+
+        running = self._running
+        if running is None:
+            held, held_bytes = self._held, self._held_bytes
+            if held is None:
+                # Keep the first body back, in case it is the only one.
+                self._held, self._held_bytes = chunks, body_bytes
+                return
+            running = self._promote_held(held, held_bytes)
+            if running is None:
+                self._inline_send(self._compress(chunks))
+                return
+
+        self._enqueue(chunks, body_bytes, running)
+
     def close(self) -> None:
-        if self._pool is None:
+        """Finish the upload: flush a body still held, then drain and tear down."""
+        if self._held is not None:
+            # The whole upload was one body, so it never needed a loop. Sent here rather
+            # than at `submit` because only now is it known that no second body follows.
+            held, self._held = self._held, None
+            self._inline_send(self._compress(held))
+
+        if self._running is None:
             return
         try:
             for future in futures.as_completed(self._pending):
                 future.result()
         finally:
-            self._pool.shutdown(wait=True)
+            self._shutdown()
+
+    def abort(self) -> None:
+        """Tear down without finishing the upload, for a producer that is already failing.
+
+        The held body is dropped rather than sent: `close` would start a fresh blocking
+        request, with its retries and rate-limit waits, while an exception unwinds -- so a
+        serialisation failure half way through, or a Ctrl-C, would begin an upload instead
+        of ending one. Sends already in flight are still drained; abandoning them
+        mid-request is not ours to do.
+        """
+        self._held = None
+        self._shutdown()
+
+    def _shutdown(self) -> None:
+        """Stop the loop, its thread, the client and the compressors. Idempotent."""
+        running = self._running
+        if running is None or running.loop.is_closed():
+            return
+
+        # A first failure leaves the rest of the sends running; stopping the loop under
+        # them would abandon them mid-request.
+        futures.wait(self._pending)
+        try:
+            asyncio.run_coroutine_threadsafe(
+                running.client.aclose(), running.loop
+            ).result()
+        finally:
+            running.loop.call_soon_threadsafe(running.loop.stop)
+            running.thread.join()
+            running.loop.close()
+            running.compressors.shutdown(wait=True)
 
 
 def item_payload(
@@ -413,4 +612,28 @@ def build_batch_writer(
         flush_callback=flush_callback,
         max_payload_bytes=_max_batch_bytes(),
         max_items=constants.DATASET_ITEMS_MAX_BATCH_SIZE,
+    )
+
+
+def build_send_pool(
+    *,
+    send: AsyncSend,
+    inline_send: Callable[[bytes], None],
+    num_threads: int,
+    transport: httpx.Client,
+    gzip_level: Optional[int],
+) -> BoundedSendPool:
+    """The upload sink for one insert.
+
+    `gzip_level` is a parameter because only the caller knows whether its transport
+    expects a compressed body. The pool's bounds are not: every one of them derives from
+    `num_threads`, so a caller cannot set the count of outstanding bodies against the
+    byte budget and have one of the two silently win.
+    """
+    return BoundedSendPool(
+        send=send,
+        inline_send=inline_send,
+        num_threads=num_threads,
+        transport=transport,
+        gzip_level=gzip_level,
     )
