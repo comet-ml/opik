@@ -538,9 +538,9 @@ export class PlaygroundPage {
 
   /**
    * Ids of the dataset rows currently mounted in the outputs body. Ids rather than cell
-   * text: they are unique per dataset item and independent of what a run has painted into
-   * the cells. Callers should not assume a dataset ordering — the grid renders items
-   * newest-first.
+   * text: the grid passes `getRowId`, so `data-row-id` is the dataset item id — unique per
+   * item and independent of what a run has painted into the cells. Callers should not
+   * assume a dataset ordering — the grid renders items newest-first.
    */
   async mountedRowIds(): Promise<string[]> {
     return test.step('read mounted row ids', async () => {
@@ -612,15 +612,49 @@ export class PlaygroundPage {
     });
   }
 
-  /** Choose a "rows per page" value from the results pagination. */
+  /**
+   * Choose a "rows per page" value from the results pagination, then wait for the
+   * replacement body. Changing the size refetches, and `mountedRowIds()` deliberately
+   * ignores the loading tbody, so returning early would let a caller assert against an
+   * empty or stale window.
+   */
   async setPageSize(size: number): Promise<void> {
     return test.step(`set page size to ${size}`, async () => {
-      await this.resultsTable()
-        .locator('..')
-        .getByRole('button', { name: /^(10|50|100|200|500|1000)$/ })
-        .click();
+      await this.pageSizeTrigger().click();
       await this.page.getByRole('menuitemcheckbox', { name: String(size), exact: true }).click();
+
+      await expect(this.pageSizeTrigger()).toHaveText(String(size));
+      await expect(
+        this.outputsPanel('body').locator(
+          'tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]',
+        ),
+      ).not.toHaveCount(0);
+      await this.settle();
     });
+  }
+
+  /** The current "rows per page" value shown by the pagination trigger. */
+  async pageSize(): Promise<number> {
+    return test.step('read the current page size', async () => {
+      return Number((await this.pageSizeTrigger().innerText()).trim());
+    });
+  }
+
+  /**
+   * Scrollable height of the page scroller. Under virtualization this tracks the row count
+   * the virtualizer is sizing for, so it moves when the page size changes even though the
+   * mounted window stays the same size.
+   */
+  async resultsScrollHeight(): Promise<number> {
+    return test.step('read the results scroll height', async () => {
+      return this.scrollContainer().evaluate((el) => el.scrollHeight);
+    });
+  }
+
+  private pageSizeTrigger(): Locator {
+    return this.resultsTable()
+      .locator('..')
+      .getByRole('button', { name: /^(10|50|100|200|500|1000)$/ });
   }
 
   /** Two frames: one for the scroll event to dispatch, one for the virtualizer to re-render. */
