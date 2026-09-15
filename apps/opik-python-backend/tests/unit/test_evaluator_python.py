@@ -687,8 +687,13 @@ def test_non_string_code_is_rejected_as_bad_request(client, code):
     assert "Field 'code' must be a string" in str(response.json["error"])
 
 
-INHERITED_SCORE_METRIC = """
-from mylib import SomeBase
+# A base reached through an assignment rather than a class statement: not statically
+# resolvable, but `issubclass` finds it at runtime -- so this actually runs, and the
+# resolver's fallback is what decides the outcome rather than an import error.
+STATICALLY_UNRESOLVABLE_METRIC = """
+from opik.evaluation.metrics import base_metric, score_result
+
+MyBase = base_metric.BaseMetric
 
 
 class Helper:
@@ -696,9 +701,12 @@ class Helper:
         return None
 
 
-class MyMetric(SomeBase):
-    def score(self, output):
-        pass
+class RealMetric(MyBase):
+    def __init__(self, name: str = "real_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str, metadata):
+        return score_result.ScoreResult(value=1.0, name=self.name)
 """
 
 TWO_METRIC_CLASSES = """
@@ -758,13 +766,16 @@ def test_receiver_is_not_filled_when_it_is_not_named_self(process_client):
 def test_unresolvable_metric_class_fills_nothing(process_client):
     response = process_client.post(EVALUATORS_URL, json={
         "data": {"output": "abc"},
-        "code": INHERITED_SCORE_METRIC
+        "code": STATICALLY_UNRESOLVABLE_METRIC
     })
 
-    # The import fails in the sandbox, so this is a 400 either way -- what matters is
-    # which one: a guessed fill would name Helper's parameter instead.
+    # Filling nothing leaves RealMetric.score missing `metadata`, so the failure names
+    # it. Guessing from Helper would instead inject `unrelated_param` and the failure
+    # would name that -- so the two behaviours are told apart, not merely both 400.
     assert response.status_code == 400
-    assert "unrelated_param" not in str(response.json["error"])
+    error = str(response.json["error"])
+    assert "metadata" in error, "the real metric's own missing argument must be reported"
+    assert "unrelated_param" not in error, "no parameter from the unrelated class"
 
 
 # With several metric classes, the statically-read signature must agree with the

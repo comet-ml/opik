@@ -267,6 +267,9 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
+# Cap on how many wrapped causes are reported before the frames.
+MAX_CAUSE_CHAIN = 5
+
 def user_facing_stacktrace(skip_frames: int = 1) -> str:
     """Format the current exception with this module's own frames dropped.
 
@@ -280,14 +283,23 @@ def user_facing_stacktrace(skip_frames: int = 1) -> str:
         if tb is None:
             break
         tb = tb.tb_next
-    # Lead with the cause. The caller truncates this message to its first 500
+    # Lead with the causes. The caller truncates this message to its first 500
     # characters and format_exception puts the exception last, so a failure raised a
     # few frames deep would have its cause cut off -- the same empty-cause outcome
     # this helper exists to prevent. Frames follow, and are what gets lost instead.
     # format_exception_only rather than slicing the formatted list: for a
     # SyntaxError the first entry is the offending location, not a header, so
-    # dropping it by position would discard the very line the user needs.
-    cause = "".join(traceback.format_exception_only(exc_type, exc)).rstrip()
+    # dropping it by position would discard the very line the user needs. The
+    # __cause__/__context__ chain is walked so a wrapped error still names its root,
+    # and bounded so a long chain cannot push the frames out on its own.
+    causes = []
+    seen = set()
+    current = exc
+    while current is not None and id(current) not in seen and len(causes) < MAX_CAUSE_CHAIN:
+        seen.add(id(current))
+        causes.append("".join(traceback.format_exception_only(type(current), current)).rstrip())
+        current = current.__cause__ or current.__context__
+    cause = "\ncaused by: ".join(causes)
     frames = "".join(traceback.format_tb(tb)).rstrip()
     return f"{cause}\n{frames}" if frames else cause
 
