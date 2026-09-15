@@ -56,13 +56,6 @@ public interface DatasetItemDAO {
 
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size);
 
-    /**
-     * Keyset page of dataset items joined with their experiment items, for streaming exports. Walks a cursor over
-     * dataset item id instead of paging by offset, so an arbitrarily large experiment streams without ClickHouse
-     * re-scanning everything before the current page on the heavy argMax join.
-     */
-    Flux<DatasetItem> getExperimentItemsForExport(DatasetItemSearchCriteria criteria, int limit, UUID lastRetrievedId);
-
     Mono<DatasetItem> get(UUID id);
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
@@ -437,7 +430,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN :experimentIds
-                <if(lastRetrievedId)>AND dataset_item_id \\< :lastRetrievedId<endif>
                 ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
             	LIMIT 1 BY id
             ), dataset_items_final AS (
@@ -728,11 +720,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             <else>
             ORDER BY id DESC, last_updated_at DESC
             <endif>
-            <if(keyset)>
-            LIMIT :limit
-            <else>
             LIMIT :limit OFFSET :offset
-            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1440,45 +1428,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                                     .just(new DatasetItemPage(items, page, items.size(), total, columns,
                                                             sortingFactory.getSortableFields())));
                         })));
-    }
-
-    @Override
-    @WithSpan
-    public Flux<DatasetItem> getExperimentItemsForExport(@NonNull DatasetItemSearchCriteria criteria, int limit,
-            UUID lastRetrievedId) {
-
-        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
-
-            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_experiment_items_export");
-
-            var template = newFindTemplate(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS, criteria,
-                    "select_experiment_items_export", workspaceId);
-            template = ImageUtils.addTruncateToTemplate(template, false);
-            template = template.add("truncationSize",
-                    configuration.getResponseFormatting().getTruncationSize());
-            template = template.add("keyset", true);
-
-            if (lastRetrievedId != null) {
-                template = template.add("lastRetrievedId", lastRetrievedId);
-            }
-
-            var statement = connection.createStatement(template.render())
-                    .bind("datasetId", criteria.datasetId())
-                    .bind("limit", limit)
-                    .bind("workspace_id", workspaceId)
-                    .bind("experimentIds", criteria.experimentIds().toArray(UUID[]::new))
-                    .bind("entityType", criteria.entityType().getType());
-
-            if (lastRetrievedId != null) {
-                statement = statement.bind("lastRetrievedId", lastRetrievedId);
-            }
-
-            bindSearchCriteria(criteria, statement);
-
-            return Flux.from(statement.execute())
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMap(DatasetItemResultMapper::mapItem);
-        }));
     }
 
     private Mono<Long> getCount(DatasetItemSearchCriteria datasetItemSearchCriteria) {

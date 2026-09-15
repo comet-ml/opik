@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.Visibility;
 import com.comet.opik.domain.CsvExportProcessor;
 import com.comet.opik.domain.ExportJobService;
 import com.comet.opik.domain.ExportMessage;
@@ -86,6 +87,7 @@ public class ExportJobSubscriber extends BaseRedisSubscriber<ExportMessage> {
                 })
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                        .put(RequestContext.VISIBILITY, Visibility.PRIVATE)
                         .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER)); // System user for async processing
     }
 

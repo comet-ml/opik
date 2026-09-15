@@ -1,4 +1,5 @@
 import React, { useCallback } from "react";
+import { Download, Loader2 } from "lucide-react";
 import get from "lodash/get";
 import slugify from "slugify";
 import uniq from "lodash/uniq";
@@ -6,6 +7,14 @@ import first from "lodash/first";
 
 import EvaluateExperimentTracesButton from "@/v2/pages/CompareExperimentsPage/EvaluateExperimentTracesButton/EvaluateExperimentTracesButton";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { Button } from "@/ui/button";
+import { useToast } from "@/ui/use-toast";
+import useStartExperimentItemsExportMutation from "@/api/datasets/useStartExperimentItemsExportMutation";
+import {
+  useAddExportJob,
+  useSetPanelExpanded,
+} from "@/store/DatasetExportStore";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
@@ -96,12 +105,63 @@ type CompareExperimentsActionsPanelProps = {
   getDataForExport?: () => Promise<ExperimentsCompare[]>;
   columnsToExport?: string[];
   experiments?: Experiment[];
+  datasetId?: string;
+  experimentsIds?: string[];
+  hasSelection?: boolean;
 };
 
 const CompareExperimentsActionsPanel: React.FC<
   CompareExperimentsActionsPanelProps
-> = ({ getDataForExport, columnsToExport, experiments }) => {
+> = ({
+  getDataForExport,
+  columnsToExport,
+  experiments,
+  datasetId,
+  experimentsIds = [],
+  hasSelection = false,
+}) => {
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
+  const isExportJobEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DATASET_EXPORT_ENABLED,
+  );
+  const { toast } = useToast();
+  const addExportJob = useAddExportJob();
+  const setPanelExpanded = useSetPanelExpanded();
+  const { mutate: startExport, isPending: isExportStarting } =
+    useStartExperimentItemsExportMutation();
+
+  // A hand-picked selection is bounded by the page, so it exports in the browser straight away. The whole result
+  // set can be arbitrarily large, so it goes through the server-side job when that pipeline is available.
+  const useExportJob =
+    !hasSelection && isExportJobEnabled && Boolean(datasetId);
+
+  const startExportJobHandler = useCallback(() => {
+    if (!datasetId) return;
+
+    startExport(
+      { datasetId, experimentsIds },
+      {
+        onSuccess: (job) => {
+          addExportJob(job, job.resource_name ?? "experiment results");
+          setPanelExpanded(true);
+        },
+        onError: () => {
+          toast({
+            title: "Export failed",
+            description: "Failed to start the export. Please try again.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  }, [
+    datasetId,
+    experimentsIds,
+    startExport,
+    addExportJob,
+    setPanelExpanded,
+    toast,
+  ]);
 
   const singleExperiment =
     experiments?.length === 1 ? experiments[0] : undefined;
@@ -191,19 +251,41 @@ const CompareExperimentsActionsPanel: React.FC<
   return (
     <div className="flex items-center gap-2">
       <EvaluateExperimentTracesButton experiment={singleExperiment} />
-      {columnsToExport && (
-        <ExportToButton
-          buttonSize="icon-2xs"
-          disabled={columnsToExport.length === 0 || !isExportEnabled}
-          getData={mapRowData}
-          generateFileName={generateFileName}
-          tooltipContent={
-            !isExportEnabled
-              ? "Export functionality is disabled for this installation"
-              : undefined
-          }
-        />
-      )}
+      {columnsToExport &&
+        (useExportJob ? (
+          <TooltipWrapper
+            content={
+              isExportEnabled
+                ? "Export all results"
+                : "Export functionality is disabled for this installation"
+            }
+          >
+            <Button
+              variant="outline"
+              size="icon-2xs"
+              onClick={startExportJobHandler}
+              disabled={!isExportEnabled || isExportStarting}
+            >
+              {isExportStarting ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                <Download />
+              )}
+            </Button>
+          </TooltipWrapper>
+        ) : (
+          <ExportToButton
+            buttonSize="icon-2xs"
+            disabled={columnsToExport.length === 0 || !isExportEnabled}
+            getData={mapRowData}
+            generateFileName={generateFileName}
+            tooltipContent={
+              !isExportEnabled
+                ? "Export functionality is disabled for this installation"
+                : undefined
+            }
+          />
+        ))}
     </div>
   );
 };

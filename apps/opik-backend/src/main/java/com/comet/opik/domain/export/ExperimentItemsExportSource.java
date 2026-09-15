@@ -7,8 +7,8 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsExportParams;
 import com.comet.opik.api.ExportParams;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.domain.DatasetItemDAO;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
+import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.utils.JsonUtils;
@@ -28,7 +28,6 @@ import java.util.Map;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Exports the results of one or more experiments over a dataset: one row per dataset item, with each compared
@@ -46,7 +45,7 @@ public class ExperimentItemsExportSource implements ExportSource {
     private static final String DATASET_PREFIX = "dataset.";
     private static final String FEEDBACK_SCORES_PREFIX = "feedback_scores.";
 
-    private final @NonNull DatasetItemDAO datasetItemDao;
+    private final @NonNull DatasetItemService datasetItemService;
     private final @NonNull ExperimentService experimentService;
 
     @Override
@@ -112,26 +111,29 @@ public class ExperimentItemsExportSource implements ExportSource {
                 .versionHashOrTag(null)
                 .build();
 
-        return streamPage(criteria, new AtomicReference<>(), batchSize);
+        return streamPage(criteria, 1, batchSize);
     }
 
-    private Flux<DatasetItem> streamPage(DatasetItemSearchCriteria criteria, AtomicReference<UUID> cursor,
-            int batchSize) {
-        return Flux.defer(() -> datasetItemDao.getExperimentItemsForExport(criteria, batchSize, cursor.get())
-                .collectList()
-                .flatMapMany(items -> {
-                    if (items.isEmpty()) {
+    /**
+     * Pages through the service rather than a DAO. The service owns dataset-version resolution — with versioning on,
+     * experiment items are joined against versioned dataset items, and querying the draft table directly returns rows
+     * whose {@code data} is empty. Going through the service keeps the export identical to what the table shows.
+     */
+    private Flux<DatasetItem> streamPage(DatasetItemSearchCriteria criteria, int page, int batchSize) {
+        return Flux.defer(() -> datasetItemService.getItems(page, batchSize, criteria)
+                .flatMapMany(result -> {
+                    List<DatasetItem> items = result.content();
+
+                    if (items == null || items.isEmpty()) {
                         return Flux.empty();
                     }
 
-                    cursor.set(items.getLast().id());
-
-                    Flux<DatasetItem> page = Flux.fromIterable(items);
+                    Flux<DatasetItem> current = Flux.fromIterable(items);
 
                     // A full page means there may be more; a partial page is the last one.
                     return items.size() == batchSize
-                            ? page.concatWith(streamPage(criteria, cursor, batchSize))
-                            : page;
+                            ? current.concatWith(streamPage(criteria, page + 1, batchSize))
+                            : current;
                 }));
     }
 
