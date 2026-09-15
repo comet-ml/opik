@@ -91,23 +91,6 @@ const useExperimentItemsData = ({
     },
   );
 
-  const { refetch: refetchAllItemsForExport } = useCompareExperimentsList(
-    {
-      workspaceName,
-      datasetId,
-      experimentsIds,
-      filters,
-      sorting,
-      search,
-      truncate: false,
-      page: 1,
-      size: total || 1,
-    },
-    {
-      enabled: false,
-    },
-  );
-
   const sortableColumns = useMemo(
     () => data?.sortable_by ?? [],
     [data?.sortable_by],
@@ -220,7 +203,6 @@ const useExperimentItemsData = ({
     isFetching,
     isPlaceholderData,
     refetchExportData,
-    refetchAllItemsForExport,
   };
 };
 

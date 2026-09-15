@@ -108,6 +108,8 @@ type CompareExperimentsActionsPanelProps = {
   datasetId?: string;
   experimentsIds?: string[];
   hasSelection?: boolean;
+  selectedCount?: number;
+  totalRows?: number;
 };
 
 const CompareExperimentsActionsPanel: React.FC<
@@ -119,6 +121,8 @@ const CompareExperimentsActionsPanel: React.FC<
   datasetId,
   experimentsIds = [],
   hasSelection = false,
+  selectedCount = 0,
+  totalRows = 0,
 }) => {
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
   const isExportJobEnabled = useIsFeatureEnabled(
@@ -130,10 +134,11 @@ const CompareExperimentsActionsPanel: React.FC<
   const { mutate: startExport, isPending: isExportStarting } =
     useStartExperimentItemsExportMutation();
 
-  // A hand-picked selection is bounded by the page, so it exports in the browser straight away. The whole result
-  // set can be arbitrarily large, so it goes through the server-side job when that pipeline is available.
-  const useExportJob =
-    !hasSelection && isExportJobEnabled && Boolean(datasetId);
+  // A hand-picked selection is bounded by what fits on a page, so it serialises in the browser straight away.
+  // The whole result set has no such bound, so it always goes through the server-side job — exporting it in the
+  // browser is exactly what falls over on a large experiment.
+  const isExportAll = !hasSelection;
+  const canExportAll = isExportJobEnabled && Boolean(datasetId);
 
   const startExportJobHandler = useCallback(() => {
     if (!datasetId) return;
@@ -162,6 +167,21 @@ const CompareExperimentsActionsPanel: React.FC<
     setPanelExpanded,
     toast,
   ]);
+
+  const exportAllDisabled =
+    !isExportEnabled || !canExportAll || isExportStarting;
+
+  const exportAllTooltip = !isExportEnabled
+    ? "Export functionality is disabled for this installation"
+    : !canExportAll
+      ? "Bulk export is disabled for this installation. Select rows to export them directly."
+      : totalRows
+        ? `Export all ${totalRows.toLocaleString()} rows as CSV`
+        : "Export all rows as CSV";
+
+  const selectedCountLabel = selectedCount
+    ? `${selectedCount.toLocaleString()} selected`
+    : undefined;
 
   const singleExperiment =
     experiments?.length === 1 ? experiments[0] : undefined;
@@ -252,26 +272,28 @@ const CompareExperimentsActionsPanel: React.FC<
     <div className="flex items-center gap-2">
       <EvaluateExperimentTracesButton experiment={singleExperiment} />
       {columnsToExport &&
-        (useExportJob ? (
-          <TooltipWrapper
-            content={
-              isExportEnabled
-                ? "Export all results"
-                : "Export functionality is disabled for this installation"
-            }
-          >
-            <Button
-              variant="outline"
-              size="icon-2xs"
-              onClick={startExportJobHandler}
-              disabled={!isExportEnabled || isExportStarting}
+        (isExportAll ? (
+          <TooltipWrapper content={exportAllTooltip}>
+            <span
+              className={
+                exportAllDisabled
+                  ? "inline-block cursor-not-allowed"
+                  : undefined
+              }
             >
-              {isExportStarting ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <Download />
-              )}
-            </Button>
+              <Button
+                variant="outline"
+                size="icon-2xs"
+                onClick={startExportJobHandler}
+                disabled={exportAllDisabled}
+              >
+                {isExportStarting ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <Download />
+                )}
+              </Button>
+            </span>
           </TooltipWrapper>
         ) : (
           <ExportToButton
@@ -279,6 +301,7 @@ const CompareExperimentsActionsPanel: React.FC<
             disabled={columnsToExport.length === 0 || !isExportEnabled}
             getData={mapRowData}
             generateFileName={generateFileName}
+            menuLabel={selectedCountLabel}
             tooltipContent={
               !isExportEnabled
                 ? "Export functionality is disabled for this installation"
