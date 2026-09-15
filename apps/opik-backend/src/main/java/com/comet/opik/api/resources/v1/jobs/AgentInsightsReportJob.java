@@ -33,6 +33,9 @@ import static com.comet.opik.infrastructure.lock.LockService.Lock;
  * from {@code agentInsightsReport.schedule}, so it is env-configurable. A distributed lock guarantees a
  * single replica runs the sweep per day, so no extra once-per-day guard is needed. Mirrors
  * {@code OllieDailyReportJob} (distributed lock + per-item failure isolation).
+ * <p>
+ * Projects that have never had a diagnostic run — no job row exists for them — get their first one from
+ * {@link AgentInsightsAutoFirstRunJob} instead.
  */
 @Slf4j
 @Singleton

@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AgentInsightsEnrollment;
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.api.AgentInsightsReport;
 import com.comet.opik.api.ReportFailure;
@@ -20,8 +21,10 @@ import com.comet.opik.api.resources.utils.resources.AgentInsightsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.ReportFailureResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.v1.jobs.AgentInsightsAutoFirstRunJob;
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
 import com.comet.opik.domain.AgentInsightsReportClient;
+import com.comet.opik.domain.AgentInsightsTriggerException;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -50,8 +53,11 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -81,9 +87,16 @@ class AgentInsightsJobsResourceTest {
 
     // Recording client bound in place of the platform default, to capture triggers fired via the queue.
     private static final List<Trigger> TRIGGERS = new CopyOnWriteArrayList<>();
+    // Projects the platform should reject for a spent free-run budget, as the real 402 + error_code would.
+    private static final Set<UUID> FREE_POOL_EXHAUSTED_PROJECTS = ConcurrentHashMap.newKeySet();
     private static final AgentInsightsReportClient RECORDING_CLIENT = (reportId, projectId, workspaceId,
-            periodStart, periodEnd, triggerSource) -> TRIGGERS.add(
-                    new Trigger(projectId, workspaceId, periodStart, periodEnd, triggerSource));
+            periodStart, periodEnd, triggerSource) -> {
+        if (FREE_POOL_EXHAUSTED_PROJECTS.contains(projectId)) {
+            throw new AgentInsightsTriggerException(AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED,
+                    "Free diagnostics budget exhausted");
+        }
+        TRIGGERS.add(new Trigger(projectId, workspaceId, periodStart, periodEnd, triggerSource));
+    };
 
     // Full stack: creating projects via the API exercises ClickHouse, so analytics containers are required.
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -139,6 +152,7 @@ class AgentInsightsJobsResourceTest {
     private AgentInsightsResourceClient insightsClient;
     private ReportFailureResourceClient reportFailuresClient;
     private AgentInsightsReportJob reportJob;
+    private AgentInsightsAutoFirstRunJob autoFirstRunJob;
 
     @BeforeAll
     void beforeAll(ClientSupport client, Injector injector) {
@@ -151,6 +165,7 @@ class AgentInsightsJobsResourceTest {
         this.insightsClient = new AgentInsightsResourceClient(client);
         this.reportFailuresClient = new ReportFailureResourceClient(client);
         this.reportJob = injector.getInstance(AgentInsightsReportJob.class);
+        this.autoFirstRunJob = injector.getInstance(AgentInsightsAutoFirstRunJob.class);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_2, WORKSPACE_NAME_2, WORKSPACE_ID_2, USER_2);
@@ -166,6 +181,80 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
+    @DisplayName("Enrolment creates a job row for a project that has none, enrolled and disabled")
+    void enrol__createsRowForProjectWithoutJob() {
+        var projectId = createProject();
+
+        try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            var result = response.readEntity(AgentInsightsEnrollment.Response.class);
+            assertThat(result.enrolled()).isEqualTo(1);
+            assertThat(result.unknownProjectIds()).isEmpty();
+            assertThat(result.alreadyRunProjectIds()).isEmpty();
+        }
+
+        try (var created = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            var job = created.readEntity(AgentInsightsJob.class);
+            assertThat(job.autoFirstRunEnrolled()).isTrue();
+            assertThat(job.autoFirstRunAt()).isNull();
+            // Enrolment must not switch the daily schedule on.
+            assertThat(job.status()).isEqualTo(AgentInsightsJob.Status.DISABLED);
+        }
+    }
+
+    @Test
+    @DisplayName("Enrolment flags an existing job row without disturbing its status")
+    void enrol__flagsExistingRow() {
+        var projectId = createProject();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+        jobsClient.update(projectId, AgentInsightsJob.Status.ENABLED, API_KEY, WORKSPACE_NAME).close();
+
+        try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId))) {
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class).enrolled()).isEqualTo(1);
+        }
+
+        try (var updated = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            var job = updated.readEntity(AgentInsightsJob.class);
+            assertThat(job.autoFirstRunEnrolled()).isTrue();
+            assertThat(job.status()).isEqualTo(AgentInsightsJob.Status.ENABLED);
+        }
+    }
+
+    @Test
+    @DisplayName("Enrolment is idempotent and reports ids that match no project")
+    void enrol__isIdempotentAndReportsUnknownProjects() {
+        var projectId = createProject();
+        var unknownProjectId = UUID.randomUUID();
+
+        jobsClient.enrolInAutoFirstRun(true, List.of(projectId)).close();
+
+        try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId, unknownProjectId))) {
+            var result = response.readEntity(AgentInsightsEnrollment.Response.class);
+            assertThat(result.unknownProjectIds()).containsExactly(unknownProjectId);
+            assertThat(result.alreadyRunProjectIds()).isEmpty();
+        }
+
+        try (var job = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(job.readEntity(AgentInsightsJob.class).autoFirstRunEnrolled()).isTrue();
+        }
+    }
+
+    @Test
+    @DisplayName("Enrolling with false clears enrolment")
+    void enrol__falseClears() {
+        var projectId = createProject();
+        jobsClient.enrolInAutoFirstRun(true, List.of(projectId)).close();
+
+        try (var response = jobsClient.enrolInAutoFirstRun(false, List.of(projectId))) {
+            assertThat(response.readEntity(AgentInsightsEnrollment.Response.class).cleared()).isEqualTo(1);
+        }
+
+        try (var job = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(job.readEntity(AgentInsightsJob.class).autoFirstRunEnrolled()).isFalse();
+        }
+    }
+
+    @Test
     @DisplayName("Create makes the job (201); creating again returns 409")
     void create__firstThenConflict() {
         var projectId = createProject();
@@ -175,7 +264,7 @@ class AgentInsightsJobsResourceTest {
             var job = first.readEntity(AgentInsightsJob.class);
             assertThat(job.id()).isNotNull();
             assertThat(job.projectId()).isEqualTo(projectId);
-            assertThat(job.status()).isEqualTo(AgentInsightsJob.Status.ENABLED);
+            assertThat(job.status()).isEqualTo(AgentInsightsJob.Status.DISABLED);
             // Audit columns are populated from the auth context / DB defaults.
             assertThat(job.createdBy()).isEqualTo(USER);
             assertThat(job.lastUpdatedBy()).isEqualTo(USER);
@@ -212,7 +301,7 @@ class AgentInsightsJobsResourceTest {
             assertThat(present.getStatus()).isEqualTo(HttpStatus.SC_OK);
             var job = present.readEntity(AgentInsightsJob.class);
             assertThat(job.projectId()).isEqualTo(projectId);
-            assertThat(job.status()).isEqualTo(AgentInsightsJob.Status.ENABLED);
+            assertThat(job.status()).isEqualTo(AgentInsightsJob.Status.DISABLED);
         }
     }
 
@@ -350,6 +439,170 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
+    @DisplayName("Auto-first-run sweep runs an enrolled project past the threshold, once")
+    void autoFirstRunSweep__runsEnrolledProjectOverThreshold() {
+        String projectName = "project-" + UUID.randomUUID();
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        jobsClient.enrolInAutoFirstRun(true, List.of(projectId)).close();
+
+        // The sweep only picks up projects past MIN_TRACES within its window.
+        var traces = IntStream.range(0, AgentInsightsAutoFirstRunJob.MIN_TRACES)
+                .mapToObj(__ -> podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .build())
+                .toList();
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+        // Exercises the real chain: findAwaitingFirstRun (MySQL) -> min-traces count (ClickHouse, tuple-IN)
+        // -> publish (Redis) -> subscriber -> recording client.
+        autoFirstRunJob.runSweep(Instant.now(), 10).block();
+
+        await().atMost(10, SECONDS).untilAsserted(() -> assertThat(
+                TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).hasSize(1));
+        assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).findFirst().orElseThrow()
+                .triggerSource()).isEqualTo("auto_first_run");
+
+        // Stamped at enqueue, which is what drops the project out of the candidate set.
+        try (var afterRun = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(afterRun.readEntity(AgentInsightsJob.class).autoFirstRunAt()).isNotNull();
+        }
+
+        // A second sweep must not run it again.
+        autoFirstRunJob.runSweep(Instant.now(), 10).block();
+        assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).hasSize(1);
+
+        // And re-enrolling reports it rather than relabelling it.
+        try (var response = jobsClient.enrolInAutoFirstRun(true, List.of(projectId))) {
+            var result = response.readEntity(AgentInsightsEnrollment.Response.class);
+            assertThat(result.alreadyRunProjectIds()).containsExactly(projectId);
+            assertThat(result.enrolled()).isZero();
+        }
+    }
+
+    @Test
+    @DisplayName("A spent free-run budget cancels the rollout instead of failing the project that hit it")
+    void autoFirstRunSweep__freePoolExhausted__cancelsRollout() {
+        String projectName = "project-" + UUID.randomUUID();
+        var runningProjectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var waitingProjectId = createProject();
+        jobsClient.enrolInAutoFirstRun(true, List.of(runningProjectId, waitingProjectId)).close();
+        FREE_POOL_EXHAUSTED_PROJECTS.add(runningProjectId);
+
+        // Only the first project is past the threshold, so it is the one that probes the budget.
+        var traces = IntStream.range(0, AgentInsightsAutoFirstRunJob.MIN_TRACES)
+                .mapToObj(__ -> podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .build())
+                .toList();
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+        autoFirstRunJob.runSweep(Instant.now(), 10).block();
+
+        // The project that hit the limit is unwound: no enqueue stamp left to read as a run in flight, and
+        // no failure recorded against it — it did nothing wrong.
+        await().atMost(10, SECONDS).untilAsserted(() -> {
+            try (var response = jobsClient.get(runningProjectId, API_KEY, WORKSPACE_NAME)) {
+                var job = response.readEntity(AgentInsightsJob.class);
+                assertThat(job.autoFirstRunEnrolled()).isFalse();
+                assertThat(job.autoFirstRunAt()).isNull();
+                assertThat(job.lastFailureReason()).isNull();
+            }
+        });
+
+        // And everyone else still owed a run is unenrolled, without having to probe the budget themselves.
+        try (var response = jobsClient.get(waitingProjectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.readEntity(AgentInsightsJob.class).autoFirstRunEnrolled()).isFalse();
+        }
+
+        // A later sweep has nothing left to run.
+        autoFirstRunJob.runSweep(Instant.now(), 10).block();
+        assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(runningProjectId)).toList()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("When the free-run budget runs out mid-batch, every rejected project is unwound, not just the first")
+    void autoFirstRunSweep__freePoolExhaustedForSeveralInOneSweep__unwindsEveryRejectedProject() {
+        // The sweep enqueues several projects at once and stamps each before publishing, so when the budget is
+        // already gone they are all rejected together. The first rejection cancels the rollout for everyone;
+        // the ones after it must still clear their own stamp, or they read as already run forever.
+        var rejectedProjectIds = IntStream.range(0, 3)
+                .mapToObj(__ -> {
+                    String projectName = "project-" + UUID.randomUUID();
+                    var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+                    var traces = IntStream.range(0, AgentInsightsAutoFirstRunJob.MIN_TRACES)
+                            .mapToObj(___ -> podamFactory.manufacturePojo(Trace.class).toBuilder()
+                                    .projectName(projectName)
+                                    .build())
+                            .toList();
+                    traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+                    FREE_POOL_EXHAUSTED_PROJECTS.add(projectId);
+                    return projectId;
+                })
+                .toList();
+        jobsClient.enrolInAutoFirstRun(true, rejectedProjectIds).close();
+
+        autoFirstRunJob.runSweep(Instant.now(), 10).block();
+
+        await().atMost(10, SECONDS).untilAsserted(() -> rejectedProjectIds.forEach(projectId -> {
+            try (var response = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+                var job = response.readEntity(AgentInsightsJob.class);
+                assertThat(job.autoFirstRunEnrolled()).as("enrolled for %s", projectId).isFalse();
+                assertThat(job.autoFirstRunAt()).as("enqueue stamp for %s", projectId).isNull();
+            }
+        }));
+    }
+
+    @Test
+    @DisplayName("Auto-first-run sweep ignores a project that is not enrolled")
+    void autoFirstRunSweep__ignoresProjectNotEnrolled() {
+        String projectName = "project-" + UUID.randomUUID();
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var traces = IntStream.range(0, AgentInsightsAutoFirstRunJob.MIN_TRACES)
+                .mapToObj(__ -> podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .build())
+                .toList();
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+        autoFirstRunJob.runSweep(Instant.now(), 10).block();
+
+        assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Running out of credits switches the daily schedule off")
+    void runFailure__outOfCredits__disablesSchedule() {
+        var projectId = createProject();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+        jobsClient.update(projectId, AgentInsightsJob.Status.ENABLED, API_KEY, WORKSPACE_NAME).close();
+
+        reportFailuresClient.create(agentInsightsFailure(projectId, "out_of_credits", "402: insufficient credits"),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+
+        try (var response = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.readEntity(AgentInsightsJob.class).status())
+                    .isEqualTo(AgentInsightsJob.Status.DISABLED);
+        }
+    }
+
+    @Test
+    @DisplayName("A failure for any other reason leaves the schedule alone")
+    void runFailure__otherReason__keepsSchedule() {
+        var projectId = createProject();
+        jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+        jobsClient.update(projectId, AgentInsightsJob.Status.ENABLED, API_KEY, WORKSPACE_NAME).close();
+
+        reportFailuresClient.create(agentInsightsFailure(projectId, "did_not_start", "trigger never landed"),
+                API_KEY, WORKSPACE_NAME, HttpStatus.SC_CREATED);
+
+        try (var response = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(response.readEntity(AgentInsightsJob.class).status())
+                    .isEqualTo(AgentInsightsJob.Status.ENABLED);
+        }
+    }
+
+    @Test
     @DisplayName("Failures accumulate as history; the job surfaces the most recent one")
     void runFailure__multipleFailures__latestSurfaced() {
         var projectId = createProject();
@@ -425,6 +678,8 @@ class AgentInsightsJobsResourceTest {
         String projectName = "project-" + UUID.randomUUID();
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         jobsClient.create(projectId, API_KEY, WORKSPACE_NAME).close();
+        // Jobs are created disabled, and the sweep only reads enabled ones, so opt in explicitly.
+        jobsClient.update(projectId, AgentInsightsJob.Status.ENABLED, API_KEY, WORKSPACE_NAME).close();
 
         // Seed a trace so the sweep's trace gate passes for this project.
         var trace = podamFactory.manufacturePojo(Trace.class).toBuilder().projectName(projectName).build();
