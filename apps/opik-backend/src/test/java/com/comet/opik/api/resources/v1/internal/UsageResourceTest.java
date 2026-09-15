@@ -488,17 +488,15 @@ class UsageResourceTest {
         }
 
         /**
-         * The known limit of the fold, pinned rather than left undefined. {@code BULK_INSERT} binds the project the
-         * request asked for without reading the stored row, so a client reusing an id across two project names
-         * writes two rows, and the fold counts it once per project. That is the value the per-project breakdown has
-         * always reported — its query has always grouped by project — so the three consumers agree here; before the
-         * fold the workspace and BI totals said one while the breakdown said two. Counting it once instead would
-         * mean deduplicating inside the usage queries, which exist to stay cheap and constant, so the behaviour is
-         * documented on {@code DemoDataExclusionUtils} rather than changed. Assert the breakdown alongside the
-         * count: they agreeing is the property worth keeping if this is ever revisited.
+         * An id reused across projects is two entities, not one counted twice: {@code project_id} is in the sorting
+         * key, so it is part of the identity {@code ReplacingMergeTree} deduplicates on. {@code BULK_INSERT} is the
+         * path that can produce it, binding the project the request asked for without reading the stored row. The
+         * count and the breakdown are asserted together because the two agreeing is the point — the breakdown has
+         * always grouped by project and reported two, and the workspace-grouped count this fold replaced collapsed
+         * on id alone and reported one.
          */
         @Test
-        void spansCountCountsABatchDuplicatedIdOncePerProject() {
+        void spansCountIncludesABatchDuplicatedIdOncePerProject() {
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = "apiKey-" + UUID.randomUUID();
             var workspaceName = "test-workspace-" + UUID.randomUUID();
@@ -605,11 +603,11 @@ class UsageResourceTest {
         }
 
         /**
-         * The single-span write paths keep an id in one project, which is what makes summing per-project counts
-         * equal the distinct-id total the workspace-grouped query used to return. A create is ignored, the span
-         * already existing, and a patch is refused by the 40-character sentinel {@code SpanDAO.PARTIAL_INSERT}
-         * writes into a {@code FixedString(36)} when the stored project differs. The batch path does not enforce
-         * this — see {@link #spansCountCountsABatchDuplicatedIdOncePerProject()}.
+         * The single-span write paths keep an id in one project, so for everything written through them the
+         * per-project counts sum to the distinct-id total the workspace-grouped query used to return. A create is
+         * ignored, the span already existing, and a patch is refused by the 40-character sentinel
+         * {@code SpanDAO.PARTIAL_INSERT} writes into a {@code FixedString(36)} when the stored project differs.
+         * {@link #spansCountIncludesABatchDuplicatedIdOncePerProject()} covers the path that does not.
          */
         @Test
         void spansCountIncludesEachSpanOnceOnTheSingleSpanWritePaths() {

@@ -25,18 +25,17 @@ import java.util.stream.Collectors;
  * <p>The usage queries therefore {@code GROUP BY project_id} and the exclusion is applied here, which keeps the
  * query text constant however many demo projects exist.
  *
- * <p>Aggregating after the exclusion matches the totals a workspace- or user-grouped query returns for every id
- * that belongs to one project, which the single-entity write paths enforce: presenting an existing id under another
- * project is a conflict, not a move.
+ * <p>Aggregating after the exclusion counts an entity once per project, which is what these tables mean by one
+ * entity: {@code project_id} is part of the sorting key of both {@code traces} and {@code spans}, so it is part of
+ * the identity {@code ReplacingMergeTree} deduplicates on. Two rows sharing an id under different projects are two
+ * distinct rows to the engine, not one row stored twice, and billing counts both.
  *
- * <p><b>The batch write path does not enforce it.</b> {@code BULK_INSERT} is a plain {@code VALUES} insert that
- * binds the project the request asked for without reading the stored row, so a client reusing an id across two
- * project names writes two rows. {@code project_id} is part of the sorting key of both {@code traces} and
- * {@code spans}, so those rows have different sort keys, survive deduplication, and are counted once per project
- * here. That is the same value the per-project usage breakdown has always reported — its query has always grouped
- * by project — so the folds make the workspace and BI totals agree with it rather than introducing a number of
- * their own. Counting such an id once instead would mean deduplicating inside the usage queries, which are the
- * queries this whole design exists to keep cheap and constant, so it is deliberately not done here.
+ * <p>Reaching that state takes a reused id: the single-entity write paths reject an existing id presented under
+ * another project, while {@code BULK_INSERT} binds the project the request asked for without reading the stored
+ * row. Either way the per-project usage breakdown has always reported such an id once per project, its query
+ * having always grouped by project. What the folds change is that the workspace and BI totals now agree with it,
+ * where the workspace-grouped {@code COUNT(DISTINCT id)} they replaced collapsed on {@code id} alone — a column
+ * that is not the identity — and so under-counted.
  *
  * <p>The folds are insertion-ordered, so the result keeps the order the query returned its rows in.
  */
