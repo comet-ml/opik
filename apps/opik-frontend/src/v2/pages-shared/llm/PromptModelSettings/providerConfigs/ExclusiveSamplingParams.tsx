@@ -42,9 +42,11 @@ const ExclusiveSamplingParams = ({
 }: ExclusiveSamplingParamsProps) => {
   const topPLive = !isNil(topP) && offerChoice;
   // The resolver settles which half is live, and yields neither when the config carries neither.
-  // Rendering a slider on its default in that case would claim a value the request omits, which is
-  // the defect this control exists to prevent.
+  // In that state the choice is offered with nothing selected: a slider would show a default the
+  // request omits, and showing nothing at all would leave the model with no way to set either.
+  // Picking a half writes it; until then nothing is claimed and nothing is sent.
   const hasLiveHalf = !isNil(temperature) || !isNil(topP);
+  const selected = topPLive ? "topP" : hasLiveHalf ? "temperature" : "";
 
   const handleTemperatureChange = useCallback(
     (v: number) => onChange({ temperature: v, topP: undefined }),
@@ -67,7 +69,8 @@ const ExclusiveSamplingParams = ({
     [onChange, temperatureDefault, topPDefault],
   );
 
-  if (!hasLiveHalf) {
+  // Without a choice to offer there is nothing to show but an invented default.
+  if (!offerChoice && !hasLiveHalf) {
     return null;
   }
 
@@ -82,7 +85,7 @@ const ExclusiveSamplingParams = ({
           <ToggleGroup
             type="single"
             variant="secondary"
-            value={topPLive ? "topP" : "temperature"}
+            value={selected}
             onValueChange={handleChoiceChange}
             className="w-full"
           >
@@ -95,35 +98,36 @@ const ExclusiveSamplingParams = ({
           </ToggleGroup>
         </>
       )}
-      {topPLive ? (
-        <SliderInputControl
-          value={topP}
-          onChange={handleTopPChange}
-          id="topP"
-          min={0}
-          max={1}
-          step={0.01}
-          defaultValue={topPDefault}
-          label="Top P"
-          tooltip={
-            <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered." />
-          }
-        />
-      ) : (
-        <SliderInputControl
-          value={temperature}
-          onChange={handleTemperatureChange}
-          id="temperature"
-          min={temperatureMin}
-          max={1}
-          step={0.01}
-          defaultValue={temperatureDefault}
-          label="Temperature"
-          tooltip={
-            <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
-          }
-        />
-      )}
+      {hasLiveHalf &&
+        (topPLive ? (
+          <SliderInputControl
+            value={topP}
+            onChange={handleTopPChange}
+            id="topP"
+            min={0}
+            max={1}
+            step={0.01}
+            defaultValue={topPDefault}
+            label="Top P"
+            tooltip={
+              <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered." />
+            }
+          />
+        ) : (
+          <SliderInputControl
+            value={temperature}
+            onChange={handleTemperatureChange}
+            id="temperature"
+            min={temperatureMin}
+            max={1}
+            step={0.01}
+            defaultValue={temperatureDefault}
+            label="Temperature"
+            tooltip={
+              <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
+            }
+          />
+        ))}
     </div>
   );
 };

@@ -94,7 +94,7 @@ describe("a Claude config that carries neither half", () => {
   // Only the Anthropic provider restores a default when a config carries neither half. A Claude
   // model reached another way resolves to neither, and the request then carries neither — so
   // rendering a slider on its default would claim a value that never leaves.
-  it("shows no sampling control rather than a default the request drops", () => {
+  it("offers the choice unselected, with no slider claiming a value", () => {
     renderPanel(
       <CustomModelConfigs
         configs={{ maxCompletionTokens: 4000 } as LLMCustomConfigsType}
@@ -103,9 +103,27 @@ describe("a Claude config that carries neither half", () => {
       />,
     );
 
-    expect(screen.queryByText("Sampling")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: "Temperature" }),
+    ).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Top P" })).not.toBeChecked();
     expect(screen.queryByTestId("temperature-input")).not.toBeInTheDocument();
     expect(screen.queryByTestId("topP-input")).not.toBeInTheDocument();
+  });
+
+  it("lets the user pick a half from that state", () => {
+    const onChange = vi.fn();
+    renderPanel(
+      <CustomModelConfigs
+        configs={{ maxCompletionTokens: 4000 } as LLMCustomConfigsType}
+        model={"custom-llm/gw/claude-opus-4-6" as PROVIDER_MODEL_TYPE}
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Temperature" }));
+
+    expect(onChange).toHaveBeenCalledWith({ temperature: 0, topP: undefined });
   });
 
   it("still shows the half the config does carry", () => {
