@@ -435,6 +435,7 @@ areas:
     routes: ["/projects/$projectId/playground"]
     spec_dir: playground
     specs:
+      - playground/playground-claude-sampling-any-provider.spec.ts
       - playground/playground-providers.spec.ts
       - playground/playground-smoke.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
@@ -458,10 +459,16 @@ areas:
       # POST /v1/private/chat/completions body in both positions.
       #
       # Still uncovered here: the OpenAI / Gemini / Vertex / OpenRouter panels, max output
-      # tokens, throttling, max concurrent requests, thinking effort, a Claude that takes
-      # NEITHER sampling parameter, and whether a persisted prompt re-hydrates its settings
-      # on reload.
-      configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs — Custom LLM only (playground-claude-sampling-any-provider.spec.ts): a Claude and a non-Claude model on ONE custom gateway, asserting the exclusive sampling choice follows the model rather than the provider, and that the chosen half is what the outbound chat/completions body carries — top_p with no temperature, and temperature with no top_p. Other providers' panels, the token/throttling/concurrency sliders, thinking effort, and settings surviving a prompt reload are all still uncovered" }
+      # tokens, throttling, max concurrent requests, a Claude that takes NEITHER sampling
+      # parameter, and whether a persisted prompt re-hydrates its settings on reload.
+      #
+      # MERGE NOTE: main gained a second half of this entry after this branch forked —
+      # playground-model-parameters.spec.ts (#8312), which covers the ANTHROPIC panel's
+      # sampling pair and Thinking effort. Both halves are real coverage. Union the two
+      # notes rather than taking a side: keeping only this one erases the Anthropic panel
+      # and Thinking effort from the record, and keeping only main's erases the Custom LLM
+      # gateway. Neither spec can see what the other asserts.
+      configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs — Custom LLM only (playground-claude-sampling-any-provider.spec.ts): a Claude and a non-Claude model on ONE custom gateway, asserting the exclusive sampling choice follows the model rather than the provider, and that the chosen half is what the outbound chat/completions body carries — top_p with no temperature, and temperature with no top_p. Other providers' panels, the token/throttling/concurrency sliders, and settings surviving a prompt reload are all still uncovered" }
 
     visual:
       playground-default: { covered: false, state: default }

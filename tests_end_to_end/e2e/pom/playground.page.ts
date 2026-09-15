@@ -537,38 +537,6 @@ export class PlaygroundPage {
     });
   }
 
-  /**
-   * Whether the model picker offers a model, by display name. Leaves the picker
-   * closed either way.
-   *
-   * The option list comes from the deployment's own model registry and from the
-   * provider keys configured on the workspace, so a model this suite names may
-   * simply not be there. Probing lets a spec skip on that rather than spend
-   * `setModelForVariant`'s retry budget failing to click an option that will
-   * never appear.
-   */
-  async isModelOffered(index: number, modelDisplayName: string): Promise<boolean> {
-    return test.step(`check whether "${modelDisplayName}" is offered`, async () => {
-      const listbox = this.page.getByRole('listbox');
-      await expect(async () => {
-        await this.modelPicker(index).click();
-        await expect(listbox).toBeVisible({ timeout: 2_000 });
-      }).toPass({ timeout: 15_000 });
-
-      await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
-      const offered = await listbox
-        .getByRole('option', { name: modelDisplayName, exact: true })
-        .first()
-        .waitFor({ state: 'visible', timeout: 5_000 })
-        .then(() => true)
-        .catch(() => false);
-
-      await this.page.keyboard.press('Escape');
-      await expect(listbox).toBeHidden();
-      return offered;
-    });
-  }
-
   /** Open a variant's model-parameters popover and wait for it to render. */
   async openModelParameters(index: number): Promise<void> {
     return test.step(`open model parameters for variant ${index}`, async () => {
@@ -628,20 +596,6 @@ export class PlaygroundPage {
    */
   sliderInput(controlId: string): Locator {
     return this.page.getByTestId(`${controlId}-input`);
-  }
-
-  /** The Thinking effort dropdown. Its text is the effort the panel claims. */
-  thinkingEffortSelect(): Locator {
-    return this.modelParametersPanel().getByLabel('Thinking effort');
-  }
-
-  /** Pick a Thinking effort by its displayed label. */
-  async selectThinkingEffort(label: string): Promise<void> {
-    return test.step(`select thinking effort "${label}"`, async () => {
-      await this.thinkingEffortSelect().click();
-      await this.page.getByRole('option', { name: label, exact: true }).click();
-      await expect(this.thinkingEffortSelect()).toHaveText(label);
-    });
   }
 
   /** Type a prompt into variant 0's first message row. */
