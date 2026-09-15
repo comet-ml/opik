@@ -84,7 +84,7 @@ public class AgentInsightsJobsResource {
 
     @POST
     @Path("/{projectId}/trigger")
-    @Operation(operationId = "triggerAgentInsightsJob", summary = "Trigger Agent Insights job", description = "Triggers an immediate report run for an existing job (over the last 24h). Fire-and-forget; returns 202. 404 if none exists.", responses = {
+    @Operation(operationId = "triggerAgentInsightsJob", summary = "Trigger Agent Insights job", description = "Triggers an immediate report run for an existing job (over the last 7 days). Fire-and-forget; returns 202. 404 if none exists.", responses = {
             @ApiResponse(responseCode = "202", description = "Run accepted"),
             @ApiResponse(responseCode = "404", description = "Job not found")
     })

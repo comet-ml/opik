@@ -1,3 +1,5 @@
+import useAppStore from "@/store/AppStore";
+
 const EVENT_PREFIX = "opik_";
 
 export const OpikEvent = {
@@ -57,9 +59,8 @@ export const trackEvent = (
 
     const environment =
       window.environmentVariablesOverwrite?.OPIK_ANALYTICS_ENVIRONMENT;
-    const enrichedProperties = environment
-      ? { ...properties, environment }
-      : properties;
+    const workspace = useAppStore.getState().activeWorkspaceName || undefined;
+    const enrichedProperties = { ...properties, workspace, environment };
 
     window.analytics.track(prefixedEvent, enrichedProperties);
   } catch {

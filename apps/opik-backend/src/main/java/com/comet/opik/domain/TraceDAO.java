@@ -137,6 +137,9 @@ public interface TraceDAO {
     Mono<Set<UUID>> getProjectsWithTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs, Instant from,
             Instant to, Connection connection);
 
+    Mono<Set<UUID>> getProjectsWithMinTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs,
+            Instant from, Instant to, int minTraces, Connection connection);
+
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
     Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(List<UUID> traceIds);
@@ -2295,6 +2298,19 @@ class TraceDAOImpl implements TraceDAO {
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
+
+    private static final String SELECT_PROJECTS_WITH_MIN_TRACES_IN_RANGE = """
+            SELECT project_id
+            FROM traces
+            WHERE (workspace_id, project_id) IN (<workspace_project_pairs>)
+            AND created_at >= parseDateTime64BestEffort(:from_time, 9)
+            AND created_at \\< parseDateTime64BestEffort(:to_time, 9)
+            GROUP BY project_id
+            HAVING count() >= :min_traces
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String SELECT_PROJECT_ID_FROM_TRACE = """
             SELECT
                 DISTINCT project_id
@@ -4845,6 +4861,26 @@ class TraceDAOImpl implements TraceDAO {
         var statement = connection.createStatement(template.render())
                 .bind("from_time", from.toString())
                 .bind("to_time", to.toString());
+
+        return Mono.from(statement.execute())
+                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
+                .collect(Collectors.toSet());
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Set<UUID>> getProjectsWithMinTracesInRange(
+            @NonNull Collection<Pair<String, UUID>> workspaceProjectPairs, @NonNull Instant from, @NonNull Instant to,
+            int minTraces, @NonNull Connection connection) {
+
+        var template = getSTWithLogComment(SELECT_PROJECTS_WITH_MIN_TRACES_IN_RANGE,
+                "projects_with_min_traces_in_range", "", "", workspaceProjectPairs.size());
+        template.add("workspace_project_pairs", toPairsLiteral(workspaceProjectPairs));
+
+        var statement = connection.createStatement(template.render())
+                .bind("from_time", from.toString())
+                .bind("to_time", to.toString())
+                .bind("min_traces", minTraces);
 
         return Mono.from(statement.execute())
                 .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))

@@ -54,6 +54,12 @@ class PlatformAgentInsightsReportClientTest {
         wireMock.server().stubFor(post(urlPathEqualTo(TRIGGER_PATH)).willReturn(aResponse().withStatus(status)));
     }
 
+    private void stubTriggerResponse(int status, String contentType, String body) {
+        wireMock.server().stubFor(post(urlPathEqualTo(TRIGGER_PATH)).willReturn(aResponse().withStatus(status)
+                .withHeader("Content-Type", contentType)
+                .withBody(body)));
+    }
+
     private void trigger() {
         client.triggerAgentInsights(UUID.randomUUID().toString(), UUID.randomUUID(), "workspace-id",
                 Instant.now().minusSeconds(86_400), Instant.now(), "manual");
@@ -63,6 +69,30 @@ class PlatformAgentInsightsReportClientTest {
     @DisplayName("A 402 rejection is named out of credits, so the run is not recorded as never started")
     void triggerAgentInsights__paymentRequired__namesOutOfCredits() {
         stubTriggerStatus(402);
+
+        assertThatExceptionOfType(AgentInsightsTriggerException.class)
+                .isThrownBy(this::trigger)
+                .extracting(AgentInsightsTriggerException::getReason)
+                .isEqualTo(AgentInsightsJob.FailureReason.OUT_OF_CREDITS);
+    }
+
+    @Test
+    @DisplayName("A 402 for Comet's free budget is named as such, so the rollout is cancelled rather than the customer blamed")
+    void triggerAgentInsights__paymentRequiredForFreeBudget__namesFreePoolExhausted() {
+        stubTriggerResponse(402, "application/json",
+                "{\"error\": \"Free diagnostics budget unavailable\", \"error_code\": \"free_pool_exhausted\"}");
+
+        assertThatExceptionOfType(AgentInsightsTriggerException.class)
+                .isThrownBy(this::trigger)
+                .extracting(AgentInsightsTriggerException::getReason)
+                .isEqualTo(AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED);
+    }
+
+    @Test
+    @DisplayName("A 402 whose body cannot be read is named out of credits, the reading that surfaces to the user")
+    void triggerAgentInsights__paymentRequiredWithUnreadableBody__namesOutOfCredits() {
+        // Falling back the other way would silently cancel the whole rollout over a malformed response.
+        stubTriggerResponse(402, "text/html", "<html>Payment required</html>");
 
         assertThatExceptionOfType(AgentInsightsTriggerException.class)
                 .isThrownBy(this::trigger)
