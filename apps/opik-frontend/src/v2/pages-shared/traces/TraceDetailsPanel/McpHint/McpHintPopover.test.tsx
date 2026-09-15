@@ -38,35 +38,37 @@ describe("the hint card without a hosted server", () => {
   beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
   afterEach(() => vi.useRealTimers());
 
-  it("offers the prompt and nothing else", () => {
+  it("offers a setup command per client, which is the install route here", () => {
+    // A local server is a stdio process holding an API key, so the CLI is what
+    // installs it. The prompt beside them cannot answer for that key.
     renderCard();
 
+    for (const client of ["claude-code", "cursor", "vscode", "codex"]) {
+      expect(screen.getByTestId(`mcp-route-${client}`)).toBeInTheDocument();
+    }
     expect(screen.getByTestId("mcp-route-prompt")).toBeInTheDocument();
-    expect(screen.queryByTestId("mcp-route-claude-code")).toBeNull();
-    expect(screen.queryByTestId("mcp-route-cursor")).toBeNull();
   });
 
-  it("confirms in place, keeping the description and the docs link", () => {
+  it("confirms a copy with a tick", () => {
     renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-prompt"));
 
     expect(
       screen.getByText("Copied — paste it into your agent"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Learn more")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Instead of writing a script for each question/),
-    ).toBeInTheDocument();
   });
 
-  it("swaps the block for a confirmation of the same height", () => {
+  it("shows the copied command back, on one line", () => {
     const { container } = renderCard();
-    const before = container.querySelector(".h-7")!.className;
+    fireEvent.click(screen.getByTestId("mcp-route-cursor"));
 
-    fireEvent.click(screen.getByTestId("mcp-route-prompt"));
-
+    expect(
+      screen.getByText("Copied — paste it in your terminal"),
+    ).toBeInTheDocument();
+    expect(container.querySelector("code")?.textContent).toBe(
+      "uvx opik mcp configure --ai-client cursor",
+    );
     expect(container.querySelector(".h-7")).toBeTruthy();
-    expect(before).toContain("h-7");
   });
 
   it("gets out of the way once the confirmation has been read", () => {

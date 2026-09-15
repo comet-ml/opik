@@ -30,9 +30,6 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   // Unmounted with the popover, so closing resets the view and a user who comes
   // back lands on the routes rather than a stale receipt.
   const [outcome, setOutcome] = useState<McpRouteOutcome | null>(null);
-  // The prompt block's own confirmation, which stands in place of the block
-  // rather than taking the card over.
-  const [isCopied, setIsCopied] = useState(false);
   const installMode = useMcpInstallMode();
 
   const handleRouteUsed = useCallback(
@@ -43,30 +40,23 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
     [onAction],
   );
 
-  const handleCopied = useCallback(() => {
-    onAction();
-    setIsCopied(true);
-  }, [onAction]);
-
   // A copy is finished business, so the confirmation stands for a few seconds
   // and then the card gets out of the way — unless the pointer is still on it,
   // in which case it goes back to the routes rather than vanishing under them.
   const cardRef = useRef<HTMLDivElement>(null);
-  const hasCopied = isCopied || outcome?.kind === "copied";
   useEffect(() => {
-    if (!hasCopied) return;
+    if (outcome?.kind !== "copied") return;
 
     const timer = setTimeout(() => {
       if (cardRef.current?.matches(":hover")) {
         setOutcome(null);
-        setIsCopied(false);
         return;
       }
       onDone();
     }, MCP_COPIED_DISMISS_MS);
 
     return () => clearTimeout(timer);
-  }, [hasCopied, onDone]);
+  }, [outcome, onDone]);
 
   const handleLearnMoreClick = () => {
     onAction();
@@ -98,12 +88,7 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
               {MCP_HINT_DESCRIPTION}
             </p>
 
-            <InstallRoutes
-              onRouteUsed={handleRouteUsed}
-              isCopied={isCopied}
-              onCopied={handleCopied}
-              target={target}
-            />
+            <InstallRoutes onRouteUsed={handleRouteUsed} target={target} />
 
             <a
               href={buildDocsUrl(MCP_HINT_DOCS_PATH)}

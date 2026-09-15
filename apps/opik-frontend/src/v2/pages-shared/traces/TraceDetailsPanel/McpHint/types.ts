@@ -68,14 +68,6 @@ export type McpPromptContext = {
 };
 
 export type McpInstallRoutesProps = {
-  /** Reported by a route whose outcome takes over the card. */
   onRouteUsed: (outcome: McpRouteOutcome) => void;
-  /**
-   * The prompt block confirms in place instead, so the description and the docs
-   * link stay put and the card keeps its size. The card owns the flag rather
-   * than the block, so there is one copy of it.
-   */
-  isCopied: boolean;
-  onCopied: () => void;
   target: McpHintTarget;
 };

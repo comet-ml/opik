@@ -4,7 +4,7 @@ import copy from "clipboard-copy";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { McpRouteOutcome } from "./types";
-import { MCP_PROMPT_ROW_CLASS } from "./McpPromptBlock";
+import { MCP_SNIPPET_ROW_CLASS } from "./tileStyles";
 
 type McpRouteConfirmationProps = {
   route: McpRouteOutcome;
@@ -41,7 +41,7 @@ const McpRouteConfirmation: React.FunctionComponent<
           prompt, and a card that tall would cover the traceback it is about. */}
       {route.snippet && (
         <div
-          className={`${MCP_PROMPT_ROW_CLASS} rounded border border-border bg-soft-background px-2`}
+          className={`${MCP_SNIPPET_ROW_CLASS} rounded border border-border bg-soft-background px-2`}
         >
           <code className="min-w-0 flex-1 truncate text-xs leading-4 text-muted-slate">
             {route.snippet}
