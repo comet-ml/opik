@@ -22,6 +22,7 @@ from opik.configurator.mcp import detection as mcp_detection
 from opik.configurator.mcp import env as mcp_env
 from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp import targets as mcp_targets
+from opik.configurator.mcp import uv_tool
 from opik.configurator.mcp import verification as mcp_verification
 from opik.configurator.mcp import view as mcp_view
 
@@ -174,6 +175,10 @@ def setup_mcp_server(
         return []
 
     if isinstance(server_spec, mcp_spec.StdioServerSpec):
+        # Before the prefetch, not after: an old tool install captures `uvx
+        # opik-mcp`, so warming the cache while one is present warms something
+        # the client would never reach.
+        _offer_to_remove_tool_install(display)
         with display.step("Preparing the Opik MCP server"):
             _prefetch_opik_mcp()
 
@@ -213,6 +218,51 @@ def setup_mcp_server(
         for target, result in zip(selected_targets, results)
         if result.succeeded
     ]
+
+
+def _offer_to_remove_tool_install(display: mcp_view.InstallView) -> None:
+    """Offer to remove an ``opik-mcp`` that an old SDK installed as a uv tool.
+
+    Such an install decides what `uvx opik-mcp` runs, so a client registered here
+    would keep starting it instead of the published release (see ``uv_tool``).
+    Removing it is what makes the plain registration mean what it says.
+
+    Asked, never assumed, and defaulting to no: this deletes from the user's
+    environment, and doing that unannounced is the bug being cleaned up. Without a
+    terminal there is nobody to ask, so it is reported and left alone.
+    """
+    installed = uv_tool.installed_version()
+    if installed is None:
+        return
+
+    problem = (
+        f"opik-mcp {installed} is installed as a uv tool, left by an older Opik "
+        f"SDK. While it is there, `uvx opik-mcp` runs it instead of the published "
+        f"version, so this server would start {installed} however often you "
+        f"restart."
+    )
+
+    if not interactive_helpers.is_interactive():
+        display.note(f"{problem} Remove it with `uv tool uninstall opik-mcp`.")
+        return
+
+    display.note(problem)
+    if not interactive_helpers.ask_user_for_approval_default_no(
+        "Remove it so the MCP server tracks the published version? [y/N]: "
+    ):
+        display.note(
+            "Left in place. `uv tool uninstall opik-mcp` removes it whenever you want."
+        )
+        return
+
+    succeeded, detail = uv_tool.uninstall()
+    if succeeded:
+        display.note(f"Removed opik-mcp {installed} from your uv tools.")
+    else:
+        display.problem(
+            f"Could not remove it: {detail}. Run `uv tool uninstall opik-mcp` "
+            f"yourself — until then this server keeps starting {installed}."
+        )
 
 
 def _deployment_label(

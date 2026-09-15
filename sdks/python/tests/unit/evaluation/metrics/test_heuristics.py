@@ -533,6 +533,25 @@ def test_spearman_ranking_metric():
     assert result.value == pytest.approx((0.5 + 1) / 2)
 
 
+@pytest.mark.parametrize(
+    "output,reference",
+    [
+        # Each case has equal-length, equal-set output/reference despite
+        # the repeats, so before this fix they reached the correlation
+        # formula and returned a score (0.625, 0.875, and -0.125) instead
+        # of raising.
+        (["a", "b", "a"], ["a", "a", "b"]),
+        (["a", "a", "b"], ["a", "b", "b"]),
+        # This one drove rho to -1.25, outside the documented [-1, 1] range.
+        (["a", "a", "b"], ["b", "a", "a"]),
+    ],
+)
+def test_spearman_ranking_rejects_duplicate_items(output, reference):
+    metric = SpearmanRanking(track=False)
+    with pytest.raises(MetricComputationError):
+        metric.score(output=output, reference=reference)
+
+
 def test_vader_sentiment_metric_uses_custom_analyzer():
     class StubAnalyzer:
         def polarity_scores(self, text: str) -> dict:

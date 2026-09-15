@@ -16,12 +16,21 @@ EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB = 3.5
 # caller passing an arbitrarily large num_threads.
 EXPERIMENT_ITEMS_BULK_MAX_THREADS = 32
 DATASET_ITEMS_MAX_BATCH_SIZE = 1000
+
 ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE = 1000
 DELETE_TRACE_BATCH_SIZE = 1000
 
 DATASET_STREAM_BATCH_SIZE = 2000
 
-DATASET_ITEMS_READ_NUM_THREADS = 4
+# Default worker counts for the bulk dataset/experiment transfer paths, so
+# callers get the tuned behaviour without passing num_threads themselves.
+# Measured at 8 rather than higher: on a 119,903-item upload, 16 threads ran
+# 1.2% *slower* than 8, with in-flight requests stuck at ~1.6 and CPU pinned at
+# ~101% on both arms. The client saturates a core on serialization well before
+# thread count binds, so past 8 the extra workers only add scheduling overhead.
+DATASET_ITEMS_READ_NUM_THREADS = 8
+DATASET_ITEMS_WRITE_NUM_THREADS = 8
+EXPERIMENT_ITEMS_BULK_NUM_THREADS = 8
 # Page-size ceiling for reads, deliberately the same as the batch size above: a
 # read should never ask the backend for a bigger page than the SDK's own read
 # batch, so peak memory stays bounded the way it was before pages were fetched
@@ -33,6 +42,10 @@ DATASET_ITEMS_READ_MAX_CHUNK_SIZE = DATASET_STREAM_BATCH_SIZE
 # connections, so a caller passing an arbitrarily large num_threads would
 # otherwise queue pages behind the pool instead of speeding anything up.
 DATASET_ITEMS_READ_MAX_THREADS = 32
+# Ceiling on dataset write threads, the counterpart to the read one above. One
+# knob sizes both the compressor pool and the upload's byte budget (two batches
+# per worker), so an unbounded value authorises an unbounded resident bound.
+DATASET_ITEMS_WRITE_MAX_THREADS = 32
 
 # Parallel dataset insert requires a backend that serializes concurrent dataset
 # version writes. On backends older than this version, concurrent batches

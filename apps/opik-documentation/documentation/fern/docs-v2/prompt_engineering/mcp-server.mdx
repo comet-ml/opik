@@ -697,6 +697,19 @@ client. Most problems end there.
     - Let the first call finish once. Later calls start in about a second.
     - If it fails, run `uvx opik-mcp --help` in a terminal to see the real error.
   </Accordion>
+  <Accordion title="The server keeps starting an old version">
+    Opik SDK 2.0.60 through 2.2.44 ran `uv tool install opik-mcp` while setting up
+    the MCP server, which leaves `opik-mcp` permanently installed as a uv tool.
+    While it is there, `uvx opik-mcp` starts that copy rather than the published
+    one, on every restart.
+
+    - Re-run `uvx opik mcp configure`. It spots the leftover install and offers to
+      remove it; say yes, then start a new session in your client.
+    - Or remove it yourself with `uv tool uninstall opik-mcp`.
+
+    Opik never removes it without asking — if you pinned that version on purpose,
+    answer no and it stays.
+  </Accordion>
   <Accordion title="Cursor: tool call timed out after 60 seconds">
     Cursor enforces a hard 60-second timeout per tool call, and large traces hit it.
 

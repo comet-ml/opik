@@ -1025,3 +1025,108 @@ class TestTerminalRequired:
 
         assert install._confirm_targets(candidates, None, False, view) == []
         assert view.choose_calls
+
+
+def _stale_install(monkeypatch, version="0.2.12"):
+    monkeypatch.setattr(install.shutil, "which", lambda name: "/usr/bin/uvx")
+    monkeypatch.setattr(install.uv_tool, "installed_version", lambda: version)
+    install_spy = mock.Mock(return_value=targets.InstallResult("Cursor", True, "Added"))
+    monkeypatch.setattr(targets, "HOST_TARGETS", [_target("cursor", True, install_spy)])
+    return install_spy
+
+
+def test_setup_mcp_server__stale_tool_install__removed_only_on_approval(monkeypatch):
+    _stale_install(monkeypatch)
+    uninstall = mock.Mock(return_value=(True, "removed"))
+    monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
+    monkeypatch.setattr(
+        install.interactive_helpers,
+        "ask_user_for_approval_default_no",
+        lambda message: True,
+    )
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    install.setup_mcp_server(**args)
+
+    uninstall.assert_called_once()
+    assert any("Removed opik-mcp 0.2.12" in note for note in args["view"].notes)
+
+
+def test_setup_mcp_server__stale_tool_install__declined__is_left_alone(monkeypatch):
+    _stale_install(monkeypatch)
+    uninstall = mock.Mock()
+    monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
+    monkeypatch.setattr(
+        install.interactive_helpers,
+        "ask_user_for_approval_default_no",
+        lambda message: False,
+    )
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    install.setup_mcp_server(**args)
+
+    # Saying no is a decision, not a failure: nothing is deleted and the setup
+    # still completes.
+    uninstall.assert_not_called()
+    assert any("Left in place" in note for note in args["view"].notes)
+
+
+def test_setup_mcp_server__stale_tool_install__headless__reports_without_asking(
+    monkeypatch,
+):
+    _stale_install(monkeypatch)
+    uninstall = mock.Mock()
+    monkeypatch.setattr(install.uv_tool, "uninstall", uninstall)
+    monkeypatch.setattr(install.interactive_helpers, "is_interactive", lambda: False)
+
+    args = _make_args(host_keys=["cursor"])
+    install.setup_mcp_server(**args)
+
+    # No terminal means nobody to ask, so it must not delete on its own.
+    uninstall.assert_not_called()
+    assert any("uv tool uninstall opik-mcp" in note for note in args["view"].notes)
+
+
+def test_setup_mcp_server__stale_install_removed_before_the_prefetch(
+    monkeypatch, prefetch_run
+):
+    # Warming the cache while the install is still there warms an environment the
+    # client would never reach.
+    _stale_install(monkeypatch)
+    order = []
+    monkeypatch.setattr(
+        install.uv_tool,
+        "uninstall",
+        lambda: (order.append("uninstall"), (True, "removed"))[1],
+    )
+    monkeypatch.setattr(
+        install.interactive_helpers,
+        "ask_user_for_approval_default_no",
+        lambda message: True,
+    )
+    prefetch_run.side_effect = lambda *a, **k: (
+        order.append("prefetch"),
+        subprocess.CompletedProcess([], 0, "", ""),
+    )[1]
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    install.setup_mcp_server(**_make_args())
+
+    assert order == ["uninstall", "prefetch"]
+
+
+def test_setup_mcp_server__no_tool_install__asks_nothing(monkeypatch):
+    _stale_install(monkeypatch, version=None)
+    approval = mock.Mock()
+    monkeypatch.setattr(
+        install.interactive_helpers, "ask_user_for_approval_default_no", approval
+    )
+    monkeypatch.setattr("builtins.input", lambda message: "y")
+
+    args = _make_args()
+    install.setup_mcp_server(**args)
+
+    approval.assert_not_called()
+    assert args["view"].notes == []

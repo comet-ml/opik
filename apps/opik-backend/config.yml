@@ -184,6 +184,12 @@ uuidValidation:
   #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
   #   embedded timestamp more than this far in the past or future are rejected.
   window: ${UUID_VALIDATION_WINDOW:-24h}
+  #  Default: 30d
+  #  Description: Wider override of `window` (between 12h and 45d) for a centrally managed set of
+  #   workspaces. That set is empty by default, which leaves this setting inert; the workspaces in it are
+  #   still rejected beyond this override. A value at or below `window` is ignored, since the override
+  #   only ever widens.
+  bypassWindow: ${UUID_VALIDATION_BYPASS_WINDOW:-30d}
 
 # Description: credentials for the Agent Insights read-only free-form SQL ClickHouse user (restricted user with a
 #   read-only profile + row policies, provisioned by OPIK-6846). Only the user/password live here; the connection
