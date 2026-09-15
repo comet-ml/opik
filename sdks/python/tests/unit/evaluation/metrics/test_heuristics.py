@@ -1,6 +1,6 @@
 import concurrent.futures
 import re
-import time
+import threading
 import warnings
 
 import pytest
@@ -1042,25 +1042,41 @@ def test_readability__language__changes_real_textstat_result_without_warning():
 
 
 def test_readability__concurrent_metrics_with_different_languages__each_scores_with_own_locale():
-    class SlowTextStat(_RecordingTextStat):
+    ease_per_lang = {"en_US": 60.0, "de_DE": 30.0}
+    arrived = {lang: threading.Event() for lang in ease_per_lang}
+
+    class HandoffTextStat(_RecordingTextStat):
+        """After applying a locale, gives the competing call a chance to overwrite it."""
+
         def set_lang(self, lang: str) -> None:
             super().set_lang(lang)
-            # Widen the window between applying the locale and reading it back.
-            time.sleep(0.002)
+            arrived[lang].set()
+            other = next(event for key, event in arrived.items() if key != lang)
+            # With the locale change serialised, the competing call cannot arrive while
+            # this one is in progress, so this wait just times out. Without it, the
+            # competing call arrives immediately and switches the locale before the
+            # values below are read, which is the regression being guarded against.
+            other.wait(timeout=0.5)
 
-    shared = SlowTextStat(syllables_per_lang={"en_US": 4, "de_DE": 7})
+        def flesch_reading_ease(self, text: str) -> float:
+            return ease_per_lang[self.lang]
+
+    shared = HandoffTextStat(syllables_per_lang={"en_US": 4, "de_DE": 7})
     english = Readability(language="en_US", track=False, textstat_module=shared)
     german = Readability(language="de_DE", track=False, textstat_module=shared)
-    jobs = [(english, 4), (german, 7)] * 25
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(
-            pool.map(
-                lambda job: (job[0].score(output="Four short words here."), job[1]),
-                jobs,
-            )
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        english_result, german_result = pool.map(
+            lambda metric: metric.score(output="Four short words here."),
+            [english, german],
         )
 
-    for result, expected_syllables in results:
-        assert result.metadata is not None
-        assert result.metadata["syllable_count"] == expected_syllables
+    assert english_result.metadata is not None
+    assert english_result.metadata["syllable_count"] == 4
+    assert english_result.metadata["flesch_reading_ease"] == 60.0
+    assert english_result.value == pytest.approx(0.6)
+
+    assert german_result.metadata is not None
+    assert german_result.metadata["syllable_count"] == 7
+    assert german_result.metadata["flesch_reading_ease"] == 30.0
+    assert german_result.value == pytest.approx(0.3)
