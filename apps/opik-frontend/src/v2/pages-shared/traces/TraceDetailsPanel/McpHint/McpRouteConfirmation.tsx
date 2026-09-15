@@ -36,7 +36,11 @@ const McpRouteConfirmation: React.FunctionComponent<
 
       {route.snippet && (
         <div className="flex items-start gap-1.5 rounded border border-border bg-soft-background px-2 py-1">
-          <code className="min-w-0 flex-1 whitespace-pre-wrap break-all text-xs leading-4 text-muted-slate">
+          {/* break-words, not break-all: the card is narrow enough that
+              break-all split the command mid-token, so "claude-code" wrapped as
+              "c" / "laude-code". This wraps at the spaces and only breaks a
+              token that cannot fit on a line of its own, such as a server URL. */}
+          <code className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs leading-4 text-muted-slate">
             {route.snippet}
           </code>
           <TooltipWrapper
