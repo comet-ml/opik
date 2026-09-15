@@ -159,7 +159,7 @@ def validate_record(
     """Validate one record, for callers that validate as they stream.
 
     Same checks as :func:`validate_records`, which keeps the whole upload in memory to
-    run them. Both per-record checks are per-record, so neither needs the full list.
+    run them. Both checks operate on individual records, so neither needs the full list.
     """
     failure_reasons: List[str] = []
 

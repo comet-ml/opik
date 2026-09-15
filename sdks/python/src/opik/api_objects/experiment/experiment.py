@@ -1,6 +1,5 @@
 import functools
 import logging
-import math
 import threading
 from concurrent import futures
 from typing import Iterator, List, Optional, TYPE_CHECKING
@@ -257,21 +256,19 @@ class Experiment:
         # shutdown(wait=True), which would re-join batches we just chose not to wait for
         # and park the caller behind a batch stuck in the rate-limit retry loop.
         # More workers than batches is pure waste, and an unbounded caller-supplied value
-        # would spawn a thread per batch. The sizes make the batch count exact; without
-        # them the count limit alone gives a lower bound, which is the same number
-        # whenever it is the count rather than the payload size that closes a batch.
-        batch_count = (
-            _count_batches(sizes_MB)
-            if sizes_MB is not None
-            else math.ceil(len(items) / constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE)
-        )
+        # would spawn a thread per batch. The sizes make the count exact; without them
+        # the bound has to be an OVER-estimate, because an under-estimate silently caps
+        # concurrency -- `ceil(len(items) / 1000)` is 1 for a payload-bound upload of
+        # 1,000 large items that actually produces hundreds of batches, which would run
+        # the whole thing on one thread. One batch per item is the ceiling.
+        batch_count = _count_batches(sizes_MB) if sizes_MB is not None else len(items)
         worker_count = min(
             num_threads, batch_count, constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS
         )
         LOGGER.debug(
             "Uploading %d experiment items in %s%d batch(es) using %d thread(s)",
             len(items),
-            "" if sizes_MB is not None else "at least ",
+            "" if sizes_MB is not None else "at most ",
             batch_count,
             worker_count,
         )

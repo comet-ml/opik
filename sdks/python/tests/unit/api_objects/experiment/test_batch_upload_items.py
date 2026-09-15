@@ -679,6 +679,46 @@ class TestBulkUploadItemsValidation:
         assert "items[0].evaluate_task_result must be a dict" in message
         assert "items[1].dataset_item_id must be a non-empty string" in message
 
+    def test_batch_upload_items__streaming_a_payload_bound_upload__stays_concurrent(
+        self,
+    ) -> None:
+        """A bound on the batch count has to over-estimate, never under-estimate.
+
+        Without pre-validation the batch count is unknown while streaming. Deriving it
+        from the 1000-item limit gives 1 for an upload whose payload sizes actually
+        produce many batches, which would silently run the whole thing on one worker.
+        """
+        experiment, mock_rest_client = _create_experiment()
+        captured_max_workers: List[int] = []
+        real_executor = concurrent_futures.ThreadPoolExecutor
+
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            captured_max_workers.append(kwargs["max_workers"])
+            return real_executor(*args, **kwargs)
+
+        # Under the 1000-item limit, but each item is a large fraction of the size cap,
+        # so the payload closes every batch and there are far more than one.
+        padding = "x" * 1_000_000
+        records = [
+            _record(
+                dataset_item_id=f"item-{i}",
+                trace=bulk_item.ExperimentItemBulkTrace(
+                    start_time=START_TIME, output={"padding": padding}
+                ),
+            )
+            for i in range(12)
+        ]
+
+        with patch.object(
+            experiment_module.futures, "ThreadPoolExecutor", side_effect=spy
+        ):
+            experiment.batch_upload_items(
+                records, num_threads=4, validate_before_upload=False
+            )
+
+        assert len(_sent_batch_sizes(mock_rest_client)) > 1
+        assert captured_max_workers == [4]
+
     def test_batch_upload_items__streaming_validation__sends_until_the_bad_item(
         self,
     ) -> None:
