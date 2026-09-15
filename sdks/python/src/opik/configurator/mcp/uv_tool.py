@@ -7,9 +7,9 @@ of the index — per ``uv help tool run``, an installed tool is used "unless a
 version is requested" or ``--isolated`` is passed — so those machines kept
 starting the same build no matter what was published afterwards.
 
-Registering ``opik-mcp@latest`` (see :data:`spec.PACKAGE_REQUEST`) is the version
-request that routes past it, so a leftover install no longer decides what the MCP
-server runs. It does still shadow a bare ``uvx opik-mcp`` the user types
+Registering ``uvx --isolated opik-mcp`` (see :data:`spec.PACKAGE_ARGS`) is what
+routes past it, so a leftover install no longer decides what the MCP server runs.
+It can still take precedence over a bare ``uvx opik-mcp`` the user types
 themselves, which is why this is reported rather than ignored — and only
 reported, never removed. The original bug was an unannounced change to someone's
 environment; silently undoing it would be the same mistake pointed the other way.

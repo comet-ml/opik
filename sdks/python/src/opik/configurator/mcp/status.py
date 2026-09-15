@@ -34,11 +34,11 @@ class HostStatus:
     points_to: Optional[str] = None
     workspace: Optional[str] = None
     in_sync: Optional[bool] = None
-    # Local (uvx) registrations only: whether the recorded command asks for a
-    # version. Without one, an `opik-mcp` installed as a uv tool can win, leaving
-    # the client starting that version indefinitely. ``None`` for a hosted
+    # Local (uvx) registrations only: whether the recorded command escapes an
+    # `opik-mcp` installed as a uv tool. Without that, such an install can win,
+    # leaving the client starting that version indefinitely. ``None`` for a hosted
     # registration, which runs no local package at all.
-    requests_latest: Optional[bool] = None
+    bypasses_tool_install: Optional[bool] = None
 
 
 def collect_host_statuses(config: opik_config.OpikConfig) -> List[HostStatus]:
@@ -85,7 +85,7 @@ def _describe_block(
     env = block.get("env") or {}
     status.transport = TRANSPORT_LOCAL
     status.workspace = env.get("COMET_WORKSPACE")
-    status.requests_latest = _requests_latest(block)
+    status.bypasses_tool_install = _bypasses_tool_install(block)
 
     if "OPIK_URL" in env:
         api_url = str(env["OPIK_URL"])
@@ -104,8 +104,13 @@ def _describe_block(
     status.in_sync = _normalize_url(api_url) == current_api_url and workspace_in_sync
 
 
-def _requests_latest(block: Dict[str, Any]) -> bool:
-    """Whether a recorded stdio block asks uv for a version of ``opik-mcp``.
+def _bypasses_tool_install(block: Dict[str, Any]) -> bool:
+    """Whether a recorded stdio block escapes an ``opik-mcp`` uv tool install.
+
+    Two things do: the ``--isolated`` flag this installer writes, and any version
+    request (``opik-mcp@latest``, ``opik-mcp==1.2.3``) — uv uses an installed tool
+    "unless a version is requested". A hand-pinned config is therefore not
+    reported as frozen, because it is not.
 
     Reads ``args`` and ``command`` both: most hosts split the executable from its
     arguments, while opencode records one ``command`` list holding both.
@@ -115,7 +120,12 @@ def _requests_latest(block: Dict[str, Any]) -> bool:
         value = block.get(key)
         if isinstance(value, list):
             words.extend(str(item) for item in value)
-    return mcp_spec.PACKAGE_REQUEST in words
+    if "--isolated" in words:
+        return True
+    return any(
+        word.startswith(mcp_spec.SERVER_NAME) and word != mcp_spec.SERVER_NAME
+        for word in words
+    )
 
 
 def uv_tool_install_note(host_statuses: List[HostStatus]) -> Optional[str]:
@@ -125,17 +135,17 @@ def uv_tool_install_note(host_statuses: List[HostStatus]) -> Optional[str]:
     local package, so an install on the same machine is beside the point.
 
     The two cases read very differently to the person on the other end, so they
-    are worded differently. A registration with no version request is *at risk of*
-    starting the installed version forever and has a fix; one that asks for
-    ``@latest`` is fine, and the install can at most take precedence over a bare
-    ``uvx opik-mcp`` they type themselves.
+    are worded differently. A registration that cannot escape the install is *at
+    risk of* starting that version forever and has a fix; one that can is fine, and
+    the install can at most take precedence over a bare ``uvx opik-mcp`` they type
+    themselves.
 
-    Both are hedged rather than asserted, because whether uv actually reuses an
-    existing tool environment varies by uv version: a uv that declines to reuse an
-    environment an older uv built re-resolves instead, leaving the same install
-    inert. Claiming a freeze that the reader can disprove in one command would
-    cost the message its credibility. Neither is phrased as an error either: a
-    deliberate pin is rare but real, and this is the only signal that
+    Both are hedged rather than asserted. uv reusing an existing tool environment
+    is the normal case — reproduced on uv 0.8.12 and 0.11.7 alike — but not a
+    certainty: at least one real environment was found being re-resolved past for
+    reasons never established. Claiming a freeze the reader can disprove in one
+    command would cost the message its credibility. Neither is phrased as an error
+    either: a deliberate pin is rare but real, and this is the only signal that
     distinguishes it from the accident.
     """
     installed = uv_tool.installed_version()
@@ -150,22 +160,24 @@ def uv_tool_install_note(host_statuses: List[HostStatus]) -> Optional[str]:
     if len(local_hosts) == 0:
         return None
 
-    frozen = [host.display_name for host in local_hosts if not host.requests_latest]
+    frozen = [
+        host.display_name for host in local_hosts if not host.bypasses_tool_install
+    ]
     if len(frozen) > 0:
         return (
             f"opik-mcp {installed} is installed as a uv tool, and "
-            f"{', '.join(frozen)} still launches it as `uvx opik-mcp` with no "
-            f"version — so it may start {installed} every time, whatever has been "
+            f"{', '.join(frozen)} still launches it as a bare `uvx opik-mcp` with no "
+            f"escape — so it may start {installed} every time, whatever has been "
             f"released since. Re-run `opik mcp configure` to update the "
             f"registration."
         )
 
     return (
-        f"opik-mcp {installed} is installed as a uv tool. Your registrations ask "
-        f"for `{mcp_spec.PACKAGE_REQUEST}`, so the MCP server is unaffected — but "
-        f"depending on your uv version that install can take precedence over a "
-        f"bare `uvx opik-mcp` you run yourself. `uv tool upgrade opik-mcp` updates "
-        f"it; `uv tool uninstall opik-mcp` removes it."
+        f"opik-mcp {installed} is installed as a uv tool. Your registrations run "
+        f"`uvx --isolated opik-mcp`, so the MCP server is unaffected — but that "
+        f"install can still take precedence over a bare `uvx opik-mcp` you run "
+        f"yourself. `uv tool upgrade opik-mcp` updates it; `uv tool uninstall "
+        f"opik-mcp` removes it."
     )
 
 

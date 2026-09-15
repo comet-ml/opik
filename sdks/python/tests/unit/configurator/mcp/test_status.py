@@ -166,41 +166,45 @@ def _local_block(args):
     }
 
 
-def test_collect__local_block_without_version__requests_latest_false(
-    monkeypatch, tmp_path
-):
+def test_collect__bare_local_block__cannot_bypass_tool_install(monkeypatch, tmp_path):
     _patch_single_host(monkeypatch, tmp_path, block=_local_block(["opik-mcp"]))
 
     [host] = status.collect_host_statuses(
         _config("https://www.comet.com/opik/api/", "alex")
     )
 
-    assert host.requests_latest is False
+    assert host.bypasses_tool_install is False
 
 
-def test_collect__local_block_with_version__requests_latest_true(monkeypatch, tmp_path):
-    _patch_single_host(monkeypatch, tmp_path, block=_local_block(["opik-mcp@latest"]))
+def test_collect__isolated_local_block__bypasses_tool_install(monkeypatch, tmp_path):
+    _patch_single_host(
+        monkeypatch, tmp_path, block=_local_block(["--isolated", "opik-mcp"])
+    )
 
     [host] = status.collect_host_statuses(
         _config("https://www.comet.com/opik/api/", "alex")
     )
 
-    assert host.requests_latest is True
+    assert host.bypasses_tool_install is True
 
 
-def test_collect__opencode_command_list__requests_latest_true(monkeypatch, tmp_path):
+def test_collect__opencode_command_list__bypasses_tool_install(monkeypatch, tmp_path):
     # opencode records the executable and its arguments in one `command` list.
-    block = {"type": "local", "command": ["uvx", "opik-mcp@latest"], "environment": {}}
+    block = {
+        "type": "local",
+        "command": ["uvx", "--isolated", "opik-mcp"],
+        "environment": {},
+    }
     _patch_single_host(monkeypatch, tmp_path, block=block)
 
     [host] = status.collect_host_statuses(
         _config("https://www.comet.com/opik/api/", "alex")
     )
 
-    assert host.requests_latest is True
+    assert host.bypasses_tool_install is True
 
 
-def test_collect__remote_block__requests_latest_is_none(monkeypatch, tmp_path):
+def test_collect__remote_block__bypass_flag_is_none(monkeypatch, tmp_path):
     _patch_single_host(
         monkeypatch,
         tmp_path,
@@ -211,24 +215,24 @@ def test_collect__remote_block__requests_latest_is_none(monkeypatch, tmp_path):
         _config("https://www.comet.com/opik/api/", "alex")
     )
 
-    assert host.requests_latest is None
+    assert host.bypasses_tool_install is None
 
 
-def _host_status(transport, requests_latest, registered=True):
+def _host_status(transport, bypasses_tool_install, registered=True):
     return status.HostStatus(
         display_name="Test Host",
         config_path=pathlib.Path("/tmp/host.json"),
         detected=True,
         registered=registered,
         transport=transport,
-        requests_latest=requests_latest,
+        bypasses_tool_install=bypasses_tool_install,
     )
 
 
 def test_uv_tool_note__no_install__is_none(monkeypatch):
     monkeypatch.setattr(status.uv_tool, "installed_version", lambda: None)
 
-    hosts = [_host_status(status.TRANSPORT_LOCAL, requests_latest=False)]
+    hosts = [_host_status(status.TRANSPORT_LOCAL, bypasses_tool_install=False)]
 
     assert status.uv_tool_install_note(hosts) is None
 
@@ -237,7 +241,7 @@ def test_uv_tool_note__install_but_only_hosted_registrations__is_none(monkeypatc
     # A hosted server runs no local package, so an install is beside the point.
     monkeypatch.setattr(status.uv_tool, "installed_version", lambda: "0.2.12")
 
-    hosts = [_host_status(status.TRANSPORT_HOSTED, requests_latest=None)]
+    hosts = [_host_status(status.TRANSPORT_HOSTED, bypasses_tool_install=None)]
 
     assert status.uv_tool_install_note(hosts) is None
 
@@ -245,7 +249,7 @@ def test_uv_tool_note__install_but_only_hosted_registrations__is_none(monkeypatc
 def test_uv_tool_note__frozen_registration__names_host_and_remedy(monkeypatch):
     monkeypatch.setattr(status.uv_tool, "installed_version", lambda: "0.2.12")
 
-    hosts = [_host_status(status.TRANSPORT_LOCAL, requests_latest=False)]
+    hosts = [_host_status(status.TRANSPORT_LOCAL, bypasses_tool_install=False)]
     note = status.uv_tool_install_note(hosts)
 
     assert "0.2.12" in note
@@ -256,7 +260,7 @@ def test_uv_tool_note__frozen_registration__names_host_and_remedy(monkeypatch):
 def test_uv_tool_note__registration_asks_for_latest__shadow_wording_only(monkeypatch):
     monkeypatch.setattr(status.uv_tool, "installed_version", lambda: "0.2.12")
 
-    hosts = [_host_status(status.TRANSPORT_LOCAL, requests_latest=True)]
+    hosts = [_host_status(status.TRANSPORT_LOCAL, bypasses_tool_install=True)]
     note = status.uv_tool_install_note(hosts)
 
     assert "unaffected" in note

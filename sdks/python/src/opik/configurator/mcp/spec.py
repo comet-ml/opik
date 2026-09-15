@@ -10,7 +10,7 @@ Two transports are supported:
 - :class:`RemoteServerSpec` — the Opik-hosted MCP server reached over HTTP, with
   the AI host handling browser-based OAuth. Used when the configured deployment
   advertises an MCP auth server (see ``detection.detect_hosted_mcp_server``).
-- :class:`StdioServerSpec` — a local server run via ``uvx opik-mcp@latest`` and
+- :class:`StdioServerSpec` — a local server run via ``uvx --isolated opik-mcp`` and
   authenticated with an API key passed through the environment. Used as the
   fallback when no hosted server is available.
 """
@@ -24,11 +24,22 @@ from opik.configurator.mcp import env as mcp_env
 
 SERVER_NAME = "opik-mcp"
 
-#: What the registered stdio command asks ``uvx`` to run. The ``@latest`` suffix
-#: makes uv revalidate the package index on every launch instead of resolving
-#: against whatever it already has cached, so a released fix reaches users on
-#: their next client restart rather than up to an index-cache TTL later.
-PACKAGE_REQUEST = f"{SERVER_NAME}@latest"
+#: What the registered stdio command passes to ``uvx``.
+#:
+#: ``--isolated`` makes uv ignore a persistent ``uv tool install opik-mcp`` and
+#: resolve normally — the thing that unfreezes machines configured by SDK
+#: 2.0.60-2.2.44, which otherwise launch whatever that install pinned, forever
+#: (see ``uv_tool``). Verified against uv 0.8.12, the version that created those
+#: installs, as well as current uv.
+#:
+#: The package itself stays unpinned, deliberately. A version request such as
+#: ``opik-mcp@latest`` would also bypass the install, but it makes uv revalidate
+#: every package in the tree on every launch — measured at 39 conditional
+#: requests and ~590ms per server start, to buy at most the index cache's ten
+#: minutes of freshness. ``--isolated`` reads through that cache like a bare
+#: ``uvx opik-mcp`` does, so a release still lands within ten minutes and a
+#: launch costs nothing extra.
+PACKAGE_ARGS = ["--isolated", SERVER_NAME]
 
 _SECRET_ENV_SUFFIXES = ("_KEY", "_TOKEN", "_SECRET", "PASSWORD")
 _REDACTED = "***REDACTED***"

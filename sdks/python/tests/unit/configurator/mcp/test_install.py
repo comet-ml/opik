@@ -204,9 +204,9 @@ def test_setup_mcp_server__single_host_selected__installs(monkeypatch):
     install_spy.assert_called_once()
     spec = install_spy.call_args.args[0]
     assert spec.command == "/usr/bin/uvx"
-    # `@latest`, so a released fix reaches the user on their next client restart
-    # instead of uv resolving against a cached version.
-    assert spec.args == ["opik-mcp@latest"]
+    # `--isolated`, so a leftover `uv tool install opik-mcp` cannot decide what
+    # the client launches — while the package itself stays unpinned.
+    assert spec.args == ["--isolated", "opik-mcp"]
     assert spec.env["OPIK_API_KEY"] == "some-key"
 
 
@@ -337,7 +337,8 @@ def test_setup_mcp_server__prefetches_opik_mcp_before_install(
     # `uv tool run`, not `uv tool install`: the point is to warm the cache for the
     # command the client will run, not to put a shim on the user's PATH.
     assert any(
-        cmd[1:] == ["tool", "run", "opik-mcp@latest", "--help"] for cmd in commands
+        cmd[1:] == ["tool", "run", "--isolated", "opik-mcp", "--help"]
+        for cmd in commands
     )
     install_spy.assert_called_once()
 

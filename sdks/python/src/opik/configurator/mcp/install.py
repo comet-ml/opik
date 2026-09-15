@@ -239,8 +239,8 @@ def _report_uv_tool_install(display: mcp_view.InstallView) -> None:
 
     display.note(
         f"Note: opik-mcp {installed} is also installed as a uv tool. The server "
-        f"registered here asks for `{mcp_spec.PACKAGE_REQUEST}`, so it is "
-        f"unaffected — but depending on your uv version that install can take "
+        f"registered here runs `uvx --isolated opik-mcp`, so it is unaffected "
+        f"— but that install can still take "
         f"precedence over a bare `uvx opik-mcp` you run yourself. `uv tool upgrade "
         f"opik-mcp` updates it; `uv tool uninstall opik-mcp` removes it so uvx "
         f"always resolves the published version."
@@ -415,11 +415,11 @@ PREFETCH_TIMEOUT_SECONDS: Final[int] = 120
 def _prefetch_opik_mcp() -> None:
     """Warm uv's cache so the AI client connects instantly on first launch.
 
-    Clients run ``uvx opik-mcp@latest``, which otherwise fetches the package and a
-    Python interpreter lazily on first use — slow, and any failure surfaces as an
-    opaque client error. So this runs the same request the client will, down to the
-    ``@latest`` suffix, which is what makes it a cache warm rather than a warm of
-    some neighbouring environment.
+    Clients run ``uvx --isolated opik-mcp``, which otherwise fetches the package
+    and a Python interpreter lazily on first use — slow, and any failure surfaces
+    as an opaque client error. So this runs the same request the client will, down
+    to the ``--isolated`` flag, which is what makes it a cache warm rather than a
+    warm of some neighbouring environment.
 
     Not ``uv tool install opik-mcp``, which was doing more than warming a cache:
     it builds a persistent tool environment and puts an ``opik-mcp`` shim on the
@@ -430,11 +430,10 @@ def _prefetch_opik_mcp() -> None:
     version current the day they ran it (see ``uv_tool``). ``uv tool run``
     populates the cache that the registered command actually reads.
 
-    The request here must stay identical to :data:`spec.PACKAGE_REQUEST`, down to
-    the ``@latest`` suffix, because uv caches per resolved requirement: warming
-    ``opik-mcp`` for a client that will run ``opik-mcp@latest`` populates an entry
-    nothing subsequently reads, leaving the first real launch to do the download
-    this function exists to have already done.
+    The request here must stay identical to :data:`spec.PACKAGE_ARGS`, because an
+    isolated run and a tool-install-backed run resolve to different environments:
+    warming the one the client will not use leaves the first real launch doing the
+    download this function exists to have already done.
 
     Output is captured rather than streamed because the caller runs this inside a
     rich status spinner: both write to the same terminal, and uv's progress bars
@@ -450,7 +449,7 @@ def _prefetch_opik_mcp() -> None:
 
     try:
         result = subprocess.run(
-            [uv_executable, "tool", "run", mcp_spec.PACKAGE_REQUEST, "--help"],
+            [uv_executable, "tool", "run", *mcp_spec.PACKAGE_ARGS, "--help"],
             capture_output=True,
             text=True,
             # Nothing should prompt here, and if it does the timeout must win
@@ -553,7 +552,7 @@ def _create_server_spec(
         return (
             mcp_spec.StdioServerSpec(
                 command=uvx_executable,
-                args=[mcp_spec.PACKAGE_REQUEST],
+                args=list(mcp_spec.PACKAGE_ARGS),
                 env=server_env,
             ),
             None,

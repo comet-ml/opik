@@ -576,13 +576,13 @@ def test_install_over_legacy_block__rewrites_args_to_versioned_request(tmp_path)
         display_name="Test Host",
         server_block=mcp_spec.StdioServerSpec(
             command="/usr/bin/uvx",
-            args=[mcp_spec.PACKAGE_REQUEST],
+            args=list(mcp_spec.PACKAGE_ARGS),
             env={"OPIK_API_KEY": "new-key"},
         ).to_block(),
     )
 
     written = json.loads(config_path.read_text(encoding="utf-8"))
-    assert written["mcpServers"]["opik-mcp"]["args"] == ["opik-mcp@latest"]
+    assert written["mcpServers"]["opik-mcp"]["args"] == ["--isolated", "opik-mcp"]
     assert written["mcpServers"]["other-server"] == {"command": "keep-me"}
     assert result.succeeded is True
     assert result.summary == "Updated"
