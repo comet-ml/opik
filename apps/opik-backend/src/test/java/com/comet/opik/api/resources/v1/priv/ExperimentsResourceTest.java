@@ -2404,11 +2404,9 @@ class ExperimentsResourceTest {
             assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
             assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
 
-            traceDeletedListener.onTracesDeleted(TracesDeleted.builder()
-                    .traceIds(Set.of(trace6.id()))
-                    .workspaceId(workspaceId)
-                    .userName(USER)
-                    .build());
+            // Replay the captured event rather than rebuilding it: a hand-assembled copy silently drifts from what
+            // production actually posts, which is how this lost the project id the real event has always carried.
+            traceDeletedListener.onTracesDeleted(experimentCaptor.getValue());
 
             List<ExperimentItem> experimentExpected = experimentItems
                     .stream()
@@ -5059,11 +5057,9 @@ class ExperimentsResourceTest {
             assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
             assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
 
-            traceDeletedListener.onTracesDeleted(TracesDeleted.builder()
-                    .traceIds(Set.of(trace6.id()))
-                    .workspaceId(workspaceId)
-                    .userName(USER)
-                    .build());
+            // Replay the captured event rather than rebuilding it: a hand-assembled copy silently drifts from what
+            // production actually posts, which is how this lost the project id the real event has always carried.
+            traceDeletedListener.onTracesDeleted(experimentCaptor.getValue());
 
             List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3, trace4, trace5));
 

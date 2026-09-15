@@ -66,7 +66,6 @@ import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.FilterUtils.addSortNeedsWideFlag;
-import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -84,6 +83,16 @@ import static java.util.function.Predicate.not;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class SpanDAO {
+
+    /**
+     * The read/insert-facing span table, and the mutation target while the sharding-readiness wrap is off. Only
+     * {@link #selectSpansMutationTable} may use these two constants to name a mutation's table — see its Javadoc
+     * and {@code SpanMutationRoutingArchTest}.
+     */
+    private static final String SPANS_TABLE = "spans";
+
+    /** The {@code MergeTree} shard beneath the {@code Distributed} wrapper, and the mutation target once it is live. */
+    private static final String SPANS_LOCAL_TABLE = "spans_local";
 
     private static final String SPAN_SEARCH_CLAUSE = """
             (ilike(id, :search_text)
@@ -1306,11 +1315,20 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * Cascade delete of the spans belonging to deleted traces, scoped to the {@code (workspace_id, project_id, id)}
+     * prefix of the sort key.
+     * <p>
+     * {@code project_id} is mandatory rather than an optional branch: a project-less {@code (workspace_id, id)} delete
+     * would scan every project's spans in the workspace, and post-wrap would reach the shard without the column
+     * {@code spans} is distributed on. The sole caller is {@code SpanService.deleteByTraceIds}, which always carries
+     * the owning project the trace delete resolved (OPIK-7483).
+     */
     private static final String DELETE_BY_IDS = """
-            DELETE FROM spans
+            DELETE FROM <spans_mutation_table>
             WHERE id IN :ids
             AND workspace_id = :workspace_id
-            <if(project_id)>AND project_id = :project_id<endif>
+            AND project_id = :project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1327,7 +1345,7 @@ public class SpanDAO {
      * applied here until {@code spans} can be pruned by a column aligned with {@code trace_id}.
      */
     private static final String DELETE_FOR_RETENTION = """
-            DELETE FROM spans
+            DELETE FROM <spans_mutation_table>
             WHERE workspace_id IN :workspace_ids
             AND trace_id >= :lower_bound
             AND trace_id \\< :cutoff_id
@@ -1335,6 +1353,36 @@ public class SpanDAO {
                 SELECT trace_id FROM experiment_items
                 WHERE workspace_id IN :workspace_ids
                 AND trace_id >= :lower_bound
+                AND trace_id \\< :cutoff_id
+            )
+            SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
+            ;
+            """;
+
+    /**
+     * The per-workspace bounded counterpart of {@link #DELETE_FOR_RETENTION} (applyToPast=false): each workspace
+     * carries its own {@code trace_id} floor, so the windows are OR-ed rather than sharing one {@code :lower_bound}.
+     * <p>
+     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching {@code BULK_INSERT} and
+     * the other variable-arity queries in this DAO, so the query text is declared once and every value is bound.
+     * Declaring it rather than assembling it at runtime is also what puts it in reach of the routing guard, which
+     * reads these constants.
+     * <p>
+     * As in {@link #DELETE_FOR_RETENTION}, no partition-pruning predicate is applied: the range keys on
+     * {@code trace_id} while the partition column {@code id_at} derives from the span's own id.
+     */
+    private static final String DELETE_FOR_RETENTION_BOUNDED = """
+            DELETE FROM <spans_mutation_table>
+            WHERE (
+                <items:{item |
+                    (workspace_id = :ws_<item.index> AND trace_id >= :lb_<item.index> AND trace_id \\< :cutoff_id)
+                    <if(item.hasNext)>OR<endif>
+                }>
+            )
+            AND trace_id NOT IN (
+                SELECT trace_id FROM experiment_items
+                WHERE workspace_id IN :workspace_ids_flat
+                AND trace_id >= :min_lower_bound
                 AND trace_id \\< :cutoff_id
             )
             SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
@@ -1714,7 +1762,7 @@ public class SpanDAO {
             FROM spans
             WHERE trace_id IN :trace_ids
             AND workspace_id = :workspace_id
-            <if(project_id)>AND project_id = :project_id<endif>
+            AND project_id = :project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2037,6 +2085,38 @@ public class SpanDAO {
 
     private boolean spanColumnsNonNullable() {
         return configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable();
+    }
+
+    /**
+     * Binds the physical table a span <b>mutation</b> must target, and the <b>only</b> place that name is decided.
+     * <p>
+     * While the sharding-readiness wrap is live, {@code spans} is a {@code Distributed} table that rejects mutations
+     * (code 36 / 48), so every {@code DELETE} / {@code ALTER} / {@code OPTIMIZE} must target the {@code spans_local}
+     * shard instead; while it is off, {@code spans} is still a {@code MergeTree} where deletes work directly.
+     * Resolving here keeps the mutation templates topology-agnostic
+     * ({@code DELETE FROM <spans_mutation_table>}) and leaves exactly one line to audit, rather than a two-branch
+     * conditional repeated in every template where a correct new mutation would be a matter of remembering to copy the
+     * branch. {@code SpanMutationRoutingArchTest} enforces both halves: no other code unit may read the wrap flag, and
+     * no mutation SQL may spell either table name out.
+     * <p>
+     * Reads and inserts are deliberately not routed through this: they always go to {@code spans}, which is the
+     * {@code Distributed} wrapper post-cutover and the {@code MergeTree} before it, and is correct either way.
+     * <p>
+     * Liquibase migrations split by kind instead: {@code DELETE} / {@code MATERIALIZE COLUMN} / {@code ADD INDEX} /
+     * {@code MODIFY TTL} target {@code spans_local} only, but {@code ADD}/{@code DROP}/{@code MODIFY COLUMN} must
+     * target <b>both</b> {@code spans_local} and {@code spans} — the wrapper takes them as metadata-only, and skipping
+     * it leaves reads unable to see the column (code 47).
+     * <p>
+     * The cluster is single-shard today and {@code spans_local} is a {@code ReplicatedMergeTree}, so a lightweight
+     * delete fans out to every replica via the replication log and reaches every matching row — no {@code ON CLUSTER}
+     * needed (no DAO uses it). Only activating sharding, a separate and deferred effort, makes a delete issued on one
+     * shard miss rows on the others.
+     */
+    private void selectSpansMutationTable(ST template) {
+        template.add("spans_mutation_table",
+                configuration.getDatabaseAnalyticsDataModel().spansDistributedWrapEnabled()
+                        ? SPANS_LOCAL_TABLE
+                        : SPANS_TABLE);
     }
 
     /**
@@ -2441,8 +2521,12 @@ public class SpanDAO {
                 .flatMap(this::mapToDto);
     }
 
+    /**
+     * Deletes the given spans within {@code projectId}, which is required: the delete is always scoped to the full
+     * {@code (workspace_id, project_id, id)} sort-key prefix, never to {@code (workspace_id, id)} alone.
+     */
     @WithSpan
-    public Mono<Long> deleteByIds(@NonNull Set<UUID> spanIds, UUID projectId) {
+    public Mono<Long> deleteByIds(@NonNull Set<UUID> spanIds, @NonNull UUID projectId) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(spanIds), "Argument 'spanIds' must not be empty");
         var segment = startSegment("spans", "Clickhouse", "delete_by_span_ids");
@@ -2451,17 +2535,12 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(DELETE_BY_IDS, "delete_spans_by_ids", workspaceId, userName,
                             spanIds.size());
-
-                    Optional.ofNullable(projectId)
-                            .ifPresent(id -> template.add("project_id", id));
+                    selectSpansMutationTable(template);
 
                     var statement = connection.createStatement(template.render())
                             .bind("ids", spanIds.toArray(UUID[]::new))
-                            .bind("workspace_id", workspaceId);
-
-                    if (projectId != null) {
-                        statement.bind("project_id", projectId);
-                    }
+                            .bind("workspace_id", workspaceId)
+                            .bind("project_id", projectId);
 
                     return Flux.from(statement.execute());
                 }))
@@ -3034,8 +3113,13 @@ public class SpanDAO {
                 || template.getAttribute("feedback_scores_empty_filters") != null;
     }
 
+    /**
+     * The ids of the spans belonging to {@code traceIds} within {@code projectId}, the first step of the trace-delete
+     * cascade. The project is required for the same reason {@link #deleteByIds(Set, UUID)} requires it: an unscoped
+     * lookup would collect spans from every project in the workspace sharing a trace id, and those ids feed the delete.
+     */
     @WithSpan
-    public Mono<Set<UUID>> getSpanIdsForTraces(@NonNull Set<UUID> traceIds, UUID projectId) {
+    public Mono<Set<UUID>> getSpanIdsForTraces(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
         if (traceIds.isEmpty()) {
             return Mono.just(Set.of());
         }
@@ -3045,15 +3129,10 @@ public class SpanDAO {
                     var template = getSTWithLogComment(SELECT_SPAN_IDS_BY_TRACE_ID, "get_span_ids_by_trace_ids",
                             workspaceId, userName, traceIds.size());
 
-                    Optional.ofNullable(projectId)
-                            .ifPresent(id -> template.add("project_id", id));
-
                     var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds)
-                            .bind("workspace_id", workspaceId);
-
-                    Optional.ofNullable(projectId)
-                            .ifPresent(id -> statement.bind("project_id", id));
+                            .bind("workspace_id", workspaceId)
+                            .bind("project_id", projectId);
 
                     return Flux.from(statement.execute());
                 }))
@@ -3344,7 +3423,9 @@ public class SpanDAO {
                 workspaceIds.size(), cutoffId, lowerBound);
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_spans", null, "",
-                workspaceIds.size());
+                "workspaces_size=%s, cutoff_id=%s, lower_bound=%s".formatted(workspaceIds.size(), cutoffId,
+                        lowerBound));
+        selectSpansMutationTable(template);
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
@@ -3395,29 +3476,17 @@ public class SpanDAO {
 
         log.info("Retention delete spans (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
 
-        var logComment = getLogComment("retention_delete_spans_bounded", null, "", workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
-        var sb = new StringBuilder("DELETE FROM spans WHERE (");
-        for (int i = 0; i < entries.size(); i++) {
-            if (i > 0) sb.append(" OR ");
-            sb.append("(workspace_id = :ws_").append(i)
-                    .append(" AND trace_id >= :lb_").append(i)
-                    .append(" AND trace_id < :cutoff_id)");
-        }
-        sb.append(") AND trace_id NOT IN (")
-                .append("SELECT trace_id FROM experiment_items")
-                .append(" WHERE workspace_id IN :workspace_ids_flat")
-                .append(" AND trace_id >= :min_lower_bound")
-                .append(" AND trace_id < :cutoff_id")
-                .append(") SETTINGS log_comment = '").append(logComment)
-                .append("', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1");
-
-        var sql = sb.toString();
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION_BOUNDED, "retention_delete_spans_bounded", null, "",
+                "workspaces_size=%s, cutoff_id=%s, min_lower_bound=%s".formatted(workspaceMinIds.size(), cutoffId,
+                        lowerBound));
+        selectSpansMutationTable(template);
+        template.add("items", getQueryItemPlaceHolder(entries.size()));
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var statement = connection.createStatement(sql)
+                    var statement = connection.createStatement(template.render())
                             .bind("cutoff_id", cutoffId)
                             .bind("workspace_ids_flat", workspaceMinIds.keySet().toArray(String[]::new))
                             .bind("min_lower_bound", lowerBound);

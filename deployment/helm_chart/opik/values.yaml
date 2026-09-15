@@ -806,6 +806,10 @@ databaseAnalyticsDataModel:
   # message naming the flag and the observed engine. That is intentional — it beats serving traffic whose trace
   # deletes are guaranteed to fail — and it clears on the next probe once the two sides are back in step.
   tracesDistributedWrapEnabled: false
+  # Spans sibling: turn true in lockstep with applying the spans Distributed wrap, so span cascade/retention
+  # mutations target spans_local. Leave false while spans is still a MergeTree. Flips independently of the trace
+  # flag, and is not covered by the `clickhouse-traces-topology` readiness probe.
+  spansDistributedWrapEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
 # lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps
