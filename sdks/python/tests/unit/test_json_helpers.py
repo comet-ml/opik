@@ -7,7 +7,9 @@ means to exercise, so both branches run everywhere.
 """
 
 import datetime
+import importlib
 import json
+import sys
 
 import pytest
 
@@ -193,6 +195,66 @@ def test_dumps__non_finite_float__differs_by_encoder(value, monkeypatch):
     assert stdlib_bytes != accelerated_bytes
 
 
-def test_accelerated_flag__reports_the_branch_in_use(accelerated, stdlib):
-    """ACCELERATED is a diagnostic, and is read at import; behaviour does not use it."""
-    assert isinstance(json_helpers.ACCELERATED, bool)
+# --------------------------------------------------------------------------- #
+# import-time state, which the fixtures above deliberately cannot reach
+# --------------------------------------------------------------------------- #
+# The fixtures swap `_orjson` on an already-imported module, which exercises `dumps`
+# but leaves `ACCELERATED` at whatever import decided. Reloading under a blocked import
+# is the only way to run the `except ImportError` branch itself.
+def _with_orjson_unavailable(probe):
+    """Reload json_helpers with `import orjson` failing, run `probe` on it, restore.
+
+    `probe` runs while the module is still in its fallback state and its result is what
+    comes back: `importlib.reload` mutates the module in place and hands back the same
+    object, so returning the module itself would hand the caller something the restore
+    below has already put right again.
+    """
+
+    class Blocked:
+        def find_spec(self, name, path=None, target=None):
+            if name == "orjson":
+                raise ImportError("no orjson wheel for this platform")
+            return None
+
+    blocker = Blocked()
+    sys.meta_path.insert(0, blocker)
+    saved = sys.modules.pop("orjson", None)
+    try:
+        return probe(importlib.reload(json_helpers))
+    finally:
+        sys.meta_path.remove(blocker)
+        if saved is not None:
+            sys.modules["orjson"] = saved
+        importlib.reload(json_helpers)
+
+
+def test_import__orjson_present__accelerated_is_true():
+    assert json_helpers.ACCELERATED is True
+    assert json_helpers._orjson is not None
+
+
+def test_import__orjson_unavailable__falls_back_at_import_time():
+    """The `except ImportError` branch, run for real rather than simulated."""
+    accelerated, encoder = _with_orjson_unavailable(
+        lambda module: (module.ACCELERATED, module._orjson)
+    )
+
+    assert accelerated is False
+    assert encoder is None
+
+
+def test_import__orjson_unavailable__still_encodes():
+    """A platform with no wheel gets a working encoder, not a broken import."""
+    encoded = _with_orjson_unavailable(
+        lambda module: module.dumps({"b": 1, "a": 2}, sort_keys=True)
+    )
+
+    assert json.loads(encoded) == {"a": 2, "b": 1}
+
+
+def test_import__restored_afterwards():
+    """The helper must leave the module as it found it, or every later test lies."""
+    _with_orjson_unavailable(lambda module: None)
+
+    assert json_helpers.ACCELERATED is True
+    assert json_helpers._orjson is not None
