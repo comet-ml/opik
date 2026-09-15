@@ -65,14 +65,14 @@ curl http://localhost:8080/v1/internal/hello-world/queue-size
 2. [Architecture](#architecture)
 3. [Detailed Setup](#detailed-setup)
 4. [Components](#components)
-6. [OpenTelemetry Metrics](#opentelemetry-metrics)
-7. [Configuration](#configuration)
-8. [Usage Guide](#usage-guide)
-9. [Adding New Queues](#adding-new-queues)
-10. [Testing](#testing)
-11. [Troubleshooting](#troubleshooting)
-12. [Design Decisions](#design-decisions)
-13. [Refactoring History](#refactoring-history)
+5. [OpenTelemetry Metrics](#opentelemetry-metrics)
+6. [Queue Configuration](#queue-configuration-configyml)
+7. [Usage Guide](#usage-guide)
+8. [Adding New Queues](#adding-new-queues)
+9. [Testing](#testing)
+10. [Troubleshooting](#troubleshooting)
+11. [Design Decisions](#design-decisions)
+12. [Refactoring History](#refactoring-history)
 
 ---
 
@@ -599,16 +599,16 @@ The metrics can be exported to various backends:
 ```yaml
 queues:
   # Enable/disable queue functionality
-  enabled: ${QUEUES_ENABLED:-true}
+  enabled: ${OPIK_QUEUES_ENABLED:-true}
   
   # Default TTL for all jobs (if not specified per-queue)
-  defaultJobTtl: ${QUEUES_DEFAULT_JOB_TTL:-1 day}
+  defaultJobTtl: ${OPIK_QUEUES_DEFAULT_JOB_TTL:-14 days}
   
   # Per-queue specific configurations
   queues:
     # Optimizer cloud queue
     opik:optimizer-cloud:
-      jobTTl: ${OPTIMIZER_QUEUE_JOB_TTL:-1 day}
+      jobTTl: ${OPIK_OPTIMIZER_QUEUE_JOB_TTL:-1 day}
     
     # Add more queue configs here
     # opik:another-queue:
@@ -619,9 +619,9 @@ queues:
 
 ```bash
 # Queue Configuration
-QUEUES_ENABLED=true                    # Enable queue functionality
-QUEUES_DEFAULT_JOB_TTL="1 day"         # Default job TTL
-OPTIMIZER_QUEUE_JOB_TTL="1 day"        # Optimizer queue TTL
+OPIK_QUEUES_ENABLED=true                    # Enable queue functionality
+OPIK_QUEUES_DEFAULT_JOB_TTL="14 days"       # Default job TTL (config.yml default)
+OPIK_OPTIMIZER_QUEUE_JOB_TTL="1 day"        # Optimizer queue TTL
 
 # Redis Connection
 REDIS_URL="redis://:opik@localhost:6379/0"
@@ -1286,9 +1286,9 @@ rq empty opik:optimizer-cloud --url redis://localhost:6379
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `QUEUES_ENABLED` | `true` | Enable queue functionality |
-| `QUEUES_DEFAULT_JOB_TTL` | `1 day` | Default job TTL |
-| `OPTIMIZER_QUEUE_JOB_TTL` | `1 day` | Optimizer queue job TTL |
+| `OPIK_QUEUES_ENABLED` | `true` | Enable queue functionality |
+| `OPIK_QUEUES_DEFAULT_JOB_TTL` | `14 days` | Default job TTL |
+| `OPIK_OPTIMIZER_QUEUE_JOB_TTL` | `1 day` | Optimizer queue job TTL |
 | `REDIS_HOST` | `localhost` | Redis host |
 | `REDIS_PORT` | `6379` | Redis port |
 | `REDIS_DB` | `0` | Redis database number |
