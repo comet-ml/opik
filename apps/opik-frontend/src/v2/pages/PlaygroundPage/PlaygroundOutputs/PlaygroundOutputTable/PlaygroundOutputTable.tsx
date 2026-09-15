@@ -22,12 +22,9 @@ import { useIncrementalDatasetHydration } from "@/v2/pages/PlaygroundPage/useInc
 import PlaygroundTagsCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundTagsCell";
 
 type PlaygroundOutputTableData = {
-  dataItemId: string;
   variables: { [key: string]: string };
   tags: string[];
 };
-
-const getRowId = (row: PlaygroundOutputTableData) => row.dataItemId;
 
 interface PlaygroundOutputTableProps {
   datasetItems: DatasetItem[];
@@ -217,7 +214,6 @@ const PlaygroundOutputTable = ({
               noData={<DataTableNoData title={noDataMessage} />}
               showLoadingOverlay={isFetchingData}
               testId="playground-variables-table"
-              getRowId={getRowId}
             />
           </div>
         </Resizable>
@@ -233,7 +229,6 @@ const PlaygroundOutputTable = ({
             noData={<DataTableNoData title={noDataMessage} />}
             showLoadingOverlay={isFetchingData}
             testId="playground-outputs-table"
-            getRowId={getRowId}
           />
         </div>
       )}

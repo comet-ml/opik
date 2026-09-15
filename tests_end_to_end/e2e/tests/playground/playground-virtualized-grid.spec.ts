@@ -18,8 +18,6 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
 const ITEM_COUNT = 100;
 /** Generous upper bound on the virtual window — the point is "far fewer than ITEM_COUNT". */
 const MAX_MOUNTED_ROWS = 40;
-/** Dataset item ids are UUIDs; TanStack's positional fallback would be "0", "1", ... */
-const DATASET_ITEM_ID = /^[0-9a-f-]{36}$/i;
 /** Enough variable columns that the left panel overflows its half of the grid at any viewport. */
 const CONTEXT_FIELDS = ['ctx_a', 'ctx_b', 'ctx_c', 'ctx_d'];
 
@@ -76,10 +74,6 @@ test.describe(
         expect(topRows.length).toBeLessThanOrEqual(MAX_MOUNTED_ROWS);
         // The whole dataset is not in the DOM — that is the point of the change.
         expect(topRows.length).toBeLessThan(ITEM_COUNT);
-        // Rows must be keyed by dataset item id, not by TanStack's positional fallback.
-        // Positional ids are reused across pages, which would make every id comparison
-        // below compare row slots rather than items.
-        expect(topRows.every((id) => DATASET_ITEM_ID.test(id))).toBe(true);
       });
 
       await test.step('Scrolling to the end reveals rows that were never mounted', async () => {

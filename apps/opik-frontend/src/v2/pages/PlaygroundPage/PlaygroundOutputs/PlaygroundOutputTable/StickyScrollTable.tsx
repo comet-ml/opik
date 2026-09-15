@@ -24,7 +24,6 @@ interface StickyScrollTableProps<TData> {
   noData: React.ReactNode;
   showLoadingOverlay: boolean;
   testId: string;
-  getRowId?: (row: TData) => string;
 }
 
 const EMPTY_DATA: never[] = [];
@@ -41,7 +40,6 @@ const StickyScrollTable = <TData,>({
   noData,
   showLoadingOverlay,
   testId,
-  getRowId,
 }: StickyScrollTableProps<TData>) => {
   const headerScrollRef = useRef<HTMLDivElement>(null);
   const bodyScrollRef = useRef<HTMLDivElement>(null);
@@ -88,7 +86,6 @@ const StickyScrollTable = <TData,>({
           resizeConfig={resizeConfig}
           noData={noData}
           showLoadingOverlay={showLoadingOverlay}
-          getRowId={getRowId}
           TableWrapper={StickyScrollTableBodyWrapper}
           TableBody={DataTableVirtualBody}
         />

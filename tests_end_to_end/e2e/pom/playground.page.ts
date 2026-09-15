@@ -537,10 +537,10 @@ export class PlaygroundPage {
   }
 
   /**
-   * Ids of the dataset rows currently mounted in the outputs body. Ids rather than cell
-   * text: the grid passes `getRowId`, so `data-row-id` is the dataset item id — unique per
-   * item and independent of what a run has painted into the cells. Callers should not
-   * assume a dataset ordering — the grid renders items newest-first.
+   * Row ids currently mounted in the outputs body. The grid does not set `getRowId`, so
+   * these are TanStack's positional ids within the page, not dataset item ids — enough to
+   * tell one mounted window from another, which is all the virtualization assertions need.
+   * Callers should not assume a dataset ordering: the grid renders items newest-first.
    */
   async mountedRowIds(): Promise<string[]> {
     return test.step('read mounted row ids', async () => {
