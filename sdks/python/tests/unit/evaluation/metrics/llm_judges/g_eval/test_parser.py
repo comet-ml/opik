@@ -421,6 +421,114 @@ def test_unparseable_reconstruction_still_resolves_duplicate_keys_last():
     )
 
 
+def test_braces_inside_a_string_do_not_shift_the_score_depth():
+    # A reason that mentions braces is prose, but counting `{` and `}`
+    # characters reads it as structure: the `}}}` here leaves the top-level key
+    # at depth 1 and the nested one at depth 0, so the shallowest agreeing match
+    # is the wrong one. Measured on `670fdd61e` this located index 13 and scored
+    # 0.7809998433984686, where `main` and the text path both read the top-level
+    # 7 as 0.6219349153822014.
+    entries = [
+        _entry('{"', -0.01),
+        _entry("score", -0.01),
+        _entry('":', -0.01),
+        _entry(
+            "7",
+            -0.1,
+            top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.0}],
+        ),
+        _entry(", ", -0.01),
+        _entry('"reason', -0.01),
+        _entry('": ', -0.01),
+        _entry('"returns }}} here"', -0.01),
+        _entry(", ", -0.01),
+        _entry('"breakdown"', -0.01),
+        _entry(": {", -0.01),
+        _entry('"score"', -0.01),
+        _entry(": ", -0.01),
+        _entry(
+            "7",
+            -0.05,
+            top=[{"token": "7", "logprob": -1.5}, {"token": "8", "logprob": -0.05}],
+        ),
+        _entry("}}", -0.01),
+    ]
+    content = '{"score":7, "reason": "returns }}} here", "breakdown": {"score": 7}}'
+    assert parser._locate_score_entries(entries) == [3]
+    result = parser.parse_litellm_model_output(
+        _response(content, entries),
+        name="g_eval",
+        log_probs_supported=True,
+    )
+    assert result.value == pytest.approx(0.6219349153822014, abs=1e-9), (
+        f"weighted from the nested key's tokens: {result.value}"
+    )
+
+
+def test_score_only_nested_falls_back_instead_of_scoring_from_it():
+    # A response whose only "score" sits inside a breakdown has no top-level
+    # score, so json.loads and the text path both fail on it. Scoring from the
+    # nested key would make the same response succeed or fail purely on whether
+    # the provider returned logprobs. Measured on `670fdd61e` this located index
+    # 9 and scored 0.6219349153822014; `main` raises.
+    entries = [
+        _entry('{"', -0.01),
+        _entry("reason", -0.01),
+        _entry('": ', -0.01),
+        _entry('"ok"', -0.01),
+        _entry(", ", -0.01),
+        _entry('"breakdown"', -0.01),
+        _entry(": {", -0.01),
+        _entry('"score"', -0.01),
+        _entry(": ", -0.01),
+        _entry(
+            "7",
+            -0.1,
+            top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.0}],
+        ),
+        _entry("}}", -0.01),
+    ]
+    content = '{"reason": "ok", "breakdown": {"score": 7}}'
+    assert parser._locate_score_entries(entries) is None
+    with pytest.raises(
+        exceptions.MetricComputationError,
+        match=logging_messages.GEVAL_SCORE_CALC_FAILED,
+    ):
+        parser.parse_litellm_model_output(
+            _response(content, entries),
+            name="g_eval",
+            log_probs_supported=True,
+        )
+
+
+def test_walk_stops_at_the_first_object_close():
+    # Trailing prose that carries a second object must not move the span, so the
+    # walk ends when the first object closes rather than at the end of the text.
+    # Measured on `670fdd61e` this located index 9, the second object's digits.
+    entries = [
+        _entry('{"', -0.01),
+        _entry("score", -0.01),
+        _entry('":', -0.01),
+        _entry(" ", -0.01),
+        _entry(
+            "7",
+            -0.1,
+            top=[{"token": "7", "logprob": -0.1}, {"token": "1", "logprob": -2.0}],
+        ),
+        _entry("} and {", -0.01),
+        _entry('"score', -0.01),
+        _entry('":', -0.01),
+        _entry(" ", -0.01),
+        _entry(
+            "3",
+            -0.1,
+            top=[{"token": "3", "logprob": -0.1}, {"token": "1", "logprob": -2.0}],
+        ),
+        _entry("}", -0.01),
+    ]
+    assert parser._locate_score_entries(entries) == [4]
+
+
 # --- provider-shaped GEval coverage ----------------------------------------
 # The tests above call parse_litellm_model_output directly with hand-built
 # token dicts. These go through the public GEval.score LiteLLM branch with

@@ -117,52 +117,52 @@ def parse_litellm_model_output(
 
 
 _SCORE_KEY_RE = re.compile(r'"score"\s*:\s*(\d+)')
+# A whole JSON string (escapes included, an unterminated tail tolerated) or a
+# brace: everything that moves or hides the object structure.
+_STRUCTURE_RE = re.compile(r'"(?:[^"\\]|\\.)*"?|[{}]', re.DOTALL)
+
+
+def _top_level_score_span(text: str) -> tuple[int, int] | None:
+    """Character span of the digits of the top-level ``score`` value.
+
+    Walks the first JSON object once, stepping over whole strings and reading
+    the key only at depth 1, so it lands on the value ``json.loads`` resolves:
+    a nested breakdown sits deeper, a brace or a ``"score"`` echo inside a
+    reason cannot shift the structure, prose sits outside the object, and
+    duplicate keys resolve to the last one. Nothing is validated, so a
+    truncated reconstruction walks as far as it got. Returns None when the
+    first object holds no top-level key.
+    """
+    span = None
+    depth = 0
+    for token in _STRUCTURE_RE.finditer(text):
+        if token.group() == "{":
+            depth += 1
+        elif token.group() == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        elif depth == 1:
+            key = _SCORE_KEY_RE.match(text, token.start())
+            if key is not None:
+                span = key.span(1)
+    return span
 
 
 def _locate_score_entries(entries: list) -> list[int] | None:
     """Find the entry indices whose tokens carry the score digits.
 
-    Reconstructs the decoded text from the token stream and locates the
-    digits after `"score":`; returns the one or two indices covering them,
-    or None when the key cannot be found in the reconstructed text (the
+    Reconstructs the decoded text from the token stream and locates the digits
+    of the top-level ``score`` value; returns the one or two indices covering
+    them, or None when the key cannot be found in the reconstructed text (the
     caller then falls back to the legacy fixed offset).
-
-    The located digits must be the ones every other path reads: the
-    top-level ``score`` of the response. Text order is not that order — a
-    nested key (a per-criterion breakdown, say) can come later than the
-    top-level one while ``json.loads`` still resolves the top-level value.
-    So a match is taken only when it agrees with the parsed value, and
-    among agreeing matches only at the shallowest brace depth. The last of
-    those keeps duplicate top-level keys resolving to the final one, as
-    ``json.loads`` does.
     """
     token_texts = [str(_to_dict(entry).get("token", "")) for entry in entries]
     full_text = "".join(token_texts)
-    matches = list(_SCORE_KEY_RE.finditer(full_text))
-    if not matches:
+    span = _top_level_score_span(full_text)
+    if span is None:
         return None
-    match = matches[-1]
-    try:
-        expected = str(int(json.loads(full_text)["score"]))
-    except Exception:
-        # The reconstruction can differ from the message content (a truncated
-        # stream, for instance); without a parsed value to agree with, keep
-        # the positional choice instead of failing the locator.
-        expected = None
-    if expected is not None:
-        agreed = [
-            (m, full_text[: m.start()].count("{") - full_text[: m.start()].count("}"))
-            for m in matches
-            if m.group(1) == expected
-        ]
-        if agreed:
-            # Equal values do not identify a position: a breakdown object can
-            # restate the top-level score, and its digits come later in the
-            # stream. Unclosed braces before a key count its depth, so the
-            # shallowest agreeing matches are the top-level ones.
-            shallowest = min(depth for _, depth in agreed)
-            match = [m for m, depth in agreed if depth == shallowest][-1]
-    start, end = match.start(1), match.end(1)
+    start, end = span
     offsets = []
     position = 0
     for text in token_texts:
