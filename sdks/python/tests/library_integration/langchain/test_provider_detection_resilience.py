@@ -44,6 +44,12 @@ def _assert_usage_survived(info: Any) -> None:
     assert info.usage.total_tokens == 30
 
 
+def _provider(base_url: Any) -> Any:
+    info = usage_extractor.try_extract_provider_usage_data(_openai_run(base_url))
+    _assert_usage_survived(info)
+    return info.provider
+
+
 def test_try_extract_provider_usage_data__string_base_url__keeps_usage_and_reports_host() -> (
     None
 ):
@@ -78,18 +84,74 @@ def test_try_extract_provider_usage_data__url_object_base_url__behaves_as_before
 
 
 @pytest.mark.parametrize(
-    "base_url",
+    "base_url,expected_provider",
     [
-        # urlsplit raises ValueError on this one, measured rather than assumed
-        pytest.param("http://[::1", id="unparseable_ipv6"),
-        pytest.param("not a url", id="no_scheme"),
-        pytest.param(42, id="neither_string_nor_url"),
+        pytest.param(
+            "https://my-proxy.example.com/v1",
+            "my-proxy.example.com",
+            id="proxy",
+        ),
+        pytest.param("http://localhost:8080/v1", "localhost", id="localhost_with_port"),
+        pytest.param(
+            "//my-proxy.example.com/v1",
+            "my-proxy.example.com",
+            id="scheme_relative",
+        ),
+        pytest.param(
+            "https://user:pw@my-proxy.example.com/v1",
+            "my-proxy.example.com",
+            id="userinfo",
+        ),
+        pytest.param(
+            "HTTPS://MY-PROXY.EXAMPLE.COM/v1",
+            "my-proxy.example.com",
+            id="upper_case",
+        ),
+        pytest.param("http://127.0.0.1:9000", "127.0.0.1", id="ipv4"),
+        pytest.param("https://[2001:db8::1]:8443/v1", "2001:db8::1", id="ipv6"),
+        pytest.param(
+            "HTTP://API.OPENAI.COM/v1",
+            LLMProvider.OPENAI,
+            id="upper_case_openai",
+        ),
+        pytest.param("my-proxy.example.com/v1", "", id="no_scheme"),
+        pytest.param("MY-PROXY.EXAMPLE.COM/v1", "", id="no_scheme_upper_case"),
+        pytest.param("not a url", "", id="free_text"),
+        pytest.param("/v1", "", id="path_only"),
+        pytest.param("http://", "", id="scheme_only"),
     ],
 )
-def test_try_extract_provider_usage_data__unusable_base_url__falls_back_to_default(
+def test_try_extract_provider_usage_data__string_and_url_object__report_the_same_provider(
+    base_url: str, expected_provider: Any
+) -> None:
+    """The two shapes a serialised run can carry must not name different providers."""
+    assert _provider(base_url) == expected_provider
+    assert _provider(httpx.URL(base_url)) == expected_provider
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        # urlsplit raises ValueError on these two, measured rather than assumed
+        pytest.param("http://[::1", id="unbalanced_ipv6"),
+        pytest.param("https://user:pw@[::1", id="unbalanced_ipv6_with_credentials"),
+    ],
+)
+def test_try_extract_provider_usage_data__unparseable_base_url__reports_no_host(
+    base_url: str,
+) -> None:
+    """An unreadable host must not be reported as OpenAI, which prices the run."""
+    assert _provider(base_url) == ""
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        pytest.param(42, id="int"),
+        pytest.param(object(), id="bare_object"),
+    ],
+)
+def test_try_extract_provider_usage_data__value_that_is_not_url_shaped__keeps_default(
     base_url: Any,
 ) -> None:
-    info = usage_extractor.try_extract_provider_usage_data(_openai_run(base_url))
-
-    _assert_usage_survived(info)
-    assert info.provider == LLMProvider.OPENAI
+    assert _provider(base_url) == LLMProvider.OPENAI
