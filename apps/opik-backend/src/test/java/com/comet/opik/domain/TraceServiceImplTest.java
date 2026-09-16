@@ -55,7 +55,6 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -533,12 +532,7 @@ class TraceServiceImplTest {
             assertThat(actualCount).isEqualTo(expectedCount);
         }
 
-        /**
-         * The bound, asserted where it is cheap to assert: the lookup only ever sees the workspaces that had
-         * traces.
-         * {@code DemoDataExclusionLiteralArchTest} forbids the unscoped fetch from gaining callers at build time;
-         * this pins that the trace path does not reach for it at runtime.
-         */
+        /** The bound, asserted where it is cheap to assert: the lookup only ever sees the workspaces that had traces. */
         @Test
         void countTracesPerWorkspace__whenFolding__thenTheDemoProjectLookupIsScopedToTheWorkspacesThatHadTraces() {
             when(traceDao.countTracesPerWorkspaceProject()).thenReturn(Flux.just(
@@ -558,7 +552,6 @@ class TraceServiceImplTest {
             traceService.countTracesPerWorkspace().block();
 
             verify(projectService).getDemoProjectIdsInWorkspaces(Set.of(WORKSPACE_ID));
-            verify(projectService, never()).getDemoProjectIdsWithTimestamps();
         }
 
         @Test
@@ -571,7 +564,6 @@ class TraceServiceImplTest {
             var actualResponse = traceService.countTracesPerWorkspace().block();
 
             assertThat(actualResponse).isEqualTo(expectedResponse);
-            verify(projectService, never()).getDemoProjectIdsWithTimestamps();
         }
 
         private long randomCount() {

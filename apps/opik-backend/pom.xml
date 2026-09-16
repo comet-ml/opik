@@ -245,7 +245,7 @@
         <dependency>
             <groupId>com.google.api</groupId>
             <artifactId>gax</artifactId>
-            <version>2.76.0</version>
+            <version>2.85.0</version>
         </dependency>
 
         <dependency>

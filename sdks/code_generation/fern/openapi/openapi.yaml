@@ -5568,6 +5568,7 @@ paths:
           application/x-protobuf:
             schema:
               $ref: "#/components/schemas/JsonNode"
+        required: true
       responses:
         default:
           description: default response

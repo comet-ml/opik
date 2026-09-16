@@ -3162,6 +3162,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH_LITE,
       label: "Gemini 2.0 Flash Lite 001",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH,
+      label: "Gemini Omni 1.1 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_ROBOTICS_ER_2,
+      label: "Gemini Robotics Er 2",
+    },
   ],
 
   [PROVIDER_TYPE.CUSTOM]: [

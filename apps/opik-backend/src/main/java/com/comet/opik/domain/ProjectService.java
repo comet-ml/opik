@@ -89,8 +89,6 @@ public interface ProjectService {
 
     Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids);
 
-    Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps();
-
     Mono<Set<UUID>> getDemoProjectIdsInWorkspaces(Set<String> workspaceIds);
 
     Mono<Project> getOrCreate(String projectName);
@@ -479,21 +477,14 @@ class ProjectServiceImpl implements ProjectService {
                 .collect(Collectors.toMap(Project::id, Project::name));
     }
 
-    public Mono<Map<UUID, Instant>> getDemoProjectIdsWithTimestamps() {
-        return Mono.fromCallable(() -> this.findByGlobalNames(DemoData.PROJECTS))
-                .map(projects -> projects.stream()
-                        .collect(Collectors.toMap(Project::id, Project::createdAt)))
-                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic());
-    }
-
     /**
-     * Bounded demo-project lookup: the demo projects belonging to {@code workspaceIds}.
+     * Bounded demo-project lookup: the demo projects belonging to {@code workspaceIds}, and the only such lookup
+     * there is. Anything unscoped grows with every signup, since one demo project is created per signup, and a
+     * caller would pay for the whole demo population however few workspaces it cares about.
      *
-     * <p>{@link #getDemoProjectIdsWithTimestamps()} is unscoped by design, so it grows with every signup and every
-     * caller pays for the whole demo population. Callers that only need to classify activity in workspaces they
-     * already hold use this instead. Scoping by workspace is what lets
-     * {@code projects_workspace_id_name_uk (workspace_id, name)} serve the query, and it bounds the result to the
-     * demo projects of those workspaces — a handful each, since {@link DemoData#PROJECTS} is a fixed list.
+     * <p>Scoping by workspace is what lets {@code projects_workspace_id_name_uk (workspace_id, name)} serve the
+     * query, and it bounds the result to the demo projects of those workspaces — a handful each, since
+     * {@link DemoData#PROJECTS} is a fixed list.
      *
      * <p>Returning a demo project that saw no activity is harmless: callers test membership, so an id absent from
      * their rows is never consulted.
@@ -515,19 +506,6 @@ class ProjectServiceImpl implements ProjectService {
                     .map(Project::id)
                     .collect(Collectors.toUnmodifiableSet());
         })).subscribeOn(Schedulers.boundedElastic());
-    }
-
-    private List<Project> findByGlobalNames(List<String> names) {
-        if (names.isEmpty()) {
-            return List.of();
-        }
-
-        return template.inTransaction(READ_ONLY, handle -> {
-
-            var repository = handle.attach(ProjectDAO.class);
-
-            return repository.findByGlobalNames(names);
-        });
     }
 
     @Override

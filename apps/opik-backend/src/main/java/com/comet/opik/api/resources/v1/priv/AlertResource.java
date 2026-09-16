@@ -184,6 +184,7 @@ public class AlertResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.ALERT_UPDATE)
     public Response deleteAlertBatch(
             @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid @NotNull BatchDelete batch) {
 
