@@ -233,6 +233,36 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void dropsAScoreTheMetricFlaggedAsFailedBeforeStoring() {
+            // The thread path maps through FeedbackScoresMapper rather than building items inline, so the
+            // wiring from the split to storage is worth pinning here too.
+            var message = sampleMessage();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            stubPythonScoringHappyPath(trace, project);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(
+                            PythonScoreResult.builder()
+                                    .name("test_score")
+                                    .value(BigDecimal.valueOf(0.95))
+                                    .reason("test reason")
+                                    .build(),
+                            PythonScoreResult.builder()
+                                    .name("failed_score")
+                                    .value(BigDecimal.ZERO)
+                                    .scoringFailed(true)
+                                    .reason("upstream call failed")
+                                    .build())));
+
+            scorer.score(message).block();
+
+            var captor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService).scoreBatchOfThreads(captor.capture());
+            assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
+                    threadScore("test_score", BigDecimal.valueOf(0.95), "test reason", project)));
+        }
+
+        @Test
         void dropsScoresWithoutValueAndPersistsTheRest() {
             // A thread metric returning ScoreResult(value=None) cannot be stored — the value column is not
             // nullable — but the score next to it must still land: binding the valueless one used to throw

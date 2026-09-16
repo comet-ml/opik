@@ -3,6 +3,16 @@ import type { FeedbackScoreRef, SpanDetail, ThreadDetail, TraceDetail } from './
 export interface PollFeedbackScoreOpts {
   timeoutMs?: number;
   pollIntervalMs?: number;
+  /**
+   * Keep polling until the found score also satisfies this.
+   *
+   * Without it the poll returns the instant a score of that name exists, which
+   * is the wrong moment whenever the field under assertion is written *after*
+   * the score row — annotating a reason, for one, is a second write against a
+   * score that already landed. The caller then reads whatever happened to be
+   * stored at that instant and usually, but not always, sees the final value.
+   */
+  until?: (score: FeedbackScoreRef) => boolean;
 }
 
 /** The only shape either poller needs: something that carries feedback scores. */
@@ -31,11 +41,15 @@ async function pollForFeedbackScore<T extends ScoredEntity>(
   const pollIntervalMs = opts.pollIntervalMs ?? 2_000;
   const start = Date.now();
   let last: T | null = null;
+  let seen: FeedbackScoreRef | null = null;
 
   while (Date.now() - start < timeoutMs) {
     last = await getEntity(id);
     const hit = last?.feedbackScores.find((fs) => fs.name === scoreName);
-    if (hit) return hit;
+    if (hit) {
+      seen = hit;
+      if (opts.until === undefined || opts.until(hit)) return hit;
+    }
     await new Promise((r) => setTimeout(r, pollIntervalMs));
   }
 
@@ -44,9 +58,18 @@ async function pollForFeedbackScore<T extends ScoredEntity>(
     last === null
       ? `<${kind} not found>`
       : `[${last.feedbackScores.map((fs) => `${fs.name}=${fs.value}`).join(', ')}]`;
+  // Which of the two waits ran out changes where to look: the score never
+  // arriving points at the write path, the predicate never holding points at a
+  // later field still unwritten. Saying "waiting for the score" for both would
+  // send a reader after the wrong one.
+  const waitedFor =
+    seen === null
+      ? `waiting for feedback_score "${scoreName}"`
+      : `waiting for feedback_score "${scoreName}" to satisfy the given condition ` +
+        `(last seen: value=${seen.value}, reason=${JSON.stringify(seen.reason)})`;
   throw new Error(
     `pollForFeedbackScore timed out after ${elapsed}ms ` +
-      `waiting for feedback_score "${scoreName}" on ${kind} ${id}. ` +
+      `${waitedFor} on ${kind} ${id}. ` +
       `Last polled feedback_scores: ${lastScores}`,
   );
 }

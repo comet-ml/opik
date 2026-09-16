@@ -2,7 +2,7 @@ import { test, expect } from '@e2e/fixtures';
 import { LogsPage } from '@e2e/pom/logs.page';
 import { uuid7 } from '@e2e/core/backend';
 import type { AutomationRuleLogRef, BackendClient } from '@e2e/core/backend';
-import { buildConstantScoreMetric, buildValuelessScoresMetric } from '@e2e/core/metrics';
+import { buildConstantScoreMetric, buildScoreResultMetric } from '@e2e/core/metrics';
 
 /**
  * A python metric may answer `ScoreResult(value=None)` — a check that did not
@@ -18,6 +18,27 @@ import { buildConstantScoreMetric, buildValuelessScoresMetric } from '@e2e/core/
  * the metric nor the reason. A user reading that trace sees "this rule did not
  * score anything", which is indistinguishable from a rule that was never
  * invoked.
+ *
+ * ## Scope, and what this does NOT cover
+ *
+ * `online-evaluation-python-score-usability.spec.ts` owns the TRACE-scope half
+ * of this contract in more detail than the first test here does: it adds the
+ * `scoring_failed=True` drop cause, and it pins the wholly-unusable response —
+ * a metric whose every score is valueless — as a single classified 400 that
+ * stores nothing. That is the python evaluator's own `has_usable_score` gate
+ * (`apps/opik-python-backend/src/opik_backend/score_validation.py`), which
+ * rejects the response before the backend's per-score split ever sees it, so
+ * the all-valueless batch is NOT a clean no-op and nothing here asserts it is.
+ *
+ * What that spec does not reach, and this one exists for, is that the per-score
+ * split is invoked from THREE separate scorers —
+ * `OnlineScoringUserDefinedMetricPythonScorer`,
+ * `OnlineScoringSpanUserDefinedMetricPythonScorer` and
+ * `OnlineScoringTraceThreadUserDefinedMetricPythonScorer` — each off its own
+ * Redis stream, each calling `splitPythonScores` and
+ * `logDroppedPythonScores` at its own call site. A scorer that forgot to split
+ * would store a valueless score, or fail its whole batch, on that entity type
+ * alone. The second test below is the span and thread halves of that.
  *
  * ## Why the log assertions do not pin the WARN's exact shape
  *
@@ -53,7 +74,7 @@ const EVALUATOR_CALL_LINE = 'to Python evaluator';
 /** Tail of the WARN that reports a dropped score, stable across both wordings. */
 const DROPPED_SCORE_REASON = 'because the metric returned no value';
 
-/** The scorer's terminal line, written even when the storable batch is empty. */
+/** The scorer's terminal line, written once the storable scores are persisted. */
 const STORED_SUCCESSFULLY = 'stored successfully';
 
 const SEED_OUTPUT = 'seed output';
@@ -66,10 +87,10 @@ const OUTPUT_ARGUMENTS = { output: 'output.output' };
  * whole log stream.
  *
  * Anchoring on the terminal "stored successfully" line rather than on a score
- * arriving is what makes the absence assertions sound. A rule whose every score
- * was valueless writes no score at all, so there is nothing to poll for; and a
- * rule that HAS written one score may still be mid-batch. The terminal line is
- * emitted on both paths and only once the scorer is done.
+ * arriving is what makes the absence assertions sound: a rule that HAS written
+ * one score of its batch may still be mid-batch, so a dropped score's absence
+ * read at that moment would only mean "not yet". The terminal line is emitted
+ * once the scorer is done with the entity, which is when absence means absence.
  *
  * An ERROR ends the wait too, and is then asserted away. It is a terminal state
  * just as much as the success line, so polling on past it only delays the
@@ -164,7 +185,7 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
     automationRulesCleanup,
   }) => {
     // Scoring is asynchronous end to end (ingest -> sampler -> Redis stream ->
-    // python evaluator -> score write -> user log write) and four rules judge
+    // python evaluator -> score write -> user log write) and three rules judge
     // the same trace. The inner polls below fail first, each with a diagnostic
     // naming the rule it was waiting on.
     test.setTimeout(300_000);
@@ -174,10 +195,8 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
     const mixedGone = `${testNamespace}-mixed-gone`;
     const zeroKept = `${testNamespace}-zero-kept`;
     const zeroGone = `${testNamespace}-zero-gone`;
-    const voidFirst = `${testNamespace}-void-first`;
-    const voidSecond = `${testNamespace}-void-second`;
 
-    const rules = await test.step('Create a control rule and three list-returning rules', async () => {
+    const rules = await test.step('Create a control rule and two list-returning rules', async () => {
       const create = (name: string, metric: string) =>
         backendClient.createAutomationRule({
           projectId: project.id,
@@ -190,20 +209,18 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
       return {
         // The control returns a single valued score and nothing else. It is what
         // separates "the fix is wrong" from "the python evaluator is
-        // unreachable": without it, three rules that stored nothing would look
-        // identical to three rules that were never invoked.
+        // unreachable": without it, two rules that stored nothing would look
+        // identical to two rules that were never invoked.
         control: await create(`${testNamespace}-control-rule`, buildConstantScoreMetric(controlName)),
         // The valueless score is FIRST in every batch below. A regression that
         // only handled a trailing `None` would pass a batch that always ends
         // with one.
         mixed: await create(
           `${testNamespace}-mixed-rule`,
-          buildValuelessScoresMetric({
-            scores: [
-              { name: mixedGone, value: null },
-              { name: mixedKept, value: 1.0 },
-            ],
-          }),
+          buildScoreResultMetric(`${testNamespace}-mixed-rule`, [
+            { name: mixedGone, value: null },
+            { name: mixedKept, value: 1.0 },
+          ]),
         ),
         // 0.0 is the value most easily confused with "no value": both are
         // falsy, and a filter written on truthiness rather than on nullness
@@ -211,29 +228,16 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
         // still passed.
         zero: await create(
           `${testNamespace}-zero-rule`,
-          buildValuelessScoresMetric({
-            scores: [
-              { name: zeroGone, value: null },
-              { name: zeroKept, value: 0.0 },
-            ],
-          }),
-        ),
-        // The empty-batch corner: every score dropped must reach a clean no-op,
-        // not an error path, and not a batch that fails because it is empty.
-        allValueless: await create(
-          `${testNamespace}-void-rule`,
-          buildValuelessScoresMetric({
-            scores: [
-              { name: voidFirst, value: null },
-              { name: voidSecond, value: null },
-            ],
-          }),
+          buildScoreResultMetric(`${testNamespace}-zero-rule`, [
+            { name: zeroGone, value: null },
+            { name: zeroKept, value: 0.0 },
+          ]),
         ),
       };
     });
 
-    const traceId = await test.step('Seed one trace for all four rules to judge', async () => {
-      // One trace, four rules: the control and the list-returning rules are then
+    const traceId = await test.step('Seed one trace for all three rules to judge', async () => {
+      // One trace, three rules: the control and the list-returning rules are then
       // provably judging identical input, so a difference in outcome is a
       // difference in the metric and not in what it was given.
       const id = uuid7();
@@ -258,18 +262,16 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
       expect(score.value, 'the control metric returns a constant 1.0').toBe(1.0);
     });
 
-    const logsByRule = await test.step('Wait for all four rules to finish with the trace', async () => {
+    const logsByRule = await test.step('Wait for all three rules to finish with the trace', async () => {
       // Every absence assertion below rests on this. The sampler enqueues rules
       // onto per-type Redis streams via `parallelStream()`, so one rule's score
-      // landing says nothing about another's progress — and the all-valueless
-      // rule never writes a score to wait on at all.
-      const [control, mixed, zero, allValueless] = await Promise.all([
+      // landing says nothing about another's progress.
+      const [control, mixed, zero] = await Promise.all([
         waitForRuleToFinish(backendClient, rules.control, `${testNamespace}-control-rule`),
         waitForRuleToFinish(backendClient, rules.mixed, `${testNamespace}-mixed-rule`),
         waitForRuleToFinish(backendClient, rules.zero, `${testNamespace}-zero-rule`),
-        waitForRuleToFinish(backendClient, rules.allValueless, `${testNamespace}-void-rule`),
       ]);
-      return { control, mixed, zero, allValueless };
+      return { control, mixed, zero };
     });
 
     const settled = await test.step('Let the trace\'s score set settle before reading it', async () => {
@@ -295,8 +297,8 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
       // a build that lost the whole batch — which is the bug this replaced.
       expect(
         settled.feedbackScores.map((s) => s.name).sort(),
-        `only the valued scores may reach the trace: '${mixedGone}', '${zeroGone}', ` +
-          `'${voidFirst}' and '${voidSecond}' carry no value and cannot be stored`,
+        `only the valued scores may reach the trace: '${mixedGone}' and '${zeroGone}' ` +
+          `carry no value and cannot be stored`,
       ).toEqual([controlName, mixedKept, zeroKept].sort());
 
       const byName = new Map(settled.feedbackScores.map((s) => [s.name, s.value]));
@@ -311,28 +313,11 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
     await test.step('Each rule reported its dropped scores and none of them failed', async () => {
       expectCleanDropLog(logsByRule.mixed, `${testNamespace}-mixed-rule`, [mixedGone]);
       expectCleanDropLog(logsByRule.zero, `${testNamespace}-zero-rule`, [zeroGone]);
-      expectCleanDropLog(logsByRule.allValueless, `${testNamespace}-void-rule`, [
-        voidFirst,
-        voidSecond,
-      ]);
       // The control has nothing to drop, so it must have warned about nothing.
       expect(
         logsByRule.control.filter((l) => l.message.includes(DROPPED_SCORE_REASON)),
         'the control rule returns a valued score, so it must report no dropped score',
       ).toEqual([]);
-    });
-
-    await test.step('The all-valueless rule stored an empty batch rather than erroring', async () => {
-      // The corner the empty batch is really about: with nothing left to store,
-      // the scorer must still reach its terminal line. `expectCleanDropLog`
-      // above has already asserted the stream carries no ERROR.
-      const terminal = logsByRule.allValueless.filter((l) =>
-        l.message.includes(STORED_SUCCESSFULLY),
-      );
-      expect(
-        terminal,
-        'a batch whose every score was dropped is a clean no-op, reported exactly once',
-      ).toHaveLength(1);
     });
 
     await test.step('The trace panel renders the survivors and no row for a dropped score', async () => {
@@ -346,21 +331,41 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
       await panel.waitForFullyLoaded();
       await panel.openFeedbackScoresTab();
 
+      // The tab renders a second table for span scores when the trace has any.
+      // This trace has no spans, so asserting one table is what makes the row
+      // count below the trace's own scores rather than a sum over both.
+      await expect(
+        panel.feedbackScoreTables(),
+        'a spanless trace renders only the Trace scores table',
+      ).toHaveCount(1);
+      await expect(
+        panel.feedbackScoreRows(),
+        'three stored scores, three rows — a dropped score must not reach the panel',
+      ).toHaveCount(3);
+
       for (const [name, value] of [
-        [controlName, 1],
-        [mixedKept, 1],
-        [zeroKept, 0],
+        [controlName, '1'],
+        [mixedKept, '1'],
+        [zeroKept, '0'],
       ] as const) {
+        // `feedbackScoreRowByName`, not `feedbackScoreRow`: the row id IS the
+        // score name, so this matches by identity. The `hasText` variant would
+        // also match a row whose name merely CONTAINS this one, which is how a
+        // shared `${testNamespace}-` prefix turns an exhaustive assertion into
+        // one that cannot fail.
         await expect(
-          panel.feedbackScoreRow(name),
+          panel.feedbackScoreRowByName(name),
           `the Feedback scores tab must show exactly one row for '${name}'`,
         ).toHaveCount(1);
-        expect(await panel.readFeedbackScoreValue(name), `'${name}' renders its value`).toBe(value);
+        await expect(
+          panel.feedbackScoreValueCell(name),
+          `'${name}' renders its value`,
+        ).toHaveText(value);
       }
 
-      for (const dropped of [mixedGone, zeroGone, voidFirst, voidSecond]) {
+      for (const dropped of [mixedGone, zeroGone]) {
         await expect(
-          panel.feedbackScoreRow(dropped),
+          panel.feedbackScoreRowByName(dropped),
           `'${dropped}' carried no value, so the panel must show no row for it`,
         ).toHaveCount(0);
       }
@@ -396,12 +401,10 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
           name: spanRuleName,
           samplingRate: 1,
           type: 'span_user_defined_metric_python',
-          metric: buildValuelessScoresMetric({
-            scores: [
-              { name: spanGone, value: null },
-              { name: spanKept, value: 0.5 },
-            ],
-          }),
+          metric: buildScoreResultMetric(spanRuleName, [
+            { name: spanGone, value: null },
+            { name: spanKept, value: 0.5 },
+          ]),
           arguments: OUTPUT_ARGUMENTS,
         }),
         thread: await backendClient.createAutomationRule({
@@ -410,15 +413,15 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
           samplingRate: 1,
           type: 'trace_thread_user_defined_metric_python',
           // No `arguments`: the thread scorer hands the metric the whole
-          // conversation rather than a mapped section, and `context` is the
-          // parameter it arrives as.
-          metric: buildValuelessScoresMetric({
-            scores: [
-              { name: threadGone, value: null },
-              { name: threadKept, value: 0.25 },
-            ],
-            scoreArgs: ['context'],
-          }),
+          // conversation as `score()`'s first positional argument rather than a
+          // mapped section, so the builder's single `output` parameter receives
+          // it. The metric never reads its input — the scores it returns are
+          // the literal ones constructed here — so the parameter's NAME is
+          // immaterial and no thread-specific builder is needed.
+          metric: buildScoreResultMetric(threadRuleName, [
+            { name: threadGone, value: null },
+            { name: threadKept, value: 0.25 },
+          ]),
         }),
       };
     });
@@ -515,7 +518,7 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
         )
         .toBe(ids.length);
 
-      await backendClient.closeThread({ projectName: project.name, threadId });
+      await backendClient.closeThreads({ projectName: project.name, threadIds: [threadId] });
       return ids;
     });
 
@@ -531,6 +534,45 @@ test.describe('Online Evaluation — python scores with no value', { tag: ['@t2-
         span!.feedbackScores.map((s) => s.name).sort(),
         `'${spanGone}' carries no value, so the span must carry only '${spanKept}'`,
       ).toEqual([spanKept]);
+    });
+
+    await test.step('The thread is readable by id before any score is asserted', async () => {
+      // A readiness barrier, deliberately separate from the score assertions,
+      // and the same one online-evaluation-thread-scope-batch-close.spec.ts
+      // makes for the same reason: `getThread` is the by-id read
+      // (`POST /traces/threads/retrieve`), which resolves the project through a
+      // different path than the trace reads above, and shortly after a project
+      // is created it has been observed to answer 404 "Project not found" while
+      // the trace surface is already serving that same project.
+      //
+      // That matters here because `pollThreadForFeedbackScore` reads through
+      // `getThread`, and a thrown 404 escapes `expect.poll`'s callback rather
+      // than being retried — so without this barrier a startup race fails the
+      // poll on its first tick, reporting a missing score for what is really an
+      // unresolved project.
+      //
+      // This cannot hide a real absence: the poll asserts the thread becomes
+      // readable, so a thread that is genuinely gone fails here by name.
+      await expect
+        .poll(
+          async () => {
+            try {
+              await backendClient.getThread({ projectId: project.id, threadId });
+              return true;
+            } catch {
+              // Not readable yet — the poll's own deadline is the failure.
+              return false;
+            }
+          },
+          {
+            timeout: 60_000,
+            intervals: [1_000, 2_000, 5_000],
+            message:
+              `thread '${threadId}' never became readable by id, so its scores cannot be ` +
+              `asserted`,
+          },
+        )
+        .toBe(true);
     });
 
     await test.step('The thread carries the valued score and not the valueless one', async () => {

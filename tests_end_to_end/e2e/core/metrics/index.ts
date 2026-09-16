@@ -3,5 +3,6 @@ export {
   buildThreadScoreMetric,
   buildSilentMetric,
   buildUnparseableMetric,
-  buildValuelessScoresMetric,
+  buildScoreResultMetric,
 } from './python-metric-source';
+export type { PythonScoreSpec } from './python-metric-source';

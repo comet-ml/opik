@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import dayjs from "dayjs";
 import { Database, FlaskConical, ListChecks, X } from "lucide-react";
 
@@ -181,28 +181,9 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
     [datasetId, setSelectedRuleIds, setScoresForDataset],
   );
 
-  // Resolve null (="all rules") to actual IDs so the backend can score non-SDK traces
-  useEffect(() => {
-    if (
-      isExperimentMode &&
-      activeType === DATASET_TYPE.DATASET &&
-      selectedRuleIds === null &&
-      rules.length > 0
-    ) {
-      setSelectedRuleIds(rules.map((r) => r.id));
-    }
-  }, [
-    isExperimentMode,
-    activeType,
-    selectedRuleIds,
-    rules,
-    setSelectedRuleIds,
-  ]);
-
   const handleRuleCreated = useCallback(
     (rule: EvaluatorsRule) => {
-      if (selectedRuleIds === null) return;
-      const next = [...selectedRuleIds, rule.id];
+      const next = [...(selectedRuleIds ?? []), rule.id];
       setSelectedRuleIds(next);
       const plainId = toPlainDatasetId(datasetId);
       if (plainId) setScoresForDataset(plainId, next);

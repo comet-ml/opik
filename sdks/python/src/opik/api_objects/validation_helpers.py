@@ -37,9 +37,7 @@ def validate_and_parse_usage(
     unknown_provider = (provider is None) or (not LLMProvider.has_value(provider))
 
     if unknown_provider:
-        return llm_usage.build_opik_usage_from_unknown_provider(
-            usage
-        ).to_backend_compatible_full_usage_dict()
+        return _parse_usage_of_unknown_provider(usage, logger)
 
     provider = LLMProvider(provider)
 
@@ -47,9 +45,30 @@ def validate_and_parse_usage(
         opik_usage = llm_usage.build_opik_usage(provider=provider, usage=usage)
         return opik_usage.to_backend_compatible_full_usage_dict()
     except Exception:
-        return llm_usage.build_opik_usage_from_unknown_provider(
-            usage
-        ).to_backend_compatible_full_usage_dict()
+        return _parse_usage_of_unknown_provider(usage, logger)
+
+
+def _parse_usage_of_unknown_provider(
+    usage: Any, logger: logging.Logger
+) -> Optional[Dict[str, int]]:
+    opik_usage = llm_usage.build_opik_usage_from_unknown_provider(usage)
+    if opik_usage is None:
+        return None
+
+    try:
+        return opik_usage.to_backend_compatible_full_usage_dict()
+    except Exception:
+        # Flattening walks the provider payload, so pathological input (deep or
+        # cyclic nesting -> RecursionError) can still fail here even though parsing
+        # succeeded. This is the best-effort path and it is reached with arbitrary
+        # caller data from `Opik.span(usage=...)`: the usage is droppable, the span
+        # it rides on is not. Type only, never the value.
+        logger.error(
+            "Failed to serialize token usage of an unknown provider (received %s)",
+            type(usage).__name__,
+            exc_info=True,
+        )
+        return None
 
 
 def validate_feedback_score(
