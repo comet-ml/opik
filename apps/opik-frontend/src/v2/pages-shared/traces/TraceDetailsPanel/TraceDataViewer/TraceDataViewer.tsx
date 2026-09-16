@@ -50,6 +50,11 @@ type TraceDataViewerProps = {
   search?: string;
   isErrorExpanded?: boolean;
   onErrorExpandedChange?: (expanded: boolean) => void;
+  /**
+   * Sits at the end of the header row. A slot rather than a component, so the
+   * panel keeps owning when it appears and this only decides where.
+   */
+  headerSlot?: React.ReactNode;
 };
 
 const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
@@ -63,6 +68,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   search,
   isErrorExpanded,
   onErrorExpandedChange,
+  headerSlot,
 }) => {
   const {
     permissions: { canAnnotateTraceSpanThread, canViewPrompts },
@@ -249,6 +255,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 className="comet-body-s text-foreground"
               />
             )}
+            {headerSlot && <div className="ml-auto">{headerSlot}</div>}
           </div>
           <TagList
             data={data}

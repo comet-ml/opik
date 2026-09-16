@@ -466,12 +466,14 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     onErrorExpandedChange={
                       showMcpHint ? handleErrorExpandedChange : undefined
                     }
-                  />
-                )}
-                {showMcpHint && (
-                  <McpHintRail
-                    isVisible={isHintVisible}
-                    target={mcpHintTarget}
+                    headerSlot={
+                      showMcpHint ? (
+                        <McpHintRail
+                          isVisible={isHintVisible}
+                          target={mcpHintTarget}
+                        />
+                      ) : undefined
+                    }
                   />
                 )}
               </div>

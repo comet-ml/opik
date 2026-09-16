@@ -9,8 +9,13 @@ type McpHintRailProps = {
   target: McpHintTarget;
 };
 
-// An overlay rather than a row in the scroll flow: it stays put while a long
-// traceback scrolls under it, and cannot shift the layout when it appears.
+/**
+ * Where the pill sits: at the end of the header row, as the design has it.
+ *
+ * In the flow rather than pinned over the viewer. An overlay in that corner
+ * landed on the agent graph's own zoom controls, which sit in the same corner
+ * of the same container, at the same z-index.
+ */
 const McpHintRail: React.FunctionComponent<McpHintRailProps> = ({
   isVisible,
   target,
@@ -24,7 +29,7 @@ const McpHintRail: React.FunctionComponent<McpHintRailProps> = ({
       // own, held at its first frame by fill-mode backwards, which costs no
       // state and no render: a timer here would only re-render to say "now".
       // Both sit inside motion-safe, so nobody who turned animation off waits.
-      className="pointer-events-none absolute right-4 top-4 z-10 flex justify-end motion-safe:duration-300 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:[animation-delay:var(--mcp-hint-reveal-delay)] motion-safe:[animation-fill-mode:backwards]"
+      className="flex shrink-0 justify-end motion-safe:duration-300 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:[animation-delay:var(--mcp-hint-reveal-delay)] motion-safe:[animation-fill-mode:backwards]"
       style={
         {
           "--mcp-hint-reveal-delay": `${MCP_HINT_REVEAL_DELAY_MS}ms`,
