@@ -167,9 +167,13 @@ class StreamingExecutor(Generic[T]):
             ):
                 for score in result.score_results:
                     # Failed scores count at their recorded 0.0 so the running
-                    # average matches the final aggregate (#8134).
+                    # average matches the final aggregate (#8134). A failure
+                    # contributes that 0.0 and not the value the raising metric
+                    # left behind, which could be non-finite.
                     if isinstance(score, ScoreResult):
-                        self._score_totals[score.name] += score.value
+                        self._score_totals[score.name] += (
+                            0.0 if score.scoring_failed else score.value
+                        )
                         self._score_counts[score.name] += 1
 
                 # Update progress bar with running averages

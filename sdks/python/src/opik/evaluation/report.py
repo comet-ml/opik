@@ -29,7 +29,10 @@ def _compute_average_scores(
             # failures stays visible via the returned failed_scores mapping.
             if score.scoring_failed:
                 score_failed[score.name] += 1
-            score_totals[score.name] += score.value
+            # A failure contributes the 0.0 the engine records, never whatever
+            # value the raising metric left behind: a non-finite one would turn
+            # this average into nan while the final statistics dropped it.
+            score_totals[score.name] += 0.0 if score.scoring_failed else score.value
             score_counts[score.name] += 1
 
     average_scores = {

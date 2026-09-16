@@ -567,15 +567,13 @@ def test_aggregate_evaluation_scores__zero_and_negative_values():
 
 def test_aggregate_evaluation_scores__all_scores_filtered_out():
     """Test when all scores are invalid - should result in empty aggregation."""
-    failed_score1 = score_result.ScoreResult(
-        name="accuracy", value=float("nan"), scoring_failed=True
-    )
-    failed_score2 = score_result.ScoreResult(
-        name="accuracy", value=float("inf"), scoring_failed=True
-    )
     nan_score = score_result.ScoreResult(
         name="precision", value=float("nan"), scoring_failed=False
     )
+    # Only successful non-finite scores filter here. A *failed* score with a
+    # non-finite leftover value no longer belongs in this test: it now counts
+    # at its recorded ``0.0`` like any other failure, which
+    # ``test_failed_scores_in_aggregates.py`` pins.
 
     test_case_obj = test_case.TestCase(
         trace_id="trace1",
@@ -586,7 +584,7 @@ def test_aggregate_evaluation_scores__all_scores_filtered_out():
 
     test_result_obj = test_result.TestResult(
         test_case=test_case_obj,
-        score_results=[failed_score1, failed_score2, nan_score],
+        score_results=[nan_score],
         trial_id=1,
     )
 
