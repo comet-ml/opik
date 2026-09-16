@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -17,6 +18,7 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.TestIdGeneratorFactory;
+import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -182,6 +184,23 @@ class SpansDistributedWrapMutationTest {
                 window.lowerBound()).block();
 
         assertThat(spanIdsOf(trace)).isEmpty();
+    }
+
+    /**
+     * Aggregate reads survive the wrap. Every test here already exercises the paginated find through {@code spans}
+     * ({@link #spanIdsOf}); this covers the one read shape they do not. The stats query is multi-CTE, reads
+     * {@code feedback_scores} alongside {@code spans}, and aggregates with counts and quantiles — and a
+     * {@code Distributed} table computes an aggregate per shard and merges partial states on the initiator rather
+     * than returning a local result, so it is the read whose plan the wrap changes most.
+     */
+    @Test
+    void spanStatsAreAggregatedThroughTheDistributedWrap() {
+        var trace = seedTraceWithSpanAt(ID_GENERATOR.generateId());
+
+        var stats = spanResourceClient.getSpansStats(trace.projectName(), null, List.of(), API_KEY, WORKSPACE_NAME,
+                Map.of());
+
+        assertThat(stats.stats()).contains(new ProjectStats.CountValueStat(StatsMapper.SPAN_COUNT, 1L));
     }
 
     @Test
