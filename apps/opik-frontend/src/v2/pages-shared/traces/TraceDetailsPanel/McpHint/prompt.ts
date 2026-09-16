@@ -4,6 +4,7 @@ type PromptContext = {
   traceId: string;
   spanId?: string;
   projectName: string;
+  projectId: string;
 };
 
 // Project and workspace names are user-controlled and land in a prompt a coding
@@ -19,14 +20,21 @@ const inlineValue = (value: string, maxLength = 120) =>
 
 // Worded the same as the `Debug this trace` payload the connected-user popover
 // will carry, so the two do not drift apart.
-const debugStep = ({ traceId, spanId, projectName }: PromptContext) => {
+const debugStep = ({
+  traceId,
+  spanId,
+  projectName,
+  projectId,
+}: PromptContext) => {
   const entity = spanId
     ? `span ${spanId} of trace ${traceId}`
     : `trace ${traceId}`;
 
+  // The name is for me, reading the prompt before I paste it; the id is what
+  // settles it, since two workspaces can hold a project of the same name.
   return `4. Then read Opik ${entity} in project "${inlineValue(
     projectName,
-  )}" — the error and its spans — work out what caused it, and fix it in the code.`;
+  )}" (id ${projectId}) — the error and its spans — work out what caused it, and fix it in the code.`;
 };
 
 const DETECT_STEP =

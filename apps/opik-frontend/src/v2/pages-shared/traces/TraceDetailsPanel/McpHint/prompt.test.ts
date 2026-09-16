@@ -7,11 +7,13 @@ import { MCP_CLIENT } from "./types";
 
 const TRACE_ID = "01a0a497-12f6-73e2-bb3d-56f286348309";
 const SPAN_ID = "01a0a497-9d9d-7ac3-a5a7-1535869ab049";
+const PROJECT_ID = "01a0a49e-693d-7265-aa94-f95a43854c9b";
 
 const hosted = (overrides = {}) =>
   buildHostedInstallPrompt({
     traceId: TRACE_ID,
     projectName: "my-agent",
+    projectId: PROJECT_ID,
     serverUrl: "https://example.com/api/v1/mcp",
     ...overrides,
   });
@@ -20,6 +22,7 @@ const local = (overrides = {}) =>
   buildLocalInstallPrompt({
     traceId: TRACE_ID,
     projectName: "my-agent",
+    projectId: PROJECT_ID,
     workspaceName: "my-workspace",
     ...overrides,
   });
@@ -121,5 +124,11 @@ describe("the local prompt's install step", () => {
 
     expect(prompt).toContain("ask me to run it myself");
     expect(prompt).toContain("carry on from step 3");
+  });
+
+  it("carries the project id, since a name is not unique across workspaces", () => {
+    for (const prompt of [hosted(), local()]) {
+      expect(prompt).toContain(`(id ${PROJECT_ID})`);
+    }
   });
 });

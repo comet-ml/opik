@@ -11,13 +11,17 @@ import { MCP_COPIED_FEEDBACK_MS } from "./constants";
  * a tick over a clipboard that never changed is worse than no tick at all.
  */
 const useCopiedFeedback = (): [boolean, (text: string) => Promise<boolean>] => {
-  const [hasCopied, setHasCopied] = useState(false);
+  // How many copies have landed, rather than a flag: a second copy has to
+  // restart the wait, and setting a flag that is already set changes nothing,
+  // so the feedback used to end on the first copy's clock. Counting keeps that
+  // independent of any clock, which a test can move under us.
+  const [copies, setCopies] = useState(0);
 
   useEffect(() => {
-    if (!hasCopied) return;
-    const timer = setTimeout(() => setHasCopied(false), MCP_COPIED_FEEDBACK_MS);
+    if (!copies) return;
+    const timer = setTimeout(() => setCopies(0), MCP_COPIED_FEEDBACK_MS);
     return () => clearTimeout(timer);
-  }, [hasCopied]);
+  }, [copies]);
 
   const copyText = useCallback(async (text: string) => {
     try {
@@ -25,11 +29,11 @@ const useCopiedFeedback = (): [boolean, (text: string) => Promise<boolean>] => {
     } catch {
       return false;
     }
-    setHasCopied(true);
+    setCopies((landed) => landed + 1);
     return true;
   }, []);
 
-  return [hasCopied, copyText];
+  return [copies > 0, copyText];
 };
 
 export default useCopiedFeedback;

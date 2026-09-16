@@ -69,6 +69,7 @@ export type McpPromptContext = {
   traceId: string;
   spanId?: string;
   projectName: string;
+  projectId: string;
   workspaceName: string;
   serverUrl: string;
 };

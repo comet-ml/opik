@@ -20,10 +20,18 @@ const useMcpPrompt = (
         traceId: target.traceId,
         spanId: target.spanId,
         projectName,
+        projectId: target.projectId,
         workspaceName,
         serverUrl: getMcpServerUrl(),
       }),
-    [buildPrompt, target.traceId, target.spanId, projectName, workspaceName],
+    [
+      buildPrompt,
+      target.traceId,
+      target.spanId,
+      target.projectId,
+      projectName,
+      workspaceName,
+    ],
   );
 };
 

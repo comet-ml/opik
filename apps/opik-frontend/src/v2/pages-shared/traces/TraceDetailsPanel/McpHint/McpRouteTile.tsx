@@ -28,10 +28,13 @@ const McpRouteTile: React.FunctionComponent<McpRouteTileProps> = ({
   const [hasCopied, copyText] = useCopiedFeedback();
 
   const handleUse = async () => {
-    if (isDeeplink || !route.clipboard) {
+    if (isDeeplink) {
       onUse(route);
       return;
     }
+    // A copy route with nothing to copy has not been used, whatever the click
+    // says. Reporting it would put an unusable route in the funnel.
+    if (!route.clipboard) return;
     if (await copyText(route.clipboard)) onUse(route);
   };
 

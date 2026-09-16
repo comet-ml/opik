@@ -7,7 +7,12 @@ import {
   waitFor,
 } from "@testing-library/react";
 
-vi.mock("clipboard-copy", () => ({ default: vi.fn(() => Promise.resolve()) }));
+const { clipboard } = vi.hoisted(() => ({
+  clipboard: { write: vi.fn(async (text: string) => void text) },
+}));
+vi.mock("clipboard-copy", () => ({
+  default: (text: string) => clipboard.write(text),
+}));
 vi.mock("@/lib/analytics/tracking", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   trackEvent: vi.fn(),
@@ -44,6 +49,7 @@ import {
   MCP_PROMPT_PITCH,
   MCP_TILES_LABEL,
 } from "./constants";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import { McpHintTarget } from "./types";
 
 const target: McpHintTarget = {
@@ -126,6 +132,46 @@ describe("the hint card", () => {
 
     await act(async () => {});
     expect(onConfirmationChange).not.toHaveBeenCalled();
+  });
+  it("says nothing when the browser refuses the clipboard", async () => {
+    // A tick over a clipboard that never changed is worse than no tick, and
+    // the funnel must not count a copy that did not happen.
+    clipboard.write.mockRejectedValueOnce(new Error("denied"));
+    vi.mocked(trackEvent).mockClear();
+    const onAction = vi.fn();
+    render(
+      <TooltipProvider>
+        <McpHintPopover
+          onAction={onAction}
+          onConfirmationChange={vi.fn()}
+          onDismiss={vi.fn()}
+          target={target}
+        />
+      </TooltipProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("mcp-route-prompt"));
+    await act(async () => {});
+
+    expect(screen.queryByTestId("mcp-route-prompt-copied")).toBeNull();
+    expect(screen.getByTestId("mcp-route-prompt")).toBeInTheDocument();
+    expect(onAction).not.toHaveBeenCalled();
+    expect(trackEvent).not.toHaveBeenCalledWith(
+      OpikEvent.MCP_PROMPT_COPIED,
+      expect.anything(),
+    );
+  });
+
+  it("leaves a tile alone when the browser refuses the clipboard", async () => {
+    clipboard.write.mockRejectedValueOnce(new Error("denied"));
+    renderCard();
+
+    const cursor = screen.getByTestId("mcp-route-cursor");
+    fireEvent.click(cursor);
+    await act(async () => {});
+
+    expect(cursor.querySelector(".lucide-check")).toBeNull();
+    expect(cursor.querySelector(".lucide-copy")).toBeTruthy();
   });
 });
 
