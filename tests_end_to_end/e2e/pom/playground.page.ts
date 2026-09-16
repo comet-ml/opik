@@ -537,6 +537,23 @@ export class PlaygroundPage {
     });
   }
 
+  // ── model parameters ────────────────────────────────────────────────────
+  //
+  // MERGE NOTE: main already carries this whole block. #8312 landed it after this
+  // branch forked, and the spec here needs it to compile, so it is re-added rather
+  // than imported. When this branch merges to main, expect a conflict in this region
+  // and resolve it member by member — a naive keep-both is `TS2393: Duplicate function
+  // implementation`, and a naive keep-either loses one real improvement:
+  //
+  //   - openModelParameters, modelParametersPanel, modelParametersTrigger,
+  //     samplingOption, selectedSamplingOptions, sliderInput, fillFirstMessage,
+  //     clickRun — byte-for-byte identical to main. DROP this branch's copies.
+  //   - closeModelParameters — NOT identical. This branch's version presses Escape
+  //     under `toPass` because the gear trigger's Radix tooltip eats the first one;
+  //     main's presses it once and flakes when the tooltip is up. KEEP THIS ONE.
+  //   - selectModelFromProvider, waitForRunIdle — new here, no counterpart on main.
+  //     Keep, no conflict expected.
+
   /** Open a variant's model-parameters popover and wait for it to render. */
   async openModelParameters(index: number): Promise<void> {
     return test.step(`open model parameters for variant ${index}`, async () => {

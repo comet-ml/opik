@@ -120,7 +120,7 @@ test.describe(
     );
 
     test(
-      'Choosing Top P for a Claude model on a custom gateway sends top_p and no temperature',
+      'A Claude on a custom gateway sends exactly the sampling parameter the panel displays, in either position',
       { tag: ['@cap:playground.configure-model-settings'] },
       async ({ project, providerKeys, testNamespace, page }) => {
         const providerName = `${testNamespace}-claude-gw`;
@@ -243,6 +243,12 @@ test.describe(
             'the Top P the user switched away from must not survive in the payload',
           ).not.toContain('top_p');
         });
+
+        // Let the run settle before the fixture deletes the gateway. Provider keys are
+        // workspace-global, so a teardown that lands while the backend is still resolving
+        // this one leaves a confusing error in the server log — nothing this spec asserts
+        // on, but nothing worth leaving behind either.
+        await playground.waitForRunIdle();
       },
     );
   },
