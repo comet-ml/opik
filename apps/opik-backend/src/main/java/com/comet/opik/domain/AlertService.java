@@ -260,9 +260,6 @@ class AlertServiceImpl implements AlertService {
             .metadata(Map.of(ROUTING_KEY_METADATA_KEY, "example-routing-key"))
             .build();
 
-    // The widest window WINDOW_OPTIONS offers in the alerts form (30 days).
-    private static final long MAX_ALERT_WINDOW_SECONDS = 2_592_000L;
-
     private static final Map<AlertType, WebhookExamples> WEBHOOK_EXAMPLES = prepareWebhookPayloadExamples();
 
     @Override
@@ -613,12 +610,13 @@ class AlertServiceImpl implements AlertService {
                     "Config value for key '%s' in trigger config of type '%s' is not a number of seconds: '%s'"
                             .formatted(WINDOW_CONFIG_KEY, type.getValue(), window));
         }
-        // Bounded on both sides: a non-positive window is not an interval at all, and one beyond the widest
-        // the alerts form offers scans far more than any alert needs, at the cost of the metrics store.
-        if (windowSeconds <= 0 || windowSeconds > MAX_ALERT_WINDOW_SECONDS) {
+        // Positive only. A non-positive window is not an interval at all, so it can never evaluate; a long
+        // one merely scans more, which is a cost question rather than a malformed config, and capping it at
+        // what the form happens to offer would reject both API clients and existing rows written above it.
+        if (windowSeconds <= 0) {
             throw new BadRequestException(
-                    "Config value for key '%s' in trigger config of type '%s' must be between 1 and %d seconds, got '%d'"
-                            .formatted(WINDOW_CONFIG_KEY, type.getValue(), MAX_ALERT_WINDOW_SECONDS, windowSeconds));
+                    "Config value for key '%s' in trigger config of type '%s' must be a positive number of seconds, got '%d'"
+                            .formatted(WINDOW_CONFIG_KEY, type.getValue(), windowSeconds));
         }
     }
 
@@ -702,6 +700,10 @@ class AlertServiceImpl implements AlertService {
 
         return config.toBuilder()
                 .id(triggerConfigId)
+                // Normalized on the way in as well as on the way out: validation already reads the legacy
+                // key, so without this a legacy-only payload passes and is written back unchanged, and the
+                // old spelling outlives every row that touches it.
+                .configValue(AlertTriggerConfig.withNormalizedWindow(config.configValue()))
                 .alertTriggerId(triggerId)
                 .createdBy(Optional.ofNullable(config.createdBy()).orElse(userName))
                 .createdAt(alert.createdAt()) // will be null for new alert, and not null for update
