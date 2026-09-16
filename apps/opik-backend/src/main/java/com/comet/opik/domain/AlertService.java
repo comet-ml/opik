@@ -40,6 +40,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.EnumMap;
@@ -258,6 +259,9 @@ class AlertServiceImpl implements AlertService {
                     .build())
             .metadata(Map.of(ROUTING_KEY_METADATA_KEY, "example-routing-key"))
             .build();
+
+    // The widest window WINDOW_OPTIONS offers in the alerts form (30 days).
+    private static final long MAX_ALERT_WINDOW_SECONDS = 2_592_000L;
 
     private static final Map<AlertType, WebhookExamples> WEBHOOK_EXAMPLES = prepareWebhookPayloadExamples();
 
@@ -582,7 +586,39 @@ class AlertServiceImpl implements AlertService {
                                         .formatted(key, config.type().getValue()));
                     }
                 }
+                // Present is not the same as usable. A value that does not parse fails inside the job on
+                // every run, which is the same silent never-fires this validation exists to prevent.
+                validateThreshold(configValue.get(THRESHOLD_CONFIG_KEY), config.type());
+                validateWindow(configValue.get(WINDOW_CONFIG_KEY), config.type());
             }
+        }
+    }
+
+    private static void validateThreshold(String threshold, AlertTriggerConfigType type) {
+        try {
+            new BigDecimal(threshold.trim());
+        } catch (NumberFormatException e) {
+            throw new BadRequestException(
+                    "Config value for key '%s' in trigger config of type '%s' is not a number: '%s'"
+                            .formatted(THRESHOLD_CONFIG_KEY, type.getValue(), threshold));
+        }
+    }
+
+    private static void validateWindow(String window, AlertTriggerConfigType type) {
+        long windowSeconds;
+        try {
+            windowSeconds = Long.parseLong(window.trim());
+        } catch (NumberFormatException e) {
+            throw new BadRequestException(
+                    "Config value for key '%s' in trigger config of type '%s' is not a number of seconds: '%s'"
+                            .formatted(WINDOW_CONFIG_KEY, type.getValue(), window));
+        }
+        // Bounded on both sides: a non-positive window is not an interval at all, and one beyond the widest
+        // the alerts form offers scans far more than any alert needs, at the cost of the metrics store.
+        if (windowSeconds <= 0 || windowSeconds > MAX_ALERT_WINDOW_SECONDS) {
+            throw new BadRequestException(
+                    "Config value for key '%s' in trigger config of type '%s' must be between 1 and %d seconds, got '%d'"
+                            .formatted(WINDOW_CONFIG_KEY, type.getValue(), MAX_ALERT_WINDOW_SECONDS, windowSeconds));
         }
     }
 

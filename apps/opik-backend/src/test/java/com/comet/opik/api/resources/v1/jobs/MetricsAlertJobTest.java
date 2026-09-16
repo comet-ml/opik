@@ -21,7 +21,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -32,6 +34,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.AlertTriggerConfig.LEGACY_WINDOW_SECONDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
@@ -39,6 +42,7 @@ import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -240,14 +244,34 @@ class MetricsAlertJobTest {
                 any(), anyString(), anyString(), any(), anyList(), anyList(), anyList());
     }
 
-    @Test
-    void firesWhenTriggerConfigHasNoWindow() {
-        // Configs persisted before write-side validation existed carry no window. This used to throw out of
-        // buildTriggerConfig on every run, so the alert never fired and nobody was told.
-        Alert alert = alertWithFeedbackConfig(Map.of(
+    /**
+     * Window resolution across the shapes actually found in persistence: the current key, the legacy one
+     * from before it was renamed, both at once, and configs stored with no usable window at all. Blank
+     * counts as absent so a stored empty string falls back rather than reaching Long.parseLong.
+     */
+    static Stream<Arguments> windowResolutionCases() {
+        return Stream.of(
+                arguments("current key wins over the legacy one",
+                        Map.of(WINDOW_CONFIG_KEY, "300", LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"), 300L),
+                arguments("legacy key is used when it is the only one",
+                        Map.of(LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"), 900L),
+                arguments("blank current key falls back to the legacy one",
+                        Map.of(WINDOW_CONFIG_KEY, "", LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"), 900L),
+                arguments("no window at all falls back to the default",
+                        Map.<String, String>of(), 86400L),
+                arguments("blank with no legacy value falls back to the default",
+                        Map.of(WINDOW_CONFIG_KEY, "   "), 86400L));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("windowResolutionCases")
+    void resolvesTheEvaluationWindow(String name, Map<String, String> windowConfig, long expectedSeconds) {
+        var configValue = new java.util.HashMap<String, String>(Map.of(
                 NAME_CONFIG_KEY, FEEDBACK_NAME,
                 OPERATOR_CONFIG_KEY, "<",
                 THRESHOLD_CONFIG_KEY, "0.5"));
+        configValue.putAll(windowConfig);
+        Alert alert = alertWithFeedbackConfig(Map.copyOf(configValue));
 
         stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
         when(alertService.findAllByWorkspaceAndEventTypes(null,
@@ -258,50 +282,7 @@ class MetricsAlertJobTest {
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
                 any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
                 anyList(), anyList(), anyList());
-        assertThat(windowSecondsPassedToDao()).isEqualTo(86400L);
-    }
-
-    @Test
-    void treatsABlankWindowAsAbsentAndFallsBackToTheLegacyKey() {
-        // A stored empty string is not a window. Reading it as present would hand Long.parseLong("") an
-        // input it throws on, failing a config that carries a perfectly good legacy value.
-        Alert alert = alertWithFeedbackConfig(Map.of(
-                NAME_CONFIG_KEY, FEEDBACK_NAME,
-                OPERATOR_CONFIG_KEY, "<",
-                THRESHOLD_CONFIG_KEY, "0.5",
-                WINDOW_CONFIG_KEY, "",
-                LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"));
-
-        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
-        when(alertService.findAllByWorkspaceAndEventTypes(null,
-                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
-
-        job.doJob(null);
-
-        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
-                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
-                anyList(), anyList(), anyList());
-        assertThat(windowSecondsPassedToDao()).isEqualTo(900L);
-    }
-
-    @Test
-    void treatsABlankWindowWithNoLegacyValueAsAbsent() {
-        Alert alert = alertWithFeedbackConfig(Map.of(
-                NAME_CONFIG_KEY, FEEDBACK_NAME,
-                OPERATOR_CONFIG_KEY, "<",
-                THRESHOLD_CONFIG_KEY, "0.5",
-                WINDOW_CONFIG_KEY, "   "));
-
-        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
-        when(alertService.findAllByWorkspaceAndEventTypes(null,
-                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
-
-        job.doJob(null);
-
-        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
-                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
-                anyList(), anyList(), anyList());
-        assertThat(windowSecondsPassedToDao()).isEqualTo(86400L);
+        assertThat(windowSecondsPassedToDao()).isEqualTo(expectedSeconds);
     }
 
     @Test
@@ -326,49 +307,6 @@ class MetricsAlertJobTest {
                 any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
                 anyList(), anyList(), anyList());
         assertThat(windowSecondsPassedToDao()).isEqualTo(1800L);
-    }
-
-    @Test
-    void readsTheWindowFromTheLegacyKeyRatherThanDefaulting() {
-        // Two of the affected production rows do carry a window, under the pre-rename key. Defaulting them
-        // would silently widen a 15-minute alert to an hour.
-        Alert alert = alertWithFeedbackConfig(Map.of(
-                NAME_CONFIG_KEY, FEEDBACK_NAME,
-                OPERATOR_CONFIG_KEY, "<",
-                THRESHOLD_CONFIG_KEY, "0.5",
-                LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"));
-
-        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
-        when(alertService.findAllByWorkspaceAndEventTypes(null,
-                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
-
-        job.doJob(null);
-
-        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
-                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
-                anyList(), anyList(), anyList());
-        assertThat(windowSecondsPassedToDao()).isEqualTo(900L);
-    }
-
-    @Test
-    void prefersTheCurrentWindowKeyOverTheLegacyOne() {
-        Alert alert = alertWithFeedbackConfig(Map.of(
-                NAME_CONFIG_KEY, FEEDBACK_NAME,
-                OPERATOR_CONFIG_KEY, "<",
-                THRESHOLD_CONFIG_KEY, "0.5",
-                WINDOW_CONFIG_KEY, "300",
-                LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"));
-
-        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
-        when(alertService.findAllByWorkspaceAndEventTypes(null,
-                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
-
-        job.doJob(null);
-
-        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
-                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
-                anyList(), anyList(), anyList());
-        assertThat(windowSecondsPassedToDao()).isEqualTo(300L);
     }
 
     @Test
