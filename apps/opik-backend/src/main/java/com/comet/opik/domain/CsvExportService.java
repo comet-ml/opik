@@ -84,7 +84,7 @@ public interface CsvExportService {
 @Singleton
 class CsvExportServiceImpl implements CsvExportService {
 
-    public static final String LOCK_KEY_PATTERN = "dataset-export:lock:%s:%s:%s";
+    public static final String LOCK_KEY_PATTERN = "export:lock:%s:%s:%s:%s";
 
     private final ExportJobService jobService;
     private final RedissonReactiveClient redisClient;
@@ -120,6 +120,7 @@ class CsvExportServiceImpl implements CsvExportService {
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             // Check for existing in-progress jobs first (without lock)
             return findMatchingInProgressJob(params)
@@ -129,7 +130,7 @@ class CsvExportServiceImpl implements CsvExportService {
                     })
                     .switchIfEmpty(Mono.defer(() -> {
                         // No existing job, acquire lock and create new one
-                        String lockKey = formatLockKey(workspaceId, params);
+                        String lockKey = formatLockKey(workspaceId, userName, params);
                         return executeWithLock(lockKey, workspaceId, params, resourceName);
                     }));
         });
@@ -192,8 +193,12 @@ class CsvExportServiceImpl implements CsvExportService {
         });
     }
 
-    private static String formatLockKey(String workspaceId, ExportParams params) {
-        return LOCK_KEY_PATTERN.formatted(workspaceId, params.exportType(), params.canonicalHash());
+    /**
+     * Keyed by caller as well as params: jobs are owned by whoever started them, so two users asking for the same
+     * rows each get their own job and must not serialise behind one another's lock.
+     */
+    private static String formatLockKey(String workspaceId, String userName, ExportParams params) {
+        return LOCK_KEY_PATTERN.formatted(workspaceId, userName, params.exportType(), params.canonicalHash());
     }
 
     @Override

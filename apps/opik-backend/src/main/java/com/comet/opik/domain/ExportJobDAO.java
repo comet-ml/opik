@@ -158,8 +158,9 @@ public interface ExportJobDAO {
             FROM export_jobs j
             WHERE j.id = :id
             AND j.workspace_id = :workspaceId
-            """)
-    Optional<ExportJob> findById(@Bind("workspaceId") String workspaceId, @Bind("id") UUID id);
+            AND (j.created_by = :userName OR :userName = '""" + RequestContext.SYSTEM_USER + "')")
+    Optional<ExportJob> findById(@Bind("workspaceId") String workspaceId, @Bind("id") UUID id,
+            @Bind("userName") String userName);
 
     @SqlQuery("""
             SELECT
@@ -179,21 +180,24 @@ public interface ExportJobDAO {
             WHERE j.workspace_id = :workspaceId
                 AND j.export_type = :exportType
                 AND j.params_hash = :paramsHash
+                AND j.created_by = :userName
                 AND j.status IN (<statuses>)
             """)
     List<ExportJob> findInProgressByParams(
             @Bind("workspaceId") String workspaceId,
             @Bind("exportType") String exportType,
             @Bind("paramsHash") String paramsHash,
+            @Bind("userName") String userName,
             @BindList("statuses") Set<ExportStatus> statuses);
 
     /**
-     * Finds all export jobs for a workspace with dataset names.
-     * Returns all jobs regardless of status - the cleanup job handles removing old jobs.
-     * The frontend checks viewed_at to decide whether to show error toasts for failed jobs.
+     * Finds the caller's own export jobs in a workspace.
+     * Returns all statuses - the cleanup job handles removing old jobs, and the frontend checks viewed_at to
+     * decide whether to show error toasts for failed jobs.
      *
      * @param workspaceId The workspace ID
-     * @return List of all export jobs for the workspace with dataset names
+     * @param userName    The caller; jobs started by other members of the workspace are not returned
+     * @return List of the caller's export jobs
      */
     @SqlQuery("""
             SELECT
@@ -211,9 +215,11 @@ public interface ExportJobDAO {
                 j.last_updated_by
             FROM export_jobs j
             WHERE j.workspace_id = :workspaceId
+            AND j.created_by = :userName
             ORDER BY j.id DESC
             """)
-    List<ExportJob> findByWorkspace(@Bind("workspaceId") String workspaceId);
+    List<ExportJob> findByWorkspace(@Bind("workspaceId") String workspaceId,
+            @Bind("userName") String userName);
 
     @SqlUpdate("""
             UPDATE export_jobs

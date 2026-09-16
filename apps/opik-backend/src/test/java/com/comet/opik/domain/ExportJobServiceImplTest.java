@@ -108,12 +108,14 @@ class ExportJobServiceImplTest {
     @Test
     void findInProgressJobs_shouldReturnEmptyList_whenNoJobsFound() {
         // Given
-        when(exportJobDAO.findInProgressByParams(any(), any(), any(), any())).thenReturn(List.of());
+        when(exportJobDAO.findInProgressByParams(any(), any(), any(), any(), any())).thenReturn(List.of());
 
         // When
         Mono<List<ExportJob>> result = service
                 .findInProgressJobs(DatasetExportParams.builder().datasetId(DATASET_ID).build())
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
 
         // Then
         StepVerifier.create(result)
@@ -121,7 +123,7 @@ class ExportJobServiceImplTest {
                 .verifyComplete();
 
         // Verify DAO.findInProgressByParams() was called
-        verify(exportJobDAO, times(1)).findInProgressByParams(eq(WORKSPACE_ID), any(), any(), any());
+        verify(exportJobDAO, times(1)).findInProgressByParams(eq(WORKSPACE_ID), any(), any(), eq(USER_NAME), any());
     }
 
     @Test
@@ -147,12 +149,14 @@ class ExportJobServiceImplTest {
                 .createdBy(USER_NAME)
                 .build();
 
-        when(exportJobDAO.findInProgressByParams(any(), any(), any(), any())).thenReturn(List.of(job1, job2));
+        when(exportJobDAO.findInProgressByParams(any(), any(), any(), any(), any())).thenReturn(List.of(job1, job2));
 
         // When
         Mono<List<ExportJob>> result = service
                 .findInProgressJobs(DatasetExportParams.builder().datasetId(DATASET_ID).build())
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
 
         // Then
         StepVerifier.create(result)
@@ -163,7 +167,7 @@ class ExportJobServiceImplTest {
                 .verifyComplete();
 
         // Verify DAO.findInProgressByParams() was called
-        verify(exportJobDAO, times(1)).findInProgressByParams(eq(WORKSPACE_ID), any(), any(), any());
+        verify(exportJobDAO, times(1)).findInProgressByParams(eq(WORKSPACE_ID), any(), any(), eq(USER_NAME), any());
     }
 
     @Test
@@ -180,11 +184,13 @@ class ExportJobServiceImplTest {
                 .createdBy(USER_NAME)
                 .build();
 
-        when(exportJobDAO.findById(WORKSPACE_ID, JOB_ID)).thenReturn(java.util.Optional.of(job));
+        when(exportJobDAO.findById(WORKSPACE_ID, JOB_ID, USER_NAME)).thenReturn(java.util.Optional.of(job));
 
         // When
         Mono<ExportJob> result = service.getJob(JOB_ID)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
 
         // Then
         StepVerifier.create(result)
@@ -194,17 +200,19 @@ class ExportJobServiceImplTest {
                 .verifyComplete();
 
         // Verify DAO.findById() was called
-        verify(exportJobDAO, times(1)).findById(eq(WORKSPACE_ID), eq(JOB_ID));
+        verify(exportJobDAO, times(1)).findById(eq(WORKSPACE_ID), eq(JOB_ID), eq(USER_NAME));
     }
 
     @Test
     void getJob_shouldThrowNotFoundException_whenJobDoesNotExist() {
         // Given
-        when(exportJobDAO.findById(WORKSPACE_ID, JOB_ID)).thenReturn(java.util.Optional.empty());
+        when(exportJobDAO.findById(WORKSPACE_ID, JOB_ID, USER_NAME)).thenReturn(java.util.Optional.empty());
 
         // When
         Mono<ExportJob> result = service.getJob(JOB_ID)
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
 
         // Then
         StepVerifier.create(result)
@@ -213,7 +221,7 @@ class ExportJobServiceImplTest {
                 .verify();
 
         // Verify DAO.findById() was called
-        verify(exportJobDAO, times(1)).findById(eq(WORKSPACE_ID), eq(JOB_ID));
+        verify(exportJobDAO, times(1)).findById(eq(WORKSPACE_ID), eq(JOB_ID), eq(USER_NAME));
     }
 
     @Test

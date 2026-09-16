@@ -46,11 +46,11 @@ public interface ExportJobService {
     Mono<List<ExportJob>> findInProgressJobs(ExportParams params);
 
     /**
-     * Finds all export jobs for the current workspace.
+     * Finds the current caller's export jobs in the current workspace.
      * Returns all jobs regardless of status - the cleanup job handles removing old jobs.
      * This is used to restore the export panel state after page refresh.
      *
-     * @return Mono emitting list of all export jobs for the workspace
+     * @return Mono emitting list of the caller's export jobs
      */
     Mono<List<ExportJob>> findAllJobs();
 
@@ -59,7 +59,8 @@ public interface ExportJobService {
      *
      * @param jobId The job ID to retrieve
      * @return Mono emitting the export job
-     * @throws NotFoundException if job doesn't exist or doesn't belong to the current workspace
+     * @throws NotFoundException if the job doesn't exist, belongs to another workspace, or was started by
+     *                           another user
      */
     Mono<ExportJob> getJob(UUID jobId);
 
@@ -200,11 +201,12 @@ class ExportJobServiceImpl implements ExportJobService {
     public Mono<List<ExportJob>> findInProgressJobs(@NonNull ExportParams params) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(ExportJobDAO.class);
                 List<ExportJob> existingJobs = dao.findInProgressByParams(workspaceId, params.exportType(),
-                        params.canonicalHash(), IN_PROGRESS_STATUSES);
+                        params.canonicalHash(), userName, IN_PROGRESS_STATUSES);
 
                 if (!existingJobs.isEmpty()) {
                     log.info("Found '{}' existing in-progress '{}' export job(s)", existingJobs.size(),
@@ -220,12 +222,14 @@ class ExportJobServiceImpl implements ExportJobService {
     public Mono<List<ExportJob>> findAllJobs() {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(ExportJobDAO.class);
-                List<ExportJob> jobs = dao.findByWorkspace(workspaceId);
+                List<ExportJob> jobs = dao.findByWorkspace(workspaceId, userName);
 
-                log.debug("Found '{}' export job(s) for workspace: '{}'", jobs.size(), workspaceId);
+                log.debug("Found '{}' export job(s) for user '{}' in workspace: '{}'", jobs.size(), userName,
+                        workspaceId);
 
                 return jobs;
             })).subscribeOn(Schedulers.boundedElastic());
@@ -236,11 +240,12 @@ class ExportJobServiceImpl implements ExportJobService {
     public Mono<ExportJob> getJob(@NonNull UUID jobId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(ExportJobDAO.class);
 
-                return dao.findById(workspaceId, jobId)
+                return dao.findById(workspaceId, jobId, userName)
                         .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
             })).subscribeOn(Schedulers.boundedElastic());
         });
@@ -256,7 +261,7 @@ class ExportJobServiceImpl implements ExportJobService {
                 var dao = handle.attach(ExportJobDAO.class);
 
                 // Verify job exists
-                var job = dao.findById(workspaceId, jobId)
+                var job = dao.findById(workspaceId, jobId, userName)
                         .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
 
                 // Idempotent: if already viewed, do nothing
@@ -284,7 +289,7 @@ class ExportJobServiceImpl implements ExportJobService {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(ExportJobDAO.class);
                     int updated = dao.markPendingJobAsProcessing(workspaceId, jobId, userName);
-                    verifyJobUpdatedToStatus(updated, jobId, ExportStatus.PROCESSING, workspaceId, dao);
+                    verifyJobUpdatedToStatus(updated, jobId, ExportStatus.PROCESSING, workspaceId, userName, dao);
                     return null;
                 });
                 return null;
@@ -304,7 +309,7 @@ class ExportJobServiceImpl implements ExportJobService {
                     var dao = handle.attach(ExportJobDAO.class);
                     int updated = dao.updateToCompleted(workspaceId, jobId, ExportStatus.COMPLETED, filePath,
                             expiresAt, userName);
-                    verifyJobUpdatedToStatus(updated, jobId, ExportStatus.COMPLETED, workspaceId, dao);
+                    verifyJobUpdatedToStatus(updated, jobId, ExportStatus.COMPLETED, workspaceId, userName, dao);
                     return null;
                 });
                 return null;
@@ -322,7 +327,7 @@ class ExportJobServiceImpl implements ExportJobService {
                 template.inTransaction(WRITE, handle -> {
                     var dao = handle.attach(ExportJobDAO.class);
                     int updated = dao.updateToFailed(workspaceId, jobId, errorMessage, userName);
-                    verifyJobUpdatedToStatus(updated, jobId, ExportStatus.FAILED, workspaceId, dao);
+                    verifyJobUpdatedToStatus(updated, jobId, ExportStatus.FAILED, workspaceId, userName, dao);
                     return null;
                 });
                 return null;
@@ -340,18 +345,19 @@ class ExportJobServiceImpl implements ExportJobService {
      * @param jobId          The ID of the job being updated
      * @param expectedStatus The status the job should now be in
      * @param workspaceId    The workspace ID for security
+     * @param userName       The caller, which on this path is the system user running the export worker
      * @param dao            The DAO to query the current job state
      * @throws NotFoundException     if the job doesn't exist or doesn't belong to workspace
      * @throws IllegalStateException if the job exists but is in an unexpected state
      */
     private void verifyJobUpdatedToStatus(int updatedRows, UUID jobId, ExportStatus expectedStatus,
-            String workspaceId, ExportJobDAO dao) {
+            String workspaceId, String userName, ExportJobDAO dao) {
         if (updatedRows > 0) {
             log.info("Export job '{}' transitioned to status '{}'", jobId, expectedStatus);
             return;
         }
 
-        var job = dao.findById(workspaceId, jobId)
+        var job = dao.findById(workspaceId, jobId, userName)
                 .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
 
         // Job already in expected state - idempotent success

@@ -30,6 +30,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,6 +44,7 @@ import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.test.StepVerifier;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -173,7 +175,9 @@ class ExportJobSubscriberResourceTest {
             // Then - Wait for job to be processed and verify completion
             ExportJob completedJob = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(jobId)
-                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                            .contextWrite(ctx -> ctx
+                                    .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                                    .put(RequestContext.USER_NAME, USER))
                             .block(),
                             j -> j.status() == ExportStatus.COMPLETED);
 
@@ -208,7 +212,9 @@ class ExportJobSubscriberResourceTest {
             // Then - Wait for job to be processed and verify completion
             ExportJob completedJob = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(jobId)
-                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                            .contextWrite(ctx -> ctx
+                                    .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                                    .put(RequestContext.USER_NAME, USER))
                             .block(),
                             j -> j.status() == ExportStatus.COMPLETED);
 
@@ -259,19 +265,25 @@ class ExportJobSubscriberResourceTest {
             // Then - All jobs should complete successfully and verify CSV content
             ExportJob completedJob1 = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(job1.id())
-                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                            .contextWrite(ctx -> ctx
+                                    .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                                    .put(RequestContext.USER_NAME, USER))
                             .block(),
                             j -> j.status() == ExportStatus.COMPLETED);
 
             ExportJob completedJob2 = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(job2.id())
-                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                            .contextWrite(ctx -> ctx
+                                    .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                                    .put(RequestContext.USER_NAME, USER))
                             .block(),
                             j -> j.status() == ExportStatus.COMPLETED);
 
             ExportJob completedJob3 = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(job3.id())
-                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                            .contextWrite(ctx -> ctx
+                                    .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                                    .put(RequestContext.USER_NAME, USER))
                             .block(),
                             j -> j.status() == ExportStatus.COMPLETED);
 
@@ -303,7 +315,9 @@ class ExportJobSubscriberResourceTest {
             // Then - Wait for job to be processed and verify completion
             ExportJob completedJob = await().atMost(AWAIT_TIMEOUT_SECONDS * 2, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(jobId)
-                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                            .contextWrite(ctx -> ctx
+                                    .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                                    .put(RequestContext.USER_NAME, USER))
                             .block(),
                             j -> j.status() == ExportStatus.COMPLETED);
 
@@ -345,11 +359,75 @@ class ExportJobSubscriberResourceTest {
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         ExportJob completedJob = exportJobService.getJob(jobId)
-                                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                                .contextWrite(ctx -> ctx
+                                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                                        .put(RequestContext.USER_NAME, USER))
                                 .block();
                         assertThat(completedJob.status()).isEqualTo(ExportStatus.COMPLETED);
                         assertThat(completedJob.filePath()).isNotNull();
                     });
+        }
+    }
+
+    @Nested
+    @DisplayName("User Scope Tests")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UserScopeTests {
+
+        private static final String OTHER_USER = "another-workspace-member";
+
+        @Test
+        @DisplayName("should not return another user's job by id")
+        void getJob_shouldNotFindJobStartedByAnotherUser() {
+            UUID jobId = startExportAs(USER).id();
+
+            var otherUserRead = exportJobService.getJob(jobId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, OTHER_USER));
+
+            StepVerifier.create(otherUserRead)
+                    .expectError(NotFoundException.class)
+                    .verify();
+        }
+
+        @Test
+        @DisplayName("should list only the calling user's jobs")
+        void findAllJobs_shouldReturnOnlyOwnJobs() {
+            UUID ownJobId = startExportAs(USER).id();
+            UUID otherJobId = startExportAs(OTHER_USER).id();
+
+            List<ExportJob> ownJobs = exportJobService.findAllJobs()
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER))
+                    .block();
+
+            assertThat(ownJobs).extracting(ExportJob::id).contains(ownJobId).doesNotContain(otherJobId);
+        }
+
+        @Test
+        @DisplayName("should not hand one user's in-progress job to another user")
+        void startExport_shouldNotReuseAnotherUsersJob() {
+            var params = DatasetExportParams.builder().datasetId(UUID.randomUUID()).build();
+
+            ExportJob first = startExport(params, USER);
+            ExportJob second = startExport(params, OTHER_USER);
+
+            assertThat(second.id()).isNotEqualTo(first.id());
+            assertThat(second.createdBy()).isEqualTo(OTHER_USER);
+        }
+
+        private ExportJob startExportAs(String userName) {
+            return startExport(DatasetExportParams.builder().datasetId(UUID.randomUUID()).build(), userName);
+        }
+
+        private ExportJob startExport(DatasetExportParams params, String userName) {
+            return csvExportService.startExport(params, "test-dataset")
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, userName))
+                    .block();
         }
     }
 

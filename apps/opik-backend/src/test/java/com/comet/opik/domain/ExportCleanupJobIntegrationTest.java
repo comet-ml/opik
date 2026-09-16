@@ -337,9 +337,9 @@ class ExportCleanupJobIntegrationTest {
                     .mapTo(String.class)
                     .one();
 
-            // Use DAO to find the job
+            // Use DAO to find the job; reads as the system user so ownership never hides a row from the assertion
             var dao = handle.attach(ExportJobDAO.class);
-            return dao.findById(workspaceId, jobId);
+            return dao.findById(workspaceId, jobId, RequestContext.SYSTEM_USER);
         });
     }
 
