@@ -433,6 +433,22 @@ class AnnotationQueuesResourceTest {
                     API_KEY, TEST_WORKSPACE,
                     SC_UNPROCESSABLE_ENTITY);
         }
+
+        @Test
+        @DisplayName("should reject request when two queues share an id")
+        void createAnnotationQueueBatchWhenIdsDuplicatedShouldReject() {
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, API_KEY, TEST_WORKSPACE);
+
+            // Same id, different names, so the batch carries two entries rather than collapsing into one.
+            var id = idGenerator.generateId();
+            var first = newAnnotationQueue().toBuilder().id(id).projectId(projectId).build();
+            var second = newAnnotationQueue().toBuilder().id(id).projectId(projectId).build();
+
+            annotationQueuesResourceClient.createAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(first, second)), API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_BAD_REQUEST);
+        }
     }
 
     @Nested

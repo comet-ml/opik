@@ -15,6 +15,7 @@ import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.LinkedHashSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -86,11 +88,35 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                 .map(this::prepareAnnotationQueue)
                 .toList();
 
+        rejectDuplicateIds(processedQueues);
+
         return validateAutomations(processedQueues)
                 .then(annotationQueueDAO.createBatch(processedQueues))
                 .then(saveAutomations(processedQueues))
                 .thenReturn(processedQueues.size())
                 .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Rejects a batch that names the same queue twice.
+     *
+     * <p>Ids are the caller's to supply, and the stores disagree about what a repeat means: the queue table
+     * is a ReplacingMergeTree, so two rows with one id silently become one, while the automation map keyed
+     * by id would reject the collision as an unhandled error. Neither is an answer the caller can act on,
+     * so the batch is refused before anything is written.
+     */
+    private void rejectDuplicateIds(List<AnnotationQueue> queues) {
+        Set<UUID> seen = new HashSet<>(queues.size());
+        List<UUID> duplicates = queues.stream()
+                .map(AnnotationQueue::id)
+                .filter(id -> !seen.add(id))
+                .distinct()
+                .toList();
+
+        if (!duplicates.isEmpty()) {
+            throw new BadRequestException(
+                    "Annotation queue batch contains duplicate ids: %s".formatted(duplicates));
+        }
     }
 
     /**
