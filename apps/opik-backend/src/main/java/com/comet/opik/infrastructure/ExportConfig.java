@@ -31,7 +31,7 @@ public class ExportConfig implements StreamConfiguration {
      * and the shared pipeline below (stream, TTL, part sizes) is the only thing they have in common.
      */
     @Valid @JsonProperty
-    private boolean experimentItemsEnabled = false;
+    private boolean experimentItemsEnabled = true;
 
     @Valid @NotBlank @JsonProperty
     private String streamName;

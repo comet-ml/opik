@@ -27,9 +27,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.WELCOME_WIZARD_ENABLED]: false,
   [FeatureToggleKeys.EXPORT_ENABLED]: true,
   [FeatureToggleKeys.DATASET_EXPORT_ENABLED]: true,
-  // Fails closed, unlike the flags above: the backend ships this one disabled, so assuming it is on until the
-  // toggles load offers an export that would be rejected with a 501.
-  [FeatureToggleKeys.EXPERIMENT_EXPORT_ENABLED]: false,
+  [FeatureToggleKeys.EXPERIMENT_EXPORT_ENABLED]: true,
   [FeatureToggleKeys.DEMO_DATA_ENABLED]: true,
   [FeatureToggleKeys.OLLIE_ENABLED]: false,
   [FeatureToggleKeys.PROJECT_HOMEPAGE_ENABLED]: false,
