@@ -58,6 +58,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -255,12 +256,22 @@ class AgentInsightsJobsResourceTest {
         }
     }
 
-    @Test
-    @DisplayName("Enrolment rejects a null project id instead of passing it to the database")
-    void enrol__nullProjectId__isRejected() {
+    Stream<Arguments> invalidEnrolmentProjectIds() {
+        return Stream.of(
+                Arguments.of("empty list", (Function<UUID, List<UUID>>) projectId -> List.of()),
+                Arguments.of("too many ids", (Function<UUID, List<UUID>>) projectId -> Stream.concat(
+                        Stream.of(projectId),
+                        Stream.generate(UUID::randomUUID).limit(AgentInsightsEnrollment.MAX_PROJECTS)).toList()),
+                Arguments.of("null id", (Function<UUID, List<UUID>>) projectId -> Arrays.asList(projectId, null)));
+    }
+
+    @ParameterizedTest(name = "[{index}] {0}")
+    @MethodSource("invalidEnrolmentProjectIds")
+    @DisplayName("Enrolment with invalid project ids fails validation (422) and enrols nothing")
+    void enrol__invalidProjectIds__isRejected(String name, Function<UUID, List<UUID>> projectIds) {
         var projectId = createProject();
 
-        try (var response = jobsClient.enrolInAutoFirstRun(true, Arrays.asList(projectId, null))) {
+        try (var response = jobsClient.enrolInAutoFirstRun(true, projectIds.apply(projectId))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
 
