@@ -1,5 +1,6 @@
 package com.comet.opik.domain.mcpoauth;
 
+import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
@@ -30,8 +31,9 @@ public class McpOAuthClientUtils {
      * value at what the column holds. Truncating rather than rejecting is deliberate: these fields were
      * silently discarded before, so failing an over-long one would break a host that registers fine today.
      */
-    public static String sanitizeDisplayText(String value) {
-        return clean(value, " ", DISPLAY_TEXT_MAX);
+    public static @Nullable String sanitizeDisplayText(@Nullable String value) {
+        String cleaned = stripControlChars(value, " ");
+        return cleaned == null ? null : StringUtils.truncate(cleaned, DISPLAY_TEXT_MAX);
     }
 
     /**
@@ -40,11 +42,13 @@ public class McpOAuthClientUtils {
      * {@code data:}, a malformed value — is dropped rather than stored, so nothing but a fetchable web URL can
      * reach a sink, whoever renders it.
      */
-    public static String sanitizeDisplayUri(String value) {
-        String uri = clean(value, "", DISPLAY_URI_MAX);
+    public static @Nullable String sanitizeDisplayUri(@Nullable String value) {
+        String uri = stripControlChars(value, "");
         if (uri == null) {
             return null;
         }
+        // Parsed before the cap, not after: truncating first can cut through a percent-escape and turn a URL
+        // the host sent correctly into an unparseable one, which would then be dropped instead of truncated.
         // Parsed, not prefix-matched: "http://[bad" or "http:///no-host" would otherwise be stored as valid.
         // Loopback and private hosts are deliberately allowed — the fetch is the end user's browser rendering
         // an <img>, never this server, and a self-hosted Opik legitimately serves logos from internal hosts.
@@ -52,18 +56,43 @@ public class McpOAuthClientUtils {
             URI parsed = new URI(uri);
             boolean webScheme = parsed.getScheme() != null
                     && StringUtils.equalsAnyIgnoreCase(parsed.getScheme(), "http", "https");
-            return webScheme && StringUtils.isNotBlank(parsed.getHost()) ? uri : null;
+            // Credentials in a display URL would be persisted, rendered into an href and sent on the fetch.
+            // RFC 3986 §3.2.1 deprecates the form outright; drop the value rather than leak it.
+            if (!webScheme || StringUtils.isBlank(parsed.getHost()) || parsed.getUserInfo() != null) {
+                return null;
+            }
         } catch (URISyntaxException e) {
             return null;
         }
+        return truncateUri(uri);
     }
 
-    /** Trim, replace control characters, cap; blank in is {@code null} out. */
-    private static String clean(String value, String controlCharReplacement, int max) {
+    /**
+     * Replace control characters and trim; blank in is {@code null} out. Trimmed again after the replacement
+     * because the separators are not whitespace to {@link String#trim()} — a value of nothing but a U+2028
+     * would otherwise come back as the space it was replaced with.
+     */
+    private static @Nullable String stripControlChars(@Nullable String value, String replacement) {
         String trimmed = StringUtils.trimToNull(value);
-        return trimmed == null
-                ? null
-                : StringUtils.truncate(CONTROL_CHARS.matcher(trimmed).replaceAll(controlCharReplacement), max);
+        return trimmed == null ? null : StringUtils.trimToNull(CONTROL_CHARS.matcher(trimmed).replaceAll(replacement));
+    }
+
+    /**
+     * Caps a validated URL at the column width without leaving a half-written percent-escape at the end, which
+     * would make the stored value unparseable for whoever renders it.
+     */
+    private static String truncateUri(String uri) {
+        if (uri.length() <= DISPLAY_URI_MAX) {
+            return uri;
+        }
+        int end = DISPLAY_URI_MAX;
+        for (int escape = 1; escape <= 2; escape++) {
+            if (uri.charAt(end - escape) == '%') {
+                end -= escape;
+                break;
+            }
+        }
+        return uri.substring(0, end);
     }
 
     /**

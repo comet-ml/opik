@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
@@ -46,6 +47,7 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.REGISTER_PATH;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * Drives Dynamic Client Registration (RFC 7591) against the app and MySQL. The mocked resource test covers the
@@ -186,6 +188,95 @@ class McpOAuthClientRegistrationIntegrationTest {
             var body = response.readEntity(ClientRegistrationResponse.class);
             assertThat(body.logoUri()).as("unparseable URL dropped").isNull();
             assertThat(body.clientUri()).as("URL without a host dropped").isNull();
+        }
+    }
+
+    /** The other side of truncation: a value that fits, at and just under each cap, must survive untouched. */
+    Stream<Arguments> valuesWithinTheCap() {
+        return Stream.of(
+                Arguments.of("software_version at the cap", 255,
+                        (IntFunction<String>) n -> "v".repeat(n),
+                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b,
+                        true),
+                Arguments.of("software_version just under the cap", 254,
+                        (IntFunction<String>) n -> "v".repeat(n),
+                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b,
+                        true),
+                Arguments.of("logo_uri at the cap", 2048,
+                        (IntFunction<String>) n -> "https://example.test/" + "p".repeat(n - 21),
+                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b,
+                        false),
+                Arguments.of("logo_uri just under the cap", 2047,
+                        (IntFunction<String>) n -> "https://example.test/" + "p".repeat(n - 21),
+                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b,
+                        false));
+    }
+
+    @ParameterizedTest(name = "{0} is stored unchanged")
+    @MethodSource("valuesWithinTheCap")
+    void valuesWithinTheCapAreStoredUnchanged(String label, int length, IntFunction<String> build,
+            UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder> unused, boolean isText) {
+        String sent = build.apply(length);
+        var builder = ClientRegistrationRequest.builder()
+                .clientName("Exact Host")
+                .redirectUris(Set.of("http://127.0.0.1:4326/cb"));
+        var request = (isText ? builder.softwareVersion(sent) : builder.logoUri(sent)).build();
+
+        String clientId;
+        try (var response = client.target(baseURI + REGISTER_PATH).request().post(Entity.json(request))) {
+            assertThat(response.getStatus()).isEqualTo(201);
+            var body = response.readEntity(ClientRegistrationResponse.class);
+            assertThat(isText ? body.softwareVersion() : body.logoUri()).as("echoed %s", label).isEqualTo(sent);
+            clientId = body.clientId();
+        }
+
+        var row = tx.inTransaction(READ_ONLY, h -> h.attach(McpOAuthClientDAO.class).findActiveById(clientId))
+                .orElseThrow();
+        assertThat(isText ? row.softwareVersion() : row.logoUri()).as("persisted %s", label).isEqualTo(sent);
+    }
+
+    @Test
+    @DisplayName("a display URL carrying credentials is dropped, not persisted")
+    void displayUrlsWithCredentialsAreDropped() {
+        var request = ClientRegistrationRequest.builder()
+                .clientName("Leaky Host")
+                .redirectUris(Set.of("http://127.0.0.1:4324/cb"))
+                .logoUri("https://user:s3cr3t@example.test/logo.png")
+                .build();
+
+        String clientId;
+        try (var response = client.target(baseURI + REGISTER_PATH).request().post(Entity.json(request))) {
+            assertThat(response.getStatus()).as("registration still succeeds").isEqualTo(201);
+            var body = response.readEntity(ClientRegistrationResponse.class);
+            assertThat(body.logoUri()).as("credentials never echoed").isNull();
+            clientId = body.clientId();
+        }
+
+        var stored = tx.inTransaction(READ_ONLY, h -> h.attach(McpOAuthClientDAO.class).findActiveById(clientId))
+                .orElseThrow();
+        assertThat(stored.logoUri()).as("credentials never persisted").isNull();
+    }
+
+    @Test
+    @DisplayName("an over-long URL is capped without leaving a half-written percent-escape")
+    void overlongUrlIsTruncatedWithoutSplittingAnEscape() {
+        // The cap lands mid-escape: without backing off, the stored value ends in "%2" or "%" and no longer parses.
+        String tail = "%20end";
+        String padded = "https://example.test/" + "p".repeat(2048 - "https://example.test/".length() - 1)
+                + tail;
+        var request = ClientRegistrationRequest.builder()
+                .clientName("Escaping Host")
+                .redirectUris(Set.of("http://127.0.0.1:4325/cb"))
+                .logoUri(padded)
+                .build();
+
+        try (var response = client.target(baseURI + REGISTER_PATH).request().post(Entity.json(request))) {
+            assertThat(response.getStatus()).isEqualTo(201);
+            String echoed = response.readEntity(ClientRegistrationResponse.class).logoUri();
+            assertThat(echoed).as("a valid long URL is truncated, never dropped").isNotNull();
+            assertThat(echoed.length()).isLessThanOrEqualTo(2048);
+            assertThat(echoed).as("no dangling percent-escape").doesNotEndWith("%").doesNotEndWith("%2");
+            assertThatCode(() -> new java.net.URI(echoed)).as("still parses").doesNotThrowAnyException();
         }
     }
 
