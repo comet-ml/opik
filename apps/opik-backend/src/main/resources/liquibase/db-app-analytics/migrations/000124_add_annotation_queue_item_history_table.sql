@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset aliaksandrk:000120_add_annotation_queue_item_history_table
+--changeset aliaksandrk:000124_add_annotation_queue_item_history_table
 --comment: Create annotation_queue_item_history — append-only record of every item ever added to a queue, so automation never adds the same one twice (OPIK-6303)
 
 -- Rows accumulate and outlive the item's membership: removeItems issues a DELETE against
@@ -23,9 +23,9 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.annotation_queue_item_h
     queue_id         FixedString(36),
     item_id          FixedString(36),
     created_at       DateTime64(9, 'UTC') DEFAULT now64(9),
-    created_by       String DEFAULT 'admin',
+    created_by       String DEFAULT '',
     last_updated_at  DateTime64(6, 'UTC') DEFAULT now64(6),
-    last_updated_by  String DEFAULT 'admin'
+    last_updated_by  String DEFAULT ''
 )
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/annotation_queue_item_history', '{replica}', last_updated_at)
 ORDER BY (workspace_id, project_id, queue_id, item_id)
