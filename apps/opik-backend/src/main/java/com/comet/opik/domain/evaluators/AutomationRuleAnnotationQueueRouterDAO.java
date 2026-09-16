@@ -1,8 +1,11 @@
 package com.comet.opik.domain.evaluators;
 
+import com.comet.opik.infrastructure.db.AnnotationScopeColumnMapper;
+import com.comet.opik.infrastructure.db.EvalTriggerScopeColumnMapper;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
-import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
+import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
+import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
@@ -20,7 +23,9 @@ import java.util.stream.Stream;
  * enabled, name — live there. Reads are addressed by queue rather than by rule id: the queue is what the
  * API has in hand, and the unique constraint on {@code queue_id} makes the lookup single-valued.
  */
-@RegisterRowMapper(AutomationRuleAnnotationQueueRouterRowMapper.class)
+@RegisterConstructorMapper(AutomationRuleAnnotationQueueRouterModel.class)
+@RegisterColumnMapper(EvalTriggerScopeColumnMapper.class)
+@RegisterColumnMapper(AnnotationScopeColumnMapper.class)
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 public interface AutomationRuleAnnotationQueueRouterDAO {
 

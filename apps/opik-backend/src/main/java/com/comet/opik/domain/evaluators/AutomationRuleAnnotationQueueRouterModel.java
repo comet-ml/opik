@@ -21,7 +21,6 @@ import java.util.UUID;
 public record AutomationRuleAnnotationQueueRouterModel(
         UUID id,
         UUID projectId,
-        Set<UUID> projectIds,
         String name,
         Float samplingRate,
         boolean enabled,
@@ -35,6 +34,16 @@ public record AutomationRuleAnnotationQueueRouterModel(
         String createdBy,
         Instant lastUpdatedAt,
         String lastUpdatedBy) implements AutomationRuleModel {
+
+    /**
+     * Derived rather than stored: the interface is shaped for evaluators, which can span projects, while a
+     * router reaches exactly one through its queue. Keeping it out of the components leaves every component
+     * a real column, which is what lets JDBI map this row by constructor instead of by hand.
+     */
+    @Override
+    public Set<UUID> projectIds() {
+        return Set.of(projectId);
+    }
 
     @Override
     public AutomationRule.AutomationRuleAction action() {

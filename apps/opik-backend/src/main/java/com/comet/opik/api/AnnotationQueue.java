@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.infrastructure.db.HasValue;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
@@ -64,7 +65,7 @@ public record AnnotationQueue(
 
     @Getter
     @RequiredArgsConstructor
-    public enum AnnotationScope {
+    public enum AnnotationScope implements HasValue {
         TRACE("trace"),
         THREAD("thread");
 
