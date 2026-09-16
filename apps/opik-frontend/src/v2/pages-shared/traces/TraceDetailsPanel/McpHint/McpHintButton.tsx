@@ -1,5 +1,6 @@
 import React, {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type SyntheticEvent,
@@ -70,6 +71,12 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
   // this and Radix's own close follows in the same event, and state that has
   // not re-rendered yet would let both of them report the same close.
   const isOpenRef = useRef(false);
+  // Read by the unmount cleanup below, which is created once and would
+  // otherwise report whatever these were on the first render.
+  const installModeRef = useRef(installMode);
+  installModeRef.current = installMode;
+  const entityTypeRef = useRef(target.entityType);
+  entityTypeRef.current = target.entityType;
   const openCard = useCallback(
     (nextIsOpen: boolean) => {
       if (isOpenRef.current === nextIsOpen) return;
@@ -117,6 +124,20 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
     isPinnedRef.current = false;
     openCard(false);
   }, [openCard]);
+
+  // An open card that goes away with its node, or with the panel, was abandoned
+  // as surely as one the user moved off. Without this the funnel carries opens
+  // that never close and the card looks as though it is still on screen.
+  useEffect(
+    () => () => {
+      if (!isOpenRef.current || hasActedRef.current) return;
+      trackEvent(OpikEvent.MCP_HINT_CLOSED, {
+        install_mode: installModeRef.current,
+        entity_type: entityTypeRef.current,
+      });
+    },
+    [],
+  );
 
   const handleContentBlur = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {

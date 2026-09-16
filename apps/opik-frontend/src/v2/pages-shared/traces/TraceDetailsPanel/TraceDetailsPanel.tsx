@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { BooleanParam, JsonParam, useQueryParam } from "use-query-params";
 import find from "lodash/find";
@@ -225,14 +231,18 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
 
   // The node being inspected. Switching it resets the hint.
   const mcpHintSubject = `${traceId}:${spanId}`;
+  // Built from what is on screen, not from the id in the url: a span that is
+  // not among the loaded ones leaves the viewer showing the trace, and the
+  // prompt would otherwise name a span whose error nobody can see.
+  const shownSpanId = dataToView && dataToView.id !== traceId ? spanId : "";
   const mcpHintTarget = useMemo<McpHintTarget>(
     () => ({
       traceId,
-      spanId: spanId || undefined,
+      spanId: shownSpanId || undefined,
       projectId,
-      entityType: spanId ? "span" : "trace",
+      entityType: shownSpanId ? "span" : "trace",
     }),
-    [traceId, projectId, spanId],
+    [traceId, projectId, shownSpanId],
   );
 
   const isErrorOpen = errorOpenFor === mcpHintSubject;
@@ -246,10 +256,15 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   // the keyboard, and the caller clearing the id — so there is no single
   // handler to hang this on. The alternative is moving both values into
   // something that unmounts with the sheet, which is how they used to drift.
+  // Which nodes have already had their impression counted, for this opening of
+  // the panel. State would re-render for nothing; the render reads
+  // `hintShownFor` instead.
+  const shownHintsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (open) return;
     setErrorOpenFor(null);
     setHintShownFor(null);
+    shownHintsRef.current.clear();
   }, [open]);
 
   const handleErrorExpandedChange = useCallback(
@@ -265,19 +280,15 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       };
       trackEvent(OpikEvent.TRACE_ERROR_EXPANDED, properties);
 
-      // One impression per node: the hint stays through a collapse, so this
-      // avoids counting a second showing of a button that never went away.
-      if (!showMcpHint || hintShownFor === mcpHintSubject) return;
+      // One impression per node for as long as the panel is open. The hint
+      // stays through a collapse, and A -> B -> A is the same button coming
+      // back into view rather than a second showing of it.
+      if (!showMcpHint || shownHintsRef.current.has(mcpHintSubject)) return;
+      shownHintsRef.current.add(mcpHintSubject);
       setHintShownFor(mcpHintSubject);
       trackEvent(OpikEvent.MCP_HINT_SHOWN, properties);
     },
-    [
-      mcpHintSubject,
-      mcpHintTarget.entityType,
-      mcpInstallMode,
-      showMcpHint,
-      hintShownFor,
-    ],
+    [mcpHintSubject, mcpHintTarget.entityType, mcpInstallMode, showMcpHint],
   );
 
   const spanCount = spansData?.content?.length ?? 0;
