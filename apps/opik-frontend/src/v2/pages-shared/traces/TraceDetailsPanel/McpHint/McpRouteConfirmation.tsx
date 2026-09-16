@@ -3,7 +3,6 @@ import { Check, Copy } from "lucide-react";
 import copy from "clipboard-copy";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { useToast } from "@/ui/use-toast";
 import { MCP_COPIED, MCP_COPIED_FEEDBACK_MS } from "./constants";
 import { McpRouteOutcome } from "./types";
 import { MCP_SNIPPET_ROW_CLASS } from "./tileStyles";
@@ -18,7 +17,6 @@ type McpRouteConfirmationProps = {
 const McpRouteConfirmation: React.FunctionComponent<
   McpRouteConfirmationProps
 > = ({ route, onRecopy }) => {
-  const { toast } = useToast();
   const [hasRecopied, setHasRecopied] = useState(false);
 
   useEffect(() => {
@@ -33,7 +31,6 @@ const McpRouteConfirmation: React.FunctionComponent<
   const handleRecopy = () => {
     if (!route.snippet) return;
     copy(route.snippet);
-    toast({ description: MCP_COPIED });
     setHasRecopied(true);
     onRecopy();
   };
@@ -73,7 +70,7 @@ const McpRouteConfirmation: React.FunctionComponent<
               className="shrink-0 text-light-slate hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {hasRecopied ? (
-                <Check className="size-3" />
+                <Check className="size-3 text-green-600" />
               ) : (
                 <Copy className="size-3" />
               )}

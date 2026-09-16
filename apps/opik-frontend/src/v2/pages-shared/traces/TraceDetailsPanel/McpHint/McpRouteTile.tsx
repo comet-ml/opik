@@ -1,8 +1,9 @@
-import React from "react";
-import { Copy, ExternalLink } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Check, Copy, ExternalLink } from "lucide-react";
 import copy from "clipboard-copy";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { MCP_COPIED_FEEDBACK_MS } from "./constants";
 import { McpInstallRoute, MCP_ROUTE_METHOD } from "./types";
 import { MCP_TILE_CLASS } from "./tileStyles";
 
@@ -18,14 +19,24 @@ const McpRouteTile: React.FunctionComponent<McpRouteTileProps> = ({
   onUse,
 }) => {
   const isDeeplink = route.method === MCP_ROUTE_METHOD.DEEPLINK;
-  const TrailingIcon = isDeeplink ? ExternalLink : Copy;
   // A custom scheme hands off without navigating, but an https route (VS Code's
   // redirector) would otherwise take the page with it.
   const opensInNewTab = route.href?.startsWith("http") ?? false;
 
+  // A copy has landed on the clipboard and nothing else changes, so the tile
+  // itself is where that gets said. A deeplink has nothing to report here: the
+  // card takes over instead, because the hand-off cannot be observed.
+  const [hasCopied, setHasCopied] = useState(false);
+  useEffect(() => {
+    if (!hasCopied) return;
+    const timer = setTimeout(() => setHasCopied(false), MCP_COPIED_FEEDBACK_MS);
+    return () => clearTimeout(timer);
+  }, [hasCopied]);
+
   const handleUse = () => {
     if (!isDeeplink && route.clipboard) {
       copy(route.clipboard);
+      setHasCopied(true);
     }
     onUse(route);
   };
@@ -34,7 +45,13 @@ const McpRouteTile: React.FunctionComponent<McpRouteTileProps> = ({
     <>
       <img src={route.logo} alt="" className="size-3 shrink-0" />
       <span className="whitespace-nowrap">{route.label}</span>
-      <TrailingIcon className="size-3 shrink-0 text-light-slate" />
+      {isDeeplink ? (
+        <ExternalLink className="size-3 shrink-0 text-light-slate" />
+      ) : hasCopied ? (
+        <Check className="size-3 shrink-0 text-green-600" />
+      ) : (
+        <Copy className="size-3 shrink-0 text-light-slate" />
+      )}
     </>
   );
 

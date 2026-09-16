@@ -13,7 +13,6 @@ vi.mock("@/store/AppStore", async (importOriginal) => ({
 vi.mock("@/api/projects/useProjectById", () => ({
   default: () => ({ data: { name: "my-agent" } }),
 }));
-vi.mock("@/ui/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
 
 // A deployment with a hosted server supplies its own routes, and only those can
 // hand off to another app. Swapped in per test rather than per file.
@@ -80,13 +79,33 @@ describe("the hint card", () => {
     renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-prompt"));
 
-    expect(screen.getByText(MCP_COPIED)).toBeInTheDocument();
+    // Not a button while it says so: a message with a hover effect reads as
+    // something to press.
+    const copied = screen.getByTestId("mcp-route-prompt-copied");
+    expect(copied).toHaveTextContent(MCP_COPIED);
+    expect(copied.tagName).toBe("SPAN");
+    expect(screen.queryByTestId("mcp-route-prompt")).toBeNull();
+
     // The card is untouched: the routes and the docs link stay where they were.
     expect(screen.getByTestId("mcp-route-cursor")).toBeInTheDocument();
     expect(screen.getByText("Learn more")).toBeInTheDocument();
 
     act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS));
     expect(screen.getByText(MCP_PROMPT_ACTION)).toBeInTheDocument();
+  });
+
+  it("ticks the client tile that was copied, and only that one", () => {
+    renderCard();
+    const cursor = screen.getByTestId("mcp-route-cursor");
+    fireEvent.click(cursor);
+
+    expect(cursor.querySelector(".lucide-check")).toBeTruthy();
+    expect(
+      screen.getByTestId("mcp-route-codex").querySelector(".lucide-copy"),
+    ).toBeTruthy();
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS));
+    expect(cursor.querySelector(".lucide-copy")).toBeTruthy();
   });
 
   it("does not hold the card open for a copy", () => {

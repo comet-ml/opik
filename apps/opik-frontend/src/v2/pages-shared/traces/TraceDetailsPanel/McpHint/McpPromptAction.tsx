@@ -2,8 +2,6 @@ import React, { useEffect, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import copy from "clipboard-copy";
 
-import { Button } from "@/ui/button";
-import { useToast } from "@/ui/use-toast";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import {
   MCP_COPIED,
@@ -18,20 +16,22 @@ type McpPromptActionProps = {
   entityType: McpHintEntityType;
 };
 
+// The same shape as the docs link below it, which is what the design asks for.
+const ACTION_CLASS =
+  "comet-body-xs inline-flex shrink-0 items-center gap-1 leading-4 text-foreground underline underline-offset-2 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
 /**
  * The route for the agent the developer already has open: the only one with no
  * prerequisite, and the only one that covers a client we never enumerated.
  *
- * Says it copied and goes back to offering itself, the way every other copy in
- * the product behaves. Nothing about the card changes, so there is no view to
- * get out of again.
+ * Says it copied for a moment and goes back to offering itself. No toast: the
+ * message is already here, next to the pointer that asked for it.
  */
 const McpPromptAction: React.FunctionComponent<McpPromptActionProps> = ({
   prompt,
   installMode,
   entityType,
 }) => {
-  const { toast } = useToast();
   const [hasCopied, setHasCopied] = useState(false);
 
   useEffect(() => {
@@ -42,7 +42,6 @@ const McpPromptAction: React.FunctionComponent<McpPromptActionProps> = ({
 
   const handleClick = () => {
     copy(prompt);
-    toast({ description: MCP_COPIED });
     setHasCopied(true);
     // Its own event, not `mcp_connect_clicked`: the funnel's "chose a route"
     // step is the union of the two, and counting this as both would double it.
@@ -52,21 +51,30 @@ const McpPromptAction: React.FunctionComponent<McpPromptActionProps> = ({
     });
   };
 
+  // Not a button while it says so: there is nothing to press, and a hover
+  // effect on a message reads as one.
+  if (hasCopied) {
+    return (
+      <span
+        data-testid="mcp-route-prompt-copied"
+        className="comet-body-xs inline-flex shrink-0 items-center gap-1 leading-4 text-green-600"
+      >
+        <Check className="size-3 shrink-0" />
+        {MCP_COPIED}
+      </span>
+    );
+  }
+
   return (
-    <Button
-      variant="link"
-      size="2xs"
+    <button
+      type="button"
       onClick={handleClick}
       data-testid="mcp-route-prompt"
-      className="h-6 shrink-0 px-0 font-mono text-xs text-foreground hover:text-primary"
+      className={ACTION_CLASS}
     >
-      <span>{hasCopied ? MCP_COPIED : MCP_PROMPT_ACTION}</span>
-      {hasCopied ? (
-        <Check className="ml-1 size-3 shrink-0 text-green-600" />
-      ) : (
-        <Copy className="ml-1 size-3 shrink-0 text-light-slate" />
-      )}
-    </Button>
+      {MCP_PROMPT_ACTION}
+      <Copy className="size-3 shrink-0" />
+    </button>
   );
 };
 
