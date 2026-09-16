@@ -180,10 +180,15 @@ export class CompareExperimentsPage {
    * How many resize dividers the row-detail panel's layout has. One fewer than
    * the number of panels (dataset + one per compared experiment), so a
    * two-experiment comparison has two.
+   *
+   * A retrying `toHaveCount` rather than a one-shot `count()`: the dividers
+   * mount with the panels they sit between, so a read taken the instant the
+   * panel opens can land on a partially-rendered group and fail on a count that
+   * is correct a frame later.
    */
-  async countPanelDividers(): Promise<number> {
-    return test.step('count the row-detail panel dividers', async () => {
-      return this.panelDividers.count();
+  async expectPanelDividerCount(expected: number): Promise<void> {
+    await test.step(`the row-detail panel has ${expected} dividers`, async () => {
+      await expect(this.panelDividers, 'row-detail panel resize dividers').toHaveCount(expected);
     });
   }
 
@@ -250,7 +255,7 @@ export class CompareExperimentsPage {
    * returns the layout it settles on.
    *
    * `dividerIndex` is positional because a divider has no identity beyond where
-   * it sits between two panels; call `countPanelDividers()` first so the
+   * it sits between two panels; call `expectPanelDividerCount()` first so the
    * position is unambiguous. Waits for the layout to actually change, so the
    * returned value is the post-drag one rather than a mid-drag read.
    */

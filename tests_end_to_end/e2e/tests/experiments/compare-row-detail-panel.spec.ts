@@ -186,7 +186,7 @@ test.describe('Experiment comparison — row-detail panel layout', { tag: ['@t2-
       let draggedLayout: string[] = [];
 
       await test.step('Dragging the first divider resizes the panels', async () => {
-        expect(await compare.countPanelDividers(), 'dividers for a two-experiment comparison').toBe(2);
+        await compare.expectPanelDividerCount(2);
 
         // Dataset panel plus one per compared experiment, each already sized:
         // reading before they register would give three blanks, and the
