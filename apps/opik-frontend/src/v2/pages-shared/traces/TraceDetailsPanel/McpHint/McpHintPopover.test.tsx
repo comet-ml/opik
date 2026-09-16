@@ -13,6 +13,7 @@ vi.mock("@/store/AppStore", async (importOriginal) => ({
 vi.mock("@/api/projects/useProjectById", () => ({
   default: () => ({ data: { name: "my-agent" } }),
 }));
+vi.mock("@/ui/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
 
 // A deployment with a hosted server supplies its own routes, and only those can
 // hand off to another app. Swapped in per test rather than per file.
@@ -30,7 +31,13 @@ vi.mock("@/store/PluginsStore", async (importOriginal) => {
 
 import { TooltipProvider } from "@/ui/tooltip";
 import McpHintPopover from "./McpHintPopover";
-import { MCP_COPIED_DISMISS_MS } from "./constants";
+import {
+  MCP_COPIED,
+  MCP_COPIED_FEEDBACK_MS,
+  MCP_PROMPT_ACTION,
+  MCP_PROMPT_PITCH,
+  MCP_TILES_LABEL,
+} from "./constants";
 import { McpHintTarget } from "./types";
 
 const target: McpHintTarget = {
@@ -39,21 +46,20 @@ const target: McpHintTarget = {
   entityType: "trace",
 };
 
-const renderCard = (onDone = vi.fn(), onConfirmationChange = vi.fn()) => {
-  const result = render(
+const renderCard = (onConfirmationChange = vi.fn()) => ({
+  onConfirmationChange,
+  ...render(
     <TooltipProvider>
       <McpHintPopover
         onAction={vi.fn()}
         onConfirmationChange={onConfirmationChange}
-        onDone={onDone}
         target={target}
       />
     </TooltipProvider>,
-  );
-  return { onDone, onConfirmationChange, ...result };
-};
+  ),
+});
 
-describe("the hint card without a hosted server", () => {
+describe("the hint card", () => {
   beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
   afterEach(() => vi.useRealTimers());
 
@@ -65,57 +71,30 @@ describe("the hint card without a hosted server", () => {
     for (const client of ["claude-code", "cursor", "vscode", "codex"]) {
       expect(screen.getByTestId(`mcp-route-${client}`)).toBeInTheDocument();
     }
-    expect(screen.getByTestId("mcp-route-prompt")).toBeInTheDocument();
+    expect(screen.getByText(MCP_TILES_LABEL)).toBeInTheDocument();
+    expect(screen.getByText(MCP_PROMPT_PITCH)).toBeInTheDocument();
+    expect(screen.getByText(MCP_PROMPT_ACTION)).toBeInTheDocument();
   });
 
-  it("confirms a copy in place, keeping the description and the docs link", () => {
+  it("says a copy landed for two seconds, then offers itself again", () => {
     renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-prompt"));
 
-    expect(
-      screen.getByText("Copied - paste into your agent"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Instead of writing a script for each question/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(MCP_COPIED)).toBeInTheDocument();
+    // The card is untouched: the routes and the docs link stay where they were.
+    expect(screen.getByTestId("mcp-route-cursor")).toBeInTheDocument();
     expect(screen.getByText("Learn more")).toBeInTheDocument();
-    // The routes it was taken from are what it stands in for.
-    expect(screen.queryByTestId("mcp-route-prompt")).toBeNull();
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS));
+    expect(screen.getByText(MCP_PROMPT_ACTION)).toBeInTheDocument();
   });
 
-  it("says where a copied command goes, without echoing it back", () => {
-    const { container } = renderCard();
+  it("does not hold the card open for a copy", () => {
+    // Nothing took the card over, so hover governs it as it did before.
+    const { onConfirmationChange } = renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-cursor"));
 
-    expect(
-      screen.getByText("Copied — paste it in your terminal"),
-    ).toBeInTheDocument();
-    expect(container.querySelector("code")).toBeNull();
-  });
-
-  it("gets out of the way once the confirmation has been read", () => {
-    const { onDone } = renderCard();
-    fireEvent.click(screen.getByTestId("mcp-route-prompt"));
-
-    expect(onDone).not.toHaveBeenCalled();
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
-    expect(onDone).toHaveBeenCalledTimes(1);
-  });
-
-  it("goes back to the prompt instead of closing under a reading pointer", () => {
-    const { onDone, container } = renderCard();
-    fireEvent.click(screen.getByTestId("mcp-route-prompt"));
-
-    const card = container.querySelector("[class*='w-[279px]']") as HTMLElement;
-    // `:hover` is the pointer's own state, which jsdom does not model, so stand
-    // in for it at the one place the card asks.
-    card.matches = ((selector: string) =>
-      selector === ":hover") as HTMLElement["matches"];
-
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
-
-    expect(onDone).not.toHaveBeenCalled();
-    expect(screen.getByTestId("mcp-route-prompt")).toBeInTheDocument();
+    expect(onConfirmationChange).not.toHaveBeenCalled();
   });
 });
 
@@ -153,60 +132,28 @@ describe("the hint card with a hosted server", () => {
     plugin.McpInstallRoutes = null;
   });
 
-  it("leaves an opened deeplink on screen, since nothing was copied", () => {
-    // The fallback under it is the only recovery when the hand-off silently
-    // did nothing, so this view waits to be dismissed.
-    const { onDone } = renderCard();
+  it("holds the card open for an opened deeplink, which is not confirmed", () => {
+    // The hand-off cannot be observed from here, so the fallback under it is
+    // the only recovery and has to wait to be dismissed.
+    const { onConfirmationChange } = renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-vscode"));
-
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS * 2));
 
     expect(screen.getByText("Opening VS Code…")).toBeInTheDocument();
-    expect(onDone).not.toHaveBeenCalled();
-  });
-
-  it("puts it on the clock once the fallback is copied", () => {
-    const { onDone } = renderCard();
-    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
-    fireEvent.click(screen.getByLabelText("Copy it"));
-
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
-
-    expect(onDone).toHaveBeenCalledTimes(1);
-  });
-
-  it("restarts the clock when the user copies again", () => {
-    const { onDone } = renderCard();
-    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
-    fireEvent.click(screen.getByLabelText("Copy it"));
-
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS - 200));
-    fireEvent.click(screen.getByLabelText("Copy it"));
-
-    // The original deadline passes without closing: a copy made just before it
-    // used to be followed by the card vanishing.
-    act(() => void vi.advanceTimersByTime(300));
-    expect(onDone).not.toHaveBeenCalled();
-
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
-    expect(onDone).toHaveBeenCalledTimes(1);
-  });
-
-  it("releases the card when it goes back to the routes", () => {
-    // The pointer is reading it, so the confirmation reverts rather than
-    // closing — and the hold has to go with it, or hover could never close
-    // the card again.
-    const { onDone, onConfirmationChange, container } = renderCard();
-    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
     expect(onConfirmationChange).toHaveBeenLastCalledWith(true);
 
-    fireEvent.click(screen.getByLabelText("Copy it"));
-    const card = container.querySelector("[class*='w-[279px]']") as HTMLElement;
-    card.matches = ((selector: string) =>
-      selector === ":hover") as HTMLElement["matches"];
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_DISMISS_MS));
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS * 3));
+    expect(screen.getByText("Opening VS Code…")).toBeInTheDocument();
+  });
 
-    expect(onDone).not.toHaveBeenCalled();
-    expect(onConfirmationChange).toHaveBeenLastCalledWith(false);
+  it("says the fallback copy landed, for the same two seconds", () => {
+    renderCard();
+    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
+
+    const button = screen.getByLabelText("Copy it");
+    fireEvent.click(button);
+    expect(button.querySelector(".lucide-check")).toBeTruthy();
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS));
+    expect(button.querySelector(".lucide-copy")).toBeTruthy();
   });
 });

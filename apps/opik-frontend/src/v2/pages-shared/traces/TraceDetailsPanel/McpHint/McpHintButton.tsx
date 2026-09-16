@@ -126,10 +126,6 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
     [close],
   );
 
-  // A copied confirmation asks to be dismissed once it has been read, which is
-  // the same thing as clicking away: the pin goes with it.
-  const handleDone = useCallback(() => close(), [close]);
-
   return (
     <HoverCard
       open={isOpen}
@@ -160,7 +156,7 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
         // No exit animation: Radix unmounts on `animationend`, which never
         // arrived here, so a closed card stayed on screen fully opaque. The `!`
         // is needed to beat the base variant's `animate-out`.
-        className="w-auto border-0 bg-transparent p-0 shadow-none data-[state=closed]:!animate-none"
+        className="w-[456px] border-0 bg-transparent p-0 shadow-none data-[state=closed]:!animate-none"
         data-testid="mcp-hint-popover"
         onPointerDownOutside={close}
         onEscapeKeyDown={close}
@@ -169,7 +165,6 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
         <McpHintPopover
           onAction={markAction}
           onConfirmationChange={handleConfirmationChange}
-          onDone={handleDone}
           target={target}
         />
       </HoverCardContent>

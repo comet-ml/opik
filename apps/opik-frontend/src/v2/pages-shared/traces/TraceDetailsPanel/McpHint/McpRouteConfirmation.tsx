@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import copy from "clipboard-copy";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { useToast } from "@/ui/use-toast";
+import { MCP_COPIED, MCP_COPIED_FEEDBACK_MS } from "./constants";
 import { McpRouteOutcome } from "./types";
 import { MCP_SNIPPET_ROW_CLASS } from "./tileStyles";
 
@@ -16,11 +18,22 @@ type McpRouteConfirmationProps = {
 const McpRouteConfirmation: React.FunctionComponent<
   McpRouteConfirmationProps
 > = ({ route, onRecopy }) => {
+  const { toast } = useToast();
   const [hasRecopied, setHasRecopied] = useState(false);
+
+  useEffect(() => {
+    if (!hasRecopied) return;
+    const timer = setTimeout(
+      () => setHasRecopied(false),
+      MCP_COPIED_FEEDBACK_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [hasRecopied]);
 
   const handleRecopy = () => {
     if (!route.snippet) return;
     copy(route.snippet);
+    toast({ description: MCP_COPIED });
     setHasRecopied(true);
     onRecopy();
   };
@@ -50,7 +63,7 @@ const McpRouteConfirmation: React.FunctionComponent<
             {route.snippet}
           </code>
           <TooltipWrapper
-            content={hasRecopied ? "Copied" : "Copy"}
+            content={hasRecopied ? MCP_COPIED : "Copy"}
             nonInteractive
           >
             <button

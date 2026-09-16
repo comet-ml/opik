@@ -2,10 +2,14 @@ import React, { useCallback } from "react";
 
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import McpRouteTile from "./McpRouteTile";
-import McpPromptTile from "./McpPromptTile";
+import McpPromptAction from "./McpPromptAction";
 import useMcpInstallMode from "./useMcpInstallMode";
 import useMcpPrompt from "./useMcpPrompt";
-import { MCP_DEEPLINK_FALLBACK_NOTE } from "./constants";
+import {
+  MCP_DEEPLINK_FALLBACK_NOTE,
+  MCP_PROMPT_PITCH,
+  MCP_TILES_LABEL,
+} from "./constants";
 import {
   MCP_ROUTE_METHOD,
   McpHintTarget,
@@ -38,29 +42,50 @@ const InstallRoutesLayout: React.FunctionComponent<
         entity_type: target.entityType,
       });
 
-      // A deeplink's fallback is the prompt, which only this layer can build,
-      // so the route describes the hand-off and the fallback is filled in here.
-      onRouteUsed(
-        route.method === MCP_ROUTE_METHOD.DEEPLINK
-          ? { ...route, note: MCP_DEEPLINK_FALLBACK_NOTE, snippet: prompt }
-          : route,
-      );
+      // A copy says so on the tile and leaves the card alone. A deeplink hands
+      // off to another app, which cannot be observed from here, so it owes the
+      // user a view — with the prompt as the fallback, which only this layer
+      // can build.
+      if (route.method !== MCP_ROUTE_METHOD.DEEPLINK) return;
+
+      onRouteUsed({
+        ...route,
+        note: MCP_DEEPLINK_FALLBACK_NOTE,
+        snippet: prompt,
+      });
     },
     [installMode, onRouteUsed, prompt, target.entityType],
   );
 
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {routes.map((route) => (
-        <McpRouteTile key={route.client} route={route} onUse={handleRouteUse} />
-      ))}
-      <McpPromptTile
-        prompt={prompt}
-        installMode={installMode}
-        entityType={target.entityType}
-        onUsed={onRouteUsed}
-      />
-    </div>
+    <>
+      <p className="comet-body-xs mb-1.5 leading-4 text-muted-slate">
+        {MCP_TILES_LABEL}
+      </p>
+
+      <div className="flex flex-wrap gap-1.5">
+        {routes.map((route) => (
+          <McpRouteTile
+            key={route.client}
+            route={route}
+            onUse={handleRouteUse}
+          />
+        ))}
+      </div>
+
+      <div className="my-2 h-px w-full bg-border" />
+
+      <div className="flex items-center justify-between gap-2">
+        <span className="comet-body-xs leading-4 text-muted-slate">
+          {MCP_PROMPT_PITCH}
+        </span>
+        <McpPromptAction
+          prompt={prompt}
+          installMode={installMode}
+          entityType={target.entityType}
+        />
+      </div>
+    </>
   );
 };
 

@@ -5,8 +5,9 @@ export const MCP_HINT_CLOSE_DELAY_MS = 260;
 // cause and effect rather than as one layout.
 export const MCP_HINT_REVEAL_DELAY_MS = 200;
 
-// How long a "copied" confirmation stands before the card gets out of the way.
-export const MCP_COPIED_DISMISS_MS = 3000;
+// How long a copy says so before going back to offering itself. Two seconds,
+// the same as CodeBlockCopy and every other copy in the product.
+export const MCP_COPIED_FEEDBACK_MS = 2000;
 
 export const MCP_HINT_LABEL = "Fix via MCP";
 
@@ -20,4 +21,10 @@ export const MCP_HINT_DESCRIPTION =
 export const MCP_DEEPLINK_FALLBACK_NOTE =
   "Nothing opened? Use the prompt instead:";
 
-export const MCP_PROMPT_COPIED = "Copied - paste into your agent";
+export const MCP_TILES_LABEL = "Set it up for:";
+
+export const MCP_PROMPT_PITCH = "Using different agent?";
+
+export const MCP_PROMPT_ACTION = "Copy prompt";
+
+export const MCP_COPIED = "Copied";
