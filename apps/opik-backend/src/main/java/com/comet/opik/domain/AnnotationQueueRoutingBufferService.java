@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
+import com.google.common.annotations.VisibleForTesting;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -51,7 +52,15 @@ import java.util.stream.Collectors;
 @Singleton
 public class AnnotationQueueRoutingBufferService {
 
+    /**
+     * Package-private so the unit test can assert against the same keys the service writes. Restating them
+     * in the test would let the two drift apart silently: a renamed key would still pass while the running
+     * service looked somewhere else.
+     */
+    @VisibleForTesting
     static final String PENDING_SET_KEY = "annotation-queue:routing:pending";
+
+    @VisibleForTesting
     static final String PENDING_AUTHORS_KEY = "annotation-queue:routing:pending-authors";
 
     /**
@@ -66,6 +75,7 @@ public class AnnotationQueueRoutingBufferService {
      * <p>One key per pending entity is a few hundred keys at the configured batch size, all deleted with
      * their member once published.
      */
+    @VisibleForTesting
     static final String PENDING_SCORE_NAMES_PREFIX = "annotation-queue:routing:pending-score-names:";
 
     private static final String MEMBER_SEPARATOR = ":";
@@ -129,7 +139,7 @@ public class AnnotationQueueRoutingBufferService {
                 })
                 .then()
                 .doOnSuccess(__ -> log.debug(
-                        "Recorded '{}' entities for routing, scope '{}', workspace '{}', due at '{}'",
+                        "Recorded entities for routing, count '{}', scope '{}', workspace '{}', due at '{}'",
                         entityIds.size(), scope, workspaceId, dueAt))
                 .doOnError(error -> log.error("Failed to record entities for routing, workspace '{}'",
                         workspaceId, error)))
@@ -168,7 +178,7 @@ public class AnnotationQueueRoutingBufferService {
                             .concatMap(this::publish)
                             .reduce(0L, Long::sum)
                             .doOnNext(published -> log.info(
-                                    "Flushed '{}' entities for routing in '{}' messages", published,
+                                    "Flushed entities for routing, count '{}', messages '{}'", published,
                                     groups.size()));
                 });
     }
@@ -181,8 +191,8 @@ public class AnnotationQueueRoutingBufferService {
                 // One group failing must not strand the others, and it no longer costs anything to
                 // swallow: this group's members are still pending, so the next tick picks them up.
                 .onErrorResume(error -> {
-                    log.error("Failed to publish routing work for workspace '{}', '{}' entities; "
-                            + "leaving them pending for the next flush", group.workspaceId(),
+                    log.error("Failed to publish routing work, leaving the entities pending for the next "
+                            + "flush, workspace '{}', count '{}'", group.workspaceId(),
                             group.entityIds().size(), error);
                     return Mono.just(0L);
                 });

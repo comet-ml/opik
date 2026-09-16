@@ -54,7 +54,7 @@ public class AnnotationQueueRoutingPublisher {
                 .build();
 
         // DEBUG: one of these per score event on an automated workspace, so INFO would be noise.
-        log.debug("Publishing annotation queue routing message: '{}' entities, scope '{}', workspace '{}'",
+        log.debug("Publishing annotation queue routing message, entities '{}', scope '{}', workspace '{}'",
                 entityIds.size(), scope, workspaceId);
 
         return Mono.defer(() -> {

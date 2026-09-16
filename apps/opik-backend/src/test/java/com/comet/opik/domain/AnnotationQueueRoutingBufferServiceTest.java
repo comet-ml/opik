@@ -46,6 +46,10 @@ import static org.mockito.Mockito.when;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class AnnotationQueueRoutingBufferServiceTest {
 
+    // Production entity ids are UUID v7, and the buffer keys Redis members by them, so v4 would exercise a
+    // different ordering and a different string shape than the one that ships.
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
+
     private static final String WORKSPACE_ID = "workspace-1";
     private static final String USER_NAME = "user-1";
     private static final AnnotationQueue.AnnotationScope TRACE = AnnotationQueue.AnnotationScope.TRACE;
@@ -90,7 +94,7 @@ class AnnotationQueueRoutingBufferServiceTest {
 
         @Test
         void recordsOneMemberPerEntityWithTheAuthorAndScoreNames() {
-            UUID traceId = UUID.randomUUID();
+            UUID traceId = ID_GENERATOR.generateId();
 
             service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(traceId), Set.of("relevance")).block();
 
@@ -106,7 +110,7 @@ class AnnotationQueueRoutingBufferServiceTest {
          */
         @Test
         void doesNotResetTheDeadlineOnRepeatedScoring() {
-            UUID traceId = UUID.randomUUID();
+            UUID traceId = ID_GENERATOR.generateId();
 
             service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(traceId), Set.of("relevance")).block();
             service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(traceId), Set.of("hallucination")).block();
@@ -117,7 +121,7 @@ class AnnotationQueueRoutingBufferServiceTest {
 
         @Test
         void writesNoScoreNamesWhenTheEmitterDidNotSay() {
-            service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(UUID.randomUUID()), Set.of()).block();
+            service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(ID_GENERATOR.generateId()), Set.of()).block();
 
             assertThat(nameSets).isEmpty();
         }
@@ -129,7 +133,7 @@ class AnnotationQueueRoutingBufferServiceTest {
          */
         @Test
         void unionsScoreNamesAcrossEventsInTheSameWindow() {
-            UUID traceId = UUID.randomUUID();
+            UUID traceId = ID_GENERATOR.generateId();
 
             service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(traceId), Set.of("relevance")).block();
             service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(traceId), Set.of("hallucination")).block();
@@ -144,7 +148,8 @@ class AnnotationQueueRoutingBufferServiceTest {
         void recordsNothingWhenDisabled() {
             config.setEnabled(false);
 
-            service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(UUID.randomUUID()), Set.of("relevance")).block();
+            service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(ID_GENERATOR.generateId()), Set.of("relevance"))
+                    .block();
 
             verify(pending, never()).addIfAbsent(anyDouble(), any());
         }
@@ -169,7 +174,7 @@ class AnnotationQueueRoutingBufferServiceTest {
          */
         @Test
         void publishesBeforeRemovingFromTheBuffer() {
-            UUID traceId = UUID.randomUUID();
+            UUID traceId = ID_GENERATOR.generateId();
             givenDue(List.of(member(traceId)));
             givenAuthors(Map.of(member(traceId), USER_NAME));
             when(publisher.enqueue(anyString(), anyString(), any(), any(), any())).thenReturn(Mono.empty());
@@ -184,7 +189,7 @@ class AnnotationQueueRoutingBufferServiceTest {
 
         @Test
         void leavesEntitiesPendingWhenPublishingFails() {
-            UUID traceId = UUID.randomUUID();
+            UUID traceId = ID_GENERATOR.generateId();
             givenDue(List.of(member(traceId)));
             givenAuthors(Map.of(member(traceId), USER_NAME));
             when(publisher.enqueue(anyString(), anyString(), any(), any(), any()))
@@ -200,8 +205,8 @@ class AnnotationQueueRoutingBufferServiceTest {
 
         @Test
         void oneFailingGroupDoesNotStopTheOthers() {
-            UUID failing = UUID.randomUUID();
-            UUID succeeding = UUID.randomUUID();
+            UUID failing = ID_GENERATOR.generateId();
+            UUID succeeding = ID_GENERATOR.generateId();
             givenDue(List.of(member(failing), member("workspace-2", succeeding)));
             givenAuthors(Map.of(member(failing), USER_NAME, member("workspace-2", succeeding), USER_NAME));
             when(publisher.enqueue(eq(WORKSPACE_ID), anyString(), any(), any(), any()))
@@ -216,9 +221,9 @@ class AnnotationQueueRoutingBufferServiceTest {
         /** One message per workspace, scope and author - the author is stamped on the queue item. */
         @Test
         void groupsByWorkspaceScopeAndAuthor() {
-            UUID a = UUID.randomUUID();
-            UUID b = UUID.randomUUID();
-            UUID c = UUID.randomUUID();
+            UUID a = ID_GENERATOR.generateId();
+            UUID b = ID_GENERATOR.generateId();
+            UUID c = ID_GENERATOR.generateId();
             givenDue(List.of(member(a), member(b), member("workspace-2", c)));
             givenAuthors(Map.of(
                     member(a), USER_NAME,
@@ -234,7 +239,7 @@ class AnnotationQueueRoutingBufferServiceTest {
 
         @Test
         void carriesEachEntitysScoreNamesThroughToTheMessage() {
-            UUID traceId = UUID.randomUUID();
+            UUID traceId = ID_GENERATOR.generateId();
             givenDue(List.of(member(traceId)));
             givenAuthors(Map.of(member(traceId), USER_NAME));
             when(nameSet(scoreNamesKey(member(traceId))).readAll())
@@ -260,7 +265,7 @@ class AnnotationQueueRoutingBufferServiceTest {
         @Test
         void boundsTheReadToOneBatchAndRemovesOnlyWhatItPublished() {
             config.setJobBatchSize(3);
-            List<UUID> ids = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+            List<UUID> ids = List.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
             List<String> firstPage = ids.stream().map(id -> member(id)).toList();
             givenDue(firstPage);
             givenAuthors(firstPage.stream()
@@ -283,8 +288,8 @@ class AnnotationQueueRoutingBufferServiceTest {
         /** Each entity's names go to its own key, so one entity cannot see another's. */
         @Test
         void keepsEachEntitysScoreNamesOnItsOwnKey() {
-            UUID first = UUID.randomUUID();
-            UUID second = UUID.randomUUID();
+            UUID first = ID_GENERATOR.generateId();
+            UUID second = ID_GENERATOR.generateId();
 
             service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(first), Set.of("relevance")).block();
             service.record(WORKSPACE_ID, USER_NAME, TRACE, Set.of(second), Set.of("safety")).block();
@@ -302,7 +307,7 @@ class AnnotationQueueRoutingBufferServiceTest {
          */
         @Test
         void removesOnlyTheNamesItPublishedRatherThanTheWholeKey() {
-            UUID traceId = UUID.randomUUID();
+            UUID traceId = ID_GENERATOR.generateId();
             String key = scoreNamesKey(member(traceId));
             givenDue(List.of(member(traceId)));
             givenAuthors(Map.of(member(traceId), USER_NAME));
