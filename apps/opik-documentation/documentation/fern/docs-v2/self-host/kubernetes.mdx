@@ -126,8 +126,8 @@ clickhouse:
 them. Declaring your own list therefore drops the chart's `default` profile entry unless you repeat
 it, which would silently remove the Distributed insert-queue settings. The examples below keep it.
 
-`prefer_localhost_replica` is not affected — the chart derives it from your topology outside this
-list, so overriding the list never changes it.
+`prefer_localhost_replica` is in that same `default` entry, so it is dropped by list replacement
+too. Keep the whole entry, not just the batching settings.
 </Warning>
 
 You can create read-only ClickHouse users with custom settings profiles.
@@ -144,6 +144,7 @@ clickhouse:
       settings:
         distributed_background_insert_batch: 1
         distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
     - name: readonly_profile
       settings:
         readonly: 1
@@ -175,6 +176,7 @@ clickhouse:
       settings:
         distributed_background_insert_batch: 1
         distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
     - name: readonly_profile
       settings:
         readonly: 1

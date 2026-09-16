@@ -207,6 +207,13 @@ class TracesSchemaParityPostCutoverTest {
      * materialized column with a valid name and a broken definition would pass every assertion above, so one row is
      * written through the wrapper and its computed value read back — the reference migration declares
      * {@code MATERIALIZED length(name)}, so a known name must yield its length.
+     *
+     * <p>The probe insert forces {@code distributed_foreground_insert}. The default profile sets
+     * {@code prefer_localhost_replica = 0} (OPIK-8255), under which a write through a Distributed table is
+     * serialised to a queue file and shipped asynchronously — so an immediate read-back races the background
+     * sender and usually sees nothing. That asynchrony is the production behaviour and is deliberate; it is
+     * simply not what this test is about, which is whether the materialized expression computes through the
+     * wrapper. Forcing the insert synchronous makes the probe deterministic without changing the profile.
      */
     private void assertDerivedFieldComputesThroughTheWrapper() throws Exception {
         var traceId = java.util.UUID.randomUUID().toString();
@@ -214,6 +221,7 @@ class TracesSchemaParityPostCutoverTest {
         execute("""
                 INSERT INTO %s.%s (id, workspace_id, project_id, name)
                 VALUES ('%s', 'ws-reference-probe', '%s', '%s')
+                SETTINGS distributed_foreground_insert = 1
                 """.formatted(DATABASE_NAME, TRACES, traceId, java.util.UUID.randomUUID(), name));
 
         var sql = "SELECT %s FROM %s.%s WHERE id = '%s'"

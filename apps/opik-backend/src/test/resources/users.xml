@@ -31,13 +31,14 @@
                  retries a failed batch file-by-file rather than wedging the queue. Both seed
                  the engine's background_insert_* table settings at attach time.
 
-                 Harmless here, but not because there is no Distributed table — several tests
-                 create real ones against this profile (TracesDistributedWrapMutationTest,
-                 TracesLocalV2CutoverTest, TracesSchemaParityPostCutoverTest). It is that a
-                 single node with prefer_localhost_replica at its default of 1 writes
-                 in-process, so no queue file is produced. Hence prefer_localhost_replica is
-                 deliberately not set to 0 here: it would route those writes through the queue
-                 and the tests' read-backs would stop seeing them. -->
+                 prefer_localhost_replica is stated at 0, the same value every deployed
+                 installation runs, so the tests exercise the production insert path rather than
+                 a local-write shortcut. Several tests build real Distributed tables against this
+                 profile (TracesDistributedWrapMutationTest, TracesLocalV2CutoverTest,
+                 TracesSchemaParityPostCutoverTest); with 0 a write through such a table is
+                 serialised to a queue file and shipped asynchronously, so a test needing an
+                 immediate read-back must force distributed_foreground_insert on that statement
+                 rather than rely on the profile. -->
             <prefer_localhost_replica>0</prefer_localhost_replica>
             <distributed_background_insert_batch>1</distributed_background_insert_batch>
             <distributed_background_insert_split_batch_on_failure>1</distributed_background_insert_split_batch_on_failure>
