@@ -48,6 +48,7 @@ DEFAULT_EXCLUDE = "^$"     # pre-commit default: match nothing
 # system hooks that shell out to mvn/npm need a toolchain.
 TOOLCHAIN_BY_ID = {
     "spotless": "java",
+    "pmd-inline-fqn": "java",
     "fe-eslint": "node-fe",
     "fe-typecheck": "node-fe",
     "no-private-fe-plugins": "none",  # plain bash, but gated to FE paths
