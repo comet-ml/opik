@@ -1,0 +1,4 @@
+sentinel:
+  enabled: true
+  masterName: mymaster
+  nodes: ${OPIK_REDIS_SENTINEL_NODES:-''}
