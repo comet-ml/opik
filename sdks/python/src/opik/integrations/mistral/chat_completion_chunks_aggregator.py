@@ -29,6 +29,11 @@ def _tool_call_key(
     known ``id`` continues that call and any other fragment opens a new one --
     ``function.name`` and ``function.arguments`` are required by the model, so
     every fragment the SDK accepts is a complete call.
+
+    A call opened here is keyed below every key already in use, so it is negative
+    while provider indexes are not: a stream that sends ``index`` for some
+    fragments and omits it for others cannot land a provider index on a slot this
+    function invented, which would merge two different calls into one.
     """
     sent_index = tool_call.index
     if "index" in tool_call.model_fields_set and isinstance(sent_index, int):
@@ -39,7 +44,7 @@ def _tool_call_key(
         if known_key is not None:
             return known_key
 
-    return max(tool_calls_by_index, default=-1) + 1
+    return min((key for key in tool_calls_by_index if key < 0), default=0) - 1
 
 
 def _merge_tool_call(
@@ -107,10 +112,7 @@ def aggregate(
                     text_chunks.append(delta.content)
 
                 if delta.tool_calls:
-                    # Mistral emits each tool call complete in a single chunk, so
-                    # ``index`` is the identity to accumulate by -- when the stream
-                    # sends one. See ``_tool_call_key`` for what happens when it
-                    # does not.
+                    # ``_tool_call_key`` owns how a fragment is matched to a call.
                     for tool_call in delta.tool_calls:
                         index = _tool_call_key(
                             tool_call, tool_calls_by_index, keys_by_call_id
@@ -130,8 +132,13 @@ def aggregate(
 
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
         if tool_calls_by_index:
+            # Calls the stream indexed keep their index order; calls opened
+            # without a sent index follow, in the order they arrived.
+            ordered_keys = sorted(key for key in tool_calls_by_index if key >= 0) + [
+                key for key in tool_calls_by_index if key < 0
+            ]
             aggregated_response["choices"][0]["message"]["tool_calls"] = [
-                tool_calls_by_index[index] for index in sorted(tool_calls_by_index)
+                tool_calls_by_index[key] for key in ordered_keys
             ]
 
         return MistralChatCompletionChunksAggregated(**aggregated_response)
