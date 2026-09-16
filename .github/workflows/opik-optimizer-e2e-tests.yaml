@@ -37,9 +37,11 @@ jobs:
         runs-on: ubuntu-latest
         if: ${{ github.event.pull_request.head.repo.fork == true }}
         steps:
-            - name: Print skip reason
-              run: |
-                echo "::warning::E2E tests do not run on pull requests from forks. GitHub issues a read-only GITHUB_TOKEN to fork-originated pull_request events, so the shared build cannot push images to GHCR. A maintainer will run these tests before merge."
+            - uses: actions/checkout@v7
+              with:
+                  sparse-checkout: .github/actions/fork-pr-e2e-skip-warning
+                  sparse-checkout-cone-mode: false
+            - uses: ./.github/actions/fork-pr-e2e-skip-warning
 
     build-opik:
         # See fork-pr-warning; delete this line once fork PRs can run E2E.

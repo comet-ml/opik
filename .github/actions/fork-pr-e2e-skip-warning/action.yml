@@ -1,0 +1,16 @@
+---
+name: Fork PR E2E Skip Warning
+description: |
+  Explain in the run log why E2E jobs were skipped on a fork-originated pull
+  request. GitHub issues a read-only GITHUB_TOKEN to fork PRs regardless of the
+  workflow's permissions block, so the shared build cannot push images to GHCR.
+  Single source of the message for every E2E workflow that gates on the fork
+  condition; delete the action and its callers once fork PRs can run E2E.
+
+runs:
+  using: composite
+  steps:
+    - name: Print skip reason
+      shell: bash
+      run: |
+        echo "::warning title=E2E skipped on fork PR::E2E tests do not run on pull requests from forks. GitHub issues a read-only GITHUB_TOKEN to fork-originated pull_request events, so the shared build cannot push images to GHCR. A maintainer will run these tests before merge."
