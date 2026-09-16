@@ -3,7 +3,6 @@ package com.comet.opik.infrastructure.net;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -16,18 +15,22 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 /**
  * Pre-flight check for outbound calls to user-supplied URLs (SSRF guard). In {@code STRICT} mode
- * (cloud) it requires HTTPS and resolves the hostname before anyone connects, refusing addresses
- * only our own network can reach: loopback, link-local (including the cloud metadata endpoint at
- * 169.254.169.254), RFC 1918 private ranges, IPv6 unique-local, multicast, and unresolvable hosts.
- * In {@code RELAXED} mode (self-hosted default) it is a no-op — internal gateways legitimately
- * live on private ranges there.
+ * (cloud) it resolves the hostname before anyone connects, refusing addresses only our own network
+ * can reach: loopback, link-local (including the cloud metadata endpoint at 169.254.169.254),
+ * RFC 1918 private ranges, IPv6 unique-local, multicast, and unresolvable hosts. In
+ * {@code RELAXED} mode (self-hosted default) it is a no-op — internal gateways legitimately live on
+ * private ranges there.
+ *
+ * <p>HTTPS enforcement is a separate control, requested per caller via {@link Scheme}. It protects
+ * the confidentiality of what we send, not the network we can reach, so callers whose payload
+ * carries a credential ({@link Scheme#HTTPS_ONLY}) opt in independently of the address filtering
+ * above. A caller passing {@link Scheme#ANY} still gets the full SSRF check.
  *
  * <p>Resolve-then-decide is the accepted level of protection here: the later connection resolves
  * again, so a DNS-rebinding attacker with a sub-TTL flip could theoretically pass the check. The
  * surfaces this guards are admin-configured (not anonymous input), which keeps that residual risk
  * acceptable; connection-time pinning would require a custom socket layer.
  */
-@RequiredArgsConstructor
 public class DestinationGuard {
 
     public enum Mode {
@@ -52,7 +55,28 @@ public class DestinationGuard {
         }
     }
 
+    /**
+     * Whether the caller also requires HTTPS. Independent of {@link Mode}: this is about protecting
+     * the payload in transit, not about which networks we are willing to reach.
+     */
+    public enum Scheme {
+        /** Accept http as well as https — for payloads where plaintext is the caller's own choice. */
+        ANY,
+        /** Refuse anything but https — for payloads carrying a credential. */
+        HTTPS_ONLY,
+    }
+
     private final @NonNull Mode mode;
+    private final @NonNull Scheme scheme;
+
+    public DestinationGuard(@NonNull Mode mode, @NonNull Scheme scheme) {
+        this.mode = mode;
+        this.scheme = scheme;
+    }
+
+    public DestinationGuard(@NonNull Mode mode) {
+        this(mode, Scheme.HTTPS_ONLY);
+    }
 
     /**
      * @throws DestinationGuardException with a user-facing message when the destination is refused
@@ -68,9 +92,15 @@ public class DestinationGuard {
         } catch (URISyntaxException exception) {
             throw new DestinationGuardException("destination '%s' is not a valid URL".formatted(url));
         }
-        if (!"https".equalsIgnoreCase(uri.getScheme())) {
+        if (scheme == Scheme.HTTPS_ONLY && !"https".equalsIgnoreCase(uri.getScheme())) {
             throw new DestinationGuardException(
                     "destination '%s' was refused: only https URLs are allowed".formatted(url));
+        }
+        // even where plaintext is allowed, the scheme must still be one we speak: file://, gopher://
+        // and friends reach places an HTTP client never should
+        if (!"https".equalsIgnoreCase(uri.getScheme()) && !"http".equalsIgnoreCase(uri.getScheme())) {
+            throw new DestinationGuardException(
+                    "destination '%s' was refused: only http and https URLs are allowed".formatted(url));
         }
         String host = uri.getHost();
         if (isBlank(host)) {

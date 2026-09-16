@@ -14,6 +14,9 @@ class DestinationGuardTest {
     private final DestinationGuard strict = new DestinationGuard(DestinationGuard.Mode.STRICT);
     private final DestinationGuard relaxed = new DestinationGuard(DestinationGuard.Mode.RELAXED);
 
+    private final DestinationGuard strictAnyScheme = new DestinationGuard(DestinationGuard.Mode.STRICT,
+            DestinationGuard.Scheme.ANY);
+
     @ParameterizedTest
     @ValueSource(strings = {
             "http://public.example.com/token", // https only
@@ -70,5 +73,36 @@ class DestinationGuardTest {
         assertThatThrownBy(() -> strict.validate("https://localhost/token"))
                 .hasMessageContaining("localhost")
                 .hasMessageNotContainingAny("127.0.0.1", "::1");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "http://8.8.8.8/events",
+            "https://8.8.8.8/events",
+    })
+    @DisplayName("scheme ANY accepts plaintext public destinations")
+    void schemeAnyAcceptsPlaintext(String url) {
+        assertThatCode(() -> strictAnyScheme.validate(url)).doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "http://localhost/events",
+            "http://10.1.2.3/events",
+            "http://169.254.169.254/latest/meta-data",
+    })
+    @DisplayName("scheme ANY still refuses private and internal destinations")
+    void schemeAnyStillFiltersAddresses(String url) {
+        assertThatThrownBy(() -> strictAnyScheme.validate(url)).isInstanceOf(DestinationGuardException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "file:///etc/passwd",
+            "gopher://8.8.8.8/events",
+    })
+    @DisplayName("scheme ANY means http or https, not any protocol at all")
+    void schemeAnyRefusesNonHttpSchemes(String url) {
+        assertThatThrownBy(() -> strictAnyScheme.validate(url)).isInstanceOf(DestinationGuardException.class);
     }
 }

@@ -1072,6 +1072,9 @@ webhook:
   # Default: 1s
   # Description: HTTP connection timeout for webhook calls
   connectionTimeout: 1s
+  # Default: relaxed
+  # Description: Outbound destination policy for webhook URLs; tests target local mock servers
+  destinationGuard: "relaxed"
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: 10
