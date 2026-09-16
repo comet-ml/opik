@@ -16,22 +16,42 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
  *
  *   picked      production scope, ticked here      -> user's selection
  *   notpicked   production scope, left alone       -> neither selected nor forced
- *   always      experiment scope, checked + locked -> forced, never selected
+ *   always      experiment scope, checked + locked -> forced, not declinable
  *
  * `notpicked` is what makes this a test rather than a demo. A regression that
  * pre-ticked every rule in the project would satisfy every other assertion
  * here, and would silently send a run to be scored by rules nobody chose.
  *
- * No model and no provider key: selecting a dataset paints the picker from the
- * project's rules query alone, which is the whole surface under test — the same
- * reason playground-virtualized-grid.spec.ts needs neither. The rules are
- * constant-1.0 python metrics that never execute here; they exist for their
- * scope and their name.
+ * No model is chosen and no LLM call is made: selecting a dataset paints the
+ * picker from the project's rules query alone, which is the whole surface under
+ * test. The rules are constant-1.0 python metrics that never execute here; they
+ * exist for their scope and their name.
  *
- * SCOPE, stated because the gap is easy to miss: this pins what the picker
- * OFFERS and RECORDS, not what the backend then scores. Asserting that a run is
- * scored by exactly these rules needs a real LLM call, so it belongs in a spec
- * that can make one — see the note on this file in the PR that introduced it.
+ * A provider IS seeded, though, and it is a precondition rather than a detail.
+ * `PlaygroundPage` auto-opens the "Add provider configuration" dialog when the
+ * workspace has no provider key at all, and that dialog is modal — it marks the
+ * whole page `aria-hidden`, so the Playground heading is not merely covered, it
+ * stops being addressable by role and every locator below it goes with it. The
+ * seeded provider therefore exists only to keep that dialog shut. It points at
+ * a refused loopback port and is never called: nothing here runs a prompt.
+ *
+ * SCOPE, stated twice because both halves are easy to miss.
+ *
+ * First: this pins what the picker OFFERS, not what the backend then scores.
+ * Asserting that a run is scored by exactly these rules needs a real LLM call,
+ * so it belongs in a spec that can make one.
+ *
+ * Second, and sharper: the picker renders the UNION of the user's picks and the
+ * always-run rules — `selectedCount` counts `selectedRuleIds ∪ alwaysRunIds`,
+ * and each row's tick is that same union. So a regression that also pushed the
+ * always-run rule into `selectedRuleIds` would leave every number and every
+ * checkbox below unchanged. What the 1 → 2 → 1 floor therefore establishes is
+ * that the picker never lets the user give the forced rule BACK, which is the
+ * user-visible half; it cannot see which list the rule is held in. The carrier
+ * itself becomes observable server-side once a run happens —
+ * `createLogPlaygroundProcessor` writes `selected_rule_ids` into the
+ * experiment's metadata — so that assertion belongs with the scoring spec
+ * above, not here.
  *
  * One product behaviour shapes the page object this drives and is worth knowing
  * before reading it: on 2.2.66 the Metrics popover closes on its own about a
@@ -61,6 +81,7 @@ test.describe(
         testNamespace,
         registerDatasetCleanup,
         automationRulesCleanup,
+        providerKeys,
         page,
       }) => {
         test.setTimeout(180_000);
@@ -68,6 +89,14 @@ test.describe(
         const pickedRule = `${testNamespace}-pg-picked`;
         const notPickedRule = `${testNamespace}-pg-notpicked`;
         const alwaysRule = `${testNamespace}-pg-always`;
+
+        await test.step('Give the workspace a provider so the setup dialog stays shut', async () => {
+          // Provider keys are workspace-global, hence the namespaced name and
+          // the fixture's teardown. `createUnreachable` is the cheapest shape
+          // that satisfies the page: the base URL refuses every connection, so
+          // a provider that can never answer is fine for a spec that never asks.
+          await providerKeys.createUnreachable({ providerName: `${testNamespace}-pg-noop` });
+        });
 
         await test.step('Seed three rules that discriminate the three paths', async () => {
           const seed = (name: string, triggerScope: 'production' | 'experiment') =>
@@ -198,10 +227,12 @@ test.describe(
         await test.step('Unticking it returns to the forced rule alone', async () => {
           await playground.setMetricPicked(pickedRule, false);
 
-          // The floor is the assertion: the count comes back to 1, not 0. That
-          // is what says the always-run rule was never part of the user's own
-          // selection — only displayed alongside it — which is the difference
-          // between a rule the user chose and one they cannot decline.
+          // The floor is the assertion: the count comes back to 1, not 0. The
+          // user can hand back everything they picked and the forced rule is
+          // still there — a rule they cannot decline, which is the whole
+          // distinction the locked checkbox is drawing. It does NOT show which
+          // list the rule is held in; see the SCOPE note at the top of the file
+          // for why that is not observable from the picker.
           const picker = await playground.readMetricsPicker();
           expect(
             picker.summary,

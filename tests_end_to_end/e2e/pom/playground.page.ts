@@ -293,6 +293,17 @@ export class PlaygroundPage {
    * it owns — the only `"<n> of <m> selected"` text on the page — rather than by
    * being "the open dialog", which would also match the add/edit rule dialog
    * this same component mounts.
+   *
+   * PRECONDITION, because that summary row is conditional: `MetricSelector`
+   * renders it only when `filteredRules.length > 0 && toggleableRules.length > 0`.
+   * A project with no trace rules, one whose enabled rules are ALL
+   * experiment/both-scoped (every rule forced, none toggleable), or a picker
+   * whose search box has filtered every row away, all leave the popover open
+   * with no summary — and this locator matches nothing, so the readers below
+   * time out rather than reporting an empty picker. Every caller today seeds at
+   * least one production-scope rule and never searches, which is what keeps that
+   * reachable only in theory. A caller that cannot promise both needs a
+   * different anchor first.
    */
   metricsPopover(): Locator {
     return this.page
@@ -419,7 +430,6 @@ export class PlaygroundPage {
       }).toPass({ timeout: 45_000, intervals: [250, 500, 1000] });
     });
   }
-
 
   /**
    * One-shot helper for provider-sanity tests: pick a model, type a single user
