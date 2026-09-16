@@ -33,9 +33,8 @@ env:
 
 jobs:
     build-opik:
-        # Fork PRs get a read-only GITHUB_TOKEN, so the GHCR push below always
-        # 403s. Skip rather than fail; delete once fork PRs can run E2E.
-        if: ${{ github.event.pull_request.head.repo.fork != true }}
+        # PROBE ONLY - forces the skip to test needs-propagation. Not for merge.
+        if: ${{ false }}
         # The reusable build workflow pushes images to GHCR; pass down the
         # packages: write grant here rather than at the workflow level (a
         # called workflow's permissions can only be maintained or reduced from
