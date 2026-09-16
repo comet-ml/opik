@@ -49,7 +49,8 @@ public class OAuthRegisterResource {
 
         McpOAuthClient client = clientService.register(request);
         ClientRegistrationResponse body = ClientRegistrationResponseMapper.INSTANCE.toResponse(client);
-        log.info("MCP OAuth client registered '{}' '{}'", client.id(), client.name());
+        log.info("MCP OAuth client registered '{}' '{}' software '{}' '{}'", client.id(), client.name(),
+                client.softwareId(), client.softwareVersion());
         return Response.status(Response.Status.CREATED).entity(body).build();
     }
 }
