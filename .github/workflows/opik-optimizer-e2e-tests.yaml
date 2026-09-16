@@ -32,7 +32,20 @@ env:
   OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
 
 jobs:
+    fork-pr-warning:
+        name: E2E Skipped On Fork PR
+        runs-on: ubuntu-latest
+        if: ${{ github.event.pull_request.head.repo.fork == true }}
+        steps:
+            - name: Print skip reason
+              run: |
+                echo "::warning::E2E tests do not run on pull requests from forks. GitHub issues a read-only GITHUB_TOKEN to fork-originated pull_request events, so the shared build cannot push images to GHCR. A maintainer will run these tests before merge."
+
     build-opik:
+        # Fork PRs get a read-only GITHUB_TOKEN regardless of the permissions
+        # block below, so the GHCR push in the reusable build always 403s.
+        # Skip rather than fail; delete this line once fork PRs can run E2E.
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
         # The reusable build workflow pushes images to GHCR; pass down the
         # packages: write grant here rather than at the workflow level (a
         # called workflow's permissions can only be maintained or reduced from
@@ -47,6 +60,8 @@ jobs:
     run-e2e-tests:
         name: Opik Optimizer E2E Tests Python ${{matrix.python_version}}
         needs: build-opik
+        # dataset-source-check needs this job, so it skips transitively.
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
         runs-on: ubuntu-latest
         timeout-minutes: 40
 
