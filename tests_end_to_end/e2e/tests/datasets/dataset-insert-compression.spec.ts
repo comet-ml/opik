@@ -54,13 +54,24 @@ function counters(versions: DatasetVersionRef[]) {
  * would be silently collapsed and both arms would agree on a number neither of
  * them stored.
  */
-function seedItems() {
+function seedItems(): SeededItem[] {
   return Array.from({ length: SEED_SIZE }, (_, seq) => ({
     input: `compression probe input ${seq}`,
     expected_output: `compression probe output ${seq}`,
     seq,
   }));
 }
+
+/**
+ * A `type` rather than an `interface` deliberately: only a type alias gets the
+ * implicit index signature that makes it assignable to the
+ * `Record<string, unknown>` the insert bridge takes.
+ */
+type SeededItem = {
+  input: string;
+  expected_output: string;
+  seq: number;
+};
 
 test.describe('Dataset insert — request compression arms', { tag: ['@area:datasets'] }, () => {
   /** The Item count column is off-screen at the default 1280px viewport. */
@@ -171,6 +182,45 @@ test.describe('Dataset insert — request compression arms', { tag: ['@area:data
           // A reordered or duplicated slice can land the right count with the
           // wrong contents, so the ids have to be distinct as well as counted.
           expect(new Set(item_ids).size, `${label}: and none of them twice`).toBe(SEED_SIZE);
+        }
+      });
+
+      await test.step('Both arms stored the payloads that were sent, not merely the right number', async () => {
+        // The count above cannot see a slice that arrived whole but garbled,
+        // and this spec's premise is that the two arms store the SAME items —
+        // a claim nothing above actually tests. The arms' item ids are minted
+        // per insert and so differ by construction, which leaves the payloads
+        // as the only thing comparable across them: each is checked against
+        // the seed, which makes them equal to each other by transitivity.
+        const expectedBySeq = new Map(seedItems().map((item) => [item.seq, item]));
+
+        for (const [label, id] of [
+          ['compressed', gzipId],
+          ['uncompressed', rawId],
+        ] as const) {
+          const stored = await backendClient.listDatasetItemsWithData(id);
+          expect(stored, `${label}: every item sent was stored`).toHaveLength(SEED_SIZE);
+
+          // Reported as the offending payloads rather than as one 2500-element
+          // diff: a mis-framed chunk garbles a contiguous run, and naming the
+          // first few that disagree is what makes this readable when it fails.
+          const mismatched = stored
+            .map((item) => item.data as Partial<SeededItem>)
+            .filter((data) => {
+              const want = expectedBySeq.get(Number(data.seq));
+              return (
+                !want || data.input !== want.input || data.expected_output !== want.expected_output
+              );
+            });
+          expect(
+            mismatched.slice(0, 5),
+            `${label}: every stored payload matches the seed item its seq names`,
+          ).toEqual([]);
+
+          // Every seq exactly once — the above would pass just as well if one
+          // seq were stored twice and another dropped.
+          const seqs = stored.map((item) => Number((item.data as Partial<SeededItem>).seq));
+          expect(new Set(seqs).size, `${label}: and each seq landed exactly once`).toBe(SEED_SIZE);
         }
       });
 

@@ -167,7 +167,10 @@ class DatasetInsertItemsRequest(BaseModel):
 class DatasetInsertItemsResponse(BaseModel):
     dataset_id: str
     # Items handed to Dataset.insert(), not what the backend stored after
-    # deduplication. Zero when `value_error` is set, since nothing was sent.
+    # deduplication. Zero when `value_error` is set — which is what the SDK
+    # rejecting the arguments means, but NOT what a ValueError raised partway
+    # through an upload would mean. Read the dataset back to learn what landed
+    # rather than inferring it from this.
     inserted: int
     # Whether this upload's bodies were gzipped, read back off the client that
     # was built rather than echoed from the request. A caller comparing a

@@ -29,12 +29,12 @@ const SEED_SIZE = 2500;
 const OVER_CAP_THREADS = 1000;
 
 /**
- * Values `insert()` documents as rejected, with the message each raises.
- * Rejection happens before the shape pre-pass and before any batch is sent, so
- * neither leaves a partial write behind.
+ * Values `insert()` documents as rejected, with the pattern the message each
+ * raises has to match. Rejection happens before the shape pre-pass and before
+ * any batch is sent, so neither leaves a partial write behind.
  */
 const REJECTED_THREAD_COUNTS = [0, -1];
-const REJECTION_MESSAGE = /num_threads must be a positive integer/;
+const REJECTION_PATTERN = /num_threads must be a positive integer/;
 
 /**
  * The four counters the estate compares — the same shape
@@ -161,7 +161,7 @@ test.describe('Dataset insert — write thread count', { tag: ['@area:datasets']
             result.value_error,
             `num_threads=${numThreads} must be rejected, not silently accepted`,
           ).not.toBeNull();
-          expect(result.value_error!).toMatch(REJECTION_MESSAGE);
+          expect(result.value_error!).toMatch(REJECTION_PATTERN);
           expect(result.inserted, 'a rejected insert sends nothing').toBe(0);
         });
       }

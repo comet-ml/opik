@@ -61,10 +61,17 @@ def insert_dataset_items(
     on — the SDK splits the items into batches of 1000 internally, and those
     batches must not become versions of their own.
 
-    A `ValueError` from the SDK's argument validation is reported as a 200 with
-    `value_error` set rather than raised, as on `/datasets/read-items`: it is a
-    documented outcome of some of these calls and the caller has to be able to
-    assert the message.
+    A `ValueError` out of `Dataset.insert` is reported as a 200 with
+    `value_error` set rather than raised, as on `/datasets/read-items`: argument
+    rejection is a documented outcome of some of these calls and the caller has
+    to be able to assert the message.
+
+    The catch is the whole call, not just its argument validation, because the
+    two are not separable from out here — a `ValueError` raised mid-upload
+    surfaces the same way. It is reported rather than swallowed, so a caller
+    that cares whether anything was written must read the dataset back instead
+    of trusting `inserted`; `dataset-insert-thread-clamp.spec.ts` does exactly
+    that.
     """
     client = make_opik_client(
         workspace=body.workspace,
