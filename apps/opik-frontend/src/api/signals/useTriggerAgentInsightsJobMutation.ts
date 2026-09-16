@@ -38,7 +38,7 @@ const useTriggerAgentInsightsJobMutation = () => {
       }
     },
     onSuccess: () => {
-      // The job may have just been created+enabled; refresh it so the page
+      // The job may have just been created; refresh it so the page
       // leaves the empty state, and refresh issues for when the run lands.
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_JOB_KEY] });
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_ISSUES_KEY] });
