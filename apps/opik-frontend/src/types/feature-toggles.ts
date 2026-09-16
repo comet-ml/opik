@@ -9,6 +9,7 @@ export enum FeatureToggleKeys {
   WELCOME_WIZARD_ENABLED = "welcome_wizard_enabled",
   EXPORT_ENABLED = "export_enabled",
   DATASET_EXPORT_ENABLED = "dataset_export_enabled",
+  EXPERIMENT_EXPORT_ENABLED = "experiment_export_enabled",
   DEMO_DATA_ENABLED = "demo_data_enabled",
   OLLIE_ENABLED = "ollie_enabled",
   PROJECT_HOMEPAGE_ENABLED = "project_homepage_enabled",
