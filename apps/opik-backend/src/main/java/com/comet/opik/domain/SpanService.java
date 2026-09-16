@@ -10,6 +10,7 @@ import com.comet.opik.api.SpanBatchUpdate;
 import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
@@ -20,6 +21,8 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
@@ -544,8 +547,19 @@ public class SpanService {
                                 !resolvedCriteria.stripAttachments())));
     }
 
+    /**
+     * Cascade entry point for the trace delete: removes every span of {@code traceIds} within {@code projectId}.
+     * <p>
+     * The project is required. Its only caller is {@code TraceDeletedListener}, fed by {@code TracesDeleted}, which
+     * always carries the resolved owning project — one event per project group, so an id reused across projects
+     * cascades per project rather than once workspace-wide (OPIK-7483). Requiring it here makes that guarantee
+     * structural rather than incidental: every span delete, and every deletion-events bridge row it emits, carries a
+     * non-null {@code project_id}, which is also what keeps the delete routable once {@code spans} is distributed on
+     * {@code project_id}. Retention sweeps are deliberately outside this: they are keyed on {@code workspace_id} plus a
+     * {@code trace_id} range and are separate methods.
+     */
     @WithSpan
-    public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, UUID projectId) {
+    public Mono<Void> deleteByTraceIds(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
         if (traceIds.isEmpty()) {
             return Mono.empty();
         }
@@ -615,39 +629,58 @@ public class SpanService {
         });
     }
 
+    /**
+     * Previous-day span counts per workspace, excluding activity in demo projects — including demo projects created
+     * after install, which earlier counted. {@link DemoDataExclusionUtils} carries the why.
+     */
     @WithSpan
     public Mono<SpansCountResponse> countSpansPerWorkspace() {
-        return projectService.getDemoProjectIdsWithTimestamps()
-                .switchIfEmpty(Mono.just(Map.of()))
-                .flatMapMany(spanDAO::countSpansPerWorkspace)
+        return spanDAO.countSpansPerWorkspaceProject()
                 .collectList()
-                .flatMap(items -> Mono.just(
-                        SpansCountResponse.builder()
-                                .workspacesSpansCount(items)
-                                .build()))
-                .switchIfEmpty(Mono.just(SpansCountResponse.empty()));
+                .flatMap(rows -> demoProjectIdsOf(rows, WorkspaceProjectCount::workspaceId)
+                        .map(demoProjectIds -> DemoDataExclusionUtils.foldByWorkspace(rows, demoProjectIds)))
+                .map(countsByWorkspace -> SpansCountResponse.builder()
+                        .workspacesSpansCount(countsByWorkspace.entrySet()
+                                .stream()
+                                .map(entry -> SpansCountResponse.WorkspaceSpansCount.builder()
+                                        .workspace(entry.getKey())
+                                        .spanCount(Math.toIntExact(entry.getValue()))
+                                        .build())
+                                .toList())
+                        .build());
     }
 
+    /** The same window and exclusion as {@link #countSpansPerWorkspace()}, broken down by user for the BI events. */
     @WithSpan
     public Mono<BiInformationResponse> getSpanBIInformation() {
         log.info("Getting span BI events daily data");
-        return projectService.getDemoProjectIdsWithTimestamps()
-                .switchIfEmpty(Mono.just(Map.of()))
-                .flatMapMany(spanDAO::getSpanBIInformation)
+        return spanDAO.getSpanBIInformationPerProject()
                 .collectList()
-                .map(items -> BiInformationResponse.builder()
-                        .biInformation(items)
-                        .build())
-                .switchIfEmpty(Mono.just(BiInformationResponse.empty()));
+                .flatMap(rows -> demoProjectIdsOf(rows, WorkspaceProjectUserCount::workspaceId)
+                        .map(demoProjectIds -> DemoDataExclusionUtils.foldByWorkspaceAndUser(rows, demoProjectIds)))
+                .map(biInformation -> BiInformationResponse.builder()
+                        .biInformation(biInformation)
+                        .build());
     }
 
+    /**
+     * The same window and exclusion as {@link #countSpansPerWorkspace()}, reported per project and user rather than
+     * folded.
+     */
     @WithSpan
     public Mono<UsageByWorkspaceProjectUserResponse> getSpanBreakdownPerWorkspace() {
         log.info("Getting span usage breakdown by workspace, project and user");
-        return projectService.getDemoProjectIdsWithTimestamps()
-                .switchIfEmpty(Mono.just(Map.of()))
-                .flatMapMany(spanDAO::countSpansBreakdownPerWorkspace)
+        return spanDAO.countSpansBreakdownPerWorkspace()
                 .collectList()
+                .flatMap(rows -> demoProjectIdsOf(rows, WorkspaceProjectUserCount::workspaceId)
+                        .map(demoProjectIds -> DemoDataExclusionUtils.excludeDemoProjects(rows, demoProjectIds)))
                 .map(rows -> UsageByWorkspaceProjectUserResponse.builder().breakdown(rows).build());
+    }
+
+    /** The demo projects of the workspaces that actually had spans, which is what bounds the lookup. */
+    private <T> Mono<Set<UUID>> demoProjectIdsOf(List<T> rows, Function<T, String> workspaceId) {
+        return projectService.getDemoProjectIdsInWorkspaces(rows.stream()
+                .map(workspaceId)
+                .collect(Collectors.toSet()));
     }
 }

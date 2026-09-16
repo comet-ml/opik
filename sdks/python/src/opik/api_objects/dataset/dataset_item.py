@@ -1,7 +1,8 @@
 from typing import Optional, Dict, Any, List
 import pydantic
-import json
 import hashlib
+
+from ... import json_helpers
 from .. import constants, helpers
 from . import streaming_writer
 
@@ -102,16 +103,16 @@ class DatasetItem(pydantic.BaseModel):
             content["execution_policy"] = self.execution_policy.model_dump()
 
         try:
-            json_string = json.dumps(content, sort_keys=True)
+            encoded = json_helpers.dumps(content, default=None, sort_keys=True)
         except TypeError:
             # Only where the line above already raised, never instead of it: every digest
             # that can be produced without the encoder keeps its exact bytes, because a
             # digest that moves silently stops matching what is stored and breaks dedup.
             # The values reaching this branch are the flexible ones the upload accepts --
             # otherwise they were rejected here before the upload ever saw them.
-            json_string = json.dumps(
-                content, sort_keys=True, default=streaming_writer.encode_flexible
+            encoded = json_helpers.dumps(
+                content, default=streaming_writer.encode_flexible, sort_keys=True
             )
-        hash_object = hashlib.sha256(json_string.encode())
+        hash_object = hashlib.sha256(encoded)
 
         return hash_object.hexdigest()

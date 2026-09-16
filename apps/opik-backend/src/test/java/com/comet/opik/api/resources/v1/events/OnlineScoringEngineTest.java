@@ -447,9 +447,10 @@ class OnlineScoringEngineTest {
                 .add(evaluatorId1.toString())
                 .add(evaluatorId2.toString());
 
-        // non-SDK traces, such as playground with "selected_rule_ids" must still be scored
-        // by the explicitly selected evaluators.
-        var trace = createTrace(traceId, projectId, Source.PLAYGROUND).toBuilder()
+        // A playground run against a dataset is logged as an experiment trace carrying the rules the
+        // user picked. Those rules score it whatever their configuration says, and the rules left
+        // unpicked stay out unless they target experiments — these three default to production.
+        var trace = createTrace(traceId, projectId, Source.EXPERIMENT).toBuilder()
                 .metadata(metadata)
                 .build();
 

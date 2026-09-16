@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.63](https://img.shields.io/badge/Version-2.2.63-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.63](https://img.shields.io/badge/AppVersion-2.2.63-informational?style=flat-square)
+![Version: 2.2.66](https://img.shields.io/badge/Version-2.2.66-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.66](https://img.shields.io/badge/AppVersion-2.2.66-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -496,6 +496,7 @@ Call opik api on http://localhost:5173/api
 | databaseAnalyticsDataModel.deletionEventsInsertBatchSize | int | `1000` |  |
 | databaseAnalyticsDataModel.spanColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.spanDeletionEventsCaptureEnabled | bool | `false` |  |
+| databaseAnalyticsDataModel.spansDistributedWrapEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.traceColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.tracesDistributedWrapEnabled | bool | `false` |  |
