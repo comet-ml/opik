@@ -9,14 +9,20 @@ class LSMetadata(NamedTuple):
     model_type: str
 
 
-def try_get_token_usage(run_dict: Dict[str, Any]) -> langchain_usage.LangChainUsage:
+def try_get_token_usage(
+    run_dict: Dict[str, Any],
+) -> Optional[langchain_usage.LangChainUsage]:
     if (usage := try_get_streaming_token_usage(run_dict)) is not None:
         return usage
 
     # try generation_info
-    usage_metadata = run_dict["outputs"]["generations"][-1][-1]["generation_info"][
-        "usage_metadata"
-    ]
+    try:
+        usage_metadata = run_dict["outputs"]["generations"][-1][-1]["generation_info"][
+            "usage_metadata"
+        ]
+    except (IndexError, KeyError, TypeError):
+        return None
+
     return langchain_usage.LangChainUsage.from_original_usage_dict(usage_metadata)
 
 
@@ -33,9 +39,9 @@ def try_get_streaming_token_usage(
 
     message = last_gen["message"]
     # usage_metadata can live directly on message or nested under message["kwargs"]
-    usage_metadata = message.get("usage_metadata") or (
-        message.get("kwargs") or {}
-    ).get("usage_metadata")
+    usage_metadata = message.get("usage_metadata") or (message.get("kwargs") or {}).get(
+        "usage_metadata"
+    )
 
     if usage_metadata is not None:
         return langchain_usage.LangChainUsage.from_original_usage_dict(usage_metadata)

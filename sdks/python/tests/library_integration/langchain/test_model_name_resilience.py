@@ -4,7 +4,10 @@ from typing import Any, Dict
 
 import pytest
 
-from opik.integrations.langchain.provider_usage_extractors import usage_extractor
+from opik.integrations.langchain.provider_usage_extractors import (
+    langchain_run_helpers,
+    usage_extractor,
+)
 
 
 def _openai_streaming_run_without_generation_info() -> Dict[str, Any]:
@@ -159,8 +162,8 @@ def test_try_get_streaming_token_usage__usage_metadata_on_message__returns_usage
     assert result.output_tokens == 8
 
 
-def _anthropic_vertexai_run_with_usage() -> Dict[str, Any]:
-    """Valid Anthropic VertexAI invocation shape with streaming usage_metadata."""
+def _anthropic_vertexai_run(outputs: Any) -> Dict[str, Any]:
+    """Valid Anthropic VertexAI invocation shape, parameterised by its outputs."""
     return {
         "serialized": {},
         "extra": {
@@ -169,7 +172,13 @@ def _anthropic_vertexai_run_with_usage() -> Dict[str, Any]:
                 "model_name": "claude-3-5-sonnet@20241022",
             }
         },
-        "outputs": {
+        "outputs": outputs,
+    }
+
+
+def _anthropic_vertexai_run_with_usage() -> Dict[str, Any]:
+    return _anthropic_vertexai_run(
+        {
             "llm_output": None,
             "generations": [
                 [
@@ -184,11 +193,13 @@ def _anthropic_vertexai_run_with_usage() -> Dict[str, Any]:
                     }
                 ]
             ],
-        },
-    }
+        }
+    )
 
 
-def test_try_extract_provider_usage_data__anthropic_vertexai__returns_usage_and_model() -> None:
+def test_try_extract_provider_usage_data__anthropic_vertexai__returns_usage_and_model() -> (
+    None
+):
     """Full public-API path: AnthropicVertexAIUsageExtractor reached, usage and model extracted."""
     import opik
 
@@ -201,3 +212,72 @@ def test_try_extract_provider_usage_data__anthropic_vertexai__returns_usage_and_
     assert info.usage is not None
     assert info.usage.prompt_tokens == 15
     assert info.usage.completion_tokens == 25
+
+
+@pytest.mark.parametrize(
+    "outputs",
+    [
+        pytest.param({"llm_output": None, "generations": []}, id="empty_generations"),
+        pytest.param(None, id="null_outputs"),
+        pytest.param(
+            {"generations": [[{"text": "hi", "generation_info": None}]]},
+            id="null_generation_info",
+        ),
+        pytest.param({"generations": [[{"text": "hi"}]]}, id="missing_generation_info"),
+    ],
+)
+def test_try_get_token_usage__unusable_outputs__returns_none(outputs: Any) -> None:
+    """The generation_info fallback must return None rather than raise."""
+    assert (
+        langchain_run_helpers.try_get_token_usage(_anthropic_vertexai_run(outputs))
+        is None
+    )
+
+
+def test_try_get_token_usage__langchain_serialized_message__returns_usage() -> None:
+    """LangChain's tracer serializes the message with dumpd, nesting usage under kwargs."""
+    run_dict = _anthropic_vertexai_run(
+        {
+            "llm_output": None,
+            "generations": [
+                [
+                    {
+                        "message": {
+                            "lc": 1,
+                            "type": "constructor",
+                            "id": ["langchain", "schema", "messages", "AIMessage"],
+                            "kwargs": {
+                                "content": "hi",
+                                "usage_metadata": {
+                                    "input_tokens": 15,
+                                    "output_tokens": 25,
+                                    "total_tokens": 40,
+                                },
+                            },
+                        }
+                    }
+                ]
+            ],
+        }
+    )
+    usage = langchain_run_helpers.try_get_token_usage(run_dict)
+
+    assert usage is not None
+    assert usage.input_tokens == 15
+    assert usage.output_tokens == 25
+
+
+def test_try_extract_provider_usage_data__anthropic_vertexai_without_usage__keeps_model() -> (
+    None
+):
+    """A run with no usage anywhere must still report provider and model, not None."""
+    import opik
+
+    info = usage_extractor.try_extract_provider_usage_data(
+        _anthropic_vertexai_run({"llm_output": None, "generations": []})
+    )
+
+    assert info is not None
+    assert info.provider == opik.LLMProvider.ANTHROPIC_VERTEXAI
+    assert info.model == "claude-3-5-sonnet@20241022"
+    assert info.usage is None
