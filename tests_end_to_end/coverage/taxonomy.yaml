@@ -251,7 +251,10 @@ areas:
     routes: ["/projects/$projectId/logs?type=traces", "/logs?type=spans"]
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
+      - trace-explore/span-cached-token-cost.spec.ts
       - trace-explore/span-cost-resolution.spec.ts
+      - trace-explore/span-kpi-cards.spec.ts
+      - trace-explore/spans-view-pagination.spec.ts
       - trace-explore/trace-attachments.spec.ts
       - trace-explore/trace-delete.spec.ts
       - trace-explore/trace-explore-smoke.spec.ts
@@ -266,10 +269,10 @@ areas:
       trace-ordering:         { covered: true,  tier: t1-smoke }
       open-trace-panel:       { covered: true,  tier: t1-smoke }
       span-tree-expand:       { covered: true,  tier: t2-cuj }
-      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls" }
+      span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls; also reasoning-token billing on perplexity/sonar-deep-research (the only shipped-price-table model that can observe it) — the reasoning rate applied and subtracted from the standard-output bucket, the bare OTel usage key as a fallback for the original_usage one, and both clamps; also a non-token price key (mistral/voxtral-mini-tts-latest, priced per input character) billed from usage.input_characters, against an identical span carrying the same token counts and no character count as the negative control; also the cache-read branch of resolveCalculator, as two with/without-cached-tokens pairs — one on a model that publishes no cache_read rate (gpt-5.5-pro, re-priced in 2.2.60), where the pair must price identically because every cached token is billed at the full input rate, and one on a model that does (gpt-4.1), where the discount must be exactly the rate difference; asserted at the API and rendered in the panel" }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
-      toggle-spans-view:      { covered: false, note: "Logs has a 3rd toggle (Spans); only Traces+Threads covered" }
+      toggle-spans-view:      { covered: true,  tier: t2-cuj, note: "the Spans toggle and paging the table it renders: 130 seeded spans read back as an exact set through offset paging, through the /spans/search cursor and through the rendered table, plus a span whose UUIDv7 id embeds mid-2200 used as the cursor. Also the four KPI cards above the Spans table — count, error rate, avg duration and total cost — and their period-over-period deltas, asserted against the kpi-cards read for both periods" }
       filter-traces:          { covered: true,  tier: t2-cuj }
       configure-columns:      { covered: false }
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
@@ -280,8 +283,8 @@ areas:
       attachments-media:      { covered: true,  tier: t2-cuj, note: "presigned multipart upload with mime_type omitted, asserting the type tika derives from each file name (incl. the octet-stream fallback), plus every attachment rendering as a thumbnail in the trace panel" }
       set-guardrail:          { covered: false, note: "SetGuardrailDialog — GUARDRAILS_ENABLED flag" }
       guardrail-results:      { covered: false, note: "GuardrailsCell column + Guardrails tree block — GUARDRAILS_ENABLED flag" }
-      delete-traces:          { covered: true,  tier: t2-cuj }
-      delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table" }
+      delete-traces:          { covered: true,  tier: t2-cuj, note: "Logs bulk delete; also the span cascade behind it — a 5-deep span chain, asserted gone project-wide rather than only through a filter on the deleted trace_id, against a bystander trace that keeps its own spans, scores and comments" }
+      delete-traces-api:      { covered: true,  tier: t2-cuj, note: "SDK/API delete reflected in the Logs table; also the span cascade behind DELETE /v1/private/traces/{id}, same shape as delete-traces" }
       update-trace-api:       { covered: true,  tier: t2-cuj, note: "PATCH /traces/{id} merges into the existing row rather than replacing it with a partial; asserted at the epoch-week, present and ~2201 id ages" }
       export-traces:          { covered: false, note: "EXPORT_ENABLED flag" }
 
@@ -329,6 +332,7 @@ areas:
     routes: ["/projects/$projectId/logs?type=threads"]
     spec_dir: trace-explore
     specs:
+      - trace-explore/thread-duration-format.spec.ts
       - trace-explore/thread-evaluation.spec.ts
       - trace-explore/thread-id-prefilter.spec.ts
       - trace-explore/thread-logging-smoke.spec.ts
@@ -339,7 +343,7 @@ areas:
       turn-order-io:           { covered: true,  tier: t1-smoke }
       thread-feedback-score:   { covered: true,  tier: t2-cuj }
       thread-actions-panel:    { covered: false }
-      thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics" }
+      thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics; also the thread panel header's duration, asserted at both ends of formatDuration(_, false) — a 3_615_300 ms thread (float remainder 15.300000000000182) rendering as '1h 15.3s', and a 5 ms thread keeping '0.005s'" }
 
     visual:
       logs-threads-view:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 03" }
@@ -380,18 +384,20 @@ areas:
     spec_dir: dashboards
     specs:
       - dashboards/dashboards-list-filters.spec.ts
+      - dashboards/project-dashboard-scoping.spec.ts
+      - dashboards/project-metrics-weekly-interval.spec.ts
       - dashboards/project-span-metrics.spec.ts
       - dashboards/workspace-span-metrics.spec.ts
     capabilities:
-      list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list is filtered by the Description column; the other operators and columns are uncovered" }
+      list-dashboards:      { covered: true,  tier: t2-cuj, note: "the list is filtered by the Description column; the other operators and columns are uncovered. Also the split between the two collections a dashboard can live in: a project-scoped view (insights-views, keyed on project_id) is returned by its own project's scoped read and by no other project's, and never by the workspace-scoped /dashboards list a Name filter on the workspace page reads — asserted with a workspace-scoped dashboard nobody touches as the positive control at both ends" }
       create-dashboard:     { covered: true,  tier: t2-cuj, note: "created via the Create dashboard dialog as the UI test's setup; rename/delete/duplicate uncovered" }
-      open-dashboard:       { covered: false }
+      open-dashboard:       { covered: true,  tier: t2-cuj, note: "the project Dashboards page's view picker: it offers a project-scoped view in the project that owns it and not in another, selecting it renders that dashboard's own section rather than the built-in template's, and a ?dashboardId= belonging to another project is declined — the URL settles on template:project-overview and neither the foreign dashboard's name nor its section appears anywhere on the page. NOT covered: opening a workspace dashboard through /dashboards/$dashboardId, and the Experiments-type view" }
       edit-dashboard:       { covered: false }
       delete-dashboard:     { covered: false }
       add-widget:           { covered: true,  tier: t2-cuj, note: "Time series widget added through the widget dialog by workspace-span-metrics; other widget types and the config dialog's remaining options are uncovered" }
       configure-widget:     { covered: true,  tier: t2-cuj, note: "scoping a Time series widget to one project and picking its metric through the widget dialog, plus the data contract of the per-project read it then makes (POST /projects/{id}/metrics across every MetricType and span breakdown); the widget dialog's remaining options — chart type, filters, group by, sub-metric — are uncovered" }
       widget-filters:       { covered: true,  tier: t2-cuj, note: "data contract (POST /workspaces/metrics/spans against the front end's own filter payload, incl. the 400 path) plus a UI test that builds a workspace-scoped Time series widget and reads its chart" }
-      metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract for the four presets at the interval calculateIntervalType implies, plus the UI date-range control driving a rendered widget" }
+      metric-date-range:    { covered: true,  tier: t2-cuj, note: "data contract for the four presets at the interval calculateIntervalType implies, plus the UI date-range control driving a rendered widget; also the WEEKLY branch a range longer than 30 days takes — every MetricType served at WEEKLY on the per-project endpoint, buckets exactly seven days apart, and a Past 60 days widget re-reading at WEEKLY and still drawing its chart. The alltime preset is NOT covered: it sends no interval_start and is refused with a 400 before any WEEKLY query runs" }
 
   # ===================== DEVELOPMENT =====================
 
@@ -431,8 +437,10 @@ areas:
     routes: ["/projects/$projectId/playground"]
     spec_dir: playground
     specs:
+      - playground/playground-model-parameters.spec.ts
       - playground/playground-providers.spec.ts
       - playground/playground-smoke.spec.ts
+      - playground/playground-virtualized-grid.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
       - prompts/prompt-playground-save.spec.ts
       - prompts/prompt-playground-traces.spec.ts
@@ -446,7 +454,18 @@ areas:
       load-prompt-version:       { covered: true,  tier: t2-cuj }
       verify-trace-from-run:     { covered: true,  tier: t2-cuj }
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
-      configure-model-settings:  { covered: false, note: "PromptModelSettings / providerConfigs" }
+      # Scoped: the Anthropic panel only, and only the two controls whose display
+      # and whose request value can disagree. On claude-sonnet-4-6 the spec
+      # asserts the sampling pair is one choice with one MOUNTED control (the
+      # outgoing half leaves the DOM rather than dimming), then compares the
+      # panel's own Top P and Thinking effort against the outbound
+      # POST /v1/private/chat/completions body — which is the only place the
+      # disagreement is observable, since neither surface alone can see it.
+      #
+      # Still uncovered here: the OpenAI / Gemini / Vertex / OpenRouter / Custom
+      # panels, max output tokens, throttling, max concurrent requests, and
+      # whether a persisted prompt re-hydrates its settings on reload.
+      configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs — Anthropic only (playground-model-parameters.spec.ts): sampling pair is a single choice with exactly one mounted slider, and the displayed Top P and Thinking effort are asserted against the outbound chat/completions body, which must carry top_p and no temperature. Other providers' panels, the token/throttling/concurrency sliders, and settings surviving a prompt reload are all still uncovered" }
 
     visual:
       playground-default: { covered: false, state: default }
@@ -514,7 +533,9 @@ areas:
     spec_dir: datasets
     specs:
       - datasets/dataset-crud-smoke.spec.ts
+      - datasets/dataset-insert-compression.spec.ts
       - datasets/dataset-insert-deduplication.spec.ts
+      - datasets/dataset-insert-thread-clamp.spec.ts
       - datasets/dataset-item-count.spec.ts
       - datasets/dataset-items-filter-scope.spec.ts
       - datasets/dataset-items.spec.ts
@@ -535,8 +556,8 @@ areas:
       filter-scoped-batch-update: { covered: true,  tier: t3-nightly, note: "tags exactly the filter-matched items; bystanders asserted present and untouched; ungrouped form only (no batch_group_id), so version-commit semantics are not asserted" }
       filter-scoped-mutation-validation: { covered: true,  tier: t3-nightly, note: "unsupported operator -> 400 naming field+operator; malformed filter list -> 422; asserted on both delete and batch-update" }
       search-items:           { covered: true,  tier: t3-nightly }
-      sdk-round-trip:         { covered: true,  tier: t1-smoke, note: "UI-created dataset + first item read back through the SDK, single-page get_items() round trip (t1); t2 also covers the multi-page parallel read — 5000 items over 3 default-chunk pages, list-equal across thread/chunk settings and against a REST enumeration, nb_samples as an exact prefix, and the documented ValueError arguments — plus the read's version pin holding against an insert committed mid-read, and Dataset.insert's deduplication flag both ways (deduplication=False stores every duplicate under its own id and cuts a version per insert; the default collapses the duplicate and cuts no second version), paired against a control dataset and asserted in the API and on the Records tab" }
-      version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the per-version Changes tags (+ N) after a non-deduplicated insert invalidates the SDK's hash cache" }
+      sdk-round-trip:         { covered: true,  tier: t1-smoke, note: "UI-created dataset + first item read back through the SDK, single-page get_items() round trip (t1); t2 also covers the multi-page parallel read — 5000 items over 3 default-chunk pages, list-equal across thread/chunk settings and against a REST enumeration, nb_samples as an exact prefix, and the documented ValueError arguments — plus the read's version pin holding against an insert committed mid-read, and Dataset.insert's deduplication flag both ways (deduplication=False stores every duplicate under its own id and cuts a version per insert; the default collapses the duplicate and cuts no second version), paired against a control dataset and asserted in the API and on the Records tab; t2 also covers Dataset.insert's remaining documented arguments — enable_json_request_compression both ways (2500 items per arm, the compressed and uncompressed upload paths asserted to store the same item ids and report the same counters, with the arm read back off the client that was built so the two are shown to have genuinely differed) and num_threads (an over-cap 1000 accepted and clamped rather than refused with every item still stored; 0 and -1 rejected with the documented ValueError and nothing written, followed by a valid count that still inserts)" }
+      version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the per-version Changes tags (+ N) after a non-deduplicated insert invalidates the SDK's hash cache; also API-level, the single version a multi-batch insert cuts whatever its num_threads or its compression arm, and the v1/v2 pair either side of a rejected insert" }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
 
@@ -677,21 +698,36 @@ areas:
       - online-evaluation/online-evaluation-judge-prompt-round-trip.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
       - online-evaluation/online-evaluation-oversized-payload.spec.ts
+      - online-evaluation/online-evaluation-provider-error-classification.spec.ts
       - online-evaluation/online-evaluation-python-metric-errors.spec.ts
+      - online-evaluation/online-evaluation-python-score-usability.spec.ts
       - online-evaluation/online-evaluation-sampling-rate.spec.ts
       - online-evaluation/online-evaluation-smoke.spec.ts
+      - online-evaluation/online-evaluation-thread-judge-provider-failure.spec.ts
+      - online-evaluation/online-evaluation-thread-scope-batch-close.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
-      llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe" }
+      llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe; t2 also covers provider-failure classification (OPIK-8262) — a permanent status costs exactly one upstream call, a transient one the whole retry budget, and neither writes a score" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
-      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line; t3 covers a span-scope rule still scoring the spans logged AFTER a 21M-character span, which is the OPIK-8164 wedge — the oversized span's own score is deliberately not asserted, since whether it is scored depends on the deployment's Jackson stream-read limits" }
-      scores-in-trace-panel:   { covered: true,  tier: t1-smoke }
+      python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line; t3 covers a span-scope rule still scoring the spans logged AFTER a 21M-character span, which is the OPIK-8164 wedge — the oversized span's own score is deliberately not asserted, since whether it is scored depends on the deployment's Jackson stream-read limits; t2 also covers the THREAD-scope metric contract, where the runner hands the metric the whole conversation positionally instead of a mapped argument map (online-evaluation-thread-scope-batch-close.spec.ts); t2 also covers per-score USABILITY (online-evaluation-python-score-usability.spec.ts), which is a different question from every clause above — those all ask whether the evaluator ran, this asks which of a run's scores survived: four rules judge one trace, so a ScoreResult(value=None) and a scoring_failed=True 0.0 each answer 400 once and store nothing, a mixed list keeps its usable score while naming each dropped one by its own cause on the rule log, and a deliberate 0.0 still lands — the flagged and the deliberate zero being the same number on the same trace is what separates over-dropping from under-dropping" }
+      scores-in-trace-panel:   { covered: true,  tier: t1-smoke, note: "t1 reads an LLM-judge score's value back off the panel; t2 also pins the row set by EXHAUSTION on a trace whose rules dropped scores server-side (online-evaluation-python-score-usability.spec.ts) — exactly two rows for two stored scores, addressed by data-row-id, with no row for any of the four dropped names, so a panel that rendered a score the backend refused fails here" }
       list-rules:              { covered: true,  tier: t2-cuj, note: "project-scoped and workspace-wide listing over a project holding six bracket-opening judge prompts, plus the rules page rendering a row for each" }
-      # Still false, and deliberately. online-evaluation-oversized-payload.spec.ts
-      # deliberately creates and drives a span-scope rule end to end, but this key
-      # covers BOTH the span and thread scope flags and nothing exercises thread
-      # scope. Flipping it on the span half would retire the thread half untested.
-      rule-scope-thread-span:  { covered: false, note: "span/thread scope flags; span scope is exercised by online-evaluation-oversized-payload.spec.ts, thread scope is untouched" }
+      # Now true, and only because BOTH halves are exercised — which is what the
+      # previous note here was holding out for. Span scope:
+      # online-evaluation-oversized-payload.spec.ts (t3). Thread scope:
+      # online-evaluation-thread-scope-batch-close.spec.ts (t2), which creates a
+      # trace_thread_user_defined_metric_python rule, reads the discriminator
+      # back, and drives it end to end through a batch close. `tier` records the
+      # stronger of the two.
+      #
+      # Thread scope is covered twice over, and deliberately: batch-close pins
+      # the SUCCESS path of the python metric shape, and
+      # online-evaluation-thread-judge-provider-failure.spec.ts (t2) pins the
+      # FAILURE path of the OTHER thread-scope rule shape
+      # (trace_thread_llm_as_judge). Neither subsumes the other — a fold that
+      # kept one sibling's failure, or one that never terminated the message,
+      # is invisible to a spec whose provider answers.
+      rule-scope-thread-span:  { covered: true,  tier: t2-cuj, note: "span/thread scope flags, both halves covered: span scope by online-evaluation-oversized-payload.spec.ts (t3), thread scope by online-evaluation-thread-scope-batch-close.spec.ts (t2) — six threads closed in ONE PUT /threads/close, each carrying exactly one score, with a mid-batch thread whose metric raises scoring nothing while its siblings do. Scoped: since #8162 the close fans out to one stream entry PER thread id, so what the spec pins is the grouped publish reaching every sampled id, not a scorer walking a multi-id message. A duplicate score WRITE is not observable — thread feedback scores upsert by name, so 'exactly once' is asserted as exactly one stored row per thread, held across a quiet period, not as insert multiplicity. Thread scope is also covered for the trace_thread_llm_as_judge shape by online-evaluation-thread-judge-provider-failure.spec.ts (t2), over an unreachable provider: two threads closed in one call, each reporting its OWN provider failure exactly once and neither carrying a thread score. Rule filters on either scope are a different key (rule-filters) and are still uncovered" }
       rule-filters:            { covered: false }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }
@@ -718,12 +754,25 @@ areas:
       edit-rule:               { covered: true,  tier: t2-cuj, note: "plain-string prompt: edit-dialog hydration + no-op re-save, byte-for-byte; content_array prompt: API-only read-then-write re-save, no dialog gesture; model custom_parameters: rule seeded over REST, saved unchanged through the edit dialog, PATCH body and persisted blob both asserted to carry the thinking block and an unrelated free-form key; editing a field through the dialog is not covered" }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
-      # Deliberately still false. online-evaluation-python-metric-errors.spec.ts
-      # asserts a rule's log stream through GET /automations/evaluators/{id}/logs,
-      # but this key names the /$workspaceName/automation-logs PAGE, which no spec
-      # opens. Flipping it on the strength of an API read would mark a UI nobody
-      # tested as tested for good.
-      automation-logs:         { covered: false }
+      # Flipped by two specs that open the /$workspaceName/automation-logs PAGE
+      # itself (AutomationLogsPage) and assert the rendered rows — not, as the
+      # API-only specs do, the GET /automations/evaluators/{id}/logs stream
+      # behind it. That distinction is why this key stayed false while
+      # online-evaluation-python-metric-errors.spec.ts asserted the same stream.
+      #   - thread-judge-provider-failure.spec.ts: ERROR rows, one per failed
+      #     thread and no others — the row set is pinned by exhaustion. Its
+      #     provider is the backend's own discard port, so it needs nothing from
+      #     the test runner and runs on EVERY deployment.
+      #   - provider-error-classification.spec.ts: the INFO Evaluating / Sending
+      #     rows as well as the ERROR one, matched on a seeded TRACE id, so the
+      #     non-error half of the stream is rendered-and-asserted too. This one
+      #     needs the backend to reach the host-run mock gateway, so it skips on
+      #     any deployment other than oss (mockAuthSkipReason) — the same gate as
+      #     configuration's ai-provider-add / ai-provider-token-refetch.
+      #
+      # So the flag itself is not oss-only: the thread-judge spec holds it up
+      # everywhere, and the classification spec deepens it on oss.
+      automation-logs:         { covered: true,  tier: t2-cuj, note: "rule_id-scoped log stream renders: one ERROR row per failed thread and no others (thread-judge-provider-failure, every deployment); and Evaluating / Sending / ERROR rows for one seeded trace id on a failed LLM-judge rule (provider-error-classification, oss only — it needs the host-run mock gateway). Both are deliberately silent on refresh, expand-all and marker columns" }
 
     visual:
       online-evaluation-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E11" }
@@ -808,9 +857,10 @@ areas:
     spec_dir: projects
     specs:
       - projects/project-delete.spec.ts
+      - projects/project-stats-far-future-id.spec.ts
       - projects/projects-list-stats.spec.ts
     capabilities:
-      list-projects:         { covered: true,  tier: t2-cuj }
+      list-projects:         { covered: true,  tier: t2-cuj, note: "the list and its 30-day windowed stat columns, at the API and rendered in the table; also a trace whose UUIDv7 id embeds mid-2200 — excluded from the windowed trace count and from the error count at every window, while still counted by the unwindowed read" }
       create-project:        { covered: false }
       delete-project:        { covered: true,  tier: t2-cuj, note: "asserts the project and its traces are gone; deliberately silent on orphaned project-scoped datasets/experiments pending a product decision" }
       project-selector:      { covered: false }

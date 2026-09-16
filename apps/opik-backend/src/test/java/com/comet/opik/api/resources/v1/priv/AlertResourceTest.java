@@ -235,6 +235,20 @@ class AlertResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
+
+        @Test
+        @DisplayName("Delete alert batch returns 403 when ALERT_UPDATE permission is denied")
+        void deleteAlertBatchReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ALERT_UPDATE.getValue());
+
+            var batchDelete = BatchDelete.builder().ids(Set.of(UUID.randomUUID())).build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, apiKey, workspaceName, HttpStatus.SC_FORBIDDEN);
+        }
     }
 
     @Nested

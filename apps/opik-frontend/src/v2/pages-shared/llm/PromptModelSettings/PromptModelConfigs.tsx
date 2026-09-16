@@ -31,6 +31,7 @@ import CustomModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/provid
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { parseComposedProviderType } from "@/lib/provider";
+import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
 interface PromptModelConfigsProps {
   provider: COMPOSED_PROVIDER_TYPE;
@@ -40,6 +41,8 @@ interface PromptModelConfigsProps {
   configs: Partial<LLMPromptConfigsType>;
   onChange: (configs: Partial<LLMPromptConfigsType>) => void;
   disabled?: boolean;
+  /** Defaults to every parameter supported, which is the playground. */
+  unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
 const PromptModelConfigs = ({
@@ -50,6 +53,7 @@ const PromptModelConfigs = ({
   configs,
   onChange,
   disabled: disabledProp = false,
+  unsupportedParams,
 }: PromptModelConfigsProps) => {
   const provider: PROVIDER_TYPE =
     parseComposedProviderType(composedProviderType);
@@ -59,6 +63,7 @@ const PromptModelConfigs = ({
       return (
         <OpenAIModelConfigs
           configs={configs as LLMOpenAIConfigsType}
+          unsupportedParams={unsupportedParams}
           model={model}
           onChange={onChange}
         />
@@ -69,6 +74,7 @@ const PromptModelConfigs = ({
       return (
         <AnthropicModelConfigs
           configs={configs as LLMAnthropicConfigsType}
+          unsupportedParams={unsupportedParams}
           onChange={onChange}
           model={model}
         />
@@ -79,6 +85,7 @@ const PromptModelConfigs = ({
       return (
         <OpenRouterModelConfigs
           configs={configs as LLMOpenRouterConfigsType}
+          unsupportedParams={unsupportedParams}
           onChange={onChange}
         />
       );
@@ -88,6 +95,7 @@ const PromptModelConfigs = ({
       return (
         <GeminiModelConfigs
           configs={configs as LLMGeminiConfigsType}
+          unsupportedParams={unsupportedParams}
           model={model}
           onChange={onChange}
         />
@@ -98,6 +106,7 @@ const PromptModelConfigs = ({
       return (
         <VertexAIModelConfigs
           configs={configs as LLMVertexAIConfigsType}
+          unsupportedParams={unsupportedParams}
           model={model}
           onChange={onChange}
         />
@@ -108,6 +117,7 @@ const PromptModelConfigs = ({
       return (
         <CustomModelConfigs
           configs={configs as LLMCustomConfigsType}
+          unsupportedParams={unsupportedParams}
           onChange={onChange}
         />
       );

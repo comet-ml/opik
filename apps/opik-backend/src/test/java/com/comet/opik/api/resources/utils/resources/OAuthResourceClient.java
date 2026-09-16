@@ -4,11 +4,14 @@ import com.comet.opik.api.resources.oauth.AuthorizeContext;
 import com.comet.opik.api.resources.oauth.ClientRegistrationResponse;
 import com.comet.opik.api.resources.oauth.ConsentRequest;
 import com.comet.opik.api.resources.oauth.ConsentResponse;
+import com.comet.opik.api.resources.oauth.OAuthError;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.mcpoauth.ClientRegistrationRequest;
 import com.comet.opik.domain.mcpoauth.TokenResponse;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.Form;
+import jakarta.ws.rs.core.Response;
+import lombok.Builder;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
@@ -25,12 +28,16 @@ import static com.comet.opik.domain.mcpoauth.OAuthConstants.AUTHORIZE_PATH;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.CODE_CHALLENGE_METHOD_S256;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.CSRF_COOKIE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_AUTHORIZATION_CODE;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.GRANT_REFRESH_TOKEN;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CLIENT_ID;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CODE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_CODE_VERIFIER;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_GRANT_TYPE;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_REDIRECT_URI;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_REFRESH_TOKEN;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.PARAM_TOKEN;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.REGISTER_PATH;
+import static com.comet.opik.domain.mcpoauth.OAuthConstants.REVOKE_PATH;
 import static com.comet.opik.domain.mcpoauth.OAuthConstants.TOKEN_PATH;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -50,20 +57,78 @@ public class OAuthResourceClient {
     private final String redirectUri;
     private final String resourceUri;
 
-    public record Minted(String code, TokenResponse tokens) {
+    public record Minted(String clientId, String code, TokenResponse tokens) {
+    }
+
+    /** What {@code POST /oauth/token} answered a {@code refresh_token} grant: the pair on 200, the error otherwise. */
+    @Builder(toBuilder = true)
+    public record RefreshOutcome(int status, TokenResponse tokens, OAuthError error) {
+        public boolean isOk() {
+            return status == HttpStatus.SC_OK;
+        }
+    }
+
+    /** Runs the {@code refresh_token} grant and reports whatever the token endpoint answered, without asserting. */
+    public RefreshOutcome refresh(String clientId, String refreshToken) {
+        var form = new Form()
+                .param(PARAM_GRANT_TYPE, GRANT_REFRESH_TOKEN)
+                .param(PARAM_CLIENT_ID, clientId)
+                .param(PARAM_REFRESH_TOKEN, refreshToken);
+
+        try (Response response = client.target(baseURI + TOKEN_PATH).request().post(Entity.form(form))) {
+            var outcome = RefreshOutcome.builder().status(response.getStatus());
+            if (response.getStatus() == HttpStatus.SC_OK) {
+                return outcome.tokens(response.readEntity(TokenResponse.class)).build();
+            }
+            return outcome.error(response.readEntity(OAuthError.class)).build();
+        }
+    }
+
+    /** Runs the {@code refresh_token} grant and asserts it succeeded. */
+    public TokenResponse refreshOk(String clientId, String refreshToken) {
+        RefreshOutcome outcome = refresh(clientId, refreshToken);
+        assertThat(outcome.status()).isEqualTo(HttpStatus.SC_OK);
+        return outcome.tokens();
+    }
+
+    /** RFC 7009 revocation of a token; the endpoint always answers 200. */
+    public void revoke(String clientId, String token) {
+        var form = new Form()
+                .param(PARAM_TOKEN, token)
+                .param(PARAM_CLIENT_ID, clientId);
+        try (Response response = client.target(baseURI + REVOKE_PATH).request().post(Entity.form(form))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+        }
+    }
+
+    /** A consented, not-yet-exchanged authorization: everything the token endpoint needs. */
+    public record Authorized(String clientId, String code, String codeVerifier) {
     }
 
     /** Registers a client, walks consent + PKCE, and exchanges the code for the raw code and the token pair. */
     public Minted mintArtifacts() {
-        String clientId = registerClient();
-        String codeVerifier = RandomStringUtils.secure().nextAlphanumeric(64);
-        String code = authorize(clientId, codeVerifier);
-        return new Minted(code, exchangeCode(clientId, code, codeVerifier));
+        var authorized = authorizeArtifacts(RandomStringUtils.secure().nextAlphanumeric(10));
+        return new Minted(authorized.clientId(), authorized.code(),
+                exchangeCode(authorized.clientId(), authorized.code(), authorized.codeVerifier()));
     }
 
-    private String registerClient() {
+    /**
+     * Registers a client under the given display name and walks consent + PKCE, stopping short of the exchange —
+     * for tests that want to drive the exchange through the service and inspect what it decided.
+     */
+    public Authorized authorizeArtifacts(String clientName) {
+        return reauthorize(registerClient(clientName));
+    }
+
+    /** Walks consent + PKCE again for a client that is already registered — a host reusing its client_id. */
+    public Authorized reauthorize(String clientId) {
+        String codeVerifier = RandomStringUtils.secure().nextAlphanumeric(64);
+        return new Authorized(clientId, authorize(clientId, codeVerifier), codeVerifier);
+    }
+
+    private String registerClient(String clientName) {
         var request = ClientRegistrationRequest.builder()
-                .clientName(RandomStringUtils.secure().nextAlphanumeric(10))
+                .clientName(clientName)
                 .redirectUris(Set.of(redirectUri))
                 .build();
 
