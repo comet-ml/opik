@@ -108,7 +108,9 @@ def test_evaluate_threads__happy_path(
             category_name=None,
         )
         for score in thread_result.scores
-        if not score.scoring_failed
+        # No ``if not score.scoring_failed`` filter here: thread evaluation
+        # uploads failed scores too, so skipping them would make this verify a
+        # shorter list than the one written and hide a crashed judge.
     ]
 
     verifiers.verify_thread(
