@@ -1,8 +1,8 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DatasetExportJob;
+import com.comet.opik.api.ExportJob;
 import com.comet.opik.domain.attachment.FileService;
-import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.infrastructure.ExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.jobs.Job;
@@ -35,21 +35,21 @@ import java.util.stream.Collectors;
 @Slf4j
 @DisallowConcurrentExecution
 @On(value = "0 0/5 * * * ?", timeZone = "UTC") // every 5 minutes
-public class DatasetExportCleanupJob extends Job implements InterruptableJob {
+public class ExportCleanupJob extends Job implements InterruptableJob {
 
-    private final DatasetExportJobService exportJobService;
+    private final ExportJobService exportJobService;
     private final FileService fileService;
     private final LockService lockService;
-    private final DatasetExportConfig exportConfig;
+    private final ExportConfig exportConfig;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
 
     @Inject
-    public DatasetExportCleanupJob(
-            @NonNull DatasetExportJobService exportJobService,
+    public ExportCleanupJob(
+            @NonNull ExportJobService exportJobService,
             @NonNull FileService fileService,
             @NonNull LockService lockService,
-            @NonNull @Config("datasetExport") DatasetExportConfig exportConfig) {
+            @NonNull @Config("exportJobs") ExportConfig exportConfig) {
         this.exportJobService = exportJobService;
         this.fileService = fileService;
         this.lockService = lockService;
@@ -145,7 +145,7 @@ public class DatasetExportCleanupJob extends Job implements InterruptableJob {
 
                     // Delete files from S3/MinIO
                     Set<String> filePaths = expiredJobs.stream()
-                            .map(DatasetExportJob::filePath)
+                            .map(ExportJob::filePath)
                             .filter(StringUtils::isNotBlank)
                             .collect(Collectors.toSet());
 
@@ -156,7 +156,7 @@ public class DatasetExportCleanupJob extends Job implements InterruptableJob {
 
                     // Delete records from database
                     Set<java.util.UUID> jobIds = expiredJobs.stream()
-                            .map(DatasetExportJob::id)
+                            .map(ExportJob::id)
                             .collect(Collectors.toSet());
 
                     return exportJobService.deleteExpiredJobs(jobIds)
@@ -196,7 +196,7 @@ public class DatasetExportCleanupJob extends Job implements InterruptableJob {
 
                     // Delete any files that may exist (in case failure happened after partial upload)
                     Set<String> filePaths = viewedFailedJobs.stream()
-                            .map(DatasetExportJob::filePath)
+                            .map(ExportJob::filePath)
                             .filter(StringUtils::isNotBlank)
                             .collect(Collectors.toSet());
 
@@ -208,7 +208,7 @@ public class DatasetExportCleanupJob extends Job implements InterruptableJob {
 
                     // Delete records from database
                     Set<java.util.UUID> jobIds = viewedFailedJobs.stream()
-                            .map(DatasetExportJob::id)
+                            .map(ExportJob::id)
                             .collect(Collectors.toSet());
 
                     return exportJobService.deleteExpiredJobs(jobIds)

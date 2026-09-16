@@ -1,10 +1,12 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DatasetExportJob;
-import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.api.ExportJob;
+import com.comet.opik.api.ExportStatus;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.ExportParamsArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
+import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
@@ -19,14 +21,19 @@ import java.util.Set;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
-@RegisterConstructorMapper(DatasetExportJob.class)
-public interface DatasetExportJobDAO {
+@RegisterArgumentFactory(ExportParamsArgumentFactory.class)
+@RegisterColumnMapper(ExportParamsArgumentFactory.class)
+@RegisterConstructorMapper(ExportJob.class)
+public interface ExportJobDAO {
 
     @SqlUpdate("""
-            INSERT INTO dataset_export_jobs (
+            INSERT INTO export_jobs (
                 id,
                 workspace_id,
-                dataset_id,
+                export_type,
+                params,
+                params_hash,
+                resource_name,
                 status,
                 file_path,
                 error_message,
@@ -38,7 +45,10 @@ public interface DatasetExportJobDAO {
             ) VALUES (
                 :job.id,
                 :workspaceId,
-                :job.datasetId,
+                :job.exportType,
+                :job.params,
+                :job.paramsHash,
+                :job.resourceName,
                 :job.status,
                 :job.filePath,
                 :job.errorMessage,
@@ -49,7 +59,7 @@ public interface DatasetExportJobDAO {
                 :job.lastUpdatedBy
             )
             """)
-    void save(@BindMethods("job") DatasetExportJob job, @Bind("workspaceId") String workspaceId);
+    void save(@BindMethods("job") ExportJob job, @Bind("workspaceId") String workspaceId);
 
     /**
      * Marks a PENDING dataset export job as PROCESSING.
@@ -62,7 +72,7 @@ public interface DatasetExportJobDAO {
      * @return The number of rows updated (0 if job not found or doesn't belong to workspace or not in PENDING state)
      */
     @SqlUpdate("""
-            UPDATE dataset_export_jobs
+            UPDATE export_jobs
             SET status = 'PROCESSING',
                 last_updated_by = :lastUpdatedBy
             WHERE id = :id
@@ -87,7 +97,7 @@ public interface DatasetExportJobDAO {
      * @return The number of rows updated (0 if job not found or doesn't belong to workspace or invalid state transition)
      */
     @SqlUpdate("""
-            UPDATE dataset_export_jobs
+            UPDATE export_jobs
             SET status = :status,
                 file_path = :filePath,
                 expires_at = :expiresAt,
@@ -100,7 +110,7 @@ public interface DatasetExportJobDAO {
             """)
     int updateToCompleted(@Bind("workspaceId") String workspaceId,
             @Bind("id") UUID id,
-            @Bind("status") DatasetExportStatus status,
+            @Bind("status") ExportStatus status,
             @Bind("filePath") String filePath,
             @Bind("expiresAt") java.time.Instant expiresAt,
             @Bind("lastUpdatedBy") String lastUpdatedBy);
@@ -118,7 +128,7 @@ public interface DatasetExportJobDAO {
      * @return The number of rows updated (0 if job not found or doesn't belong to workspace or invalid state transition)
      */
     @SqlUpdate("""
-            UPDATE dataset_export_jobs
+            UPDATE export_jobs
             SET status = 'FAILED',
                 error_message = :errorMessage,
                 last_updated_by = :lastUpdatedBy
@@ -134,8 +144,8 @@ public interface DatasetExportJobDAO {
     @SqlQuery("""
             SELECT
                 j.id,
-                j.dataset_id,
-                d.name AS dataset_name,
+                j.params,
+                j.resource_name,
                 j.status,
                 j.file_path,
                 j.error_message,
@@ -145,18 +155,17 @@ public interface DatasetExportJobDAO {
                 j.viewed_at,
                 j.created_by,
                 j.last_updated_by
-            FROM dataset_export_jobs j
-            LEFT JOIN datasets d ON j.dataset_id = d.id AND j.workspace_id = d.workspace_id
+            FROM export_jobs j
             WHERE j.id = :id
             AND j.workspace_id = :workspaceId
             """)
-    Optional<DatasetExportJob> findById(@Bind("workspaceId") String workspaceId, @Bind("id") UUID id);
+    Optional<ExportJob> findById(@Bind("workspaceId") String workspaceId, @Bind("id") UUID id);
 
     @SqlQuery("""
             SELECT
                 j.id,
-                j.dataset_id,
-                d.name AS dataset_name,
+                j.params,
+                j.resource_name,
                 j.status,
                 j.file_path,
                 j.error_message,
@@ -166,16 +175,17 @@ public interface DatasetExportJobDAO {
                 j.viewed_at,
                 j.created_by,
                 j.last_updated_by
-            FROM dataset_export_jobs j
-            LEFT JOIN datasets d ON j.dataset_id = d.id AND j.workspace_id = d.workspace_id
+            FROM export_jobs j
             WHERE j.workspace_id = :workspaceId
-                AND j.dataset_id = :datasetId
+                AND j.export_type = :exportType
+                AND j.params_hash = :paramsHash
                 AND j.status IN (<statuses>)
             """)
-    List<DatasetExportJob> findInProgressByDataset(
+    List<ExportJob> findInProgressByParams(
             @Bind("workspaceId") String workspaceId,
-            @Bind("datasetId") UUID datasetId,
-            @BindList("statuses") Set<DatasetExportStatus> statuses);
+            @Bind("exportType") String exportType,
+            @Bind("paramsHash") String paramsHash,
+            @BindList("statuses") Set<ExportStatus> statuses);
 
     /**
      * Finds all export jobs for a workspace with dataset names.
@@ -188,8 +198,8 @@ public interface DatasetExportJobDAO {
     @SqlQuery("""
             SELECT
                 j.id,
-                j.dataset_id,
-                d.name AS dataset_name,
+                j.params,
+                j.resource_name,
                 j.status,
                 j.file_path,
                 j.error_message,
@@ -199,15 +209,14 @@ public interface DatasetExportJobDAO {
                 j.viewed_at,
                 j.created_by,
                 j.last_updated_by
-            FROM dataset_export_jobs j
-            LEFT JOIN datasets d ON j.dataset_id = d.id AND j.workspace_id = d.workspace_id
+            FROM export_jobs j
             WHERE j.workspace_id = :workspaceId
             ORDER BY j.id DESC
             """)
-    List<DatasetExportJob> findByWorkspace(@Bind("workspaceId") String workspaceId);
+    List<ExportJob> findByWorkspace(@Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
-            UPDATE dataset_export_jobs
+            UPDATE export_jobs
             SET viewed_at = :viewedAt,
                 last_updated_by = :lastUpdatedBy
             WHERE id = :id
@@ -235,7 +244,8 @@ public interface DatasetExportJobDAO {
             SELECT
                 id,
                 workspace_id,
-                dataset_id,
+                params,
+                resource_name,
                 status,
                 file_path,
                 error_message,
@@ -245,7 +255,7 @@ public interface DatasetExportJobDAO {
                 viewed_at,
                 created_by,
                 last_updated_by
-            FROM dataset_export_jobs
+            FROM export_jobs
             WHERE expires_at < :now
                 AND status = 'COMPLETED'
                 AND :userName = '""" + RequestContext.SYSTEM_USER + "'"
@@ -253,7 +263,7 @@ public interface DatasetExportJobDAO {
                         ORDER BY expires_at ASC
                         LIMIT :limit
                     """)
-    List<DatasetExportJob> findExpiredCompletedJobs(@Bind("userName") String userName,
+    List<ExportJob> findExpiredCompletedJobs(@Bind("userName") String userName,
             @Bind("now") Instant now,
             @Bind("limit") int limit);
 
@@ -272,7 +282,8 @@ public interface DatasetExportJobDAO {
             SELECT
                 id,
                 workspace_id,
-                dataset_id,
+                params,
+                resource_name,
                 status,
                 file_path,
                 error_message,
@@ -282,7 +293,7 @@ public interface DatasetExportJobDAO {
                 viewed_at,
                 created_by,
                 last_updated_by
-            FROM dataset_export_jobs
+            FROM export_jobs
             WHERE status = 'FAILED'
                 AND viewed_at IS NOT NULL
                 AND :userName = '""" + RequestContext.SYSTEM_USER + "'"
@@ -290,7 +301,7 @@ public interface DatasetExportJobDAO {
                         ORDER BY viewed_at ASC
                         LIMIT :limit
                     """)
-    List<DatasetExportJob> findViewedFailedJobs(@Bind("userName") String userName, @Bind("limit") int limit);
+    List<ExportJob> findViewedFailedJobs(@Bind("userName") String userName, @Bind("limit") int limit);
 
     /**
      * Deletes export jobs by their IDs across all workspaces.
@@ -305,13 +316,13 @@ public interface DatasetExportJobDAO {
      * @return Number of deleted records, or 0 if userName is not SYSTEM_USER
      */
     @SqlUpdate("""
-            DELETE FROM dataset_export_jobs
+            DELETE FROM export_jobs
             WHERE id IN (<ids>)
             AND :userName = '""" + RequestContext.SYSTEM_USER + "'")
     int deleteJobsByIds(@Bind("userName") String userName, @BindList("ids") Set<UUID> ids);
 
     @SqlUpdate("""
-            UPDATE dataset_export_jobs
+            UPDATE export_jobs
             SET viewed_at = :viewedAt
             WHERE id = :id
                 AND workspace_id = :workspaceId
@@ -321,6 +332,6 @@ public interface DatasetExportJobDAO {
             @Bind("id") UUID id,
             @Bind("viewedAt") Instant viewedAt);
 
-    @SqlUpdate("DELETE FROM dataset_export_jobs WHERE workspace_id = :workspaceId AND id IN (<ids>)")
+    @SqlUpdate("DELETE FROM export_jobs WHERE workspace_id = :workspaceId AND id IN (<ids>)")
     int deleteByIds(@Bind("workspaceId") String workspaceId, @BindList("ids") Set<UUID> ids);
 }

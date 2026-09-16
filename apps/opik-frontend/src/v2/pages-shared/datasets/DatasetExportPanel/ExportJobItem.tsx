@@ -27,7 +27,7 @@ interface ExportJobItemProps {
 }
 
 const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
-  const { job, datasetName } = jobInfo;
+  const { job, resourceName } = jobInfo;
   const removeJob = useRemoveExportJob();
   const updateJob = useUpdateExportJob();
   const [isHovered, setIsHovered] = useState(false);
@@ -75,7 +75,7 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
         title: "Export failed",
         description:
           currentJob.error_message ||
-          `Failed to export test suite "${datasetName}"`,
+          `Failed to export test suite "${resourceName}"`,
         variant: "destructive",
       });
 
@@ -89,7 +89,7 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
     job.status,
     job.viewed_at,
     updateJob,
-    datasetName,
+    resourceName,
     toast,
     markAsViewed,
   ]);
@@ -175,7 +175,7 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {renderStatusIndicator()}
-        <span className="truncate text-sm">{datasetName}</span>
+        <span className="truncate text-sm">{resourceName}</span>
         {isFailed && (
           <span className="shrink-0 text-xs text-destructive">Failed</span>
         )}

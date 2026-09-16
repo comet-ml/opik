@@ -106,6 +106,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         .withPlugins(new SqlObjectPlugin(), new Jackson2Plugin()),
                         new McpOAuthBundle())
                 .modules(new DatabaseAnalyticsModule(), new AuthModule(), new RedisModule(),
+                        new com.comet.opik.domain.export.ExportSourceModule(),
                         new RateLimitModule(), new NameGeneratorModule(), new HttpModule(), new EventModule(),
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),

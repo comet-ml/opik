@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
 @Getter
-public enum DatasetExportStatus {
+public enum ExportStatus {
     PENDING("PENDING"),
     PROCESSING("PROCESSING"),
     COMPLETED("COMPLETED"),

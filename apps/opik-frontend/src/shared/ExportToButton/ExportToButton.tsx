@@ -18,6 +18,8 @@ type ExportToButtonProps = {
   getData: () => Array<object> | Promise<Array<object>>;
   disabled: boolean;
   tooltipContent?: string;
+  /** Scope hint shown in the menu items, e.g. "3 selected". Omitted when the scope is unambiguous. */
+  menuLabel?: string;
   buttonVariant?: "outline" | "ghost" | "ghostInverted";
   buttonSize?: ButtonProps["size"];
 };
@@ -27,6 +29,7 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
   getData,
   disabled,
   tooltipContent,
+  menuLabel,
   buttonVariant = "outline",
   buttonSize = "icon-sm",
 }) => {
@@ -128,13 +131,13 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
           onClick={exportCSVHandler}
           disabled={disabled || loading}
         >
-          Export as CSV
+          {menuLabel ? `Export ${menuLabel} as CSV` : "Export as CSV"}
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={exportJSONHandler}
           disabled={disabled || loading}
         >
-          Export as JSON
+          {menuLabel ? `Export ${menuLabel} as JSON` : "Export as JSON"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

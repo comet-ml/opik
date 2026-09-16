@@ -1,11 +1,12 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Dataset;
-import com.comet.opik.api.DatasetExportJob;
-import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.api.DatasetExportParams;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.ExportJob;
+import com.comet.opik.api.ExportStatus;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -17,13 +18,13 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
-import com.comet.opik.domain.CsvDatasetExportService;
-import com.comet.opik.domain.DatasetExportJobService;
+import com.comet.opik.domain.CsvExportService;
+import com.comet.opik.domain.ExportJobService;
 import com.comet.opik.domain.attachment.FileService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
-import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.infrastructure.ExportConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -63,14 +64,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 /**
- * Integration tests for {@link DatasetExportJobSubscriber} using real Redis, MySQL, and ClickHouse containers.
+ * Integration tests for {@link ExportJobSubscriber} using real Redis, MySQL, and ClickHouse containers.
  * Tests verify end-to-end processing of dataset export jobs through the Redis stream.
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Dataset Export Job Subscriber Resource Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class DatasetExportJobSubscriberResourceTest {
+class ExportJobSubscriberResourceTest {
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -94,8 +95,8 @@ class DatasetExportJobSubscriberResourceTest {
 
     private String baseURI;
     private DatasetResourceClient datasetResourceClient;
-    private DatasetExportJobService exportJobService;
-    private CsvDatasetExportService csvExportService;
+    private ExportJobService exportJobService;
+    private CsvExportService csvExportService;
     private OpikConfiguration opikConfig;
     private FileService fileService;
 
@@ -125,8 +126,8 @@ class DatasetExportJobSubscriberResourceTest {
     }
 
     @BeforeAll
-    void setUpAll(ClientSupport client, DatasetExportJobService exportJobService,
-            CsvDatasetExportService csvExportService, OpikConfiguration opikConfig, FileService fileService) {
+    void setUpAll(ClientSupport client, ExportJobService exportJobService,
+            CsvExportService csvExportService, OpikConfiguration opikConfig, FileService fileService) {
         this.baseURI = TestUtils.getBaseUrl(client);
         this.exportJobService = exportJobService;
         this.csvExportService = csvExportService;
@@ -159,8 +160,9 @@ class DatasetExportJobSubscriberResourceTest {
             int expectedRowCount = 5;
             Dataset dataset = createDatasetWithItemsAndColumns(expectedColumns, expectedRowCount);
 
-            // When - Use CsvDatasetExportService to create job and publish to Redis stream
-            DatasetExportJob job = csvExportService.startExport(dataset.id())
+            // When - Use CsvExportService to create job and publish to Redis stream
+            ExportJob job = csvExportService
+                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -169,11 +171,11 @@ class DatasetExportJobSubscriberResourceTest {
             UUID jobId = job.id();
 
             // Then - Wait for job to be processed and verify completion
-            DatasetExportJob completedJob = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            ExportJob completedJob = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(jobId)
                             .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
                             .block(),
-                            j -> j.status() == DatasetExportStatus.COMPLETED);
+                            j -> j.status() == ExportStatus.COMPLETED);
 
             assertThat(completedJob.filePath()).isNotNull();
             assertThat(completedJob.filePath()).contains("exports/");
@@ -193,8 +195,9 @@ class DatasetExportJobSubscriberResourceTest {
                     .build();
             datasetResourceClient.createDataset(dataset, API_KEY, WORKSPACE_NAME);
 
-            // When - Use CsvDatasetExportService to create job and publish to Redis stream
-            DatasetExportJob job = csvExportService.startExport(dataset.id())
+            // When - Use CsvExportService to create job and publish to Redis stream
+            ExportJob job = csvExportService
+                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -203,11 +206,11 @@ class DatasetExportJobSubscriberResourceTest {
             UUID jobId = job.id();
 
             // Then - Wait for job to be processed and verify completion
-            DatasetExportJob completedJob = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            ExportJob completedJob = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(jobId)
                             .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
                             .block(),
-                            j -> j.status() == DatasetExportStatus.COMPLETED);
+                            j -> j.status() == ExportStatus.COMPLETED);
 
             assertThat(completedJob.filePath()).isNotNull();
 
@@ -231,43 +234,46 @@ class DatasetExportJobSubscriberResourceTest {
             Dataset dataset2 = createDatasetWithItemsAndColumns(columns2, rowCount2);
             Dataset dataset3 = createDatasetWithItemsAndColumns(columns3, rowCount3);
 
-            // When - Use CsvDatasetExportService to create jobs and publish to Redis stream
-            DatasetExportJob job1 = csvExportService.startExport(dataset1.id())
+            // When - Use CsvExportService to create jobs and publish to Redis stream
+            ExportJob job1 = csvExportService
+                    .startExport(DatasetExportParams.builder().datasetId(dataset1.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
                     .block();
 
-            DatasetExportJob job2 = csvExportService.startExport(dataset2.id())
+            ExportJob job2 = csvExportService
+                    .startExport(DatasetExportParams.builder().datasetId(dataset2.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
                     .block();
 
-            DatasetExportJob job3 = csvExportService.startExport(dataset3.id())
+            ExportJob job3 = csvExportService
+                    .startExport(DatasetExportParams.builder().datasetId(dataset3.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
                     .block();
 
             // Then - All jobs should complete successfully and verify CSV content
-            DatasetExportJob completedJob1 = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            ExportJob completedJob1 = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(job1.id())
                             .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
                             .block(),
-                            j -> j.status() == DatasetExportStatus.COMPLETED);
+                            j -> j.status() == ExportStatus.COMPLETED);
 
-            DatasetExportJob completedJob2 = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            ExportJob completedJob2 = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(job2.id())
                             .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
                             .block(),
-                            j -> j.status() == DatasetExportStatus.COMPLETED);
+                            j -> j.status() == ExportStatus.COMPLETED);
 
-            DatasetExportJob completedJob3 = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            ExportJob completedJob3 = await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(job3.id())
                             .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
                             .block(),
-                            j -> j.status() == DatasetExportStatus.COMPLETED);
+                            j -> j.status() == ExportStatus.COMPLETED);
 
             // Verify each CSV content
             assertCsvFile(completedJob1.filePath(), columns1, rowCount1);
@@ -284,8 +290,9 @@ class DatasetExportJobSubscriberResourceTest {
             int expectedRowCount = 50; // Larger dataset
             Dataset dataset = createDatasetWithItemsAndColumns(expectedColumns, expectedRowCount);
 
-            // When - Use CsvDatasetExportService to create job and publish to Redis stream
-            DatasetExportJob job = csvExportService.startExport(dataset.id())
+            // When - Use CsvExportService to create job and publish to Redis stream
+            ExportJob job = csvExportService
+                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -294,11 +301,11 @@ class DatasetExportJobSubscriberResourceTest {
             UUID jobId = job.id();
 
             // Then - Wait for job to be processed and verify completion
-            DatasetExportJob completedJob = await().atMost(AWAIT_TIMEOUT_SECONDS * 2, TimeUnit.SECONDS)
+            ExportJob completedJob = await().atMost(AWAIT_TIMEOUT_SECONDS * 2, TimeUnit.SECONDS)
                     .until(() -> exportJobService.getJob(jobId)
                             .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
                             .block(),
-                            j -> j.status() == DatasetExportStatus.COMPLETED);
+                            j -> j.status() == ExportStatus.COMPLETED);
 
             assertThat(completedJob.filePath()).isNotNull();
 
@@ -323,9 +330,10 @@ class DatasetExportJobSubscriberResourceTest {
             // Given - A non-existent dataset ID
             UUID nonExistentDatasetId = UUID.randomUUID();
 
-            // When - Use CsvDatasetExportService to start export for non-existent dataset
+            // When - Use CsvExportService to start export for non-existent dataset
             // The export should complete successfully with an empty file (no columns, no items)
-            DatasetExportJob job = csvExportService.startExport(nonExistentDatasetId)
+            ExportJob job = csvExportService
+                    .startExport(DatasetExportParams.builder().datasetId(nonExistentDatasetId).build(), "test-dataset")
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -336,10 +344,10 @@ class DatasetExportJobSubscriberResourceTest {
             // Then - Job should complete successfully with an empty file
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        DatasetExportJob completedJob = exportJobService.getJob(jobId)
+                        ExportJob completedJob = exportJobService.getJob(jobId)
                                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
                                 .block();
-                        assertThat(completedJob.status()).isEqualTo(DatasetExportStatus.COMPLETED);
+                        assertThat(completedJob.status()).isEqualTo(ExportStatus.COMPLETED);
                         assertThat(completedJob.filePath()).isNotNull();
                     });
         }
@@ -354,15 +362,16 @@ class DatasetExportJobSubscriberResourceTest {
         @DisplayName("should verify subscriber is enabled by default")
         void shouldVerifySubscriberIsEnabled() {
             // Verify the subscriber is enabled in the test configuration
-            DatasetExportConfig config = opikConfig.getDatasetExport();
-            assertThat(config.isEnabled()).isTrue();
+            ExportConfig config = opikConfig.getExportJobs();
+            assertThat(config.isDatasetEnabled()).isTrue();
+            assertThat(config.isExperimentItemsEnabled()).isTrue();
         }
 
         @Test
         @DisplayName("should verify stream configuration")
         void shouldVerifyStreamConfiguration() {
-            // Get the DatasetExportConfig from OpikConfiguration
-            DatasetExportConfig config = opikConfig.getDatasetExport();
+            // Get the ExportConfig from OpikConfiguration
+            ExportConfig config = opikConfig.getExportJobs();
             assertThat(config.getStreamName()).isEqualTo("dataset-export-test");
             assertThat(config.getConsumerGroupName()).isNotNull();
             assertThat(config.getConsumerBatchSize()).isGreaterThan(0);

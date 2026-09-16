@@ -378,13 +378,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     );
   }, [dynamicScoresColumns, experimentsIds]);
 
-  const selectedRows: Array<ExperimentsCompare> = useMemo(() => {
-    return rows.filter((row) => rowSelection[row.id]);
-  }, [rowSelection, rows]);
-
   const getDataForExport = useCallback(async (): Promise<
     ExperimentsCompare[]
   > => {
+    // Only ever serves a selection now; the whole result set goes through the export job.
+    const selectedIds = Object.keys(rowSelection);
     const result = await refetchExportData();
 
     if (result.error) {
@@ -395,10 +393,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       throw new Error("Failed to fetch data");
     }
 
-    const allRows = result.data.content;
-    const selectedIds = Object.keys(rowSelection);
-
-    return allRows.filter((row) => selectedIds.includes(row.id));
+    return result.data.content.filter((row) => selectedIds.includes(row.id));
   }, [refetchExportData, rowSelection]);
 
   const columns = useMemo(() => {
@@ -679,9 +674,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel
             getDataForExport={getDataForExport}
-            selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             experiments={experiments}
+            datasetId={datasetId}
+            experimentsIds={experimentsIds}
+            hasSelection={Object.keys(rowSelection).length > 0}
+            selectedCount={Object.keys(rowSelection).length}
+            totalRows={total}
           />
           <Separator orientation="vertical" className="mx-[2px] h-4" />
           <DataTableRowHeightSelector

@@ -34,6 +34,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean datasetVersioningEnabled;
     @JsonProperty
     @NotNull boolean datasetExportEnabled;
+
+    @NotNull boolean experimentExportEnabled;
     @JsonProperty
     @NotNull boolean demoDataEnabled;
     // LLM Provider feature flags
