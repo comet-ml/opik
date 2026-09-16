@@ -5208,7 +5208,8 @@ class TraceDAOImpl implements TraceDAO {
                 workspaceIds.size(), cutoffId, lowerBound);
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_traces", null, "",
-                workspaceIds.size());
+                "workspaces_size=%s, cutoff_id=%s, lower_bound=%s".formatted(workspaceIds.size(), cutoffId,
+                        lowerBound));
         selectTracesMutationTable(template);
 
         return Mono.from(connectionFactory.create())
@@ -5255,7 +5256,8 @@ class TraceDAOImpl implements TraceDAO {
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION_BOUNDED, "retention_delete_traces_bounded", null, "",
-                workspaceMinIds.size());
+                "workspaces_size=%s, cutoff_id=%s, min_lower_bound=%s".formatted(workspaceMinIds.size(), cutoffId,
+                        lowerBound));
         selectTracesMutationTable(template);
         template.add("items", getQueryItemPlaceHolder(entries.size()));
 

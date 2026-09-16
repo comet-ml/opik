@@ -218,6 +218,28 @@ class SpanServiceImplTest {
         }
 
         /**
+         * A project-less cascade would issue a {@code (workspace_id, id)}-only delete: unscoped across every project in
+         * the workspace, unroutable once {@code spans} is distributed on {@code project_id}, and recorded in the
+         * deletion-events bridge with an empty {@code project_id}. Rejecting it at the entry point is what makes the
+         * guarantee structural — it cannot be expressed, so no downstream step has to decide what to do about an
+         * absent project.
+         */
+        @Test
+        void deleteByTraceIdsRejectsAnAbsentProjectBeforeDeletingOrCapturing() {
+            var traceIds = Set.of(idGenerator.generateId());
+
+            spanService = newSpanService(DatabaseAnalyticsDataModelConfig.builder()
+                    .spanDeletionEventsCaptureEnabled(true)
+                    .build());
+
+            assertThatThrownBy(() -> spanService.deleteByTraceIds(traceIds, null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessageContaining("projectId");
+
+            verifyNoInteractions(spanDAO, deletionEventDAO, eventBus);
+        }
+
+        /**
          * The bridge rows the cascade is expected to record: one {@code spans} / {@code cascade} event per span id,
          * with {@code eventTime} left null for ClickHouse to stamp. Matching the insert on this rather than on
          * {@code any()} is what pins the recorded contents, so a wrong source table, reason or id fails the test.
