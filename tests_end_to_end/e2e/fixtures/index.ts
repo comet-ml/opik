@@ -2,6 +2,7 @@ export { test, expect } from './project-scoped-dashboard.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
+  FailingProviderSeed,
   ProviderKeysFixture,
   ProviderKeyFixtures,
 } from './provider-key.fixture';
