@@ -19,6 +19,36 @@ class ChatCompletionChunksAggregated(pydantic.BaseModel):
     usage: Optional[Dict[str, Any]]
 
 
+def _resolve_tool_call_key(
+    tool_call: chat_completion_chunk.ChoiceDeltaToolCall,
+    position: int,
+    fragment_count: int,
+    tool_calls_by_index: Dict[int, Dict[str, Any]],
+    keys_by_call_id: Dict[str, int],
+) -> int:
+    """Which reassembled tool call this fragment belongs to.
+
+    ``index`` is the identity the wire format provides. Fragments of a stream
+    that omits it are attributed by their ``id`` when they carry one, by their
+    position only while a single call is in flight or the chunk repeats every
+    slot, and otherwise to the most recently opened call -- the only one a
+    provider can still be streaming arguments for.
+    """
+    if tool_call.index is not None:
+        return tool_call.index
+
+    if tool_call.id is not None:
+        known_key = keys_by_call_id.get(tool_call.id)
+        if known_key is not None:
+            return known_key
+        return max(tool_calls_by_index, default=-1) + 1
+
+    if len(tool_calls_by_index) <= 1 or fragment_count == len(tool_calls_by_index):
+        return position
+
+    return max(tool_calls_by_index)
+
+
 def _merge_tool_call(
     tool_calls_by_index: Dict[int, Dict[str, Any]],
     index: int,
@@ -62,6 +92,7 @@ def aggregate(
 
         text_chunks: List[str] = []
         tool_calls_by_index: Dict[int, Dict[str, Any]] = {}
+        keys_by_call_id: Dict[str, int] = {}
 
         for chunk in items:
             if chunk.choices and chunk.choices[0].delta:
@@ -77,20 +108,24 @@ def aggregate(
                     text_chunks.append(delta.content)
 
                 if delta.tool_calls:
+                    fragment_count = len(delta.tool_calls)
                     for position, tool_call in enumerate(delta.tool_calls):
-                        index = (
-                            tool_call.index if tool_call.index is not None else position
+                        index = _resolve_tool_call_key(
+                            tool_call,
+                            position,
+                            fragment_count,
+                            tool_calls_by_index,
+                            keys_by_call_id,
                         )
                         tool_call_payload = tool_call.model_dump(exclude_none=True)
                         # `index` orders fragments inside the stream; a
                         # non-streamed response message does not carry it, and
                         # dropping it here keeps both shapes interchangeable.
                         tool_call_payload.pop("index", None)
-                        _merge_tool_call(
-                            tool_calls_by_index,
-                            index,
-                            tool_call_payload,
-                        )
+                        _merge_tool_call(tool_calls_by_index, index, tool_call_payload)
+                        call_id = tool_call_payload.get("id")
+                        if call_id is not None:
+                            keys_by_call_id[call_id] = index
 
             if chunk.choices and chunk.choices[0].finish_reason:
                 aggregated_response["choices"][0]["finish_reason"] = chunk.choices[

@@ -392,3 +392,316 @@ def test_aggregate__usage_only_final_chunk__keeps_usage_and_adds_no_tool_calls_k
     assert aggregated is not None
     assert "tool_calls" not in _message(aggregated)
     assert aggregated.model_dump()["usage"]["total_tokens"] == 4
+
+
+def test_aggregate__single_anonymous_fragment__does_not_rewrite_another_call() -> None:
+    """One fragment with no index cannot be aligned by its position in the chunk."""
+    stream = [
+        _chunk(
+            [
+                (
+                    0,
+                    None,
+                    _delta(
+                        tool_calls=[
+                            _tool_call(
+                                None,
+                                call_id="call_first",
+                                call_type="function",
+                                name="get_weather",
+                                arguments='{"x":',
+                            ),
+                            _tool_call(
+                                None,
+                                call_id="call_second",
+                                call_type="function",
+                                name="get_time",
+                                arguments='{"y":',
+                            ),
+                        ]
+                    ),
+                )
+            ]
+        ),
+        _chunk([(0, None, _delta(tool_calls=[_tool_call(None, arguments="2}")]))]),
+        _chunk([(0, "tool_calls", _delta())]),
+    ]
+
+    aggregated = chat_completion_chunks_aggregator.aggregate(stream)
+
+    assert aggregated is not None
+    assert _message(aggregated)["tool_calls"] == [
+        {
+            "id": "call_first",
+            "type": "function",
+            "function": {"name": "get_weather", "arguments": '{"x":'},
+        },
+        {
+            "id": "call_second",
+            "type": "function",
+            "function": {"name": "get_time", "arguments": '{"y":2}'},
+        },
+    ]
+
+
+def test_aggregate__unindexed_calls_opened_in_later_chunks__stay_separate() -> None:
+    """A second `id` opens a second call even when the stream carries no index."""
+    stream = [
+        _chunk(
+            [
+                (
+                    0,
+                    None,
+                    _delta(
+                        tool_calls=[
+                            _tool_call(
+                                None,
+                                call_id="call_one",
+                                call_type="function",
+                                name="first_fn",
+                                arguments='{"a": 1}',
+                            )
+                        ]
+                    ),
+                )
+            ]
+        ),
+        _chunk(
+            [
+                (
+                    0,
+                    None,
+                    _delta(
+                        tool_calls=[
+                            _tool_call(
+                                None,
+                                call_id="call_two",
+                                call_type="function",
+                                name="second_fn",
+                                arguments='{"b":',
+                            )
+                        ]
+                    ),
+                )
+            ]
+        ),
+        _chunk([(0, None, _delta(tool_calls=[_tool_call(None, arguments="2}")]))]),
+        _chunk([(0, "tool_calls", _delta())]),
+    ]
+
+    aggregated = chat_completion_chunks_aggregator.aggregate(stream)
+
+    assert aggregated is not None
+    assert _message(aggregated)["tool_calls"] == [
+        {
+            "id": "call_one",
+            "type": "function",
+            "function": {"name": "first_fn", "arguments": '{"a": 1}'},
+        },
+        {
+            "id": "call_two",
+            "type": "function",
+            "function": {"name": "second_fn", "arguments": '{"b":2}'},
+        },
+    ]
+
+
+def test_aggregate__fragment_with_explicit_nulls__reports_no_null_values() -> None:
+    """Some gateways send `"id": null` instead of leaving the key out."""
+    null_fragment = chat_completion_chunk.ChoiceDeltaToolCall.model_construct(
+        index=0,
+        id=None,
+        type=None,
+        function=chat_completion_chunk.ChoiceDeltaToolCallFunction(
+            name=None, arguments=CITY_ARGS
+        ),
+    )
+    stream = [
+        _chunk([(0, None, _delta(tool_calls=[null_fragment]))]),
+        _chunk([(0, "stop", _delta())]),
+    ]
+
+    aggregated = chat_completion_chunks_aggregator.aggregate(stream)
+
+    assert aggregated is not None
+    assert _message(aggregated)["tool_calls"] == [
+        {"function": {"arguments": CITY_ARGS}}
+    ]
+
+
+def test_aggregate__chunks_parsed_from_sse_payloads__reassembles_the_call() -> None:
+    """`model_validate_json` is how the client turns `data:` lines into chunks."""
+
+    def payload(
+        delta: Dict[str, Any],
+        finish_reason: Optional[str] = None,
+        usage: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        body: Dict[str, Any] = {
+            "id": CHUNK_ID,
+            "object": "chat.completion.chunk",
+            "created": CREATED,
+            "model": MODEL,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": delta,
+                    "logprobs": None,
+                    "finish_reason": finish_reason,
+                }
+            ],
+        }
+        if usage is not None:
+            body["choices"] = []
+            body["usage"] = usage
+        return json.dumps(body)
+
+    stream = [
+        ChatCompletionChunk.model_validate_json(
+            payload({"role": "assistant", "content": None})
+        ),
+        ChatCompletionChunk.model_validate_json(
+            payload(
+                {
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": "call_sse",
+                            "type": "function",
+                            "function": {"name": "get_weather", "arguments": ""},
+                        }
+                    ]
+                }
+            )
+        ),
+        ChatCompletionChunk.model_validate_json(
+            payload(
+                {"tool_calls": [{"index": 0, "function": {"arguments": CITY_ARGS}}]},
+                finish_reason="tool_calls",
+            )
+        ),
+        ChatCompletionChunk.model_validate_json(
+            payload(
+                {},
+                usage={
+                    "prompt_tokens": 41,
+                    "completion_tokens": 17,
+                    "total_tokens": 58,
+                },
+            )
+        ),
+    ]
+
+    aggregated = chat_completion_chunks_aggregator.aggregate(stream)
+
+    assert aggregated is not None
+    assert _message(aggregated)["tool_calls"] == [
+        {
+            "id": "call_sse",
+            "type": "function",
+            "function": {"name": "get_weather", "arguments": CITY_ARGS},
+        }
+    ]
+    assert aggregated.model_dump()["usage"]["total_tokens"] == 58
+
+
+def test_aggregate__fragments_arrive_out_of_index_order__ordered_by_index() -> None:
+    """`index` decides both identity and order, not the order chunks arrive in."""
+    stream = [
+        _chunk(
+            [
+                (
+                    0,
+                    None,
+                    _delta(
+                        tool_calls=[
+                            _tool_call(
+                                1,
+                                call_id="call_b",
+                                name="second_fn",
+                                arguments='{"b": ',
+                            ),
+                            _tool_call(
+                                0,
+                                call_id="call_a",
+                                name="first_fn",
+                                arguments='{"a":',
+                            ),
+                        ]
+                    ),
+                )
+            ]
+        ),
+        _chunk(
+            [
+                (
+                    0,
+                    None,
+                    _delta(
+                        tool_calls=[
+                            _tool_call(1, arguments="2}"),
+                            _tool_call(0, arguments="1}"),
+                        ]
+                    ),
+                )
+            ]
+        ),
+        _chunk([(0, "tool_calls", _delta())]),
+    ]
+
+    aggregated = chat_completion_chunks_aggregator.aggregate(stream)
+
+    assert aggregated is not None
+    assert _message(aggregated)["tool_calls"] == [
+        {
+            "id": "call_a",
+            "function": {"name": "first_fn", "arguments": '{"a":1}'},
+        },
+        {
+            "id": "call_b",
+            "function": {"name": "second_fn", "arguments": '{"b": 2}'},
+        },
+    ]
+
+
+def test_aggregate__call_id_arrives_after_its_arguments__still_reported() -> None:
+    stream = [
+        _chunk(
+            [
+                (
+                    0,
+                    None,
+                    _delta(
+                        tool_calls=[
+                            _tool_call(0, name="get_weather", arguments=CITY_ARGS)
+                        ]
+                    ),
+                )
+            ]
+        ),
+        _chunk(
+            [
+                (
+                    0,
+                    None,
+                    _delta(
+                        tool_calls=[
+                            _tool_call(0, call_id="call_late", call_type="function")
+                        ]
+                    ),
+                )
+            ]
+        ),
+        _chunk([(0, "stop", _delta())]),
+    ]
+
+    aggregated = chat_completion_chunks_aggregator.aggregate(stream)
+
+    assert aggregated is not None
+    assert _message(aggregated)["tool_calls"] == [
+        {
+            "function": {"name": "get_weather", "arguments": CITY_ARGS},
+            "id": "call_late",
+            "type": "function",
+        }
+    ]
