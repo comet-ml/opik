@@ -1,7 +1,10 @@
+import logging
 import os
 
 import litellm
 import opik  # HIGHLIGHTED_LINE
+
+logger = logging.getLogger(__name__)
 from litellm.integrations.opik.opik import OpikLogger  # HIGHLIGHTED_LINE
 from opik import track  # HIGHLIGHTED_LINE
 from opik.opik_context import get_current_span_data  # HIGHLIGHTED_LINE
@@ -41,6 +44,9 @@ def generate_story(prompt):
             },
         },
     )
+    if not getattr(response, "choices", None) or response.choices[0].message is None:
+        logger.warning("LLM returned no choices or null message; skipping response")
+        return None
     return response.choices[0].message.content
 
 
