@@ -270,13 +270,16 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
 # Cap on how many wrapped causes are reported before the frames.
 MAX_CAUSE_CHAIN = 5
 
+
 def user_facing_stacktrace(skip_frames: int = 1) -> str:
-    """Format the current exception with this module's own frames dropped.
+    """Format the current exception, cause first, with this module's own frames dropped.
 
     Walks frames rather than slicing a fixed number of leading lines, so the
     exception line survives however short the traceback is. A failure raised while
     binding the call arguments has no user frame at all, so a fixed slice could
-    remove the message itself and report a cause of "".
+    remove the message itself and report a cause of "". Returns the exception and any
+    wrapped causes ahead of the frames, since the caller keeps only the first 500
+    characters.
     """
     exc_type, exc, tb = sys.exc_info()
     for _ in range(skip_frames):
@@ -298,7 +301,11 @@ def user_facing_stacktrace(skip_frames: int = 1) -> str:
     while current is not None and id(current) not in seen and len(causes) < MAX_CAUSE_CHAIN:
         seen.add(id(current))
         causes.append("".join(traceback.format_exception_only(type(current), current)).rstrip())
-        current = current.__cause__ or current.__context__
+        # `raise X from None` sets __suppress_context__, and reporting the context
+        # anyway would expose what the author explicitly hid.
+        current = current.__cause__ or (
+            None if current.__suppress_context__ else current.__context__
+        )
     cause = "\ncaused by: ".join(causes)
     frames = "".join(traceback.format_tb(tb)).rstrip()
     return f"{cause}\n{frames}" if frames else cause

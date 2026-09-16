@@ -905,3 +905,36 @@ class NeedsSpans(base_metric.BaseMetric):
 
     assert response.status_code == 400
     assert "spans" in str(response.json["error"])
+
+
+# The reported cause walks __cause__/__context__ so a wrapped error still names its
+# root. `raise ... from None` opts out of that, and honouring it is the difference
+# between reporting context and exposing what the author deliberately hid.
+@pytest.mark.parametrize("raise_stmt, root_expected", [
+    ("raise RuntimeError('outer') from err", True),    # explicit chain
+    ("raise RuntimeError('outer')", True),             # implicit context
+    ("raise RuntimeError('outer') from None", False),  # suppressed
+])
+def test_cause_chain_honours_suppressed_context(process_client, raise_stmt, root_expected):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": f"""
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class Chained(base_metric.BaseMetric):
+    def __init__(self, name: str = "chained_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str):
+        try:
+            raise ValueError('inner root')
+        except ValueError as err:
+            {raise_stmt}
+"""
+    })
+
+    assert response.status_code == 400
+    error = str(response.json["error"])
+    assert "outer" in error, "the raised exception is always reported"
+    assert ("inner root" in error) is root_expected
