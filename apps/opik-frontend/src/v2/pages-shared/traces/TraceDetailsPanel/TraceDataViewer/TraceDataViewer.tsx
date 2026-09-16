@@ -174,6 +174,14 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           <AgentGraphTab data={graphData} />
         </div>
       )}
+      {/* Sticky, and no height of its own, so the pill keeps the spot the
+          design gives it in the header row and stays there while the panel
+          scrolls. Clicks pass through to the header items underneath. */}
+      {headerSlot && (
+        <div className="pointer-events-none sticky top-0 z-20 h-0">
+          <div className="flex justify-end px-4 pt-4">{headerSlot}</div>
+        </div>
+      )}
       <div className="min-w-[400px] max-w-full overflow-x-hidden p-4">
         <div className="mb-4 flex flex-col gap-1">
           <div className="comet-body-s flex w-full flex-wrap items-center gap-3 pl-1 text-foreground">
@@ -255,7 +263,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 className="comet-body-s text-foreground"
               />
             )}
-            {headerSlot && <div className="ml-auto">{headerSlot}</div>}
           </div>
           <TagList
             data={data}
