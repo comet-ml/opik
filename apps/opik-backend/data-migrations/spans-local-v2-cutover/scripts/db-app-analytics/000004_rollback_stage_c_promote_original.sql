@@ -21,10 +21,13 @@
 -- rollback.sh runs the reverse-replay (000004_rollback_reverse_replay.sql) right after this so deletes since
 -- cutover_start do not resurrect, and asserts the post-wrap topology (spans = Distributed) before running it.
 --
--- THIS STAGE IS UNREACHABLE UNTIL OPIK-7799 LANDS, and that is worth stating rather than leaving implicit: the wrap it
--- reverses cannot be applied while SpanDAO has no spansDistributedWrapEnabled to retarget its mutations with, so no
--- spans estate can currently be in the post-wrap state. The file ships complete so the wrap and its reversal are
--- reviewed together rather than the reversal being authored later, under pressure, against an estate already wrapped.
+-- THIS STAGE APPLIES ONLY TO A WRAPPED ESTATE, WHICH THE DEFAULT WINDOW DOES NOT CREATE, and that is worth stating
+-- rather than leaving implicit. OPIK-7799 landed spansDistributedWrapEnabled and SpanDAO's routing, so the wrap it
+-- reverses is reachable; the runbook nonetheless defers it while the readiness gap OPIK-7799 left open stands (see the
+-- README section of that name, and OPIK-8376). So an estate reaches this stage only after a deliberate --with-wrap or
+-- --wrap-only run. The file ships complete so the wrap and its reversal are reviewed together rather than the reversal
+-- being authored later, under pressure, against an estate already wrapped; rollback.sh's topology guard refuses this
+-- stage cleanly on an unwrapped estate.
 --
 -- BEFORE backends resume: set databaseAnalyticsDataModel.spansDistributedWrapEnabled=false (OPIK-7799). This stage
 -- makes `spans` a MergeTree again and parks `spans_local`, so a still-true flag would send SpanDAO mutations at the

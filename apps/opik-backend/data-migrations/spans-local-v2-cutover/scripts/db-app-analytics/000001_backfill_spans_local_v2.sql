@@ -25,7 +25,7 @@
 --     rows. Lowering it lowers peak insert memory and raises the part count; raising it does the reverse. README's
 --     threshold table carries the measured pairs.
 --
--- ALL SIX placeholders the driver substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the
+-- ALL SEVEN placeholders the driver substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the
 -- server as a literal and the INSERT fails):
 --   ${ANALYTICS_DB_DATABASE_NAME}          the analytics database
 --   ${WINDOW_LO} / ${WINDOW_HI}            the created_at half-open window bounds

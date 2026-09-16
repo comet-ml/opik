@@ -100,6 +100,16 @@
 #                     deletion bridge and are never replayed onto the successor, so a retention sweep during the cutover
 #                     window leaks live across the swap. Asserts retention is paused (RETENTION_ENABLED=false on every
 #                     backend) for the whole window — a backend setting the script can't read.
+#   --confirm-columns-non-nullable  REQUIRED for every EXCHANGE path. Asserts spanColumnsNonNullable=true is live on
+#                     EVERY backend instance (the rolling restart has landed everywhere), so the read side already
+#                     speaks the successor's sentinel representation the instant the successor is live under the name
+#                     `spans`. An instance still reading false returns an absent end_time as 1970-01-01 instead of
+#                     null and gets absent-value filters and sorts wrong. The script cannot inspect backend config, so
+#                     the operator must assert it. What to assert on: the config read-back out of every pod, plus the
+#                     WRITE-side probe the Go/No-Go prescribes (write an in-progress span through the API and check the
+#                     epoch/NaN sentinel was physically stored — pre-swap a stale-false instance stores NULL instead,
+#                     so this discriminates). The READ-side read-back does NOT discriminate until after the swap: the
+#                     still-Nullable original answers null either way. See the runbook's "The one rolling restart".
 
 set -euo pipefail
 
@@ -121,6 +131,7 @@ SETTLE_TIMEOUT_MAX=7200   # its accepted ceiling; the validation below explains 
 CONFIRM_MAINTENANCE=0
 CONFIRM_DAOS_RETARGETED=0
 CONFIRM_RETENTION_PAUSED=0
+CONFIRM_COLUMNS_NON_NULLABLE=0
 
 # Stuck-ness thresholds for the replication queue, deliberately not flags: they describe what "a replica is genuinely
 # lagging" means, not a per-run choice. An entry that has sat this long, or retried this many times, is not the
@@ -162,6 +173,7 @@ while [[ $# -gt 0 ]]; do
         --confirm-maintenance) CONFIRM_MAINTENANCE=1; shift ;;
         --confirm-daos-retargeted) CONFIRM_DAOS_RETARGETED=1; shift ;;
         --confirm-retention-paused) CONFIRM_RETENTION_PAUSED=1; shift ;;
+        --confirm-columns-non-nullable) CONFIRM_COLUMNS_NON_NULLABLE=1; shift ;;
         --host) CH_HOST="${2:?"$1 requires a value"}"; shift 2 ;;
         --port) CH_PORT="${2:?"$1 requires a value"}"; shift 2 ;;
         --receive-timeout) RECEIVE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
@@ -280,6 +292,31 @@ if [[ "$WRAP_ONLY" != "1" && "$CONFIRM_RETENTION_PAUSED" != "1" ]]; then
     echo "ERROR: the EXCHANGE requires --confirm-retention-paused. Retention deletes bypass the deletion bridge, so a" >&2
     echo "       retention sweep during the cutover window would leak live across the swap. Pause retention" >&2
     echo "       (RETENTION_ENABLED=false on every backend) for the whole window, then re-run with the flag." >&2
+    exit 2
+fi
+# The successor stores end_time/ttft as non-nullable epoch/NaN sentinels; spanColumnsNonNullable is what makes the READ
+# side translate them back to null. The EXCHANGE is atomic and the flag is fleet config, so the flag must already be
+# true EVERYWHERE when the successor goes live under the name `spans` — an instance still reading false serves an absent
+# end_time as 1970-01-01 and gets absent-value filters and sorts wrong, silently, for as long as it lags.
+#
+# THIS GATE IS AN ASSERTION, NOT A CHECK, AND UNAVOIDABLY SO: the script speaks to ClickHouse, which holds no record of
+# what any backend instance believes. What the operator can assert it on is the config read-back out of every pod plus
+# the Go/No-Go's WRITE-side probe, which does discriminate pre-swap (a true instance stores the epoch/NaN sentinel into
+# the still-Nullable original; a false one stores NULL). The READ-side read-back discriminates only AFTER the swap,
+# which is why the runbook lists it as a post-swap item. Applies to every EXCHANGE path (not --wrap-only, which does no
+# data cutover). rollback.sh gates the reverse flip the same way, via --confirm-flag-reverted.
+if [[ "$WRAP_ONLY" != "1" && "$CONFIRM_COLUMNS_NON_NULLABLE" != "1" ]]; then
+    echo "ERROR: the EXCHANGE requires --confirm-columns-non-nullable. The successor stores an absent end_time/ttft as" >&2
+    echo "       an epoch/NaN sentinel, and databaseAnalyticsDataModel.spanColumnsNonNullable=true is what makes the" >&2
+    echo "       read side translate it back to null. Any instance still reading false will serve an absent end_time" >&2
+    echo "       as 1970-01-01 and apply absent-value filters and sorts wrongly, from the instant of the swap." >&2
+    echo "       Roll the flag out to true and land the restart on EVERY backend instance FIRST (it is write-compatible" >&2
+    echo "       with both schemas, so it is safe to flip before the swap), then confirm it two ways: read the env back" >&2
+    echo "       out of every pod, and write an in-progress span through the API and check the epoch/NaN sentinel was" >&2
+    echo "       physically stored — pre-swap a stale-false instance stores NULL there instead, so that probe" >&2
+    echo "       discriminates. See the runbook's 'The one rolling restart (spanColumnsNonNullable)'. A READ-side" >&2
+    echo "       read-back does NOT discriminate until after the swap (the still-Nullable original answers null either" >&2
+    echo "       way), which is why it is a post-swap Go/No-Go item rather than evidence for this flag." >&2
     exit 2
 fi
 

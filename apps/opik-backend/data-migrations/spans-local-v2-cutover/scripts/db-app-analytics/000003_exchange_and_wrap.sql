@@ -157,17 +157,20 @@ RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 TO ${ANALYTICS_DB_DATA
 -- the same project on DIFFERENT shards, and every cross-entity read the product makes (a trace and its spans, a
 -- project's usage rollups) is project-scoped. Keying both tables the same way keeps those reads single-shard.
 --
--- HARD PREREQUISITE, AND IT IS NOT YET SATISFIABLE: a Distributed table supports SELECT and INSERT but NOT mutations —
--- a lightweight DELETE returns "DELETE query is not supported" (code 36) and ALTER ... DELETE returns "Distributed
--- doesn't support mutations" (code 48). So the span delete cascade AND the retention sweep both break the moment this
--- wrap is applied. The traces cutover could apply its wrap because OPIK-7455 had already landed
--- databaseAnalyticsDataModel.tracesDistributedWrapEnabled, which retargets TraceDAO's mutations at `traces_local`.
--- THE SPANS EQUIVALENT (OPIK-7799) HAS NOT SHIPPED: there is no spansDistributedWrapEnabled in
--- DatabaseAnalyticsDataModelConfig, so SpanDAO has no way to target `spans_local` and no ClickHouseSpansTopologyHealthCheck
--- reports which side of the cutover an instance believes it is on. Until OPIK-7799 shipped the routing behind it, the honest state of this
--- block is "written, reviewed, and not runnable": exchange_and_wrap.sh requires --confirm-daos-retargeted for every
--- wrap path and that assertion cannot truthfully be made. The EXCHANGE above is the data cutover and leaves `spans` a
--- MergeTree where deletes still work; the wrap is a separate, gated step.
+-- HARD PREREQUISITE, SATISFIABLE BUT DELIBERATELY NOT SATISFIED IN THIS WINDOW: a Distributed table supports SELECT
+-- and INSERT but NOT mutations — a lightweight DELETE returns "DELETE query is not supported" (code 36) and
+-- ALTER ... DELETE returns "Distributed doesn't support mutations" (code 48). So the span delete cascade AND the
+-- retention sweep both break the moment this wrap is applied, on any instance not yet retargeted. The traces cutover
+-- could apply its wrap because OPIK-7455 had landed databaseAnalyticsDataModel.tracesDistributedWrapEnabled, which
+-- retargets TraceDAO's mutations at `traces_local`. OPIK-7799 has since landed the spans equivalent —
+-- spansDistributedWrapEnabled (default false) and SpanDAO#selectSpansMutationTable — so --confirm-daos-retargeted is
+-- an assertion an operator CAN now make, once the flag is true fleet-wide, and this block is runnable.
+--
+-- The runbook defers it anyway, for a reason about the rollout rather than this DDL: OPIK-7799 shipped no
+-- ClickHouseSpansTopologyHealthCheck, so nothing reports which side of the cutover an instance believes it is on and a
+-- flag/topology mismatch stays silent until a span delete fails. That probe is OPIK-8376. See the README's "the
+-- readiness gap that OPIK-7799 left open". The EXCHANGE above is the data cutover and leaves `spans` a MergeTree where
+-- deletes still work; the wrap is a separate, gated step this window does not take.
 --
 -- GAPLESS per node: build the Distributed wrapper under a temp name FIRST (its 'spans_local' target need not exist
 -- yet — Distributed resolves it lazily), then a SINGLE atomic multi-target RENAME rotates the data to `spans_local`

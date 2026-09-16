@@ -582,10 +582,14 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    running anything else.
    ```bash
    CLICKHOUSE_HOST=<host> CLICKHOUSE_PASSWORD=<pw> ./scripts/exchange_and_wrap.sh --database opik \
-       --backfill-start '<anchor from backfill.sh> UTC' --confirm-retention-paused
+       --backfill-start '<anchor from backfill.sh> UTC' --confirm-retention-paused \
+       --confirm-columns-non-nullable
    ```
-   Every EXCHANGE path requires: `--backfill-start` (for the final deletion replay) and `--confirm-retention-paused`
-   (retention deletes bypass the bridge, so a retention sweep in the window would leak across the swap).
+   Every EXCHANGE path requires three things: `--backfill-start` (for the final deletion replay),
+   `--confirm-retention-paused` (retention deletes bypass the bridge, so a retention sweep in the window would leak
+   across the swap) and `--confirm-columns-non-nullable` (the read side must already speak the successor's sentinel
+   representation the instant the successor is live — see
+   ["The one rolling restart"](#the-one-rolling-restart-spancolumnsnonnullable)).
 
    > **On spans, stop here by default.** `--with-wrap --confirm-maintenance --confirm-daos-retargeted` now works —
    > OPIK-7799 shipped `spansDistributedWrapEnabled` and the `SpanDAO` routing behind it — but the flag defaults to
@@ -808,6 +812,11 @@ capacity, so plan for that (see the end of this section).
 > [self-host troubleshooting guide](../../../opik-documentation/documentation/fern/docs-v2/self-host/troubleshooting.mdx)
 > for how and when to use them. What ended is only the **cutover's dependence** on raising one of them for the window
 > (OPIK-8239) — a dependence that never delivered what it promised; see "The final cutover window".
+
+`exchange_and_wrap.sh` will not run an `EXCHANGE` without `--confirm-columns-non-nullable`, which is the operator
+asserting this roll has landed everywhere. Like `--confirm-retention-paused` it is an assertion, not a check: ClickHouse
+holds no record of what a backend instance believes, so nothing the driver can query distinguishes a fleet that has
+rolled from one that has not.
 
 **It takes effect only on a backend restart — so confirm the restart finished before continuing.** The backend receives
 the flag through the container environment (`envFrom.configMapRef` under Helm), which Kubernetes injects at container
@@ -1705,7 +1714,7 @@ Three consequences to carry:
    the soak also holds `S` of parked data for its whole length, so the trade is explicit: a shorter soak frees the
    volume sooner and forecloses rollback sooner. **Shorten it knowingly if you must; do not skip the backup.** Skipping
    it is the one option that is not on the table: without `spans_pre_cutover_backup` there is no stage B, and on spans
-   stage B is the only rollback there is (stage C needs a wrap that OPIK-7799 has not enabled).
+   stage B is the only rollback this window can need (stage C reverses a wrap this window does not apply).
 
 **If the volume genuinely cannot hold both copies**, the answer is to grow the volume before the backfill, not to
 change the procedure. Every alternative shape
@@ -2801,8 +2810,10 @@ these is working the wrong problem.
       production, and confirm on staging under live ingest that it does not abort on ordinary churn). The **final**
       deletion replay is not covered by this gate, which samples before that statement is issued; what covers it is
       `lightweight_deletes_sync = 2` in its own block, asserted by the driver.
-- [ ] **`spanColumnsNonNullable = true` rolled out to every backend instance before the EXCHANGE** — confirmed live on
-      the whole fleet by a **positive** check, not by the absence of ingestion errors: write an in-progress span (no
+- [ ] **`spanColumnsNonNullable = true` rolled out to every backend instance before the EXCHANGE** —
+      `exchange_and_wrap.sh` enforces `--confirm-columns-non-nullable` on every EXCHANGE path, but that is an assertion;
+      this item is the real "it is actually true on every instance" verification. Confirm it on the whole fleet by a
+      **positive** check, not by the absence of ingestion errors: write an in-progress span (no
       `end_time`, and so no `ttft`) through the API and assert the epoch/NaN **sentinel** was stored for both — then
       repeat it as a read-back (`null`, not the sentinel) **after** the EXCHANGE, because until the swap the Nullable table
       answers `null` either way and the read-back proves nothing. A stale-`false` instance still writes

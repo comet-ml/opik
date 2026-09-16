@@ -175,11 +175,13 @@ recreate_backend
 
 # 8. Final delta + replay (the last write-facing step), then the EXCHANGE immediately after. The EXCHANGE is the data
 #    cutover and leaves spans a MergeTree so the backend's cascade deletes keep working; it also renames the displaced
-#    old data to spans_pre_cutover_backup. The wrap is NOT deferred here so much as unavailable — see the setup note.
-#    --confirm-retention-paused holds trivially (retention is disabled by default).
+#    old data to spans_pre_cutover_backup. --skip-wrap defers the wrap by decision, matching the runbook; since
+#    OPIK-7799 it is reachable, not unavailable — see the setup note.
+#    --confirm-retention-paused holds trivially (retention is disabled by default);
+#    --confirm-columns-non-nullable is what step 7's flag flip + restart above earned.
 $RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start> UTC'
 $RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfill_start> UTC' \
-    --confirm-retention-paused --skip-wrap
+    --confirm-retention-paused --confirm-columns-non-nullable --skip-wrap
 #    The settle gate polls (default 1800s on spans, against the traces runbook's 120s — the thresholds are sized for
 #    very large parts, which a local rehearsal does not have). Locally the queue drains immediately and the gate returns
 #    at once; that is the early-exit path, not a skipped gate. To see it actually poll, throttle or stop a replica.
@@ -240,9 +242,9 @@ live table too: it is a frozen copy while live `spans` keeps changing.
 
 ## Rehearsing rollback
 
-Rollback is driven by `rollback.sh`; pick the stage by how far the forward run got. **On spans only stages A and B are
-reachable** — stage C and `--unwrap-only` reverse a wrap that OPIK-7799 has not enabled, so no estate can be in the
-state they assert. Run them anyway once, to see their topology guards refuse cleanly; that refusal is the tested
+Rollback is driven by `rollback.sh`; pick the stage by how far the forward run got. **Only stages A and B apply to
+this rehearsal** — stage C and `--unwrap-only` reverse a wrap that `--skip-wrap` never applied, so the estate is not in
+the state they assert. Run them anyway once, to see their topology guards refuse cleanly; that refusal is the tested
 behaviour, not the promote.
 
 Stage B re-applies the **reverse deletion replay**, so to exercise it, delete some traces *after* the EXCHANGE — their

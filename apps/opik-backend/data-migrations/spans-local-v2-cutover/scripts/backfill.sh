@@ -535,7 +535,7 @@ run_backfill() {
     # which is the one case that most needs the diagnostic.
     mit_line="$(mit_assignment_lines "$sql" || true)"
     if [[ "$(grep -c . <<<"$mit_line" || true)" -ne 1 ]]; then
-        mit_require_one_assignment "$sql" "$block" || exit 2
+        mit_require_one_assignment "$sql" backfill || exit 2
         exit 2
     fi
     if [[ -z "$MAX_INSERT_THREADS" ]]; then
