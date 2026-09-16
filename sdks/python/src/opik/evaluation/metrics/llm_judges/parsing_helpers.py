@@ -1,8 +1,5 @@
 from typing import Any
-from collections.abc import Sequence
 import json
-import re
-
 import opik.exceptions as exceptions
 
 
@@ -46,54 +43,3 @@ def _extract_presumably_json_dict_or_raise(content: str) -> Any:
         raise exceptions.JSONParsingError(
             f"Failed to extract presumably JSON dictionary: {str(e)}"
         ) from e
-
-
-_NOT_A_TAG_NAME = re.compile(r"[\s<>]")
-
-
-def escape_closing_tags(value: object, tag_names: Sequence[str]) -> str:
-    """Rewrite closing delimiter tags found inside a value meant for a judge prompt.
-
-    Judge templates wrap per-call values in ``<tag>``/``</tag>`` pairs and tell the
-    judge those sections hold data rather than instructions. A value that carries a
-    closing tag can end its section early, which makes the rest of it read as prompt
-    structure, so neutralize those closings before interpolation.
-
-    Matching is case-insensitive and tolerates whitespace before ``>`` because a
-    judge model treats ``</OUTPUT>`` or ``</output >`` as a closing tag just as
-    readily as the lowercase form.
-
-    ``tag_names`` must be a non-empty collection of complete tag names. A bare
-    string raises rather than being iterated: iterating it yields single
-    characters, which would leave the caller's own ``</output>`` in place while
-    rewriting unrelated one-letter tags, inverting the control instead of
-    weakening it. An empty collection raises for the same kind of reason, since it
-    builds an empty alternative that matches the malformed closings no judge reads
-    as a terminator.
-
-    This is defense-in-depth on top of the system-prompt instruction, not a
-    breakout guarantee: it rewrites these forms and nothing else. It is also
-    unconditional, so a value that legitimately contains a closing tag (generated
-    code, XML templates) reaches the judge with a backslash inserted.
-    """
-    if isinstance(tag_names, str):
-        raise TypeError(
-            "tag_names must be a collection of tag names, not a single string; "
-            f"pass ({tag_names!r},) instead of {tag_names!r}."
-        )
-
-    names = tuple(tag_names)
-    if not names:
-        raise ValueError("tag_names must contain at least one complete tag name.")
-
-    for name in names:
-        if not name or _NOT_A_TAG_NAME.search(name):
-            raise ValueError(
-                f"{name!r} is not a usable tag name: it must be non-empty and "
-                "contain no whitespace or angle brackets."
-            )
-
-    closings = "|".join(re.escape(name) for name in names)
-    return re.sub(
-        rf"</\s*({closings})\s*>", r"<\\/\1>", str(value), flags=re.IGNORECASE
-    )
