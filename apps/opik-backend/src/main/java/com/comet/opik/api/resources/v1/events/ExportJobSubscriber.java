@@ -92,8 +92,8 @@ public class ExportJobSubscriber extends BaseRedisSubscriber<ExportMessage> {
     }
 
     private boolean isDisabled() {
-        if (!config.isEnabled()) {
-            log.info("Dataset export job subscriber is disabled, skipping lifecycle operation");
+        if (!config.isAnyEnabled()) {
+            log.info("Export job subscriber is disabled, skipping lifecycle operation");
             return true;
         }
         return false;

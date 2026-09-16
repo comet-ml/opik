@@ -1,5 +1,7 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.DatasetExportParams;
+import com.comet.opik.api.ExperimentItemsExportParams;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -23,6 +25,13 @@ public class ExportConfig implements StreamConfiguration {
 
     @Valid @JsonProperty
     private boolean enabled = true;
+
+    /**
+     * Experiment result export is switched separately from dataset export: the two surfaces ship independently,
+     * and the shared pipeline below (stream, TTL, part sizes) is the only thing they have in common.
+     */
+    @Valid @JsonProperty
+    private boolean experimentItemsEnabled = false;
 
     @Valid @NotBlank @JsonProperty
     private String streamName;
@@ -118,5 +127,25 @@ public class ExportConfig implements StreamConfiguration {
     @JsonIgnore
     public Codec getCodec() {
         return RedisStreamCodec.JAVA.getCodec();
+    }
+
+    /**
+     * Whether the given export type may be started. Each exportable surface is switched separately so they can
+     * be rolled out independently.
+     */
+    public boolean isEnabledFor(String exportType) {
+        return switch (exportType) {
+            case DatasetExportParams.TYPE -> enabled;
+            case ExperimentItemsExportParams.TYPE -> experimentItemsEnabled;
+            default -> false;
+        };
+    }
+
+    /**
+     * Whether any export type is switched on. The worker and the cleanup job are shared, so they run whenever at
+     * least one surface is enabled.
+     */
+    public boolean isAnyEnabled() {
+        return enabled || experimentItemsEnabled;
     }
 }

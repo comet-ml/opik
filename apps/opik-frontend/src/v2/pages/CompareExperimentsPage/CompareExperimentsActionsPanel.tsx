@@ -126,7 +126,7 @@ const CompareExperimentsActionsPanel: React.FC<
 }) => {
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
   const isExportJobEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.DATASET_EXPORT_ENABLED,
+    FeatureToggleKeys.EXPERIMENT_EXPORT_ENABLED,
   );
   const { toast } = useToast();
   const addExportJob = useAddExportJob();

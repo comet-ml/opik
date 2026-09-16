@@ -32,6 +32,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -77,7 +78,7 @@ class CsvExportServiceImplTest {
         ExportJob newJob = createJob(JOB_ID, ExportStatus.PENDING);
 
         // Mock: export is enabled
-        when(exportConfig.isEnabled()).thenReturn(true);
+        when(exportConfig.isEnabledFor(anyString())).thenReturn(true);
 
         // Mock: no existing jobs
         when(jobService.findInProgressJobs(any())).thenReturn(Mono.just(List.of()));
@@ -139,7 +140,7 @@ class CsvExportServiceImplTest {
     void startExport_shouldReturnExistingJob_whenJobAlreadyExists(ExportStatus status) {
         // Given
         ExportJob existingJob = createJob(JOB_ID, status);
-        when(exportConfig.isEnabled()).thenReturn(true);
+        when(exportConfig.isEnabledFor(anyString())).thenReturn(true);
         when(jobService.findInProgressJobs(any())).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
@@ -168,7 +169,7 @@ class CsvExportServiceImplTest {
     void startExport_shouldCheckInProgressJobsWithCorrectStatuses() {
         // Given
         ExportJob existingJob = createJob(JOB_ID, ExportStatus.PENDING);
-        when(exportConfig.isEnabled()).thenReturn(true);
+        when(exportConfig.isEnabledFor(anyString())).thenReturn(true);
         when(jobService.findInProgressJobs(any())).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
@@ -186,7 +187,7 @@ class CsvExportServiceImplTest {
     @Test
     void startExport_shouldReturnError_whenExportIsDisabled() {
         // Given
-        when(exportConfig.isEnabled()).thenReturn(false);
+        when(exportConfig.isEnabledFor(anyString())).thenReturn(false);
 
         // When
         Mono<ExportJob> result = service
@@ -198,7 +199,7 @@ class CsvExportServiceImplTest {
         // Then
         StepVerifier.create(result)
                 .expectErrorMatches(throwable -> throwable instanceof IllegalStateException &&
-                        throwable.getMessage().contains("Dataset export is disabled"))
+                        throwable.getMessage().contains("Export is disabled for type"))
                 .verify();
 
         // Verify no job service calls were made

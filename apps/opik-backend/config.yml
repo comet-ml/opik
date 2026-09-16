@@ -1054,6 +1054,10 @@ datasetExport:
   # Default: false
   # Description: Whether dataset export feature is enabled
   enabled: ${DATASET_EXPORT_ENABLED:-false}
+  # Default: false
+  # Description: Whether experiment results export is enabled. Separate from dataset export so the two surfaces
+  #              can be rolled out independently; both use the same job pipeline configured below.
+  experimentItemsEnabled: ${EXPERIMENT_EXPORT_ENABLED:-false}
   # Default: export-jobs
   # Description: Redis stream name for export jobs. Renamed from 'dataset-export' when the message payload's
   #              class discriminator changed: a shared stream would let mixed-version pods read each other's

@@ -106,9 +106,10 @@ class CsvExportServiceImpl implements CsvExportService {
 
     @Override
     public Mono<ExportJob> startExport(@NonNull ExportParams params, String resourceName) {
-        if (!exportConfig.isEnabled()) {
-            log.warn("CSV export is disabled; skipping '{}' export", params.exportType());
-            return Mono.error(new IllegalStateException("Dataset export is disabled"));
+        if (!exportConfig.isEnabledFor(params.exportType())) {
+            log.warn("CSV export is disabled for type '{}'; skipping", params.exportType());
+            return Mono.error(
+                    new IllegalStateException("Export is disabled for type '%s'".formatted(params.exportType())));
         }
 
         log.info("Starting CSV '{}' export", params.exportType());

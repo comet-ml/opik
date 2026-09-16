@@ -39,7 +39,7 @@ class ExportJobSubscriberTest {
     @Test
     void start_shouldSkipStartup_whenDisabled() {
         // Given
-        when(config.isEnabled()).thenReturn(false);
+        when(config.isAnyEnabled()).thenReturn(false);
         subscriber = spy(new ExportJobSubscriber(config, redisClient, jobService, csvProcessor));
 
         // When
@@ -52,7 +52,7 @@ class ExportJobSubscriberTest {
     @Test
     void stop_shouldSkipShutdown_whenDisabled() {
         // Given
-        when(config.isEnabled()).thenReturn(false);
+        when(config.isAnyEnabled()).thenReturn(false);
         subscriber = spy(new ExportJobSubscriber(config, redisClient, jobService, csvProcessor));
 
         // When
