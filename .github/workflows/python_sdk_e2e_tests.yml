@@ -69,8 +69,9 @@ jobs:
           include_guardrails: true
 
     run-e2e:
+        # No fork gate needed: the default success() check skips this whenever
+        # build-opik is skipped.
         needs: [select-matrix, build-opik]
-        if: ${{ github.event.pull_request.head.repo.fork != true }}
         name: Python SDK E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
         timeout-minutes: 30

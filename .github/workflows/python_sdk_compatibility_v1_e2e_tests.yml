@@ -69,8 +69,9 @@ jobs:
           include_guardrails: true
 
     run-compatibility-v1-e2e:
+        # No fork gate needed: the default success() check skips this whenever
+        # build-opik is skipped.
         needs: [select-matrix, build-opik]
-        if: ${{ github.event.pull_request.head.repo.fork != true }}
         name: Python SDK Compatibility V1.x E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
         # Only the "Publish Test Report" step needs these; keep them off the

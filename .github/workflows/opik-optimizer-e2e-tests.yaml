@@ -49,9 +49,9 @@ jobs:
 
     run-e2e-tests:
         name: Opik Optimizer E2E Tests Python ${{matrix.python_version}}
+        # No fork gate needed: the default success() check skips this whenever
+        # build-opik is skipped, and dataset-source-check in turn skips on this.
         needs: build-opik
-        # dataset-source-check needs this job, so it skips transitively.
-        if: ${{ github.event.pull_request.head.repo.fork != true }}
         runs-on: ubuntu-latest
         timeout-minutes: 40
 
