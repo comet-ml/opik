@@ -24,7 +24,7 @@ public class ExportConfig implements StreamConfiguration {
     public static final String PAYLOAD_FIELD = "message";
 
     @Valid @JsonProperty
-    private boolean enabled = true;
+    private boolean datasetEnabled = true;
 
     /**
      * Experiment result export is switched separately from dataset export: the two surfaces ship independently,
@@ -135,7 +135,7 @@ public class ExportConfig implements StreamConfiguration {
      */
     public boolean isEnabledFor(String exportType) {
         return switch (exportType) {
-            case DatasetExportParams.TYPE -> enabled;
+            case DatasetExportParams.TYPE -> datasetEnabled;
             case ExperimentItemsExportParams.TYPE -> experimentItemsEnabled;
             default -> false;
         };
@@ -146,6 +146,6 @@ public class ExportConfig implements StreamConfiguration {
      * least one surface is enabled.
      */
     public boolean isAnyEnabled() {
-        return enabled || experimentItemsEnabled;
+        return datasetEnabled || experimentItemsEnabled;
     }
 }

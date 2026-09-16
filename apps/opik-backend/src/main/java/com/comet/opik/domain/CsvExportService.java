@@ -94,7 +94,7 @@ class CsvExportServiceImpl implements CsvExportService {
     public CsvExportServiceImpl(
             @NonNull ExportJobService jobService,
             @NonNull RedissonReactiveClient redisClient,
-            @NonNull @Config("datasetExport") ExportConfig exportConfig,
+            @NonNull @Config("exportJobs") ExportConfig exportConfig,
             @NonNull LockService lockService,
             @NonNull FileService fileService) {
         this.jobService = jobService;

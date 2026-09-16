@@ -587,8 +587,8 @@ onlineScoring:
       pendingMessageDuration: # Empty - will use global default
       maxRetries: # Empty - will use global default
 
-datasetExport:
-  enabled: true
+exportJobs:
+  datasetEnabled: true
   experimentItemsEnabled: true
   streamName: 'dataset-export-test'
   consumerGroupName: 'dataset_export_consumers_test'

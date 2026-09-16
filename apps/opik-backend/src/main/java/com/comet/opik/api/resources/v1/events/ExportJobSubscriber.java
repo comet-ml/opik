@@ -28,7 +28,7 @@ public class ExportJobSubscriber extends BaseRedisSubscriber<ExportMessage> {
 
     @Inject
     public ExportJobSubscriber(
-            @NonNull @Config("datasetExport") ExportConfig config,
+            @NonNull @Config("exportJobs") ExportConfig config,
             @NonNull RedissonReactiveClient redisClient,
             @NonNull ExportJobService jobService,
             @NonNull CsvExportProcessor csvProcessor) {

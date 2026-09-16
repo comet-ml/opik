@@ -362,15 +362,16 @@ class ExportJobSubscriberResourceTest {
         @DisplayName("should verify subscriber is enabled by default")
         void shouldVerifySubscriberIsEnabled() {
             // Verify the subscriber is enabled in the test configuration
-            ExportConfig config = opikConfig.getDatasetExport();
-            assertThat(config.isEnabled()).isTrue();
+            ExportConfig config = opikConfig.getExportJobs();
+            assertThat(config.isDatasetEnabled()).isTrue();
+            assertThat(config.isExperimentItemsEnabled()).isTrue();
         }
 
         @Test
         @DisplayName("should verify stream configuration")
         void shouldVerifyStreamConfiguration() {
             // Get the ExportConfig from OpikConfiguration
-            ExportConfig config = opikConfig.getDatasetExport();
+            ExportConfig config = opikConfig.getExportJobs();
             assertThat(config.getStreamName()).isEqualTo("dataset-export-test");
             assertThat(config.getConsumerGroupName()).isNotNull();
             assertThat(config.getConsumerBatchSize()).isGreaterThan(0);

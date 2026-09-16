@@ -30,7 +30,7 @@ import lombok.extern.slf4j.Slf4j;
  * produced by a background consumer with no caller, so the decision belongs to the download, which does have one:
  * a permitted caller should receive the stored bytes and an unpermitted one the same rows with the rules applied
  * per cell, through the CSV parser so the rules cannot reach the delimiters. Left out because
- * {@code datasetExport.enabled} defaults to false, so the path is unreachable on a default deployment - it needs
+ * {@code exportJobs.datasetEnabled} defaults to false, so the path is unreachable on a default deployment - it needs
  * doing before the export feature is switched on anywhere, not before this merges.
  */
 @Slf4j

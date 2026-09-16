@@ -69,7 +69,7 @@ class CsvExportProcessorImpl implements CsvExportProcessor {
 
     private final @NonNull ExportSourceRegistry sourceRegistry;
     private final @NonNull FileService fileService;
-    private final @NonNull @Config("datasetExport") ExportConfig exportConfig;
+    private final @NonNull @Config("exportJobs") ExportConfig exportConfig;
 
     private static final String CSV_CONTENT_TYPE = "text/csv";
     private static final int S3_MIN_PART_SIZE = 5242880; // 5 MB - S3 requirement for non-final parts

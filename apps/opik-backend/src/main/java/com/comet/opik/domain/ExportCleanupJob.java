@@ -49,7 +49,7 @@ public class ExportCleanupJob extends Job implements InterruptableJob {
             @NonNull ExportJobService exportJobService,
             @NonNull FileService fileService,
             @NonNull LockService lockService,
-            @NonNull @Config("datasetExport") ExportConfig exportConfig) {
+            @NonNull @Config("exportJobs") ExportConfig exportConfig) {
         this.exportJobService = exportJobService;
         this.fileService = fileService;
         this.lockService = lockService;

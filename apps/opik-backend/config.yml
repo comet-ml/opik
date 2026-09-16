@@ -1050,10 +1050,10 @@ experimentExecution:
   batchCounterTtl: ${EXPERIMENT_EXECUTION_BATCH_COUNTER_TTL:-24h}
 
 # Configuration for Dataset Export
-datasetExport:
+exportJobs:
   # Default: false
   # Description: Whether dataset export feature is enabled
-  enabled: ${DATASET_EXPORT_ENABLED:-false}
+  datasetEnabled: ${DATASET_EXPORT_ENABLED:-false}
   # Default: false
   # Description: Whether experiment results export is enabled. Separate from dataset export so the two surfaces
   #              can be rolled out independently; both use the same job pipeline configured below.
@@ -1063,57 +1063,57 @@ datasetExport:
   #              class discriminator changed: a shared stream would let mixed-version pods read each other's
   #              payloads during a rolling upgrade, fail to decode them and drop the job. Separate streams keep
   #              each version reading only what it can parse.
-  streamName: ${DATASET_EXPORT_STREAM_NAME:-'export-jobs'}
+  streamName: ${EXPORT_JOBS_STREAM_NAME:-'export-jobs'}
   # Default: export-jobs-consumers
   # Description: Consumer group name for export job processing
-  consumerGroupName: ${DATASET_EXPORT_CONSUMER_GROUP_NAME:-'export-jobs-consumers'}
+  consumerGroupName: ${EXPORT_JOBS_CONSUMER_GROUP_NAME:-'export-jobs-consumers'}
   # Default: 10
   # Description: Maximum number of export jobs to process in a single batch
-  consumerBatchSize: ${DATASET_EXPORT_CONSUMER_BATCH_SIZE:-10}
+  consumerBatchSize: ${EXPORT_JOBS_CONSUMER_BATCH_SIZE:-10}
   # Default: 1s
   # Description: How often to poll Redis for new export jobs
-  poolingInterval: ${DATASET_EXPORT_POOLING_INTERVAL:-1s}
+  poolingInterval: ${EXPORT_JOBS_POOLING_INTERVAL:-1s}
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling)
-  longPollingDuration: ${DATASET_EXPORT_LONG_POLLING_DURATION:-5s}
+  longPollingDuration: ${EXPORT_JOBS_LONG_POLLING_DURATION:-5s}
   # Default: 3
   # Description: Maximum number of retry attempts for failed export jobs (1-10)
-  maxRetries: ${DATASET_EXPORT_MAX_RETRIES:-3}
+  maxRetries: ${EXPORT_JOBS_MAX_RETRIES:-3}
   # Default: 2
   # Description: Claim pending messages every N polling intervals
-  claimIntervalRatio: ${DATASET_EXPORT_CLAIM_INTERVAL_RATIO:-2}
+  claimIntervalRatio: ${EXPORT_JOBS_CLAIM_INTERVAL_RATIO:-2}
   # Default: 5m
   # Description: Time before export job message considered orphaned and eligible for claiming
-  pendingMessageDuration: ${DATASET_EXPORT_PENDING_MESSAGE_DURATION:-5m}
+  pendingMessageDuration: ${EXPORT_JOBS_PENDING_MESSAGE_DURATION:-5m}
   # Default: 10000
   # Description: Max number of entries (approx) when publishing to the Redis stream. Oldest are evicted if exceeded
-  streamMaxLen: ${DATASET_EXPORT_STREAM_MAX_LEN:-10000}
+  streamMaxLen: ${EXPORT_JOBS_STREAM_MAX_LEN:-10000}
   # Default: 100
   # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
-  streamTrimLimit: ${DATASET_EXPORT_STREAM_TRIM_LIMIT:-100}
+  streamTrimLimit: ${EXPORT_JOBS_STREAM_TRIM_LIMIT:-100}
   # Default: 24h
   # Description: Default time-to-live for exported CSV files before automatic cleanup
-  defaultTtl: ${DATASET_EXPORT_DEFAULT_TTL:-24h}
+  defaultTtl: ${EXPORT_JOBS_DEFAULT_TTL:-24h}
   # Default: 5MB (5242880 bytes - S3 minimum for non-final parts)
   # Description: Minimum part size for S3 multipart upload (in bytes). Must be >= 5242880 bytes.
   #              Values below 5242880 will be clamped to 5242880 at runtime.
-  minPartSize: ${DATASET_EXPORT_MIN_PART_SIZE:-5242880}
+  minPartSize: ${EXPORT_JOBS_MIN_PART_SIZE:-5242880}
   # Default: 10MB (10 * 1024 * 1024 = 10485760 bytes)
   # Description: Maximum part size for S3 multipart upload (in bytes). Must be >= minPartSize.
   #              Values below minPartSize will be clamped to minPartSize at runtime.
-  maxPartSize: ${DATASET_EXPORT_MAX_PART_SIZE:-10485760}
+  maxPartSize: ${EXPORT_JOBS_MAX_PART_SIZE:-10485760}
   # Default: 100
   # Description: Number of items to fetch per batch when streaming dataset items
-  itemBatchSize: ${DATASET_EXPORT_ITEM_BATCH_SIZE:-100}
+  itemBatchSize: ${EXPORT_JOBS_ITEM_BATCH_SIZE:-100}
   # Default: 5m
   # Description: Timeout for cleanup job execution (how long the cleanup can run)
-  cleanupTimeout: ${DATASET_EXPORT_CLEANUP_TIMEOUT:-5m}
+  cleanupTimeout: ${EXPORT_JOBS_CLEANUP_TIMEOUT:-5m}
   # Default: 1s
   # Description: How long to wait for acquiring the distributed lock for cleanup
-  cleanupLockWaitTime: ${DATASET_EXPORT_CLEANUP_LOCK_WAIT_TIME:-1s}
+  cleanupLockWaitTime: ${EXPORT_JOBS_CLEANUP_LOCK_WAIT_TIME:-1s}
   # Default: 100
   # Description: Batch size for cleanup job operations (number of jobs to process per batch). Must be between 10 and 1000.
-  cleanupBatchSize: ${DATASET_EXPORT_CLEANUP_BATCH_SIZE:-100}
+  cleanupBatchSize: ${EXPORT_JOBS_CLEANUP_BATCH_SIZE:-100}
 
 # Configuration for the Agent Insights report trigger queue (manual /trigger + daily cron enqueue here;
 # a bounded Redis consumer group performs the actual report calls)
@@ -1563,6 +1563,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not dataset export to CSV feature is enabled
   datasetExportEnabled: ${DATASET_EXPORT_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not experiment results export to CSV is enabled
+  experimentExportEnabled: ${EXPERIMENT_EXPORT_ENABLED:-"false"}
   # Default: true
   # Description: Whether the deployment is expected to produce demo project data on signup. When false, the FE skips the onboarding demo-loading screen and lets the user proceed to the empty workspace immediately.
   demoDataEnabled: ${TOGGLE_DEMO_DATA_ENABLED:-"true"}
@@ -2011,7 +2014,7 @@ redaction:
   # experiment they have only ever seen masked will therefore overwrite stored content with the replacement.
   # Out of scope here; it needs the write path to recognise the token or refuse the write, which is a separate
   # decision about how much editing such a caller should be able to do at all.
-  # NOT YET COVERED: the dataset CSV export (datasetExport.enabled, false by default) writes its file from a
+  # NOT YET COVERED: the CSV export jobs (exportJobs.datasetEnabled / exportJobs.experimentItemsEnabled, both false by default) write their file from a
   # background job with no caller, and the download streams those bytes without applying the rules. Enable the
   # export feature and an unpermitted caller can read stored content through it. Masking belongs on the download,
   # which does have a caller, applied per cell through the CSV parser so the rules cannot reach the delimiters.
