@@ -10,6 +10,7 @@ import com.comet.opik.api.AnnotationQueueUpdate;
 import com.comet.opik.api.LockResponse;
 import com.comet.opik.api.Project;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
@@ -337,6 +338,13 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
                         .orElseGet(() -> Mono.just(eligible)));
     }
 
+    /**
+     * Package-private for its unit test. The ceiling applies only to automated adds and the resource layer
+     * only ever passes {@code MANUAL}, so no request reaches this through the API; the routing pipeline that
+     * does is a separate change. Truncation also picks which items survive, by id, which stays easier to
+     * pin here than through an endpoint.
+     */
+    @VisibleForTesting
     static Set<UUID> fillToMaxItems(UUID queueId, Set<UUID> eligible, int maxItemsInQueue, long held) {
         long headroom = maxItemsInQueue - held;
 
