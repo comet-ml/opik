@@ -341,4 +341,19 @@ describe("AddToTestSuiteDialog", () => {
       );
     });
   });
+  it("should never send field mappings for a test suite", async () => {
+    render(<AddToTestSuiteDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Suite 1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to test suite" }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalled();
+    });
+
+    expect(mockAddTracesToDataset.mock.calls[0][0]).not.toHaveProperty(
+      "fieldMappings",
+    );
+  });
 });
