@@ -4,6 +4,7 @@ import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.AnnotationQueueAutomation;
 import com.comet.opik.api.annotationqueue.Conditions;
 import com.comet.opik.api.annotationqueue.ScoreCondition;
+import com.comet.opik.api.evaluators.AutomationRule;
 import com.comet.opik.api.evaluators.EvalTriggerScope;
 import com.comet.opik.domain.evaluators.AnnotationQueueAutomationMapper;
 import com.comet.opik.domain.evaluators.AutomationRuleAnnotationQueueRouterDAO;
@@ -305,7 +306,8 @@ public class AnnotationQueueAutomationService {
             // step can leave a row pointing at something already gone.
             routerDao.deleteByRuleIds(ruleIds);
             handle.attach(AutomationRuleProjectsDAO.class).deleteByRuleIds(Set.copyOf(ruleIds), workspaceId);
-            handle.attach(AutomationRuleDAO.class).deleteBaseRules(Set.copyOf(ruleIds), workspaceId);
+            handle.attach(AutomationRuleDAO.class).deleteBaseRules(Set.copyOf(ruleIds), workspaceId,
+                    AutomationRule.AutomationRuleAction.ANNOTATION_QUEUE_ROUTER.getAction());
             return null;
         });
     }

@@ -112,16 +112,26 @@ public interface AutomationRuleDAO {
     @SqlUpdate("UPDATE automation_rules SET project_id = NULL WHERE id = :id AND workspace_id = :workspaceId")
     int clearLegacyProjectId(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
 
+    /**
+     * Deletes parent rows of one action only.
+     *
+     * <p>The table holds every kind of rule and each caller owns one subtype, which it deletes separately.
+     * Without the action predicate a caller handed an id of the other kind would take the parent out from
+     * under a subtype row it does not know about, leaving that row unreachable: every read of this table
+     * inner-joins a subtype, so nothing would ever see it again.
+     */
     @SqlUpdate("""
             DELETE FROM automation_rules
             WHERE workspace_id = :workspaceId
+            AND action = :action
             <if(ids)> AND id IN (<ids>) <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     void deleteBaseRules(
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
-            @Bind("workspaceId") String workspaceId);
+            @Bind("workspaceId") String workspaceId,
+            @Bind("action") String action);
 
     @SqlQuery("""
             SELECT COUNT(DISTINCT rule.id)
