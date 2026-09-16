@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset aliaksandrk:000096_generalize_dataset_export_jobs
+--changeset aliaksandrk:000100_generalize_dataset_export_jobs
 --comment: Generalize dataset_export_jobs into export_jobs so experiment item exports reuse the same pipeline
 
 RENAME TABLE dataset_export_jobs TO export_jobs;
