@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.infrastructure.db.TestUuidV7TimestampValidatorFactory;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -23,7 +22,7 @@ class AnnotationQueueMaxItemsTest {
 
     // Production ids are UUID v7, and the ceiling orders by id when it truncates, so v4 would exercise a
     // different ordering than the one that ships.
-    private static final IdGenerator ID_GENERATOR = new IdGeneratorImpl(TestUuidV7TimestampValidatorFactory.create());
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private static final UUID QUEUE_ID = ID_GENERATOR.generateId();
 
