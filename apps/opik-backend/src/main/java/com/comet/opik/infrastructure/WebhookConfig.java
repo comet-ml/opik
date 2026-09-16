@@ -144,5 +144,11 @@ public class WebhookConfig implements StreamConfiguration {
         @Valid @JsonProperty
         @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
         private Duration metricsAlertJobLockWaitTimeout = Duration.seconds(1);
+
+        // Window used for a threshold config persisted without one, from before the write side validated it.
+        // Defaults to the same hour the alerts form offers as its own default.
+        @Valid @JsonProperty
+        @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
+        private Duration defaultAlertWindow = Duration.hours(1);
     }
 }

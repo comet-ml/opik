@@ -449,6 +449,58 @@ class AlertResourceTest {
         }
 
         @Test
+        @DisplayName("when a threshold config has no window, then return bad request")
+        void createAlert__whenThresholdConfigHasNoWindow__thenReturnBadRequest() {
+            // Such an alert used to persist and then fail on every run of MetricsAlertJob, so its owner had
+            // an alert that simply never fired and was never told why.
+            var mock = prepareMockWorkspace();
+
+            var threshold = AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                    .configValue(Map.of(
+                            NAME_CONFIG_KEY, "quality",
+                            THRESHOLD_CONFIG_KEY, "0.5",
+                            OPERATOR_CONFIG_KEY, MetricsAlertJob.Operator.LESS_THAN.getValue()))
+                    .build();
+            var trigger = AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                    .triggerConfigs(List.of(threshold))
+                    .build();
+
+            var alert = generateAlert().toBuilder().triggers(List.of(trigger)).build();
+
+            try (var response = alertResourceClient.createAlertWithResponse(alert, mock.getLeft(),
+                    mock.getRight())) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        @DisplayName("when a threshold config has no threshold, then return bad request")
+        void createAlert__whenThresholdConfigHasNoThreshold__thenReturnBadRequest() {
+            var mock = prepareMockWorkspace();
+
+            var threshold = AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                    .configValue(Map.of(
+                            NAME_CONFIG_KEY, "quality",
+                            WINDOW_CONFIG_KEY, "3600",
+                            OPERATOR_CONFIG_KEY, MetricsAlertJob.Operator.LESS_THAN.getValue()))
+                    .build();
+            var trigger = AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                    .triggerConfigs(List.of(threshold))
+                    .build();
+
+            var alert = generateAlert().toBuilder().triggers(List.of(trigger)).build();
+
+            try (var response = alertResourceClient.createAlertWithResponse(alert, mock.getLeft(),
+                    mock.getRight())) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
         @DisplayName("when group_index set on scope:project, then return bad request")
         void createAlert__whenGroupIndexOnScopeProject__thenReturnBadRequest() {
             var mock = prepareMockWorkspace();

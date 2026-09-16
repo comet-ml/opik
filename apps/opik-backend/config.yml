@@ -1855,6 +1855,9 @@ webhook:
     # Default: 1s
     # Description: Maximum time to wait for acquiring metrics alert job lock
     metricsAlertJobLockWaitTimeout: ${WEBHOOK_METRICS_ALERT_JOB_LOCK_WAIT_TIMEOUT:-1s}
+    # Default: 1h
+    # Description: Window used to evaluate a threshold alert whose config was persisted without one
+    defaultAlertWindow: ${WEBHOOK_METRICS_DEFAULT_ALERT_WINDOW:-1h}
 
 # Free Model configuration (admin-configured server-side LLM provider)
 # Note: The model name "opik-free-model" is hardcoded and cannot be changed.

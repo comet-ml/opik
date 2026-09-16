@@ -51,6 +51,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.AlertTriggerConfig.LEGACY_WINDOW_SECONDS_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.deserializeEventPayload;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter.prepareWebhookPayload;
@@ -266,6 +269,7 @@ class AlertServiceImpl implements AlertService {
 
         validateNoProjectScopeConflict(alert);
         validateGroupIndices(alert);
+        validateThresholdConfigs(alert);
         var newAlert = prepareAlert(alert, userName, workspaceId);
 
         return EntityConstraintHandler
@@ -285,6 +289,7 @@ class AlertServiceImpl implements AlertService {
 
         validateNoProjectScopeConflict(alert);
         validateGroupIndices(alert);
+        validateThresholdConfigs(alert);
 
         alert = alert.toBuilder()
                 .createdBy(existingAlert.createdBy())
@@ -532,6 +537,46 @@ class AlertServiceImpl implements AlertService {
                 if (config.type() == AlertTriggerConfigType.SCOPE_PROJECT) {
                     throw new BadRequestException(
                             "'group_index' must be null for 'scope:project' trigger configs; it applies as a global precondition, not as part of the boolean expression.");
+                }
+            }
+        }
+    }
+
+    // A threshold config with no threshold or no window cannot be evaluated: MetricsAlertJob needs both to
+    // build a condition. Such an alert used to persist happily and then fail on every run of the job, so its
+    // owner saw an alert that simply never fired. Rejecting it here is the only point the user finds out.
+    //
+    // Scoped to exactly the configs the job would evaluate, via the same mapping the job uses, so this never
+    // rejects a config that is inert anyway (a threshold config left on a non-metrics trigger, say).
+    private static void validateThresholdConfigs(Alert alert) {
+        if (alert.triggers() == null) {
+            return;
+        }
+        for (AlertTrigger trigger : alert.triggers()) {
+            if (trigger.triggerConfigs() == null || trigger.eventType() == null) {
+                continue;
+            }
+            var thresholdType = AlertTriggerConfigType.thresholdTypeFor(trigger.eventType());
+            if (thresholdType.isEmpty()) {
+                continue;
+            }
+            for (AlertTriggerConfig config : trigger.triggerConfigs()) {
+                if (config.type() != thresholdType.get()) {
+                    continue;
+                }
+                Map<String, String> configValue = Optional.ofNullable(config.configValue()).orElseGet(Map::of);
+                if (StringUtils.isBlank(configValue.get(THRESHOLD_CONFIG_KEY))) {
+                    throw new BadRequestException(
+                            "Missing config value for key '%s' in trigger config of type '%s'"
+                                    .formatted(THRESHOLD_CONFIG_KEY, config.type().getValue()));
+                }
+                // The legacy key counts: the job reads it, so an alert stored under it works and must stay
+                // editable. Only a config with no window at all is rejected.
+                if (StringUtils.isBlank(configValue.get(WINDOW_CONFIG_KEY))
+                        && StringUtils.isBlank(configValue.get(LEGACY_WINDOW_SECONDS_CONFIG_KEY))) {
+                    throw new BadRequestException(
+                            "Missing config value for key '%s' in trigger config of type '%s'"
+                                    .formatted(WINDOW_CONFIG_KEY, config.type().getValue()));
                 }
             }
         }

@@ -55,6 +55,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.AlertTriggerConfig.LEGACY_WINDOW_SECONDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
@@ -82,6 +83,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
             AlertEventType.TRACE_FEEDBACK_SCORE,
             AlertEventType.TRACE_THREAD_FEEDBACK_SCORE);
     private static final BigDecimal MILLISECONDS_PER_SECOND = BigDecimal.valueOf(1000);
+
     private volatile boolean interrupted = false;
 
     private final @NonNull WebhookConfig webhookConfig;
@@ -164,6 +166,13 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
     private Mono<Void> processAlert(Alert alert) {
         if (isInterrupted()) {
             log.info("Skipping alert '{}' due to job interruption", alert.id());
+            return Mono.empty();
+        }
+        // Reactor's Context rejects null values, so without this a malformed row raises an NPE from the
+        // contextWrite below and fails the alert there instead of being skipped here.
+        if (alert.workspaceId() == null) {
+            log.warn("Skipping alert '{}' (id: '{}') - no workspaceId", alert.name(), alert.id());
+            alertsSkipped.add(1);
             return Mono.empty();
         }
         // Create a unique lock key for this alert to prevent duplicate firing across instances
@@ -382,14 +391,9 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         Set<UUID> collected = AlertScopeUtils.collectProjectIds(projectId, trigger.triggerConfigs());
         List<UUID> projectIds = collected.isEmpty() ? null : List.copyOf(collected);
 
-        AlertTriggerConfigType thresholdConfigType = switch (trigger.eventType()) {
-            case TRACE_COST -> AlertTriggerConfigType.THRESHOLD_COST;
-            case TRACE_LATENCY -> AlertTriggerConfigType.THRESHOLD_LATENCY;
-            case TRACE_ERRORS -> AlertTriggerConfigType.THRESHOLD_ERRORS;
-            case TRACE_FEEDBACK_SCORE, TRACE_THREAD_FEEDBACK_SCORE -> AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE;
-            default -> throw new IllegalArgumentException(
-                    "Unsupported event type for metrics alerts: '%s'".formatted(trigger.eventType()));
-        };
+        AlertTriggerConfigType thresholdConfigType = AlertTriggerConfigType.thresholdTypeFor(trigger.eventType())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unsupported event type for metrics alerts: '%s'".formatted(trigger.eventType())));
 
         final List<UUID> finalProjectIds = projectIds;
         final AlertTriggerConfigType finalThresholdConfigType = thresholdConfigType;
@@ -425,13 +429,21 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         }
         BigDecimal threshold = new BigDecimal(thresholdString);
 
+        // Configs persisted before write-side validation existed may carry no window at all, or carry it
+        // under the legacy key. Throwing here only skipped the alert for good; every one of these evaluated
+        // to a permanently silent alert nobody was told about.
         var windowString = config.configValue().get(WINDOW_CONFIG_KEY);
         if (windowString == null) {
-            throw new IllegalArgumentException(
-                    "Missing config value for key '%s' in trigger of type '%s'"
-                            .formatted(WINDOW_CONFIG_KEY, thresholdConfigType));
+            windowString = config.configValue().get(LEGACY_WINDOW_SECONDS_CONFIG_KEY);
         }
-        long windowSeconds = Long.parseLong(windowString);
+        long windowSeconds;
+        if (windowString == null) {
+            windowSeconds = webhookConfig.getMetrics().getDefaultAlertWindow().toSeconds();
+            log.warn("No '{}' in trigger config '{}' of type '{}'; evaluating over the default of '{}'s",
+                    WINDOW_CONFIG_KEY, config.id(), thresholdConfigType, windowSeconds);
+        } else {
+            windowSeconds = Long.parseLong(windowString);
+        }
 
         String name = null;
         Operator operator = Operator.GREATER_THAN;

@@ -43,6 +43,8 @@ public record AlertTriggerConfig(
     public static final String PROJECT_IDS_CONFIG_KEY = "project_ids";
     public static final String THRESHOLD_CONFIG_KEY = "threshold";
     public static final String WINDOW_CONFIG_KEY = "window";
+    // Configs written before the key settled on "window" store it here; read-only, never written.
+    public static final String LEGACY_WINDOW_SECONDS_CONFIG_KEY = "window_seconds";
     public static final String NAME_CONFIG_KEY = "name";
     public static final String OPERATOR_CONFIG_KEY = "operator";
     // Comma-separated GuardrailType names (e.g. "PII,TOPIC"); empty/absent means all types.
