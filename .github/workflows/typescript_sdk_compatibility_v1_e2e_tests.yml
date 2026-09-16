@@ -65,8 +65,8 @@ jobs:
     uses: ./.github/workflows/build_e2e_docker.yaml
 
   run-compatibility-v1-e2e:
-    # No fork gate needed: the default success() check skips this whenever
-    # build-opik is skipped.
+    # No explicit if: needed here -- the default success() check skips this
+    # whenever build-opik is skipped.
     needs: [select-matrix, build-opik]
     name: TypeScript SDK Compatibility V1.x E2E Tests Node ${{matrix.node_version}}
     runs-on: ubuntu-latest

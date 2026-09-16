@@ -78,8 +78,9 @@ jobs:
 
   run_e2e_lib_integration:
     name: E2E Lib Integration Python ${{matrix.python_version}}
-    # No secrets gate needed: the default success() check skips this whenever
-    # build-opik is skipped, and build-opik carries the gate.
+    # No explicit if: needed here -- build-opik carries the secrets gate, and
+    # the default success() check skips this whenever build-opik is skipped.
+    # The needs: entries below stay as they are.
     needs: [has_needed_secrets, build-opik]
     runs-on: ubuntu-latest
     timeout-minutes: 30

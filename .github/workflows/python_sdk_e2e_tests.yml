@@ -69,8 +69,8 @@ jobs:
           include_guardrails: true
 
     run-e2e:
-        # No fork gate needed: the default success() check skips this whenever
-        # build-opik is skipped.
+        # No explicit if: needed here -- the default success() check skips this
+        # whenever build-opik is skipped.
         needs: [select-matrix, build-opik]
         name: Python SDK E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
