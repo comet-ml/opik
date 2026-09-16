@@ -181,10 +181,10 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
         },
       ],
     },
-    { enabled: scanIsOld && !isRunning },
+    { enabled: scanIsOld && !showRunning },
   );
   const recentTraceCount = recentTracesData?.total ?? 0;
-  const isStale = scanIsOld && !isRunning && recentTraceCount > 0;
+  const isStale = scanIsOld && !showRunning && recentTraceCount > 0;
   const staleDays = scanAt ? Math.floor((Date.now() - scanAt) / DAY_MS) : 0;
 
   // Eligibility gate: traces in the eligibility window, hour-bucketed like the
