@@ -63,6 +63,24 @@ export class DatasetItemsPage {
   }
 
   /**
+   * One item's cell for one of its data fields.
+   *
+   * Addressed by the table's own `data-cell-id` (`<rowId>_<columnId>`) rather
+   * than by position: dataset item columns are derived from the item's own
+   * keys, and their order is user-configurable and persisted, so an
+   * `nth-child` would read a different field the moment someone reorders the
+   * grid.
+   *
+   * The id is `<itemId>_data_<field>`, not `<itemId>_data.<field>`: the FE
+   * builds the column id as `data.<field>` (`COLUMN_DATA_ID`), and TanStack
+   * Table rewrites the dot to an underscore when it derives the cell id the
+   * table stamps. So neither half of this is the field name the SDK sent.
+   */
+  itemCell(itemId: string, field: string): Locator {
+    return this.itemRowById(itemId).locator(`[data-cell-id="${itemId}_data_${field}"]`);
+  }
+
+  /**
    * The dataset item ids the grid is currently rendering, in row order.
    *
    * Read from `data-row-id` rather than from cell text: a caller checking which

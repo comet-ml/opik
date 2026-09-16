@@ -1,6 +1,11 @@
 import atexit
+import datetime
+import enum
+import uuid
+from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException
+from opik import json_helpers
 
 from ..opik_factory import make_opik_client
 from ..schemas import (
@@ -9,11 +14,14 @@ from ..schemas import (
     DatasetInsertItemsResponse,
     DatasetInsertItemsSessionRequest,
     DatasetInsertItemsSessionResponse,
+    DatasetInsertTypedItemRequest,
+    DatasetInsertTypedItemResponse,
     DatasetReadItemsRequest,
     DatasetReadItemsResponse,
     DatasetReadWithMidReadInsertRequest,
     DatasetReadWithMidReadInsertResponse,
     DatasetResponse,
+    TypedValue,
 )
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -113,6 +121,84 @@ def insert_dataset_items_session(
     return DatasetInsertItemsSessionResponse(
         dataset_id=dataset_id,
         inserted=[len(call.items) for call in body.inserts],
+    )
+
+
+def _materialize(field: str, spec: TypedValue) -> Any:
+    """The real Python object a `TypedValue` describes.
+
+    Raises 422 rather than falling back to the JSON form on a value the kind
+    cannot be built from: a caller asking for a `uuid` and silently receiving
+    the string it sent would get a green test asserting nothing, because a
+    string round-trips trivially.
+    """
+    try:
+        if spec.kind == "float":
+            return float(spec.value)
+        if spec.kind == "uuid":
+            return uuid.UUID(spec.value)
+        if spec.kind == "datetime":
+            return datetime.datetime.fromisoformat(spec.value)
+        if spec.kind == "enum":
+            # A one-member Enum built here rather than a fixed catalogue, so the
+            # caller decides the value its member must serialise to.
+            return enum.Enum(f"{field.title()}Probe", {"MEMBER": spec.value}).MEMBER
+        if spec.kind == "set":
+            return set(spec.value)
+        if spec.kind == "tuple":
+            return tuple(spec.value)
+    except (TypeError, ValueError) as err:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"field '{field}': {spec.value!r} is not a valid {spec.kind} ({err})"
+            ),
+        ) from err
+
+    # Unreachable while `kind` is a Literal pydantic validates, which is the
+    # point: a kind added to the schema and not handled above must fail here
+    # rather than fall out of the function returning None and be inserted as a
+    # null the caller would have to notice.
+    raise HTTPException(
+        status_code=422, detail=f"field '{field}': unhandled kind {spec.kind}"
+    )
+
+
+@router.post(
+    "/insert-typed-item",
+    response_model=DatasetInsertTypedItemResponse,
+    status_code=200,
+)
+def insert_typed_dataset_item(
+    body: DatasetInsertTypedItemRequest,
+    x_opik_api_key: str | None = Header(default=None),
+) -> DatasetInsertTypedItemResponse:
+    """One `Dataset.insert([item])` whose content carries real Python types.
+
+    See `DatasetInsertTypedItemRequest` for why the types are built here rather
+    than sent. `accelerated` reports which encoder this process holds, which the
+    caller cannot otherwise know — it is diagnostic, and no behaviour here
+    depends on it.
+    """
+    content = {
+        field: _materialize(field, spec) for field, spec in body.typed_content.items()
+    }
+
+    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    try:
+        dataset = client.get_dataset(
+            name=body.dataset_name, project_name=body.project_name
+        )
+        dataset.insert([content], deduplication=body.deduplication)
+        dataset_id = str(dataset.id)
+    finally:
+        client.end(flush=True)
+        atexit.unregister(client.end)
+
+    return DatasetInsertTypedItemResponse(
+        dataset_id=dataset_id,
+        inserted=1,
+        accelerated=json_helpers.ACCELERATED,
     )
 
 
