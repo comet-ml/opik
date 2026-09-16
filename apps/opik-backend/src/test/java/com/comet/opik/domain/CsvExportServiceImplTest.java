@@ -198,8 +198,8 @@ class CsvExportServiceImplTest {
 
         // Then
         StepVerifier.create(result)
-                .expectErrorMatches(throwable -> throwable instanceof IllegalStateException &&
-                        throwable.getMessage().contains("Export is disabled for type"))
+                .expectErrorMatches(throwable -> throwable instanceof jakarta.ws.rs.ServerErrorException &&
+                        throwable.getMessage().contains("Export is not enabled for type"))
                 .verify();
 
         // Verify no job service calls were made

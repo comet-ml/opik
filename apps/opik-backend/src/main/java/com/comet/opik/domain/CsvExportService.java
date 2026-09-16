@@ -13,6 +13,8 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStreamReactive;
@@ -108,8 +110,10 @@ class CsvExportServiceImpl implements CsvExportService {
     public Mono<ExportJob> startExport(@NonNull ExportParams params, String resourceName) {
         if (!exportConfig.isEnabledFor(params.exportType())) {
             log.warn("CSV export is disabled for type '{}'; skipping", params.exportType());
-            return Mono.error(
-                    new IllegalStateException("Export is disabled for type '%s'".formatted(params.exportType())));
+            // A disabled surface is a deployment choice, not a server fault: report it as such rather than a 500.
+            return Mono.error(new ServerErrorException(
+                    "Export is not enabled for type '%s' on this installation".formatted(params.exportType()),
+                    Response.Status.NOT_IMPLEMENTED));
         }
 
         log.info("Starting CSV '{}' export", params.exportType());
