@@ -11,28 +11,22 @@
 --   ../delta_replay.sh --database opik --backfill-start '2025-06-01 12:00:00.000000 UTC'
 -- The ' UTC' marker is mandatory: the driver refuses an anchor without it, because the bounds below parse the
 -- value as UTC and one captured elsewhere would shift them silently.
--- The surrounding config operations (buffer raise/restore) and the go/no-go checkpoint stay with the operator, where
--- situational awareness matters most — those are config/judgement, not SQL. The driver invokes clickhouse-client with
--- --time, so it prints each statement's elapsed seconds to stderr (delta-insert first, deletion replay second); the
--- second value is the replay measurement in step 5. A bare --query prints no timing, hence the flag.
+-- The go/no-go checkpoint between the steps stays with the operator, where situational awareness matters most — that is
+-- judgement, not SQL. The driver invokes clickhouse-client with --time, so it prints each statement's elapsed seconds
+-- to stderr (delta-insert first, deletion replay second); the second value is the replay measurement in step 4. A bare
+-- --query prints no timing, hence the flag.
 
 -- Step 1: BACKFILL_START is the timestamp captured BEFORE the backfill began. backfill.sh prints it at startup
 -- ("RECORD backfill_start=..."); if you ran the backfill manually, use the now64(6, 'UTC') you captured before the first
 -- INSERT. The delta and the replay both key off this single anchor, so writes during the whole backfill window are
 -- covered.
 
--- Step 2: Raise the async-insert buffer ceiling so the buffer can absorb the cutover window. Set
--- databaseAnalytics.asyncInsertBusyTimeoutMaxMs ~= 10000 (env ANALYTICS_DB_ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS) and roll
--- it out (config push + rolling restart, OR a session-level SET on a dedicated cutover connection). Because
--- async_insert_use_adaptive_busy_timeout=1, this only widens the buffer while rows are queued. VERIFY the widening
--- took effect before proceeding — see README.
-
--- Step 3: Delta-insert — re-copy every row written during the backfill window. Anchored on
+-- Step 2: Delta-insert — re-copy every row written during the backfill window. Anchored on
 -- created_at OR last_updated_at >= backfill_start (NOT last_updated_at alone): last_updated_at is client-supplied on the
 -- batch-ingest path, so it is not a reliable "changed since" signal by itself. Every trace write sets EITHER a fresh
 -- server created_at (batch-ingest path) OR a fresh server last_updated_at (create/update merge paths), so the union is
 -- complete. ReplacingMergeTree dedups the re-copied rows against the backfilled ones (newest last_updated_at wins).
--- Uses ${BACKFILL_START}. SETTINGS max_insert_block_size bounds per-block memory as in step 1, and
+-- Uses ${BACKFILL_START}. SETTINGS max_insert_block_size bounds per-block memory as in the backfill (000001), and
 -- max_partitions_per_insert_block bounds how many partitions one block may span — a CORRECTNESS gate here, not a
 -- tuning knob, and it is NOT optional just because the delta is smaller than the backfill. This INSERT writes into the
 -- same weekly-partitioned shadow, and the last_updated_at arm re-copies UPDATES TO OLD ROWS, so a far-future-id row
@@ -122,7 +116,7 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
          log_comment = 'traces_local_v2_cutover:delta_insert';
 -- >>> END delta-insert
 
--- Step 4: Deletion replay — remove from the destination every row that was deleted on the source since backfill_start
+-- Step 3: Deletion replay — remove from the destination every row that was deleted on the source since backfill_start
 -- AND is still deleted there. Single FULL-KEY branch: since OPIK-7483 every trace delete resolves its owning project(s)
 -- and deletes each under the full (workspace_id, project_id, id) key — there is no project-less delete path, so no
 -- deletion event is ever bridged with an empty project_id for source_table='traces' (a pre-cutover prereq asserts the
@@ -132,7 +126,9 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
 -- during the window (client-supplied ids; the delete is a mask, a newer insert wins under FINAL). Such an id is bridged
 -- as deleted but is LIVE again on the source, and the backfill/delta already copied its live version. Deleting it by key
 -- would drop a row that is live on the source — silent data loss. So the replay deletes only ids that are NOT currently
--- live on the source (mask-honored). The `id IN (deleted_ids since anchor)` bound keeps the deleted-id set tiny
+-- live on the source (mask-honored). The guard covers a second case since OPIK-8141: capture runs before the delete, so
+-- the bridge can name an id whose delete then errored and is still live on the source. Same arm, same reason.
+-- The `id IN (deleted_ids since anchor)` bound keeps the deleted-id set tiny
 -- (retention is off, so these are user-scale deletes); `traces` has no id skip index (000088 indexes only
 -- created_at/last_updated_at — id minmax/bloom indexes exist only on traces_local_v2), so this source lookup is a
 -- bounded id-filtered read of that tiny set, not a value-indexed prune of the full `traces` table.
@@ -142,7 +138,7 @@ SETTINGS max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
 -- lightweight_deletes_sync = 2: block until the delete mutation has completed on EVERY replica, not just the one that
 -- accepted it. The mutation is otherwise asynchronous, so without this the verify step (and the EXCHANGE) could run
 -- against a replica where the mask is not yet applied — a false mismatch, or worse an incomplete cutover.
--- Uses ${BACKFILL_START}. Retention is disabled everywhere (see step 6), so this is user-scale volume — a single
+-- Uses ${BACKFILL_START}. Retention is disabled everywhere (see step 5), so this is user-scale volume — a single
 -- mutation. If it is ever large (e.g. retention enabled), bound each mutation by a created_at week (the non-wrapping,
 -- minmax-indexed slice backfill.sh uses) and loop the weeks — NOT toMonday(id_at), which wraps far-future/epoch ids
 -- (OPIK-7456) and no longer matches the successor's honest-Date32 partition expression.
@@ -185,14 +181,18 @@ SETTINGS allow_nondeterministic_mutations = 1,
          log_comment = 'traces_local_v2_cutover:deletion_replay';
 -- >>> END deletion-replay
 
--- Step 5: Measure the replay. Compare its wall time against the buffer window (must fit with margin — acceptance
--- criterion). Re-run steps 3-4 if new rows/deletes accumulated during the replay itself; convergence is fast because
--- the buffer is holding new writes.
+-- Step 4: Measure the replay. Its wall time is the first half of the final-delta -> EXCHANGE gap (exchange_and_wrap.sh
+-- reports the second half, its own run through the swap), and that gap is where tail writes are left behind
+-- (OPIK-8238), so keeping it short keeps that set small. Re-run
+-- steps 2-3 if new rows/deletes accumulated during the replay itself. Note the anchor is fixed, so a re-run re-copies
+-- the WHOLE window rather than only what is new — the statement does not get cheaper, and ReplacingMergeTree dedups the
+-- re-copies. What shrinks is the residual: after each pass, only the writes that arrived during that pass are uncaught.
 
--- Step 6 (retention — see README): Data Retention is disabled in every deployment (RETENTION_ENABLED=false), so the
+-- Step 5 (retention — see README): Data Retention is disabled in every deployment (RETENTION_ENABLED=false), so the
 -- retention delete path does not fire during the cutover. The only deletes in this window are user-initiated, and those
 -- ARE captured by the bridge. If retention is ever enabled, pause it for the window (or land retention-path capture).
 
 -- rollback: none for the delta-insert (it only adds newest versions that ReplacingMergeTree dedups); the replay is
---           idempotent. If aborting the cutover here, TRUNCATE traces_local_v2 (step 1 rollback) and restore the buffer
---           ceiling (step 2, reverse). The live `traces` table is still untouched until the EXCHANGE in step 3.
+--           idempotent. If aborting the cutover here, TRUNCATE traces_local_v2 (rollback.sh --stage A) and see the
+--           README on the traceColumnsNonNullable revert and sentinel repair that an abandoned run still owes. The
+--           live `traces` table is untouched until the EXCHANGE in 000003.

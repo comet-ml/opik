@@ -83,6 +83,31 @@ export class TracePanelPage {
     return this.root.getByText(value);
   }
 
+  /**
+   * The detail half of the panel — the pane that renders whichever entity is
+   * selected in the span tree, as opposed to the tree itself.
+   */
+  get dataViewer(): Locator {
+    return this.root.locator('#data-viewer');
+  }
+
+  /**
+   * The estimated-cost stat in the data viewer's header row, as it is formatted.
+   *
+   * Scoped to the viewer, not the whole panel: the span tree renders a cost per
+   * node too, so a panel-wide lookup matches the tree row and the header both.
+   * Exact, not substring: `$3` must not pass for `$30`, and `$6` must not pass
+   * for `$6.25`. Whose cost it reads follows the panel's own selection — the
+   * trace's rolled-up total while the trace is selected, that span's own once a
+   * span is. `TraceStatsDisplay` carries no `data-testid`, so the formatted
+   * amount is the handle; adding one is a worthwhile follow-up, but a spec
+   * verified against a deployed build cannot depend on an attribute that build
+   * does not have.
+   */
+  estimatedCost(formatted: string): Locator {
+    return this.dataViewer.getByText(formatted, { exact: true });
+  }
+
   // --- Attachments ---
 
   /**
@@ -265,6 +290,49 @@ export class TracePanelPage {
    */
   feedbackScoreRow(scoreName: string): Locator {
     return this.feedbackScoresTabPanel.getByRole('row').filter({ hasText: scoreName });
+  }
+
+  /**
+   * Every score table rendered on the Feedback scores tab.
+   *
+   * The tab renders a "Trace scores" table, and a second "Span scores" one when
+   * the trace's spans carry scores of their own. Neither is labelled in the DOM,
+   * so a spec that means "the trace's own scores" and wants an exhaustive row
+   * assertion should assert this is exactly 1 first — otherwise the row
+   * locators below silently range over both tables' rows.
+   */
+  feedbackScoreTables(): Locator {
+    return this.feedbackScoresTabPanel.getByRole('table');
+  }
+
+  /**
+   * Every data row on the Feedback scores tab, for counting.
+   *
+   * `[data-row-id]` is what makes this the rows and not the header: the shared
+   * `DataTable` stamps it on body rows only.
+   */
+  feedbackScoreRows(): Locator {
+    return this.feedbackScoresTabPanel.locator('tbody tr[data-row-id]');
+  }
+
+  /**
+   * The row for one score, addressed by identity rather than by text.
+   *
+   * This table's row id IS the score name, so the attribute match is exact —
+   * unlike {@link feedbackScoreRow}'s `hasText`, which also matches a score
+   * whose name merely contains this one.
+   */
+  feedbackScoreRowByName(scoreName: string): Locator {
+    return this.feedbackScoresTabPanel.locator(
+      `tbody tr[data-row-id="${scoreName}"]`,
+    );
+  }
+
+  /** The Score cell of one row — `<rowId>_value`, the cell id `DataTable` stamps. */
+  feedbackScoreValueCell(scoreName: string): Locator {
+    return this.feedbackScoresTabPanel.locator(
+      `td[data-cell-id="${scoreName}_value"]`,
+    );
   }
 
   /**

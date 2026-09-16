@@ -58,6 +58,7 @@ services:
       - clickhouse-server:/var/log/clickhouse-server/:type=volume,source=~/opik/clickhouse/logs
       - clickhouse-config:/etc/clickhouse-server/config.d
       - ./clickhouse_config/users.d/enable_time_type.xml:/etc/clickhouse-server/users.d/enable_time_type.xml
+      - ./clickhouse_config/users.d/distributed_insert_queue.xml:/etc/clickhouse-server/users.d/distributed_insert_queue.xml
     healthcheck:
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping" ]
       interval: 1s
@@ -107,7 +108,7 @@ services:
       - zookeeper:/bitnami/zookeeper
 
   minio:
-    image: minio/minio:RELEASE.2025-03-12T18-04-18Z
+    image: quay.io/minio/minio:RELEASE.2025-03-12T18-04-18Z
     pull_policy: always
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
@@ -123,7 +124,7 @@ services:
       - minio-data:/data
 
   mc:
-    image: minio/mc:RELEASE.2025-03-12T17-29-24Z
+    image: quay.io/minio/mc:RELEASE.2025-03-12T17-29-24Z
     pull_policy: always
     depends_on:
       - minio
@@ -189,8 +190,10 @@ services:
       ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE: ${ANALYTICS_DB_DATA_MODEL_TRACE_COLUMNS_NON_NULLABLE:-false}
       ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE: ${ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE:-false}
       # Flip TRACES_DISTRIBUTED_WRAP_ENABLED to true in lockstep with applying the Distributed wrap: it routes trace
-      # delete/retention mutations to traces_local, since a Distributed traces rejects mutations.
+      # delete/retention mutations to traces_local, since a Distributed traces rejects mutations. The SPANS sibling
+      # does the same for spans/spans_local and flips with the spans wrap, independently.
       ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED: ${ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED:-false}
+      ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED: ${ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED:-false}
       # Readiness probes for the Hyperscale topology, both off for the single-node Compose stack: the cluster probe
       # checks the Distributed cluster definition is visible, the cold-storage probe checks the cold_s3 tiered disk.
       ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED: ${ANALYTICS_DB_CLUSTER_HEALTH_CHECK_ENABLED:-false}

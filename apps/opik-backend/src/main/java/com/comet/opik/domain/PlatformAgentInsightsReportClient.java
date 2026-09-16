@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.infrastructure.AgentInsightsReportConfig;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -53,9 +54,14 @@ public class PlatformAgentInsightsReportClient implements AgentInsightsReportCli
         try (Response response = httpClient.target(config.getTriggerUrl())
                 .request(MediaType.APPLICATION_JSON)
                 .post(Entity.json(payload))) {
+            if (response.getStatus() == Response.Status.PAYMENT_REQUIRED.getStatusCode()) {
+                throw new AgentInsightsTriggerException(AgentInsightsJob.FailureReason.OUT_OF_CREDITS,
+                        "Agent Insights trigger rejected for report '%s': insufficient credits"
+                                .formatted(reportId));
+            }
             if (response.getStatus() >= 300) {
                 // Signal failure to the subscriber, which logs and drops the run (at-most-once).
-                throw new IllegalStateException(
+                throw new AgentInsightsTriggerException(AgentInsightsJob.FailureReason.DID_NOT_START,
                         "Agent Insights trigger returned %d for report '%s'".formatted(response.getStatus(),
                                 reportId));
             }

@@ -1,6 +1,7 @@
-export { test, expect } from './enriched-datasets.fixture';
+export { test, expect } from './project-scoped-dashboard.fixture';
 export type {
   OauthProviderSeed,
+  UnreachableProviderSeed,
   ProviderKeysFixture,
   ProviderKeyFixtures,
 } from './provider-key.fixture';
@@ -95,7 +96,7 @@ export type {
 } from './token-usage-spans.fixture';
 export type { AutomationRulesCleanupFixtures } from './automation-rules.fixture';
 export type {
-  ProjectMetricDaySeed,
+  ProjectMetricHourSeed,
   ProjectMetricSpansRef,
   ProjectMetricSpansFixtures,
 } from './project-metric-spans.fixture';
@@ -114,8 +115,49 @@ export type {
 } from './alert.fixture';
 export { ALERT_EVENT_TYPE, ALERT_EVENT_TITLE } from './alert.fixture';
 export type {
-  EnrichedDatasetSeedRef,
-  EnrichedDatasetsRef,
-  EnrichedDatasetsFixtures,
-} from './enriched-datasets.fixture';
+  ModelCostSpanSeed,
+  ModelCostSpansRef,
+  ModelCostSpansFixtures,
+} from './model-cost-spans.fixture';
+export type {
+  SummarisedDatasetShape,
+  SummarisedDatasetRef,
+  SummarisedDatasetsRef,
+  SummarisedDatasetsFixtures,
+} from './summarised-datasets.fixture';
+export { SUMMARISED_DATASET_SHAPES } from './summarised-datasets.fixture';
+export type {
+  TimedThreadRef,
+  DurationThreadsRef,
+  TimedThreadsFixtures,
+} from './timed-threads.fixture';
+export type {
+  PagedSpansRef,
+  FarFuturePagedSpanRef,
+  PagedSpansFixtures,
+} from './paged-spans.fixture';
+export type {
+  SpanKpiPeriodExpectation,
+  SpanKpiSpansRef,
+  SpanKpiSpansFixtures,
+} from './span-kpi-cards.fixture';
+export type {
+  FarFutureErrorTracesRef,
+  FarFutureErrorTracesFixtures,
+} from './far-future-error-traces.fixture';
+export type {
+  WeeklyMetricDaySeed,
+  WeeklyMetricSpansRef,
+  WeeklyMetricSpansFixtures,
+} from './weekly-metric-spans.fixture';
+export type {
+  CachedTokenSpanSeed,
+  CachedTokenSpansRef,
+  CachedTokenSpansFixtures,
+} from './cached-token-spans.fixture';
+export { CACHED_TOKENS_KEY } from './cached-token-spans.fixture';
+export type {
+  ProjectScopedDashboardRef,
+  ProjectScopedDashboardFixtures,
+} from './project-scoped-dashboard.fixture';
 export type { ProjectRef } from '../core/backend';

@@ -1,25 +1,21 @@
-import { test, expect } from '@playwright/test';
-import type { Page, Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { DatasetItemsPage } from './dataset-items.page';
 
 /**
- * Column ids of the list table, as `DatasetListPage` declares them. They are
- * also the second half of every `data-cell-id`, so a cell is addressed by
- * (dataset id, column id) rather than by position — column order is
- * user-configurable and persisted, so `nth-child` would be addressing whatever
- * the last user dragged into place.
+ * Column ids on the Datasets list, as `DatasetListPage`'s `DEFAULT_COLUMNS`
+ * declares them. The DataTable stamps `data-cell-id="<rowId>_<columnId>"`, so
+ * these are how a cell is addressed by identity — column ORDER is
+ * user-configurable and persisted per workspace, which makes any positional
+ * selector (`td:nth-child(4)`) wrong for a different user on the same page.
  */
-export const DATASET_COLUMN = {
-  itemCount: 'dataset_items_count',
-  mostRecentExperiment: 'most_recent_experiment_at',
-  mostRecentOptimization: 'most_recent_optimization_at',
-} as const;
-
-export type DatasetColumnId = (typeof DATASET_COLUMN)[keyof typeof DATASET_COLUMN];
-
-/** What a time column renders when the dataset has no such timestamp. */
-export const EMPTY_CELL = '-';
+export type DatasetColumnId =
+  | 'name'
+  | 'description'
+  | 'dataset_items_count'
+  | 'most_recent_experiment_at'
+  | 'most_recent_optimization_at'
+  | 'last_updated_at';
 
 export class DatasetsPage {
   private projectId: string | null = null;
@@ -48,6 +44,75 @@ export class DatasetsPage {
   }
 
   /**
+   * A single cell of a dataset's row, addressed by dataset id and column id
+   * rather than by position — `data-cell-id` is `<rowId>_<columnId>`, and the
+   * row id is the dataset id (`getRowId` on the page).
+   *
+   * Takes the id rather than the name because a caller reading a computed
+   * column already knows which dataset it seeded, and an id cannot be
+   * ambiguous the way a name-matching filter can.
+   */
+  datasetCell(datasetId: string, column: DatasetColumnId): Locator {
+    return this.page.locator(
+      `tbody tr[data-row-id="${datasetId}"] [data-cell-id="${datasetId}_${column}"]`,
+    );
+  }
+
+  /**
+   * The rendered text of one cell, trimmed.
+   *
+   * Asserts the locator resolved to exactly one element first: a duplicated
+   * row or a column rendered twice would otherwise be silently reduced to
+   * whichever matched first, and the test would report on a cell it never
+   * meant to read.
+   */
+  async datasetCellText(datasetId: string, column: DatasetColumnId): Promise<string> {
+    return test.step(`read the ${column} cell of dataset ${datasetId}`, async () => {
+      const cell = this.datasetCell(datasetId, column);
+      await expect(cell).toHaveCount(1);
+      return (await cell.innerText()).trim();
+    });
+  }
+
+  /** The Columns dropdown trigger in the list toolbar. */
+  get columnsButton(): Locator {
+    return this.page.getByTestId('columns-button');
+  }
+
+  /**
+   * Turn a column on or off through the Columns dropdown, by its visible label.
+   *
+   * Idempotent, and asserts the checkbox's starting state before clicking, so a
+   * regression that renders the menu out of sync with the table fails here
+   * rather than quietly toggling the column the wrong way.
+   *
+   * Each row is a Radix `CheckboxItem`, but `SortableMenuItem` spreads dnd-kit's
+   * sortable attributes over it, and those set `role="button"` — so the row is
+   * addressed as a button and its state read from the checkbox it wraps, not
+   * from a `menuitemcheckbox` role that never reaches the DOM. Neither carries
+   * a data-testid. `exact` matching is required because "Most recent
+   * experiment" and "Most recent optimization" share a prefix.
+   */
+  async setColumnEnabled(label: string, enabled: boolean): Promise<void> {
+    return test.step(`set column "${label}" enabled=${enabled}`, async () => {
+      await this.columnsButton.click();
+      const menu = this.page.getByRole('menu');
+      const item = menu.getByRole('button', { name: label, exact: true });
+      await expect(item).toHaveCount(1);
+      const checkbox = item.getByRole('checkbox');
+      if ((await checkbox.isChecked()) !== enabled) {
+        await item.click();
+      }
+      await expect(checkbox).toBeChecked({ checked: enabled });
+      // The menu keeps itself open on select (`onSelect` is prevented) so a
+      // caller can toggle several columns; close it explicitly rather than
+      // leaving an overlay across the table the next assertion has to read.
+      await this.page.keyboard.press('Escape');
+      await expect(item).toBeHidden();
+    });
+  }
+
+  /**
    * The "Item count" cell of a dataset's row, as rendered.
    *
    * Addressed by the table's own `data-cell-id` (`<rowId>_<columnId>`) rather
@@ -60,55 +125,6 @@ export class DatasetsPage {
    */
   datasetItemCount(name: string): Locator {
     return this.datasetRow(name).locator('[data-cell-id$="_dataset_items_count"]');
-  }
-
-  /**
-   * One cell of one dataset's row, addressed by identity: the shared DataTable
-   * stamps `data-row-id="<datasetId>"` on the row and
-   * `data-cell-id="<datasetId>_<columnId>"` on the cell.
-   *
-   * Callers should assert `toHaveCount(1)` before reading it, so an ambiguous
-   * match fails loudly instead of silently testing some other row.
-   */
-  cell(datasetId: string, columnId: DatasetColumnId): Locator {
-    return this.page.locator(
-      `tbody tr[data-row-id="${datasetId}"] td[data-cell-id="${datasetId}_${columnId}"]`,
-    );
-  }
-
-  /**
-   * Turn on a column that is not in the default selection, via the Columns
-   * picker.
-   *
-   * Selection lives in localStorage, so a fresh browser context always starts
-   * from the default set — a test that needs an optional column must enable it
-   * rather than assume a previous run left it on.
-   *
-   * The entries are Radix checkbox menu items, but `SortableMenuItem` spreads
-   * dnd-kit's sortable attributes over them, and those set `role="button"`.
-   * So each one reports as a button (named for the column) wrapping the
-   * checkbox that carries the state — not as a `menuitemcheckbox`.
-   */
-  async showColumn(label: string): Promise<void> {
-    return test.step(`Enable the "${label}" column`, async () => {
-      await this.page.getByTestId('columns-button').click();
-      const menu = this.page.getByRole('menu');
-      await menu.waitFor({ state: 'visible' });
-
-      const entry = menu.getByRole('button', { name: label, exact: true });
-      const toggle = entry.getByRole('checkbox');
-      if (!(await toggle.isChecked())) {
-        await entry.click();
-      }
-      // Assert rather than assume: a picker that silently failed to select the
-      // column would leave the caller asserting an empty cell that never existed.
-      await expect(toggle, `"${label}" is selected in the Columns picker`).toBeChecked();
-
-      // Selecting keeps the menu open (onSelect is prevented), so close it
-      // rather than leaving it over the table.
-      await this.page.keyboard.press('Escape');
-      await menu.waitFor({ state: 'hidden' });
-    });
   }
 
   async openDatasetByName(name: string): Promise<DatasetItemsPage> {

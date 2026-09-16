@@ -30,10 +30,8 @@ import { DashboardsPage } from '@e2e/pom/dashboards.page';
  * the capability tag names something a browser actually exercised.
  */
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** The UTC day a DAILY bucket falls on, as the fixture records its seeds. */
-const bucketDate = (point: { time: string }): string => point.time.slice(0, 10);
+/** The UTC hour an HOURLY bucket falls on, as the fixture records its seeds. */
+const bucketHour = (point: { time: string }): string => point.time.slice(0, 13);
 
 /**
  * Sum of one named series across the window.
@@ -53,6 +51,9 @@ test.describe('Project span metrics — data contract', { tag: ['@t2-cuj', '@are
    * The fixture seeds four backdated traces and blocks until every span is
    * queryable, which the default budget cannot contain. Declared on the
    * describe so it covers fixture setup too.
+   *
+   * The seeds sit hours rather than days back so their ids stay inside the
+   * ingestion id-timestamp window; see the note on HOUR_SEEDS in the fixture.
    */
   test.slow();
 
@@ -68,7 +69,7 @@ test.describe('Project span metrics — data contract', { tag: ['@t2-cuj', '@are
           const { status, message } = await backendClient.projectMetric({
             projectId: project.id,
             metricType,
-            interval: 'DAILY',
+            interval: 'HOURLY',
             ...window,
           });
           if (status !== 200) failures.push(`${metricType} -> ${status}: ${message}`);
@@ -98,7 +99,7 @@ test.describe('Project span metrics — data contract', { tag: ['@t2-cuj', '@are
           const { status, message } = await backendClient.projectMetric({
             projectId: project.id,
             metricType: breakdown.metricType,
-            interval: 'DAILY',
+            interval: 'HOURLY',
             ...window,
             breakdown: { field: breakdown.field, subMetric: breakdown.subMetric },
           });
@@ -113,17 +114,17 @@ test.describe('Project span metrics — data contract', { tag: ['@t2-cuj', '@are
   );
 
   test(
-    'the read is scoped to the one project and bucketed on the day each span was stamped',
+    'the read is scoped to the one project and bucketed on the hour each span was stamped',
     { tag: ['@cap:dashboards.configure-widget'] },
     async ({ projectMetricSpans, project, backendClient }) => {
-      const { days, totals } = projectMetricSpans;
+      const { hours, totals } = projectMetricSpans;
       const window = { intervalStart: projectMetricSpans.windowStart, intervalEnd: new Date() };
 
       await test.step('SPAN_COUNT is exactly the seeded span count', async () => {
         const { status, message, series } = await backendClient.projectMetric({
           projectId: project.id,
           metricType: 'SPAN_COUNT',
-          interval: 'DAILY',
+          interval: 'HOURLY',
           ...window,
         });
         expect(status, `SPAN_COUNT rejected with: ${message}`).toBe(200);
@@ -133,11 +134,11 @@ test.describe('Project span metrics — data contract', { tag: ['@t2-cuj', '@are
         expect(seriesTotal(series, 'spans'), 'the spans series over the window').toBe(totals.spanCount);
       });
 
-      await test.step('Each DAILY bucket carries the tokens seeded on that day, and no other bucket carries any', async () => {
+      await test.step('Each HOURLY bucket carries the tokens seeded in that hour, and no other bucket carries any', async () => {
         const { status, message, series } = await backendClient.projectMetric({
           projectId: project.id,
           metricType: 'SPAN_TOKEN_USAGE',
-          interval: 'DAILY',
+          interval: 'HOURLY',
           ...window,
         });
         expect(status, `SPAN_TOKEN_USAGE rejected with: ${message}`).toBe(200);
@@ -145,30 +146,30 @@ test.describe('Project span metrics — data contract', { tag: ['@t2-cuj', '@are
         const totalTokens = series.find((s) => s.name === 'total_tokens');
         expect(totalTokens, 'the answer carries a "total_tokens" series').toBeDefined();
 
-        const byDate = new Map<string, number>();
+        const byHour = new Map<string, number>();
         for (const point of totalTokens!.points) {
-          byDate.set(bucketDate(point), (byDate.get(bucketDate(point)) ?? 0) + (point.value ?? 0));
+          byHour.set(bucketHour(point), (byHour.get(bucketHour(point)) ?? 0) + (point.value ?? 0));
         }
 
-        for (const day of days) {
-          expect(byDate.get(day.bucketDate), `total_tokens on ${day.bucketDate} (day -${day.ageDays})`)
-            .toBe(day.totalTokens);
+        for (const hour of hours) {
+          expect(byHour.get(hour.bucketHour), `total_tokens on ${hour.bucketHour} (hour -${hour.ageHours})`)
+            .toBe(hour.totalTokens);
         }
 
-        // The other half of the assertion, and the half a per-day comparison
-        // alone would miss: nothing leaked into a day that was never seeded. A
+        // The other half of the assertion, and the half a per-hour comparison
+        // alone would miss: nothing leaked into an hour that was never seeded. A
         // query that ignored its bucket expression would put the whole 274 in
-        // one bucket and still satisfy the loop above for that one day.
-        const seededDates = new Set(days.map((d) => d.bucketDate));
-        const strays = [...byDate.entries()].filter(([date, value]) => !seededDates.has(date) && value !== 0);
-        expect(strays, 'buckets outside the seeded days are empty').toEqual([]);
+        // one bucket and still satisfy the loop above for that one hour.
+        const seededHours = new Set(hours.map((h) => h.bucketHour));
+        const strays = [...byHour.entries()].filter(([hour, value]) => !seededHours.has(hour) && value !== 0);
+        expect(strays, 'buckets outside the seeded hours are empty').toEqual([]);
       });
 
       await test.step('Every usage series matches the seed', async () => {
         const { series } = await backendClient.projectMetric({
           projectId: project.id,
           metricType: 'SPAN_TOKEN_USAGE',
-          interval: 'DAILY',
+          interval: 'HOURLY',
           ...window,
         });
         expect(seriesTotal(series, 'total_tokens'), 'total_tokens').toBe(totals.totalTokens);
@@ -182,11 +183,11 @@ test.describe('Project span metrics — data contract', { tag: ['@t2-cuj', '@are
         const { status, series } = await backendClient.projectMetric({
           projectId: project.id,
           metricType: 'SPAN_COUNT',
-          interval: 'DAILY',
+          interval: 'HOURLY',
           intervalStart: projectMetricSpans.windowStart,
-          intervalEnd: new Date(Date.now() - 5 * DAY_MS),
+          intervalEnd: projectMetricSpans.emptyWindowEnd,
         });
-        expect(status, 'a window ending before the oldest seeded day').toBe(200);
+        expect(status, 'a window ending before the oldest seeded hour').toBe(200);
         const spans = series.find((s) => s.name === 'spans');
         // Absent and zero are the same answer for a window that matched
         // nothing, unlike the seeded windows above where an absent series
@@ -207,7 +208,7 @@ test.describe('Project span metrics — data contract', { tag: ['@t2-cuj', '@are
         const { status, message, series } = await backendClient.projectMetric({
           projectId: project.id,
           metricType: 'SPAN_TOKEN_USAGE',
-          interval: 'DAILY',
+          interval: 'HOURLY',
           intervalStart: projectMetricSpans.windowStart,
           intervalEnd: new Date(),
           breakdown: { field: 'provider', subMetric: 'total_tokens' },
@@ -264,7 +265,7 @@ test.describe('Project span metrics — data contract', { tag: ['@t2-cuj', '@are
               const { status, series } = await backendClient.projectMetric({
                 projectId: project.id,
                 metricType: 'SPAN_TOKEN_USAGE',
-                interval: 'DAILY',
+                interval: 'HOURLY',
                 intervalStart: projectMetricSpans.windowStart,
                 intervalEnd: new Date(),
               });

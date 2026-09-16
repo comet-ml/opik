@@ -4,7 +4,9 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanService;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
@@ -14,6 +16,7 @@ import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.util.Duration;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -39,6 +42,9 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython.SpanUserDefinedMetricPythonCode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -70,6 +76,8 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
     @Mock
     private PythonEvaluatorService pythonEvaluatorService;
+
+    private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
 
     private OnlineScoringSpanUserDefinedMetricPythonScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -223,6 +231,75 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
             assertThat(scores.get(0).value()).isEqualByComparingTo(BigDecimal.valueOf(0.95));
             assertThat(scores.get(0).reason()).isEqualTo("test reason");
             assertThat(scores.get(0).source()).isEqualTo(ScoreSource.ONLINE_SCORING);
+        }
+
+        @Test
+        @DisplayName("Should drop scores without a value and store the rest")
+        void shouldDropScoresWithoutValueAndStoreTheRest() {
+            // Given — a metric returning one usable score and one with value=None. The valueless one
+            // cannot be stored, but it must not take the batch down with it: binding it used to throw an
+            // NPE that failed the whole insert, losing the usable score too.
+            UUID spanId = ID_GENERATOR.generateId();
+            UUID projectId = ID_GENERATOR.generateId();
+            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(10);
+            String valuedName = "score-" + RandomStringUtils.secure().nextAlphanumeric(10);
+            String valuelessName = "score-" + RandomStringUtils.secure().nextAlphanumeric(10);
+            String reason = RandomStringUtils.secure().nextAlphanumeric(16);
+
+            Span span = Span.builder()
+                    .id(spanId)
+                    .projectId(projectId)
+                    .projectName(projectName)
+                    .traceId(ID_GENERATOR.generateId())
+                    .name("span-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .build();
+
+            SpanUserDefinedMetricPythonCode code = SpanUserDefinedMetricPythonCode.builder()
+                    .metric("def score(input, output): return []")
+                    .arguments(Map.of("input", "input.input", "output", "output.output"))
+                    .build();
+
+            SpanToScoreUserDefinedMetricPython message = SpanToScoreUserDefinedMetricPython.builder()
+                    .span(span)
+                    .ruleId(ID_GENERATOR.generateId())
+                    .ruleName("rule-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .code(code)
+                    .workspaceId(ID_GENERATOR.generateId().toString())
+                    .userName("user-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .build();
+
+            when(pythonEvaluatorService.evaluate(eq(code.metric()), anyMap()))
+                    .thenReturn(Mono.just(List.of(
+                            PythonScoreResult.builder()
+                                    .name(valuedName)
+                                    .value(BigDecimal.valueOf(0.75))
+                                    .reason(reason)
+                                    .build(),
+                            PythonScoreResult.builder()
+                                    .name(valuelessName)
+                                    .reason(RandomStringUtils.secure().nextAlphanumeric(16))
+                                    .build())));
+            when(feedbackScoreService.scoreBatchOfSpans(anyList()))
+                    .thenReturn(Mono.empty());
+
+            // When
+            scorer.score(message).block();
+
+            // Then
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<FeedbackScoreBatchItem>> scoresCaptor = ArgumentCaptor.forClass(List.class);
+            verify(feedbackScoreService).scoreBatchOfSpans(scoresCaptor.capture());
+
+            FeedbackScoreBatchItem expected = FeedbackScoreBatchItem.builder()
+                    .id(spanId)
+                    .projectId(projectId)
+                    .projectName(projectName)
+                    .name(valuedName)
+                    .value(BigDecimal.valueOf(0.75))
+                    .reason(reason)
+                    .source(ScoreSource.ONLINE_SCORING)
+                    .build();
+            assertThat(scoresCaptor.getValue()).usingRecursiveComparison().isEqualTo(List.of(expected));
         }
 
         @Test

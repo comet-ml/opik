@@ -12,7 +12,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
  * Architectural guard for the trace deletion event capturing. User-initiated trace deletes must flow through
- * {@link TraceServiceImpl}, which records the deleted ids in {@code deletion_events_local} after the delete so
+ * {@link TraceServiceImpl}, which records the ids in {@code deletion_events_local} before the delete so
  * they survive the data-model migration's table copy. A new caller of
  * {@code TraceDAO.delete(Set, Connection)} would issue the lightweight delete without that capture,
  * silently bypassing the capturing, so this rule fails the build if one appears. Retention paths
