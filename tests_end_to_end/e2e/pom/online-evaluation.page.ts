@@ -514,12 +514,19 @@ export class OnlineEvaluationPage {
   async listThinkingLevels(): Promise<string[]> {
     return test.step('list the offered thinking levels', async () => {
       await this.thinkingLevelSelect.click();
-      const options = this.page.getByRole('listbox').getByRole('option');
+      const listbox = this.page.getByRole('listbox');
+      const options = listbox.getByRole('option');
+      // `allTextContents()` is a one-shot read with no auto-wait, so the list
+      // has to be asserted onto the screen first. Without this, a listbox that
+      // had not rendered yet returns `[]` — and `[]` reads as "this model
+      // offers no thinking levels", which is a different and much more
+      // alarming claim than "the read was too early".
+      await expect(options.first(), 'the thinking-level select offers at least one level').toBeVisible();
       const labels = (await options.allTextContents()).map((t) => t.trim());
       // Dismiss the select without choosing, so reading the options cannot
       // change the value the caller is about to assert on.
       await this.page.keyboard.press('Escape');
-      await expect(this.page.getByRole('listbox')).toBeHidden();
+      await expect(listbox).toBeHidden();
       return labels;
     });
   }
