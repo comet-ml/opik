@@ -14,8 +14,8 @@ class DestinationGuardTest {
     private final DestinationGuard strict = new DestinationGuard(DestinationGuard.Mode.STRICT);
     private final DestinationGuard relaxed = new DestinationGuard(DestinationGuard.Mode.RELAXED);
 
-    private final DestinationGuard strictAnyScheme = new DestinationGuard(DestinationGuard.Mode.STRICT,
-            DestinationGuard.Scheme.ANY);
+    private final DestinationGuard strictPlaintextAllowed = new DestinationGuard(DestinationGuard.Mode.STRICT,
+            DestinationGuard.Scheme.PLAINTEXT_OR_TLS);
 
     @ParameterizedTest
     @ValueSource(strings = {
@@ -80,9 +80,9 @@ class DestinationGuardTest {
             "http://8.8.8.8/events",
             "https://8.8.8.8/events",
     })
-    @DisplayName("scheme ANY accepts plaintext public destinations")
-    void schemeAnyAcceptsPlaintext(String url) {
-        assertThatCode(() -> strictAnyScheme.validate(url)).doesNotThrowAnyException();
+    @DisplayName("plaintext allowed: accepts http public destinations")
+    void plaintextAllowedAcceptsHttp(String url) {
+        assertThatCode(() -> strictPlaintextAllowed.validate(url)).doesNotThrowAnyException();
     }
 
     @ParameterizedTest
@@ -91,9 +91,9 @@ class DestinationGuardTest {
             "http://10.1.2.3/events",
             "http://169.254.169.254/latest/meta-data",
     })
-    @DisplayName("scheme ANY still refuses private and internal destinations")
-    void schemeAnyStillFiltersAddresses(String url) {
-        assertThatThrownBy(() -> strictAnyScheme.validate(url)).isInstanceOf(DestinationGuardException.class);
+    @DisplayName("plaintext allowed: still refuses private and internal destinations")
+    void plaintextAllowedStillFiltersAddresses(String url) {
+        assertThatThrownBy(() -> strictPlaintextAllowed.validate(url)).isInstanceOf(DestinationGuardException.class);
     }
 
     @ParameterizedTest
@@ -101,8 +101,8 @@ class DestinationGuardTest {
             "file:///etc/passwd",
             "gopher://8.8.8.8/events",
     })
-    @DisplayName("scheme ANY means http or https, not any protocol at all")
-    void schemeAnyRefusesNonHttpSchemes(String url) {
-        assertThatThrownBy(() -> strictAnyScheme.validate(url)).isInstanceOf(DestinationGuardException.class);
+    @DisplayName("plaintext allowed means http or https, not any protocol at all")
+    void plaintextAllowedRefusesNonHttpSchemes(String url) {
+        assertThatThrownBy(() -> strictPlaintextAllowed.validate(url)).isInstanceOf(DestinationGuardException.class);
     }
 }

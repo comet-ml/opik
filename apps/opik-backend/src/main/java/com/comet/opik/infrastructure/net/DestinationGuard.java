@@ -24,7 +24,7 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
  * <p>HTTPS enforcement is a separate control, requested per caller via {@link Scheme}. It protects
  * the confidentiality of what we send, not the network we can reach, so callers whose payload
  * carries a credential ({@link Scheme#HTTPS_ONLY}) opt in independently of the address filtering
- * above. A caller passing {@link Scheme#ANY} still gets the full SSRF check.
+ * above. A caller passing {@link Scheme#PLAINTEXT_OR_TLS} still gets the full SSRF check.
  *
  * <p>Resolve-then-decide is the accepted level of protection here: the later connection resolves
  * again, so a DNS-rebinding attacker with a sub-TTL flip could theoretically pass the check. The
@@ -56,12 +56,13 @@ public class DestinationGuard {
     }
 
     /**
-     * Whether the caller also requires HTTPS. Independent of {@link Mode}: this is about protecting
-     * the payload in transit, not about which networks we are willing to reach.
+     * Whether the caller also requires TLS. Independent of {@link Mode}: this is about protecting
+     * the payload in transit, not about which networks we are willing to reach. Either way the
+     * destination must be http or https — the only schemes an HTTP client speaks.
      */
     public enum Scheme {
         /** Accept http as well as https — for payloads where plaintext is the caller's own choice. */
-        ANY,
+        PLAINTEXT_OR_TLS,
         /** Refuse anything but https — for payloads carrying a credential. */
         HTTPS_ONLY,
     }

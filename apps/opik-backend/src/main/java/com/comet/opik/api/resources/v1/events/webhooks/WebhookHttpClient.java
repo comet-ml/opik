@@ -50,10 +50,10 @@ public class WebhookHttpClient {
         this.httpClient = httpClient;
         this.webhookConfig = webhookConfig;
         this.userFacingLog = UserFacingLoggingFactory.getLogger(this.getClass());
-        // Scheme.ANY: plaintext webhooks are documented as supported, so the scheme is the
+        // plaintext allowed: http webhooks are documented as supported, so the scheme is the
         // operator's call; this guard is here for the destination, not the transport
         this.destinationGuard = new DestinationGuard(webhookConfig.getDestinationGuard(),
-                DestinationGuard.Scheme.ANY);
+                DestinationGuard.Scheme.PLAINTEXT_OR_TLS);
     }
 
     /**

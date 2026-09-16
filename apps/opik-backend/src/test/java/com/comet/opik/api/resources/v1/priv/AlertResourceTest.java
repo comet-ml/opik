@@ -1216,9 +1216,9 @@ class AlertResourceTest {
             var result = alertResourceClient.testWebhook(alert, mock.getLeft(), mock.getRight());
             assertThat(result.status()).isEqualTo(WebhookTestResult.Status.FAILURE);
             assertThat(result.statusCode()).isEqualTo(500);
-            // the status code is what a caller needs; the destination's own response is not
-            // theirs to read, since they chose the destination
-            assertThat(result.errorMessage()).isNotNull().doesNotContain(WEBHOOK_RESPONSE_BODY);
+            // asserted exactly, not just for the absence of the body: anything the destination
+            // returns is the destination's to know, and the caller chose the destination
+            assertThat(result.errorMessage()).isEqualTo("Webhook failed with status 500");
 
             assertWebhookTestResultRequest(alert, result.requestBody());
 
