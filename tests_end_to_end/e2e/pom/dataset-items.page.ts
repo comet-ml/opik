@@ -75,9 +75,16 @@ export class DatasetItemsPage {
    * builds the column id as `data.<field>` (`COLUMN_DATA_ID`), and TanStack
    * Table rewrites the dot to an underscore when it derives the cell id the
    * table stamps. So neither half of this is the field name the SDK sent.
+   *
+   * The whole id is escaped before it goes into the CSS attribute selector.
+   * Unlike `itemRowById`, whose argument is always a server-issued uuid, a
+   * dataset field name is user data — any JSON key is legal, and a `"` or a
+   * `\` in one would otherwise end the quoted string early and silently match
+   * a different cell, or none.
    */
   itemCell(itemId: string, field: string): Locator {
-    return this.itemRowById(itemId).locator(`[data-cell-id="${itemId}_data_${field}"]`);
+    const cellId = `${itemId}_data_${field}`.replace(/["\\]/g, '\\$&');
+    return this.itemRowById(itemId).locator(`[data-cell-id="${cellId}"]`);
   }
 
   /**

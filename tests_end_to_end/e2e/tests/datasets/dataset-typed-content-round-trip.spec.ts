@@ -80,7 +80,7 @@ const EXPECTED_STORED: Record<string, unknown> = {
 
 test.describe('Dataset insert — non-JSON-native item content', { tag: ['@area:datasets'] }, () => {
   test(
-    'An item carrying a UUID, an Enum, a datetime, a set and a tuple round-trips to its JSON form and dedups against it',
+    'An item carrying a UUID, an Enum, a datetime, a set, a tuple and a sub-1e-4 float round-trips to its JSON form and dedups against it',
     // Both caps, as `dataset-insert-deduplication.spec.ts` does for the same
     // reason: the version counters below are asserted, not merely read past, so
     // leaving them untagged would be coverage the map cannot see.
