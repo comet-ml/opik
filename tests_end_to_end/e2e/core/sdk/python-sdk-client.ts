@@ -81,6 +81,18 @@ export interface PythonSdkClient {
    * payload into. `num_threads` > 1 uploads those batches in parallel.
    * `deduplication: false` bypasses the content-hash dedup path, so identical
    * content sent twice is stored twice.
+   *
+   * `num_threads` is deliberately unconstrained so a caller can assert the
+   * SDK's own validation of it: a value it refuses comes back as `value_error`
+   * carrying the ValueError's message with `inserted: 0`, rather than as a
+   * bridge failure. Validation runs before any batch is sent, so a rejected
+   * insert leaves the dataset untouched.
+   *
+   * `enable_json_request_compression: false` selects the uncompressed upload
+   * arm. Omit it to get whatever the deployment is configured for. Either way
+   * `compression_enabled` reports what the upload actually did — read off the
+   * client the bridge built, not echoed from this argument, so the two arms can
+   * be shown to have genuinely differed.
    */
   insertDatasetItems(args: {
     dataset_name: string;
@@ -88,8 +100,14 @@ export interface PythonSdkClient {
     items: Array<Record<string, unknown>>;
     num_threads?: number;
     deduplication?: boolean;
+    enable_json_request_compression?: boolean;
     workspace?: string;
-  }): Promise<{ dataset_id: string; inserted: number }>;
+  }): Promise<{
+    dataset_id: string;
+    inserted: number;
+    compression_enabled: boolean;
+    value_error: string | null;
+  }>;
   /**
    * Several `Dataset.insert(...)` calls sharing ONE `Dataset` object — the
    * shape `insertDatasetItems` cannot express, because the bridge builds a
@@ -448,12 +466,12 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
       // Multi-batch inserts against a cloud backend outlive the default budget
       // when the workspace is being rate-limited, and a client-side abort here
       // would leave a half-written dataset behind.
-      return request<{ dataset_id: string; inserted: number }>(
-        'POST',
-        '/datasets/insert-items',
-        args,
-        { timeoutMs: 180_000 },
-      );
+      return request<{
+        dataset_id: string;
+        inserted: number;
+        compression_enabled: boolean;
+        value_error: string | null;
+      }>('POST', '/datasets/insert-items', args, { timeoutMs: 180_000 });
     },
     async insertDatasetItemsSession(args) {
       // Same budget as insertDatasetItems, and for the same reason — except

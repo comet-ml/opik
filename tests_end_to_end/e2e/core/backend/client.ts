@@ -1565,6 +1565,33 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * The same read as `listDatasetItemIds`, keeping each item's payload. The
+     * sibling exists because `truncate: true` is what makes an id-only read of
+     * a few thousand items cheap, and a caller comparing what was *stored*
+     * against what was *sent* needs the payloads it drops. `getDatasetItems`
+     * cannot stand in: it takes the endpoint's default page and so silently
+     * answers for the first page alone.
+     */
+    async listDatasetItemsWithData(datasetId: string): Promise<DatasetItemRef[]> {
+      const pageSize = 1000;
+      const items: DatasetItemRef[] = [];
+      for (let page = 1; ; page++) {
+        const result = await opik.api.datasets.getDatasetItems(datasetId, {
+          page,
+          size: pageSize,
+        });
+        const content = result.content ?? [];
+        items.push(
+          ...content.map((item) => ({
+            id: String(item.id),
+            data: (item.data ?? {}) as Record<string, unknown>,
+          })),
+        );
+        if (content.length < pageSize) return items;
+      }
+    },
+
+    /**
      * Dataset items under `filters`, with their tags — `GET /v1/private/datasets/
      * {id}/items`. This is the read the filter-scoped mutations preview: whatever
      * this returns is exactly the set a delete or batch-update with the same
