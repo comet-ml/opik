@@ -67,6 +67,24 @@ def test_batch_manager__at_least_one_batcher_is_not_empty__batch_manager_is_not_
     integers_batcher.is_empty.assert_called_once()
 
 
+def test_batch_manager__first_batcher_is_not_empty__short_circuits_and_later_batchers_are_not_checked():
+    integers_batcher = mock.Mock()
+    integers_batcher.is_empty.return_value = False
+    strings_batcher = mock.Mock()
+    strings_batcher.is_empty.return_value = True
+
+    MESSAGE_BATCHERS = {
+        int: integers_batcher,
+        str: strings_batcher,
+    }
+
+    tested = batch_manager.BatchManager(MESSAGE_BATCHERS)
+
+    assert not tested.is_empty()
+    integers_batcher.is_empty.assert_called_once()
+    strings_batcher.is_empty.assert_not_called()
+
+
 def test_batch_manager__flush_is_called__all_batchers_are_flushed():
     integers_batcher = mock.Mock()
     strings_batcher = mock.Mock()

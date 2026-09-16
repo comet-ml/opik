@@ -144,4 +144,14 @@ class PythonTemplateParserTest {
 
         assertThat(result).isEqualTo("Result: $100 & <tag>");
     }
+
+    @Test
+    @DisplayName("should handle null context safely and preserve placeholders")
+    void renderWhenNullContextPreservesPlaceholders() {
+        String template = "Hello {name}, you live in {city}.";
+
+        String result = parser.render(template, null);
+
+        assertThat(result).isEqualTo("Hello {name}, you live in {city}.");
+    }
 }
