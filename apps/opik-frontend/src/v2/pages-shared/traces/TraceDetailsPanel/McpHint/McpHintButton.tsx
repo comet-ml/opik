@@ -55,8 +55,8 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
     hasActedRef.current = true;
   }, []);
 
-  // Released when the card goes back to the routes, or hover would never get
-  // to close it again.
+  // Released once the card says the hold has served its purpose, or hover would
+  // never get to close the card again.
   const handleConfirmationChange = useCallback((isShowing: boolean) => {
     isPinnedRef.current = isShowing;
   }, []);
@@ -165,6 +165,7 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
         <McpHintPopover
           onAction={markAction}
           onConfirmationChange={handleConfirmationChange}
+          onDismiss={close}
           target={target}
         />
       </HoverCardContent>

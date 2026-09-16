@@ -31,6 +31,7 @@ vi.mock("@/store/PluginsStore", async (importOriginal) => {
 import { TooltipProvider } from "@/ui/tooltip";
 import McpHintPopover from "./McpHintPopover";
 import {
+  MCP_CONFIRMATION_HOLD_MS,
   MCP_COPIED,
   MCP_COPIED_FEEDBACK_MS,
   MCP_PROMPT_ACTION,
@@ -45,13 +46,15 @@ const target: McpHintTarget = {
   entityType: "trace",
 };
 
-const renderCard = (onConfirmationChange = vi.fn()) => ({
+const renderCard = (onConfirmationChange = vi.fn(), onDismiss = vi.fn()) => ({
   onConfirmationChange,
+  onDismiss,
   ...render(
     <TooltipProvider>
       <McpHintPopover
         onAction={vi.fn()}
         onConfirmationChange={onConfirmationChange}
+        onDismiss={onDismiss}
         target={target}
       />
     </TooltipProvider>,
@@ -151,16 +154,35 @@ describe("the hint card with a hosted server", () => {
     plugin.McpInstallRoutes = null;
   });
 
-  it("holds the card open for an opened deeplink, which is not confirmed", () => {
-    // The hand-off cannot be observed from here, so the fallback under it is
-    // the only recovery and has to wait to be dismissed.
-    const { onConfirmationChange } = renderCard();
+  it("holds the card while the layout settles, then lets it go", () => {
+    // Replacing the routes makes the card shorter, which can slide it out from
+    // under a pointer that has not moved. The hold survives that; it is not a
+    // state the card stays in.
+    const { onConfirmationChange, onDismiss } = renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-vscode"));
 
     expect(screen.getByText("Opening VS Code…")).toBeInTheDocument();
     expect(onConfirmationChange).toHaveBeenLastCalledWith(true);
+    expect(onDismiss).not.toHaveBeenCalled();
 
-    act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS * 3));
+    act(() => void vi.advanceTimersByTime(MCP_CONFIRMATION_HOLD_MS));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands the card back to hover when someone is reading it", () => {
+    const { onConfirmationChange, onDismiss, container } = renderCard();
+    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
+
+    // `:hover` is the pointer's own state, which jsdom does not model, so
+    // stand in for it wherever the card asks.
+    for (const el of [container, ...container.querySelectorAll("*")]) {
+      (el as HTMLElement).matches = ((selector: string) =>
+        selector === ":hover") as HTMLElement["matches"];
+    }
+    act(() => void vi.advanceTimersByTime(MCP_CONFIRMATION_HOLD_MS));
+
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(onConfirmationChange).toHaveBeenLastCalledWith(false);
     expect(screen.getByText("Opening VS Code…")).toBeInTheDocument();
   });
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, Plug } from "lucide-react";
 
 import { buildDocsUrl } from "@/lib/utils";
@@ -8,6 +8,7 @@ import McpRouteConfirmation from "./McpRouteConfirmation";
 import useMcpInstallMode from "./useMcpInstallMode";
 import { McpHintTarget, McpRouteOutcome } from "./types";
 import {
+  MCP_CONFIRMATION_HOLD_MS,
   MCP_HINT_DESCRIPTION,
   MCP_HINT_DOCS_PATH,
   MCP_HINT_TITLE,
@@ -18,12 +19,15 @@ type McpHintPopoverProps = {
   onAction: () => void;
   /** Whether a confirmation is on screen, which is what holds the card open. */
   onConfirmationChange: (isShowing: boolean) => void;
+  /** Asked for when the hold expires and nobody is reading. */
+  onDismiss: () => void;
   target: McpHintTarget;
 };
 
 const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   onAction,
   onConfirmationChange,
+  onDismiss,
   target,
 }) => {
   // Unmounted with the popover, so closing resets the view and a user who comes
@@ -51,6 +55,24 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
     });
   }, [installMode, target.entityType]);
 
+  // The hold is a moment, not a state the card gets stuck in: once the layout
+  // has settled, either the pointer is on the card and hover keeps it, or it is
+  // not and the card goes. A timer, because it has to be cleared on unmount.
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!outcome) return;
+
+    const timer = setTimeout(() => {
+      if (cardRef.current?.matches(":hover")) {
+        onConfirmationChange(false);
+        return;
+      }
+      onDismiss();
+    }, MCP_CONFIRMATION_HOLD_MS);
+
+    return () => clearTimeout(timer);
+  }, [outcome, onConfirmationChange, onDismiss]);
+
   const handleLearnMoreClick = () => {
     onAction();
     trackEvent(OpikEvent.MCP_LEARN_MORE_CLICKED, {
@@ -61,6 +83,7 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
 
   return (
     <div
+      ref={cardRef}
       // Wide enough for the four tiles on one row, as the design has them. The
       // design's own 401px is against its type; ours needs the extra. The row
       // still wraps rather than overflowing if a narrow panel clamps the card.
