@@ -142,7 +142,17 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
 
     if (nextName !== currentName) {
       suggestedNameRef.current = nextName;
-      form.setValue("name", nextName, { shouldDirty: false });
+      form.setValue("name", nextName, {
+        shouldDirty: false,
+        // setValue does not validate on its own, and this write is
+        // programmatic, so a "Alert name is required" error left by a failed
+        // submit would otherwise sit under the name we just filled in until
+        // the user edited the field by hand. Gated on isSubmitted because
+        // before the first submit there is no error to clear, and validating
+        // then would flag the empty name the moment the last trigger is
+        // removed — on a form the user has not tried to submit yet.
+        shouldValidate: form.formState.isSubmitted,
+      });
     }
   }, [form, isEdit, triggers, nameValue, existingAlertNames]);
 

@@ -136,6 +136,16 @@ export class AlertEditorPage {
   }
 
   /**
+   * The validation message under the Name field.
+   *
+   * Zod's message rather than a testid: `FormMessage` renders no stable hook
+   * of its own, and the copy is what a user actually reads.
+   */
+  get nameError(): Locator {
+    return this.page.getByText('Alert name is required');
+  }
+
+  /**
    * Empties the name field.
    *
    * Distinct from `fillName('')` only in intent: the form treats an empty name

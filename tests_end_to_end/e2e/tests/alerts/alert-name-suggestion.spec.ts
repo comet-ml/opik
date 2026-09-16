@@ -70,6 +70,41 @@ test.describe('Alerts — name suggestion', { tag: ['@t2-cuj', '@area:alerts'] }
   );
 
   test(
+    "A failed submit's name error clears once the suggestion fills the field",
+    { tag: ['@cap:alerts.suggest-alert-name'] },
+    async ({ project, page }) => {
+      const alerts = new AlertsPage(page);
+
+      const editor = await test.step('Open the create form', async () => {
+        await alerts.goto(project.id);
+        await alerts.waitForReady();
+        return alerts.openCreateForm();
+      });
+
+      await test.step('Submit the empty form to raise the validation errors', async () => {
+        await editor.submitButton.click();
+        await expect(editor.nameError).toBeVisible();
+      });
+
+      // `setValue` does not validate on its own, so the suggestion used to
+      // land under a still-showing "required" error. The field is filled, so
+      // the message has to go without the user touching it.
+      await test.step('Verify the suggestion clears the error it satisfies', async () => {
+        await editor.addTrigger(TRACE_ERRORS);
+        await expect(editor.nameInput).toHaveValue(SUGGESTED_BARE);
+        await expect(editor.nameError).toHaveCount(0);
+      });
+
+      // The other half of the gate: re-validation has to report an empty name
+      // too, not merely stay quiet once it has been silenced.
+      await test.step('Verify emptying the name brings the error back', async () => {
+        await editor.clearName();
+        await expect(editor.nameError).toBeVisible();
+      });
+    },
+  );
+
+  test(
     'A suggested name is what persists, and the next alert is de-duplicated against it',
     { tag: ['@cap:alerts.suggest-alert-name', '@cap:alerts.create-alert'] },
     async ({ project, uiAlertCleanup, backendClient, page }) => {
