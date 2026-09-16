@@ -68,7 +68,8 @@ public class TraceEnrichmentService {
                                     trace -> TraceEnrichmentMapper.enrichTraceData(
                                             trace,
                                             spansByTraceId.getOrDefault(trace.id(), List.of()),
-                                            options)));
+                                            options),
+                                    (existing, replacement) -> replacement));
 
                     return Mono.just(enrichedTraces);
                 });
