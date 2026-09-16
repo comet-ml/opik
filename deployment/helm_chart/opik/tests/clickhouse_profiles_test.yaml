@@ -10,6 +10,14 @@ suite: clickhouse default settings profile (Distributed insert-queue settings)
 # `users.d/chop-generated-profiles.xml`, the last file the server reads, so it wins over both
 # the chart's `conf.d/profiles.xml` and the operator's own default profile.
 #
+# SCOPE OF THIS SUITE. These assertions stop at the rendered `ClickHouseInstallation` -- the
+# manifest the chart is responsible for. Everything after that is the Altinity operator's
+# behaviour: translating `spec.configuration.profiles` into `users.d/chop-generated-profiles.xml`,
+# and ClickHouse's own precedence between `conf.d`, the operator's `users.d` defaults and that
+# generated file. Neither is exercised here, and `helm unittest` cannot exercise them -- no
+# operator runs in chart CI. Treat the ordering described above as an external deployment
+# assumption, verified against a running cluster rather than by this suite (OPIK-8255).
+#
 # The cost is that Helm replaces lists wholesale rather than merging them, so any values file
 # declaring its own list drops the `default` entry unless it repeats it. This suite pins the
 # chart's default and asserts the drop, so a consumer's obligation is visible here rather than

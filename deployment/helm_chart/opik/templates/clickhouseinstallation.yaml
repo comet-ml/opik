@@ -71,15 +71,37 @@ spec:
       carries a duplicate key.
     */}}
     {{- $plrKey := "prefer_localhost_replica" }}
+    {{- $plrValid := list "0" "1" }}
+    {{/*
+         Profile names must be unique. The emission loop below renders every entry, so two entries
+         sharing a name put the same `<name>/<setting>` key into the manifest twice — for any
+         setting, not only this one. Fail rather than emit a map whose duplicate keys resolve
+         arbitrarily.
+    */}}
+    {{- $seenProfiles := dict }}
+    {{- range .Values.clickhouse.additionalProfiles }}
+    {{- $n := .name | toString }}
+    {{- if hasKey $seenProfiles $n }}
+    {{- fail (printf "clickhouse.additionalProfiles: duplicate profile name %q. Names must be unique; merge the entries into one." $n) }}
+    {{- end }}
+    {{- $seenProfiles = set $seenProfiles $n true }}
+    {{- end }}
     {{- $plrFromList := false }}
     {{- range .Values.clickhouse.additionalProfiles }}
     {{- if and (eq (.name | toString) "default") (hasKey (.settings | default dict) $plrKey) }}
+    {{- $listVal := printf "%v" (index (.settings | default dict) $plrKey) }}
+    {{- if not (has $listVal $plrValid) }}
+    {{- fail (printf "clickhouse.additionalProfiles: default.%s must be 0 or 1, got %q. ClickHouse accepts nothing else for this setting." $plrKey $listVal) }}
+    {{- end }}
     {{- $plrFromList = true }}
     {{- end }}
     {{- end }}
     {{- $plr := "" }}
     {{- if not (kindIs "invalid" .Values.clickhouse.preferLocalhostReplica) }}
     {{- $plr = printf "%v" .Values.clickhouse.preferLocalhostReplica }}
+    {{- end }}
+    {{- if and (ne $plr "") (not (has $plr $plrValid)) }}
+    {{- fail (printf "clickhouse.preferLocalhostReplica must be 0, 1, or empty to derive from topology; got %q." $plr) }}
     {{- end }}
     {{- if eq $plr "" }}
     {{- $multiNode := or (gt (int .Values.clickhouse.replicasCount) 1) (gt (int .Values.clickhouse.shardsCount) 1) }}
