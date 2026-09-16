@@ -1,0 +1,159 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, act } from "@testing-library/react";
+
+vi.mock("clipboard-copy", () => ({ default: vi.fn() }));
+vi.mock("@/lib/analytics/tracking", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  trackEvent: vi.fn(),
+}));
+vi.mock("@/store/AppStore", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useActiveWorkspaceName: () => "my-workspace",
+}));
+vi.mock("@/api/projects/useProjectById", () => ({
+  default: () => ({ data: { name: "my-agent" } }),
+}));
+vi.mock("@/ui/use-toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
+
+// A deployment with a hosted server supplies its own routes, and only those can
+// hand off to another app. Swapped in per test rather than per file.
+const { plugin } = vi.hoisted(() => ({
+  plugin: { McpInstallRoutes: null as unknown },
+}));
+vi.mock("@/store/PluginsStore", async (importOriginal) => {
+  const actual = await importOriginal<{ default: unknown }>();
+  return {
+    ...actual,
+    default: (selector: (state: Record<string, unknown>) => unknown) =>
+      selector({ McpInstallRoutes: plugin.McpInstallRoutes }),
+  };
+});
+
+import { TooltipProvider } from "@/ui/tooltip";
+import McpHintPopover from "./McpHintPopover";
+import {
+  MCP_COPIED,
+  MCP_COPIED_FEEDBACK_MS,
+  MCP_PROMPT_ACTION,
+  MCP_PROMPT_PITCH,
+  MCP_TILES_LABEL,
+} from "./constants";
+import { McpHintTarget } from "./types";
+
+const target: McpHintTarget = {
+  traceId: "01a0a497-12f6-73e2-bb3d-56f286348309",
+  projectId: "p1",
+  entityType: "trace",
+};
+
+const renderCard = (onConfirmationChange = vi.fn()) => ({
+  onConfirmationChange,
+  ...render(
+    <TooltipProvider>
+      <McpHintPopover
+        onAction={vi.fn()}
+        onConfirmationChange={onConfirmationChange}
+        target={target}
+      />
+    </TooltipProvider>,
+  ),
+});
+
+describe("the hint card", () => {
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+  afterEach(() => vi.useRealTimers());
+
+  it("offers a setup command per client, which is the install route here", () => {
+    // A local server is a stdio process holding an API key, so the CLI is what
+    // installs it. The prompt beside them cannot answer for that key.
+    renderCard();
+
+    for (const client of ["claude-code", "cursor", "vscode", "codex"]) {
+      expect(screen.getByTestId(`mcp-route-${client}`)).toBeInTheDocument();
+    }
+    expect(screen.getByText(MCP_TILES_LABEL)).toBeInTheDocument();
+    expect(screen.getByText(MCP_PROMPT_PITCH)).toBeInTheDocument();
+    expect(screen.getByText(MCP_PROMPT_ACTION)).toBeInTheDocument();
+  });
+
+  it("says a copy landed for two seconds, then offers itself again", () => {
+    renderCard();
+    fireEvent.click(screen.getByTestId("mcp-route-prompt"));
+
+    expect(screen.getByText(MCP_COPIED)).toBeInTheDocument();
+    // The card is untouched: the routes and the docs link stay where they were.
+    expect(screen.getByTestId("mcp-route-cursor")).toBeInTheDocument();
+    expect(screen.getByText("Learn more")).toBeInTheDocument();
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS));
+    expect(screen.getByText(MCP_PROMPT_ACTION)).toBeInTheDocument();
+  });
+
+  it("does not hold the card open for a copy", () => {
+    // Nothing took the card over, so hover governs it as it did before.
+    const { onConfirmationChange } = renderCard();
+    fireEvent.click(screen.getByTestId("mcp-route-cursor"));
+
+    expect(onConfirmationChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("the hint card with a hosted server", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const HostedRoutes = ({
+      onRouteUsed,
+    }: {
+      onRouteUsed: (outcome: {
+        kind: "opened";
+        confirmation: string;
+        snippet: string;
+      }) => void;
+    }) => (
+      <button
+        type="button"
+        data-testid="mcp-route-vscode"
+        onClick={() =>
+          onRouteUsed({
+            kind: "opened",
+            confirmation: "Opening VS Code…",
+            snippet: "Connect me to Opik MCP",
+          })
+        }
+      >
+        VS Code
+      </button>
+    );
+    HostedRoutes.displayName = "HostedRoutes";
+    plugin.McpInstallRoutes = HostedRoutes;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    plugin.McpInstallRoutes = null;
+  });
+
+  it("holds the card open for an opened deeplink, which is not confirmed", () => {
+    // The hand-off cannot be observed from here, so the fallback under it is
+    // the only recovery and has to wait to be dismissed.
+    const { onConfirmationChange } = renderCard();
+    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
+
+    expect(screen.getByText("Opening VS Code…")).toBeInTheDocument();
+    expect(onConfirmationChange).toHaveBeenLastCalledWith(true);
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS * 3));
+    expect(screen.getByText("Opening VS Code…")).toBeInTheDocument();
+  });
+
+  it("says the fallback copy landed, for the same two seconds", () => {
+    renderCard();
+    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
+
+    const button = screen.getByLabelText("Copy it");
+    fireEvent.click(button);
+    expect(button.querySelector(".lucide-check")).toBeTruthy();
+
+    act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS));
+    expect(button.querySelector(".lucide-copy")).toBeTruthy();
+  });
+});
