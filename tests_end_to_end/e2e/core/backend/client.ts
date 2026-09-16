@@ -187,12 +187,29 @@ export interface AutomationRuleRef {
 }
 
 /**
+ * One entry of a rule's `filters` array, in the backend's own wire shape.
+ *
+ * `field` and `operator` are the API's query-param spellings (`name`, `=`), not
+ * the labels the dialog renders (`Name`, `=`) — a spec asserting on either has
+ * to say which one it means.
+ */
+export interface AutomationRuleFilter {
+  field: string;
+  operator: string;
+  value: string;
+  /** Sub-key for dictionary-typed fields; the backend echoes '' for the rest. */
+  key?: string;
+}
+
+/**
  * A rule read back through the raw REST view rather than the pinned SDK.
  *
  * The SDK bundled with this suite (opik 2.0.40) has no `triggerScope` on any
  * evaluator shape, so `listAutomationRulesForProject` structurally cannot
  * report it. A rule whose whole point is which trace sources it fires on has
- * to be read where the field exists.
+ * to be read where the field exists. `filters` is in the same position: the
+ * field is `@JsonIgnore` on the base evaluator and re-exposed per subclass, so
+ * only the REST view carries it.
  */
 export interface AutomationRuleDetail {
   id: string;
@@ -201,6 +218,8 @@ export interface AutomationRuleDetail {
   samplingRate: number;
   /** `production` | `experiment` | `both`. Defaults to `production` server-side. */
   triggerScope: string;
+  /** Empty when the rule filters nothing; never absent on a 200. */
+  filters: AutomationRuleFilter[];
 }
 
 /** One line of a rule's user-facing log stream. */
@@ -1613,6 +1632,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       arguments: Record<string, string>;
       triggerScope?: 'production' | 'experiment' | 'both';
       enabled?: boolean;
+      /**
+       * Trace filters the rule applies before scoring, in the backend's wire
+       * shape (`{ field: 'name', operator: '=', value: '...' }`).
+       *
+       * Seeded here rather than through the dialog because the filter row is a
+       * three-control combobox/combobox/input group, and a spec about *when*
+       * filters apply should not spend its reliability budget on driving them.
+       */
+      filters?: AutomationRuleFilter[];
     }): Promise<string> {
       const { status, message, location } = await rawFetch(
         'POST',
@@ -1626,6 +1654,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             sampling_rate: args.samplingRate,
             enabled: args.enabled ?? true,
             ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
+            ...(args.filters ? { filters: args.filters } : {}),
             code: { metric: args.metric, arguments: args.arguments },
           },
         },
@@ -1660,6 +1689,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         enabled?: boolean;
         sampling_rate?: number;
         trigger_scope?: string;
+        filters?: AutomationRuleFilter[];
       };
       // Same reasoning as `requireSamplingRate`: defaulting an absent rate or
       // scope would present as the server's default, which is exactly the value
@@ -1670,12 +1700,19 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       if (typeof rule.trigger_scope !== 'string') {
         throw new Error(`getAutomationRule: ${ruleId} returned no trigger_scope`);
       }
+      // Same again for filters: a rule that dropped its filters on an update
+      // and a rule whose filters the response simply omitted must not read the
+      // same way, so an absent array is an error rather than an empty list.
+      if (!Array.isArray(rule.filters)) {
+        throw new Error(`getAutomationRule: ${ruleId} returned no filters array`);
+      }
       return {
         id: String(rule.id ?? ruleId),
         name: String(rule.name ?? ''),
         enabled: rule.enabled ?? true,
         samplingRate: rule.sampling_rate,
         triggerScope: rule.trigger_scope,
+        filters: rule.filters,
       };
     },
 
