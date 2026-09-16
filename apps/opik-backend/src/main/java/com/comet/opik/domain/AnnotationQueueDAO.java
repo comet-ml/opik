@@ -207,16 +207,20 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             WHERE workspace_id = :workspace_id
             AND id IN :ids
             """;
-    // Read before the queues are deleted: their rows are what maps a queue to its project.
+
+    /** Read before the queues are deleted: their rows are what maps a queue to its project. */
     private static final String SELECT_PROJECT_IDS_BY_QUEUE_IDS = """
             SELECT DISTINCT project_id
             FROM annotation_queues
             WHERE workspace_id = :workspace_id
             AND id IN :ids
             """;
-    // Counts what the queue holds now, not what it has ever held — items removed by a reviewer free up
-    // room again. DISTINCT because the table is a ReplacingMergeTree and an unmerged part can still hold
-    // more than one row per item.
+
+    /**
+     * Counts what the queue holds now, not what it has ever held — items removed by a reviewer free up
+     * room again. DISTINCT because the table is a ReplacingMergeTree and an unmerged part can still hold
+     * more than one row per item.
+     */
     private static final String COUNT_ITEMS = """
             SELECT count(DISTINCT item_id) AS count
             FROM annotation_queue_items
@@ -225,9 +229,11 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
             AND queue_id = :queue_id
             """;
 
-    // Lookup, not a listing: the caller renders the queue-items table from the traces/threads API with
-    // its own sort and filters, so it asks for exactly the ids currently on screen. Paginating here would
-    // produce pages that cannot be aligned with that table's pages.
+    /**
+     * Lookup, not a listing: the caller renders the queue-items table from the traces/threads API with its
+     * own sort and filters, so it asks for exactly the ids currently on screen. Paginating here would
+     * produce pages that cannot be aligned with that table's pages.
+     */
     private static final String SELECT_ITEMS_BY_IDS = """
             SELECT item_id, source
             FROM annotation_queue_items
