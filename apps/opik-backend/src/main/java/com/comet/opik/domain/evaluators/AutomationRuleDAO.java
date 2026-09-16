@@ -98,6 +98,14 @@ public interface AutomationRuleDAO {
             @Bind("filters") String filters);
 
     /**
+     * Renames a rule without touching any other column, so a caller that only knows the new name does not
+     * have to read the rest back and write it out again — a read-modify-write two writers can lose.
+     */
+    @SqlUpdate("UPDATE automation_rules SET name = :name WHERE id = :id AND workspace_id = :workspaceId")
+    int updateBaseRuleName(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
+            @Bind("name") String name);
+
+    /**
      * Clears the legacy project_id field to prevent stale data.
      * Should be called when projects are removed from the junction table.
      */

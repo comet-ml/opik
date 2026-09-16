@@ -71,7 +71,7 @@ public class AnnotationQueueAutomationService {
             var ruleDao = handle.attach(AutomationRuleDAO.class);
             var projectsDao = handle.attach(AutomationRuleProjectsDAO.class);
 
-            var existing = routerDao.findByQueueIdForUpdate(workspaceId, queueId);
+            var existing = routerDao.findByQueueId(workspaceId, queueId);
             var resolved = resolve(existing, automation);
 
             UUID ruleId = existing.map(AutomationRuleAnnotationQueueRouterModel::id)
@@ -109,17 +109,16 @@ public class AnnotationQueueAutomationService {
      * Renames the rule to follow its queue.
      *
      * <p>The rule's name is the queue's, so a queue renamed on its own would otherwise leave the rule
-     * carrying the old one. Only the name changes: everything else is read back and rewritten as-is, so
-     * this cannot disturb an automation the caller did not mention.
+     * carrying the old one. The update names only that column, so a rename racing a save cannot write
+     * back a stale copy of the fields it never meant to touch.
      */
     public void renameRule(@NonNull String workspaceId, @NonNull UUID queueId, @NonNull String queueName) {
         transactionTemplate.inTransaction(WRITE, handle -> {
             var routerDao = handle.attach(AutomationRuleAnnotationQueueRouterDAO.class);
 
-            routerDao.findByQueueIdForUpdate(workspaceId, queueId)
-                    .ifPresent(rule -> handle.attach(AutomationRuleDAO.class).updateBaseRule(rule.id(),
-                            workspaceId, queueName, rule.samplingRate(), rule.enabled(), rule.triggerScope(),
-                            rule.filters()));
+            routerDao.findByQueueId(workspaceId, queueId)
+                    .ifPresent(rule -> handle.attach(AutomationRuleDAO.class)
+                            .updateBaseRuleName(rule.id(), workspaceId, queueName));
             return null;
         });
     }

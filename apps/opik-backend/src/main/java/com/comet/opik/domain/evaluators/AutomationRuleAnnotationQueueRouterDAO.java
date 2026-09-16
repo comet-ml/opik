@@ -58,13 +58,6 @@ public interface AutomationRuleAnnotationQueueRouterDAO {
     Optional<AutomationRuleAnnotationQueueRouterModel> findByQueueId(@Bind("workspaceId") String workspaceId,
             @Bind("queueId") UUID queueId);
 
-    @SqlQuery(SELECT_COLUMNS + """
-            WHERE rule.workspace_id = :workspaceId AND router.queue_id = :queueId
-            FOR UPDATE
-            """)
-    Optional<AutomationRuleAnnotationQueueRouterModel> findByQueueIdForUpdate(
-            @Bind("workspaceId") String workspaceId, @Bind("queueId") UUID queueId);
-
     /**
      * Batch lookup for the queue list endpoint, so a page of queues costs one query rather than one per row.
      *
