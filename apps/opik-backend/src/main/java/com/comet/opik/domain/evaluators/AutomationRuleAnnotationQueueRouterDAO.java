@@ -46,7 +46,12 @@ public interface AutomationRuleAnnotationQueueRouterDAO {
             @Bind("maxItemsInQueue") Integer maxItemsInQueue,
             @Bind("userName") String userName);
 
-    String SELECT_COLUMNS = """
+    /**
+     * Lookup by queue, for one queue or for a page of them. Streamed rather than listed so the caller maps
+     * each row as it arrives; the stream is tied to the handle, so it must be consumed inside the
+     * transaction that opened it.
+     */
+    @SqlQuery("""
             SELECT rule.id, arp.project_id, rule.name, rule.sampling_rate, rule.enabled,
                    rule.trigger_scope, rule.filters,
                    router.queue_id, router.scope, router.conditions, router.max_items_in_queue,
@@ -55,31 +60,34 @@ public interface AutomationRuleAnnotationQueueRouterDAO {
             JOIN automation_rule_annotation_queue_routers router ON rule.id = router.id
             JOIN automation_rule_projects arp
                 ON arp.rule_id = rule.id AND arp.workspace_id = rule.workspace_id
-            """;
-
-    @SqlQuery(SELECT_COLUMNS + """
-            WHERE rule.workspace_id = :workspaceId AND router.queue_id = :queueId
-            """)
-    Optional<AutomationRuleAnnotationQueueRouterModel> findByQueueId(@Bind("workspaceId") String workspaceId,
-            @Bind("queueId") UUID queueId);
-
-    /**
-     * Batch lookup for the queue list endpoint, so a page of queues costs one query rather than one per row.
-     *
-     * <p>Streamed rather than listed so the caller maps each row as it arrives. The stream is tied to the
-     * handle, so it must be consumed inside the transaction that opened it.
-     */
-    @SqlQuery(SELECT_COLUMNS + """
             WHERE rule.workspace_id = :workspaceId AND router.queue_id IN (<queueIds>)
             """)
     Stream<AutomationRuleAnnotationQueueRouterModel> findByQueueIds(@Bind("workspaceId") String workspaceId,
             @BindList("queueIds") List<UUID> queueIds);
 
     /**
+     * The single-queue case of {@link #findByQueueIds}. A one-element {@code IN} plans the same as an
+     * equality test against the unique index on {@code queue_id}, so this needs no query of its own.
+     */
+    default Optional<AutomationRuleAnnotationQueueRouterModel> findByQueueId(String workspaceId, UUID queueId) {
+        try (var rows = findByQueueIds(workspaceId, List.of(queueId))) {
+            return rows.findFirst();
+        }
+    }
+
+    /**
      * Enabled routers for the given projects — the scope routing actually runs at. Projects are reached
      * through the junction table as well as the legacy column, matching how evaluators are looked up.
      */
-    @SqlQuery(SELECT_COLUMNS + """
+    @SqlQuery("""
+            SELECT rule.id, arp.project_id, rule.name, rule.sampling_rate, rule.enabled,
+                   rule.trigger_scope, rule.filters,
+                   router.queue_id, router.scope, router.conditions, router.max_items_in_queue,
+                   router.created_at, router.created_by, router.last_updated_at, router.last_updated_by
+            FROM automation_rules rule
+            JOIN automation_rule_annotation_queue_routers router ON rule.id = router.id
+            JOIN automation_rule_projects arp
+                ON arp.rule_id = rule.id AND arp.workspace_id = rule.workspace_id
             WHERE rule.workspace_id = :workspaceId
               AND rule.enabled = TRUE
               AND router.scope = :scope
