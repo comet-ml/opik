@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import { manageToolFilter } from "@/v2/pages-shared/traces/spanTypeFilter";
-import { CopyEntityActions } from "@/v2/pages-shared/traces/CopyEntityActions";
+import CopyEntityActions from "@/v2/pages-shared/traces/CopyEntityActions/CopyEntityActions";
 import useAppStore from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -622,7 +622,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         variant="info"
         title={
           <TooltipWrapper content={`Thread ID: ${threadId}`}>
-            <span className="truncate">Thread</span>
+            <span>Thread</span>
           </TooltipWrapper>
         }
         titleSuffix={

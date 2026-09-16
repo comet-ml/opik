@@ -23,8 +23,6 @@ const CopyActionButton: React.FunctionComponent<CopyActionButtonProps> = ({
   const [isCopied, setIsCopied] = useState(false);
   const timerRef = useRef<number | null>(null);
 
-  // Clear on unmount so the timer can't set state after teardown. Repeated
-  // clicks restart the countdown rather than stacking timers.
   useEffect(
     () => () => {
       if (timerRef.current) window.clearTimeout(timerRef.current);
@@ -43,12 +41,14 @@ const CopyActionButton: React.FunctionComponent<CopyActionButtonProps> = ({
     );
   }, [onCopy]);
 
+  const currentLabel = isCopied ? "Copied" : label;
+
   return (
-    <TooltipWrapper content={label}>
+    <TooltipWrapper content={currentLabel}>
       <Button
         variant="minimal"
         size="icon-2xs"
-        aria-label={label}
+        aria-label={currentLabel}
         onClick={handleClick}
       >
         {isCopied ? <Check className="text-chart-green" /> : icon}

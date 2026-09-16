@@ -38,7 +38,7 @@ import {
   DetailsActionSection,
   DetailsActionSectionValue,
 } from "@/v2/pages-shared/traces/DetailsActionSection";
-import { CopyEntityActions } from "@/v2/pages-shared/traces/CopyEntityActions";
+import CopyEntityActions from "@/v2/pages-shared/traces/CopyEntityActions/CopyEntityActions";
 import {
   mapRowDataForExport,
   TRACE_EXPORT_COLUMNS,
@@ -213,7 +213,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       variant="info"
       title={
         <TooltipWrapper content={`Trace ID: ${traceId}`}>
-          <span className="truncate">{traceName || "Trace"}</span>
+          <span>{traceName || "Trace"}</span>
         </TooltipWrapper>
       }
       titleSuffix={

@@ -31,7 +31,7 @@ import useTreeDetailsStore, {
   TreeNodeConfig,
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
 import AddToDropdown from "@/v2/pages-shared/traces/AddToDropdown/AddToDropdown";
-import { CopyEntityActions } from "@/v2/pages-shared/traces/CopyEntityActions";
+import CopyEntityActions from "@/v2/pages-shared/traces/CopyEntityActions/CopyEntityActions";
 import {
   DetailsActionSection,
   DetailsActionSectionToggle,

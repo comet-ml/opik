@@ -110,6 +110,21 @@ describe("CopyEntityActions", () => {
     expect(iconOf(linkButton)).toContain("lucide-link");
   });
 
+  it("relabels the button while the check is showing", () => {
+    renderActions();
+
+    fireEvent.click(screen.getByLabelText("Copy trace ID"));
+
+    expect(screen.getByLabelText("Copied")).toBeTruthy();
+    expect(screen.queryByLabelText("Copy trace ID")).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(3100);
+    });
+
+    expect(screen.getByLabelText("Copy trace ID")).toBeTruthy();
+  });
+
   it("reverts the check icon after 3s", () => {
     renderActions();
     const idButton = screen.getByLabelText("Copy trace ID");
