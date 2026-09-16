@@ -339,6 +339,38 @@ export interface ThreadDetail {
   feedbackScores: FeedbackScoreRef[];
 }
 
+/** One trigger config of an alert, as the API stores it. */
+export interface AlertTriggerConfigDetail {
+  type: string;
+  /**
+   * The stored key/value map, verbatim. Nullable because the API's own shape
+   * makes it optional — a caller asserting on a threshold or a window must
+   * compare the whole map so an absent one fails, rather than reading through
+   * an optional chain that turns "no config at all" into a silent pass.
+   */
+  configValue: Record<string, string> | null;
+}
+
+/** One trigger of an alert, with the configs that decide when it fires. */
+export interface AlertTriggerDetail {
+  eventType: string;
+  configs: AlertTriggerConfigDetail[];
+}
+
+/**
+ * An alert read back by id, including the trigger configs the list never shows.
+ *
+ * `listAlertsWithPrefix` answers name and id only, which cannot say whether a
+ * rejected write left the stored alert alone — the name, the threshold and the
+ * window all have to be re-read for that.
+ */
+export interface AlertDetail {
+  id: string;
+  name: string;
+  enabled: boolean;
+  triggers: AlertTriggerDetail[];
+}
+
 export interface AutomationRuleRef {
   id: string;
   name: string;
@@ -841,7 +873,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
    * exists for the same reason (the pinned SDK can't express the call).
    */
   const rawFetch = async (
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH',
     path: string,
     opts: { query?: URLSearchParams; body?: unknown } = {},
   ): Promise<RawApiResult & { json: unknown }> => {
@@ -1251,6 +1283,59 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     async deleteAlertsBatch(ids: string[]): Promise<void> {
       if (ids.length === 0) return;
       await opik.api.alerts.deleteAlertBatch({ ids });
+    },
+
+    /**
+     * `POST /v1/private/alerts` returning the status and message rather than
+     * throwing, for the payloads the API is meant to refuse.
+     *
+     * Raw rather than the pinned SDK for two reasons. The SDK raises on any
+     * non-2xx and discards the body, but here the status *and* the message are
+     * the contract: a threshold config the metrics job could never evaluate
+     * must answer 400 naming the missing key and the config type. And the
+     * payloads under test are ones the typed write shape cannot express — a
+     * config carrying only half a threshold condition, or one still using the
+     * legacy `window_seconds` key the backend deliberately keeps valid.
+     */
+    async createAlertRaw(body: unknown): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch('POST', '/v1/private/alerts', { body });
+      return { status, message, location };
+    },
+
+    /** `PUT /v1/private/alerts/{id}`, raw for the same reasons as `createAlertRaw`. */
+    async updateAlertRaw(alertId: string, body: unknown): Promise<RawApiResult> {
+      const { status, message, location } = await rawFetch(
+        'PUT',
+        `/v1/private/alerts/${alertId}`,
+        { body },
+      );
+      return { status, message, location };
+    },
+
+    /**
+     * One alert by id with its triggers and their configs, or null once it is
+     * no longer readable — so "the write was refused" and "the write landed and
+     * was then lost" cannot be confused for each other.
+     */
+    async getAlert(alertId: string): Promise<AlertDetail | null> {
+      try {
+        const alert = await opik.api.alerts.getAlertById(alertId);
+        return {
+          id: String(alert.id),
+          name: alert.name ?? '',
+          enabled: alert.enabled ?? false,
+          triggers: (alert.triggers ?? []).map((trigger) => ({
+            eventType: String(trigger.eventType),
+            configs: (trigger.triggerConfigs ?? []).map((config) => ({
+              type: String(config.type),
+              configValue: config.configValue ?? null,
+            })),
+          })),
+        };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
     },
 
     async listOptimizationsWithPrefix(prefix: string): Promise<ProjectRef[]> {

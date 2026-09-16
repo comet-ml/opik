@@ -67,6 +67,18 @@ export interface AlertFixtures {
    * and a prefix delete would reach across them.
    */
   uiAlertCleanup: (names: string[]) => void;
+
+  /**
+   * Deletes alerts a test writes itself, through `createAlertRaw` rather than
+   * `seedAlerts` — the validation specs send payloads the typed seed shape
+   * cannot express, and whose acceptance or refusal is the assertion.
+   *
+   * Registered by id, which those tests mint client-side, so the call comes
+   * *before* the write: a payload the API answered 400 to but persisted anyway
+   * is precisely the leak worth sweeping, and a registration after the response
+   * would miss it. A delete for an alert that was correctly refused is a no-op.
+   */
+  registerAlertCleanup: (id: string) => void;
 }
 
 /**
@@ -139,6 +151,21 @@ export const test = baseTest.extend<AlertFixtures>({
   alert: async ({ seedAlerts }, use) => {
     const [seeded] = await seedAlerts([{ suffix: 'seeded' }]);
     await use(seeded);
+  },
+
+  registerAlertCleanup: async ({ backendClient }, use, testInfo) => {
+    const registry: string[] = [];
+    await use((id) => {
+      registry.push(id);
+    });
+
+    if (registry.length === 0 || shouldLeaveArtifacts(testInfo)) return;
+
+    try {
+      await backendClient.deleteAlertsBatch(registry);
+    } catch (err) {
+      console.warn('[registerAlertCleanup] batch delete warning:', err);
+    }
   },
 
   uiAlertCleanup: [
