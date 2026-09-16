@@ -59,7 +59,7 @@ public record ExportJob(
      */
     @Nullable @JsonProperty("dataset_id")
     @JsonView(ExportJob.View.Public.class)
-    @Schema(accessMode = Schema.AccessMode.READ_ONLY, nullable = true)
+    @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     public UUID datasetId() {
         return params instanceof DatasetExportParams dataset ? dataset.datasetId() : null;
     }
@@ -69,7 +69,7 @@ public record ExportJob(
      */
     @Nullable @JsonProperty("dataset_name")
     @JsonView(ExportJob.View.Public.class)
-    @Schema(accessMode = Schema.AccessMode.READ_ONLY, nullable = true)
+    @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     public String datasetName() {
         return datasetId() == null ? null : resourceName;
     }
