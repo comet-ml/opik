@@ -147,6 +147,7 @@ class McpOAuthClientRegistrationIntegrationTest {
                 .logoUri("javascript:alert(1)")
                 .clientUri("  DATA:text/html;base64,PHNjcmlwdD4=")
                 .softwareId("evil\r\nFAKE LOG LINE")
+                .softwareVersion("1.0\u2028FORGED\u2029LINES")
                 .build();
 
         String clientId;
@@ -156,6 +157,8 @@ class McpOAuthClientRegistrationIntegrationTest {
             assertThat(body.logoUri()).as("javascript: dropped").isNull();
             assertThat(body.clientUri()).as("data: dropped, whitespace/case not a bypass").isNull();
             assertThat(body.softwareId()).as("control chars stripped").isEqualTo("evil  FAKE LOG LINE");
+            assertThat(body.softwareVersion()).as("Unicode line/paragraph separators stripped too")
+                    .isEqualTo("1.0 FORGED LINES");
             clientId = body.clientId();
         }
 

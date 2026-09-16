@@ -21,7 +21,9 @@ public class McpOAuthClientUtils {
 
     private static final int DISPLAY_TEXT_MAX = 255;
     private static final int DISPLAY_URI_MAX = 2048;
-    private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
+    // Cntrl plus the Unicode line and paragraph separators, which are not control characters but break lines in
+    // any log viewer that honours them — the same forgery a \r\n would be.
+    private static final Pattern CONTROL_CHARS = Pattern.compile("[\\p{Cntrl}\u2028\u2029]");
 
     /**
      * Strips control characters, which would otherwise forge lines in the registration log, and caps the
