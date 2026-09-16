@@ -120,13 +120,22 @@ public interface AutomationRuleAnnotationQueueRouterDAO {
     /**
      * Coarser fallback guard, used only when the event carries no project id — which the batch score path
      * cannot, because one batch may span several projects.
+     *
+     * <p>The {@code action} predicate is implied by the join and is there for the index, not the result:
+     * it is what lets the lookup use the second column of
+     * {@code automation_rules_workspace_action_enabled_idx}. Without it the only usable prefix is
+     * workspace_id, and a workspace full of evaluators is walked in full to answer a question about
+     * routers.
      */
     @SqlQuery("""
             SELECT EXISTS (
                 SELECT 1
                 FROM automation_rules rule
                 JOIN automation_rule_annotation_queue_routers router ON rule.id = router.id
-                WHERE rule.workspace_id = :workspaceId AND rule.enabled = TRUE AND router.scope = :scope
+                WHERE rule.workspace_id = :workspaceId
+                  AND rule.action = 'annotation_queue_router'
+                  AND rule.enabled = TRUE
+                  AND router.scope = :scope
             )
             """)
     boolean existsEnabledByWorkspace(@Bind("workspaceId") String workspaceId, @Bind("scope") String scope);

@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset aliaksandrk:000097_add_annotation_queue_router_action
+--changeset aliaksandrk:000100_add_annotation_queue_router_action
 --comment: Allow automation_rules to describe a queue-population rule (OPIK-6303)
 
 -- Queue automation is an automation rule, so it is a row in automation_rules with its own action rather
@@ -9,7 +9,7 @@ ALTER TABLE automation_rules MODIFY COLUMN `action` ENUM('evaluator', 'annotatio
 
 --rollback empty
 
---changeset aliaksandrk:000097_create_automation_rule_annotation_queue_routers
+--changeset aliaksandrk:000100_create_automation_rule_annotation_queue_routers
 --comment: Create automation_rule_annotation_queue_routers — the queue-population subtype of automation_rules (OPIK-6303)
 
 -- Mirrors automation_rule_evaluators: the primary key is the parent rule's id, and workspace and project
