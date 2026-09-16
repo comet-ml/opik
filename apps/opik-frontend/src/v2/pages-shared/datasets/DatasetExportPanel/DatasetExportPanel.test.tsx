@@ -40,7 +40,7 @@ vi.mock("@/ui/use-toast", () => ({
 const createMockStore = () => {
   let activeJobs = new Map<
     string,
-    { job: DatasetExportJob; datasetName: string }
+    { job: DatasetExportJob; resourceName: string }
   >();
   let isPanelExpanded = true;
   let isHydrated = false;
@@ -53,7 +53,10 @@ const createMockStore = () => {
     }),
     setState: (
       newState: Partial<{
-        activeJobs: Map<string, { job: DatasetExportJob; datasetName: string }>;
+        activeJobs: Map<
+          string,
+          { job: DatasetExportJob; resourceName: string }
+        >;
         isPanelExpanded: boolean;
         isHydrated: boolean;
       }>,
@@ -127,8 +130,9 @@ describe("DatasetExportPanel", () => {
     overrides: Partial<DatasetExportJob> = {},
   ): DatasetExportJob => ({
     id: "job-1",
-    dataset_id: "dataset-1",
-    dataset_name: "Test Dataset",
+    export_type: "DATASET",
+    params: { dataset_id: "dataset-1" },
+    resource_name: "Test Dataset",
     status: DATASET_EXPORT_STATUS.PENDING,
     created_at: "2024-01-01T00:00:00Z",
     last_updated_at: "2024-01-01T00:00:01Z",
@@ -146,7 +150,7 @@ describe("DatasetExportPanel", () => {
     it("should render panel when there are active jobs", () => {
       const job = createMockJob();
       mockStore.setState({
-        activeJobs: new Map([["job-1", { job, datasetName: "Test Dataset" }]]),
+        activeJobs: new Map([["job-1", { job, resourceName: "Test Dataset" }]]),
       });
 
       render(<DatasetExportPanel />, { wrapper });
@@ -157,7 +161,7 @@ describe("DatasetExportPanel", () => {
     it("should show 'Download ready' when all jobs are completed", () => {
       const job = createMockJob({ status: DATASET_EXPORT_STATUS.COMPLETED });
       mockStore.setState({
-        activeJobs: new Map([["job-1", { job, datasetName: "Test Dataset" }]]),
+        activeJobs: new Map([["job-1", { job, resourceName: "Test Dataset" }]]),
       });
 
       render(<DatasetExportPanel />, { wrapper });
@@ -168,7 +172,7 @@ describe("DatasetExportPanel", () => {
     it("should display dataset name for each job", () => {
       const job = createMockJob();
       mockStore.setState({
-        activeJobs: new Map([["job-1", { job, datasetName: "My Dataset" }]]),
+        activeJobs: new Map([["job-1", { job, resourceName: "My Dataset" }]]),
       });
 
       render(<DatasetExportPanel />, { wrapper });
@@ -179,7 +183,7 @@ describe("DatasetExportPanel", () => {
     it("should show 'Exporting...' status for pending jobs", () => {
       const job = createMockJob({ status: DATASET_EXPORT_STATUS.PENDING });
       mockStore.setState({
-        activeJobs: new Map([["job-1", { job, datasetName: "Test Dataset" }]]),
+        activeJobs: new Map([["job-1", { job, resourceName: "Test Dataset" }]]),
       });
 
       render(<DatasetExportPanel />, { wrapper });
@@ -190,7 +194,7 @@ describe("DatasetExportPanel", () => {
     it("should show 'Ready' status for completed jobs", () => {
       const job = createMockJob({ status: DATASET_EXPORT_STATUS.COMPLETED });
       mockStore.setState({
-        activeJobs: new Map([["job-1", { job, datasetName: "Test Dataset" }]]),
+        activeJobs: new Map([["job-1", { job, resourceName: "Test Dataset" }]]),
       });
 
       render(<DatasetExportPanel />, { wrapper });
@@ -201,14 +205,14 @@ describe("DatasetExportPanel", () => {
     it("should show 'Failed' status for failed jobs", () => {
       const job = createMockJob({ status: DATASET_EXPORT_STATUS.FAILED });
       mockStore.setState({
-        activeJobs: new Map([["job-1", { job, datasetName: "Test Dataset" }]]),
+        activeJobs: new Map([["job-1", { job, resourceName: "Test Dataset" }]]),
         isHydrated: true, // Mark as hydrated to prevent toast from initial load
       });
 
       // Mark the job as already viewed to prevent toast
       job.viewed_at = "2024-01-01T00:00:02Z";
       mockStore.setState({
-        activeJobs: new Map([["job-1", { job, datasetName: "Test Dataset" }]]),
+        activeJobs: new Map([["job-1", { job, resourceName: "Test Dataset" }]]),
       });
 
       render(<DatasetExportPanel />, { wrapper });
@@ -228,7 +232,7 @@ describe("DatasetExportPanel", () => {
 
       mockStore.setState({
         activeJobs: new Map([
-          ["failed-job-1", { job: failedJob, datasetName: "Failed Dataset" }],
+          ["failed-job-1", { job: failedJob, resourceName: "Failed Dataset" }],
         ]),
         isHydrated: true,
       });
@@ -254,7 +258,7 @@ describe("DatasetExportPanel", () => {
 
       mockStore.setState({
         activeJobs: new Map([
-          ["failed-job-2", { job: failedJob, datasetName: "Test Dataset" }],
+          ["failed-job-2", { job: failedJob, resourceName: "Test Dataset" }],
         ]),
         isHydrated: true,
       });
@@ -280,7 +284,7 @@ describe("DatasetExportPanel", () => {
         activeJobs: new Map([
           [
             "viewed-failed-job",
-            { job: viewedFailedJob, datasetName: "Test Dataset" },
+            { job: viewedFailedJob, resourceName: "Test Dataset" },
           ],
         ]),
         isHydrated: true,
@@ -307,7 +311,7 @@ describe("DatasetExportPanel", () => {
         activeJobs: new Map([
           [
             "failed-no-message",
-            { job: failedJob, datasetName: "My Dataset Name" },
+            { job: failedJob, resourceName: "My Dataset Name" },
           ],
         ]),
         isHydrated: true,
@@ -337,7 +341,7 @@ describe("DatasetExportPanel", () => {
 
       mockStore.setState({
         activeJobs: new Map([
-          ["dedup-job", { job: failedJob, datasetName: "Test Dataset" }],
+          ["dedup-job", { job: failedJob, resourceName: "Test Dataset" }],
         ]),
         isHydrated: true,
       });
@@ -362,7 +366,7 @@ describe("DatasetExportPanel", () => {
 
       mockStore.setState({
         activeJobs: new Map([
-          ["dedup-job", { job: viewedJob, datasetName: "Test Dataset" }],
+          ["dedup-job", { job: viewedJob, resourceName: "Test Dataset" }],
         ]),
         isHydrated: true,
       });
@@ -388,10 +392,10 @@ describe("DatasetExportPanel", () => {
 
       mockStore.setState({
         activeJobs: new Map([
-          ["pending-job", { job: pendingJob, datasetName: "Pending Dataset" }],
+          ["pending-job", { job: pendingJob, resourceName: "Pending Dataset" }],
           [
             "completed-job",
-            { job: completedJob, datasetName: "Completed Dataset" },
+            { job: completedJob, resourceName: "Completed Dataset" },
           ],
         ]),
         isHydrated: true,
@@ -417,10 +421,10 @@ describe("DatasetExportPanel", () => {
 
       mockStore.setState({
         activeJobs: new Map([
-          ["pending-job", { job: pendingJob, datasetName: "Pending Dataset" }],
+          ["pending-job", { job: pendingJob, resourceName: "Pending Dataset" }],
           [
             "completed-job",
-            { job: completedJob, datasetName: "Completed Dataset" },
+            { job: completedJob, resourceName: "Completed Dataset" },
           ],
         ]),
         isHydrated: true,

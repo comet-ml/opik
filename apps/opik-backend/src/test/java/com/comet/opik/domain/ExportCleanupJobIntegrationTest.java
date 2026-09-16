@@ -1,7 +1,8 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DatasetExportJob;
-import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.api.DatasetExportParams;
+import com.comet.opik.api.ExportJob;
+import com.comet.opik.api.ExportStatus;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
@@ -51,7 +52,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @DisplayName("Dataset Export Cleanup Job Integration Test")
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class DatasetExportCleanupJobIntegrationTest {
+class ExportCleanupJobIntegrationTest {
 
     private final String TEST_WORKSPACE_ID = "test-workspace";
 
@@ -121,7 +122,7 @@ class DatasetExportCleanupJobIntegrationTest {
     void setUp() {
         // Clean up all jobs to ensure test isolation
         transactionTemplate.inTransaction(handle -> {
-            handle.execute("DELETE FROM dataset_export_jobs");
+            handle.execute("DELETE FROM export_jobs");
             return null;
         });
     }
@@ -133,13 +134,13 @@ class DatasetExportCleanupJobIntegrationTest {
         String workspaceId = TEST_WORKSPACE_ID;
         UUID datasetId = UUID.randomUUID();
 
-        UUID expiredJobId1 = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
+        UUID expiredJobId1 = createJob(workspaceId, datasetId, ExportStatus.COMPLETED,
                 "exports/test/expired-job1.csv", Instant.now().minusSeconds(3600));
 
-        UUID expiredJobId2 = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
+        UUID expiredJobId2 = createJob(workspaceId, datasetId, ExportStatus.COMPLETED,
                 "exports/test/expired-job2.csv", Instant.now().minusSeconds(1800));
 
-        UUID activeJobId = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
+        UUID activeJobId = createJob(workspaceId, datasetId, ExportStatus.COMPLETED,
                 "exports/test/active-job.csv", Instant.now().plusSeconds(3600));
 
         // Verify jobs exist before cleanup
@@ -210,7 +211,7 @@ class DatasetExportCleanupJobIntegrationTest {
         String workspaceId = TEST_WORKSPACE_ID;
         UUID datasetId = UUID.randomUUID();
 
-        UUID expiredJobId = createJob(workspaceId, datasetId, DatasetExportStatus.COMPLETED,
+        UUID expiredJobId = createJob(workspaceId, datasetId, ExportStatus.COMPLETED,
                 "exports/test/security-test.csv", Instant.now().minusSeconds(3600));
 
         // Verify job exists
@@ -219,7 +220,7 @@ class DatasetExportCleanupJobIntegrationTest {
         // When: Try to cleanup with a non-system user (simulate by calling DAO directly)
         int deletedCount = Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
             return transactionTemplate.inTransaction(handle -> {
-                var dao = handle.attach(DatasetExportJobDAO.class);
+                var dao = handle.attach(ExportJobDAO.class);
                 return dao.deleteJobsByIds("regular-user", Set.of(expiredJobId));
             });
         }))
@@ -251,15 +252,15 @@ class DatasetExportCleanupJobIntegrationTest {
 
     // Helper methods
 
-    private UUID createJob(String workspaceId, UUID datasetId, DatasetExportStatus status,
+    private UUID createJob(String workspaceId, UUID datasetId, ExportStatus status,
             String filePath, Instant expiresAt) {
         UUID jobId = UUID.randomUUID();
         String createdBy = "test-user";
         Instant now = Instant.now();
 
-        DatasetExportJob job = DatasetExportJob.builder()
+        ExportJob job = ExportJob.builder()
                 .id(jobId)
-                .datasetId(datasetId)
+                .params(DatasetExportParams.builder().datasetId(datasetId).build())
                 .status(status)
                 .filePath(filePath)
                 .errorMessage(null)
@@ -272,7 +273,7 @@ class DatasetExportCleanupJobIntegrationTest {
                 .build();
 
         transactionTemplate.inTransaction(handle -> {
-            var dao = handle.attach(DatasetExportJobDAO.class);
+            var dao = handle.attach(ExportJobDAO.class);
             dao.save(job, workspaceId);
             return null;
         });
@@ -286,10 +287,10 @@ class DatasetExportCleanupJobIntegrationTest {
         String createdBy = "test-user";
         Instant now = Instant.now();
 
-        DatasetExportJob job = DatasetExportJob.builder()
+        ExportJob job = ExportJob.builder()
                 .id(jobId)
-                .datasetId(datasetId)
-                .status(DatasetExportStatus.FAILED)
+                .params(DatasetExportParams.builder().datasetId(datasetId).build())
+                .status(ExportStatus.FAILED)
                 .filePath(filePath)
                 .errorMessage(errorMessage)
                 .createdAt(now)
@@ -301,12 +302,12 @@ class DatasetExportCleanupJobIntegrationTest {
                 .build();
 
         transactionTemplate.inTransaction(handle -> {
-            var dao = handle.attach(DatasetExportJobDAO.class);
+            var dao = handle.attach(ExportJobDAO.class);
             dao.save(job, workspaceId);
 
             // Update viewed_at if provided (since save() doesn't support it)
             if (viewedAt != null) {
-                handle.createUpdate("UPDATE dataset_export_jobs SET viewed_at = :viewedAt WHERE id = :id")
+                handle.createUpdate("UPDATE export_jobs SET viewed_at = :viewedAt WHERE id = :id")
                         .bind("viewedAt", viewedAt)
                         .bind("id", jobId.toString())
                         .execute();
@@ -318,10 +319,10 @@ class DatasetExportCleanupJobIntegrationTest {
         return jobId;
     }
 
-    private java.util.Optional<DatasetExportJob> findJobById(UUID jobId) {
+    private java.util.Optional<ExportJob> findJobById(UUID jobId) {
         return transactionTemplate.inTransaction(handle -> {
             // Directly query to check if job exists
-            Integer count = handle.createQuery("SELECT COUNT(*) FROM dataset_export_jobs WHERE id = :id")
+            Integer count = handle.createQuery("SELECT COUNT(*) FROM export_jobs WHERE id = :id")
                     .bind("id", jobId.toString())
                     .mapTo(Integer.class)
                     .one();
@@ -331,19 +332,19 @@ class DatasetExportCleanupJobIntegrationTest {
             }
 
             // Get workspace ID
-            String workspaceId = handle.createQuery("SELECT workspace_id FROM dataset_export_jobs WHERE id = :id")
+            String workspaceId = handle.createQuery("SELECT workspace_id FROM export_jobs WHERE id = :id")
                     .bind("id", jobId.toString())
                     .mapTo(String.class)
                     .one();
 
             // Use DAO to find the job
-            var dao = handle.attach(DatasetExportJobDAO.class);
+            var dao = handle.attach(ExportJobDAO.class);
             return dao.findById(workspaceId, jobId);
         });
     }
 
     private void triggerCleanupJob() throws SchedulerException {
-        var key = JobKey.jobKey(DatasetExportCleanupJob.class.getName());
+        var key = JobKey.jobKey(ExportCleanupJob.class.getName());
         var trigger = TriggerBuilder.newTrigger().startNow().forJob(key).build();
         guiceJobManager.getScheduler().scheduleJob(trigger);
     }

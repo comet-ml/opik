@@ -9,8 +9,8 @@ import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
-import com.comet.opik.domain.CsvDatasetExportService;
 import com.comet.opik.domain.CsvDatasetItemProcessor;
+import com.comet.opik.domain.CsvExportService;
 import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
@@ -67,7 +67,7 @@ class DatasetsResourceIntegrationTest {
     private static final JsonDatasetItemProcessor jsonProcessor = mock(JsonDatasetItemProcessor.class);
     private static final FeatureFlags featureFlags = mock(FeatureFlags.class);
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
-    private static final CsvDatasetExportService csvExportService = mock(CsvDatasetExportService.class);
+    private static final CsvExportService csvExportService = mock(CsvExportService.class);
     private static final AnalyticsService analyticsService = mock(AnalyticsService.class);
     private static final ResourceExtension EXT;
 

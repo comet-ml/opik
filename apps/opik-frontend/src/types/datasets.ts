@@ -277,10 +277,16 @@ export enum DATASET_EXPORT_STATUS {
   FAILED = "FAILED",
 }
 
+export interface ExportJobParams {
+  dataset_id: string;
+  experiment_ids?: string[];
+}
+
 export interface DatasetExportJob {
   id: string;
-  dataset_id: string;
-  dataset_name?: string;
+  export_type: "DATASET" | "EXPERIMENT_ITEMS";
+  params: ExportJobParams;
+  resource_name?: string;
   status: DATASET_EXPORT_STATUS;
   file_path?: string;
   download_url?: string;

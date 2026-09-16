@@ -1,7 +1,8 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DatasetExportJob;
-import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.api.DatasetExportParams;
+import com.comet.opik.api.ExportJob;
+import com.comet.opik.api.ExportStatus;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.NotFoundException;
 import org.jdbi.v3.core.Handle;
@@ -32,17 +33,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for DatasetExportJobServiceImpl.
+ * Unit tests for ExportJobServiceImpl.
  *
  * <p>These tests verify both the service's business logic and DAO interactions by executing
  * the transaction callbacks and mocking the Handle to return the DAO mock. This allows us
  * to verify that the service correctly calls DAO methods with the expected parameters.
  */
 @ExtendWith(MockitoExtension.class)
-class DatasetExportJobServiceImplTest {
+class ExportJobServiceImplTest {
 
     @Mock
-    private DatasetExportJobDAO exportJobDAO;
+    private ExportJobDAO exportJobDAO;
 
     @Mock
     private IdGenerator idGenerator;
@@ -53,7 +54,7 @@ class DatasetExportJobServiceImplTest {
     @Mock
     private Handle handle;
 
-    private DatasetExportJobServiceImpl service;
+    private ExportJobServiceImpl service;
 
     private static final String WORKSPACE_ID = "test-workspace";
     private static final String USER_NAME = "test-user";
@@ -62,14 +63,14 @@ class DatasetExportJobServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new DatasetExportJobServiceImpl(idGenerator, template);
+        service = new ExportJobServiceImpl(idGenerator, template);
 
         // Setup common transaction template behavior - execute callbacks
         when(template.inTransaction(any(), any())).thenAnswer(invocation -> {
             TxAction<?> callback = invocation.getArgument(1);
             return callback.execute(handle);
         });
-        when(handle.attach(DatasetExportJobDAO.class)).thenReturn(exportJobDAO);
+        when(handle.attach(ExportJobDAO.class)).thenReturn(exportJobDAO);
     }
 
     @Test
@@ -79,7 +80,9 @@ class DatasetExportJobServiceImplTest {
         when(idGenerator.generateId()).thenReturn(JOB_ID);
 
         // When
-        Mono<DatasetExportJob> result = service.createJob(DATASET_ID, ttl)
+        Mono<ExportJob> result = service
+                .createJob(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset",
+                        ttl)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -88,8 +91,9 @@ class DatasetExportJobServiceImplTest {
         StepVerifier.create(result)
                 .assertNext(job -> {
                     assertThat(job.id()).isEqualTo(JOB_ID);
-                    assertThat(job.datasetId()).isEqualTo(DATASET_ID);
-                    assertThat(job.status()).isEqualTo(DatasetExportStatus.PENDING);
+                    assertThat(job.params()).isEqualTo(
+                            DatasetExportParams.builder().datasetId(DATASET_ID).build());
+                    assertThat(job.status()).isEqualTo(ExportStatus.PENDING);
                     assertThat(job.createdBy()).isEqualTo(USER_NAME);
                     assertThat(job.createdAt()).isNotNull();
                     assertThat(job.lastUpdatedAt()).isNotNull();
@@ -98,16 +102,17 @@ class DatasetExportJobServiceImplTest {
                 .verifyComplete();
 
         // Verify DAO.save() was called
-        verify(exportJobDAO, times(1)).save(any(DatasetExportJob.class), eq(WORKSPACE_ID));
+        verify(exportJobDAO, times(1)).save(any(ExportJob.class), eq(WORKSPACE_ID));
     }
 
     @Test
     void findInProgressJobs_shouldReturnEmptyList_whenNoJobsFound() {
         // Given
-        when(exportJobDAO.findInProgressByDataset(any(), any(), any())).thenReturn(List.of());
+        when(exportJobDAO.findInProgressByParams(any(), any(), any(), any())).thenReturn(List.of());
 
         // When
-        Mono<List<DatasetExportJob>> result = service.findInProgressJobs(DATASET_ID)
+        Mono<List<ExportJob>> result = service
+                .findInProgressJobs(DatasetExportParams.builder().datasetId(DATASET_ID).build())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -115,37 +120,38 @@ class DatasetExportJobServiceImplTest {
                 .assertNext(jobs -> assertThat(jobs).isEmpty())
                 .verifyComplete();
 
-        // Verify DAO.findInProgressByDataset() was called
-        verify(exportJobDAO, times(1)).findInProgressByDataset(eq(WORKSPACE_ID), eq(DATASET_ID), any());
+        // Verify DAO.findInProgressByParams() was called
+        verify(exportJobDAO, times(1)).findInProgressByParams(eq(WORKSPACE_ID), any(), any(), any());
     }
 
     @Test
     void findInProgressJobs_shouldReturnJobs_whenJobsExist() {
         // Given
-        DatasetExportJob job1 = DatasetExportJob.builder()
+        ExportJob job1 = ExportJob.builder()
                 .id(UUID.randomUUID())
-                .datasetId(DATASET_ID)
-                .status(DatasetExportStatus.PENDING)
+                .params(DatasetExportParams.builder().datasetId(DATASET_ID).build())
+                .status(ExportStatus.PENDING)
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())
                 .expiresAt(Instant.now().plus(Duration.ofHours(24)))
                 .createdBy(USER_NAME)
                 .build();
 
-        DatasetExportJob job2 = DatasetExportJob.builder()
+        ExportJob job2 = ExportJob.builder()
                 .id(UUID.randomUUID())
-                .datasetId(DATASET_ID)
-                .status(DatasetExportStatus.PROCESSING)
+                .params(DatasetExportParams.builder().datasetId(DATASET_ID).build())
+                .status(ExportStatus.PROCESSING)
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())
                 .expiresAt(Instant.now().plus(Duration.ofHours(24)))
                 .createdBy(USER_NAME)
                 .build();
 
-        when(exportJobDAO.findInProgressByDataset(any(), any(), any())).thenReturn(List.of(job1, job2));
+        when(exportJobDAO.findInProgressByParams(any(), any(), any(), any())).thenReturn(List.of(job1, job2));
 
         // When
-        Mono<List<DatasetExportJob>> result = service.findInProgressJobs(DATASET_ID)
+        Mono<List<ExportJob>> result = service
+                .findInProgressJobs(DatasetExportParams.builder().datasetId(DATASET_ID).build())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -156,17 +162,17 @@ class DatasetExportJobServiceImplTest {
                 })
                 .verifyComplete();
 
-        // Verify DAO.findInProgressByDataset() was called
-        verify(exportJobDAO, times(1)).findInProgressByDataset(eq(WORKSPACE_ID), eq(DATASET_ID), any());
+        // Verify DAO.findInProgressByParams() was called
+        verify(exportJobDAO, times(1)).findInProgressByParams(eq(WORKSPACE_ID), any(), any(), any());
     }
 
     @Test
     void getJob_shouldReturnJob_whenJobExists() {
         // Given
-        DatasetExportJob job = DatasetExportJob.builder()
+        ExportJob job = ExportJob.builder()
                 .id(JOB_ID)
-                .datasetId(DATASET_ID)
-                .status(DatasetExportStatus.COMPLETED)
+                .params(DatasetExportParams.builder().datasetId(DATASET_ID).build())
+                .status(ExportStatus.COMPLETED)
                 .filePath("workspace/exports/dataset-123/job-456.csv")
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())
@@ -177,7 +183,7 @@ class DatasetExportJobServiceImplTest {
         when(exportJobDAO.findById(WORKSPACE_ID, JOB_ID)).thenReturn(java.util.Optional.of(job));
 
         // When
-        Mono<DatasetExportJob> result = service.getJob(JOB_ID)
+        Mono<ExportJob> result = service.getJob(JOB_ID)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -197,7 +203,7 @@ class DatasetExportJobServiceImplTest {
         when(exportJobDAO.findById(WORKSPACE_ID, JOB_ID)).thenReturn(java.util.Optional.empty());
 
         // When
-        Mono<DatasetExportJob> result = service.getJob(JOB_ID)
+        Mono<ExportJob> result = service.getJob(JOB_ID)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -266,7 +272,7 @@ class DatasetExportJobServiceImplTest {
 
         // Verify DAO.updateToCompleted() was called
         verify(exportJobDAO, times(1)).updateToCompleted(eq(WORKSPACE_ID), eq(JOB_ID),
-                eq(DatasetExportStatus.COMPLETED),
+                eq(ExportStatus.COMPLETED),
                 eq(filePath), eq(expiresAt), eq(USER_NAME));
     }
 
@@ -293,16 +299,16 @@ class DatasetExportJobServiceImplTest {
     @ParameterizedTest
     @MethodSource("provideUpdateJobNotFoundScenarios")
     void updateJob_shouldThrowNotFoundException_whenJobDoesNotExist(
-            DatasetExportStatus status, String filePath, Instant expiresAt, String errorMessage) {
+            ExportStatus status, String filePath, Instant expiresAt, String errorMessage) {
         // Given
-        if (status == DatasetExportStatus.COMPLETED) {
+        if (status == ExportStatus.COMPLETED) {
             when(exportJobDAO.updateToCompleted(any(), any(), any(), any(), any(), any())).thenReturn(0);
         } else {
             when(exportJobDAO.updateToFailed(any(), any(), any(), any())).thenReturn(0);
         }
 
         // When
-        Mono<Void> result = (status == DatasetExportStatus.COMPLETED)
+        Mono<Void> result = (status == ExportStatus.COMPLETED)
                 ? service.updateJobToCompleted(JOB_ID, filePath, expiresAt)
                 : service.updateJobToFailed(JOB_ID, errorMessage);
 
@@ -317,9 +323,9 @@ class DatasetExportJobServiceImplTest {
                 .verify();
 
         // Verify appropriate DAO method was called
-        if (status == DatasetExportStatus.COMPLETED) {
+        if (status == ExportStatus.COMPLETED) {
             verify(exportJobDAO, times(1)).updateToCompleted(eq(WORKSPACE_ID), eq(JOB_ID),
-                    eq(DatasetExportStatus.COMPLETED), eq(filePath), eq(expiresAt), eq(USER_NAME));
+                    eq(ExportStatus.COMPLETED), eq(filePath), eq(expiresAt), eq(USER_NAME));
         } else {
             verify(exportJobDAO, times(1)).updateToFailed(eq(WORKSPACE_ID), eq(JOB_ID), eq(errorMessage),
                     eq(USER_NAME));
@@ -333,7 +339,7 @@ class DatasetExportJobServiceImplTest {
         String errorMessage = "Export failed due to timeout";
 
         return Stream.of(
-                Arguments.of(DatasetExportStatus.COMPLETED, filePath, expiresAt, null),
-                Arguments.of(DatasetExportStatus.FAILED, null, null, errorMessage));
+                Arguments.of(ExportStatus.COMPLETED, filePath, expiresAt, null),
+                Arguments.of(ExportStatus.FAILED, null, null, errorMessage));
     }
 }

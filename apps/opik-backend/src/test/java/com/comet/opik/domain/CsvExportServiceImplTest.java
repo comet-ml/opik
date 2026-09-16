@@ -1,9 +1,10 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DatasetExportJob;
-import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.api.DatasetExportParams;
+import com.comet.opik.api.ExportJob;
+import com.comet.opik.api.ExportStatus;
 import com.comet.opik.domain.attachment.FileService;
-import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.infrastructure.ExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.util.Duration;
@@ -31,6 +32,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -39,16 +41,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class CsvDatasetExportServiceImplTest {
+class CsvExportServiceImplTest {
 
     @Mock
-    private DatasetExportJobService jobService;
+    private ExportJobService jobService;
 
     @Mock
     private RedissonReactiveClient redisClient;
 
     @Mock
-    private DatasetExportConfig exportConfig;
+    private ExportConfig exportConfig;
 
     @Mock
     private LockService lockService;
@@ -56,7 +58,7 @@ class CsvDatasetExportServiceImplTest {
     @Mock
     private FileService fileService;
 
-    private CsvDatasetExportServiceImpl service;
+    private CsvExportServiceImpl service;
 
     private static final String WORKSPACE_ID = "test-workspace";
     private static final String USER_NAME = "test-user";
@@ -66,19 +68,20 @@ class CsvDatasetExportServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new CsvDatasetExportServiceImpl(jobService, redisClient, exportConfig, lockService, fileService);
+        service = new CsvExportServiceImpl(jobService, redisClient, exportConfig, lockService,
+                fileService);
     }
 
     @Test
     void startExport_shouldCreateNewJobAndPublishToRedis_whenNoExistingJob() {
         // Given
-        DatasetExportJob newJob = createJob(JOB_ID, DatasetExportStatus.PENDING);
+        ExportJob newJob = createJob(JOB_ID, ExportStatus.PENDING);
 
         // Mock: export is enabled
-        when(exportConfig.isEnabled()).thenReturn(true);
+        when(exportConfig.isEnabledFor(anyString())).thenReturn(true);
 
         // Mock: no existing jobs
-        when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of()));
+        when(jobService.findInProgressJobs(any())).thenReturn(Mono.just(List.of()));
 
         // Mock: lock service executes the action
         when(lockService.executeWithLock(any(LockService.Lock.class), any(Mono.class)))
@@ -88,11 +91,11 @@ class CsvDatasetExportServiceImplTest {
         when(exportConfig.getDefaultTtl()).thenReturn(DEFAULT_TTL);
 
         // Mock: create new job
-        when(jobService.createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()))).thenReturn(Mono.just(newJob));
+        when(jobService.createJob(any(), any(), eq(DEFAULT_TTL.toJavaDuration()))).thenReturn(Mono.just(newJob));
 
         // Mock: Redis stream
         @SuppressWarnings("unchecked")
-        RStreamReactive<String, DatasetExportMessage> mockStream = (RStreamReactive<String, DatasetExportMessage>) mock(
+        RStreamReactive<String, ExportMessage> mockStream = (RStreamReactive<String, ExportMessage>) mock(
                 RStreamReactive.class);
         when(redisClient.getStream(any(String.class), any())).thenReturn((RStreamReactive) mockStream);
 
@@ -103,7 +106,8 @@ class CsvDatasetExportServiceImplTest {
         when(exportConfig.getStreamTrimLimit()).thenReturn(100);
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
+        Mono<ExportJob> result = service
+                .startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset")
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -112,17 +116,17 @@ class CsvDatasetExportServiceImplTest {
         StepVerifier.create(result)
                 .assertNext(job -> {
                     assertThat(job).isEqualTo(newJob);
-                    assertThat(job.status()).isEqualTo(DatasetExportStatus.PENDING);
+                    assertThat(job.status()).isEqualTo(ExportStatus.PENDING);
                     assertThat(job.id()).isEqualTo(JOB_ID);
                 })
                 .verifyComplete();
 
         // Verify the flow
-        verify(jobService, times(2)).findInProgressJobs(eq(DATASET_ID)); // Initial check + double-check in lock
-        verify(jobService, times(1)).createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()));
+        verify(jobService, times(2)).findInProgressJobs(any()); // Initial check + double-check in lock
+        verify(jobService, times(1)).createJob(any(), any(), eq(DEFAULT_TTL.toJavaDuration()));
 
         // Verify stream.add was called with correct params
-        ArgumentCaptor<StreamAddParams<String, DatasetExportMessage>> captor = ArgumentCaptor
+        ArgumentCaptor<StreamAddParams<String, ExportMessage>> captor = ArgumentCaptor
                 .forClass(StreamAddParams.class);
         verify(mockStream, times(1)).add(captor.capture());
         var streamAddParams = captor.getValue();
@@ -132,15 +136,16 @@ class CsvDatasetExportServiceImplTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = DatasetExportStatus.class, names = {"PENDING", "PROCESSING"})
-    void startExport_shouldReturnExistingJob_whenJobAlreadyExists(DatasetExportStatus status) {
+    @EnumSource(value = ExportStatus.class, names = {"PENDING", "PROCESSING"})
+    void startExport_shouldReturnExistingJob_whenJobAlreadyExists(ExportStatus status) {
         // Given
-        DatasetExportJob existingJob = createJob(JOB_ID, status);
-        when(exportConfig.isEnabled()).thenReturn(true);
-        when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
+        ExportJob existingJob = createJob(JOB_ID, status);
+        when(exportConfig.isEnabledFor(anyString())).thenReturn(true);
+        when(jobService.findInProgressJobs(any())).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
+        Mono<ExportJob> result = service
+                .startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset")
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -154,61 +159,62 @@ class CsvDatasetExportServiceImplTest {
                 .verifyComplete();
 
         // Verify jobService was called to check existing jobs
-        verify(jobService).findInProgressJobs(eq(DATASET_ID));
+        verify(jobService).findInProgressJobs(any());
 
         // Verify no new job was created
-        verify(jobService, never()).createJob(any(), any());
+        verify(jobService, never()).createJob(any(), any(), any());
     }
 
     @Test
     void startExport_shouldCheckInProgressJobsWithCorrectStatuses() {
         // Given
-        DatasetExportJob existingJob = createJob(JOB_ID, DatasetExportStatus.PENDING);
-        when(exportConfig.isEnabled()).thenReturn(true);
-        when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
+        ExportJob existingJob = createJob(JOB_ID, ExportStatus.PENDING);
+        when(exportConfig.isEnabledFor(anyString())).thenReturn(true);
+        when(jobService.findInProgressJobs(any())).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
-        service.startExport(DATASET_ID)
+        service.startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset")
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME))
                 .block();
 
         // Then - verify that findInProgressJobs is called with DATASET_ID
-        // The Set<DatasetExportStatus> is created inside the service, so we just verify the call
-        verify(jobService).findInProgressJobs(eq(DATASET_ID));
+        // The Set<ExportStatus> is created inside the service, so we just verify the call
+        verify(jobService).findInProgressJobs(any());
     }
 
     @Test
     void startExport_shouldReturnError_whenExportIsDisabled() {
         // Given
-        when(exportConfig.isEnabled()).thenReturn(false);
+        when(exportConfig.isEnabledFor(anyString())).thenReturn(false);
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
+        Mono<ExportJob> result = service
+                .startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset")
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
 
         // Then
         StepVerifier.create(result)
-                .expectErrorMatches(throwable -> throwable instanceof IllegalStateException &&
-                        throwable.getMessage().contains("Dataset export is disabled"))
+                .expectErrorMatches(throwable -> throwable instanceof jakarta.ws.rs.ServerErrorException &&
+                        throwable.getMessage().contains("Export is not enabled for type"))
                 .verify();
 
         // Verify no job service calls were made
         verify(jobService, never()).findInProgressJobs(any());
-        verify(jobService, never()).createJob(any(), any());
+        verify(jobService, never()).createJob(any(), any(), any());
     }
 
     @Test
     void downloadExport_shouldReturnInputStream_whenJobIsCompleted() {
         // Given
         String filePath = "exports/test-file.csv";
-        DatasetExportJob completedJob = DatasetExportJob.builder()
+        ExportJob completedJob = ExportJob.builder()
                 .id(JOB_ID)
-                .datasetId(DATASET_ID)
-                .status(DatasetExportStatus.COMPLETED)
+                .params(DatasetExportParams.builder().datasetId(DATASET_ID).build())
+                .status(ExportStatus.COMPLETED)
                 .filePath(filePath)
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())
@@ -239,7 +245,7 @@ class CsvDatasetExportServiceImplTest {
     @Test
     void downloadExport_shouldReturnError_whenJobIsNotCompleted() {
         // Given
-        DatasetExportJob pendingJob = createJob(JOB_ID, DatasetExportStatus.PENDING);
+        ExportJob pendingJob = createJob(JOB_ID, ExportStatus.PENDING);
 
         when(jobService.getJob(JOB_ID)).thenReturn(Mono.just(pendingJob));
 
@@ -259,10 +265,10 @@ class CsvDatasetExportServiceImplTest {
         verify(fileService, never()).download(any());
     }
 
-    private DatasetExportJob createJob(UUID jobId, DatasetExportStatus status) {
-        return DatasetExportJob.builder()
+    private ExportJob createJob(UUID jobId, ExportStatus status) {
+        return ExportJob.builder()
                 .id(jobId)
-                .datasetId(DATASET_ID)
+                .params(DatasetExportParams.builder().datasetId(DATASET_ID).build())
                 .status(status)
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())

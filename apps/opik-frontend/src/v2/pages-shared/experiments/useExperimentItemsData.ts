@@ -72,6 +72,8 @@ const useExperimentItemsData = ({
       },
     );
 
+  const total = data?.total ?? 0;
+
   const { refetch: refetchExportData } = useCompareExperimentsList(
     {
       workspaceName,
@@ -130,7 +132,6 @@ const useExperimentItemsData = ({
   );
 
   const rows = useMemo(() => data?.content ?? [], [data?.content]);
-  const total = data?.total ?? 0;
 
   const columnsStatistic = useMemo(
     () => statisticData?.stats ?? [],
