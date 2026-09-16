@@ -288,13 +288,24 @@ def test_evaluate__tolerated_failures__are_sent_to_the_backend(
     # The failure has to have actually happened, or its presence below proves nothing.
     assert _score_by_name(result, failed_score_name).scoring_failed is True
 
-    logged_scores = {
-        score.name: score
+    # Kept as a list on purpose. Keyed by score name, one record per metric would
+    # satisfy a set comparison no matter how many items failed, which is the
+    # regression this test exists to catch.
+    logged = [
+        score
         for trace in fake_backend.trace_trees
-        for score in trace.feedback_scores or []
-    }
-    assert set(logged_scores) == {"always_passes", failed_score_name}
-    assert logged_scores[failed_score_name].value == 0.0
+        for score in (trace.feedback_scores or [])
+    ]
+    n_items = len(items) if items is not None else 2
+    assert len(logged) == 2 * n_items, [s.name for s in logged]
+    assert {score.name for score in logged} == {"always_passes", failed_score_name}
+
+    failed_logged = [score for score in logged if score.name == failed_score_name]
+    assert len(failed_logged) == n_items
+    for score in failed_logged:
+        assert score.value == 0.0
+        assert score.reason
+    assert all(score.value == 1.0 for score in logged if score.name == "always_passes")
 
 
 def test_evaluate__error_tolerance_accepts_plain_ints(fake_backend):
