@@ -25,7 +25,9 @@ CREATE TABLE IF NOT EXISTS automation_rule_annotation_queue_routers (
     conditions JSON NOT NULL,
     -- Ceiling on how many items automation may leave in the queue. NULL means no ceiling, which is why
     -- this is nullable rather than a sentinel like 0 — "unbounded" is the default state, not a magic value.
-    max_items_in_queue INT UNSIGNED NULL,
+    -- Signed to match the Integer the API validates and the model carries: UNSIGNED reaches 4.29e9, which
+    -- no caller can send and no Integer can hold, so the extra range only buys a value nothing could read.
+    max_items_in_queue INT NULL,
 
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     created_by VARCHAR(100) NOT NULL DEFAULT 'admin',
