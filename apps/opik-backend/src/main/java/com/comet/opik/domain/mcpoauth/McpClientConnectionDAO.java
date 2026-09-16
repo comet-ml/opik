@@ -80,6 +80,11 @@ interface McpClientConnectionDAO {
     /**
      * Backs a workspace's connected-clients view, most recently used first.
      * <p>
+     * Rows written before the display sanitisers existed (migration 000098, ahead of them) can still hold a
+     * {@code javascript:} logo or a name with a line break — the upsert refreshes both on the next connection,
+     * but a row whose host never comes back keeps them. Whoever first renders this list should put the values
+     * through {@link McpOAuthClientUtils}, as {@code DbOAuthClientStrategy} does for the client rows.
+     * <p>
      * {@code active} is derived from the tokens rather than stored, because most disconnections are never
      * reported: a client removed on the user's machine simply stops coming back, and only the ageing out of
      * its tokens reveals it. An explicit revocation deletes the row outright; this covers the silent case.

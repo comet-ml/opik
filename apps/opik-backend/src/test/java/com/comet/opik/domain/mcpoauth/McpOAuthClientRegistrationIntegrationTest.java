@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.resources.OAuthResourceClient;
+import com.comet.opik.domain.mcpoauth.ClientRegistrationRequest.ClientRegistrationRequestBuilder;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
@@ -31,12 +32,14 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.IntFunction;
-import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -191,48 +194,89 @@ class McpOAuthClientRegistrationIntegrationTest {
         }
     }
 
-    /** The other side of truncation: a value that fits, at and just under each cap, must survive untouched. */
-    Stream<Arguments> valuesWithinTheCap() {
-        return Stream.of(
-                Arguments.of("software_version at the cap", 255,
-                        (IntFunction<String>) n -> "v".repeat(n),
-                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b,
-                        true),
-                Arguments.of("software_version just under the cap", 254,
-                        (IntFunction<String>) n -> "v".repeat(n),
-                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b,
-                        true),
-                Arguments.of("logo_uri at the cap", 2048,
-                        (IntFunction<String>) n -> "https://example.test/" + "p".repeat(n - 21),
-                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b,
-                        false),
-                Arguments.of("logo_uri just under the cap", 2047,
-                        (IntFunction<String>) n -> "https://example.test/" + "p".repeat(n - 21),
-                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b,
-                        false));
+    private static final String URL_PREFIX = "https://example.test/";
+
+    /**
+     * One of the four optional metadata fields: how to set it on a registration, how to read it back from the
+     * response and from the persisted row, the cap its column imposes, and how to build a value of a given
+     * length that is valid for it — text takes any filler, a URL has to stay parseable.
+     */
+    private record MetadataField(String name, int limit, IntFunction<String> sample,
+            BiFunction<ClientRegistrationRequestBuilder, String, ClientRegistrationRequestBuilder> set,
+            Function<ClientRegistrationResponse, String> echoed, Function<McpOAuthClient, String> stored) {
+        @Override
+        public String toString() {
+            return name;
+        }
     }
 
-    @ParameterizedTest(name = "{0} is stored unchanged")
-    @MethodSource("valuesWithinTheCap")
-    void valuesWithinTheCapAreStoredUnchanged(String label, int length, IntFunction<String> build,
-            UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder> unused, boolean isText) {
-        String sent = build.apply(length);
-        var builder = ClientRegistrationRequest.builder()
-                .clientName("Exact Host")
-                .redirectUris(Set.of("http://127.0.0.1:4326/cb"));
-        var request = (isText ? builder.softwareVersion(sent) : builder.logoUri(sent)).build();
+    private static final IntFunction<String> TEXT_SAMPLE = length -> "v".repeat(length);
+    private static final IntFunction<String> URL_SAMPLE = length -> URL_PREFIX
+            + "p".repeat(length - URL_PREFIX.length());
+
+    private static final List<MetadataField> METADATA_FIELDS = List.of(
+            new MetadataField("software_id", 255, TEXT_SAMPLE, ClientRegistrationRequestBuilder::softwareId,
+                    ClientRegistrationResponse::softwareId, McpOAuthClient::softwareId),
+            new MetadataField("software_version", 255, TEXT_SAMPLE, ClientRegistrationRequestBuilder::softwareVersion,
+                    ClientRegistrationResponse::softwareVersion, McpOAuthClient::softwareVersion),
+            new MetadataField("client_uri", 2048, URL_SAMPLE, ClientRegistrationRequestBuilder::clientUri,
+                    ClientRegistrationResponse::clientUri, McpOAuthClient::clientUri),
+            new MetadataField("logo_uri", 2048, URL_SAMPLE, ClientRegistrationRequestBuilder::logoUri,
+                    ClientRegistrationResponse::logoUri, McpOAuthClient::logoUri));
+
+    Stream<Arguments> metadataFields() {
+        return METADATA_FIELDS.stream().map(Arguments::of);
+    }
+
+    /** Both sides of each cap: the last length that fits, and the one before it. */
+    Stream<Arguments> metadataFieldsWithinTheirCap() {
+        return METADATA_FIELDS.stream()
+                .flatMap(field -> Stream.of(Arguments.of(field, field.limit()),
+                        Arguments.of(field, field.limit() - 1)));
+    }
+
+    /** Registers a client carrying one metadata value; returns what the response echoed and what the row kept. */
+    private Map.Entry<String, String> register(MetadataField field, String sent, String host) {
+        var request = field.set()
+                .apply(ClientRegistrationRequest.builder().clientName(host).redirectUris(Set.of(REDIRECT_URI)), sent)
+                .build();
 
         String clientId;
+        String echoed;
         try (var response = client.target(baseURI + REGISTER_PATH).request().post(Entity.json(request))) {
-            assertThat(response.getStatus()).isEqualTo(201);
+            assertThat(response.getStatus()).as("a host that registers today must keep working").isEqualTo(201);
             var body = response.readEntity(ClientRegistrationResponse.class);
-            assertThat(isText ? body.softwareVersion() : body.logoUri()).as("echoed %s", label).isEqualTo(sent);
+            echoed = field.echoed().apply(body);
             clientId = body.clientId();
         }
 
         var row = tx.inTransaction(READ_ONLY, h -> h.attach(McpOAuthClientDAO.class).findActiveById(clientId))
                 .orElseThrow();
-        assertThat(isText ? row.softwareVersion() : row.logoUri()).as("persisted %s", label).isEqualTo(sent);
+        return Map.entry(echoed, field.stored().apply(row));
+    }
+
+    @ParameterizedTest(name = "an over-long {0} is truncated, never rejected")
+    @MethodSource("metadataFields")
+    void overlongValuesAreTruncatedNotRejected(MetadataField field) {
+        String sent = field.sample().apply(field.limit() + 200);
+        // Built without the production truncation helper, so a shared bug cannot make both sides agree.
+        String expected = sent.substring(0, field.limit());
+
+        var actual = register(field, sent, "Verbose Host");
+
+        assertThat(actual.getKey()).as("echoed %s", field).isEqualTo(expected).hasSize(field.limit());
+        assertThat(actual.getValue()).as("persisted %s", field).isEqualTo(expected);
+    }
+
+    @ParameterizedTest(name = "a {1}-character {0} is stored unchanged")
+    @MethodSource("metadataFieldsWithinTheirCap")
+    void valuesWithinTheCapAreStoredUnchanged(MetadataField field, int length) {
+        String sent = field.sample().apply(length);
+
+        var actual = register(field, sent, "Exact Host");
+
+        assertThat(actual.getKey()).as("echoed %s", field).isEqualTo(sent);
+        assertThat(actual.getValue()).as("persisted %s", field).isEqualTo(sent);
     }
 
     @Test
@@ -257,17 +301,22 @@ class McpOAuthClientRegistrationIntegrationTest {
         assertThat(stored.logoUri()).as("credentials never persisted").isNull();
     }
 
-    @Test
-    @DisplayName("an over-long URL is capped without leaving a half-written percent-escape")
-    void overlongUrlIsTruncatedWithoutSplittingAnEscape() {
-        // The cap lands mid-escape: without backing off, the stored value ends in "%2" or "%" and no longer parses.
-        String tail = "%20end";
-        String padded = "https://example.test/" + "p".repeat(2048 - "https://example.test/".length() - 1)
-                + tail;
+    /** The cap landing on the last character of a %XX escape, and on its middle. */
+    Stream<Arguments> escapePositions() {
+        return Stream.of(Arguments.of("last character of the escape", 1),
+                Arguments.of("middle of the escape", 2));
+    }
+
+    @ParameterizedTest(name = "a URL capped at the {0} keeps a parseable value")
+    @MethodSource("escapePositions")
+    void overlongUrlIsTruncatedWithoutSplittingAnEscape(String label, int backOff) {
+        // Place "%20" so the 2048-character cut lands inside it: without backing off, the stored value would
+        // end in "%" or "%2" and no longer parse.
+        String head = URL_PREFIX + "p".repeat(2048 - URL_PREFIX.length() - backOff);
         var request = ClientRegistrationRequest.builder()
                 .clientName("Escaping Host")
-                .redirectUris(Set.of("http://127.0.0.1:4325/cb"))
-                .logoUri(padded)
+                .redirectUris(Set.of(REDIRECT_URI))
+                .logoUri(head + "%20and-more-beyond-the-cap")
                 .build();
 
         try (var response = client.target(baseURI + REGISTER_PATH).request().post(Entity.json(request))) {
@@ -276,11 +325,10 @@ class McpOAuthClientRegistrationIntegrationTest {
             assertThat(echoed).as("a valid long URL is truncated, never dropped").isNotNull();
             assertThat(echoed.length()).isLessThanOrEqualTo(2048);
             assertThat(echoed).as("no dangling percent-escape").doesNotEndWith("%").doesNotEndWith("%2");
-            assertThatCode(() -> new java.net.URI(echoed)).as("still parses").doesNotThrowAnyException();
+            assertThatCode(() -> new URI(echoed)).as("still parses").doesNotThrowAnyException();
         }
     }
 
-    @Test
     @DisplayName("a row stored before the filters existed is cleaned on the way to the consent page")
     void legacyUnsafeRowIsCleanedOnRead() {
         // Written straight through the DAO, as a registration from before the write-side filters would have been:
@@ -312,60 +360,6 @@ class McpOAuthClientRegistrationIntegrationTest {
                     .isEqualTo("Legacy Evil Host  FAKE LOG LINE");
             assertThat(context.clientLogoUri()).as("the <img src> the consent page would render").isNull();
         }
-    }
-
-    /**
-     * One case per optional metadata field (the two text ones and the two URLs): the over-long value a host could
-     * send, and the cap the column imposes.
-     */
-    Stream<Arguments> overlongMetadataValues() {
-        String text = "v".repeat(5000);
-        String uri = "https://example.test/" + "p".repeat(5000);
-        return Stream.of(
-                Arguments.of("software_id", text, 255,
-                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b
-                                .softwareId(text),
-                        (Function<ClientRegistrationResponse, String>) ClientRegistrationResponse::softwareId,
-                        (Function<McpOAuthClient, String>) McpOAuthClient::softwareId),
-                Arguments.of("software_version", text, 255,
-                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b
-                                .softwareVersion(text),
-                        (Function<ClientRegistrationResponse, String>) ClientRegistrationResponse::softwareVersion,
-                        (Function<McpOAuthClient, String>) McpOAuthClient::softwareVersion),
-                Arguments.of("client_uri", uri, 2048,
-                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b
-                                .clientUri(uri),
-                        (Function<ClientRegistrationResponse, String>) ClientRegistrationResponse::clientUri,
-                        (Function<McpOAuthClient, String>) McpOAuthClient::clientUri),
-                Arguments.of("logo_uri", uri, 2048,
-                        (UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder>) b -> b.logoUri(uri),
-                        (Function<ClientRegistrationResponse, String>) ClientRegistrationResponse::logoUri,
-                        (Function<McpOAuthClient, String>) McpOAuthClient::logoUri));
-    }
-
-    @ParameterizedTest(name = "{0} over {2} characters is truncated, never rejected")
-    @MethodSource("overlongMetadataValues")
-    void overlongValuesAreTruncatedNotRejected(String field, String sent, int limit,
-            UnaryOperator<ClientRegistrationRequest.ClientRegistrationRequestBuilder> withValue,
-            Function<ClientRegistrationResponse, String> echoed, Function<McpOAuthClient, String> stored) {
-        var request = withValue.apply(ClientRegistrationRequest.builder()
-                .clientName("Verbose Host")
-                .redirectUris(Set.of("http://127.0.0.1:4322/cb")))
-                .build();
-        // Built without the production truncation helper, so a shared bug cannot make both sides agree.
-        String expected = sent.substring(0, limit);
-
-        String clientId;
-        try (var response = client.target(baseURI + REGISTER_PATH).request().post(Entity.json(request))) {
-            assertThat(response.getStatus()).as("a host that registers today must keep working").isEqualTo(201);
-            var body = response.readEntity(ClientRegistrationResponse.class);
-            assertThat(echoed.apply(body)).as("echoed %s", field).isEqualTo(expected).hasSize(limit);
-            clientId = body.clientId();
-        }
-
-        var row = tx.inTransaction(READ_ONLY, h -> h.attach(McpOAuthClientDAO.class).findActiveById(clientId))
-                .orElseThrow();
-        assertThat(stored.apply(row)).as("persisted %s", field).isEqualTo(expected);
     }
 
     @Test

@@ -33,7 +33,7 @@ public class McpOAuthClientUtils {
      */
     public static @Nullable String sanitizeDisplayText(@Nullable String value) {
         String cleaned = stripControlChars(value, " ");
-        return cleaned == null ? null : StringUtils.truncate(cleaned, DISPLAY_TEXT_MAX);
+        return cleaned == null ? null : truncate(cleaned, DISPLAY_TEXT_MAX);
     }
 
     /**
@@ -41,6 +41,10 @@ public class McpOAuthClientUtils {
      * in the connected-clients UI. Anything that is not a well-formed http(s) URL with a host — {@code javascript:},
      * {@code data:}, a malformed value — is dropped rather than stored, so nothing but a fetchable web URL can
      * reach a sink, whoever renders it.
+     * <p>
+     * The host has to be ASCII, because that is what {@link URI} will parse: an internationalised domain is
+     * dropped rather than punycoded. No MCP host ships one, and the alternative — accepting the raw authority
+     * when the host does not parse — would also accept the {@code user:password@} form this deliberately drops.
      */
     public static @Nullable String sanitizeDisplayUri(@Nullable String value) {
         String uri = stripControlChars(value, "");
@@ -79,7 +83,9 @@ public class McpOAuthClientUtils {
 
     /**
      * Caps a validated URL at the column width without leaving a half-written percent-escape at the end, which
-     * would make the stored value unparseable for whoever renders it.
+     * would make the stored value unparseable for whoever renders it. Two characters of back-off is enough and
+     * unambiguous: {@link URI} has already rejected any malformed escape, so every {@code %} left in the string
+     * is followed by two hex digits and can never be one itself.
      */
     private static String truncateUri(String uri) {
         if (uri.length() <= DISPLAY_URI_MAX) {
@@ -92,7 +98,18 @@ public class McpOAuthClientUtils {
                 break;
             }
         }
-        return uri.substring(0, end);
+        return truncate(uri, end);
+    }
+
+    /**
+     * Caps at {@code max} characters without splitting a surrogate pair — half of one is not a character, and
+     * the driver writes it to a utf8mb4 column as a replacement byte.
+     */
+    private static String truncate(String value, int max) {
+        if (value.length() <= max) {
+            return value;
+        }
+        return value.substring(0, Character.isHighSurrogate(value.charAt(max - 1)) ? max - 1 : max);
     }
 
     /**
