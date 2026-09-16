@@ -28,6 +28,7 @@ import io.dropwizard.jobs.GuiceJobManager;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -109,6 +110,18 @@ class DailyUsageReportJobTest {
                                 .and(matchingJsonPath("$.event_properties.daily_experiments",
                                         equalTo(dailyExperiments)))
                                 .and(matchingJsonPath("$.event_properties.daily_datasets", equalTo(dailyDatasets)))));
+    }
+
+    /**
+     * Verifies the trace count alone, for the tests whose subject is trace counting. Their dataset and experiment
+     * counts depend on what earlier tests in the class left backdated, which is incidental to what they assert.
+     */
+    private void verifyDailyTraces(WireMockServer server, String dailyTraces) {
+        server.verify(
+                postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type",
+                                equalTo(DailyUsageReportJob.STATISTICS_BE))
+                                .and(matchingJsonPath("$.event_properties.daily_traces", equalTo(dailyTraces)))));
     }
 
     private void updateDatasets(String workspaceId, TransactionTemplate transactionTemplate, boolean updateUser) {
@@ -432,6 +445,34 @@ class DailyUsageReportJobTest {
             NETWORK.close();
         }
 
+        /**
+         * Each test has to run the report itself, on its own data, and verify its own event. All three were
+         * shared before:
+         *
+         * <ul>
+         * <li>the job only reports once a day — {@code shouldSendDailyReport} compares
+         * {@code metadata.daily_usage_report} against {@code CURDATE()} — so after the first test every later job
+         * run returned early and sent nothing;</li>
+         * <li>traces accumulate, because {@code updateTraces} copies the workspace's traces into the previous-day
+         * window rather than moving them, and the daily count spans every workspace;</li>
+         * <li>WireMock's journal is cumulative, so {@code verify} was satisfied by the first test's event.</li>
+         * </ul>
+         *
+         * <p>Together those let a test assert a count it never produced:
+         * {@link #dailyUsageReportMixedDataExcludesOnlyDemo()} created seven regular traces, asserted five, and
+         * passed without its job ever emitting anything. It failed as soon as it was run on its own.
+         */
+        @BeforeEach
+        void resetReportState() {
+            templateAsync.nonTransaction(
+                    connection -> Mono.from(connection.createStatement("TRUNCATE TABLE traces").execute()))
+                    .block();
+            transactionTemplate.inTransaction(TransactionTemplateAsync.WRITE,
+                    handle -> handle.createUpdate("DELETE FROM metadata WHERE `key` = 'daily_usage_report'")
+                            .execute());
+            wireMock.server().resetRequests();
+        }
+
         @Test
         void test() throws SchedulerException {
 
@@ -452,7 +493,8 @@ class DailyUsageReportJobTest {
                     .await()
                     .atMost(5, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        verifyResponse(wireMock.server(), "1", "1", "5", "0", "0");
+                        // setUpData backdates datasets and experiments as well as traces, so all three are counted
+                        verifyResponse(wireMock.server(), "1", "1");
                     });
 
         }
@@ -587,6 +629,8 @@ class DailyUsageReportJobTest {
             // Create demo data (which should be excluded)
             createDemoData(apiKey, workspaceName);
 
+            var expectedDailyTraces = String.valueOf(regularTraces.size());
+
             // Update created_at to yesterday to be captured in daily report
             updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
 
@@ -597,11 +641,8 @@ class DailyUsageReportJobTest {
 
             // Wait for job completion and verify
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-                // Verify that demo data tracking was properly excluded from BI events
-                // The verification here would depend on how the job reports data
-                // Since this test focuses on exclusion, we verify no demo data is included
-                // in the usage statistics by checking that only regular traces are counted
-                verifyResponse(wireMock.server(), "1", "1", "5", "0", "0"); // Only regular traces counted
+                // Only the regular traces are counted; everything in a demo project is excluded
+                verifyDailyTraces(wireMock.server(), expectedDailyTraces);
             });
         }
 
@@ -638,6 +679,8 @@ class DailyUsageReportJobTest {
             // Create demo data (should be excluded from counts)
             createDemoData(apiKey, workspaceName);
 
+            var expectedDailyTraces = String.valueOf(regularTraces1.size() + regularTraces2.size());
+
             // Update created_at to yesterday to be captured in daily report
             updateTraces(ProjectService.DEFAULT_WORKSPACE_ID, templateAsync, false);
 
@@ -648,11 +691,9 @@ class DailyUsageReportJobTest {
 
             // Wait for job completion and verify
             Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
-                // Verify that demo data exclusion works properly with mixed data
-                // The job should process both regular and demo data, but only regular data
-                // should be included in the final usage statistics sent to the BI events
-                // Expected: Regular traces only, demo traces excluded
-                verifyResponse(wireMock.server(), "1", "1", "5", "0", "0"); // Only regular traces counted
+                // Both regular projects are summed and the demo projects dropped, so the count is the
+                // traces created here rather than either project's share of them
+                verifyDailyTraces(wireMock.server(), expectedDailyTraces);
             });
         }
 

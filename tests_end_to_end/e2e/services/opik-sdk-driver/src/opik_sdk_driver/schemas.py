@@ -144,17 +144,45 @@ class DatasetInsertItemsRequest(BaseModel):
     # both paths must land in ONE dataset version with identical counters.
     # Parallel upload needs a backend >= MIN_BACKEND_VERSION_FOR_PARALLEL_INSERT
     # (2.2.8); against an older one the SDK silently falls back to sequential.
+    #
+    # A plain int, not a constrained one, and for the same reason as on the read
+    # request: the SDK's own validation of it (0, negative) and its clamp at
+    # DATASET_ITEMS_WRITE_MAX_THREADS are part of what a caller reads this route
+    # to assert, so pydantic must not reject those values before the SDK sees
+    # them.
     num_threads: int = 1
     # Mirrors Dataset.insert's own default. False bypasses the content-hash
     # dedup path entirely: every item is sent as-is, so identical content
     # inserted twice is stored twice.
     deduplication: bool = True
+    # Whether the item batches are gzipped on the wire. None leaves the
+    # deployment's own setting in place; False selects the uncompressed upload
+    # arm, where the send pool joins and ships raw chunks instead of the writer
+    # emitting a compressed stream. Both arms must store identical items, and
+    # the response reports which one actually ran.
+    enable_json_request_compression: bool | None = None
     workspace: str | None = None
 
 
 class DatasetInsertItemsResponse(BaseModel):
     dataset_id: str
+    # Items handed to Dataset.insert(), not what the backend stored after
+    # deduplication. Zero when `value_error` is set — which is what the SDK
+    # rejecting the arguments means, but NOT what a ValueError raised partway
+    # through an upload would mean. Read the dataset back to learn what landed
+    # rather than inferring it from this.
     inserted: int
+    # Whether this upload's bodies were gzipped, read back off the client that
+    # was built rather than echoed from the request. A caller comparing a
+    # compressed run against an uncompressed one has to be able to show the two
+    # arms genuinely differed; an echoed flag would agree with itself even if
+    # the override never reached the transport.
+    compression_enabled: bool
+    # The ValueError message when the SDK rejected the arguments, else None. The
+    # route answers 200 either way so the caller can assert on the message, the
+    # same contract as /datasets/read-items. Validation runs before any batch is
+    # sent, so a rejected insert leaves the dataset exactly as it was.
+    value_error: str | None = None
 
 
 class DatasetInsertCall(BaseModel):

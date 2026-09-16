@@ -60,23 +60,52 @@ def insert_dataset_items(
     Each call is one `Dataset.insert(...)`, which is the unit a version is cut
     on — the SDK splits the items into batches of 1000 internally, and those
     batches must not become versions of their own.
+
+    A `ValueError` out of `Dataset.insert` is reported as a 200 with
+    `value_error` set rather than raised, as on `/datasets/read-items`: argument
+    rejection is a documented outcome of some of these calls and the caller has
+    to be able to assert the message.
+
+    The catch is the whole call, not just its argument validation, because the
+    two are not separable from out here — a `ValueError` raised mid-upload
+    surfaces the same way. It is reported rather than swallowed, so a caller
+    that cares whether anything was written must read the dataset back instead
+    of trusting `inserted`; `dataset-insert-thread-clamp.spec.ts` does exactly
+    that.
     """
-    client = make_opik_client(workspace=body.workspace, api_key=x_opik_api_key)
+    client = make_opik_client(
+        workspace=body.workspace,
+        api_key=x_opik_api_key,
+        enable_json_request_compression=body.enable_json_request_compression,
+    )
+    # The setting the client was actually built with, read off its own config
+    # rather than from the request: this is what decides whether the upload's
+    # bodies are gzipped, so it is the only honest thing to report back.
+    compression_enabled = client.config.enable_json_request_compression
+    value_error: str | None = None
     try:
         dataset = client.get_dataset(
             name=body.dataset_name, project_name=body.project_name
         )
-        dataset.insert(
-            body.items,
-            num_threads=body.num_threads,
-            deduplication=body.deduplication,
-        )
+        try:
+            dataset.insert(
+                body.items,
+                num_threads=body.num_threads,
+                deduplication=body.deduplication,
+            )
+        except ValueError as err:
+            value_error = str(err)
         dataset_id = str(dataset.id)
     finally:
         client.end(flush=True)
         atexit.unregister(client.end)
 
-    return DatasetInsertItemsResponse(dataset_id=dataset_id, inserted=len(body.items))
+    return DatasetInsertItemsResponse(
+        dataset_id=dataset_id,
+        inserted=0 if value_error else len(body.items),
+        compression_enabled=compression_enabled,
+        value_error=value_error,
+    )
 
 
 @router.post(

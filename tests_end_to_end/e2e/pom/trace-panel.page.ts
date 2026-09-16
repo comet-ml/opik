@@ -293,6 +293,49 @@ export class TracePanelPage {
   }
 
   /**
+   * Every score table rendered on the Feedback scores tab.
+   *
+   * The tab renders a "Trace scores" table, and a second "Span scores" one when
+   * the trace's spans carry scores of their own. Neither is labelled in the DOM,
+   * so a spec that means "the trace's own scores" and wants an exhaustive row
+   * assertion should assert this is exactly 1 first — otherwise the row
+   * locators below silently range over both tables' rows.
+   */
+  feedbackScoreTables(): Locator {
+    return this.feedbackScoresTabPanel.getByRole('table');
+  }
+
+  /**
+   * Every data row on the Feedback scores tab, for counting.
+   *
+   * `[data-row-id]` is what makes this the rows and not the header: the shared
+   * `DataTable` stamps it on body rows only.
+   */
+  feedbackScoreRows(): Locator {
+    return this.feedbackScoresTabPanel.locator('tbody tr[data-row-id]');
+  }
+
+  /**
+   * The row for one score, addressed by identity rather than by text.
+   *
+   * This table's row id IS the score name, so the attribute match is exact —
+   * unlike {@link feedbackScoreRow}'s `hasText`, which also matches a score
+   * whose name merely contains this one.
+   */
+  feedbackScoreRowByName(scoreName: string): Locator {
+    return this.feedbackScoresTabPanel.locator(
+      `tbody tr[data-row-id="${scoreName}"]`,
+    );
+  }
+
+  /** The Score cell of one row — `<rowId>_value`, the cell id `DataTable` stamps. */
+  feedbackScoreValueCell(scoreName: string): Locator {
+    return this.feedbackScoresTabPanel.locator(
+      `td[data-cell-id="${scoreName}_value"]`,
+    );
+  }
+
+  /**
    * Read the numeric value rendered in the Score column for the given score name.
    * Requires the Feedback scores tab to be open (call openFeedbackScoresTab first).
    * Throws if the row doesn't exist or the cell isn't a parseable number.

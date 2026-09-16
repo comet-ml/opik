@@ -363,24 +363,6 @@ export const updateProviderConfig = <
     const next: T = { ...currentConfig };
     let changed = false;
 
-    // Reasoning models reject temperature < 1; coerce.
-    if (
-      isReasoningModel(params.model) &&
-      typeof next.temperature === "number" &&
-      next.temperature < 1
-    ) {
-      next.temperature = 1.0;
-      changed = true;
-    }
-
-    // Reasoning models reject top_p outright (OpenAI returns 400 "Unsupported parameter:
-    // 'top_p' is not supported with this model."). Drop any stale value so the next request
-    // omits the field entirely. The Top P slider is hidden for these models in the UI.
-    if (isReasoningModel(params.model) && next.topP !== undefined) {
-      next.topP = undefined;
-      changed = true;
-    }
-
     // reasoningEffort: drop it for models without an effort option list,
     // coerce stale values to "high" otherwise. Mirrors the Anthropic
     // thinkingEffort handling below.
@@ -404,17 +386,6 @@ export const updateProviderConfig = <
   if (providerType === PROVIDER_TYPE.ANTHROPIC) {
     const next: T = { ...currentConfig };
     let changed = false;
-
-    if (!supportsSamplingParams(params.model)) {
-      if (next.temperature !== undefined) {
-        next.temperature = undefined;
-        changed = true;
-      }
-      if (next.topP !== undefined) {
-        next.topP = undefined;
-        changed = true;
-      }
-    }
 
     const effortOptions = getAnthropicThinkingEffortOptions(params.model);
     if (effortOptions.length === 0) {
@@ -462,6 +433,114 @@ export const updateProviderConfig = <
   return currentConfig;
 };
 
+export type SamplingParams = { temperature?: number; topP?: number };
+
+/**
+ * The single interpreter of temperature/topP for a model: capability gating plus Anthropic's
+ * temperature-XOR-topP rule.
+ *
+ * The settings panel and the request builder both read through it, so a slider can never show a
+ * value the request leaves out. That lets the stored config keep whatever the user last chose even
+ * while a model that rejects it is selected — switching back restores the value instead of losing
+ * it.
+ *
+ * It gates and disambiguates; it does not invent. A parameter the config does not carry stays
+ * absent, because the same panels serve surfaces with narrower configs — the LLM judge rule stores
+ * no topP, so offering one there would show a control its save path drops. Filling in a parameter a
+ * surface genuinely owns belongs to that surface (see restoreMissingConfigKeys for the playground).
+ */
+export const resolveSamplingParams = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: { temperature?: number | null; topP?: number | null },
+): SamplingParams => {
+  const temperature = configs.temperature ?? undefined;
+  const topP = configs.topP ?? undefined;
+
+  if (!model) {
+    return { temperature, topP };
+  }
+
+  const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+
+  if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    if (!supportsSamplingParams(model)) {
+      return {};
+    }
+    // Anthropic takes one of the pair, never both: temperature wins a config carrying both, and
+    // takes over when neither is set so the panel can't offer two live sliders.
+    if (temperature !== undefined) {
+      return { temperature };
+    }
+    if (topP !== undefined) {
+      return { topP };
+    }
+    return { temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE };
+  }
+
+  // Reasoning models take neither: top_p is rejected outright ("Unsupported parameter: 'top_p' is
+  // not supported with this model.") and temperature accepts only the provider's own default, so
+  // there is nothing to tune and omitting both is the one payload that always works.
+  if (provider === PROVIDER_TYPE.OPEN_AI && isReasoningModel(model)) {
+    return {};
+  }
+
+  return { temperature, topP };
+};
+
+export type EffortParams = {
+  reasoningEffort?: ReasoningEffort;
+  thinkingEffort?: AnthropicThinkingEffort;
+};
+
+/**
+ * The effort a model will actually run at, for the providers that expose one. The companion to
+ * {@link resolveSamplingParams} for the effort dropdowns.
+ *
+ * Unlike the sampling pair this does substitute a default, because the dropdown has no empty state:
+ * it renders "High (Default)" for a config holding nothing, which is also what a fresh config is
+ * seeded with. Resolving to that same value is what stops the control claiming an effort the
+ * request never carries — a model change into a reasoning model leaves the config's effort unset,
+ * and the provider would then apply its own default rather than the high the panel showed.
+ *
+ * "high" is offered by every model in both capability maps, so it is always a valid substitute.
+ */
+export const resolveEffort = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: EffortParams,
+): EffortParams => {
+  if (!model) {
+    return { ...configs };
+  }
+
+  const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
+
+  if (provider === PROVIDER_TYPE.OPEN_AI) {
+    const options = getOpenAIReasoningEffortOptions(model);
+    if (options.length === 0) {
+      return {};
+    }
+    return {
+      reasoningEffort: options.some((o) => o.value === configs.reasoningEffort)
+        ? configs.reasoningEffort
+        : "high",
+    };
+  }
+
+  if (provider === PROVIDER_TYPE.ANTHROPIC) {
+    const options = getAnthropicThinkingEffortOptions(model);
+    if (options.length === 0) {
+      return {};
+    }
+    return {
+      thinkingEffort: options.some((o) => o.value === configs.thinkingEffort)
+        ? configs.thinkingEffort
+        : "high",
+    };
+  }
+
+  return { ...configs };
+};
+
 // Last-mile request hardening, complementary to updateProviderConfig: this
 // layer doesn't trust upstream and keeps the payload valid for stale state
 // (e.g. older persisted prompts missing maxCompletionTokens).
@@ -474,42 +553,40 @@ export const sanitizeConfigForRequest = (
   const sanitized: Record<string, unknown> = { ...configs };
   const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
-  if (provider === PROVIDER_TYPE.ANTHROPIC) {
-    if (!supportsSamplingParams(model)) {
-      delete sanitized.temperature;
-      delete sanitized.topP;
-    } else if (sanitized.topP != null && sanitized.temperature != null) {
-      delete sanitized.topP;
-    }
-    if (sanitized.maxCompletionTokens == null) {
-      sanitized.maxCompletionTokens =
-        DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
-    }
-  }
-
-  if (provider === PROVIDER_TYPE.OPEN_AI && sanitized.reasoningEffort != null) {
-    if (!supportsOpenAIReasoningEffort(model)) {
-      delete sanitized.reasoningEffort;
-    } else {
-      const allowed = getOpenAIReasoningEffortOptions(model).map(
-        (o) => o.value,
-      );
-      if (!allowed.includes(sanitized.reasoningEffort as ReasoningEffort)) {
-        delete sanitized.reasoningEffort;
+  if (
+    provider === PROVIDER_TYPE.ANTHROPIC ||
+    provider === PROVIDER_TYPE.OPEN_AI
+  ) {
+    const sampling = resolveSamplingParams(model, configs as SamplingParams);
+    for (const key of ["temperature", "topP"] as const) {
+      if (sampling[key] === undefined) {
+        delete sanitized[key];
+      } else {
+        sanitized[key] = sampling[key];
       }
     }
   }
 
-  // Strip top_p for OpenAI reasoning models — OpenAI rejects it with 400 "Unsupported
-  // parameter: 'top_p' is not supported with this model." Belt-and-braces with the slider
-  // gating and updateProviderConfig: stale persisted prompts that bypass the reconciler
-  // still produce a valid wire payload.
   if (
-    provider === PROVIDER_TYPE.OPEN_AI &&
-    isReasoningModel(model) &&
-    sanitized.topP != null
+    provider === PROVIDER_TYPE.ANTHROPIC &&
+    sanitized.maxCompletionTokens == null
   ) {
-    delete sanitized.topP;
+    sanitized.maxCompletionTokens =
+      DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
+  }
+
+  if (
+    provider === PROVIDER_TYPE.ANTHROPIC ||
+    provider === PROVIDER_TYPE.OPEN_AI
+  ) {
+    const effort = resolveEffort(model, configs as EffortParams);
+    for (const key of ["reasoningEffort", "thinkingEffort"] as const) {
+      if (effort[key] === undefined) {
+        delete sanitized[key];
+      } else {
+        sanitized[key] = effort[key];
+      }
+    }
   }
 
   // The request body is a flat spread of the config, and the backend deserializes it into

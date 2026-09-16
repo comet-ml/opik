@@ -1,12 +1,10 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
-import com.comet.opik.api.SpansCountResponse;
-import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.SpanSortingFactory;
@@ -17,6 +15,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.stats.StatsMerger;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -66,7 +65,6 @@ import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.FilterUtils.addSortNeedsWideFlag;
-import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -84,6 +82,16 @@ import static java.util.function.Predicate.not;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class SpanDAO {
+
+    /**
+     * The read/insert-facing span table, and the mutation target while the sharding-readiness wrap is off. Only
+     * {@link #selectSpansMutationTable} may use these two constants to name a mutation's table — see its Javadoc
+     * and {@code SpanMutationRoutingArchTest}.
+     */
+    private static final String SPANS_TABLE = "spans";
+
+    /** The {@code MergeTree} shard beneath the {@code Distributed} wrapper, and the mutation target once it is live. */
+    private static final String SPANS_LOCAL_TABLE = "spans_local";
 
     private static final String SPAN_SEARCH_CLAUSE = """
             (ilike(id, :search_text)
@@ -1306,11 +1314,20 @@ public class SpanDAO {
             ;
             """;
 
+    /**
+     * Cascade delete of the spans belonging to deleted traces, scoped to the {@code (workspace_id, project_id, id)}
+     * prefix of the sort key.
+     * <p>
+     * {@code project_id} is mandatory rather than an optional branch: a project-less {@code (workspace_id, id)} delete
+     * would scan every project's spans in the workspace, and post-wrap would reach the shard without the column
+     * {@code spans} is distributed on. The sole caller is {@code SpanService.deleteByTraceIds}, which always carries
+     * the owning project the trace delete resolved (OPIK-7483).
+     */
     private static final String DELETE_BY_IDS = """
-            DELETE FROM spans
+            DELETE FROM <spans_mutation_table>
             WHERE id IN :ids
             AND workspace_id = :workspace_id
-            <if(project_id)>AND project_id = :project_id<endif>
+            AND project_id = :project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1327,7 +1344,7 @@ public class SpanDAO {
      * applied here until {@code spans} can be pruned by a column aligned with {@code trace_id}.
      */
     private static final String DELETE_FOR_RETENTION = """
-            DELETE FROM spans
+            DELETE FROM <spans_mutation_table>
             WHERE workspace_id IN :workspace_ids
             AND trace_id >= :lower_bound
             AND trace_id \\< :cutoff_id
@@ -1335,6 +1352,36 @@ public class SpanDAO {
                 SELECT trace_id FROM experiment_items
                 WHERE workspace_id IN :workspace_ids
                 AND trace_id >= :lower_bound
+                AND trace_id \\< :cutoff_id
+            )
+            SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
+            ;
+            """;
+
+    /**
+     * The per-workspace bounded counterpart of {@link #DELETE_FOR_RETENTION} (applyToPast=false): each workspace
+     * carries its own {@code trace_id} floor, so the windows are OR-ed rather than sharing one {@code :lower_bound}.
+     * <p>
+     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching {@code BULK_INSERT} and
+     * the other variable-arity queries in this DAO, so the query text is declared once and every value is bound.
+     * Declaring it rather than assembling it at runtime is also what puts it in reach of the routing guard, which
+     * reads these constants.
+     * <p>
+     * As in {@link #DELETE_FOR_RETENTION}, no partition-pruning predicate is applied: the range keys on
+     * {@code trace_id} while the partition column {@code id_at} derives from the span's own id.
+     */
+    private static final String DELETE_FOR_RETENTION_BOUNDED = """
+            DELETE FROM <spans_mutation_table>
+            WHERE (
+                <items:{item |
+                    (workspace_id = :ws_<item.index> AND trace_id >= :lb_<item.index> AND trace_id \\< :cutoff_id)
+                    <if(item.hasNext)>OR<endif>
+                }>
+            )
+            AND trace_id NOT IN (
+                SELECT trace_id FROM experiment_items
+                WHERE workspace_id IN :workspace_ids_flat
+                AND trace_id >= :min_lower_bound
                 AND trace_id \\< :cutoff_id
             )
             SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
@@ -1714,40 +1761,59 @@ public class SpanDAO {
             FROM spans
             WHERE trace_id IN :trace_ids
             AND workspace_id = :workspace_id
-            <if(project_id)>AND project_id = :project_id<endif>
+            AND project_id = :project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
-    private static final String SPAN_COUNT_BY_WORKSPACE_ID = """
+    /**
+     * Previous-day span counts per workspace, at project granularity so that
+     * {@link DemoDataExclusionUtils#foldByWorkspace} can drop demo projects and re-aggregate in Java.
+     *
+     * <p><b>The demo-project exclusion must not render into this query text.</b> It used to, as an inline
+     * {@code project_id NOT IN [...]} literal holding one UUID per demo project across all workspaces. One demo
+     * project is created per signup, so that literal grows without bound, and a {@code Distributed} table re-parses
+     * the query text per shard — on {@code traces} that is what eventually pushed the equivalent queries past
+     * {@code max_execution_time}, after which the daily counts silently stopped being produced, because the callers
+     * consuming them cannot tell an empty result from a failed one. Keeping the text constant is what makes growth
+     * in the demo set unable to reintroduce that; see {@link DemoDataExclusionUtils}.
+     *
+     * <p><b>No {@code id_at} week bound, deliberately.</b> See {@link #SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER}.
+     */
+    private static final String SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT = """
             SELECT
                  workspace_id,
-                 COUNT(DISTINCT id) as span_count
+                 project_id,
+                 COUNT(DISTINCT id) AS span_count
              FROM spans
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)>AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-            <endif>
-             GROUP BY workspace_id
+             GROUP BY workspace_id, project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
-    private static final String SPAN_DAILY_BI_INFORMATION = """
-            SELECT
-                    workspace_id,
-                    created_by AS user,
-                    COUNT(DISTINCT id) AS span_count
-            FROM spans
-            WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-            <if(excluded_project_ids)>AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-            <endif>
-            GROUP BY workspace_id, created_by
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
+    /**
+     * Previous-day span counts per workspace, project and user. Serves both the BI events — which
+     * {@link DemoDataExclusionUtils#foldByWorkspaceAndUser} re-aggregates by workspace and user — and the
+     * per-project usage breakdown, which reports the rows as they come back and only drops the demo projects. One
+     * text, two log comments, so the two consumers stay distinguishable in {@code system.query_log}. Same constraint
+     * on the query text as {@link #SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT}.
+     *
+     * <p><b>No {@code id_at} week bound, by decision rather than omission (OPIK-8375).</b> Once {@code spans} is
+     * partitioned weekly on {@code id_at} this opens parts in every partition, which is expensive, and a bound is
+     * derivable in principle: the window is on {@code created_at}, so with UUIDv7 ingestion validation enforcing
+     * that every id's embedded timestamp sits within {@link com.comet.opik.infrastructure.UuidValidationConfig}'s
+     * window of ingest, {@code id_at} would fall within that window of {@code created_at} too.
+     *
+     * <p>It is rejected because that premise is a runtime setting, not an invariant, and this is a billing count —
+     * a bound that drops rows under-bills silently, the exact failure this query set exists to avoid. Validation has
+     * a kill-switch and an audit mode that deliberately admits out-of-window ids; its window is operator-tunable up
+     * to 45 days, with a wider per-workspace bypass on top; and none of it applies to rows already written. A bound
+     * would therefore have to be correct for whatever configuration was in force when each row was ingested, which
+     * nothing in a query over a past day can know. Widening it to the maximum does not rescue it, since the
+     * kill-switch and audit mode void it at any width. The partition cost is answered by reducing the partition
+     * count instead.
+     */
     private static final String SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER = """
             SELECT
                  workspace_id,
@@ -1756,9 +1822,6 @@ public class SpanDAO {
                  COUNT(DISTINCT id) AS span_count
              FROM spans
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)>AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-            <endif>
              GROUP BY workspace_id, project_id, created_by
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2037,6 +2100,38 @@ public class SpanDAO {
 
     private boolean spanColumnsNonNullable() {
         return configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable();
+    }
+
+    /**
+     * Binds the physical table a span <b>mutation</b> must target, and the <b>only</b> place that name is decided.
+     * <p>
+     * While the sharding-readiness wrap is live, {@code spans} is a {@code Distributed} table that rejects mutations
+     * (code 36 / 48), so every {@code DELETE} / {@code ALTER} / {@code OPTIMIZE} must target the {@code spans_local}
+     * shard instead; while it is off, {@code spans} is still a {@code MergeTree} where deletes work directly.
+     * Resolving here keeps the mutation templates topology-agnostic
+     * ({@code DELETE FROM <spans_mutation_table>}) and leaves exactly one line to audit, rather than a two-branch
+     * conditional repeated in every template where a correct new mutation would be a matter of remembering to copy the
+     * branch. {@code SpanMutationRoutingArchTest} enforces both halves: no other code unit may read the wrap flag, and
+     * no mutation SQL may spell either table name out.
+     * <p>
+     * Reads and inserts are deliberately not routed through this: they always go to {@code spans}, which is the
+     * {@code Distributed} wrapper post-cutover and the {@code MergeTree} before it, and is correct either way.
+     * <p>
+     * Liquibase migrations split by kind instead: {@code DELETE} / {@code MATERIALIZE COLUMN} / {@code ADD INDEX} /
+     * {@code MODIFY TTL} target {@code spans_local} only, but {@code ADD}/{@code DROP}/{@code MODIFY COLUMN} must
+     * target <b>both</b> {@code spans_local} and {@code spans} — the wrapper takes them as metadata-only, and skipping
+     * it leaves reads unable to see the column (code 47).
+     * <p>
+     * The cluster is single-shard today and {@code spans_local} is a {@code ReplicatedMergeTree}, so a lightweight
+     * delete fans out to every replica via the replication log and reaches every matching row — no {@code ON CLUSTER}
+     * needed (no DAO uses it). Only activating sharding, a separate and deferred effort, makes a delete issued on one
+     * shard miss rows on the others.
+     */
+    private void selectSpansMutationTable(ST template) {
+        template.add("spans_mutation_table",
+                configuration.getDatabaseAnalyticsDataModel().spansDistributedWrapEnabled()
+                        ? SPANS_LOCAL_TABLE
+                        : SPANS_TABLE);
     }
 
     /**
@@ -2441,8 +2536,12 @@ public class SpanDAO {
                 .flatMap(this::mapToDto);
     }
 
+    /**
+     * Deletes the given spans within {@code projectId}, which is required: the delete is always scoped to the full
+     * {@code (workspace_id, project_id, id)} sort-key prefix, never to {@code (workspace_id, id)} alone.
+     */
     @WithSpan
-    public Mono<Long> deleteByIds(@NonNull Set<UUID> spanIds, UUID projectId) {
+    public Mono<Long> deleteByIds(@NonNull Set<UUID> spanIds, @NonNull UUID projectId) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(spanIds), "Argument 'spanIds' must not be empty");
         var segment = startSegment("spans", "Clickhouse", "delete_by_span_ids");
@@ -2451,17 +2550,12 @@ public class SpanDAO {
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
                     var template = getSTWithLogComment(DELETE_BY_IDS, "delete_spans_by_ids", workspaceId, userName,
                             spanIds.size());
-
-                    Optional.ofNullable(projectId)
-                            .ifPresent(id -> template.add("project_id", id));
+                    selectSpansMutationTable(template);
 
                     var statement = connection.createStatement(template.render())
                             .bind("ids", spanIds.toArray(UUID[]::new))
-                            .bind("workspace_id", workspaceId);
-
-                    if (projectId != null) {
-                        statement.bind("project_id", projectId);
-                    }
+                            .bind("workspace_id", workspaceId)
+                            .bind("project_id", projectId);
 
                     return Flux.from(statement.execute());
                 }))
@@ -3034,8 +3128,13 @@ public class SpanDAO {
                 || template.getAttribute("feedback_scores_empty_filters") != null;
     }
 
+    /**
+     * The ids of the spans belonging to {@code traceIds} within {@code projectId}, the first step of the trace-delete
+     * cascade. The project is required for the same reason {@link #deleteByIds(Set, UUID)} requires it: an unscoped
+     * lookup would collect spans from every project in the workspace sharing a trace id, and those ids feed the delete.
+     */
     @WithSpan
-    public Mono<Set<UUID>> getSpanIdsForTraces(@NonNull Set<UUID> traceIds, UUID projectId) {
+    public Mono<Set<UUID>> getSpanIdsForTraces(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
         if (traceIds.isEmpty()) {
             return Mono.just(Set.of());
         }
@@ -3045,15 +3144,10 @@ public class SpanDAO {
                     var template = getSTWithLogComment(SELECT_SPAN_IDS_BY_TRACE_ID, "get_span_ids_by_trace_ids",
                             workspaceId, userName, traceIds.size());
 
-                    Optional.ofNullable(projectId)
-                            .ifPresent(id -> template.add("project_id", id));
-
                     var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds)
-                            .bind("workspace_id", workspaceId);
-
-                    Optional.ofNullable(projectId)
-                            .ifPresent(id -> statement.bind("project_id", id));
+                            .bind("workspace_id", workspaceId)
+                            .bind("project_id", projectId);
 
                     return Flux.from(statement.execute());
                 }))
@@ -3061,116 +3155,52 @@ public class SpanDAO {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Previous-day span counts per workspace and project, for {@link SpanService} to drop demo projects from and
+     * fold by workspace. Returns per-project rows rather than the workspace totals the endpoint reports, because the
+     * exclusion cannot be expressed in the query text — see {@link #SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT}.
+     */
     @WithSpan
-    public Flux<SpansCountResponse.WorkspaceSpansCount> countSpansPerWorkspace(
-            @NonNull Map<UUID, Instant> excludedProjectIds) {
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(SPAN_COUNT_BY_WORKSPACE_ID, "count_spans_per_workspace", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
+    public Flux<WorkspaceProjectCount> countSpansPerWorkspaceProject() {
+        var template = getSTWithLogComment(SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT, "count_spans_per_workspace", "", "",
+                "");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(template.render());
-
-                    if (!excludedProjectIds.isEmpty()) {
-                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-                    }
-
-                    if (demoDataCreatedAt.isPresent()) {
-                        statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-                    }
-
-                    return statement.execute();
-                })
-                .flatMap(result -> result.map((row, rowMetadata) -> SpansCountResponse.WorkspaceSpansCount.builder()
-                        .workspace(row.get("workspace_id", String.class))
-                        .spanCount(row.get("span_count", Integer.class))
-                        .build()));
-    }
-
-    @WithSpan
-    public Flux<BiInformationResponse.BiInformation> getSpanBIInformation(
-            @NonNull Map<UUID, Instant> excludedProjectIds) {
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(SPAN_DAILY_BI_INFORMATION, "get_span_bi_information", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
-
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-
-                    var statement = connection.createStatement(template.render());
-
-                    if (!excludedProjectIds.isEmpty()) {
-                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-                    }
-
-                    if (demoDataCreatedAt.isPresent()) {
-                        statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-                    }
-
-                    return statement.execute();
-                })
-                .flatMap(result -> result.map((row, rowMetadata) -> BiInformationResponse.BiInformation.builder()
+                .flatMapMany(connection -> connection.createStatement(template.render()).execute())
+                .flatMap(result -> result.map((row, _) -> WorkspaceProjectCount.builder()
                         .workspaceId(row.get("workspace_id", String.class))
-                        .user(row.get("user", String.class))
+                        .projectId(row.get("project_id", UUID.class))
                         .count(row.get("span_count", Long.class))
                         .build()));
     }
 
+    /** Same as {@link #countSpansPerWorkspaceProject()}, broken down by user for the BI events. */
+    @WithSpan
+    public Flux<WorkspaceProjectUserCount> getSpanBIInformationPerProject() {
+        return countSpansPerWorkspaceProjectUser("get_span_bi_information");
+    }
+
     /**
-     * Counts previous-day spans grouped by workspace, project and user.
+     * The same previous-day count as {@link #getSpanBIInformationPerProject()}, for the per-project usage breakdown,
+     * which reports these rows as they are rather than folding them. Its own method so that the two consumers carry
+     * different log comments.
      */
     @WithSpan
-    public Flux<UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount> countSpansBreakdownPerWorkspace(
-            @NonNull Map<UUID, Instant> excludedProjectIds) {
+    public Flux<WorkspaceProjectUserCount> countSpansBreakdownPerWorkspace() {
+        return countSpansPerWorkspaceProjectUser("count_spans_by_workspace_project_user");
+    }
 
-        var template = getSTWithLogComment(SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER,
-                "count_spans_by_workspace_project_user", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-        demoDataCreatedAt.ifPresent(instant -> template.add("demo_data_created_at", instant.toString()));
+    private Flux<WorkspaceProjectUserCount> countSpansPerWorkspaceProjectUser(String logComment) {
+        var template = getSTWithLogComment(SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER, logComment, "", "", "");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(template.render());
-
-                    if (!excludedProjectIds.isEmpty()) {
-                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-                    }
-
-                    demoDataCreatedAt.ifPresent(instant -> statement.bind("demo_data_created_at", instant.toString()));
-
-                    return statement.execute();
-                })
-                .flatMap(result -> result.map(
-                        (row, rowMetadata) -> UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount.builder()
-                                .workspaceId(row.get("workspace_id", String.class))
-                                .projectId(row.get("project_id", UUID.class))
-                                .user(row.get("user", String.class))
-                                .count(row.get("span_count", Long.class))
-                                .build()));
+                .flatMapMany(connection -> connection.createStatement(template.render()).execute())
+                .flatMap(result -> result.map((row, _) -> WorkspaceProjectUserCount.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .projectId(row.get("project_id", UUID.class))
+                        .user(row.get("user", String.class))
+                        .count(row.get("span_count", Long.class))
+                        .build()));
     }
 
     private boolean isManualCost(Span span) {
@@ -3344,7 +3374,9 @@ public class SpanDAO {
                 workspaceIds.size(), cutoffId, lowerBound);
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_spans", null, "",
-                workspaceIds.size());
+                "workspaces_size=%s, cutoff_id=%s, lower_bound=%s".formatted(workspaceIds.size(), cutoffId,
+                        lowerBound));
+        selectSpansMutationTable(template);
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
@@ -3395,29 +3427,17 @@ public class SpanDAO {
 
         log.info("Retention delete spans (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
 
-        var logComment = getLogComment("retention_delete_spans_bounded", null, "", workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
-        var sb = new StringBuilder("DELETE FROM spans WHERE (");
-        for (int i = 0; i < entries.size(); i++) {
-            if (i > 0) sb.append(" OR ");
-            sb.append("(workspace_id = :ws_").append(i)
-                    .append(" AND trace_id >= :lb_").append(i)
-                    .append(" AND trace_id < :cutoff_id)");
-        }
-        sb.append(") AND trace_id NOT IN (")
-                .append("SELECT trace_id FROM experiment_items")
-                .append(" WHERE workspace_id IN :workspace_ids_flat")
-                .append(" AND trace_id >= :min_lower_bound")
-                .append(" AND trace_id < :cutoff_id")
-                .append(") SETTINGS log_comment = '").append(logComment)
-                .append("', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1");
-
-        var sql = sb.toString();
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION_BOUNDED, "retention_delete_spans_bounded", null, "",
+                "workspaces_size=%s, cutoff_id=%s, min_lower_bound=%s".formatted(workspaceMinIds.size(), cutoffId,
+                        lowerBound));
+        selectSpansMutationTable(template);
+        template.add("items", getQueryItemPlaceHolder(entries.size()));
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var statement = connection.createStatement(sql)
+                    var statement = connection.createStatement(template.render())
                             .bind("cutoff_id", cutoffId)
                             .bind("workspace_ids_flat", workspaceMinIds.keySet().toArray(String[]::new))
                             .bind("min_lower_bound", lowerBound);
