@@ -52,6 +52,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -251,6 +252,20 @@ class AgentInsightsJobsResourceTest {
 
         try (var job = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
             assertThat(job.readEntity(AgentInsightsJob.class).autoFirstRunEnrolled()).isFalse();
+        }
+    }
+
+    @Test
+    @DisplayName("Enrolment rejects a null project id instead of passing it to the database")
+    void enrol__nullProjectId__isRejected() {
+        var projectId = createProject();
+
+        try (var response = jobsClient.enrolInAutoFirstRun(true, Arrays.asList(projectId, null))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        try (var job = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(job.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         }
     }
 

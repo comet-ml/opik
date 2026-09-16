@@ -26,7 +26,7 @@ public class AgentInsightsEnrollment {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record Request(
             @Schema(description = "True enrols the given projects, false clears their enrolment") @NotNull Boolean enrolled,
-            @NotEmpty @Size(max = MAX_PROJECTS) List<UUID> projectIds) {
+            @NotEmpty @Size(max = MAX_PROJECTS) List<@NotNull UUID> projectIds) {
     }
 
     @Builder
