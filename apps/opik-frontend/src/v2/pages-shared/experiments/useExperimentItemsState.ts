@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -87,6 +87,13 @@ const useExperimentItemsState = ({
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  // Selection is keyed by row id, and the ids on screen change with the page, the search and the filters.
+  // Keeping stale keys makes the toolbar report a selection whose rows are no longer loaded, so exporting it
+  // produces an empty file.
+  useEffect(() => {
+    setRowSelection({});
+  }, [page, size, search, filters]);
 
   return {
     page,

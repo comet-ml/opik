@@ -19,7 +19,10 @@ ALTER TABLE export_jobs ADD COLUMN params_hash CHAR(64) NULL;
 -- need a join back to a resource that may since have been renamed or deleted.
 ALTER TABLE export_jobs ADD COLUMN resource_name VARCHAR(255) NULL;
 
-UPDATE export_jobs SET params = JSON_OBJECT('dataset_id', dataset_id) WHERE params IS NULL;
+-- export_type must be inside params too: ExportParams resolves its subtype from that property, so a payload
+-- carrying only dataset_id cannot be deserialized back into DatasetExportParams.
+UPDATE export_jobs SET params = JSON_OBJECT('export_type', 'DATASET', 'dataset_id', dataset_id)
+WHERE params IS NULL;
 
 ALTER TABLE export_jobs DROP COLUMN dataset_id;
 
@@ -30,6 +33,10 @@ DROP INDEX idx_workspace_dataset_status ON export_jobs;
 CREATE INDEX idx_workspace_type_hash_status
 ON export_jobs(workspace_id, export_type, params_hash, status);
 
+-- Rollback refuses to run once rows exist that the old schema cannot represent. Experiment exports have no
+-- single dataset_id column to restore to, so silently rolling them back would hand the old application rows it
+-- cannot use. Retire those rows (or let them expire) before rolling back.
+--rollback SELECT IF(COUNT(*) = 0, 'ok', (SELECT CONCAT('Refusing to roll back: ', COUNT(*), ' non-DATASET export job(s) exist. Delete them or wait for the cleanup job, then retry.') FROM export_jobs WHERE export_type <> 'DATASET')) INTO @export_rollback_guard FROM export_jobs WHERE export_type <> 'DATASET';
 --rollback DROP INDEX idx_workspace_type_hash_status ON export_jobs;
 --rollback ALTER TABLE export_jobs ADD COLUMN dataset_id CHAR(36) NULL;
 --rollback UPDATE export_jobs SET dataset_id = JSON_UNQUOTE(JSON_EXTRACT(params, '$.dataset_id'));

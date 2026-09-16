@@ -1054,12 +1054,15 @@ datasetExport:
   # Default: false
   # Description: Whether dataset export feature is enabled
   enabled: ${DATASET_EXPORT_ENABLED:-false}
-  # Default: dataset-export
-  # Description: Redis stream name for dataset export jobs
-  streamName: ${DATASET_EXPORT_STREAM_NAME:-'dataset-export'}
-  # Default: dataset-export-consumers
-  # Description: Consumer group name for dataset export job processing
-  consumerGroupName: ${DATASET_EXPORT_CONSUMER_GROUP_NAME:-'dataset-export-consumers'}
+  # Default: export-jobs
+  # Description: Redis stream name for export jobs. Renamed from 'dataset-export' when the message payload's
+  #              class discriminator changed: a shared stream would let mixed-version pods read each other's
+  #              payloads during a rolling upgrade, fail to decode them and drop the job. Separate streams keep
+  #              each version reading only what it can parse.
+  streamName: ${DATASET_EXPORT_STREAM_NAME:-'export-jobs'}
+  # Default: export-jobs-consumers
+  # Description: Consumer group name for export job processing
+  consumerGroupName: ${DATASET_EXPORT_CONSUMER_GROUP_NAME:-'export-jobs-consumers'}
   # Default: 10
   # Description: Maximum number of export jobs to process in a single batch
   consumerBatchSize: ${DATASET_EXPORT_CONSUMER_BATCH_SIZE:-10}
