@@ -29,6 +29,21 @@ export interface DashboardRef {
   description: string;
 }
 
+/**
+ * A dashboard read out of the `insights-views` collection — the project-scoped
+ * one, as opposed to the workspace-scoped `DashboardRef` above.
+ *
+ * `projectId` and `scope` are carried rather than dropped because they are the
+ * subject: a scoping assertion that only compared ids could not tell a view the
+ * backend attached to the right project from one it attached to none.
+ */
+export interface InsightsViewRef {
+  id: string;
+  name: string;
+  projectId: string | null;
+  scope: string | null;
+}
+
 export interface DatasetRef {
   id: string;
   name: string;
@@ -190,6 +205,80 @@ export interface SpanCostRef {
   model: string | null;
   provider: string | null;
   totalEstimatedCost: number | null;
+  /**
+   * The `usage` map as the backend stored it, so a cost assertion can first
+   * prove the priced quantity really reached the server under the key the
+   * calculator reads.
+   *
+   * Load-bearing for the cache-rate vectors: a seed whose
+   * `original_usage.prompt_tokens_details.cached_tokens` key was dropped in
+   * transit prices exactly like one that reported no cached tokens, so
+   * "cached tokens bought no discount" and "no cached tokens were logged" are
+   * the same observation until this is read back.
+   *
+   * Null, not `{}`, when the span carries no usage at all — an absent map and an
+   * empty one are different answers.
+   */
+  usage: Record<string, number> | null;
+}
+
+/** A span reduced to the fields a cascade assertion needs: who it is, and whose it is. */
+export interface SpanRef {
+  id: string;
+  name: string;
+  traceId: string;
+  parentSpanId: string | null;
+}
+
+/** One span of a `POST /v1/private/spans/batch` write. */
+export interface SpanBatchSeed {
+  /** Caller-minted so the seed knows the exact id set it wrote. Must be a UUIDv7. */
+  id: string;
+  traceId: string;
+  name: string;
+  /**
+   * Defaults to `sdk`, which is what a seed almost always wants: the Logs page
+   * filters every span read on `source = sdk`, and `SpanDAO` binds NULL when
+   * the write omits it — so a span seeded without one is written, queryable by
+   * id, and invisible in the view a UI spec is about to assert on.
+   */
+  source?: 'sdk' | 'experiment' | 'playground' | 'optimization';
+  type?: 'general' | 'llm' | 'tool';
+  startTime?: Date;
+  endTime?: Date;
+  model?: string;
+  provider?: string;
+  /** Written through verbatim; deliberately no `total_cost` (see `createSpan`). */
+  usage?: Record<string, number>;
+  /** Set to make the span count toward the error rate. */
+  errorInfo?: { exceptionType: string; message: string; traceback: string };
+}
+
+/**
+ * One page of the spans listing, kept as ids plus the envelope.
+ *
+ * `total` and `size` are part of the answer, not decoration: a paging spec that
+ * only collected ids could not tell "the last page was short" from "the reader
+ * stopped early", and the table renders `total` to the user as
+ * "Showing 1-25 of 130".
+ */
+export interface SpanIdPage {
+  ids: string[];
+  page: number;
+  size: number;
+  total: number;
+}
+
+/** One KPI card as `POST /v1/private/projects/{id}/kpi-cards` answers it. */
+export interface KpiCardStat {
+  type: 'count' | 'errors' | 'avg_duration' | 'total_cost';
+  /**
+   * Nullable because the API's own shape is. A caller comparing numbers must
+   * assert the value is there rather than default it — `?? 0` would turn "the
+   * card returned nothing" into a passing zero.
+   */
+  currentValue: number | null;
+  previousValue: number | null;
 }
 
 export interface TraceDetail {
@@ -801,7 +890,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
    * The backoff exists because retrying instantly is no retry at all: the three
    * attempts land inside the same burst and all fail.
    */
-  const postSeedWrite = async (path: string, describe: string, body: unknown): Promise<void> => {
+  const postSeedWrite = async (
+    path: string,
+    describe: string,
+    body: unknown,
+    // The single-entity writes answer 201; `/spans/batch` answers 204. Both are
+    // "the write landed", so the expectation is a parameter rather than a
+    // second near-identical helper.
+    expectedStatus = 201,
+  ): Promise<void> => {
     const backoffMs = [1_000, 3_000, 8_000];
     let last: RawApiResult = { status: 0, message: '<no response>', location: null };
     // Counted as requests are made, not inferred from the final status: a 502
@@ -813,7 +910,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
       attempted++;
       const { status, message, location } = await rawFetch('POST', path, { body });
-      if (status === 201) return;
+      if (status === expectedStatus) return;
       last = { status, message, location };
       if (status < 500) break;
       if (attempt < backoffMs.length) {
@@ -822,7 +919,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     }
 
     throw new Error(
-      `${describe}: expected 201, got ${last.status} after ${attempted} attempt(s): ${last.message}`,
+      `${describe}: expected ${expectedStatus}, got ${last.status} after ${attempted} attempt(s): ${last.message}`,
     );
   };
 
@@ -933,9 +1030,117 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       return { id, name: args.name, description: args.description };
     },
 
+    /**
+     * A dashboard does not hang off a project, so no project delete reaches
+     * it. `global-teardown` sweeps dashboards by run prefix, but only at the
+     * end of the run — a spec that builds one deletes it per-test.
+     */
     async deleteDashboard(id: string): Promise<void> {
       try {
         await opik.api.dashboards.deleteDashboard(id);
+      } catch (err) {
+        if (!isNotFoundError(err)) throw err;
+      }
+    },
+
+    /**
+     * `POST /v1/private/insights-views` — a dashboard that belongs to one
+     * project, which is what the project Dashboards page reads and writes.
+     *
+     * A different collection from `createDashboard` above, not a parameter of
+     * it: that one posts to `/v1/private/dashboards` and the backend stamps
+     * `scope: workspace`, which is what the workspace Dashboards list shows.
+     * Passing a `projectId` there would not move it. The two scopes are exactly
+     * what a scoping spec has to be able to seed independently.
+     *
+     * `sections: []` rather than the `widgets` shape `createDashboard` uses: an
+     * insights view is rendered by the project page, and `DashboardContent`
+     * reads `config.sections`. A caller that wants the page to show something
+     * identifiable passes a section of its own.
+     *
+     * Each section is completed to the full `DashboardSection` shape and the
+     * config to the full `DashboardState` — `layout` and `lastModified` are
+     * required by both, and the backend does not supply the defaults. Omitting
+     * them stores a view the app then has to cope with: `areSectionsEqual`
+     * hands `section.layout` to `areLayoutsEqual`, which reads `prev.length`
+     * unguarded, and the unmount path in `useDashboardPersistence` only skips
+     * that comparison when `lastModified === 0` — an absent one is `undefined`,
+     * which is not `0`, so the guard does not fire and the unguarded read
+     * happens anyway. A seed should look like what the product's
+     * own create dialog writes, not like the minimum the API will accept.
+     */
+    async createInsightsView(args: {
+      name: string;
+      projectId: string;
+      sections?: Array<{
+        id: string;
+        title: string;
+        widgets: unknown[];
+        layout?: unknown[];
+      }>;
+    }): Promise<InsightsViewRef> {
+      const created = await opik.api.insightsViews.createInsightsView({
+        name: args.name,
+        projectId: args.projectId,
+        // The type the project page's own create dialog sends. The picker filters
+        // its list on it, so a view seeded without it is invisible there — which
+        // would read as the scoping under test rather than as a bad seed.
+        type: 'multi_project',
+        config: {
+          version: 1,
+          sections: (args.sections ?? []).map((s) => ({
+            ...s,
+            layout: s.layout ?? [],
+          })),
+          lastModified: Date.now(),
+        },
+      });
+      const id = created.id;
+      if (typeof id !== 'string') {
+        throw new Error(`createInsightsView(${args.name}) returned no id`);
+      }
+      return {
+        id,
+        name: args.name,
+        projectId: created.projectId ?? null,
+        scope: created.scope ?? null,
+      };
+    },
+
+    /**
+     * `GET /v1/private/insights-views` — the read the project page's view picker
+     * issues, with the same `project_id` narrowing.
+     *
+     * `projectId` is optional because its absence is itself a case worth
+     * driving: the unscoped read is what a shared link resolves against, and the
+     * difference between the two is the scoping this exists to check.
+     */
+    async listInsightsViews(args: { projectId?: string } = {}): Promise<InsightsViewRef[]> {
+      const content = await fetchAllPages(
+        (page) =>
+          opik.api.insightsViews.findInsightsViews({
+            ...(args.projectId ? { projectId: args.projectId } : {}),
+            page,
+            size: 100,
+          }),
+        100,
+      );
+      return content.map((d) => ({
+        id: String(d.id ?? ''),
+        name: d.name,
+        projectId: d.projectId ?? null,
+        scope: d.scope ?? null,
+      }));
+    },
+
+    /**
+     * Nothing cascades to an insights view: it outlives the project it names,
+     * and `global-teardown`'s prefix sweep only knows the workspace-scoped
+     * `/dashboards` collection. So a spec that seeds one must delete it.
+     */
+    async deleteInsightsView(id: string): Promise<void> {
+      try {
+        await opik.api.insightsViews.deleteInsightsView(id);
       } catch (err) {
         if (!isNotFoundError(err)) throw err;
       }
@@ -1582,26 +1787,6 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
-     * `DELETE /v1/private/dashboards/{id}`.
-     *
-     * A dashboard does not hang off a project, so no project delete reaches
-     * it. `global-teardown` does sweep dashboards by run prefix, but only at
-     * the end of the run — a spec that builds one deletes it per-test.
-     */
-    async deleteDashboard(id: string): Promise<void> {
-      const headers = workspaceHeaders();
-      const res = await fetch(`${env.apiBaseUrl}/v1/private/dashboards/${id}`, {
-        method: 'DELETE',
-        headers,
-      });
-      if (!res.ok && res.status !== 404) {
-        throw new Error(
-          `DELETE /v1/private/dashboards/${id} -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
-        );
-      }
-    },
-
-    /**
      * Uploads one attachment against a trace or span through the real
      * presigned multipart flow: `upload-start` → PUT the bytes → `upload-complete`.
      *
@@ -1810,6 +1995,59 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `POST /v1/private/projects/{id}/kpi-cards` — the four numbers the Logs
+     * page renders above its table, for the current period and the equal-length
+     * period immediately before it.
+     *
+     * Raw fetch because the pinned SDK has no binding for it, and because the
+     * status is part of what a caller asserts: an unservable entity type is a
+     * 400, not a wrong number.
+     *
+     * `filters` is sent verbatim when given. The Logs page always sends a
+     * `source = sdk` filter; a caller seeding into a fresh project through the
+     * SDK/REST writes gets the same answer either way, and says so rather than
+     * copying the front end's payload for its own sake.
+     */
+    async projectKpiCards(args: {
+      projectId: string;
+      entityType: 'traces' | 'spans' | 'threads';
+      intervalStart: Date;
+      intervalEnd?: Date;
+      filters?: unknown[];
+    }): Promise<RawApiResult & { stats: KpiCardStat[] }> {
+      const { status, message, json } = await rawFetch(
+        'POST',
+        `/v1/private/projects/${args.projectId}/kpi-cards`,
+        {
+          body: {
+            entity_type: args.entityType,
+            interval_start: args.intervalStart.toISOString(),
+            ...(args.intervalEnd ? { interval_end: args.intervalEnd.toISOString() } : {}),
+            ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+          },
+        },
+      );
+      const body = json as {
+        stats?: Array<{
+          type?: string;
+          current_value?: number | null;
+          previous_value?: number | null;
+        }>;
+      } | null;
+      return {
+        status,
+        message,
+        stats: (body?.stats ?? []).map((stat) => ({
+          type: stat.type as KpiCardStat['type'],
+          // `?? null`, never `?? 0`: the response declares these always-present
+          // but nullable, and a zeroed absent card would read as a real value.
+          currentValue: stat.current_value ?? null,
+          previousValue: stat.previous_value ?? null,
+        })),
+      };
+    },
+
+    /**
      * By id, unlike findExperimentByName — `findExperiments({ name })` is not
      * scoped to a project, so a same-named experiment elsewhere would answer
      * for this one.
@@ -1986,7 +2224,275 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         model: s.model ?? null,
         provider: s.provider ?? null,
         totalEstimatedCost: s.totalEstimatedCost ?? null,
+        usage: s.usage ?? null,
       }));
+    },
+
+    /**
+     * Spans in a project, optionally narrowed to one trace.
+     *
+     * The `traceId`-less form is what makes a cascade assertion mean anything.
+     * `GET /spans?trace_id=<deleted>` answering "0 spans" is not evidence the
+     * cascade ran: a filter on a trace that no longer exists matches nothing
+     * either way, so a delete that removed the trace and orphaned every span
+     * would produce that same zero. Listing the whole project and naming the
+     * spans that survived tells the two apart.
+     *
+     * `projectId` is mandatory for the same reason it is on `listSpanCosts`:
+     * without it the backend falls back to the Default Project and answers with
+     * an empty page, which again reads identically to "everything was deleted".
+     */
+    async listSpanRefs(args: { projectId: string; traceId?: string }): Promise<SpanRef[]> {
+      const content = await fetchAllPages(
+        (page) =>
+          opik.api.spans.getSpansByProject({
+            projectId: args.projectId,
+            ...(args.traceId ? { traceId: args.traceId } : {}),
+            page,
+            size: 100,
+          }),
+        100,
+      );
+      return content.map((s) => ({
+        id: String(s.id ?? ''),
+        name: s.name ?? '',
+        traceId: String(s.traceId ?? ''),
+        parentSpanId: s.parentSpanId ? String(s.parentSpanId) : null,
+      }));
+    },
+
+    /**
+     * `POST /v1/private/spans/batch` — many spans in one request.
+     *
+     * The only way to seed a span population large enough to page. Writing them
+     * one at a time through `createSpan` is both slow and the fastest route to
+     * the workspace ingestion rate limit, which surfaces as a seed that half
+     * landed — the worst possible input to a spec whose subject is "every span
+     * comes back exactly once".
+     *
+     * Each span's `source` defaults to `sdk`, which is what the Logs page
+     * filters every span read on. The write does not default it — `SpanDAO`
+     * binds NULL for an absent one — so a batch seeded without it lands, is
+     * readable by id, and never appears in the table.
+     */
+    async createSpansBatch(args: {
+      projectName: string;
+      spans: SpanBatchSeed[];
+    }): Promise<void> {
+      // The endpoint's own cap. Chunking here would hide from the caller that
+      // the seed is no longer one atomic write, which a paging spec cares about.
+      if (args.spans.length < 1 || args.spans.length > 1000) {
+        throw new Error(
+          `createSpansBatch: the endpoint accepts 1..1000 spans, got ${args.spans.length}`,
+        );
+      }
+      const now = new Date();
+      await postSeedWrite(
+        '/v1/private/spans/batch',
+        `createSpansBatch of ${args.spans.length} into '${args.projectName}'`,
+        {
+          spans: args.spans.map((span) => ({
+            id: span.id,
+            trace_id: span.traceId,
+            project_name: args.projectName,
+            name: span.name,
+            source: span.source ?? 'sdk',
+            type: span.type ?? 'general',
+            start_time: (span.startTime ?? now).toISOString(),
+            end_time: (span.endTime ?? now).toISOString(),
+            ...(span.model === undefined ? {} : { model: span.model }),
+            ...(span.provider === undefined ? {} : { provider: span.provider }),
+            ...(span.usage === undefined ? {} : { usage: span.usage }),
+            ...(span.errorInfo === undefined
+              ? {}
+              : {
+                  error_info: {
+                    exception_type: span.errorInfo.exceptionType,
+                    message: span.errorInfo.message,
+                    traceback: span.errorInfo.traceback,
+                  },
+                }),
+          })),
+        },
+        204,
+      );
+    },
+
+    /**
+     * One page of `GET /v1/private/spans`, as the Logs table asks for it.
+     *
+     * Deliberately NOT `fetchAllPages`: the paging itself is what a caller of
+     * this is testing, so the page boundary has to stay visible. `truncate`
+     * keeps the payload slim — these callers only ever read ids.
+     */
+    async listSpanIdsPage(args: {
+      projectId: string;
+      page: number;
+      size: number;
+    }): Promise<SpanIdPage> {
+      // Both retries: `withReadRetry` for an ingress 5xx blip, and
+      // `withRateLimitRetry` because paging a population is a burst of reads
+      // against a per-workspace limit.
+      const answer = await withRateLimitRetry(() =>
+        withReadRetry(() =>
+          opik.api.spans.getSpansByProject({
+            projectId: args.projectId,
+            page: args.page,
+            size: args.size,
+            truncate: true,
+          }),
+        ),
+      );
+      return {
+        ids: (answer.content ?? []).map((s) => String(s.id ?? '')),
+        page: answer.page ?? args.page,
+        size: answer.size ?? 0,
+        total: answer.total ?? 0,
+      };
+    },
+
+    /**
+     * `POST /v1/private/spans/search` — the cursor-paged read, which is a
+     * different query from the offset-paged listing above and not a wrapper
+     * around it.
+     *
+     * Written by hand rather than through `rawFetch` because the endpoint
+     * answers `application/octet-stream`: one JSON object per line, streamed.
+     * `rawFetch` would `JSON.parse` the whole body, fail, and hand back the raw
+     * text as a "message" — which reads like an error response rather than a
+     * successful stream.
+     *
+     * A line that carries no `id` is treated as the stream's error object and
+     * thrown. The streamer really does emit one mid-stream on failure, and
+     * silently skipping it would turn a truncated answer into a short page —
+     * exactly the symptom a paging spec is supposed to catch.
+     */
+    async searchSpanIds(args: {
+      projectId: string;
+      limit: number;
+      lastRetrievedId?: string;
+    }): Promise<string[]> {
+      const headers: Record<string, string> = {
+        Accept: 'application/octet-stream',
+        'Content-Type': 'application/json',
+        'Comet-Workspace': env.workspace,
+      };
+      const key = apiKey ?? env.apiKey;
+      if (key) headers['Authorization'] = key;
+
+      // Rate-limited per workspace (`search_spans:{workspaceId}`), and draining
+      // by cursor is by definition a burst — see `withRateLimitRetry`.
+      const text = await withRateLimitRetry(async () => {
+        const res = await fetch(`${env.apiBaseUrl}/v1/private/spans/search`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            project_id: args.projectId,
+            limit: args.limit,
+            truncate: true,
+            ...(args.lastRetrievedId ? { last_retrieved_id: args.lastRetrievedId } : {}),
+          }),
+        });
+        const body = await res.text();
+        if (!res.ok) {
+          throw new Error(`POST /v1/private/spans/search -> ${res.status}: ${body.slice(0, 300)}`);
+        }
+        return body;
+      });
+
+      const ids: string[] = [];
+      for (const line of text.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const parsed = JSON.parse(trimmed) as { id?: unknown };
+        if (typeof parsed.id !== 'string') {
+          throw new Error(
+            `POST /v1/private/spans/search streamed a non-span line: ${trimmed.slice(0, 300)}`,
+          );
+        }
+        ids.push(parsed.id);
+      }
+      return ids;
+    },
+
+    /**
+     * Attach a feedback score to a trace, so a delete has a dependent row to
+     * cascade to. `source: 'sdk'` matches how a logged score arrives.
+     */
+    async addTraceFeedbackScore(args: {
+      traceId: string;
+      name: string;
+      value: number;
+    }): Promise<void> {
+      await opik.api.traces.addTraceFeedbackScore(args.traceId, {
+        body: { name: args.name, value: args.value, source: 'sdk' },
+      });
+    },
+
+    /** The span-level counterpart of `addTraceFeedbackScore`. */
+    async addSpanFeedbackScore(args: {
+      spanId: string;
+      name: string;
+      value: number;
+    }): Promise<void> {
+      await opik.api.spans.addSpanFeedbackScore(args.spanId, {
+        body: { name: args.name, value: args.value, source: 'sdk' },
+      });
+    },
+
+    /**
+     * Comment on a trace or a span, returning the comment's id.
+     *
+     * Through `rawFetch` rather than the pinned SDK because the id has to come
+     * back. `CommentServiceImpl.create` mints its own id and IGNORES any the
+     * caller sends, answering 201 with the real one in `Location` — which the
+     * SDK's `void` return discards. Sending an id and then reading it back
+     * would 404 every time, against a comment that was created perfectly well.
+     */
+    async addComment(args: {
+      entity: 'traces' | 'spans';
+      entityId: string;
+      text: string;
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        `/v1/private/${args.entity}/${args.entityId}/comments`,
+        { body: { text: args.text } },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `addComment on ${args.entity}/${args.entityId}: expected 201, got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `addComment on ${args.entity}/${args.entityId}: 201 carried no usable Location header (got ${location ?? '<none>'})`,
+        );
+      }
+      return id;
+    },
+
+    /** One trace comment by id, or null once it is no longer readable. */
+    async getTraceComment(traceId: string, commentId: string): Promise<string | null> {
+      try {
+        const comment = await opik.api.traces.getTraceComment(traceId, commentId);
+        return comment.text ?? '';
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /** One span comment by id, or null once it is no longer readable. */
+    async getSpanComment(spanId: string, commentId: string): Promise<string | null> {
+      try {
+        const comment = await opik.api.spans.getSpanComment(spanId, commentId);
+        return comment.text ?? '';
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
     },
 
     /**
@@ -2228,6 +2734,76 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         throw new Error(
           `createLlmJudgeRule: 201 for '${args.name}' carried no usable Location header ` +
             `(got '${location}') — cannot address the rule.`,
+        );
+      }
+      return id;
+    },
+    /**
+     * Create a THREAD-scope LLM-as-judge rule and return its id.
+     *
+     * A sibling of `createLlmJudgeRule` rather than a flag on it: the two are
+     * the same `code` shape but not the same contract. A trace-scope judge
+     * binds `variables` to fields of one trace; a thread-scope judge is handed
+     * the rendered conversation under the scorer's own `{{context}}` and takes
+     * no `variables` at all, so one builder would carry a field that is
+     * meaningless in half its calls.
+     *
+     * Raw REST for the same two reasons as its siblings: creation answers 201
+     * with an empty body, so the id exists only in the `Location` header that
+     * the pinned SDK's `void` return discards, and reading the id back by name
+     * would silently pick up a rule an earlier run left under the same
+     * namespace.
+     */
+    async createTraceThreadLlmAsJudgeRule(args: {
+      projectId: string;
+      name: string;
+      /** Fraction in [0, 1], the backend's own units — not the dialog's percentage. */
+      samplingRate: number;
+      /** Fully-qualified model id, e.g. `custom-llm/<providerName>/<modelName>`. */
+      model: string;
+      /** Score name the judge's output schema declares, and the score it would write. */
+      scoreName: string;
+      enabled?: boolean;
+    }): Promise<string> {
+      const { status, message, location } = await rawFetch(
+        'POST',
+        '/v1/private/automations/evaluators/',
+        {
+          body: {
+            type: 'trace_thread_llm_as_judge',
+            action: 'evaluator',
+            name: args.name,
+            project_ids: [args.projectId],
+            sampling_rate: args.samplingRate,
+            enabled: args.enabled ?? true,
+            code: {
+              model: { name: args.model, temperature: 0 },
+              // `{{context}}` is the thread scorer's own variable for the
+              // rendered conversation — the judge has to reference it or the
+              // rule would be evaluating an empty prompt.
+              messages: [
+                {
+                  role: 'USER',
+                  content: `Rate this conversation from 0 to 1: {{context}}`,
+                },
+              ],
+              schema: [
+                { name: args.scoreName, type: 'DOUBLE', description: 'thread score' },
+              ],
+            },
+          },
+        },
+      );
+      if (status !== 201) {
+        throw new Error(
+          `createTraceThreadLlmAsJudgeRule: expected 201 for '${args.name}', got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').filter(Boolean).pop();
+      if (!id) {
+        throw new Error(
+          `createTraceThreadLlmAsJudgeRule: 201 for '${args.name}' carried no usable Location ` +
+            `header (got '${location}') — cannot address the rule.`,
         );
       }
       return id;
@@ -2705,6 +3281,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * scored — and a scoring spec built on it would assert nothing.
        */
       endTime?: Date;
+      /**
+       * Set to make the trace count toward the project's error statistics. The
+       * SDK bridge can seed this too, but only for a trace whose id it mints
+       * itself — and a trace placed inside or outside a window by its id has to
+       * supply its own.
+       */
+      errorInfo?: { exceptionType: string; message: string; traceback: string };
     }): Promise<string> {
       await postSeedWrite('/v1/private/traces', `createTraceWithSource '${args.name}'`, {
         id: args.id,
@@ -2714,6 +3297,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.threadId ? { thread_id: args.threadId } : {}),
         start_time: (args.startTime ?? new Date()).toISOString(),
         ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
+        ...(args.errorInfo
+          ? {
+              error_info: {
+                exception_type: args.errorInfo.exceptionType,
+                message: args.errorInfo.message,
+                traceback: args.errorInfo.traceback,
+              },
+            }
+          : {}),
         ...(args.input === undefined ? {} : { input: args.input }),
         ...(args.output === undefined ? {} : { output: args.output }),
         ...(args.metadata ? { metadata: args.metadata } : {}),
@@ -2734,6 +3326,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * keeps only spans whose source `isLoggingSource`, so a span written without
      * it is dropped before any rule sees it — silently, which is exactly how a
      * scoring spec ends up asserting nothing.
+     *
+     * The `id` must be a UUIDv7 (`uuid7()`); the backend rejects a v4 outright
+     * with "Span id must be a version 7 UUID".
      */
     async createSpan(args: {
       id: string;
@@ -2746,6 +3341,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       output?: TraceJsonSection;
       startTime?: Date;
       endTime?: Date;
+      model?: string;
+      provider?: string;
+      /**
+       * The span's `usage` map, written through to the backend VERBATIM.
+       *
+       * This is the whole reason an LLM span is ever seeded here rather than
+       * through `sdkClient.python.createNestedTrace`. The Python SDK normalises
+       * whatever it is handed: a bare OTel usage key such as
+       * `completion_tokens_details.reasoning_tokens` is re-emitted as
+       * `original_usage.completion_tokens_details.reasoning_tokens`, so the
+       * backend's bare-key fallback can never be reached through the bridge —
+       * a seed aimed at the fallback would silently exercise the primary key
+       * and pass for the wrong reason. Spans that really arrive with bare OTel
+       * keys come from OTel ingestion, not from the SDK, and this raw write is
+       * the faithful stand-in for that producer.
+       *
+       * Deliberately not `total_cost`: a caller that supplies a cost is not
+       * exercising server-side pricing at all.
+       */
+      usage?: Record<string, number>;
     }): Promise<string> {
       const now = new Date();
       await postSeedWrite('/v1/private/spans', `createSpan '${args.name}'`, {
@@ -2759,6 +3374,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         end_time: (args.endTime ?? now).toISOString(),
         ...(args.input === undefined ? {} : { input: args.input }),
         ...(args.output === undefined ? {} : { output: args.output }),
+        ...(args.model === undefined ? {} : { model: args.model }),
+        ...(args.provider === undefined ? {} : { provider: args.provider }),
+        ...(args.usage === undefined ? {} : { usage: args.usage }),
       });
       return args.id;
     },
@@ -2959,6 +3577,55 @@ async function withReadRetry<T>(read: () => Promise<T>): Promise<T> {
     } catch (err) {
       const status = statusCodeOf(err);
       if (status === null || status < 500 || attempt >= backoffMs.length) throw err;
+      await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+    }
+  }
+}
+
+/**
+ * True when a read was refused by a rate limiter rather than failing.
+ *
+ * Matched on the status where the pinned SDK exposes one and on the message
+ * otherwise, because the raw-fetch reads here report a refusal as a thrown
+ * `Error` carrying the status text.
+ *
+ * The message match requires `429` to stand alone rather than merely occur, and
+ * that is not pedantry: these messages quote ids and response bodies, and a
+ * UUID with `429` somewhere in its hex would otherwise make every real 4xx look
+ * like a rate limit. The callers stand off and retry on a true, so a
+ * misclassified error is one that gets swallowed for the whole backoff and then
+ * reported as something else. The forms that must still match are
+ * `-> 429:` (the hand-rolled stream read), `got 429 after` (`postSeedWrite`)
+ * and a trailing `status code 429` — all of them delimited.
+ */
+export function isRateLimitedError(err: unknown): boolean {
+  if (typeof err === 'object' && err !== null && 'statusCode' in err) {
+    if ((err as { statusCode: unknown }).statusCode === 429) return true;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return /(?:^|[^0-9A-Za-z])429(?:[^0-9A-Za-z]|$)/.test(message);
+}
+
+/**
+ * Run an idempotent read, standing off and retrying when it is rate-limited.
+ *
+ * Distinct from `withReadRetry`, which hides a 5xx blip. A 429 is not a blip:
+ * the spans listing is limited per workspace (`getSpans:{workspaceId}`), and a
+ * spec that pages a population necessarily issues a burst of reads — on a
+ * shared environment, alongside whatever else is running. Failing the test on
+ * that reports an infrastructure budget as a paging defect.
+ *
+ * Only 429, and only for reads. A different error is a real one and must
+ * surface immediately; a rate limit that outlasts the whole backoff still
+ * throws, because at that point it is not a burst.
+ */
+async function withRateLimitRetry<T>(read: () => Promise<T>): Promise<T> {
+  const backoffMs = [2_000, 5_000, 10_000, 20_000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await read();
+    } catch (err) {
+      if (!isRateLimitedError(err) || attempt >= backoffMs.length) throw err;
       await new Promise((r) => setTimeout(r, backoffMs[attempt]));
     }
   }

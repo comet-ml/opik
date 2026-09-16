@@ -8,6 +8,7 @@ from opik_backend.executor import CodeExecutorBase
 from opik_backend.http_utils import build_error_response
 from opik_backend.payload_types import PayloadType
 from opik_backend.process_worker import required_score_params
+from opik_backend.score_validation import has_usable_score
 
 # Built-ins the scorer injects rather than resolving from a trace/span path.
 RESERVED_BUILT_INS = frozenset({"spans"})
@@ -96,5 +97,13 @@ def execute_evaluator_python():
     if len(scores) == 0:
         current_app.logger.info("Missing ScoreResult in code '%s'", code)
         abort(400, "The provided 'code' field didn't return any 'opik.evaluation.metrics.ScoreResult'")
+
+    # A mixed list is passed through on purpose: the usable scores still reach the backend, which drops
+    # the rest and names them on the rule's log stream. Only a wholly unusable response is rejected,
+    # which is the same class of user error as returning no ScoreResult at all, just above.
+    if not has_usable_score(scores):
+        current_app.logger.info("No usable ScoreResult in code '%s'", code)
+        abort(400, "The provided 'code' field didn't return any usable "
+                   "'opik.evaluation.metrics.ScoreResult'")
 
     return jsonify({"scores": scores})

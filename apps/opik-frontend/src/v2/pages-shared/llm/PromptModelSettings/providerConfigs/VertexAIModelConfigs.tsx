@@ -17,18 +17,22 @@ import {
   getThinkingLevelOptions,
   supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
+import { ModelConfigParam } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
 
 interface VertexAIModelConfigsProps {
   configs: LLMVertexAIConfigsType;
   model?: PROVIDER_MODEL_TYPE | "";
   onChange: (configs: Partial<LLMVertexAIConfigsType>) => void;
+  unsupportedParams?: ReadonlySet<ModelConfigParam>;
 }
 
 const VertexAIModelConfigs = ({
   configs,
   model,
   onChange,
+  unsupportedParams,
 }: VertexAIModelConfigsProps) => {
+  const supports = (param: ModelConfigParam) => !unsupportedParams?.has(param);
   const hasThinkingLevel = supportsVertexAIThinkingLevel(model);
   const thinkingLevelOptions = getThinkingLevelOptions(model);
   const defaultThinkingLevel = getDefaultThinkingLevel(model);
@@ -67,7 +71,7 @@ const VertexAIModelConfigs = ({
         />
       )}
 
-      {!isUndefined(configs.topP) && (
+      {supports("topP") && !isUndefined(configs.topP) && (
         <SliderInputControl
           value={configs.topP}
           onChange={(v) => onChange({ topP: v })}
@@ -103,36 +107,40 @@ const VertexAIModelConfigs = ({
         </div>
       )}
 
-      <SliderInputControl
-        value={configs.throttling ?? DEFAULT_VERTEX_AI_CONFIGS.THROTTLING}
-        onChange={(v) => onChange({ throttling: v })}
-        id="throttling"
-        min={0}
-        max={10}
-        step={0.1}
-        defaultValue={DEFAULT_VERTEX_AI_CONFIGS.THROTTLING}
-        label="Throttling (seconds)"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
-        }
-      />
+      {supports("throttling") && (
+        <SliderInputControl
+          value={configs.throttling ?? DEFAULT_VERTEX_AI_CONFIGS.THROTTLING}
+          onChange={(v) => onChange({ throttling: v })}
+          id="throttling"
+          min={0}
+          max={10}
+          step={0.1}
+          defaultValue={DEFAULT_VERTEX_AI_CONFIGS.THROTTLING}
+          label="Throttling (seconds)"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
+          }
+        />
+      )}
 
-      <SliderInputControl
-        value={
-          configs.maxConcurrentRequests ??
-          DEFAULT_VERTEX_AI_CONFIGS.MAX_CONCURRENT_REQUESTS
-        }
-        onChange={(v) => onChange({ maxConcurrentRequests: v })}
-        id="maxConcurrentRequests"
-        min={1}
-        max={20}
-        step={1}
-        defaultValue={DEFAULT_VERTEX_AI_CONFIGS.MAX_CONCURRENT_REQUESTS}
-        label="Max concurrent requests"
-        tooltip={
-          <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
-        }
-      />
+      {supports("maxConcurrentRequests") && (
+        <SliderInputControl
+          value={
+            configs.maxConcurrentRequests ??
+            DEFAULT_VERTEX_AI_CONFIGS.MAX_CONCURRENT_REQUESTS
+          }
+          onChange={(v) => onChange({ maxConcurrentRequests: v })}
+          id="maxConcurrentRequests"
+          min={1}
+          max={20}
+          step={1}
+          defaultValue={DEFAULT_VERTEX_AI_CONFIGS.MAX_CONCURRENT_REQUESTS}
+          label="Max concurrent requests"
+          tooltip={
+            <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
+          }
+        />
+      )}
     </div>
   );
 };

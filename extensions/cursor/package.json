@@ -4,7 +4,7 @@
   "description": "Export your chat history from Cursor to Opik.",
   "repository": "https://github.com/comet-ml/opik",
   "publisher": "opik",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "preview": false,
   "engines": {
     "vscode": "^1.90.0"
@@ -22,6 +22,11 @@
       {
         "command": "opik.resetState",
         "title": "Reset Extension State",
+        "category": "Opik"
+      },
+      {
+        "command": "opik.importHistoricalTraces",
+        "title": "Import Historical Cursor Traces",
         "category": "Opik"
       }
     ],
@@ -118,7 +123,9 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test",
+    "test": "npm run test:unit && npm run test-spans",
+    "test:unit": "tsc -p tsconfig.tests.json && node --test out-test/tests/*.test.js",
+    "test:extension": "vscode-test",
     "verify-usage": "node scripts/verify-usage.js",
     "test-spans": "node --test scripts/test-spans.js"
   },

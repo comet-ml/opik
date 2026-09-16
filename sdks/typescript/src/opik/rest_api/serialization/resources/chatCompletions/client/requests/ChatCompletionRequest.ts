@@ -17,36 +17,30 @@ export const ChatCompletionRequest: core.serialization.Schema<
     model: core.serialization.string().optional(),
     messages: core.serialization.list(Message).optional(),
     temperature: core.serialization.number().optional(),
-    topP: core.serialization.property("top_p", core.serialization.number().optional()),
+    topP: core.serialization.number().optional(),
     n: core.serialization.number().optional(),
     stream: core.serialization.boolean().optional(),
-    streamOptions: core.serialization.property("stream_options", StreamOptions.optional()),
+    streamOptions: StreamOptions.optional(),
     stop: core.serialization.list(core.serialization.string()).optional(),
-    maxTokens: core.serialization.property("max_tokens", core.serialization.number().optional()),
-    maxCompletionTokens: core.serialization.property("max_completion_tokens", core.serialization.number().optional()),
-    presencePenalty: core.serialization.property("presence_penalty", core.serialization.number().optional()),
-    frequencyPenalty: core.serialization.property("frequency_penalty", core.serialization.number().optional()),
-    logitBias: core.serialization.property(
-        "logit_bias",
-        core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
-    ),
+    maxTokens: core.serialization.number().optional(),
+    maxCompletionTokens: core.serialization.number().optional(),
+    presencePenalty: core.serialization.number().optional(),
+    frequencyPenalty: core.serialization.number().optional(),
+    logitBias: core.serialization.record(core.serialization.string(), core.serialization.number()).optional(),
     user: core.serialization.string().optional(),
-    responseFormat: core.serialization.property("response_format", ResponseFormat.optional()),
+    responseFormat: ResponseFormat.optional(),
     seed: core.serialization.number().optional(),
     tools: core.serialization.list(Tool).optional(),
-    toolChoice: core.serialization.property(
-        "tool_choice",
-        core.serialization.record(core.serialization.string(), core.serialization.unknown()).optional(),
-    ),
-    parallelToolCalls: core.serialization.property("parallel_tool_calls", core.serialization.boolean().optional()),
+    toolChoice: core.serialization.record(core.serialization.string(), core.serialization.unknown()).optional(),
+    parallelToolCalls: core.serialization.boolean().optional(),
     store: core.serialization.boolean().optional(),
     metadata: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
-    reasoningEffort: core.serialization.property("reasoning_effort", core.serialization.string().optional()),
-    serviceTier: core.serialization.property("service_tier", core.serialization.string().optional()),
+    reasoningEffort: core.serialization.string().optional(),
+    serviceTier: core.serialization.string().optional(),
     logprobs: core.serialization.boolean().optional(),
-    topLogprobs: core.serialization.property("top_logprobs", core.serialization.number().optional()),
+    topLogprobs: core.serialization.number().optional(),
     functions: core.serialization.list(Function).optional(),
-    functionCall: core.serialization.property("function_call", FunctionCall.optional()),
+    functionCall: FunctionCall.optional(),
 });
 
 export declare namespace ChatCompletionRequest {
@@ -54,29 +48,29 @@ export declare namespace ChatCompletionRequest {
         model?: string | null;
         messages?: Message.Raw[] | null;
         temperature?: number | null;
-        top_p?: number | null;
+        topP?: number | null;
         n?: number | null;
         stream?: boolean | null;
-        stream_options?: StreamOptions.Raw | null;
+        streamOptions?: StreamOptions.Raw | null;
         stop?: string[] | null;
-        max_tokens?: number | null;
-        max_completion_tokens?: number | null;
-        presence_penalty?: number | null;
-        frequency_penalty?: number | null;
-        logit_bias?: Record<string, number> | null;
+        maxTokens?: number | null;
+        maxCompletionTokens?: number | null;
+        presencePenalty?: number | null;
+        frequencyPenalty?: number | null;
+        logitBias?: Record<string, number> | null;
         user?: string | null;
-        response_format?: ResponseFormat.Raw | null;
+        responseFormat?: ResponseFormat.Raw | null;
         seed?: number | null;
         tools?: Tool.Raw[] | null;
-        tool_choice?: Record<string, unknown> | null;
-        parallel_tool_calls?: boolean | null;
+        toolChoice?: Record<string, unknown> | null;
+        parallelToolCalls?: boolean | null;
         store?: boolean | null;
         metadata?: Record<string, string> | null;
-        reasoning_effort?: string | null;
-        service_tier?: string | null;
+        reasoningEffort?: string | null;
+        serviceTier?: string | null;
         logprobs?: boolean | null;
-        top_logprobs?: number | null;
+        topLogprobs?: number | null;
         functions?: Function.Raw[] | null;
-        function_call?: FunctionCall.Raw | null;
+        functionCall?: FunctionCall.Raw | null;
     }
 }
