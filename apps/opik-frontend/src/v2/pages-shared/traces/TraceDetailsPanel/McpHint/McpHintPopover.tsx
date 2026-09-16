@@ -8,7 +8,7 @@ import McpRouteConfirmation from "./McpRouteConfirmation";
 import useMcpInstallMode from "./useMcpInstallMode";
 import { McpHintTarget, McpRouteOutcome } from "./types";
 import {
-  MCP_CONFIRMATION_HOLD_MS,
+  MCP_CONFIRMATION_DISMISS_MS,
   MCP_HINT_DESCRIPTION,
   MCP_HINT_DOCS_PATH,
   MCP_HINT_TITLE,
@@ -55,23 +55,34 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
     });
   }, [installMode, target.entityType]);
 
-  // The hold is a moment, not a state the card gets stuck in: once the layout
-  // has settled, either the pointer is on the card and hover keeps it, or it is
-  // not and the card goes. A timer, because it has to be cleared on unmount.
+  // A confirmation gets its moment and is then resolved one of two ways: the
+  // card closes, or — if the pointer is on it, so somebody is reading — it goes
+  // back to the routes. A timer, because it has to be cleared on unmount.
+  //
+  // It counts from the confirmation and nothing else. Keeping the callbacks in
+  // the dependency list restarted the clock whenever one of them was rebuilt
+  // higher up, which showed as three seconds taking four.
   const cardRef = useRef<HTMLDivElement>(null);
+  const resolveRef = useRef<() => void>(() => {});
+  resolveRef.current = () => {
+    if (cardRef.current?.matches(":hover")) {
+      setOutcome(null);
+      onConfirmationChange(false);
+      return;
+    }
+    onDismiss();
+  };
+
   useEffect(() => {
     if (!outcome) return;
 
-    const timer = setTimeout(() => {
-      if (cardRef.current?.matches(":hover")) {
-        onConfirmationChange(false);
-        return;
-      }
-      onDismiss();
-    }, MCP_CONFIRMATION_HOLD_MS);
+    const timer = setTimeout(
+      () => resolveRef.current(),
+      MCP_CONFIRMATION_DISMISS_MS,
+    );
 
     return () => clearTimeout(timer);
-  }, [outcome, onConfirmationChange, onDismiss]);
+  }, [outcome]);
 
   const handleLearnMoreClick = () => {
     onAction();

@@ -9,11 +9,12 @@ export const MCP_HINT_REVEAL_DELAY_MS = 200;
 // the same as CodeBlockCopy and every other copy in the product.
 export const MCP_COPIED_FEEDBACK_MS = 2000;
 
-// How long a deeplink's confirmation holds the card. Replacing the routes with
-// it makes the card shorter, which can slide it out from under a pointer that
-// has not moved, and the pointer-leave that follows would dismiss what the user
-// just asked for. After this, hover governs the card again.
-export const MCP_CONFIRMATION_HOLD_MS = 2000;
+// How long a confirmation stands before the card resolves it: closing, or —
+// if the pointer is on the card, so somebody is reading — going back to the
+// routes. Until then nothing dismisses it, because replacing the routes makes
+// the card shorter, which can slide it out from under a pointer that never
+// moved, and hand-off to another app takes the focus with it.
+export const MCP_CONFIRMATION_DISMISS_MS = 3000;
 
 export const MCP_HINT_LABEL = "Fix via MCP";
 

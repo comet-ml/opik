@@ -31,7 +31,7 @@ vi.mock("@/store/PluginsStore", async (importOriginal) => {
 import { TooltipProvider } from "@/ui/tooltip";
 import McpHintPopover from "./McpHintPopover";
 import {
-  MCP_CONFIRMATION_HOLD_MS,
+  MCP_CONFIRMATION_DISMISS_MS,
   MCP_COPIED,
   MCP_COPIED_FEEDBACK_MS,
   MCP_PROMPT_ACTION,
@@ -154,10 +154,10 @@ describe("the hint card with a hosted server", () => {
     plugin.McpInstallRoutes = null;
   });
 
-  it("holds the card while the layout settles, then lets it go", () => {
-    // Replacing the routes makes the card shorter, which can slide it out from
-    // under a pointer that has not moved. The hold survives that; it is not a
-    // state the card stays in.
+  it("closes the card once the confirmation has had its moment", () => {
+    // Nothing dismisses it before then: replacing the routes makes the card
+    // shorter, which can slide it out from under a pointer that never moved,
+    // and the hand-off takes the focus with it.
     const { onConfirmationChange, onDismiss } = renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-vscode"));
 
@@ -165,11 +165,11 @@ describe("the hint card with a hosted server", () => {
     expect(onConfirmationChange).toHaveBeenLastCalledWith(true);
     expect(onDismiss).not.toHaveBeenCalled();
 
-    act(() => void vi.advanceTimersByTime(MCP_CONFIRMATION_HOLD_MS));
+    act(() => void vi.advanceTimersByTime(MCP_CONFIRMATION_DISMISS_MS));
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it("hands the card back to hover when someone is reading it", () => {
+  it("goes back to the routes when someone is reading it", () => {
     const { onConfirmationChange, onDismiss, container } = renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-vscode"));
 
@@ -179,11 +179,12 @@ describe("the hint card with a hosted server", () => {
       (el as HTMLElement).matches = ((selector: string) =>
         selector === ":hover") as HTMLElement["matches"];
     }
-    act(() => void vi.advanceTimersByTime(MCP_CONFIRMATION_HOLD_MS));
+    act(() => void vi.advanceTimersByTime(MCP_CONFIRMATION_DISMISS_MS));
 
     expect(onDismiss).not.toHaveBeenCalled();
     expect(onConfirmationChange).toHaveBeenLastCalledWith(false);
-    expect(screen.getByText("Opening VS Code…")).toBeInTheDocument();
+    expect(screen.queryByText("Opening VS Code…")).toBeNull();
+    expect(screen.getByTestId("mcp-route-vscode")).toBeInTheDocument();
   });
 
   it("says the fallback copy landed, for the same two seconds", () => {

@@ -121,6 +121,9 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
   const handleContentBlur = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {
       if (contentRef.current?.contains(event.relatedTarget)) return;
+      // Using a deeplink hands off to another app, which takes the focus with
+      // it. That is not the user dismissing what they just asked for.
+      if (isPinnedRef.current) return;
       close();
     },
     [close],
