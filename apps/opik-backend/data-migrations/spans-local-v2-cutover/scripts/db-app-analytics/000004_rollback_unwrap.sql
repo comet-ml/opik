@@ -1,0 +1,58 @@
+-- runbook spans-local-v2-cutover — ROLLBACK un-wrap: remove the Distributed wrap, keep the cutover (driven by
+-- ../rollback.sh --unwrap-only)
+-- The gate test SpansLocalV2CutoverTest reimplements this inline; keep the two in step (see its Javadoc).
+--
+-- Use when the WRAP misbehaves but the cutover itself is fine. It reverses only the sharding half: `spans` goes back to
+-- being the partitioned successor MergeTree and the `Distributed` wrapper is gone, landing in the post-EXCHANGE,
+-- pre-wrap state — a supported resting state the runbook already describes (`--skip-wrap` stops there, and on spans it
+-- is where the runbook stops while the wrap stays deferred).
+--
+-- WHY THIS EXISTS SEPARATELY FROM STAGE C. Stage C is the only other statement that touches the wrap, but it bundles
+-- that with promoting the parked original, parking the successor and reverse-replaying — the right answer when the
+-- SUCCESSOR is suspect, a disproportionate one when only the routing definition is, since the wrapper holds no data. Two
+-- consequences (the runbook's "Un-wrap" section carries the full comparison):
+--   * It needs NO reverse-replay. The successor stays live, so no write is abandoned and no delete needs re-applying —
+--     the whole reason stage B/C carry `--cutover-start`, `--confirm-retention-paused` and
+--     `--accept-post-cutover-write-loss`. None apply here.
+--   * It works AFTER finalize.sh. Stages B and C both require `spans_pre_cutover_backup`, which finalize drops; this
+--     needs only `spans` and `spans_local`. Since the documented order is wrap, soak, then finalize, post-wrap and
+--     post-finalize is the expected steady state, and this is the only wrap recovery available there.
+--
+-- SCOPE LIMIT: this undoes SHARDING only. If the partitioned successor itself is the problem — a fidelity defect, a
+-- partition-count or merge-load regression, slower queries — un-wrapping changes none of it; use stage B/C (while the
+-- parked original still exists) instead. Complement, not replacement.
+--
+-- GAPLESS per node, by the same construction as the wrap and stage C: a SINGLE atomic multi-target RENAME (all clauses
+-- apply or none) moves the data-less wrapper to an explicit temp name and promotes `spans_local` into the name it
+-- frees, so `spans` is never absent on a node. ACROSS the shard's replicas ON CLUSTER runs synchronously — the client
+-- blocks until every reachable replica applies it, or throws naming a laggard that then converges via the DDL queue —
+-- NOT globally atomic, so a sub-second cross-replica skew remains. It is the exact mirror of the wrap's: while a lagging
+-- replica still has the wrapper, that wrapper resolves `spans_local`, which the already-renamed replicas no longer
+-- have, so a query routed there can fail with UNKNOWN_TABLE (the wrap's own window is the same thing in reverse — a
+-- Distributed query reaching a node where `spans_local` does not exist YET). It is brief and fails loudly rather than
+-- silently, and ../rollback.sh gates it behind --confirm-maintenance; only quiescing reads as well as writes actually
+-- covers it — nothing on the ingestion side can.
+--
+-- Partial-failure recovery: if the RENAME succeeds and the DROP does not, the estate is already correct (`spans` is the
+-- successor) and only the data-less ex-wrapper lingers under `spans_dist_old`. Nothing needs re-running — --unwrap-only
+-- would (correctly) refuse now that `spans` is no longer Distributed. Just drop the leftover:
+--   DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans_dist_old ON CLUSTER '{cluster}' SYNC;
+-- Leaving it in place also blocks the NEXT un-wrap (RENAME cannot overwrite an existing name), which ../rollback.sh
+-- pre-checks and reports rather than letting the RENAME fail obscurely.
+--
+-- BEFORE backends resume: set databaseAnalyticsDataModel.spansDistributedWrapEnabled=false (OPIK-7799) — the inverse of
+-- the flip that enabled the wrap. It is the ONLY flag this reverses, and `spanColumnsNonNullable` must stay `true`: the
+-- live table keeps the successor's sentinel schema, which un-wrapping preserves. Contrast stage B/C, which restore the
+-- unpartitioned original and so also revert `spanColumnsNonNullable` (stage C both flags), plus the sentinel/duration
+-- repair. Span-delete partition pruning is not a flag at all and is not this cutover's to deliver — it is OPIK-8364, and
+-- until it lands the span delete path is unpruned on both sides of the swap alike.
+
+-- 1. Gapless un-wrap: rotate both names atomically.
+SET log_comment = 'spans_local_v2_rollback:unwrap';
+RENAME TABLE
+    ${ANALYTICS_DB_DATABASE_NAME}.spans TO ${ANALYTICS_DB_DATABASE_NAME}.spans_dist_old,
+    ${ANALYTICS_DB_DATABASE_NAME}.spans_local TO ${ANALYTICS_DB_DATABASE_NAME}.spans
+    ON CLUSTER '{cluster}';
+
+-- 2. Drop the ex-wrapper by its unambiguous temp name (data-less Distributed routing definition — no size guard needed).
+DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans_dist_old ON CLUSTER '{cluster}' SYNC;
