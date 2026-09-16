@@ -7,8 +7,10 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
+import org.apache.commons.lang3.StringUtils;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -49,4 +51,21 @@ public record AlertTriggerConfig(
     public static final String OPERATOR_CONFIG_KEY = "operator";
     // Comma-separated GuardrailType names (e.g. "PII,TOPIC"); empty/absent means all types.
     public static final String GUARDRAIL_TYPES_CONFIG_KEY = "guardrail_types";
+
+    /**
+     * The config value with the window under {@link #WINDOW_CONFIG_KEY}, taking it from the legacy key when
+     * that is where it was stored. Applied as configs are read out of persistence, so the legacy spelling
+     * never reaches a consumer: the alerts editor reads only {@code window} and drops a config it cannot
+     * read, which would delete the condition on the next save.
+     */
+    public static Map<String, String> withNormalizedWindow(Map<String, String> configValue) {
+        if (configValue == null
+                || StringUtils.isNotBlank(configValue.get(WINDOW_CONFIG_KEY))
+                || StringUtils.isBlank(configValue.get(LEGACY_WINDOW_SECONDS_CONFIG_KEY))) {
+            return configValue;
+        }
+        var normalized = new HashMap<>(configValue);
+        normalized.put(WINDOW_CONFIG_KEY, configValue.get(LEGACY_WINDOW_SECONDS_CONFIG_KEY));
+        return Map.copyOf(normalized);
+    }
 }

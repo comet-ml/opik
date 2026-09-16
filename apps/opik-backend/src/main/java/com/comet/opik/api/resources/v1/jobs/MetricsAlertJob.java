@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.jobs;
 import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
+import com.comet.opik.api.AlertTriggerConfig;
 import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
@@ -32,6 +33,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.JobExecutionContext;
@@ -55,7 +57,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.AlertTriggerConfig.LEGACY_WINDOW_SECONDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
@@ -171,7 +172,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         // Reactor's Context rejects null values, so without this a malformed row raises an NPE from the
         // contextWrite below and fails the alert there instead of being skipped here.
         if (alert.workspaceId() == null) {
-            log.warn("Skipping alert '{}' (id: '{}') - no workspaceId", alert.name(), alert.id());
+            log.warn("Skipping alert with missing workspaceId: name='{}' id='{}'", alert.name(), alert.id());
             alertsSkipped.add(1);
             return Mono.empty();
         }
@@ -419,7 +420,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         return groups;
     }
 
-    private TriggerConfig buildTriggerConfig(com.comet.opik.api.AlertTriggerConfig config, AlertEventType eventType,
+    private TriggerConfig buildTriggerConfig(AlertTriggerConfig config, AlertEventType eventType,
             List<UUID> projectIds, AlertTriggerConfigType thresholdConfigType) {
         var thresholdString = config.configValue().get(THRESHOLD_CONFIG_KEY);
         if (thresholdString == null) {
@@ -429,20 +430,17 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         }
         BigDecimal threshold = new BigDecimal(thresholdString);
 
-        // Configs persisted before write-side validation existed may carry no window at all, or carry it
-        // under the legacy key. Throwing here only skipped the alert for good; every one of these evaluated
-        // to a permanently silent alert nobody was told about.
-        var windowString = config.configValue().get(WINDOW_CONFIG_KEY);
-        if (windowString == null) {
-            windowString = config.configValue().get(LEGACY_WINDOW_SECONDS_CONFIG_KEY);
-        }
+        // Configs persisted before the write side validated them may carry no window at all. Throwing here
+        // only skipped the alert for good, leaving a permanently silent alert nobody was told about.
+        // Blank counts as absent, so a stored empty string falls back rather than failing Long.parseLong.
+        var windowString = AlertTriggerConfig.withNormalizedWindow(config.configValue()).get(WINDOW_CONFIG_KEY);
         long windowSeconds;
-        if (windowString == null) {
+        if (StringUtils.isBlank(windowString)) {
             windowSeconds = webhookConfig.getMetrics().getDefaultAlertWindow().toSeconds();
-            log.warn("No '{}' in trigger config '{}' of type '{}'; evaluating over the default of '{}'s",
-                    WINDOW_CONFIG_KEY, config.id(), thresholdConfigType, windowSeconds);
+            log.warn("Trigger config has no window, evaluating over the default: configId='{}' type='{}' "
+                    + "windowSeconds='{}'", config.id(), thresholdConfigType, windowSeconds);
         } else {
-            windowSeconds = Long.parseLong(windowString);
+            windowSeconds = Long.parseLong(windowString.trim());
         }
 
         String name = null;

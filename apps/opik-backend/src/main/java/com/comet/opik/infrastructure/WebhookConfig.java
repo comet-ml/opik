@@ -146,9 +146,10 @@ public class WebhookConfig implements StreamConfiguration {
         private Duration metricsAlertJobLockWaitTimeout = Duration.seconds(1);
 
         // Window used for a threshold config persisted without one, from before the write side validated it.
-        // Defaults to the same hour the alerts form offers as its own default.
+        // Matches DEFAULT_FEEDBACK_SCORE_CONDITION in the alerts form, so such a config evaluates over the
+        // same period an equivalent alert created today would get.
         @Valid @JsonProperty
         @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-        private Duration defaultAlertWindow = Duration.hours(1);
+        private Duration defaultAlertWindow = Duration.hours(24);
     }
 }

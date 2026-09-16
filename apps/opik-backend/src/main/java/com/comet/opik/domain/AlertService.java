@@ -51,7 +51,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.AlertTriggerConfig.LEGACY_WINDOW_SECONDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
@@ -553,6 +552,11 @@ class AlertServiceImpl implements AlertService {
             return;
         }
         for (AlertTrigger trigger : alert.triggers()) {
+            // A null element is a malformed request body, not a server fault: dereferencing it here would
+            // answer 5xx for something the caller sent.
+            if (trigger == null) {
+                throw new BadRequestException("'triggers' must not contain null entries");
+            }
             if (trigger.triggerConfigs() == null || trigger.eventType() == null) {
                 continue;
             }
@@ -561,22 +565,22 @@ class AlertServiceImpl implements AlertService {
                 continue;
             }
             for (AlertTriggerConfig config : trigger.triggerConfigs()) {
+                if (config == null) {
+                    throw new BadRequestException("'trigger_configs' must not contain null entries");
+                }
                 if (config.type() != thresholdType.get()) {
                     continue;
                 }
-                Map<String, String> configValue = Optional.ofNullable(config.configValue()).orElseGet(Map::of);
-                if (StringUtils.isBlank(configValue.get(THRESHOLD_CONFIG_KEY))) {
-                    throw new BadRequestException(
-                            "Missing config value for key '%s' in trigger config of type '%s'"
-                                    .formatted(THRESHOLD_CONFIG_KEY, config.type().getValue()));
-                }
-                // The legacy key counts: the job reads it, so an alert stored under it works and must stay
-                // editable. Only a config with no window at all is rejected.
-                if (StringUtils.isBlank(configValue.get(WINDOW_CONFIG_KEY))
-                        && StringUtils.isBlank(configValue.get(LEGACY_WINDOW_SECONDS_CONFIG_KEY))) {
-                    throw new BadRequestException(
-                            "Missing config value for key '%s' in trigger config of type '%s'"
-                                    .formatted(WINDOW_CONFIG_KEY, config.type().getValue()));
+                // Normalized so the legacy spelling counts, exactly as it does everywhere a config is read.
+                Map<String, String> configValue = Optional
+                        .ofNullable(AlertTriggerConfig.withNormalizedWindow(config.configValue()))
+                        .orElseGet(Map::of);
+                for (String key : List.of(THRESHOLD_CONFIG_KEY, WINDOW_CONFIG_KEY)) {
+                    if (StringUtils.isBlank(configValue.get(key))) {
+                        throw new BadRequestException(
+                                "Missing config value for key '%s' in trigger config of type '%s'"
+                                        .formatted(key, config.type().getValue()));
+                    }
                 }
             }
         }

@@ -258,7 +258,50 @@ class MetricsAlertJobTest {
         verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
                 any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
                 anyList(), anyList(), anyList());
-        assertThat(windowSecondsPassedToDao()).isEqualTo(3600L);
+        assertThat(windowSecondsPassedToDao()).isEqualTo(86400L);
+    }
+
+    @Test
+    void treatsABlankWindowAsAbsentAndFallsBackToTheLegacyKey() {
+        // A stored empty string is not a window. Reading it as present would hand Long.parseLong("") an
+        // input it throws on, failing a config that carries a perfectly good legacy value.
+        Alert alert = alertWithFeedbackConfig(Map.of(
+                NAME_CONFIG_KEY, FEEDBACK_NAME,
+                OPERATOR_CONFIG_KEY, "<",
+                THRESHOLD_CONFIG_KEY, "0.5",
+                WINDOW_CONFIG_KEY, "",
+                LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"));
+
+        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
+                anyList(), anyList(), anyList());
+        assertThat(windowSecondsPassedToDao()).isEqualTo(900L);
+    }
+
+    @Test
+    void treatsABlankWindowWithNoLegacyValueAsAbsent() {
+        Alert alert = alertWithFeedbackConfig(Map.of(
+                NAME_CONFIG_KEY, FEEDBACK_NAME,
+                OPERATOR_CONFIG_KEY, "<",
+                THRESHOLD_CONFIG_KEY, "0.5",
+                WINDOW_CONFIG_KEY, "   "));
+
+        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
+                anyList(), anyList(), anyList());
+        assertThat(windowSecondsPassedToDao()).isEqualTo(86400L);
     }
 
     @Test
