@@ -309,6 +309,12 @@ vertex-ai:
   - id: "gemini-2.0-flash-lite-001"
     qualifiedName: "vertex_ai/gemini-2.0-flash-lite-001"
     label: "Gemini 2.0 Flash Lite 001"
+  - id: "gemini-omni-1.1-flash"
+    qualifiedName: "vertex_ai/gemini-omni-1.1-flash"
+    label: "Gemini Omni 1.1 Flash"
+  - id: "gemini-robotics-er-2"
+    qualifiedName: "vertex_ai/gemini-robotics-er-2"
+    label: "Gemini Robotics Er 2"
   - id: "gemini-2.5-flash-lite-preview-06-17"
     qualifiedName: "vertex_ai/gemini-2.5-flash-lite-preview-06-17"
     structuredOutput: true

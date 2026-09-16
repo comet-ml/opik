@@ -1,10 +1,17 @@
-"""Item identity must not move when the wire serialiser changes.
+"""Item identity must not move for a given encoder, and dedup must not depend on the wire.
 
-`content_hash` feeds duplicate detection, and the digests of items already stored were
-produced by `json.dumps(..., sort_keys=True)` with default separators. A compact
-serialiser produces different bytes for the same value, so if the hash ever followed the
-wire serialiser every stored digest would stop matching and dedup would silently fail
-against existing datasets. These tests are the gate on that.
+`content_hash` feeds duplicate detection. Its digests are process-local: `Dataset` never
+reads a digest from the backend, it rebuilds `_hashes` by streaming the stored items down
+and hashing them itself (`__internal_api__sync_hashes__`). So the items a pass compares
+against were hashed by the same interpreter, in the same process, with whichever encoder
+that process has -- there is no stored digest for a changed encoding to stop matching.
+
+That is what lets `json_helpers` accelerate the digest where orjson is installed. What it
+does not license is the digest drifting *within* one encoder, so the golden digests below
+are still pinned, and still pinned to the standard library: it is the encoder every
+platform has, the one the SDK has always used, and the only one whose bytes can be
+written down here and checked anywhere. Tests that assert them therefore pin the
+standard-library path explicitly rather than taking whatever the test machine installed.
 """
 
 import dataclasses
@@ -16,6 +23,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from opik import json_helpers
 from opik.api_objects.dataset import dataset_item, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
 
@@ -35,13 +43,23 @@ ITEM_SHAPES = [
 ]
 
 
+@pytest.fixture
+def stdlib_encoder(monkeypatch):
+    """Force `json_helpers` down the standard-library path.
+
+    Without this a golden digest would assert one thing on a machine with orjson and
+    another without, which is the opposite of a pinned value.
+    """
+    monkeypatch.setattr(json_helpers, "_orjson", None)
+
+
 def _legacy_digest(content: dict) -> str:
     """Exactly how the digest was produced before this change."""
     return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
 
 
 @pytest.mark.parametrize("content", ITEM_SHAPES)
-def test_content_hash__matches_the_legacy_digest(content):
+def test_content_hash__matches_the_legacy_digest(content, stdlib_encoder):
     item = dataset_item.DatasetItem(**content)
     assert item.content_hash() == _legacy_digest(item.get_content())
 
@@ -111,7 +129,9 @@ def test_content_hash__flexible_value__hashes_instead_of_raising(content):
 
 
 @pytest.mark.parametrize("content", ITEM_SHAPES)
-def test_content_hash__ordinary_value__does_not_use_the_fallback(content, monkeypatch):
+def test_content_hash__ordinary_value__does_not_use_the_fallback(
+    content, monkeypatch, stdlib_encoder
+):
     """The fallback must be unreachable for anything that already serialises.
 
     Its bytes would be the same here, so equality with the legacy digest cannot prove the
@@ -142,8 +162,9 @@ def test_content_hash__unserializable_value__still_raises():
 # --------------------------------------------------------------------------- #
 # Written down rather than derived: comparing against `_legacy_digest` proves only that
 # two pieces of code agree, and both would move together if the encoding changed. These
-# are the bytes items already stored were hashed with. A failure here is a dedup break for
-# every existing dataset, never a test to update.
+# are the standard library's bytes -- the encoder every platform has, and the one this SDK
+# has always used. A failure here means the standard-library digest moved, which is a
+# dedup break for every install without orjson, never a test to update.
 GOLDEN_DIGESTS = [
     pytest.param(
         {"input": "plain"},
@@ -179,7 +200,7 @@ GOLDEN_DIGESTS = [
 
 
 @pytest.mark.parametrize("content, digest", GOLDEN_DIGESTS)
-def test_content_hash__matches_the_recorded_digest(content, digest):
+def test_content_hash__matches_the_recorded_digest(content, digest, stdlib_encoder):
     assert dataset_item.DatasetItem(**content).content_hash() == digest
 
 
@@ -210,7 +231,7 @@ def test_content_hash__object_with_no_json_form__raises_wherever_it_is():
             dataset_item.DatasetItem(input={"v": value}).content_hash()
 
 
-def test_content_hash__set_valued_item__digest_is_pinned():
+def test_content_hash__set_valued_item__digest_is_pinned(stdlib_encoder):
     """A set's members must reach the digest in an order no process can change.
 
     Python randomises string hashing per process, so `list()` over a set of strings comes
