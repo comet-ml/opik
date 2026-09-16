@@ -53,19 +53,9 @@ jobs:
                   match-regex: '^sdks/python/|^\.github/workflows/python_sdk_e2e_tests\.yml$'
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
-    fork-pr-warning:
-        name: E2E Skipped On Fork PR
-        runs-on: ubuntu-latest
-        if: ${{ github.event.pull_request.head.repo.fork == true }}
-        steps:
-            - uses: actions/checkout@v7
-              with:
-                  sparse-checkout: .github/actions/fork-pr-e2e-skip-warning
-                  sparse-checkout-cone-mode: false
-            - uses: ./.github/actions/fork-pr-e2e-skip-warning
-
     build-opik:
-        # See fork-pr-warning; delete this line once fork PRs can run E2E.
+        # Fork PRs get a read-only GITHUB_TOKEN, so the GHCR push below always
+        # 403s. Skip rather than fail; delete once fork PRs can run E2E.
         if: ${{ github.event.pull_request.head.repo.fork != true }}
         # The reusable build workflow pushes images to GHCR; pass down the
         # packages: write grant here rather than at the workflow level (a
