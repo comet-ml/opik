@@ -121,7 +121,11 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
               {MCP_HINT_DESCRIPTION}
             </p>
 
-            <InstallRoutes onRouteUsed={handleRouteUsed} target={target} />
+            <InstallRoutes
+              onRouteUsed={handleRouteUsed}
+              onCopied={onAction}
+              target={target}
+            />
 
             <a
               href={buildDocsUrl(MCP_HINT_DOCS_PATH)}

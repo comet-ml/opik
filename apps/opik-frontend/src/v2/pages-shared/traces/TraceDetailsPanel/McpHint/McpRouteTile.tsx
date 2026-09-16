@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Check, Copy, ExternalLink } from "lucide-react";
-import copy from "clipboard-copy";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { MCP_COPIED_FEEDBACK_MS } from "./constants";
+import useCopiedFeedback from "./useCopiedFeedback";
 import { McpInstallRoute, MCP_ROUTE_METHOD } from "./types";
 import { MCP_TILE_CLASS } from "./tileStyles";
 
@@ -26,19 +25,14 @@ const McpRouteTile: React.FunctionComponent<McpRouteTileProps> = ({
   // A copy has landed on the clipboard and nothing else changes, so the tile
   // itself is where that gets said. A deeplink has nothing to report here: the
   // card takes over instead, because the hand-off cannot be observed.
-  const [hasCopied, setHasCopied] = useState(false);
-  useEffect(() => {
-    if (!hasCopied) return;
-    const timer = setTimeout(() => setHasCopied(false), MCP_COPIED_FEEDBACK_MS);
-    return () => clearTimeout(timer);
-  }, [hasCopied]);
+  const [hasCopied, copyText] = useCopiedFeedback();
 
-  const handleUse = () => {
-    if (!isDeeplink && route.clipboard) {
-      copy(route.clipboard);
-      setHasCopied(true);
+  const handleUse = async () => {
+    if (isDeeplink || !route.clipboard) {
+      onUse(route);
+      return;
     }
-    onUse(route);
+    if (await copyText(route.clipboard)) onUse(route);
   };
 
   const content = (

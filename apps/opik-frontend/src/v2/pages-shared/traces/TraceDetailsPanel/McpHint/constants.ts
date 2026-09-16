@@ -5,8 +5,8 @@ export const MCP_HINT_CLOSE_DELAY_MS = 260;
 // cause and effect rather than as one layout.
 export const MCP_HINT_REVEAL_DELAY_MS = 200;
 
-// How long a copy says so before going back to offering itself. Two seconds,
-// the same as CodeBlockCopy and every other copy in the product.
+// How long the copied feedback stays on a control before it goes back to
+// offering the copy. Two seconds, as CodeBlockCopy and the rest of the product.
 export const MCP_COPIED_FEEDBACK_MS = 2000;
 
 // How long a confirmation stands before the card resolves it: closing, or —

@@ -75,5 +75,10 @@ export type McpPromptContext = {
 
 export type McpInstallRoutesProps = {
   onRouteUsed: (outcome: McpRouteOutcome) => void;
+  /**
+   * A copy landed. It changes nothing about the card, but the user did leave
+   * through it, so closing it afterwards is not abandonment.
+   */
+  onCopied: () => void;
   target: McpHintTarget;
 };

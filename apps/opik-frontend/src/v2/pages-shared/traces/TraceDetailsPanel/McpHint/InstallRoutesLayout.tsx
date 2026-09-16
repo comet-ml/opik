@@ -23,13 +23,14 @@ type InstallRoutesLayoutProps = {
   buildPrompt: (context: McpPromptContext) => string;
   target: McpHintTarget;
   onRouteUsed: (outcome: McpRouteOutcome) => void;
+  onCopied: () => void;
 };
 
 // Everything the two deployments share. Either side supplies only its routes
 // and its prompt builder.
 const InstallRoutesLayout: React.FunctionComponent<
   InstallRoutesLayoutProps
-> = ({ routes, buildPrompt, target, onRouteUsed }) => {
+> = ({ routes, buildPrompt, target, onRouteUsed, onCopied }) => {
   const installMode = useMcpInstallMode();
   const prompt = useMcpPrompt(target, buildPrompt);
 
@@ -46,7 +47,10 @@ const InstallRoutesLayout: React.FunctionComponent<
       // off to another app, which cannot be observed from here, so it owes the
       // user a view — with the prompt as the fallback, which only this layer
       // can build.
-      if (route.method !== MCP_ROUTE_METHOD.DEEPLINK) return;
+      if (route.method !== MCP_ROUTE_METHOD.DEEPLINK) {
+        onCopied();
+        return;
+      }
 
       onRouteUsed({
         ...route,
@@ -54,7 +58,7 @@ const InstallRoutesLayout: React.FunctionComponent<
         snippet: prompt,
       });
     },
-    [installMode, onRouteUsed, prompt, target.entityType],
+    [installMode, onCopied, onRouteUsed, prompt, target.entityType],
   );
 
   return (
@@ -83,6 +87,7 @@ const InstallRoutesLayout: React.FunctionComponent<
           prompt={prompt}
           installMode={installMode}
           entityType={target.entityType}
+          onCopied={onCopied}
         />
       </div>
     </>

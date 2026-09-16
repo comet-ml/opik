@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
-vi.mock("clipboard-copy", () => ({ default: vi.fn() }));
+vi.mock("clipboard-copy", () => ({ default: vi.fn(() => Promise.resolve()) }));
 
 import { TooltipProvider } from "@/ui/tooltip";
 import McpRouteConfirmation from "./McpRouteConfirmation";
@@ -60,7 +60,7 @@ describe("the route confirmation", () => {
     expect(note.className).toContain("text-foreground");
   });
 
-  it("reports a recopy, so the funnel sees it and the clock restarts", () => {
+  it("reports a recopy, so the funnel sees it and the clock restarts", async () => {
     const { onRecopy } = renderConfirmation({
       kind: "opened",
       confirmation: "Opening VS Code…",
@@ -69,6 +69,7 @@ describe("the route confirmation", () => {
 
     fireEvent.click(screen.getByLabelText("Copy it"));
 
-    expect(onRecopy).toHaveBeenCalledTimes(1);
+    // The write is awaited now, so the success effects land a microtask later.
+    await waitFor(() => expect(onRecopy).toHaveBeenCalledTimes(1));
   });
 });

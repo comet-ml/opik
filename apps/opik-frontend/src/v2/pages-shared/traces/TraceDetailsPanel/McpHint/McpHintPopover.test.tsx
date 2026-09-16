@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from "@testing-library/react";
 
-vi.mock("clipboard-copy", () => ({ default: vi.fn() }));
+vi.mock("clipboard-copy", () => ({ default: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/lib/analytics/tracking", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   trackEvent: vi.fn(),
@@ -78,13 +84,13 @@ describe("the hint card", () => {
     expect(screen.getByText(MCP_PROMPT_ACTION)).toBeInTheDocument();
   });
 
-  it("says a copy landed for two seconds, then offers itself again", () => {
+  it("says a copy landed for two seconds, then offers itself again", async () => {
     renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-prompt"));
 
     // Not a button while it says so: a message with a hover effect reads as
     // something to press.
-    const copied = screen.getByTestId("mcp-route-prompt-copied");
+    const copied = await screen.findByTestId("mcp-route-prompt-copied");
     expect(copied).toHaveTextContent(MCP_COPIED);
     expect(copied.tagName).toBe("SPAN");
     expect(screen.queryByTestId("mcp-route-prompt")).toBeNull();
@@ -97,12 +103,14 @@ describe("the hint card", () => {
     expect(screen.getByText(MCP_PROMPT_ACTION)).toBeInTheDocument();
   });
 
-  it("ticks the client tile that was copied, and only that one", () => {
+  it("ticks the client tile that was copied, and only that one", async () => {
     renderCard();
     const cursor = screen.getByTestId("mcp-route-cursor");
     fireEvent.click(cursor);
 
-    expect(cursor.querySelector(".lucide-check")).toBeTruthy();
+    await waitFor(() =>
+      expect(cursor.querySelector(".lucide-check")).toBeTruthy(),
+    );
     expect(
       screen.getByTestId("mcp-route-codex").querySelector(".lucide-copy"),
     ).toBeTruthy();
@@ -111,11 +119,12 @@ describe("the hint card", () => {
     expect(cursor.querySelector(".lucide-copy")).toBeTruthy();
   });
 
-  it("does not hold the card open for a copy", () => {
+  it("does not hold the card open for a copy", async () => {
     // Nothing took the card over, so hover governs it as it did before.
     const { onConfirmationChange } = renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-cursor"));
 
+    await act(async () => {});
     expect(onConfirmationChange).not.toHaveBeenCalled();
   });
 });
@@ -187,15 +196,36 @@ describe("the hint card with a hosted server", () => {
     expect(screen.getByTestId("mcp-route-vscode")).toBeInTheDocument();
   });
 
-  it("says the fallback copy landed, for the same two seconds", () => {
+  it("says the fallback copy landed, for the same two seconds", async () => {
     renderCard();
     fireEvent.click(screen.getByTestId("mcp-route-vscode"));
 
     const button = screen.getByLabelText("Copy it");
     fireEvent.click(button);
-    expect(button.querySelector(".lucide-check")).toBeTruthy();
+    await waitFor(() =>
+      expect(button.querySelector(".lucide-check")).toBeTruthy(),
+    );
 
     act(() => void vi.advanceTimersByTime(MCP_COPIED_FEEDBACK_MS));
     expect(button.querySelector(".lucide-copy")).toBeTruthy();
+  });
+
+  it("counts a copy as leaving through the card, not abandoning it", () => {
+    // Otherwise the next dismissal reports mcp_popover_closed and every copy
+    // lands in the funnel as someone who read it and walked away.
+    const onAction = vi.fn();
+    render(
+      <TooltipProvider>
+        <McpHintPopover
+          onAction={onAction}
+          onConfirmationChange={vi.fn()}
+          onDismiss={vi.fn()}
+          target={target}
+        />
+      </TooltipProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId("mcp-route-vscode"));
+    expect(onAction).toHaveBeenCalled();
   });
 });

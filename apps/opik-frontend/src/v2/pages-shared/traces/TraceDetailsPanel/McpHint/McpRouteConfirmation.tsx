@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Check, Copy } from "lucide-react";
-import copy from "clipboard-copy";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { MCP_COPIED, MCP_COPIED_FEEDBACK_MS } from "./constants";
+import useCopiedFeedback from "./useCopiedFeedback";
+import { MCP_COPIED } from "./constants";
 import { McpRouteOutcome } from "./types";
 import { MCP_SNIPPET_ROW_CLASS } from "./tileStyles";
 
@@ -17,22 +17,11 @@ type McpRouteConfirmationProps = {
 const McpRouteConfirmation: React.FunctionComponent<
   McpRouteConfirmationProps
 > = ({ route, onRecopy }) => {
-  const [hasRecopied, setHasRecopied] = useState(false);
+  const [hasRecopied, copyText] = useCopiedFeedback();
 
-  useEffect(() => {
-    if (!hasRecopied) return;
-    const timer = setTimeout(
-      () => setHasRecopied(false),
-      MCP_COPIED_FEEDBACK_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [hasRecopied]);
-
-  const handleRecopy = () => {
+  const handleRecopy = async () => {
     if (!route.snippet) return;
-    copy(route.snippet);
-    setHasRecopied(true);
-    onRecopy();
+    if (await copyText(route.snippet)) onRecopy();
   };
 
   return (

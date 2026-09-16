@@ -1,19 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Check, Copy } from "lucide-react";
-import copy from "clipboard-copy";
 
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
-import {
-  MCP_COPIED,
-  MCP_COPIED_FEEDBACK_MS,
-  MCP_PROMPT_ACTION,
-} from "./constants";
+import useCopiedFeedback from "./useCopiedFeedback";
+import { MCP_COPIED, MCP_PROMPT_ACTION } from "./constants";
 import { McpHintEntityType, McpInstallMode } from "./types";
 
 type McpPromptActionProps = {
   prompt: string;
   installMode: McpInstallMode;
   entityType: McpHintEntityType;
+  /** The user left through the card, so closing it is not abandonment. */
+  onCopied: () => void;
 };
 
 // The same shape as the docs link below it, which is what the design asks for.
@@ -31,18 +29,14 @@ const McpPromptAction: React.FunctionComponent<McpPromptActionProps> = ({
   prompt,
   installMode,
   entityType,
+  onCopied,
 }) => {
-  const [hasCopied, setHasCopied] = useState(false);
+  const [hasCopied, copyText] = useCopiedFeedback();
 
-  useEffect(() => {
-    if (!hasCopied) return;
-    const timer = setTimeout(() => setHasCopied(false), MCP_COPIED_FEEDBACK_MS);
-    return () => clearTimeout(timer);
-  }, [hasCopied]);
+  const handlePromptCopy = async () => {
+    if (!(await copyText(prompt))) return;
 
-  const handleClick = () => {
-    copy(prompt);
-    setHasCopied(true);
+    onCopied();
     // Its own event, not `mcp_connect_clicked`: the funnel's "chose a route"
     // step is the union of the two, and counting this as both would double it.
     trackEvent(OpikEvent.MCP_PROMPT_COPIED, {
@@ -68,7 +62,7 @@ const McpPromptAction: React.FunctionComponent<McpPromptActionProps> = ({
   return (
     <button
       type="button"
-      onClick={handleClick}
+      onClick={handlePromptCopy}
       data-testid="mcp-route-prompt"
       className={ACTION_CLASS}
     >
