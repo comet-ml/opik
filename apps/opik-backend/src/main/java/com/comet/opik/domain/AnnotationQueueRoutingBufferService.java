@@ -8,6 +8,7 @@ import jakarta.inject.Singleton;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -116,11 +117,16 @@ public class AnnotationQueueRoutingBufferService {
             Map<UUID, Set<String>> scoreNamesByEntity) {
     }
 
+    /**
+     * Buffers entities for routing. Nothing to route is not an error, so an absent or empty set returns
+     * rather than throwing - the null-safe checks make the two the same answer, which is why the
+     * collections carry no non-null annotation.
+     */
     public Mono<Void> record(@NonNull String workspaceId, String userName,
-            @NonNull AnnotationQueue.AnnotationScope scope, @NonNull Set<UUID> entityIds,
-            @NonNull Set<String> scoreNames) {
+            @NonNull AnnotationQueue.AnnotationScope scope, Set<UUID> entityIds,
+            Set<String> scoreNames) {
 
-        if (!config.isEnabled() || entityIds.isEmpty()) {
+        if (!config.isEnabled() || CollectionUtils.isEmpty(entityIds)) {
             return Mono.empty();
         }
 
@@ -133,7 +139,7 @@ public class AnnotationQueueRoutingBufferService {
                     String member = member(workspaceId, scope, entityId);
                     return pending.addIfAbsent(dueAt, member)
                             .then(userName == null ? Mono.empty() : authors.fastPut(member, userName))
-                            .then(scoreNames.isEmpty()
+                            .then(CollectionUtils.isEmpty(scoreNames)
                                     ? Mono.empty()
                                     : recordScoreNames(member, scoreNames));
                 })
