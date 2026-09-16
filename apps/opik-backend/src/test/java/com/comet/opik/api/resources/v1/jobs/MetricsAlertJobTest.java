@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.comet.opik.api.AlertTriggerConfig.LEGACY_WINDOW_SECONDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
@@ -239,7 +240,146 @@ class MetricsAlertJobTest {
                 any(), anyString(), anyString(), any(), anyList(), anyList(), anyList());
     }
 
+    @Test
+    void firesWhenTriggerConfigHasNoWindow() {
+        // Configs persisted before write-side validation existed carry no window. This used to throw out of
+        // buildTriggerConfig on every run, so the alert never fired and nobody was told.
+        Alert alert = alertWithFeedbackConfig(Map.of(
+                NAME_CONFIG_KEY, FEEDBACK_NAME,
+                OPERATOR_CONFIG_KEY, "<",
+                THRESHOLD_CONFIG_KEY, "0.5"));
+
+        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
+                anyList(), anyList(), anyList());
+        assertThat(windowSecondsPassedToDao()).isEqualTo(3600L);
+    }
+
+    @Test
+    void usesTheConfiguredDefaultWindowWhenOneIsSet() {
+        WebhookConfig.MetricsConfig metrics = new WebhookConfig.MetricsConfig();
+        metrics.setFixedDelay(Duration.seconds(60));
+        metrics.setDefaultAlertWindow(Duration.seconds(1800));
+        when(webhookConfig.getMetrics()).thenReturn(metrics);
+
+        Alert alert = alertWithFeedbackConfig(Map.of(
+                NAME_CONFIG_KEY, FEEDBACK_NAME,
+                OPERATOR_CONFIG_KEY, "<",
+                THRESHOLD_CONFIG_KEY, "0.5"));
+
+        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
+                anyList(), anyList(), anyList());
+        assertThat(windowSecondsPassedToDao()).isEqualTo(1800L);
+    }
+
+    @Test
+    void readsTheWindowFromTheLegacyKeyRatherThanDefaulting() {
+        // Two of the affected production rows do carry a window, under the pre-rename key. Defaulting them
+        // would silently widen a 15-minute alert to an hour.
+        Alert alert = alertWithFeedbackConfig(Map.of(
+                NAME_CONFIG_KEY, FEEDBACK_NAME,
+                OPERATOR_CONFIG_KEY, "<",
+                THRESHOLD_CONFIG_KEY, "0.5",
+                LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"));
+
+        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
+                anyList(), anyList(), anyList());
+        assertThat(windowSecondsPassedToDao()).isEqualTo(900L);
+    }
+
+    @Test
+    void prefersTheCurrentWindowKeyOverTheLegacyOne() {
+        Alert alert = alertWithFeedbackConfig(Map.of(
+                NAME_CONFIG_KEY, FEEDBACK_NAME,
+                OPERATOR_CONFIG_KEY, "<",
+                THRESHOLD_CONFIG_KEY, "0.5",
+                WINDOW_CONFIG_KEY, "300",
+                LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"));
+
+        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
+                anyList(), anyList(), anyList());
+        assertThat(windowSecondsPassedToDao()).isEqualTo(300L);
+    }
+
+    @Test
+    void skipsAlertWithNoWorkspaceIdWithoutTakingTheLock() {
+        // Reactor's Context rejects a null value, so this used to surface as an NPE out of contextWrite.
+        Alert alert = alertWithFeedbackConfig(Map.of(
+                NAME_CONFIG_KEY, FEEDBACK_NAME,
+                OPERATOR_CONFIG_KEY, "<",
+                THRESHOLD_CONFIG_KEY, "0.5",
+                WINDOW_CONFIG_KEY, "300"))
+                .toBuilder()
+                .workspaceId(null)
+                .build();
+
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        verify(alertWebhookSender, after(NO_CALL_WINDOW_MS).never()).createAndSendWebhook(
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList());
+        verify(lockService, never()).lockUsingToken(any(), any(java.time.Duration.class));
+    }
+
     // --- helpers ---------------------------------------------------------
+    private long windowSecondsPassedToDao() {
+        ArgumentCaptor<Instant> start = ArgumentCaptor.forClass(Instant.class);
+        ArgumentCaptor<Instant> end = ArgumentCaptor.forClass(Instant.class);
+        verify(projectMetricsDAO, timeout(ASYNC_TIMEOUT_MS).atLeastOnce()).getAverageFeedbackScore(
+                anyList(), start.capture(), end.capture(), any(EntityType.class), anyString());
+        return java.time.Duration.between(start.getValue(), end.getValue()).toSeconds();
+    }
+
+    private static Alert alertWithFeedbackConfig(Map<String, String> configValue) {
+        AlertTrigger trigger = AlertTrigger.builder()
+                .id(UUID.randomUUID())
+                .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                .triggerConfigs(List.of(AlertTriggerConfig.builder()
+                        .id(UUID.randomUUID())
+                        .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                        .configValue(configValue)
+                        .build()))
+                .build();
+
+        return Alert.builder()
+                .id(UUID.randomUUID())
+                .name("test-alert")
+                .enabled(true)
+                .webhook(Webhook.builder().url("http://example/hook").build())
+                .triggers(List.of(trigger))
+                .projectId(PROJECT_ID)
+                .workspaceId(WORKSPACE_ID)
+                .build();
+    }
 
     private void stubFeedbackScores(AlertEventType eventType, String v1, String v2) {
         EntityType entityType = entityTypeFor(eventType);
