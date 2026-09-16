@@ -157,7 +157,7 @@ describe("the hint card", () => {
     expect(screen.getByTestId("mcp-route-prompt")).toBeInTheDocument();
     expect(onAction).not.toHaveBeenCalled();
     expect(trackEvent).not.toHaveBeenCalledWith(
-      OpikEvent.MCP_PROMPT_COPIED,
+      OpikEvent.MCP_HINT_PROMPT_COPIED,
       expect.anything(),
     );
   });

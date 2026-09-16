@@ -79,14 +79,14 @@ const McpHintButton: React.FunctionComponent<McpHintButtonProps> = ({
       if (nextIsOpen) {
         hasActedRef.current = false;
         isPinnedRef.current = false;
-        trackEvent(OpikEvent.MCP_POPOVER_OPENED, {
+        trackEvent(OpikEvent.MCP_HINT_OPENED, {
           install_mode: installMode,
           entity_type: target.entityType,
         });
         return;
       }
       if (!hasActedRef.current) {
-        trackEvent(OpikEvent.MCP_POPOVER_CLOSED, {
+        trackEvent(OpikEvent.MCP_HINT_CLOSED, {
           install_mode: installMode,
           entity_type: target.entityType,
         });

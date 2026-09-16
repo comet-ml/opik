@@ -49,7 +49,7 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
   // The fallback under a deeplink's confirmation copies the prompt, so it
   // belongs in the same funnel step as the prompt route itself.
   const handleRecopy = useCallback(() => {
-    trackEvent(OpikEvent.MCP_PROMPT_COPIED, {
+    trackEvent(OpikEvent.MCP_HINT_PROMPT_COPIED, {
       install_mode: installMode,
       entity_type: target.entityType,
     });
@@ -86,7 +86,7 @@ const McpHintPopover: React.FunctionComponent<McpHintPopoverProps> = ({
 
   const handleLearnMoreClick = () => {
     onAction();
-    trackEvent(OpikEvent.MCP_LEARN_MORE_CLICKED, {
+    trackEvent(OpikEvent.MCP_HINT_DOCS_CLICKED, {
       install_mode: installMode,
       entity_type: target.entityType,
     });

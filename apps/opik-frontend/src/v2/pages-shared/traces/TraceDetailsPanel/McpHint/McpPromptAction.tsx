@@ -39,7 +39,7 @@ const McpPromptAction: React.FunctionComponent<McpPromptActionProps> = ({
     onCopied();
     // Its own event, not `mcp_connect_clicked`: the funnel's "chose a route"
     // step is the union of the two, and counting this as both would double it.
-    trackEvent(OpikEvent.MCP_PROMPT_COPIED, {
+    trackEvent(OpikEvent.MCP_HINT_PROMPT_COPIED, {
       install_mode: installMode,
       entity_type: entityType,
     });

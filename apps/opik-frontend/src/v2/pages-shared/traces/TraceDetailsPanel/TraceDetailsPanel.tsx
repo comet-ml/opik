@@ -269,7 +269,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       // avoids counting a second showing of a button that never went away.
       if (!showMcpHint || hintShownFor === mcpHintSubject) return;
       setHintShownFor(mcpHintSubject);
-      trackEvent(OpikEvent.MCP_BUTTON_SHOWN, properties);
+      trackEvent(OpikEvent.MCP_HINT_SHOWN, properties);
     },
     [
       mcpHintSubject,

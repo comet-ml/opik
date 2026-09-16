@@ -36,7 +36,7 @@ const InstallRoutesLayout: React.FunctionComponent<
 
   const handleRouteUse = useCallback(
     (route: McpInstallRoute) => {
-      trackEvent(OpikEvent.MCP_CONNECT_CLICKED, {
+      trackEvent(OpikEvent.MCP_HINT_CLIENT_CLICKED, {
         client: route.client,
         method: route.method,
         install_mode: installMode,
