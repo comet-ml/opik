@@ -121,6 +121,14 @@ const SIMPLE_THRESHOLD_CONFIG_TYPE: Partial<
     ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
 };
 
+const resolveWindowConfig = (configValue?: Record<string, string>): string => {
+  const window = configValue?.window?.trim();
+  if (window) {
+    return window;
+  }
+  return configValue?.window_in_seconds?.trim() || "";
+};
+
 const getThresholdFromTriggerConfigs = (
   configType: ALERT_TRIGGER_CONFIG_TYPE,
   triggerConfigs?: AlertTriggerConfig[],
@@ -137,7 +145,7 @@ const getThresholdFromTriggerConfigs = (
   if (thresholdConfig?.config_value) {
     return {
       threshold: thresholdConfig.config_value.threshold,
-      window: thresholdConfig.config_value.window,
+      window: resolveWindowConfig(thresholdConfig.config_value),
       name: thresholdConfig.config_value.name,
       operator: thresholdConfig.config_value.operator,
     };
@@ -169,7 +177,7 @@ const getAllThresholdConditionGroupsFromTriggerConfigs = (
     const rawOperator = config.config_value.operator;
     const condition: FeedbackScoreConditionType = {
       threshold: config.config_value.threshold || "",
-      window: config.config_value.window || "",
+      window: resolveWindowConfig(config.config_value),
       name: config.config_value.name || "",
       operator: rawOperator === "<" ? "<" : ">",
     };
