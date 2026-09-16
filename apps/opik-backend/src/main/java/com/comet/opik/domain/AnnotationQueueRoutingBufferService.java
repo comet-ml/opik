@@ -112,6 +112,7 @@ public class AnnotationQueueRoutingBufferService {
     }
 
     /** One published message: the entities of a single workspace, scope and author. */
+    @Builder(toBuilder = true)
     private record MessageGroup(String workspaceId, String userName,
             AnnotationQueue.AnnotationScope scope, Set<UUID> entityIds,
             Map<UUID, Set<String>> scoreNamesByEntity) {
@@ -305,22 +306,28 @@ public class AnnotationQueueRoutingBufferService {
     private List<MessageGroup> group(List<DueEntity> due) {
         return due.stream()
                 .collect(Collectors.groupingBy(
-                        entity -> new GroupKey(entity.workspaceId(), entity.userName(), entity.scope()),
+                        entity -> GroupKey.builder()
+                                .workspaceId(entity.workspaceId())
+                                .userName(entity.userName())
+                                .scope(entity.scope())
+                                .build(),
                         Collectors.toList()))
                 .entrySet()
                 .stream()
-                .map(entry -> new MessageGroup(
-                        entry.getKey().workspaceId(),
-                        entry.getKey().userName(),
-                        entry.getKey().scope(),
-                        entry.getValue().stream().map(DueEntity::entityId).collect(Collectors.toSet()),
-                        entry.getValue().stream()
+                .map(entry -> MessageGroup.builder()
+                        .workspaceId(entry.getKey().workspaceId())
+                        .userName(entry.getKey().userName())
+                        .scope(entry.getKey().scope())
+                        .entityIds(entry.getValue().stream().map(DueEntity::entityId).collect(Collectors.toSet()))
+                        .scoreNamesByEntity(entry.getValue().stream()
                                 .filter(entity -> !entity.scoreNames().isEmpty())
                                 .collect(Collectors.toMap(DueEntity::entityId, DueEntity::scoreNames,
-                                        (first, second) -> first))))
+                                        (first, second) -> first)))
+                        .build())
                 .toList();
     }
 
+    @Builder(toBuilder = true)
     private record GroupKey(String workspaceId, String userName, AnnotationQueue.AnnotationScope scope) {
     }
 
