@@ -10,6 +10,7 @@ import lombok.Builder;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -66,6 +67,8 @@ public record AlertTriggerConfig(
         }
         var normalized = new HashMap<>(configValue);
         normalized.put(WINDOW_CONFIG_KEY, configValue.get(LEGACY_WINDOW_SECONDS_CONFIG_KEY));
-        return Map.copyOf(normalized);
+        // Not Map.copyOf: it rejects null values, and a config value of null is a malformed request that
+        // belongs in the 400 the validation already produces, not a 500 raised from inside this helper.
+        return Collections.unmodifiableMap(normalized);
     }
 }
