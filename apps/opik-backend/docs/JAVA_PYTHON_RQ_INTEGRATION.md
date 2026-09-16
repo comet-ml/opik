@@ -66,7 +66,7 @@ curl http://localhost:8080/v1/internal/hello-world/queue-size
 3. [Detailed Setup](#detailed-setup)
 4. [Components](#components)
 6. [OpenTelemetry Metrics](#opentelemetry-metrics)
-7. [Configuration](#configuration)
+7. [Queue Configuration (config.yml)](#queue-configuration-configyml)
 8. [Usage Guide](#usage-guide)
 9. [Adding New Queues](#adding-new-queues)
 10. [Testing](#testing)
