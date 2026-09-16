@@ -8,10 +8,12 @@ the span is logged with no usage, no model and no cost even though the tokens
 were extractable.
 """
 
+import uuid
 from typing import Any, Dict
 
 import httpx
 import pytest
+from langchain_core.tracers import schemas
 
 from opik import LLMProvider
 from opik.integrations.langchain.provider_usage_extractors import usage_extractor
@@ -155,3 +157,48 @@ def test_try_extract_provider_usage_data__value_that_is_not_url_shaped__keeps_de
     base_url: Any,
 ) -> None:
     assert _provider(base_url) == LLMProvider.OPENAI
+
+
+def test_try_extract_provider_usage_data__base_url_through_a_real_run_object__reports_the_host() -> (
+    None
+):
+    """Keeps the serialisation boundary between the tracer and the extractor covered.
+
+    `opik_tracer._process_end_span` hands the extractors `run.dict()`, so the payload
+    below is built through the same LangChain model rather than a literal dict. A
+    change in how `extra` is dumped, including a switch to a JSON mode that coerces
+    values, has to break here rather than only in a running application.
+    """
+    run = schemas.Run(
+        id=uuid.uuid4(),
+        trace_id=uuid.uuid4(),
+        name="ChatOpenAI",
+        run_type="llm",
+        serialized={"kwargs": {"openai_api_key": "fixture-value"}},
+        extra={
+            "invocation_params": {
+                "base_url": "http://litellm.local:4000",
+                "model": "mock-model",
+            }
+        },
+        outputs={
+            "llm_output": {
+                "token_usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                },
+                "model_name": "gpt-4o",
+            }
+        },
+    )
+
+    run_dict = run.dict()
+
+    carried = run_dict["extra"]["invocation_params"]["base_url"]
+    assert isinstance(carried, str), "the string must survive the run dump unchanged"
+
+    info = usage_extractor.try_extract_provider_usage_data(run_dict)
+
+    _assert_usage_survived(info)
+    assert info.provider == "litellm.local"
