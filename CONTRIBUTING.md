@@ -63,7 +63,7 @@ E2E workflows are skipped on pull requests opened from a fork, and their checks 
 
 GitHub issues a read-only `GITHUB_TOKEN` to fork-originated `pull_request` events regardless of a workflow's `permissions:` block, and regardless of whether a maintainer approved the run. The shared E2E build pushes images to GHCR, so on a fork it fails with a 403 before any test executes. Skipping keeps that structural failure from showing up as a red check you cannot act on.
 
-A maintainer will run the E2E suite against your branch before merging. The gate is the `github.event.pull_request.head.repo.fork` condition on the `build-opik` and test jobs in the five `*_e2e_tests` workflows; it is temporary and will be removed once fork PRs can run E2E directly.
+A maintainer can run the E2E suite against your branch before merging. The gate is the `github.event.pull_request.head.repo.fork` condition on the `build-opik` and test jobs in the five `*_e2e_tests` workflows; it is temporary and will be removed once fork PRs can run E2E directly.
 
 ## Dockerfiles
 Dockerfiles are linted with [hadolint](https://github.com/hadolint/hadolint), which runs as a hook in the unified `🐙 Code Quality` workflow (and locally via pre-commit) on changed Dockerfiles. It uses hadolint's default rule set; the handful of intentionally-suppressed rules are annotated inline in each Dockerfile with a `# hadolint ignore=` comment and a reason. The hook runs hadolint via its Docker image, so it needs only Docker — no manual install. To run it directly on a single file: `docker run --rm -i ghcr.io/hadolint/hadolint < path/to/Dockerfile`.
