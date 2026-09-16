@@ -375,6 +375,19 @@ export interface AutomationRuleDetail {
    * this is read back rather than assumed from the create payload.
    */
   type: string;
+  /**
+   * The rule's filters, exactly as the GET answers them — not narrowed to
+   * `BackendFilter`.
+   *
+   * A mapped type here would quietly normalise the read: the server strips the
+   * frontend's transient `id` and adds `key: ""` where the field was absent, and
+   * a spec asserting that an unedited save preserved a filter has to be able to
+   * see both of those as themselves rather than as an object that happens to
+   * mapped-compare equal. `null` means the field came back absent, which is a
+   * different answer from `[]` — an unfiltered rule and a rule whose filters
+   * were cleared are exactly what such a spec is telling apart.
+   */
+  filters: Array<Record<string, unknown>> | null;
 }
 
 /** Fields every user-defined-metric-python rule carries, whatever it scores. */
@@ -387,6 +400,15 @@ interface PythonRuleCommon {
   metric: string;
   triggerScope?: 'production' | 'experiment' | 'both';
   enabled?: boolean;
+  /**
+   * Rule filters, in the same wire shape the REST layer uses everywhere else.
+   *
+   * Seedable here because the edit dialog cannot always set them: for
+   * `trigger_scope=experiment` the whole filtering-and-sampling section is not
+   * rendered at all, so a spec about what an unedited save does to a filtered
+   * experiment rule has no UI path to create one.
+   */
+  filters?: BackendFilter[];
 }
 
 /**
@@ -955,6 +977,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       );
     }
     return rate;
+  };
+
+  /**
+   * A rule's `filters` as the GET answers them, with absent kept distinct from
+   * empty. A shape that is neither absent nor an array is not "no filters" —
+   * reporting it as `null` would let a spec asserting that a save preserved a
+   * filtered rule pass against a response it could not actually read.
+   */
+  const readRuleFilters = (
+    ruleId: string,
+    filters: unknown,
+  ): Array<Record<string, unknown>> | null => {
+    if (filters === undefined || filters === null) return null;
+    if (!Array.isArray(filters)) {
+      throw new Error(
+        `getAutomationRule: ${ruleId} returned a '${typeof filters}' filters field — ` +
+          `cannot be read as a filter list.`,
+      );
+    }
+    return filters as Array<Record<string, unknown>>;
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -2641,6 +2683,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             sampling_rate: args.samplingRate,
             enabled: args.enabled ?? true,
             ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
+            // Omitted rather than sent empty: `filters` is nullable on the write
+            // model, and a rule seeded with `[]` is a different starting state
+            // from one seeded with the field absent.
+            ...(args.filters?.length ? { filters: args.filters } : {}),
             code: isThreadScope
               ? { metric: args.metric }
               : { metric: args.metric, arguments: args.arguments },
@@ -3078,6 +3124,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         sampling_rate?: number;
         trigger_scope?: string;
         type?: string;
+        filters?: unknown;
       };
       // Same reasoning as `requireSamplingRate`: defaulting an absent rate or
       // scope would present as the server's default, which is exactly the value
@@ -3098,6 +3145,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         samplingRate: rule.sampling_rate,
         triggerScope: rule.trigger_scope,
         type: rule.type,
+        filters: readRuleFilters(ruleId, rule.filters),
       };
     },
 

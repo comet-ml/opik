@@ -4,6 +4,9 @@ import { loadEnvConfig } from '../config/env.config';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
+const escapeForRegExp = (literal: string): string =>
+  literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** Empty-state text an output cell shows until its row has been run. */
 const IDLE_CELL_TEXT = 'No runs yet';
 
@@ -52,6 +55,23 @@ export interface RunSimplePromptArgs {
 export interface RunSimplePromptResult {
   outputText: string;
   isError: boolean;
+}
+
+/** One instant's view of the Playground's Metrics picker. */
+export interface MetricsPickerState {
+  /** The "<selected> of <total> selected" footer, verbatim. */
+  summary: string;
+  /** One entry per rule row, in the order the picker lists them. */
+  rules: Array<{
+    name: string;
+    checked: boolean;
+    /**
+     * Whether the row's checkbox is disabled — which the picker uses to mark a
+     * rule that scores every dataset run whether or not it was chosen, so it
+     * cannot be given back.
+     */
+    locked: boolean;
+  }>;
 }
 
 /**
@@ -245,6 +265,161 @@ export class PlaygroundPage {
   loadedSourcePill(): Locator {
     return this.page.getByTestId('playground-loaded-source-pill');
   }
+
+  // ── metrics picker ──────────────────────────────────────────────────────
+  //
+  // The Metrics control only exists once a DATASET is loaded (test suites do
+  // not render it), and it carries no testid: `MetricSelector`'s
+  // `PopoverTrigger asChild` wraps a bare `div tabIndex={0}`, so it is neither a
+  // `<button>` nor named — `getByRole('button', { name: /Metrics/ })` finds
+  // nothing. It does sit inside `playground-loaded-source-pill`, which is
+  // stamped, and Radix marks the trigger `aria-haspopup="dialog"`; the pill's
+  // only other controls are the dataset-version combobox and the "Clear
+  // selection" button, neither of which opens a dialog. That pair is the
+  // stablest description available. A `data-testid` on the trigger would be
+  // better, but these specs run against a deployed Opik, so an attribute added
+  // alongside them would not exist in the version under test.
+
+  /** The Metrics popover trigger, inside the loaded-dataset pill. */
+  metricsPickerTrigger(): Locator {
+    return this.loadedSourcePill().locator('[aria-haspopup="dialog"]');
+  }
+
+  /**
+   * The open Metrics popover.
+   *
+   * Radix renders `PopoverContent` portalled with `role="dialog"`, so it cannot
+   * be scoped through the pill. It is identified by the select-all summary row
+   * it owns — the only `"<n> of <m> selected"` text on the page — rather than by
+   * being "the open dialog", which would also match the add/edit rule dialog
+   * this same component mounts.
+   */
+  metricsPopover(): Locator {
+    return this.page
+      .getByRole('dialog')
+      .filter({ has: this.page.getByText(/^\d+ of \d+ selected$/) });
+  }
+
+  /**
+   * Open the Metrics popover if it is not already open.
+   *
+   * **The popover does not stay open.** On 2.2.66 it closes on its own roughly
+   * a second after opening, with no interaction at all — measured on staging by
+   * polling its presence once a second: present at t=0, gone at t=1 and every
+   * second after. It reopens cleanly and keeps its state, and one interaction
+   * comfortably fits inside the window, which is why this is usable at all.
+   *
+   * So every reader and every gesture below reopens first rather than assuming
+   * the popover it saw a moment ago is still there. That is a workaround for a
+   * product behaviour, not for a flaky locator — and it is deliberately NOT
+   * hidden inside a blanket retry of the assertions, which would let a genuine
+   * regression in what the picker SHOWS retry itself into passing.
+   */
+  async ensureMetricsPickerOpen(): Promise<void> {
+    if ((await this.metricsPopover().count()) > 0) return;
+    await this.metricsPickerTrigger().click();
+    await this.metricsPopover().waitFor({ state: 'visible' });
+  }
+
+  /**
+   * One rule row in the Metrics popover, addressed by the rule's name.
+   *
+   * Matched anchored and exact: the namespaced rule names in these specs share
+   * a long prefix, so a substring filter would match every sibling — and
+   * `-pg-picked` would also match `-pg-picked-2`.
+   */
+  metricRow(ruleName: string): Locator {
+    return this.metricsPopover()
+      .locator('div')
+      .filter({ has: this.page.getByRole('checkbox') })
+      .filter({ hasText: new RegExp(`^\\s*${escapeForRegExp(ruleName)}\\s*$`) });
+  }
+
+  /**
+   * The picker's whole visible state, captured in a single DOM evaluation.
+   *
+   * One atomic read rather than an assertion per control, because the popover
+   * can vanish between two of them (see `ensureMetricsPickerOpen`): a sequence
+   * of `expect(locator)` calls would be reading a surface that is disappearing
+   * underneath them, and each retry would re-open the popover and re-measure
+   * from a different moment. Everything a caller asserts therefore comes from
+   * the same instant.
+   *
+   * Rows are found from their checkboxes rather than by class, and the
+   * select-all footer row is excluded by its summary text — it carries a
+   * checkbox too, but it is not a rule.
+   */
+  async readMetricsPicker(): Promise<MetricsPickerState> {
+    return test.step('read the Metrics picker state', async () => {
+      await this.ensureMetricsPickerOpen();
+      return this.metricsPopover().evaluate((root): MetricsPickerState => {
+        const SUMMARY = /^\s*\d+ of \d+ selected\s*$/;
+        const rules: MetricsPickerState['rules'] = [];
+        let summary = '';
+
+        for (const checkbox of Array.from(root.querySelectorAll('[role="checkbox"]'))) {
+          // Walk out to the first ancestor that carries text: for an ordinary
+          // rule that is the row itself, and for an always-run one it is the
+          // row above the tooltip <span> its checkbox is wrapped in.
+          let row: Element | null = checkbox;
+          while (row && !(row.textContent ?? '').trim()) row = row.parentElement;
+          if (!row) continue;
+
+          const text = (row.textContent ?? '').trim();
+          if (SUMMARY.test(text)) {
+            summary = text;
+            continue;
+          }
+          rules.push({
+            name: text,
+            checked: checkbox.getAttribute('aria-checked') === 'true',
+            locked:
+              (checkbox as HTMLButtonElement).disabled === true ||
+              checkbox.hasAttribute('data-disabled'),
+          });
+        }
+        return { summary, rules };
+      });
+    });
+  }
+
+  /**
+   * Tick or untick a rule, and confirm the picker agrees afterwards.
+   *
+   * The whole row is the click target — `MetricSelector` puts `onClick` on the
+   * row div, not on the checkbox — so clicking the checkbox would depend on the
+   * event reaching the row by propagation rather than by contract.
+   *
+   * Retried because the popover may close mid-gesture, and made IDEMPOTENT so
+   * retrying is safe: each attempt re-reads the state first and returns if the
+   * rule already holds the wanted value. Without that guard a click that landed
+   * but could not be confirmed would be replayed, toggling the rule back.
+   *
+   * A rule that will not move is a failure, not something to retry away: the
+   * `toPass` window is what absorbs the popover closing, and a locked rule
+   * simply never reaches the wanted state, so this fails with the last
+   * comparison rather than silently continuing.
+   */
+  async setMetricPicked(ruleName: string, picked: boolean): Promise<void> {
+    return test.step(`${picked ? 'pick' : 'unpick'} metric "${ruleName}"`, async () => {
+      await expect(async () => {
+        const before = await this.readMetricsPicker();
+        const current = before.rules.find((rule) => rule.name === ruleName);
+        expect(current, `the picker lists exactly one rule named "${ruleName}"`).toBeDefined();
+        if (current!.checked === picked) return;
+
+        await this.ensureMetricsPickerOpen();
+        await this.metricRow(ruleName).click({ timeout: 2_000 });
+
+        const after = await this.readMetricsPicker();
+        expect(
+          after.rules.find((rule) => rule.name === ruleName)?.checked,
+          `"${ruleName}" is ${picked ? 'ticked' : 'unticked'} after clicking its row`,
+        ).toBe(picked);
+      }).toPass({ timeout: 45_000, intervals: [250, 500, 1000] });
+    });
+  }
+
 
   /**
    * One-shot helper for provider-sanity tests: pick a model, type a single user
