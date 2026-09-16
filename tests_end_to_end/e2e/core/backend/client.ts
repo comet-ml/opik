@@ -3,6 +3,7 @@ import { Opik } from 'opik';
 import { loadEnvConfig } from '../../config/env.config';
 import {
   pollSpanForFeedbackScore,
+  pollThreadForFeedbackScore,
   pollTraceForFeedbackScore,
   type PollFeedbackScoreOpts,
 } from './poll-feedback-score';
@@ -1001,6 +1002,40 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       if (isNotFoundError(err)) return null;
       throw err;
     }
+  };
+
+  // Hoisted for the same reason as `localGetTrace`: the thread poller is a free
+  // function and cannot reach the not-yet-constructed return object.
+  //
+  // Unlike the trace and span readers this does NOT map a 404 to null:
+  // swallowing it would turn a mistyped thread id, or a project that never
+  // existed, into a poll that times out saying "no score" instead of failing
+  // immediately with "no such thread".
+  //
+  // The cost is on the caller, and it is real rather than theoretical. This read
+  // is `POST /traces/threads/retrieve`, which resolves the project through a
+  // different path than the trace surface, and shortly after a project is
+  // created it has been observed to answer 404 "Project not found" while traces
+  // in that same project are already readable. A thrown 404 escapes
+  // `expect.poll`'s callback instead of being retried, so a spec polling a
+  // freshly-seeded thread for a score must gate on the thread becoming readable
+  // FIRST — see the readiness barrier in
+  // online-evaluation-thread-scope-batch-close.spec.ts and
+  // online-evaluation-valueless-python-scores.spec.ts. Retrying the 404 in here
+  // instead would make every caller's "no such thread" failure arrive as a
+  // timeout.
+  const localGetThread = async (projectId: string, threadId: string): Promise<ThreadDetail> => {
+    const thread = await opik.api.traces.getTraceThread({ projectId, threadId });
+    return {
+      id: String(thread.id ?? ''),
+      projectId: String(thread.projectId ?? ''),
+      feedbackScores: (thread.feedbackScores ?? []).map((fs) => ({
+        name: fs.name,
+        value: Number(fs.value),
+        reason: fs.reason ?? null,
+        source: String(fs.source),
+      })),
+    };
   };
 
   return {
@@ -3179,20 +3214,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * of its traces — so this is the only API read that can confirm one landed.
      */
     async getThread(args: { projectId: string; threadId: string }): Promise<ThreadDetail> {
-      const thread = await opik.api.traces.getTraceThread({
-        projectId: args.projectId,
-        threadId: args.threadId,
-      });
-      return {
-        id: String(thread.id ?? ''),
-        projectId: String(thread.projectId ?? ''),
-        feedbackScores: (thread.feedbackScores ?? []).map((fs) => ({
-          name: fs.name,
-          value: Number(fs.value),
-          reason: fs.reason ?? null,
-          source: String(fs.source),
-        })),
-      };
+      return localGetThread(args.projectId, args.threadId);
+    },
+
+    /**
+     * The thread-scope counterpart of `pollTraceForFeedbackScore`.
+     *
+     * A thread-scope rule writes to the thread and to none of its traces, so
+     * polling a turn's trace for a thread rule's score waits forever.
+     */
+    async pollThreadForFeedbackScore(
+      args: { projectId: string; threadId: string },
+      scoreName: string,
+      opts: PollFeedbackScoreOpts = {},
+    ): Promise<FeedbackScoreRef> {
+      return pollThreadForFeedbackScore(
+        (threadId) => localGetThread(args.projectId, threadId),
+        args.threadId,
+        scoreName,
+        opts,
+      );
     },
 
     /**
@@ -3298,6 +3339,10 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * the backend materialises a thread model from the traces that share a
        * `thread_id`, which is also when it decides which thread-scope rules
        * sample it — so a rule has to exist before the first trace is written.
+       *
+       * Traces sharing one are the turns a thread-scope rule is handed when the
+       * thread closes; turn order comes from `start_time`, so a multi-turn seed
+       * must space them.
        */
       threadId?: string;
       startTime?: Date;
