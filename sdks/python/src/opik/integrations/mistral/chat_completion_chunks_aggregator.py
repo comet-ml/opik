@@ -132,8 +132,8 @@ def aggregate(
 
         aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
         if tool_calls_by_index:
-            # Calls the stream indexed keep their index order; calls opened
-            # without a sent index follow, in the order they arrived.
+            # Calls with a stream-provided index retain index order; calls opened
+            # without one follow the order their fragments arrived.
             ordered_keys = sorted(key for key in tool_calls_by_index if key >= 0) + [
                 key for key in tool_calls_by_index if key < 0
             ]
