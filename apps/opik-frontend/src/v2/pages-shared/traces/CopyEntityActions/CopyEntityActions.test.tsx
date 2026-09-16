@@ -65,12 +65,37 @@ describe("CopyEntityActions", () => {
     expect(mockCopy).toHaveBeenCalledWith(ENTITY_ID);
   });
 
-  it("copies the current url when the copy-link button is clicked", () => {
-    renderActions();
+  it("drops the selected span from a trace link", () => {
+    window.history.replaceState({}, "", "/logs?trace=T1&span=S1&tab=logs");
+    renderActions({ entityLabel: "trace" });
 
     fireEvent.click(screen.getByLabelText("Copy trace link"));
 
+    const copied = new URL(mockCopy.mock.calls[0][0] as string);
+    expect(copied.searchParams.get("span")).toBeNull();
+    expect(copied.searchParams.get("trace")).toBe("T1");
+    expect(copied.searchParams.get("tab")).toBe("logs");
+  });
+
+  it("drops the selected span from a thread link", () => {
+    window.history.replaceState({}, "", "/logs?thread=TH1&span=S1");
+    renderActions({ entityLabel: "thread" });
+
+    fireEvent.click(screen.getByLabelText("Copy thread link"));
+
+    const copied = new URL(mockCopy.mock.calls[0][0] as string);
+    expect(copied.searchParams.get("span")).toBeNull();
+    expect(copied.searchParams.get("thread")).toBe("TH1");
+  });
+
+  it("keeps the selected span in a span link", () => {
+    window.history.replaceState({}, "", "/logs?trace=T1&span=S1");
+    renderActions({ entityLabel: "span" });
+
+    fireEvent.click(screen.getByLabelText("Copy span link"));
+
     expect(mockCopy).toHaveBeenCalledWith(window.location.href);
+    expect(mockCopy.mock.calls[0][0]).toContain("span=S1");
   });
 
   it("swaps only the clicked button to the check icon", () => {
@@ -124,18 +149,21 @@ describe("CopyEntityActions", () => {
     expect(iconOf(idButton)).toContain("lucide-copy");
   });
 
-  it("does not update state after unmount", () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("clears the pending revert timer on unmount", () => {
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+    const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
     const { unmount } = renderActions();
 
     fireEvent.click(screen.getByLabelText("Copy trace ID"));
-    unmount();
-    act(() => {
-      vi.advanceTimersByTime(4000);
-    });
+    const timerId = setTimeoutSpy.mock.results.at(-1)?.value;
+    clearTimeoutSpy.mockClear();
 
-    expect(errorSpy).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
+    unmount();
+
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(timerId);
+
+    setTimeoutSpy.mockRestore();
+    clearTimeoutSpy.mockRestore();
   });
 
   it("does not fire a toast when copying", () => {

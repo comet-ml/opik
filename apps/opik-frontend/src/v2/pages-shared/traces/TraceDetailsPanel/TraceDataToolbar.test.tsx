@@ -33,7 +33,7 @@ const span = {
 const renderToolbar = (props = {}) =>
   render(
     <PermissionsProvider value={DEFAULT_PERMISSIONS}>
-      <TooltipProvider>
+      <TooltipProvider delayDuration={0}>
         <TraceDataToolbar
           dataToView={span}
           setActiveSection={vi.fn()}
@@ -93,6 +93,18 @@ describe("TraceDataToolbar header", () => {
     expect(screen.getByLabelText("Copy span ID")).toBeTruthy();
     expect(screen.getByLabelText("Copy span link")).toBeTruthy();
     expect(screen.queryByTestId("add-to-dropdown")).toBeNull();
+  });
+
+  // The title is wrapped so hovering reveals the full id. Radix renders the
+  // content through a portal that never materializes under happy-dom, so this
+  // asserts the title is a tooltip trigger at all; the text it reveals is
+  // verified manually.
+  it("makes the title a tooltip trigger", () => {
+    renderToolbar({ dataToView: span });
+
+    expect(
+      screen.getByText("chat_completion_create").getAttribute("data-state"),
+    ).toBe("closed");
   });
 
   it("renders no title or copy actions while loading", () => {

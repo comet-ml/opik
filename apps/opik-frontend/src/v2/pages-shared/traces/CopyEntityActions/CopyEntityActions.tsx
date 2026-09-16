@@ -69,7 +69,17 @@ const CopyEntityActions: React.FunctionComponent<CopyEntityActionsProps> = ({
   className,
 }) => {
   const copyId = useCallback(() => entityId, [entityId]);
-  const copyLink = useCallback(() => window.location.href, []);
+
+  // A trace or thread link must not carry a selected span, otherwise the
+  // "copy trace link" and "copy span link" buttons visible at the same time
+  // would both yield the span-scoped URL.
+  const copyLink = useCallback(() => {
+    if (entityLabel === "span") return window.location.href;
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("span");
+    return url.toString();
+  }, [entityLabel]);
 
   return (
     <div className={cn("flex shrink-0 items-center gap-1", className)}>
