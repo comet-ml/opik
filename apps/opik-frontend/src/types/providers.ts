@@ -893,6 +893,8 @@ export enum PROVIDER_MODEL_TYPE {
   VERTEX_AI_GEMINI_3_6_FLASH = "vertex_ai/gemini-3.6-flash",
   VERTEX_AI_GEMINI_3_7_FLASH = "vertex_ai/gemini-3.7-flash",
   VERTEX_AI_GEMINI_3_8_FLASH = "vertex_ai/gemini-3.8-flash",
+  VERTEX_AI_GEMINI_OMNI_1_1_FLASH = "vertex_ai/gemini-omni-1.1-flash",
+  VERTEX_AI_GEMINI_ROBOTICS_ER_2 = "vertex_ai/gemini-robotics-er-2",
 }
 
 export interface ProviderModelsMap {
