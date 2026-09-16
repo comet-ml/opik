@@ -81,7 +81,10 @@ const EXPECTED_STORED: Record<string, unknown> = {
 test.describe('Dataset insert — non-JSON-native item content', { tag: ['@area:datasets'] }, () => {
   test(
     'An item carrying a UUID, an Enum, a datetime, a set and a tuple round-trips to its JSON form and dedups against it',
-    { tag: ['@t2-cuj', '@cap:datasets.sdk-round-trip'] },
+    // Both caps, as `dataset-insert-deduplication.spec.ts` does for the same
+    // reason: the version counters below are asserted, not merely read past, so
+    // leaving them untagged would be coverage the map cannot see.
+    { tag: ['@t2-cuj', '@cap:datasets.sdk-round-trip', '@cap:datasets.version-history-view'] },
     async ({ project, sdkClient, backendClient, registerDatasetCleanup, testNamespace, page }) => {
       const datasetName = `${testNamespace}-typed-content`;
 

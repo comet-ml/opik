@@ -540,6 +540,7 @@ areas:
       - datasets/dataset-list-summary-columns.spec.ts
       - datasets/dataset-parallel-item-read.spec.ts
       - datasets/dataset-read-version-pinning.spec.ts
+      - datasets/dataset-typed-content-round-trip.spec.ts
       - datasets/dataset-version-concurrent-writes.spec.ts
       - datasets/dataset-version-counters.spec.ts
       - datasets/dataset-version-repeated-item-id.spec.ts
@@ -555,7 +556,7 @@ areas:
       filter-scoped-mutation-validation: { covered: true,  tier: t3-nightly, note: "unsupported operator -> 400 naming field+operator; malformed filter list -> 422; asserted on both delete and batch-update" }
       search-items:           { covered: true,  tier: t3-nightly }
       sdk-round-trip:         { covered: true,  tier: t1-smoke, note: "UI-created dataset + first item read back through the SDK, single-page get_items() round trip (t1); t2 also covers the multi-page parallel read — 5000 items over 3 default-chunk pages, list-equal across thread/chunk settings and against a REST enumeration, nb_samples as an exact prefix, and the documented ValueError arguments — plus the read's version pin holding against an insert committed mid-read, and Dataset.insert's deduplication flag both ways (deduplication=False stores every duplicate under its own id and cuts a version per insert; the default collapses the duplicate and cuts no second version), paired against a control dataset and asserted in the API and on the Records tab; also an item whose content carries non-JSON-native Python types (a uuid.UUID, an enum.Enum member, a tz-aware datetime, a set, a tuple and a float below 1e-4) — each stored as the JSON form encode_flexible normalises it to, and the identical item inserted a second time from a fresh Dataset deduplicated against that stored JSON rather than against an in-process cache, asserted at the API and rendered cell by cell on the Records tab. NOT covered: the same item inserted from a process without orjson, which needs a second interpreter and belongs in the Python SDK's own suite" }
-      version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the per-version Changes tags (+ N) after a non-deduplicated insert invalidates the SDK's hash cache" }
+      version-history-view:   { covered: true,  tier: t2-cuj, note: "sequential + parallel multi-batch insert counters, rendered as Item count; plus a batch repeating one item id (51 entries -> items_total 50), a grouped insert racing ungrouped mutate-latest batches (API-level: exactly one new version, one is_latest, counters accounting for every entry sent), and the per-version Changes tags (+ N) after a non-deduplicated insert invalidates the SDK's hash cache; plus the counters a single non-JSON-native item cuts (one version, itemsAdded 1, itemsModified 0) and the absence of any second version once the repeat insert deduplicates" }
       export-dataset:         { covered: false, note: "DATASET_EXPORT_ENABLED" }
       import-huggingface:     { covered: false }
 
