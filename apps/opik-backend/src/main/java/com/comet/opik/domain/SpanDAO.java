@@ -1,12 +1,10 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
-import com.comet.opik.api.SpansCountResponse;
-import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.SpanSortingFactory;
@@ -17,6 +15,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.stats.StatsMerger;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -1719,35 +1718,54 @@ public class SpanDAO {
             ;
             """;
 
-    private static final String SPAN_COUNT_BY_WORKSPACE_ID = """
+    /**
+     * Previous-day span counts per workspace, at project granularity so that
+     * {@link DemoDataExclusionUtils#foldByWorkspace} can drop demo projects and re-aggregate in Java.
+     *
+     * <p><b>The demo-project exclusion must not render into this query text.</b> It used to, as an inline
+     * {@code project_id NOT IN [...]} literal holding one UUID per demo project across all workspaces. One demo
+     * project is created per signup, so that literal grows without bound, and a {@code Distributed} table re-parses
+     * the query text per shard — on {@code traces} that is what eventually pushed the equivalent queries past
+     * {@code max_execution_time}, after which the daily counts silently stopped being produced, because the callers
+     * consuming them cannot tell an empty result from a failed one. Keeping the text constant is what makes growth
+     * in the demo set unable to reintroduce that; see {@link DemoDataExclusionUtils}.
+     *
+     * <p><b>No {@code id_at} week bound, deliberately.</b> See {@link #SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER}.
+     */
+    private static final String SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT = """
             SELECT
                  workspace_id,
-                 COUNT(DISTINCT id) as span_count
+                 project_id,
+                 COUNT(DISTINCT id) AS span_count
              FROM spans
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)>AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-            <endif>
-             GROUP BY workspace_id
+             GROUP BY workspace_id, project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
-    private static final String SPAN_DAILY_BI_INFORMATION = """
-            SELECT
-                    workspace_id,
-                    created_by AS user,
-                    COUNT(DISTINCT id) AS span_count
-            FROM spans
-            WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-            <if(excluded_project_ids)>AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-            <endif>
-            GROUP BY workspace_id, created_by
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
+    /**
+     * Previous-day span counts per workspace, project and user. Serves both the BI events — which
+     * {@link DemoDataExclusionUtils#foldByWorkspaceAndUser} re-aggregates by workspace and user — and the
+     * per-project usage breakdown, which reports the rows as they come back and only drops the demo projects. One
+     * text, two log comments, so the two consumers stay distinguishable in {@code system.query_log}. Same constraint
+     * on the query text as {@link #SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT}.
+     *
+     * <p><b>No {@code id_at} week bound, by decision rather than omission (OPIK-8375).</b> Once {@code spans} is
+     * partitioned weekly on {@code id_at} this opens parts in every partition, which is expensive, and a bound is
+     * derivable in principle: the window is on {@code created_at}, so with UUIDv7 ingestion validation enforcing
+     * that every id's embedded timestamp sits within {@link com.comet.opik.infrastructure.UuidValidationConfig}'s
+     * window of ingest, {@code id_at} would fall within that window of {@code created_at} too.
+     *
+     * <p>It is rejected because that premise is a runtime setting, not an invariant, and this is a billing count —
+     * a bound that drops rows under-bills silently, the exact failure this query set exists to avoid. Validation has
+     * a kill-switch and an audit mode that deliberately admits out-of-window ids; its window is operator-tunable up
+     * to 45 days, with a wider per-workspace bypass on top; and none of it applies to rows already written. A bound
+     * would therefore have to be correct for whatever configuration was in force when each row was ingested, which
+     * nothing in a query over a past day can know. Widening it to the maximum does not rescue it, since the
+     * kill-switch and audit mode void it at any width. The partition cost is answered by reducing the partition
+     * count instead.
+     */
     private static final String SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER = """
             SELECT
                  workspace_id,
@@ -1756,9 +1774,6 @@ public class SpanDAO {
                  COUNT(DISTINCT id) AS span_count
              FROM spans
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)>AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-            <endif>
              GROUP BY workspace_id, project_id, created_by
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -3061,116 +3076,52 @@ public class SpanDAO {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Previous-day span counts per workspace and project, for {@link SpanService} to drop demo projects from and
+     * fold by workspace. Returns per-project rows rather than the workspace totals the endpoint reports, because the
+     * exclusion cannot be expressed in the query text — see {@link #SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT}.
+     */
     @WithSpan
-    public Flux<SpansCountResponse.WorkspaceSpansCount> countSpansPerWorkspace(
-            @NonNull Map<UUID, Instant> excludedProjectIds) {
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(SPAN_COUNT_BY_WORKSPACE_ID, "count_spans_per_workspace", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
+    public Flux<WorkspaceProjectCount> countSpansPerWorkspaceProject() {
+        var template = getSTWithLogComment(SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT, "count_spans_per_workspace", "", "",
+                "");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(template.render());
-
-                    if (!excludedProjectIds.isEmpty()) {
-                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-                    }
-
-                    if (demoDataCreatedAt.isPresent()) {
-                        statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-                    }
-
-                    return statement.execute();
-                })
-                .flatMap(result -> result.map((row, rowMetadata) -> SpansCountResponse.WorkspaceSpansCount.builder()
-                        .workspace(row.get("workspace_id", String.class))
-                        .spanCount(row.get("span_count", Integer.class))
-                        .build()));
-    }
-
-    @WithSpan
-    public Flux<BiInformationResponse.BiInformation> getSpanBIInformation(
-            @NonNull Map<UUID, Instant> excludedProjectIds) {
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(SPAN_DAILY_BI_INFORMATION, "get_span_bi_information", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
-
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-
-                    var statement = connection.createStatement(template.render());
-
-                    if (!excludedProjectIds.isEmpty()) {
-                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-                    }
-
-                    if (demoDataCreatedAt.isPresent()) {
-                        statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-                    }
-
-                    return statement.execute();
-                })
-                .flatMap(result -> result.map((row, rowMetadata) -> BiInformationResponse.BiInformation.builder()
+                .flatMapMany(connection -> connection.createStatement(template.render()).execute())
+                .flatMap(result -> result.map((row, _) -> WorkspaceProjectCount.builder()
                         .workspaceId(row.get("workspace_id", String.class))
-                        .user(row.get("user", String.class))
+                        .projectId(row.get("project_id", UUID.class))
                         .count(row.get("span_count", Long.class))
                         .build()));
     }
 
+    /** Same as {@link #countSpansPerWorkspaceProject()}, broken down by user for the BI events. */
+    @WithSpan
+    public Flux<WorkspaceProjectUserCount> getSpanBIInformationPerProject() {
+        return countSpansPerWorkspaceProjectUser("get_span_bi_information");
+    }
+
     /**
-     * Counts previous-day spans grouped by workspace, project and user.
+     * The same previous-day count as {@link #getSpanBIInformationPerProject()}, for the per-project usage breakdown,
+     * which reports these rows as they are rather than folding them. Its own method so that the two consumers carry
+     * different log comments.
      */
     @WithSpan
-    public Flux<UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount> countSpansBreakdownPerWorkspace(
-            @NonNull Map<UUID, Instant> excludedProjectIds) {
+    public Flux<WorkspaceProjectUserCount> countSpansBreakdownPerWorkspace() {
+        return countSpansPerWorkspaceProjectUser("count_spans_by_workspace_project_user");
+    }
 
-        var template = getSTWithLogComment(SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER,
-                "count_spans_by_workspace_project_user", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-        demoDataCreatedAt.ifPresent(instant -> template.add("demo_data_created_at", instant.toString()));
+    private Flux<WorkspaceProjectUserCount> countSpansPerWorkspaceProjectUser(String logComment) {
+        var template = getSTWithLogComment(SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER, logComment, "", "", "");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(template.render());
-
-                    if (!excludedProjectIds.isEmpty()) {
-                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-                    }
-
-                    demoDataCreatedAt.ifPresent(instant -> statement.bind("demo_data_created_at", instant.toString()));
-
-                    return statement.execute();
-                })
-                .flatMap(result -> result.map(
-                        (row, rowMetadata) -> UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount.builder()
-                                .workspaceId(row.get("workspace_id", String.class))
-                                .projectId(row.get("project_id", UUID.class))
-                                .user(row.get("user", String.class))
-                                .count(row.get("span_count", Long.class))
-                                .build()));
+                .flatMapMany(connection -> connection.createStatement(template.render()).execute())
+                .flatMap(result -> result.map((row, _) -> WorkspaceProjectUserCount.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .projectId(row.get("project_id", UUID.class))
+                        .user(row.get("user", String.class))
+                        .count(row.get("span_count", Long.class))
+                        .build()));
     }
 
     private boolean isManualCost(Span span) {

@@ -13,7 +13,6 @@ import dataclasses
 import datetime
 import decimal
 import enum
-import json
 import logging
 import pathlib
 import threading
@@ -28,6 +27,7 @@ import pydantic
 from ... import httpx_client
 from .. import constants
 from . import identifiers
+from ... import json_helpers
 from ...rest_api.core.jsonable_encoder import jsonable_encoder
 
 LOGGER = logging.getLogger(__name__)
@@ -127,7 +127,7 @@ def dumps(value: Any) -> bytes:
     `default=` carries the flexible types the generated client used to accept, so only a
     value that needs the normalisation pays for it.
     """
-    return json.dumps(value, default=encode_flexible).encode("utf-8")
+    return json_helpers.dumps(value, default=encode_flexible, sort_keys=False)
 
 
 class StreamingBatchWriter:
