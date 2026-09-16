@@ -49,70 +49,9 @@ spec:
         - '0.0.0.0/0'
       {{- end }}
       {{- end }}
-    {{/*
-      prefer_localhost_replica is resolved here rather than carried in additionalProfiles because
-      the right value depends on the TOPOLOGY, which a static values list cannot express
-      (OPIK-8255). It decides whether an insert with a local replica available bypasses the
-      Distributed forwarding queue and writes straight into the local `_local` table.
-
-        - Multi-node (>1 replica or >1 shard): 0. Inserts take the queue, which is the path
-          batching fixes. The bypass is no substitute — at N shards only ~1/N of inserts could
-          take it, so the rest re-enter the same unfixed queue.
-        - Single node: 1. Every replica is already local, so 0 buys nothing and only converts an
-          in-process write into an async queue file, which also stops anything written through a
-          Distributed wrapper from being immediately readable — it breaks the cutover tests.
-
-      Either way the value is STATED, never inherited: the Altinity operator ships 0 and vanilla
-      ClickHouse ships 1, so without this the insert path would differ between installations by
-      nothing but which flavour they run. Deriving from topology just picks the correct value.
-
-      Override with clickhouse.preferLocalhostReplica, or by setting the key on a `default` entry
-      in additionalProfiles — in which case the derived value is suppressed so the manifest never
-      carries a duplicate key.
-    */}}
-    {{- $plrKey := "prefer_localhost_replica" }}
-    {{- $plrValid := list "0" "1" }}
-    {{/*
-         Profile names must be unique. The emission loop below renders every entry, so two entries
-         sharing a name put the same `<name>/<setting>` key into the manifest twice — for any
-         setting, not only this one. Fail rather than emit a map whose duplicate keys resolve
-         arbitrarily.
-    */}}
-    {{- $seenProfiles := dict }}
-    {{- range .Values.clickhouse.additionalProfiles }}
-    {{- $n := .name | toString }}
-    {{- if hasKey $seenProfiles $n }}
-    {{- fail (printf "clickhouse.additionalProfiles: duplicate profile name %q. Names must be unique; merge the entries into one." $n) }}
-    {{- end }}
-    {{- $seenProfiles = set $seenProfiles $n true }}
-    {{- end }}
-    {{- $plrFromList := false }}
-    {{- range .Values.clickhouse.additionalProfiles }}
-    {{- if and (eq (.name | toString) "default") (hasKey (.settings | default dict) $plrKey) }}
-    {{- $listVal := printf "%v" (index (.settings | default dict) $plrKey) }}
-    {{- if not (has $listVal $plrValid) }}
-    {{- fail (printf "clickhouse.additionalProfiles: default.%s must be 0 or 1, got %q. ClickHouse accepts nothing else for this setting." $plrKey $listVal) }}
-    {{- end }}
-    {{- $plrFromList = true }}
-    {{- end }}
-    {{- end }}
-    {{- $plr := "" }}
-    {{- if not (kindIs "invalid" .Values.clickhouse.preferLocalhostReplica) }}
-    {{- $plr = printf "%v" .Values.clickhouse.preferLocalhostReplica }}
-    {{- end }}
-    {{- if and (ne $plr "") (not (has $plr $plrValid)) }}
-    {{- fail (printf "clickhouse.preferLocalhostReplica must be 0, 1, or empty to derive from topology; got %q." $plr) }}
-    {{- end }}
-    {{- if eq $plr "" }}
-    {{- $multiNode := or (gt (int .Values.clickhouse.replicasCount) 1) (gt (int .Values.clickhouse.shardsCount) 1) }}
-    {{- $plr = ternary "0" "1" $multiNode }}
-    {{- end }}
     profiles:
       {{- if and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username }}
       {{ .Values.clickhouse.monitoring.username }}/readonly: 1
-      {{- end }}
-      {{- if not $plrFromList }}
-      default/{{ $plrKey }}: {{ $plr }}
       {{- end }}
       {{- range .Values.clickhouse.additionalProfiles }}
       {{- $profileName := .name }}
