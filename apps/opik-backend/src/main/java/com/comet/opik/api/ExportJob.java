@@ -57,9 +57,9 @@ public record ExportJob(
      * dataset_id, and the generated SDK models still expect it. Derived from params so it stays in step, and null
      * for export types that are not dataset-scoped.
      */
-    @JsonProperty("dataset_id")
+    @Nullable @JsonProperty("dataset_id")
     @JsonView(ExportJob.View.Public.class)
-    @Schema(accessMode = Schema.AccessMode.READ_ONLY)
+    @Schema(accessMode = Schema.AccessMode.READ_ONLY, nullable = true)
     public UUID datasetId() {
         return params instanceof DatasetExportParams dataset ? dataset.datasetId() : null;
     }
@@ -67,9 +67,9 @@ public record ExportJob(
     /**
      * Also kept for backward compatibility with the previous response shape; resource_name is the general form.
      */
-    @JsonProperty("dataset_name")
+    @Nullable @JsonProperty("dataset_name")
     @JsonView(ExportJob.View.Public.class)
-    @Schema(accessMode = Schema.AccessMode.READ_ONLY)
+    @Schema(accessMode = Schema.AccessMode.READ_ONLY, nullable = true)
     public String datasetName() {
         return datasetId() == null ? null : resourceName;
     }

@@ -24,6 +24,14 @@ ALTER TABLE export_jobs ADD COLUMN resource_name VARCHAR(255) NULL;
 UPDATE export_jobs SET params = JSON_OBJECT('export_type', 'DATASET', 'dataset_id', dataset_id)
 WHERE params IS NULL;
 
+-- resource_name is what the progress panel labels the job with, and what names the downloaded file. Without a
+-- snapshot a job carried over from the old schema renders as "Unknown export" and downloads as its UUID, so take
+-- the name from the dataset while dataset_id is still here to join on.
+UPDATE export_jobs job
+JOIN datasets dataset ON dataset.id = job.dataset_id
+SET job.resource_name = dataset.name
+WHERE job.resource_name IS NULL;
+
 ALTER TABLE export_jobs DROP COLUMN dataset_id;
 
 -- In-flight rows keep a NULL params_hash and so never match a dedupe lookup; the worst case is one redundant

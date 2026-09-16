@@ -1051,6 +1051,10 @@ experimentExecution:
 
 # Configuration for Dataset Export
 exportJobs:
+  # Renamed from the previous 'datasetExport' block, which served the same job pipeline. Deployments that override
+  # any of the shared knobs below must rename their variables: DATASET_EXPORT_<KNOB> -> EXPORT_JOBS_<KNOB>. The two
+  # exceptions are DATASET_EXPORT_ENABLED, which keeps its name, and the stream/consumer-group names, which are
+  # deliberately not carried over (see streamName below).
   # Default: false
   # Description: Whether dataset export feature is enabled
   datasetEnabled: ${DATASET_EXPORT_ENABLED:-false}

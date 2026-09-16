@@ -198,8 +198,10 @@ class CsvExportServiceImplTest {
 
         // Then
         StepVerifier.create(result)
-                .expectErrorMatches(throwable -> throwable instanceof jakarta.ws.rs.ServerErrorException &&
-                        throwable.getMessage().contains("Export is not enabled for type"))
+                .expectErrorMatches(throwable -> throwable instanceof jakarta.ws.rs.ServerErrorException error &&
+                        error.getResponse().getStatus() == jakarta.ws.rs.core.Response.Status.NOT_IMPLEMENTED
+                                .getStatusCode()
+                        && error.getMessage().contains("Export is not enabled for type"))
                 .verify();
 
         // Verify no job service calls were made
