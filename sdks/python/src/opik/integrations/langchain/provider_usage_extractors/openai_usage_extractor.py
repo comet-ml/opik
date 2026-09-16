@@ -1,5 +1,6 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
+from urllib.parse import urlsplit
 import opik
 from opik import _logging as opik_logging
 from opik import llm_usage, logging_messages
@@ -56,8 +57,9 @@ class OpenAIUsageExtractor(
         if isinstance(invocation_params, dict) and (
             base_url := invocation_params.get("base_url")
         ):
-            if base_url.host != "api.openai.com":
-                provider = base_url.host
+            host = _try_get_base_url_host(base_url)
+            if host is not None and host != "api.openai.com":
+                provider = host
 
         return provider
 
@@ -129,3 +131,27 @@ def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
                 model = generation_info.get("model_name", model)
 
     return model
+
+
+def _try_get_base_url_host(base_url: Any) -> Optional[str]:
+    """
+    Host of the configured base URL, whichever shape the serialised run carries.
+
+    LangChain passes this value either as a URL object or as the plain string the
+    user configured. Reading `.host` off a string raises, and that exception
+    escapes `get_llm_usage_info`, so the orchestrator discards usage that was
+    already extracted and the span is logged without tokens, model or cost. A
+    value with no readable host returns None, leaving the provider at its default.
+    """
+    host = getattr(base_url, "host", None)
+    if isinstance(host, str) and host:
+        return host
+
+    if isinstance(base_url, str):
+        try:
+            return urlsplit(base_url).hostname
+        except ValueError:
+            # Not a parseable URL, an unbalanced IPv6 literal for instance.
+            return None
+
+    return None
