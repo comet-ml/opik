@@ -18,7 +18,6 @@ from opik.api_objects.experiment import (
     bulk_item,
     experiment as experiment_module,
 )
-from opik.message_processing.batching import sequence_splitter
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
 
@@ -184,8 +183,7 @@ class TestBulkUploadItemsBatching:
         # Assert the actual ceiling rather than a hand-computed batch size.
         for call in mock_rest_client.experiments.experiment_items_bulk.call_args_list:
             batch_size_MB = sum(
-                sequence_splitter.get_payload_size_MB(item)
-                for item in call.kwargs["items"]
+                bulk_converters.payload_size_MB(item) for item in call.kwargs["items"]
             )
             assert batch_size_MB <= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
 
@@ -459,6 +457,25 @@ class TestBulkUploadItemsConcurrency:
         assert "num_threads must be at least 1" in str(exc_info.value)
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
+    @pytest.mark.parametrize(
+        "flag", [pytest.param("false", id="str"), pytest.param(1, id="int")]
+    )
+    def test_batch_upload_items__non_bool_validate_before_upload__raises_validation_error(
+        self, flag: Any
+    ) -> None:
+        """A truthy non-bool would pick a mode rather than be rejected.
+
+        ``"false"`` is the case that costs something: it reads as a request to skip the
+        up-front pass and silently asks for it instead.
+        """
+        experiment, mock_rest_client = _create_experiment()
+
+        with pytest.raises(exceptions.ValidationError) as exc_info:
+            experiment.batch_upload_items([_record()], validate_before_upload=flag)
+
+        assert "validate_before_upload must be a bool" in str(exc_info.value)
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
     def test_batch_upload_items__batch_stuck_when_another_fails__returns_without_waiting(
         self,
     ) -> None:
@@ -679,6 +696,128 @@ class TestBulkUploadItemsValidation:
         assert "items[0].evaluate_task_result must be a dict" in message
         assert "items[1].dataset_item_id must be a non-empty string" in message
 
+    def test_batch_upload_items__streaming_a_payload_bound_upload__stays_concurrent(
+        self,
+    ) -> None:
+        """A bound on the batch count has to over-estimate, never under-estimate.
+
+        Without pre-validation the batch count is unknown while streaming. Deriving it
+        from the 1000-item limit gives 1 for an upload whose payload sizes actually
+        produce many batches, which would silently run the whole thing on one worker.
+        """
+        experiment, mock_rest_client = _create_experiment()
+        captured_max_workers: List[int] = []
+        real_executor = concurrent_futures.ThreadPoolExecutor
+
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            captured_max_workers.append(kwargs["max_workers"])
+            return real_executor(*args, **kwargs)
+
+        # Under the 1000-item limit, but each item is a large fraction of the size cap,
+        # so the payload closes every batch and there are far more than one.
+        padding = "x" * 1_000_000
+        records = [
+            _record(
+                dataset_item_id=f"item-{i}",
+                trace=bulk_item.ExperimentItemBulkTrace(
+                    start_time=START_TIME, output={"padding": padding}
+                ),
+            )
+            for i in range(12)
+        ]
+
+        with patch.object(
+            experiment_module.futures, "ThreadPoolExecutor", side_effect=spy
+        ):
+            experiment.batch_upload_items(
+                records, num_threads=4, validate_before_upload=False
+            )
+
+        # Concurrency is the subject, but a test that only counts batches would also
+        # pass if items were dropped or duplicated, so check delivery too. Batches are
+        # sent from several workers, so the ids are compared as a set with a count
+        # rather than as a sequence -- arrival order is not defined here.
+        sent = [
+            item.dataset_item_id
+            for call in mock_rest_client.experiments.experiment_items_bulk.call_args_list
+            for item in call.kwargs["items"]
+        ]
+        assert len(sent) == 12
+        assert set(sent) == {f"item-{i}" for i in range(12)}
+        assert len(_sent_batch_sizes(mock_rest_client)) > 1
+        assert (
+            max(_sent_batch_sizes(mock_rest_client))
+            <= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE
+        )
+        assert captured_max_workers == [4]
+
+    def test_batch_upload_items__streaming_validation__sends_until_the_bad_item(
+        self,
+    ) -> None:
+        """validate_before_upload=False trades the pre-check for a single pass.
+
+        The whole point of the parameter: the bad item is still reported, but only when
+        it is reached, and what came before it has already been sent.
+        """
+        experiment, mock_rest_client = _create_experiment()
+        records = [_record(dataset_item_id=f"item-{i}") for i in range(1500)]
+        records.append(_record(evaluate_task_result="not-a-dict"))
+
+        with pytest.raises(exceptions.ValidationError) as exc_info:
+            experiment.batch_upload_items(
+                records, num_threads=1, validate_before_upload=False
+            )
+
+        assert "items[1500].evaluate_task_result must be a dict" in str(exc_info.value)
+        # The first 1000 filled a batch and went out before the bad item was reached.
+        assert _sent_batch_sizes(mock_rest_client) == [1000]
+
+    def test_batch_upload_items__validate_before_upload__sends_nothing_on_a_bad_item(
+        self,
+    ) -> None:
+        """The default keeps the pre-check, which is the only reason to pay for it."""
+        experiment, mock_rest_client = _create_experiment()
+        records = [_record(dataset_item_id=f"item-{i}") for i in range(1500)]
+        records.append(_record(evaluate_task_result="not-a-dict"))
+
+        with pytest.raises(exceptions.ValidationError):
+            experiment.batch_upload_items(records, num_threads=1)
+
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
+    @pytest.mark.parametrize("validate_before_upload", [True, False])
+    def test_batch_upload_items__batches_are_identical_either_way(
+        self, validate_before_upload: bool
+    ) -> None:
+        """Both modes batch by the same rule, so the wire form cannot depend on it."""
+        experiment, mock_rest_client = _create_experiment()
+        records = [_record(dataset_item_id=f"item-{i}") for i in range(2500)]
+
+        experiment.batch_upload_items(
+            records,
+            num_threads=1,
+            validate_before_upload=validate_before_upload,
+        )
+
+        assert _sent_batch_sizes(mock_rest_client) == [1000, 1000, 500]
+
+    def test_batch_upload_items__streaming_validation__rejects_an_oversized_item(
+        self,
+    ) -> None:
+        """The size check moves with the validation, rather than being skipped."""
+        experiment, mock_rest_client = _create_experiment()
+        oversized_trace = bulk_item.ExperimentItemBulkTrace(
+            start_time=START_TIME, output={"padding": "x" * 5_000_000}
+        )
+
+        with pytest.raises(exceptions.ValidationError) as exc_info:
+            experiment.batch_upload_items(
+                [_record(trace=oversized_trace)], validate_before_upload=False
+            )
+
+        assert "at or above the" in str(exc_info.value)
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
     def test_batch_upload_items__single_item_larger_than_request_limit__raises_validation_error(
         self,
     ) -> None:
@@ -707,7 +846,7 @@ class TestBulkUploadItemsValidation:
                 start_time=START_TIME, output={"padding": "x" * 5_000_000}
             )
         )
-        measured_MB = sequence_splitter.get_payload_size_MB(
+        measured_MB = bulk_converters.payload_size_MB(
             bulk_converters.to_rest_record(record)
         )
 
@@ -720,6 +859,33 @@ class TestBulkUploadItemsValidation:
                 experiment.batch_upload_items([record])
 
         assert "at or above the" in str(exc_info.value)
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
+    def test_batch_upload_items__unmeasurable_item__is_not_reported_as_oversized(self):
+        """A record that cannot be measured must not be blamed on the size limit.
+
+        Sizing runs the caller's own ``__str__`` and it can raise. There is no size to
+        report when it does, and reporting the limit instead is a wrong explanation
+        that reads like a right one: it sends the caller off shrinking a record whose
+        size was never the problem.
+        """
+        experiment, mock_rest_client = _create_experiment()
+
+        class Hostile:
+            def __str__(self) -> str:
+                raise RuntimeError("no string for you")
+
+            __repr__ = __str__
+
+        record = _record(evaluate_task_result={"h": Hostile()})
+
+        with pytest.raises(exceptions.ValidationError) as exc_info:
+            experiment.batch_upload_items([record])
+
+        message = str(exc_info.value)
+        assert "could not be measured" in message
+        assert "RuntimeError" in message
+        assert "at or above" not in message
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
 

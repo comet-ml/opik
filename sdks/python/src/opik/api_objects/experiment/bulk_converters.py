@@ -1,12 +1,22 @@
+import datetime
+import logging
 from typing import Any, Dict, List, Optional
 
-from opik import exceptions, id_helpers
+import pydantic
+
+from opik import exceptions, id_helpers, json_helpers, jsonable_encoder
+from opik.message_processing.batching import sequence_splitter
 from opik.rest_api import types as rest_api_types
+from opik.rest_api.core import datetime_utils
 from opik.types import FeedbackScoreDict
 from . import bulk_item
 from .. import constants
 
+LOGGER = logging.getLogger(__name__)
+
 _JSON_LIKE_FIELDS = ("input", "output", "metadata")
+
+_BYTES_PER_MB = 1024 * 1024
 
 
 def _validate_json_like_fields(
@@ -117,8 +127,9 @@ def _validate_record(
         )
 
 
-def _validate_project_name_consistency(
-    records: List[bulk_item.ExperimentItemBulkRecord],
+def _validate_project_name_match(
+    record: bulk_item.ExperimentItemBulkRecord,
+    index: int,
     project_name: Optional[str],
     failure_reasons: List[str],
 ) -> None:
@@ -130,19 +141,45 @@ def _validate_project_name_consistency(
     if project_name is None or not project_name.strip():
         return
 
+    trace = record.trace
+    if trace is None or trace.project_name is None or not trace.project_name.strip():
+        return
+
+    if trace.project_name.casefold() != project_name.casefold():
+        failure_reasons.append(
+            f"items[{index}].trace.project_name ({trace.project_name!r}) does not match "
+            f"the upload project_name ({project_name!r})"
+        )
+
+
+def _validate_project_name_consistency(
+    records: List[bulk_item.ExperimentItemBulkRecord],
+    project_name: Optional[str],
+    failure_reasons: List[str],
+) -> None:
     for index, record in enumerate(records):
-        trace = record.trace
-        if (
-            trace is None
-            or trace.project_name is None
-            or not trace.project_name.strip()
-        ):
-            continue
-        if trace.project_name.casefold() != project_name.casefold():
-            failure_reasons.append(
-                f"items[{index}].trace.project_name ({trace.project_name!r}) does not match "
-                f"the upload project_name ({project_name!r})"
-            )
+        _validate_project_name_match(record, index, project_name, failure_reasons)
+
+
+def validate_record(
+    record: bulk_item.ExperimentItemBulkRecord,
+    index: int,
+    project_name: Optional[str],
+) -> None:
+    """Validate one record, for callers that validate as they stream.
+
+    Same checks as :func:`validate_records`, which keeps the whole upload in memory to
+    run them. Both checks operate on individual records, so neither needs the full list.
+    """
+    failure_reasons: List[str] = []
+
+    _validate_record(record, index, failure_reasons)
+    _validate_project_name_match(record, index, project_name, failure_reasons)
+
+    if failure_reasons:
+        raise exceptions.ValidationError(
+            prefix="batch_upload_items", failure_reasons=failure_reasons
+        )
 
 
 def validate_records(
@@ -161,6 +198,119 @@ def validate_records(
         raise exceptions.ValidationError(
             prefix="batch_upload_items", failure_reasons=failure_reasons
         )
+
+
+def _json_shell(value: Any) -> Any:
+    """One value the encoder cannot represent, as a shell it can walk into itself.
+
+    The interior is handed back unconverted on purpose: the encoder comes back here for
+    each member, so a record costs one C-level walk rather than a Python one per node.
+    Fully converting here instead would rebuild in Python exactly what this replaces.
+
+    The two shapes it does convert mirror ``jsonable_encoder.encode`` -- a pydantic model
+    as its fields plus its extras, a datetime through the SDK's own serializer -- so the
+    bytes counted match what that encoder produced. Anything else is rare enough to pay
+    for the full conversion, which ends in ``str(obj)`` and so can raise for an object
+    that refuses to render one; :func:`_estimated_size_MB` is where that is turned
+    into a reportable failure.
+    """
+    if isinstance(value, datetime.datetime):
+        return datetime_utils.serialize_datetime(value)
+    if isinstance(value, pydantic.BaseModel):
+        extra = value.__pydantic_extra__
+        return (
+            {**value.__dict__, **extra} if isinstance(extra, dict) else value.__dict__
+        )
+    return jsonable_encoder.encode(value)
+
+
+class UnsizeableRecordError(Exception):
+    """No encoder and no estimator could measure this record.
+
+    Raised rather than returned as a number, because there is no number that tells the
+    truth here. Infinity is what the estimator returns for a value it cannot measure,
+    and every caller reads a number that large as "over the per-request limit" -- a
+    plausible, wrong account of an exception thrown inside the encoder, which sends
+    whoever hit it looking at the size of their data.
+    """
+
+    def __init__(self, cause: BaseException) -> None:
+        super().__init__(f"could not measure the record: {type(cause).__name__}")
+        self.cause = cause
+
+
+def unsizeable_failure_reason(
+    index: int, error: UnsizeableRecordError, max_size_MB: float
+) -> str:
+    """The one wording for an unmeasurable record, shared by both upload paths.
+
+    Both paths reject such a record and both have to say why. Two copies of the
+    sentence is two things to keep true of each other, and the whole point of the
+    sentence is that it does not mislead.
+    """
+    return (
+        f"items[{index}] could not be measured: the encoder raised "
+        f"{type(error.cause).__name__}. This is not the {max_size_MB}MB limit; see "
+        f"the logged traceback for the value responsible"
+    )
+
+
+def _estimated_size_MB(rest_record: Any) -> float:
+    """The structural estimate, with its one escape route closed.
+
+    ``jsonable_encoder.encode`` ends in ``str(obj)`` placed outside its own ``try``, so
+    an object whose ``__str__`` raises escapes it -- and the estimator runs that same
+    encoder, so it is not a refuge from a value the encoder refused.
+
+    The ``try`` holds one call, and it is the only one here that runs code belonging to
+    whoever called us. Its breadth is a property of that call rather than of this
+    handler: ``__str__`` may raise anything, a custom exception class included, so
+    there is no set of types to name. Sizing the encoded result is below it on purpose
+    -- nothing there executes caller code, so a failure there is our defect and
+    propagates instead of being reported as an unmeasurable record.
+    """
+    try:
+        encoded_for_json = jsonable_encoder.encode(rest_record)
+    except Exception as error:
+        LOGGER.warning(
+            "Could not size an experiment item; the upload will reject it.",
+            exc_info=True,
+        )
+        raise UnsizeableRecordError(error) from error
+
+    return sequence_splitter.get_encoded_payload_size_MB(encoded_for_json)
+
+
+def payload_size_MB(rest_record: Any) -> float:
+    """Estimate one converted record's JSON size, in megabytes.
+
+    Serialising the record and measuring the result is several times cheaper than the
+    structural estimate in ``sequence_splitter``, which walks the record twice in Python
+    -- once to convert it, once to add up what the conversion would encode to. Here the
+    walk is orjson's, in C. It matters because this runs on the producer thread, which is
+    what bounds a large upload.
+
+    Without orjson this stays on the estimator. The standard library is not
+    interchangeable for measuring: ``json.dumps`` escapes non-ASCII where httpx does not,
+    so it reads a multibyte record ~1.7x over its real size and would split batches that
+    would have fit.
+
+    Nothing measured here reaches the wire: the bytes are counted and dropped, and the
+    request body is built by the generated client as before. A record the encoder refuses
+    outright falls back to the structural estimate, so nothing that could be sized before
+    stops being sizeable. A record neither of them can walk raises
+    :class:`UnsizeableRecordError`, which the caller reports as itself rather than as a
+    size.
+    """
+    if not json_helpers.ACCELERATED:
+        return _estimated_size_MB(rest_record)
+
+    try:
+        encoded = json_helpers.dumps(rest_record, default=_json_shell, sort_keys=False)
+    except Exception:
+        return _estimated_size_MB(rest_record)
+
+    return len(encoded) / _BYTES_PER_MB
 
 
 def _to_rest_trace(
