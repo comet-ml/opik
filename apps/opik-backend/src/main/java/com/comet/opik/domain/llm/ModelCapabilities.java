@@ -2,6 +2,7 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.ModelCostData;
 import com.comet.opik.domain.cost.CostService;
+import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.experimental.UtilityClass;
@@ -11,6 +12,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -35,6 +37,27 @@ public class ModelCapabilities {
             // Qwen Omni models support multimodal (audio, video, images)
             Pattern.compile(".*qwen.*omni.*", Pattern.CASE_INSENSITIVE));
 
+    /**
+     * Anthropic's Claude models reject temperature and top_p together. The family name is the only
+     * signal common to every way they are routed — Anthropic's own ids ({@code claude-opus-4-6}),
+     * Bedrock's decorated ids ({@code us.anthropic.claude-…-v1:0}) and OpenAI-compatible proxy names
+     * — so the match is deliberately loose. A false positive only drops top_p when temperature is
+     * also set, which is what Anthropic recommends regardless.
+     */
+    private static final Pattern EXCLUSIVE_SAMPLING_MODEL_PATTERN = Pattern.compile(".*claude.*",
+            Pattern.CASE_INSENSITIVE);
+
+    /** Anthropic dates a release as yyyyMMdd, e.g. claude-sonnet-4-5-20250929. */
+    private static final int DATE_SUFFIX_LENGTH = 8;
+
+    /**
+     * Claude 3 spells the generation before the family ({@code claude-3-5-sonnet}); Claude 4 onward
+     * spells it after ({@code claude-sonnet-4-5}). That whole generation takes sampling params, so it
+     * is recognised by shape instead of being listed, and the allow-list only has to name models from
+     * the generation where taking none became the norm.
+     */
+    private static final String LEGACY_GENERATION_PREFIX = "claude-3";
+
     private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = loadCapabilities();
 
     /**
@@ -45,6 +68,114 @@ public class ModelCapabilities {
             return false;
         }
         return VISION_MODEL_PATTERNS.stream().anyMatch(pattern -> pattern.matcher(modelName).matches());
+    }
+
+    /**
+     * Whether the model rejects temperature and top_p in the same request, so that only one may be sent.
+     */
+    public boolean requiresExclusiveSamplingParams(String modelName) {
+        if (StringUtils.isBlank(modelName)) {
+            return false;
+        }
+        return EXCLUSIVE_SAMPLING_MODEL_PATTERN.matcher(modelSegment(modelName)).matches();
+    }
+
+    /**
+     * Whether the model refuses temperature and top_p outright, rather than merely refusing them
+     * together. Anthropic's adaptive-thinking models answer a request carrying either with a 400.
+     *
+     * <p>An Anthropic id we cannot place is assumed to take none. Taking none is where the family is
+     * heading, so the unplaceable id is far more often a model newer than this list than an older one
+     * missing from it — and the two failures are not equal: assuming it takes none omits a parameter,
+     * while assuming it takes them fails the whole request. The floating {@code claude-opus-latest}
+     * aliases are the case that settles it, since they follow the newest model by definition.
+     *
+     * <p>A name that is not an Anthropic id at all is left alone — see {@link #canonicalAnthropicId}.
+     */
+    public boolean rejectsSamplingParams(String modelName) {
+        var canonical = canonicalAnthropicId(modelName);
+        if (canonical.isEmpty() || isLegacyGeneration(canonical)) {
+            return false;
+        }
+        return knownAnthropicId(canonical)
+                .map(id -> !AnthropicModelName.samplingCapableModelIds().contains(id))
+                .orElse(true);
+    }
+
+    /**
+     * The Anthropic id a routed model name denotes, when we know it.
+     *
+     * <p>One model arrives spelled three ways: Anthropic's own {@code claude-opus-4-6}, Bedrock's
+     * {@code us.anthropic.claude-sonnet-4-5-20250929-v1:0} and OpenRouter's dotted
+     * {@code anthropic/claude-opus-4.7}. Reducing all three to the bare id lets the match be anchored
+     * at the start rather than found anywhere in the string, and the longest match wins so a later
+     * {@code claude-opus-4-9} reads as itself rather than as the {@code claude-opus-4} it begins with.
+     */
+    private Optional<String> knownAnthropicId(String canonical) {
+        return AnthropicModelName.allModelIds().stream()
+                .filter(id -> namesModel(canonical, id))
+                .max(Comparator.comparingInt(String::length));
+    }
+
+    /**
+     * The bare Anthropic id a routed model name denotes, or empty when the name does not denote one.
+     *
+     * <p>Only a vendor decoration may precede the id: Bedrock's region and vendor prefix is a
+     * statement about which Claude this is, whereas a proxy's own name for a model it renamed
+     * ({@code my-claude-deployment}) is not, and must keep the sampling params someone set on it.
+     */
+    private String canonicalAnthropicId(String modelName) {
+        if (StringUtils.isBlank(modelName)) {
+            return "";
+        }
+        // normalize() also spells versions with hyphens, which is how OpenRouter's dots reach our ids.
+        var segment = normalize(modelSegment(modelName));
+        var claudeAt = segment.indexOf("claude-");
+        if (claudeAt < 0) {
+            return "";
+        }
+        var prefix = segment.substring(0, claudeAt);
+        if (!prefix.isEmpty() && !prefix.endsWith("anthropic-")) {
+            return "";
+        }
+        // Bedrock appends an inference profile (-v1:0); OpenRouter, a :free or :beta variant.
+        return StringUtils.substringBefore(segment.substring(claudeAt), ":").replaceFirst("-v\\d+$", "");
+    }
+
+    /** The prefix has to end where a segment does, or {@code claude-30-future} would read as Claude 3. */
+    private boolean isLegacyGeneration(String canonical) {
+        return canonical.equals(LEGACY_GENERATION_PREFIX)
+                || canonical.startsWith(LEGACY_GENERATION_PREFIX + "-");
+    }
+
+    /**
+     * A prefix names the model only when it ends where a segment does, so {@code claude-opus-4-1} is
+     * not {@code claude-opus-4}. The release date is optional on either side, because providers drop
+     * it as often as they add it — but only a whole date is matched across, or {@code claude-opus-4}
+     * would claim {@code claude-opus-4-8}.
+     */
+    private boolean namesModel(String canonical, String modelId) {
+        if (canonical.equals(modelId) || canonical.startsWith(modelId + "-")) {
+            return true;
+        }
+        if (!modelId.startsWith(canonical + "-")) {
+            return false;
+        }
+        var suffix = modelId.substring(canonical.length() + 1);
+        return suffix.length() == DATE_SUFFIX_LENGTH && StringUtils.isNumeric(suffix);
+    }
+
+    /**
+     * The model, not the route to it. Custom ids carry the gateway in the prefix
+     * (custom-llm/&lt;provider_name&gt;/&lt;model&gt;), so a provider someone called "claude-gw" would
+     * otherwise make every model behind it — Mistral, Llama — look like Claude. An id with no
+     * separator is the model; one that ends in a separator names no model at all and must not fall
+     * back to the gateway — the frontend reads the same id the same way.
+     */
+    private String modelSegment(String modelName) {
+        return StringUtils.contains(modelName, "/")
+                ? StringUtils.substringAfterLast(modelName, "/")
+                : modelName;
     }
 
     public boolean supportsVision(String modelName) {

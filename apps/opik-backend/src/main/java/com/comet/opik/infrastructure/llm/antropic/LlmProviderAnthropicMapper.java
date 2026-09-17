@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.domain.llm.MessageContentNormalizer;
+import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
@@ -87,7 +88,7 @@ interface LlmProviderAnthropicMapper {
      * fail. Mirrors the judge-path logic in {@code AnthropicClientGenerator}.
      */
     private boolean samplingParamsAllowed(ChatCompletionRequest request) {
-        return AnthropicModelName.supportsSamplingParams(request.model()) && !thinkingEnabled(request);
+        return !ModelCapabilities.rejectsSamplingParams(request.model()) && !thinkingEnabled(request);
     }
 
     /**
