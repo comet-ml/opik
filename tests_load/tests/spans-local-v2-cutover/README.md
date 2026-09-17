@@ -172,10 +172,14 @@ $RUNBOOK/scripts/verify.sh --database opik            # --drill-down lists the d
 #    BEFORE the EXCHANGE (runbook "The final cutover window"). This is the only restart the spans cutover needs.
 #    Skipping it leaves the whole read-side half of the flag unexercised — and its failure mode is SILENT (writes still
 #    succeed either way; an absent end_time just reads back as 1970-01-01 instead of null).
-FLIP_AT="$(date -u '+%Y-%m-%d %H:%M:%S')"   # anchor: scopes the probe below to rows written AFTER the restart
 export ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED=true \
        ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE=true
 recreate_backend
+#    Anchor the probe AFTER recreate_backend returns, never before it. The outgoing backend keeps serving until the new
+#    container is healthy, and everything it writes in that window is a legitimate NULL — anchoring earlier sweeps those
+#    rows in and fails a flip that actually landed. Take the anchor from ClickHouse's own clock, as backfill.sh does for
+#    backfill_start: it is the clock that stamps last_updated_at, so no host/container skew can shift the boundary.
+FLIP_AT="$(clickhouse-client --query "SELECT toString(now64(9, 'UTC'))")"
 #
 #    PROVE THE FLIP LANDED, AND DO IT NOW — this is the evidence --confirm-columns-non-nullable asserts in step 8, and
 #    the rehearsal's counterpart of the runbook's Go/No-Go box. It must be the PHYSICAL stored value, and it must be
@@ -254,8 +258,11 @@ $RUNBOOK/scripts/verify.sh --database opik --old-table spans_pre_cutover_backup 
 ```
 
 **Resetting between iterations depends on how far the last run got.** If you have **not** completed the `EXCHANGE`
-(iterating on backfill/delta/verify), truncate **all three** tables and re-seed: `TRUNCATE TABLE spans`,
-`TRUNCATE TABLE spans_local_v2`, `TRUNCATE TABLE deletion_events_local`. Also delete the persisted anchor
+(iterating on backfill/delta/verify), truncate **all four** tables and re-seed: `TRUNCATE TABLE opik.spans`,
+`TRUNCATE TABLE opik.spans_local_v2`, `TRUNCATE TABLE opik.deletion_events_local`, `TRUNCATE TABLE opik.traces`.
+**Qualify every one with the database.** Nothing here exports `CLICKHOUSE_DATABASE` — the drivers pass `--database opik`
+themselves — so a bare `TRUNCATE TABLE spans` resolves against `default` and either errors or, on a client configured
+with some other default, empties the wrong table. Also delete the persisted anchor
 (`rm -f spans_cutover_backfill_start`) so the next `backfill.sh` captures a fresh `backfill_start` instead of reusing
 the prior run's. Delete it **only together with truncating `spans_local_v2`** — `backfill.sh` aborts if the anchor is
 missing while the destination still holds rows, because that combination means a resume whose original anchor was lost,
@@ -264,6 +271,14 @@ same directory each time, or pass an absolute path.) Truncate the bridge and re-
 — a prior run leaves stale delete events behind, and a new run whose `backfill_start` is *after* those events will
 neither copy nor replay them, so `verify.sh` reports a spurious mismatch. Note the bridge also holds any **traces**
 cutover events; those are harmless (every statement filters `source_table = 'spans'`) and truncating removes them too.
+
+**`traces` is the fourth table for a reason that is easy to miss.** `seed_history.py` creates **no** `traces` rows — its
+spans hang off trace ids that have none — so every `traces` row comes from `live_traffic.py`. Leave them and the next
+run's `delete_traffic.py`, which picks its victims with `search_traces(project_name=...)`, spends its budget deleting
+last run's traces, whose spans you have just truncated. Those deletes cascade over nothing: no span deletion reaches the
+bridge, and the resurrection guard goes unexercised. The run still passes, having tested less than it appears to — which
+is exactly the trap `delete_traffic.py --resurrect spans` warns about in its own help ("confirm the traces being deleted
+actually have spans").
 
 **If you have already completed the `EXCHANGE`, truncate + re-seed is not enough** — the swap made `spans` the
 non-nullable successor with a `FixedString(36)` `parent_span_id` and an `Int64` `usage`, and `seed_history.py` writes
@@ -298,19 +313,25 @@ being written to.
 # Stage A — forward run stopped before the EXCHANGE: discards the shadow; live `spans` is untouched.
 $RUNBOOK/scripts/rollback.sh --database opik --stage A
 
-# Stage B — after the EXCHANGE. Generate post-cutover activity first, so the rollback has something to reverse.
+# Stage B — after the EXCHANGE. Post-cutover activity has to satisfy BOTH halves of the rule above, and they pull in
+# opposite directions: it must already EXIST when the rollback starts (or there is nothing to reverse) and it must STILL
+# BE FLOWING while it runs (the promote and the reverse replay take no hold on writes). Backgrounding both generators
+# with a head start satisfies both; running them in the foreground to completion, as an earlier revision of this guide
+# did, satisfies only the first and hands rollback.sh a quiesced table — the one condition this section forbids. Size
+# --duration to OUTLAST the rollback, and use separate terminals instead of `&` if you prefer to watch their output.
 # --resurrect-ratio matters here too, but for the OPPOSITE reason to the forward replay: a post-cutover
 # delete-then-recreate must end up MASKED on the restored original (the reverse replay deliberately carries no
 # resurrection guard — rollback discards post-cutover writes while honoring post-cutover deletes).
-python tests_load/tests/spans-local-v2-cutover/delete_traffic.py --tps 3 --duration 45 --resurrect-ratio 0.25
-python tests_load/tests/spans-local-v2-cutover/live_traffic.py   --tps 4 --duration 30   # -> the discarded writes
+python tests_load/tests/spans-local-v2-cutover/delete_traffic.py --tps 3 --duration 300 --resurrect-ratio 0.25 &
+python tests_load/tests/spans-local-v2-cutover/live_traffic.py   --tps 4 --duration 300 &  # -> the discarded writes
+sleep 30   # head start: the post-cutover tail the rollback must reverse. NOT a substitute for the traffic still running.
 $RUNBOOK/scripts/rollback.sh --database opik --stage B --cutover-start '<cutover_start> UTC' \
     --confirm-retention-paused --accept-post-cutover-write-loss
 
 # Stage C / --unwrap-only — confirm they REFUSE. There is no wrapped estate to reverse.
 $RUNBOOK/scripts/rollback.sh --database opik --stage C --cutover-start '<cutover_start> UTC' \
     --confirm-retention-paused --accept-post-cutover-write-loss   # expect: "stage C expects the post-wrap state"
-$RUNBOOK/scripts/rollback.sh --database opik --unwrap-only --confirm-maintenance   # expect: "traces is engine='...'"
+$RUNBOOK/scripts/rollback.sh --database opik --unwrap-only --confirm-maintenance   # expect: "spans is engine='...'"
 
 # If a stage B run's reverse-replay was interrupted, re-apply just it (idempotent):
 $RUNBOOK/scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<cutover_start> UTC' \
