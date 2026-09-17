@@ -259,11 +259,20 @@ $RUNBOOK/scripts/verify.sh --database opik --old-table spans_pre_cutover_backup 
 #     (c) THE READ-SIDE HALF OF spanColumnsNonNullable, which only becomes checkable HERE. Step 7 proved the flag was
 #     live by the physical value a write landed as; this proves the other direction — that a stored sentinel is
 #     translated back out. It could not be run before the swap, because the Nullable original answered null under
-#     either setting. Fetch any span the flag wrote absent and assert the API returns null, not 1970 / NaN:
-#       curl -s "${OPIK_URL_OVERRIDE%/}/v1/private/spans/<id>" -H "Comet-Workspace: $OPIK_WORKSPACE" \
-#         | jq '.end_time, .ttft'
-#     PASS = both null. 1970-01-01 or NaN here means the read side never took, and the whole point of the flip was
-#     the read side: writes succeed either way, which is what makes this failure silent.
+#     either setting. Take an id the flag wrote absent — `spans` is the successor now, so those hold the sentinel
+#     PHYSICALLY, which is what makes them findable — then read the same span back through the API:
+SPAN_ID="$(clickhouse-client --query "
+  SELECT id FROM opik.spans
+  WHERE name = 'live-span-in-progress'
+    AND end_time = toDateTime64('1970-01-01 00:00:00', 6, 'UTC')
+  LIMIT 1")"
+curl -s "${OPIK_URL_OVERRIDE%/}/v1/private/spans/$SPAN_ID" -H "Comet-Workspace: $OPIK_WORKSPACE" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print('end_time=', d.get('end_time'), 'ttft=', d.get('ttft'))"
+#     PASS = both None. 1970-01-01 or NaN here means the read side never took, and the read side was the whole point
+#     of the flip: writes succeed either way, which is what makes this failure silent.
+#     An empty SPAN_ID means the window held no in-flight spans (step 3's --in-progress-ratio), not that the flag
+#     worked — the same distinction step 7's probe draws. The successor's end_time is DateTime64(6), so the literal
+#     is written at precision 6; matching it at 9 finds nothing.
 
 # 11. Leave the config as it is: keep spanColumnsNonNullable=true and span deletion capture ON — capture must stay live
 #     through the soak, since the rollback reverse-replay reads the bridge.
