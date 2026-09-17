@@ -94,8 +94,12 @@ recreate_backend() {   # exports must be set by the caller; unset a var to retur
 }
 ```
 
-Always re-read the env out of the container afterwards (as above) to confirm the flag actually took — that is the only
-check available for `spanColumnsNonNullable`, whose failure mode is silent (see the runbook's prereq #6).
+Always re-read the env out of the container afterwards (as above) to confirm the flag actually took. Its failure mode
+is silent (see the runbook's prereq #6), and there are exactly two checks that see through it: this env read-back, and
+the **physical** value a new absent `end_time`/`ttft` lands as in the source table — the epoch/NaN sentinel once the
+flag is live, `NULL` while it is not. Step 7 runs the second. A read-back through the API is NOT one of them until
+after the swap: while `spans` is the Nullable original, `SpanDAO#readEpochSentinel` returns `null` whichever way the
+flag is set.
 
 **`spansDistributedWrapEnabled` now exists (OPIK-7799), and this rehearsal still stops before the wrap.** That
 matches what a real spans cutover is planned to do: the runbook defers the wrap while the readiness gap OPIK-7799 left
@@ -168,17 +172,43 @@ $RUNBOOK/scripts/verify.sh --database opik            # --drill-down lists the d
 #    BEFORE the EXCHANGE (runbook "The final cutover window"). This is the only restart the spans cutover needs.
 #    Skipping it leaves the whole read-side half of the flag unexercised — and its failure mode is SILENT (writes still
 #    succeed either way; an absent end_time just reads back as 1970-01-01 instead of null).
+FLIP_AT="$(date -u '+%Y-%m-%d %H:%M:%S')"   # anchor: scopes the probe below to rows written AFTER the restart
 export ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED=true \
        ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE=true
 recreate_backend
-#    Positive check (the only real one): an in-progress span must read back end_time = None after the swap.
+#
+#    PROVE THE FLIP LANDED, AND DO IT NOW — this is the evidence --confirm-columns-non-nullable asserts in step 8, and
+#    the rehearsal's counterpart of the runbook's Go/No-Go box. It must be the PHYSICAL stored value, and it must be
+#    read before the EXCHANGE:
+#      * pre-swap the write discriminates. SpanDAO#bindEpochSentinel / #bindNanSentinel are gated on the flag alone,
+#        not on the table's type, so an absent end_time/ttft lands as the epoch/NaN SENTINEL once the flag is live and
+#        as NULL while it is not — even though `spans` is still Nullable and would accept either.
+#      * pre-swap an API read does NOT discriminate. #readEpochSentinel translates epoch -> null only when the flag is
+#        true, so a stale-false instance serving a stored NULL and a live-true one serving a stored epoch both answer
+#        null. That check only becomes meaningful after the swap; it is step 10(c), not this one.
+#    live_traffic.py is already writing the rows this needs (--in-progress-ratio, step 3), so give it a few seconds of
+#    post-restart traffic and then read them:
+clickhouse-client --query "
+  SELECT countIf(end_time IS NULL)                                      AS stale_null_end_time,
+         countIf(end_time = toDateTime64('1970-01-01 00:00:00.000', 9)) AS sentinel_end_time,
+         countIf(ttft IS NULL)                                          AS stale_null_ttft,
+         countIf(isNaN(ttft))                                           AS sentinel_ttft
+  FROM opik.spans
+  WHERE name = 'live-span-in-progress'
+    AND last_updated_at >= toDateTime64('$FLIP_AT', 9, 'UTC')"
+#    PASS = both stale_null_* are 0 and both sentinel_* are non-zero. A non-zero stale_null_* means the restart did not
+#    take on every instance and the EXCHANGE must not proceed — which is exactly the state --confirm-columns-non-nullable
+#    would otherwise let you assert falsely. Rows written BEFORE $FLIP_AT legitimately hold NULL; that is why the
+#    anchor is captured before the restart rather than the query scanning the whole table.
+#    Expect sentinel_ttft to dwarf sentinel_end_time (step 3's note) — that is the production shape, not a fault.
 
 # 8. Final delta + replay (the last write-facing step), then the EXCHANGE immediately after. The EXCHANGE is the data
 #    cutover and leaves spans a MergeTree so the backend's cascade deletes keep working; it also renames the displaced
 #    old data to spans_pre_cutover_backup. --skip-wrap defers the wrap by decision, matching the runbook; since
 #    OPIK-7799 it is reachable, not unavailable — see the setup note.
 #    --confirm-retention-paused holds trivially (retention is disabled by default);
-#    --confirm-columns-non-nullable is what step 7's flag flip + restart above earned.
+#    --confirm-columns-non-nullable is what step 7's sentinel probe earned — the flip and restart alone are the
+#    action, the probe is the evidence. Do not pass it on the strength of having run recreate_backend.
 $RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start> UTC'
 $RUNBOOK/scripts/exchange_and_wrap.sh --database opik --backfill-start '<backfill_start> UTC' \
     --confirm-retention-paused --confirm-columns-non-nullable --skip-wrap
@@ -209,6 +239,15 @@ $RUNBOOK/scripts/verify.sh --database opik --old-table spans_pre_cutover_backup 
 #
 #     (b) SEALED HISTORY — bounded below the cutover week, where any mismatch IS a defect.
 $RUNBOOK/scripts/verify.sh --database opik --old-table spans_pre_cutover_backup --new-table spans --to-week last-sealed
+#
+#     (c) THE READ-SIDE HALF OF spanColumnsNonNullable, which only becomes checkable HERE. Step 7 proved the flag was
+#     live by the physical value a write landed as; this proves the other direction — that a stored sentinel is
+#     translated back out. It could not be run before the swap, because the Nullable original answered null under
+#     either setting. Fetch any span the flag wrote absent and assert the API returns null, not 1970 / NaN:
+#       curl -s "${OPIK_URL_OVERRIDE%/}/v1/private/spans/<id>" -H "Comet-Workspace: $OPIK_WORKSPACE" \
+#         | jq '.end_time, .ttft'
+#     PASS = both null. 1970-01-01 or NaN here means the read side never took, and the whole point of the flip was
+#     the read side: writes succeed either way, which is what makes this failure silent.
 
 # 11. Leave the config as it is: keep spanColumnsNonNullable=true and span deletion capture ON — capture must stay live
 #     through the soak, since the rollback reverse-replay reads the bridge.
