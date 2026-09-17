@@ -470,9 +470,9 @@ class KpiCardDAOImpl implements KpiCardDAO {
                         t.project_id as project_id,
                         minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
                         max(t.end_time) as end_time,
-                        if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND min(t.start_time) IS NOT NULL
-                               AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
-                           (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
+                        if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
+                               AND notEquals(minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), max(t.end_time)) / 1000.0),
                            NULL) AS duration,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         <if(trace_thread_first_message_filter)>argMin(t.input, t.start_time) as first_message,<endif>
