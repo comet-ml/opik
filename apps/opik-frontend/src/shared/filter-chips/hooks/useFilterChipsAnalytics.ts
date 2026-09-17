@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import uniq from "lodash/uniq";
 import { OpikEvent, OpikEventName, trackEvent } from "@/lib/analytics/tracking";
+import { Filter } from "@/types/filters";
 import {
   ChipDefinition,
   ChipValue,
@@ -12,6 +13,18 @@ import {
 } from "@/shared/filter-chips/types";
 
 export type FilterRemovedSource = "chip_x" | "clear_all" | "dialog" | "unpin";
+
+// Shared with the quick-filter handoff, which applies a row into a view whose
+// chip definitions it never builds. Every target it can reach is a
+// query-builder chip, and this payload needs only the chip id and the rows.
+export const queryBuilderFilterEventProps = (
+  chipId: string,
+  rows: Filter[],
+): Record<string, unknown> => ({
+  filter_name: chipId,
+  operators: uniq(rows.map((r) => r.operator).filter(Boolean)),
+  values: rows.map((r) => r.value),
+});
 
 const getFilterEventProps = (
   def: ChipDefinition,
@@ -47,14 +60,11 @@ const getFilterEventProps = (
         return { ...base, operator: "after", value: v.after };
       return { ...base, operator: "between", value: `${v.start}/${v.end}` };
     }
-    case "query-builder": {
-      const v = value as QueryBuilderChipValue;
-      return {
-        ...base,
-        operators: uniq(v.rows.map((r) => r.operator).filter(Boolean)),
-        values: v.rows.map((r) => r.value),
-      };
-    }
+    case "query-builder":
+      return queryBuilderFilterEventProps(
+        def.id,
+        (value as QueryBuilderChipValue).rows,
+      );
   }
 };
 
