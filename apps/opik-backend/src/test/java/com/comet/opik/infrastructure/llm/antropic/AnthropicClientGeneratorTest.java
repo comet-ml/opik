@@ -48,9 +48,34 @@ class AnthropicClientGeneratorTest {
             assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
         }
 
+        /**
+         * A name that is not an Anthropic id tells us nothing about the model behind it, so nothing is
+         * stripped: the proxy may be serving a capable Claude under a name of its own.
+         */
         @ParameterizedTest
-        @ValueSource(strings = {"some-unknown-model", "claude-future-99", "custom-llm/gw/my-claude-deployment"})
-        void staysPermissiveForModelsItCannotPlace(String modelName) {
+        @ValueSource(strings = {"some-unknown-model", "custom-llm/gw/my-claude-deployment",
+                "custom-llm/claude-gw/mistral-large"})
+        void staysPermissiveForNamesThatAreNotAnthropicIds(String modelName) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
+        }
+
+        /**
+         * An Anthropic id we cannot place is assumed to take none. It is far more often a model newer
+         * than the capability list than an older one missing from it, and the floating aliases settle
+         * it: claude-opus-latest follows the newest model by definition.
+         */
+        @ParameterizedTest
+        @ValueSource(strings = {"claude-future-99", "claude-opus-latest", "anthropic/claude-sonnet-latest",
+                "us.anthropic.claude-opus-9-v1:0"})
+        void assumesAnUnplaceableAnthropicIdTakesNone(String modelName) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isTrue();
+        }
+
+        /** Claude 3 predates the constraint, and is recognised by shape rather than being listed. */
+        @ParameterizedTest
+        @ValueSource(strings = {"claude-3-haiku", "anthropic/claude-3.5-sonnet", "anthropic/claude-3.5-haiku",
+                "us.anthropic.claude-3-5-sonnet-20240620-v1:0"})
+        void staysPermissiveForTheGenerationThatPredatesTheConstraint(String modelName) {
             assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
         }
 
