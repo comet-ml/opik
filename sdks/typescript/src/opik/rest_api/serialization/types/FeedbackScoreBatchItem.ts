@@ -4,6 +4,7 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { FeedbackScoreBatchItemSource } from "./FeedbackScoreBatchItemSource.js";
+import { JsonNode } from "./JsonNode.js";
 
 export const FeedbackScoreBatchItem: core.serialization.ObjectSchema<
     serializers.FeedbackScoreBatchItem.Raw,
@@ -19,6 +20,7 @@ export const FeedbackScoreBatchItem: core.serialization.ObjectSchema<
     author: core.serialization.string().optional(),
     sourceQueueId: core.serialization.property("source_queue_id", core.serialization.string().optional()),
     id: core.serialization.string(),
+    metadata: JsonNode.optional(),
 });
 
 export declare namespace FeedbackScoreBatchItem {
@@ -33,5 +35,6 @@ export declare namespace FeedbackScoreBatchItem {
         author?: string | null;
         source_queue_id?: string | null;
         id: string;
+        metadata?: JsonNode.Raw | null;
     }
 }

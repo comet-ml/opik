@@ -42,11 +42,13 @@ public interface FeedbackScoreMapper {
 
     @Mapping(target = "id", source = "entityId")
     @Mapping(target = "author", ignore = true)
+    @Mapping(target = "metadata", ignore = true)
     FeedbackScoreBatchItem toFeedbackScoreBatchItem(UUID entityId, String projectName,
             FeedbackScore feedbackScore);
 
     @Mapping(target = "id", source = "entityId")
     @Mapping(target = "author", ignore = true)
+    @Mapping(target = "metadata", ignore = true)
     FeedbackScoreBatchItem toFeedbackScore(UUID entityId, UUID projectId, FeedbackScore score);
 
     /**
