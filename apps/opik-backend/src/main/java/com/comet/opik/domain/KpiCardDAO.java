@@ -362,22 +362,6 @@ class KpiCardDAOImpl implements KpiCardDAO {
             SETTINGS log_comment = '<log_comment>';
             """;
 
-    /**
-     * Current-vs-previous period is decided by {@code min(traces.start_time)}, not by the UUIDv7 timestamp inside
-     * {@code trace_threads.id}. That id records when the thread row was first written and falls back to
-     * {@code now()} when no first-trace timestamp reaches
-     * {@link com.comet.opik.domain.threads.TraceThreadIdService}, so a backfilled project files every thread into
-     * whichever period it was ingested in — counts, average duration and cost alike (OPIK-8335).
-     * <p>
-     * {@code trace_threads_final} is narrowed by {@code thread_id IN (SELECT thread_id FROM traces_final)} rather
-     * than by its own id range. The inner join already restricts the result to exactly those threads, so this
-     * changes no row; it only keeps the hash-join build side and the feedback-score {@code IN} sets off every
-     * thread in the project. Re-adding an <em>id</em> filter here instead would drop threads whose row was written
-     * outside the window, which is the bug.
-     * <p>
-     * A thread whose traces were ingested inside the window but ran outside it lands in neither period and is not
-     * counted, which matches the chart in {@code ProjectMetricsDAO}; the thread list still shows it.
-     */
     private static final String GET_THREAD_KPI_CARDS = """
             WITH traces_final AS (
                 SELECT
