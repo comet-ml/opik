@@ -114,6 +114,16 @@ tests:
           path: spec.configuration.profiles["readonly_profile/readonly"]
           value: 1
 
+  # A consumer may legitimately clear the list. The whole `profiles:` key must then be omitted, not
+  # emitted empty: `profiles: null` in the rendered ClickHouseInstallation fails on apply.
+  - it: omits the profiles block entirely when nothing would populate it
+    set:
+      clickhouse.additionalProfiles: []
+      clickhouse.monitoring.enabled: false
+    asserts:
+      - notExists:
+          path: spec.configuration.profiles
+
   # The monitoring user's readonly flag shares the profiles block with these settings; it is
   # gated separately, so check the two coexist rather than one gate shadowing the other.
   - it: coexists with the monitoring profile

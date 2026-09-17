@@ -49,6 +49,7 @@ spec:
         - '0.0.0.0/0'
       {{- end }}
       {{- end }}
+    {{- if or .Values.clickhouse.additionalProfiles (and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username) }}
     profiles:
       {{- if and .Values.clickhouse.monitoring.enabled .Values.clickhouse.monitoring.username }}
       {{ .Values.clickhouse.monitoring.username }}/readonly: 1
@@ -59,6 +60,7 @@ spec:
       {{ $profileName }}/{{ $key }}: {{ $value }}
       {{- end }}
       {{- end }}
+    {{- end }}
 
     {{- if .Values.clickhouse.configuration }}
     {{- with .Values.clickhouse.configuration.additional_configuration }}
