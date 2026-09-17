@@ -29,31 +29,42 @@ export const test = baseTest.extend<DatasetFixtures>({
   dataset: async ({ sdkClient, backendClient, project, testNamespace }, use, testInfo) => {
     const name = `${testNamespace}-ds`;
     const description = `seeded by ${testInfo.title}`;
-    const created = await sdkClient.python.createDataset({
-      project_name: project.name,
-      name,
-      description,
-      items: SEED_ITEMS as unknown as Array<Record<string, unknown>>,
-    });
-    const ref: DatasetRef = {
-      id: created.id,
-      name: created.name,
-      projectId: project.id,
-      projectName: project.name,
-      description,
-      items: SEED_ITEMS,
-    };
-    await testInfo.attach('opik.dataset', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
-    await use(ref);
-    /** Datasets don't cascade with project deletion — explicit delete required. */
-    if (!shouldLeaveArtifacts(testInfo)) {
-      try {
-        await backendClient.deleteDataset(created.id);
-      } catch (err) {
-        console.warn(`[dataset fixture] delete warning for ${name}:`, err);
+    // The id is registered the moment the dataset exists: a failure in the
+    // steps below must still tear it down, so it cannot wait for the ref.
+    let datasetId: string | null = null;
+    let ref: DatasetRef | null = null;
+    try {
+      const created = await sdkClient.python.createDataset({
+        project_name: project.name,
+        name,
+        description,
+        items: SEED_ITEMS as unknown as Array<Record<string, unknown>>,
+      });
+      datasetId = created.id;
+      ref = {
+        id: created.id,
+        name: created.name,
+        projectId: project.id,
+        projectName: project.name,
+        description,
+        items: SEED_ITEMS,
+      };
+      await testInfo.attach('opik.dataset', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
+      });
+      await use(ref);
+    } finally {
+      // A fully built fixture follows shouldLeaveArtifacts (keep failed-test
+      // resources for debugging); a partially built one is garbage that
+      // poisons later runs' empty-state assertions and is always removed.
+      if (datasetId !== null && (ref === null || !shouldLeaveArtifacts(testInfo))) {
+        /** Datasets don't cascade with project deletion — explicit delete required. */
+        try {
+          await backendClient.deleteDataset(datasetId);
+        } catch (err) {
+          console.warn(`[dataset fixture] delete warning for ${name}:`, err);
+        }
       }
     }
   },

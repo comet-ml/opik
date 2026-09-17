@@ -131,96 +131,110 @@ export const test = baseTest.extend<ProjectMetricSpansFixtures>({
     const now = Date.now();
     const hours: ProjectMetricHourSeed[] = [];
     const totalTokensByProvider: Record<string, number> = {};
+    // Every minted trace id lands here the moment the bridge reports it, so a
+    // failure partway through the seed loop still tears down the hours that
+    // succeeded — backdated traces left behind are counted by later runs
+    // against the same window.
+    const seededTraceIds: string[] = [];
+    let ref: ProjectMetricSpansRef | null = null;
 
-    for (const hour of HOUR_SEEDS) {
-      const created = await sdkClient.python.createNestedTrace({
-        project_name: project.name,
-        name: `${testNamespace}-h${hour.ageHours}`,
-        input: { question: `seeded metrics hour -${hour.ageHours}` },
-        output: { answer: `seeded metrics hour -${hour.ageHours}` },
-        age_days: hour.ageHours / 24,
-        spans: hour.spans.map((span, i) => ({
-          name: `${testNamespace}-h${hour.ageHours}-span-${i + 1}`,
-          type: 'llm' as const,
-          model: span.model,
-          provider: span.provider,
-          usage: {
-            prompt_tokens: span.promptTokens,
-            completion_tokens: span.completionTokens,
-            total_tokens: span.promptTokens + span.completionTokens,
-          },
-        })),
-      });
+    try {
+      for (const hour of HOUR_SEEDS) {
+        const created = await sdkClient.python.createNestedTrace({
+          project_name: project.name,
+          name: `${testNamespace}-h${hour.ageHours}`,
+          input: { question: `seeded metrics hour -${hour.ageHours}` },
+          output: { answer: `seeded metrics hour -${hour.ageHours}` },
+          age_days: hour.ageHours / 24,
+          spans: hour.spans.map((span, i) => ({
+            name: `${testNamespace}-h${hour.ageHours}-span-${i + 1}`,
+            type: 'llm' as const,
+            model: span.model,
+            provider: span.provider,
+            usage: {
+              prompt_tokens: span.promptTokens,
+              completion_tokens: span.completionTokens,
+              total_tokens: span.promptTokens + span.completionTokens,
+            },
+          })),
+        });
+        seededTraceIds.push(created.id);
 
-      if (created.span_count !== hour.spans.length) {
+        if (created.span_count !== hour.spans.length) {
+          throw new Error(
+            `[projectMetricSpans fixture] hour -${hour.ageHours}: expected ${hour.spans.length} spans, ` +
+              `bridge reported ${created.span_count}`,
+          );
+        }
+
+        for (const span of hour.spans) {
+          totalTokensByProvider[span.provider] =
+            (totalTokensByProvider[span.provider] ?? 0) +
+            span.promptTokens +
+            span.completionTokens;
+        }
+
+        hours.push({
+          ageHours: hour.ageHours,
+          // Read back off the id the bridge minted, not computed from `now`: the
+          // bridge anchors on its own clock at request time, and at hour
+          // granularity the gap between the two straddles a bucket boundary often
+          // enough to matter. This is the instant the backend itself buckets on.
+          bucketHour: utcHour(uuid7Moment(created.id)),
+          traceId: created.id,
+          spanCount: hour.spans.length,
+          promptTokens: hour.spans.reduce((acc, s) => acc + s.promptTokens, 0),
+          completionTokens: hour.spans.reduce((acc, s) => acc + s.completionTokens, 0),
+          totalTokens: hour.spans.reduce((acc, s) => acc + s.promptTokens + s.completionTokens, 0),
+        });
+      }
+
+      // Distinct hours are what the per-bucket assertions key on. Unlike the
+      // day-aged seed this replaced, these are read back off the minted ids, so a
+      // collision no longer needs a duplicated entry in the table — a stalled run
+      // between two seeds would do it. Checking it here keeps that from silently
+      // collapsing two hours into one expectation that then "passes".
+      const bucketHours = new Set(hours.map((h) => h.bucketHour));
+      if (bucketHours.size !== hours.length) {
         throw new Error(
-          `[projectMetricSpans fixture] hour -${hour.ageHours}: expected ${hour.spans.length} spans, ` +
-            `bridge reported ${created.span_count}`,
+          `[projectMetricSpans fixture] seeded hours share a UTC bucket: ${hours.map((h) => h.bucketHour).join(', ')}`,
         );
       }
 
-      for (const span of hour.spans) {
-        totalTokensByProvider[span.provider] =
-          (totalTokensByProvider[span.provider] ?? 0) +
-          span.promptTokens +
-          span.completionTokens;
-      }
+      ref = {
+        hours,
+        totals: {
+          spanCount: hours.reduce((acc, h) => acc + h.spanCount, 0),
+          promptTokens: hours.reduce((acc, h) => acc + h.promptTokens, 0),
+          completionTokens: hours.reduce((acc, h) => acc + h.completionTokens, 0),
+          totalTokens: hours.reduce((acc, h) => acc + h.totalTokens, 0),
+        },
+        totalTokensByProvider,
+        // Start of the UTC hour WINDOW_HOURS back, so the window opens on a bucket
+        // boundary and the six hours before the oldest seed are whole empty
+        // buckets rather than a partial one.
+        windowStart: new Date(`${utcHour(new Date(now - WINDOW_HOURS * HOUR_MS))}:00:00.000Z`),
+        emptyWindowEnd: new Date(`${utcHour(new Date(now - EMPTY_WINDOW_END_HOURS * HOUR_MS))}:00:00.000Z`),
+      };
 
-      hours.push({
-        ageHours: hour.ageHours,
-        // Read back off the id the bridge minted, not computed from `now`: the
-        // bridge anchors on its own clock at request time, and at hour
-        // granularity the gap between the two straddles a bucket boundary often
-        // enough to matter. This is the instant the backend itself buckets on.
-        bucketHour: utcHour(uuid7Moment(created.id)),
-        traceId: created.id,
-        spanCount: hour.spans.length,
-        promptTokens: hour.spans.reduce((acc, s) => acc + s.promptTokens, 0),
-        completionTokens: hour.spans.reduce((acc, s) => acc + s.completionTokens, 0),
-        totalTokens: hour.spans.reduce((acc, s) => acc + s.promptTokens + s.completionTokens, 0),
+      await testInfo.attach('opik.projectMetricSpans', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
       });
-    }
 
-    // Distinct hours are what the per-bucket assertions key on. Unlike the
-    // day-aged seed this replaced, these are read back off the minted ids, so a
-    // collision no longer needs a duplicated entry in the table — a stalled run
-    // between two seeds would do it. Checking it here keeps that from silently
-    // collapsing two hours into one expectation that then "passes".
-    const bucketHours = new Set(hours.map((h) => h.bucketHour));
-    if (bucketHours.size !== hours.length) {
-      throw new Error(
-        `[projectMetricSpans fixture] seeded hours share a UTC bucket: ${hours.map((h) => h.bucketHour).join(', ')}`,
-      );
-    }
-
-    const ref: ProjectMetricSpansRef = {
-      hours,
-      totals: {
-        spanCount: hours.reduce((acc, h) => acc + h.spanCount, 0),
-        promptTokens: hours.reduce((acc, h) => acc + h.promptTokens, 0),
-        completionTokens: hours.reduce((acc, h) => acc + h.completionTokens, 0),
-        totalTokens: hours.reduce((acc, h) => acc + h.totalTokens, 0),
-      },
-      totalTokensByProvider,
-      // Start of the UTC hour WINDOW_HOURS back, so the window opens on a bucket
-      // boundary and the six hours before the oldest seed are whole empty
-      // buckets rather than a partial one.
-      windowStart: new Date(`${utcHour(new Date(now - WINDOW_HOURS * HOUR_MS))}:00:00.000Z`),
-      emptyWindowEnd: new Date(`${utcHour(new Date(now - EMPTY_WINDOW_END_HOURS * HOUR_MS))}:00:00.000Z`),
-    };
-
-    await testInfo.attach('opik.projectMetricSpans', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
-
-    await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      try {
-        await backendClient.deleteTraces(hours.map((h) => h.traceId));
-      } catch (err) {
-        console.warn('[projectMetricSpans fixture] trace delete warning:', err);
+      await use(ref);
+    } finally {
+      // A fully built fixture follows shouldLeaveArtifacts (keep failed-test
+      // resources for debugging); a partially built one is garbage that poisons
+      // later windows and is always removed. Teardown deletes the traces rather
+      // than relying on the project delete: a project delete does not take its
+      // traces with it.
+      if (ref === null || !shouldLeaveArtifacts(testInfo)) {
+        try {
+          await backendClient.deleteTraces(seededTraceIds);
+        } catch (err) {
+          console.warn('[projectMetricSpans fixture] trace delete warning:', err);
+        }
       }
     }
   },

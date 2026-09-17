@@ -52,69 +52,78 @@ const SEED_ROWS: Array<{ label: string; group: string }> = [
 export const test = baseTest.extend<GroupedDatasetFixtures>({
   groupedDataset: async ({ sdkClient, backendClient, project, testNamespace }, use, testInfo) => {
     const name = `${testNamespace}-grouped-ds`;
+    // Registered the moment the dataset exists: any failure in the read-back
+    // and shape assertions below must still tear it down.
+    let datasetId: string | null = null;
+    let ref: GroupedDatasetRef | null = null;
+    try {
+      const created = await sdkClient.python.createDataset({
+        project_name: project.name,
+        name,
+        description: 'filter-scoped dataset item mutations',
+        items: SEED_ROWS.map((row) => ({
+          label: row.label,
+          [GROUP_COLUMN]: row.group,
+          input: `question for ${row.label}`,
+          expected_output: `answer for ${row.label}`,
+        })) as unknown as Array<Record<string, unknown>>,
+      });
+      datasetId = created.id;
 
-    const created = await sdkClient.python.createDataset({
-      project_name: project.name,
-      name,
-      description: 'filter-scoped dataset item mutations',
-      items: SEED_ROWS.map((row) => ({
-        label: row.label,
-        [GROUP_COLUMN]: row.group,
-        input: `question for ${row.label}`,
-        expected_output: `answer for ${row.label}`,
-      })) as unknown as Array<Record<string, unknown>>,
-    });
+      const storedItems = await backendClient.getDatasetItems(created.id);
+      if (storedItems.length !== SEED_ROWS.length) {
+        throw new Error(
+          `[groupedDataset fixture] expected ${SEED_ROWS.length} items, got ${storedItems.length}`,
+        );
+      }
 
-    const storedItems = await backendClient.getDatasetItems(created.id);
-    if (storedItems.length !== SEED_ROWS.length) {
-      throw new Error(
-        `[groupedDataset fixture] expected ${SEED_ROWS.length} items, got ${storedItems.length}`,
-      );
-    }
+      const idsForGroup = (predicate: (group: string) => boolean): string[] =>
+        storedItems
+          .filter((item) => {
+            const group = item.data[GROUP_COLUMN];
+            if (typeof group !== 'string') {
+              throw new Error(
+                `[groupedDataset fixture] item ${item.id} has no string "${GROUP_COLUMN}"`,
+              );
+            }
+            return predicate(group);
+          })
+          .map((item) => item.id);
 
-    const idsForGroup = (predicate: (group: string) => boolean): string[] =>
-      storedItems
-        .filter((item) => {
-          const group = item.data[GROUP_COLUMN];
-          if (typeof group !== 'string') {
-            throw new Error(
-              `[groupedDataset fixture] item ${item.id} has no string "${GROUP_COLUMN}"`,
-            );
-          }
-          return predicate(group);
-        })
-        .map((item) => item.id);
+      const targetItemIds = idsForGroup((group) => group === TARGET_GROUP);
+      const bystanderItemIds = idsForGroup((group) => group !== TARGET_GROUP);
+      const expectedTargets = SEED_ROWS.filter((row) => row.group === TARGET_GROUP).length;
+      if (targetItemIds.length !== expectedTargets) {
+        throw new Error(
+          `[groupedDataset fixture] expected ${expectedTargets} "${TARGET_GROUP}" items, got ${targetItemIds.length}`,
+        );
+      }
 
-    const targetItemIds = idsForGroup((group) => group === TARGET_GROUP);
-    const bystanderItemIds = idsForGroup((group) => group !== TARGET_GROUP);
-    const expectedTargets = SEED_ROWS.filter((row) => row.group === TARGET_GROUP).length;
-    if (targetItemIds.length !== expectedTargets) {
-      throw new Error(
-        `[groupedDataset fixture] expected ${expectedTargets} "${TARGET_GROUP}" items, got ${targetItemIds.length}`,
-      );
-    }
+      ref = {
+        id: created.id,
+        name: created.name,
+        projectId: project.id,
+        targetItemIds,
+        bystanderItemIds,
+        allItemIds: storedItems.map((item) => item.id),
+      };
 
-    const ref: GroupedDatasetRef = {
-      id: created.id,
-      name: created.name,
-      projectId: project.id,
-      targetItemIds,
-      bystanderItemIds,
-      allItemIds: storedItems.map((item) => item.id),
-    };
+      await testInfo.attach('opik.groupedDataset', {
+        body: JSON.stringify(ref, null, 2),
+        contentType: 'application/json',
+      });
 
-    await testInfo.attach('opik.groupedDataset', {
-      body: JSON.stringify(ref, null, 2),
-      contentType: 'application/json',
-    });
-
-    await use(ref);
-
-    if (!shouldLeaveArtifacts(testInfo)) {
-      try {
-        await backendClient.deleteDataset(created.id);
-      } catch (err) {
-        console.warn(`[groupedDataset fixture] delete warning for ${name}:`, err);
+      await use(ref);
+    } finally {
+      // A fully built fixture follows shouldLeaveArtifacts; a partially built
+      // one is garbage that poisons later runs and is always removed. The
+      // dataset delete takes its items with it.
+      if (datasetId !== null && (ref === null || !shouldLeaveArtifacts(testInfo))) {
+        try {
+          await backendClient.deleteDataset(datasetId);
+        } catch (err) {
+          console.warn(`[groupedDataset fixture] delete warning for ${name}:`, err);
+        }
       }
     }
   },
