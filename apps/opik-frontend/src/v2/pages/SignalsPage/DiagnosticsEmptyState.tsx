@@ -38,6 +38,15 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
   const reached = Math.min(traceCount, TRACE_THRESHOLD);
   const progress = (reached / TRACE_THRESHOLD) * 100;
 
+  const docsButton = (
+    <Button variant="outline" size="sm" asChild>
+      <a href={DIAGNOSTICS_DOCS_URL} target="_blank" rel="noopener noreferrer">
+        Read docs
+        <ArrowUpRight className="ml-1.5 size-3.5" />
+      </a>
+    </Button>
+  );
+
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-8 py-10">
       <div className="flex w-full max-w-[480px] flex-col items-center gap-6">
@@ -90,31 +99,21 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
               free.
             </p>
 
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href={DIAGNOSTICS_DOCS_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Read docs
-                <ArrowUpRight className="ml-1.5 size-3.5" />
-              </a>
-            </Button>
+            {docsButton}
           </>
+        ) : !canConfigure ? (
+          docsButton
+        ) : isOutOfCredits ? (
+          <OutOfCreditsButton
+            large
+            label="Add Ollie credits to run diagnostic"
+            description="You need Ollie credits to run diagnostic. Ollie credits are shared across AI features in Opik — a workspace admin can add more."
+          />
         ) : (
-          canConfigure &&
-          (isOutOfCredits ? (
-            <OutOfCreditsButton
-              large
-              label="Add Ollie credits to run diagnostic"
-              description="You need Ollie credits to run diagnostic. Ollie credits are shared across AI features in Opik — a workspace admin can add more."
-            />
-          ) : (
-            <Button onClick={onRun} disabled={isRunPending}>
-              <Play className="mr-2 size-4" />
-              Run your first diagnostic
-            </Button>
-          ))
+          <Button onClick={onRun} disabled={isRunPending}>
+            <Play className="mr-2 size-4" />
+            Run your first diagnostic
+          </Button>
         )}
       </div>
     </div>

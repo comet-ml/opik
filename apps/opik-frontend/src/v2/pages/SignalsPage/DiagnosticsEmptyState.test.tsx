@@ -90,10 +90,15 @@ describe("DiagnosticsEmptyState", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("shows no call to action without configure permission", () => {
+    it("offers the docs without configure permission, rather than nothing at all", () => {
       render(<DiagnosticsEmptyState {...props} canConfigure={false} />);
 
-      expect(screen.queryByRole("button")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /Read docs/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /Run your first diagnostic/ }),
+      ).not.toBeInTheDocument();
     });
   });
 });
