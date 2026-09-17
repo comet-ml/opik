@@ -226,15 +226,22 @@ def payload_size_MB(rest_record: Any) -> float:
     Serialising the record and measuring the result is several times cheaper than the
     structural estimate in ``sequence_splitter``, which walks the record twice in Python
     -- once to convert it, once to add up what the conversion would encode to. Here the
-    walk is the encoder's own, which is C where orjson is available and still one pass
-    where it is not. It matters because this runs on the producer thread, which is what
-    bounds a large upload.
+    walk is orjson's, in C. It matters because this runs on the producer thread, which is
+    what bounds a large upload.
+
+    Without orjson this stays on the estimator. The standard library is not
+    interchangeable for measuring: ``json.dumps`` escapes non-ASCII where httpx does not,
+    so it reads a multibyte record ~1.7x over its real size and would split batches that
+    would have fit.
 
     Nothing measured here reaches the wire: the bytes are counted and dropped, and the
     request body is built by the generated client as before. A record the encoder refuses
     outright falls back to the structural estimate, so nothing that could be sized before
     stops being sizeable.
     """
+    if not json_helpers.ACCELERATED:
+        return sequence_splitter.get_payload_size_MB(rest_record)
+
     try:
         encoded = json_helpers.dumps(rest_record, default=_json_shell, sort_keys=False)
     except Exception:

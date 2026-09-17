@@ -37,8 +37,14 @@ MODES = [
 
 @pytest.fixture
 def stdlib(monkeypatch):
-    """Force the standard-library branch. Runs everywhere."""
+    """Force the standard-library branch. Runs everywhere.
+
+    ``ACCELERATED`` is patched alongside the encoder because callers branch on the flag
+    rather than on the private module; patching only one simulates a platform that
+    cannot exist.
+    """
     monkeypatch.setattr(json_helpers, "_orjson", None)
+    monkeypatch.setattr(json_helpers, "ACCELERATED", False)
 
 
 @pytest.fixture
@@ -47,6 +53,7 @@ def accelerated(monkeypatch):
     if orjson is None:
         pytest.skip("orjson ships no wheel for this platform")
     monkeypatch.setattr(json_helpers, "_orjson", orjson)
+    monkeypatch.setattr(json_helpers, "ACCELERATED", True)
 
 
 def _rest_record(**kwargs: Any):
@@ -96,18 +103,39 @@ def test_payload_size_MB__accelerated__matches_the_structural_estimate(accelerat
     )
 
 
-def test_payload_size_MB__stdlib__never_under_estimates(stdlib):
-    """``json.dumps`` writes ``", "`` and ``": "`` where orjson writes ``,`` and ``:``.
+def test_payload_size_MB__stdlib__falls_back_to_the_estimator(stdlib):
+    """Without orjson this must not measure by encoding at all.
 
-    The extra byte per separator makes this estimate a few percent high, which closes a
-    batch marginally early -- the safe direction, and the reason the bound is one-sided.
-    Tightening it would mean compact separators in ``json_helpers``, which would change
-    the bytes the dataset path puts on the wire.
+    ``json.dumps`` escapes non-ASCII where httpx does not, so it reads a multibyte record
+    well over its wire size -- enough to split batches that would have fit. The estimator
+    counts the characters themselves and does not have that problem.
     """
     record = _full_record()
-    structural = sequence_splitter.get_payload_size_MB(record)
 
-    assert structural <= bulk_converters.payload_size_MB(record) < structural * 1.2
+    assert bulk_converters.payload_size_MB(
+        record
+    ) == sequence_splitter.get_payload_size_MB(record)
+
+
+def test_payload_size_MB__stdlib__multibyte_is_not_inflated(stdlib):
+    """The case that makes the fallback mandatory rather than merely tidy.
+
+    ``json.dumps`` renders a non-ASCII character as a six-byte ``\\uXXXX`` escape, so
+    measuring by encoding would report a record of emoji and accents far over its wire
+    size. Falling back keeps the estimate on the characters themselves.
+    """
+    record = _rest_record(
+        trace=bulk_item.ExperimentItemBulkTrace(
+            name="héllo 🙂 café",
+            input={"q": "où est la bibliothèque 📚"},
+            output={"a": "déjà vu 🎉 " * 20},
+            start_time=START_TIME,
+        )
+    )
+
+    assert bulk_converters.payload_size_MB(
+        record
+    ) == sequence_splitter.get_payload_size_MB(record)
 
 
 @pytest.mark.parametrize("mode", MODES)
