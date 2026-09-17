@@ -250,6 +250,29 @@ class AlertResourceTest {
 
             alertResourceClient.deleteAlertBatch(batchDelete, apiKey, workspaceName, HttpStatus.SC_FORBIDDEN);
         }
+
+        @Test
+        @DisplayName("Test webhook returns 403 when ALERT_UPDATE permission is denied")
+        void testWebhookReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ALERT_UPDATE.getValue());
+
+            var alert = Alert.builder()
+                    .name("Test Alert: " + UUID.randomUUID())
+                    .webhook(factory.manufacturePojo(Webhook.class).toBuilder()
+                            .createdBy(null)
+                            .createdAt(null)
+                            .secretToken(UUID.randomUUID().toString())
+                            .build())
+                    .build();
+
+            try (var response = alertResourceClient.testWebhookWithResponse(alert, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested
@@ -1293,6 +1316,7 @@ class AlertResourceTest {
 
         private WireMockServer externalWebhookServer;
         private static final String WEBHOOK_PATH = "/webhook";
+        private static final String WEBHOOK_RESPONSE_BODY = "Internal Server Error";
 
         @BeforeAll
         void setUpAll() {
@@ -1371,7 +1395,7 @@ class AlertResourceTest {
             externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
                     .willReturn(aResponse()
                             .withStatus(500)
-                            .withBody("Internal Server Error")));
+                            .withBody(WEBHOOK_RESPONSE_BODY)));
 
             // Create alert with webhook
             var alert = generateAlert();
@@ -1386,7 +1410,9 @@ class AlertResourceTest {
             var result = alertResourceClient.testWebhook(alert, mock.getLeft(), mock.getRight());
             assertThat(result.status()).isEqualTo(WebhookTestResult.Status.FAILURE);
             assertThat(result.statusCode()).isEqualTo(500);
-            assertThat(result.errorMessage()).isNotNull();
+            // asserted exactly, not just for the absence of the body: anything the destination
+            // returns is the destination's to know, and the caller chose the destination
+            assertThat(result.errorMessage()).isEqualTo("Webhook failed with status 500");
 
             assertWebhookTestResultRequest(alert, result.requestBody());
 

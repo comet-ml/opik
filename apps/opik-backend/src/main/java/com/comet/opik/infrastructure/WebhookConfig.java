@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.infrastructure.net.DestinationGuard;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -68,6 +69,14 @@ public class WebhookConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration connectionTimeout = Duration.seconds(5);
+
+    /**
+     * Defaults to {@code RELAXED} because self-hosted deployments legitimately point webhooks at
+     * internal services; cloud sets {@code STRICT}.
+     */
+    @Valid @JsonProperty
+    @Builder.Default
+    @NotNull private DestinationGuard.Mode destinationGuard = DestinationGuard.Mode.RELAXED;
 
     // Debouncing configuration
     @Valid @JsonProperty
