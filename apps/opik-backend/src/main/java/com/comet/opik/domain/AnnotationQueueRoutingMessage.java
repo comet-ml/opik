@@ -40,11 +40,16 @@ public record AnnotationQueueRoutingMessage(
         Map<UUID, Set<String>> scoreNamesByEntity) implements RedisSubscriberMessage {
 
     /**
-     * Normalises a null map to empty and copies both levels, so a message cannot be observed differently
-     * on two deliveries. Redelivery deserializes afresh and would not share state, but the publisher hands
-     * in a map built by {@code Collectors.toMap} - mutable, and reachable from the caller.
+     * Copies the entity ids, and normalises a null score-name map to empty and copies both of its levels,
+     * so a message cannot be observed differently on two deliveries. Redelivery deserializes afresh and
+     * would not share state, but the publisher hands in collections it built and its caller can still
+     * reach - a set from {@code Collectors.toSet} and a map from {@code Collectors.toMap}, both mutable.
      */
     public AnnotationQueueRoutingMessage {
+        // The publisher hands in the set the buffer grouped, which is reachable from its caller, so the
+        // same reasoning that copies the map below applies here. @NonNull already rejects a null.
+        entityIds = Set.copyOf(entityIds);
+
         // Null-tolerant at both levels. The publisher never produces nulls, but this record is also
         // rebuilt by the stream codec from JSON, where an absent nested value deserializes to null - and
         // Set.copyOf would throw, failing the message instead of the freshness check it feeds.
