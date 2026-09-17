@@ -219,13 +219,25 @@ class Experiment:
 
         Raises:
             opik.exceptions.ValidationError: If any item fails validation, if a
-                single item is too large to fit in one request, or if
-                ``num_threads`` is less than 1.
+                single item is too large to fit in one request, if
+                ``num_threads`` is less than 1, or if ``validate_before_upload``
+                is not a bool.
         """
         if num_threads < 1:
             raise exceptions.ValidationError(
                 prefix="batch_upload_items",
                 failure_reasons=[f"num_threads must be at least 1, got {num_threads}"],
+            )
+
+        # Read as a bare truth value, a non-bool picks a mode instead of being rejected
+        # -- "false" asks for the up-front pass it reads as a request to skip.
+        if not isinstance(validate_before_upload, bool):
+            raise exceptions.ValidationError(
+                prefix="batch_upload_items",
+                failure_reasons=[
+                    "validate_before_upload must be a bool, got "
+                    f"{type(validate_before_upload).__name__}"
+                ],
             )
 
         if not items:

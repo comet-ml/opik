@@ -457,6 +457,25 @@ class TestBulkUploadItemsConcurrency:
         assert "num_threads must be at least 1" in str(exc_info.value)
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
+    @pytest.mark.parametrize(
+        "flag", [pytest.param("false", id="str"), pytest.param(1, id="int")]
+    )
+    def test_batch_upload_items__non_bool_validate_before_upload__raises_validation_error(
+        self, flag: Any
+    ) -> None:
+        """A truthy non-bool would pick a mode rather than be rejected.
+
+        ``"false"`` is the case that costs something: it reads as a request to skip the
+        up-front pass and silently asks for it instead.
+        """
+        experiment, mock_rest_client = _create_experiment()
+
+        with pytest.raises(exceptions.ValidationError) as exc_info:
+            experiment.batch_upload_items([_record()], validate_before_upload=flag)
+
+        assert "validate_before_upload must be a bool" in str(exc_info.value)
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
     def test_batch_upload_items__batch_stuck_when_another_fails__returns_without_waiting(
         self,
     ) -> None:
