@@ -1,5 +1,16 @@
+import * as fs from 'node:fs/promises';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
+
+/**
+ * How long an export may take to reach the browser as a download. Generous
+ * because an unscoped export is one request per 100 rows before the file
+ * exists at all, and this budget is a failure message rather than a wait.
+ */
+const EXPORT_TIMEOUT_MS = 60_000;
+
+/** How long the grid may take to answer a newly-applied filter. */
+const FILTER_SETTLE_TIMEOUT_MS = 30_000;
 
 /**
  * The compare view lives at /experiments/{datasetId}/compare?experiments=[...]
@@ -213,6 +224,185 @@ export class CompareExperimentsPage {
       );
       return ids;
     });
+  }
+
+  /**
+   * Add one filter through the FiltersButton popover, and return the row total
+   * the grid received for it.
+   *
+   * Driven through the real popover rather than the `filters` query param —
+   * unlike `sorting`, the filter's wire shape is assembled by the control
+   * itself (column id, type and the operator it defaults to), so a spec that
+   * hand-wrote the param would be asserting its own guess at that shape rather
+   * than the one a user produces.
+   *
+   * Two things this has to get right, both of which cost an exploration pass:
+   *  - the popover COMMITS on click-outside and DISCARDS on Escape, so
+   *    dismissing it the obvious way leaves the view unfiltered — and a spec
+   *    that then exported would assert happily against 250 rows;
+   *  - the filter applies live as the value is typed, so the settle point is
+   *    the grid's own data response carrying the final value, not the popover
+   *    closing.
+   *
+   * The total comes from that response because the grid is virtualised: only
+   * the rows in view carry a `data-row-id`, so counting the DOM would report
+   * the viewport, not the result set.
+   */
+  async addGridFilter(column: string, value: string): Promise<number> {
+    return test.step(`filter the grid where "${column}" contains "${value}"`, async () => {
+      await this.filtersButton.click();
+
+      const columnSelect = this.page.locator(
+        'button[role="combobox"]:has([data-testid="filter-column"])',
+      );
+      await columnSelect.click();
+      await this.page.getByRole('option', { name: column, exact: true }).click();
+
+      // The grid's own row read, not one of the sibling column/statistics calls
+      // that carry the same `filters` param and answer without a `total` —
+      // hence pathname equality rather than a substring match.
+      const settled = this.page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.endsWith('/items/experiments/items') &&
+          decodeURIComponent(response.url()).includes(`"value":"${value}"`) &&
+          response.ok(),
+        { timeout: FILTER_SETTLE_TIMEOUT_MS },
+      );
+
+      await this.page.locator('input[placeholder="value"]').fill(value);
+      // Commit by clicking outside. The page heading is inert and always present.
+      await this.compareHeading.click();
+
+      const body: unknown = await (await settled).json();
+      const total = (body as { total?: unknown }).total;
+      if (typeof total !== 'number') {
+        throw new Error(
+          'CompareExperimentsPage.addGridFilter: the filtered read answered without a total — ' +
+            'cannot tell a narrowed result set from an unfiltered one.',
+        );
+      }
+      await this.page
+        .locator('tbody tr[data-row-id], tbody tr[data-testid="no-data-row"]')
+        .first()
+        .waitFor({ state: 'visible' });
+      return total;
+    });
+  }
+
+  /**
+   * How many rows the grid currently has in the DOM.
+   *
+   * The table is virtualised, so this is the viewport rather than the result
+   * set — only assert on it when the view has been narrowed to fewer rows than
+   * a screen holds.
+   */
+  async expectRenderedRowCount(expected: number): Promise<void> {
+    await test.step(`the grid renders ${expected} row(s)`, async () => {
+      await expect(this.itemRows, 'rendered comparison rows').toHaveCount(expected);
+    });
+  }
+
+  /** Tick the select checkbox on each named row, addressed by dataset-item id. */
+  async selectRows(datasetItemIds: string[]): Promise<void> {
+    await test.step(`select ${datasetItemIds.length} row(s)`, async () => {
+      for (const id of datasetItemIds) {
+        const checkbox = this.rowCheckbox(id);
+        await expect(checkbox, `select checkbox for row ${id}`).toHaveCount(1);
+        await checkbox.click();
+        await expect(checkbox, `row ${id} after ticking`).toBeChecked();
+      }
+    });
+  }
+
+  /** Untick the select checkbox on each named row. */
+  async deselectRows(datasetItemIds: string[]): Promise<void> {
+    await test.step(`deselect ${datasetItemIds.length} row(s)`, async () => {
+      for (const id of datasetItemIds) {
+        const checkbox = this.rowCheckbox(id);
+        await expect(checkbox, `select checkbox for row ${id}`).toHaveCount(1);
+        await checkbox.click();
+        await expect(checkbox, `row ${id} after unticking`).not.toBeChecked();
+      }
+    });
+  }
+
+  async expectExportEnabled(): Promise<void> {
+    await test.step('the export control is offered', async () => {
+      await expect(this.exportButton, 'export button').toHaveCount(1);
+      await expect(this.exportButton, 'export button').toBeEnabled();
+    });
+  }
+
+  /**
+   * Export the current view as JSON and return the parsed file.
+   *
+   * The file, not the page: the export is built in the tab and handed to the
+   * browser as a download, so the only way to tell "the file holds every row"
+   * from "the file holds the page on screen" is to read the bytes on disk.
+   *
+   * With nothing selected the export reads the whole result set page by page,
+   * so the click can outlive the default action budget on a large comparison.
+   */
+  async exportAsJson(): Promise<Record<string, unknown>[]> {
+    return test.step('export the view as JSON and read the downloaded file', async () => {
+      await this.exportButton.click();
+      const menuItem = this.page.getByRole('menuitem', { name: 'Export as JSON' });
+      await expect(menuItem, 'Export as JSON menu item').toBeEnabled();
+
+      const [download] = await Promise.all([
+        this.page.waitForEvent('download', { timeout: EXPORT_TIMEOUT_MS }),
+        menuItem.click(),
+      ]);
+
+      const path = await download.path();
+      const parsed: unknown = JSON.parse(await fs.readFile(path, 'utf-8'));
+      if (!Array.isArray(parsed)) {
+        throw new Error(
+          `CompareExperimentsPage.exportAsJson: expected an array, got ${typeof parsed}`,
+        );
+      }
+      return parsed as Record<string, unknown>[];
+    });
+  }
+
+  /** The rendered text of one dataset column's cell — what the user actually sees. */
+  async readDatasetCellText(datasetItemId: string, field: string): Promise<string> {
+    return test.step(`read the on-screen "${field}" cell for item ${datasetItemId}`, async () => {
+      // TanStack derives a column id from the accessor key by replacing dots,
+      // so the `data.detail` column is addressed as `data_detail` here while
+      // `sorting` and `filters` still take `data.detail` (see sortByColumn).
+      const cell = this.page.locator(
+        `td[data-cell-id="${datasetItemId}_data_${field}"]`,
+      );
+      await expect(cell, `"${field}" cell for item ${datasetItemId}`).toHaveCount(1);
+      return ((await cell.textContent()) ?? '').trim();
+    });
+  }
+
+  /**
+   * The export trigger, addressed by its Download icon.
+   *
+   * No `data-testid` and no accessible name: the control is an icon-only button
+   * whose only label is a hover tooltip, which contributes nothing to the
+   * accessibility tree. A `data-testid` belongs on `ExportToButton` — it is not
+   * added here because these specs are verified against a pre-built deployment
+   * of the PR under test, where a front-end attribute added alongside them
+   * would not exist. The count assertion in `expectExportEnabled` keeps the
+   * match honest if a second download control ever joins the panel.
+   */
+  private get exportButton(): Locator {
+    return this.page.locator('button:has(svg.lucide-download)');
+  }
+
+  /** The FiltersButton trigger — icon-only, labelled only by a hover tooltip. */
+  private get filtersButton(): Locator {
+    return this.page.locator('button:has(svg.lucide-filter)');
+  }
+
+  private rowCheckbox(datasetItemId: string): Locator {
+    return this.page
+      .locator(`tbody tr[data-row-id="${datasetItemId}"]`)
+      .getByRole('checkbox', { name: 'Select row' });
   }
 
   private get compareHeading(): Locator {

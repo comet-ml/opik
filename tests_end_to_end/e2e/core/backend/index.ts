@@ -27,6 +27,7 @@ export {
   type SpanCostRef,
   type SpanRef,
   type SpanBatchSeed,
+  type TraceBatchSeed,
   type SpanIdPage,
   type KpiCardStat,
   type TraceDetail,

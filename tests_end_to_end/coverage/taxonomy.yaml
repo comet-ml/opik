@@ -633,7 +633,7 @@ areas:
       insights-tab:            { covered: false }
       configuration-tab:       { covered: false }
       logs-tab:                { covered: true,  tier: t1-smoke, note: "experiment traces inline; replaced the Go to logs tag" }
-      export-comparison:       { covered: false }
+      export-comparison:       { covered: true,  tier: t2-cuj, note: "browser export off the compare Results tab, asserted on the downloaded file: unscoped export covers every page untruncated, filter/search/sort scope and order it, a row selection narrows it. The over-the-cap disabled state is NOT covered — the cap constant is not stable across builds" }
       delete-experiment:       { covered: true,  tier: t2-cuj }
 
     visual:

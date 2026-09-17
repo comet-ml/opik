@@ -255,6 +255,24 @@ export interface SpanBatchSeed {
 }
 
 /**
+ * One trace of a `POST /v1/private/traces/batch` write.
+ *
+ * `input`/`output` are the JSON sections the compare grid renders per
+ * experiment, and the ones the server truncates for display — so a seed that
+ * wants an untruncated value asserted has to put it here (or on the dataset
+ * item) rather than relying on the trace name.
+ */
+export interface TraceBatchSeed {
+  /** Caller-minted so the seed knows the exact id set it wrote. Must be a UUIDv7. */
+  id: string;
+  name: string;
+  input?: TraceJsonSection;
+  output?: TraceJsonSection;
+  startTime?: Date;
+  endTime?: Date;
+}
+
+/**
  * One page of the spans listing, kept as ids plus the envelope.
  *
  * `total` and `size` are part of the answer, not decoration: a paging spec that
@@ -1729,6 +1747,55 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
       });
       return (page.content ?? []).map((item) => String(item.id));
+    },
+
+    /**
+     * One page of the same read, with the envelope kept — the exact request the
+     * comparison grid issues, and the one the browser export pages through.
+     *
+     * `total` is part of the answer rather than a convenience: a seed that has
+     * only half landed still returns a well-formed page, so a fixture that
+     * waited on `ids.length` alone would open the browser against a partially
+     * ingested comparison and assert on a row count that was never the seed's.
+     * `filters`/`search`/`sorting` travel verbatim, so a caller can confirm a
+     * scoped result set server-side before asking the UI to export it, and
+     * `rows` carries each item's `data` so a caller can see what `truncate`
+     * did to it — the difference between the grid's read and the export's.
+     */
+    async compareItemsPage(args: {
+      datasetId: string;
+      experimentIds: string[];
+      page?: number;
+      size?: number;
+      search?: string;
+      filters?: BackendFilter[];
+      sorting?: BackendSort[];
+      truncate?: boolean;
+    }): Promise<{ total: number; ids: string[]; rows: DatasetItemRef[] }> {
+      const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
+        experimentIds: JSON.stringify(args.experimentIds),
+        page: args.page ?? 1,
+        size: args.size ?? 100,
+        truncate: args.truncate ?? true,
+        ...(args.search ? { search: args.search } : {}),
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
+      });
+      if (typeof page.total !== 'number') {
+        throw new Error(
+          `compareItemsPage: dataset ${args.datasetId} answered without a total — ` +
+            'cannot tell a fully ingested comparison from a partial one.',
+        );
+      }
+      const content = page.content ?? [];
+      return {
+        total: page.total,
+        ids: content.map((item) => String(item.id)),
+        rows: content.map((item) => ({
+          id: String(item.id),
+          data: (item.data ?? {}) as Record<string, unknown>,
+        })),
+      };
     },
 
     /**
@@ -3338,6 +3405,50 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.metadata ? { metadata: args.metadata } : {}),
       });
       return args.id;
+    },
+
+    /**
+     * `POST /v1/private/traces/batch` — many traces in one request.
+     *
+     * The trace equivalent of `createSpansBatch`, and for the same reason: a
+     * comparison big enough to page is hundreds of traces, and writing them one
+     * at a time through `createTraceWithSource` is both slow and the quickest
+     * route to the workspace ingestion rate limit — which surfaces as a seed
+     * that half landed, the worst possible input to a spec whose subject is
+     * "the export covers every page".
+     *
+     * `source` is fixed at `sdk`: these are experiment evaluation traces, which
+     * is what the SDK's own `evaluate()` writes, and the compare grid reads
+     * them through the experiment item rather than through a source filter.
+     */
+    async createTracesBatch(args: {
+      projectName: string;
+      traces: TraceBatchSeed[];
+    }): Promise<void> {
+      // The endpoint's own cap. Chunking here would hide from the caller that
+      // the seed is no longer one atomic write.
+      if (args.traces.length < 1 || args.traces.length > 1000) {
+        throw new Error(
+          `createTracesBatch: the endpoint accepts 1..1000 traces, got ${args.traces.length}`,
+        );
+      }
+      const now = new Date();
+      await postSeedWrite(
+        '/v1/private/traces/batch',
+        `createTracesBatch of ${args.traces.length} into '${args.projectName}'`,
+        {
+          traces: args.traces.map((trace) => ({
+            id: trace.id,
+            project_name: args.projectName,
+            name: trace.name,
+            start_time: (trace.startTime ?? now).toISOString(),
+            end_time: (trace.endTime ?? now).toISOString(),
+            ...(trace.input === undefined ? {} : { input: trace.input }),
+            ...(trace.output === undefined ? {} : { output: trace.output }),
+          })),
+        },
+        204,
+      );
     },
 
     /**
