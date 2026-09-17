@@ -22,6 +22,7 @@ on:
           # - mistral  # disabled: Mistral API rejects the test traffic with 429
           - groq
           - cerebras
+          - ollama
           - aisuite
           - haystack
           # - guardrails  # disabled: guardrails-ai is on PyPI quarantine
@@ -153,6 +154,12 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["cerebras", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-cerebras-tests.yml
+    secrets: inherit
+
+  ollama_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["ollama", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-ollama-tests.yml
     secrets: inherit
 
   aisuite_tests:
