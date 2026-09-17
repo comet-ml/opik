@@ -285,18 +285,30 @@ def test_sync_hashes__recomputes_locally_rather_than_trusting_the_backend():
 
     A digest read back from the backend would have been produced by whichever encoder
     that uploader had. Recomputing here is what keeps the comparison meaningful.
+
+    So this drives the sync itself -- a backend already holding one item, the local
+    cache marked stale -- and asserts what a caller can see: the copy of the stored
+    item never leaves, the new one does. The stored item comes back with the
+    backend's own id and its keys in another order, so a cache keyed on anything but
+    recomputed content would miss the duplicate and upload it.
     """
+    stored = {"input": {"key": "value"}, "expected_output": {"key": "out"}}
+    backend_item = dataset_item.DatasetItem(
+        id="backend-assigned-id",
+        expected_output={"key": "out"},
+        input={"key": "value"},
+    )
+
     capture = UploadCapture()
     dataset = make_dataset(Dataset, Mock(), capture)
+    dataset.__internal_api__stream_items_as_dataclasses__ = lambda *_, **__: iter(
+        [backend_item]
+    )
+    dataset.__internal_api__hashes_synced__ = False
 
-    item = {"input": {"key": "value"}, "expected_output": {"key": "out"}}
-    dataset.insert([item])
+    fresh = {"input": {"key": "other"}, "expected_output": {"key": "out"}}
+    dataset.insert([stored, fresh])
 
-    digests = {
-        dataset_item.DatasetItem(**item).content_hash()
-        for item in ({"input": {"key": "value"}, "expected_output": {"key": "out"}},)
-    }
-
-    assert digests <= dataset._hashes, (
-        "The digest the client computes for this content must be the one dedup holds"
+    assert [item["data"]["input"] for item in capture.items] == [{"key": "other"}], (
+        "The item the backend already holds must be recognised from its content alone"
     )
