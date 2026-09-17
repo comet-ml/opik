@@ -88,6 +88,13 @@ const calculateProjectMetricsTitle = (
   return baseTitle;
 };
 
+export const isCostMetricType = (
+  metricName: METRIC_NAME_TYPE | undefined,
+): boolean =>
+  metricName === METRIC_NAME_TYPE.COST ||
+  metricName === METRIC_NAME_TYPE.THREAD_COST ||
+  metricName === METRIC_NAME_TYPE.SPAN_COST;
+
 export const widgetHelpers = {
   getDefaultConfig: () => ({
     chartType: CHART_TYPE.line,
