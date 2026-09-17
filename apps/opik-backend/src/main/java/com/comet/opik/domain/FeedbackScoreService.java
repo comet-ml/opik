@@ -5,6 +5,7 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ScoreDestination;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.api.events.FeedbackScoresDeleted;
@@ -158,7 +159,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             String userName = ctx.get(RequestContext.USER_NAME);
             Set<UUID> entityIds = scores.stream().map(FeedbackScoreBatchItem::id).collect(Collectors.toSet());
 
-            Set<String> scoreNames = scores.stream().map(FeedbackScoreItem::name).collect(Collectors.toSet());
+            Set<String> scoreNames = feedbackScoreNames(scores);
 
             return processScoreBatch(EntityType.TRACE, scores)
                     .doOnSuccess(__ -> {
@@ -194,6 +195,20 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .map(projectMap -> mergeProjectsAndScores(projectMap, scoresPerProject))
                 .flatMap(projects -> saveScoreBatch(entityType, projects)) // score all scores
                 .then();
+    }
+
+    /**
+     * Names of the scores that will be visible in {@code feedback_scores}, for the routing freshness check.
+     *
+     * <p>Assertion-destined items are excluded: they are written to {@code assertion_results} instead, so a
+     * consumer told to expect one would re-read for a score that is never going to appear there, and give
+     * up only after exhausting its retries.
+     */
+    private Set<String> feedbackScoreNames(List<? extends FeedbackScoreItem> scores) {
+        return scores.stream()
+                .filter(score -> score.scoreDestination() == ScoreDestination.FEEDBACK_SCORES)
+                .map(FeedbackScoreItem::name)
+                .collect(Collectors.toSet());
     }
 
     private <T extends FeedbackScoreItem> Mono<Long> saveScoreBatch(
@@ -508,10 +523,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                     .map(FeedbackScoreItem::id)
                     .collect(Collectors.toSet());
 
-            Set<String> scoreNames = projectDto.scores()
-                    .stream()
-                    .map(FeedbackScoreItem::name)
-                    .collect(Collectors.toSet());
+            Set<String> scoreNames = feedbackScoreNames(projectDto.scores());
 
             eventBus.post(new FeedbackScoresCreated(threadModelIds, EntityType.THREAD,
                     ctx.get(RequestContext.WORKSPACE_ID), ctx.get(RequestContext.USER_NAME),
