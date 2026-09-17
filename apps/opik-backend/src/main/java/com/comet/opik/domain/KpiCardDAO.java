@@ -362,6 +362,17 @@ class KpiCardDAOImpl implements KpiCardDAO {
             SETTINGS log_comment = '<log_comment>';
             """;
 
+    /**
+     * Current-vs-previous period is decided by {@code min(traces.start_time)}, not by the UUIDv7 timestamp inside
+     * {@code trace_threads.id}. That id records when the thread row was first written and falls back to
+     * {@code now()} when no first-trace timestamp reaches
+     * {@link com.comet.opik.domain.threads.TraceThreadIdService}, so a backfilled project files every thread into
+     * whichever period it was ingested in — counts, average duration and cost alike (OPIK-8335).
+     * <p>
+     * {@code trace_threads_final} is deliberately unbounded in time: {@code traces_final} already restricts the
+     * query to the doubled window, and the join to it is what scopes the threads. Re-adding an id filter here
+     * drops threads whose row was written outside the window, which is the bug.
+     */
     private static final String GET_THREAD_KPI_CARDS = """
             WITH traces_final AS (
                 SELECT
@@ -390,8 +401,6 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id >= :uuid_from_time
-                AND id \\<= :uuid_to_time
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -461,6 +470,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
+                    t.start_time as start_time,
                     t.duration as duration,
                     if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id
                 FROM (
@@ -524,14 +534,23 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 JOIN traces_final tr ON s.trace_id = tr.id
                 GROUP BY tr.thread_id
             )
+            , thread_periods AS (
+                SELECT
+                    tf.*,
+                    tf.start_time >= UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC')
+                        AND tf.start_time \\<= UUIDv7ToDateTime(toUUID(:id_end), 'UTC') AS is_current,
+                    tf.start_time >= UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')
+                        AND tf.start_time \\< UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC') AS is_previous
+                FROM threads_filtered tf
+            )
             SELECT
-                COUNTIf(tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_count,
-                COUNTIf(tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_count,
-                AVGIf(tf.duration, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_avg_duration,
-                AVGIf(tf.duration, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_avg_duration,
-                SUMIf(tc.cost, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_total_cost,
-                SUMIf(tc.cost, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_total_cost
-            FROM threads_filtered tf
+                COUNTIf(tf.is_current) AS current_count,
+                COUNTIf(tf.is_previous) AS previous_count,
+                AVGIf(tf.duration, tf.is_current) AS current_avg_duration,
+                AVGIf(tf.duration, tf.is_previous) AS previous_avg_duration,
+                SUMIf(tc.cost, tf.is_current) AS current_total_cost,
+                SUMIf(tc.cost, tf.is_previous) AS previous_total_cost
+            FROM thread_periods tf
             LEFT JOIN thread_costs tc ON tf.id = tc.thread_id
             SETTINGS log_comment = '<log_comment>';
             """;
