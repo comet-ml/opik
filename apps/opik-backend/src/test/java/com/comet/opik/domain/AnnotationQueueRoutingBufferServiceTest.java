@@ -238,6 +238,23 @@ class AnnotationQueueRoutingBufferServiceTest {
         }
 
         @Test
+        void publishesEntitiesWhoseAuthorWasLost() {
+            // The member and its author are separate Redis writes, so a process dying between them leaves
+            // the member with no author. It must still publish: the publisher rejects a null user name, and
+            // a group that cannot publish stays pending and retries forever.
+            UUID traceId = ID_GENERATOR.generateId();
+            givenDue(List.of(member(traceId)));
+            givenAuthors(Map.of());
+            when(publisher.enqueue(anyString(), anyString(), any(), any(), any())).thenReturn(Mono.empty());
+
+            assertThat(service.flush().block()).isEqualTo(1L);
+
+            ArgumentCaptor<String> author = ArgumentCaptor.forClass(String.class);
+            verify(publisher).enqueue(anyString(), author.capture(), any(), any(), any());
+            assertThat(author.getValue()).isEmpty();
+        }
+
+        @Test
         void carriesEachEntitysScoreNamesThroughToTheMessage() {
             UUID traceId = ID_GENERATOR.generateId();
             givenDue(List.of(member(traceId)));

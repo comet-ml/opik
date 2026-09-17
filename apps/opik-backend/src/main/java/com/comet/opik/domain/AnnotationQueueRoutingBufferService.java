@@ -82,6 +82,14 @@ public class AnnotationQueueRoutingBufferService {
     private static final String MEMBER_SEPARATOR = ":";
 
     /**
+     * Stands in for an author the buffer no longer has. The member and the author are separate Redis
+     * structures written one after the other, so a process dying between them leaves a member with no
+     * author, and the publisher will not accept a null. Empty is how the rest of the feature spells an
+     * unknown principal - the same value the queue item's created_by falls back to.
+     */
+    private static final String UNKNOWN_AUTHOR = "";
+
+    /**
      * How long a pending entity's score-name set outlives its last write. Generous on purpose: it is a
      * backstop against leaked keys, not a functional deadline, and expiring one that is still pending
      * would quietly cost the freshness check its input.
@@ -347,7 +355,7 @@ public class AnnotationQueueRoutingBufferService {
                     .workspaceId(parts[0])
                     .scope(AnnotationQueue.AnnotationScope.fromString(parts[1]))
                     .entityId(UUID.fromString(parts[2]))
-                    .userName(userName)
+                    .userName(userName == null ? UNKNOWN_AUTHOR : userName)
                     .scoreNames(scoreNames)
                     .build();
         } catch (IllegalArgumentException exception) {
