@@ -81,12 +81,14 @@ abstract class AbstractClickHouseTopologyHealthCheck extends AbstractClickHouseH
     private final Map<String, Object> queryParams;
 
     /**
-     * @param table      the read-facing table the flag describes, e.g. {@code traces}
-     * @param localTable the shard table mutations are routed at while the flag is on, e.g. {@code traces_local}
-     * @param entity     singular, lower-case noun for a row of {@code table} ({@code trace}, {@code span}), read into
-     *                   the messages an operator sees on {@code /health-check}
-     * @param flag       fully qualified configuration key being asserted, named in every message so the operator knows
-     *                   which of the two sides to change
+     * @param table           the read-facing table the flag describes, e.g. {@code traces}
+     * @param localTable      the shard table mutations are routed at while the flag is on, e.g. {@code traces_local}
+     * @param entity          singular, lower-case noun for a row of {@code table} ({@code trace}, {@code span}), read
+     *                        into the messages. Those messages carry the remediation, and they reach an operator on the
+     *                        admin connector's {@code /healthcheck} — the readiness {@code /health-check} serves the
+     *                        verdict only (name, healthy, critical, type)
+     * @param flag            fully qualified configuration key being asserted, named in every message so the operator
+     *                        knows which of the two sides to change
      */
     protected AbstractClickHouseTopologyHealthCheck(@NonNull Client clickHouseClient,
             @NonNull Duration healthCheckTimeout, String name, @NonNull String table, @NonNull String localTable,
@@ -185,9 +187,9 @@ abstract class AbstractClickHouseTopologyHealthCheck extends AbstractClickHouseH
     private String notWrappedMessage(String tableEngine) {
         return """
                 %s=true routes %s mutations at '%s', but '%s' is a %s, not Distributed: the Distributed wrap has not \
-                been applied (or has been rolled back). Apply it (exchange_and_wrap.sh --wrap-only) or set the flag \
-                back to false — otherwise %s deletes either fail with UNKNOWN_TABLE (60) when '%s' is absent, or \
-                silently delete from a stale '%s' while the live rows in '%s' are left untouched.\
+                been applied (or has been rolled back). Apply it or set the flag back to false — otherwise %s deletes \
+                either fail with UNKNOWN_TABLE (60) when '%s' is absent, or silently delete from a stale '%s' while \
+                the live rows in '%s' are left untouched.\
                 """.formatted(flag, entity, localTable, table, tableEngine, entity, localTable, localTable, table);
     }
 

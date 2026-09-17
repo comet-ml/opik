@@ -35,10 +35,11 @@ import static org.mockito.Mockito.when;
  * {@link ClickHouseTracesTopologyHealthCheckTest}.
  *
  * <p>The mismatch cases are the point of the check, so each asserts the actual message rather than merely that the
- * probe went unhealthy: the message is the only thing an operator sees on {@code /health-check}, and it has to name
- * the flag, the observed engine and the fix. Every expectation is spelled out here rather than derived from the
- * probe's own constants — the two probes share one implementation, so this file and its traces counterpart are what
- * hold the shared wording to what each side needs.
+ * probe went unhealthy: the message is all an operator gets — the readiness {@code /health-check} serves the verdict
+ * alone, so the flag, the observed engine and the fix reach them only through the message, on the admin connector's
+ * {@code /healthcheck}. Every expectation is spelled out here rather than derived from the probe's own constants —
+ * the two probes share one implementation, so this file and its traces counterpart are what hold the shared wording
+ * to what each side needs.
  *
  * <p>The query text is shared too, with the table names bound as parameters, so the stub matches on those parameters:
  * a probe binding the wrong pair finds no stub and fails here. {@link ClickHouseSpansTopologyReadinessTest} covers the
@@ -106,10 +107,10 @@ class ClickHouseSpansTopologyHealthCheckTest {
 
         assertUnhealthy(actualResult, """
                 %s=true routes span mutations at 'spans_local', but 'spans' is a ReplicatedMergeTree, not \
-                Distributed: the Distributed wrap has not been applied (or has been rolled back). Apply it \
-                (exchange_and_wrap.sh --wrap-only) or set the flag back to false — otherwise span deletes either \
-                fail with UNKNOWN_TABLE (60) when 'spans_local' is absent, or silently delete from a stale \
-                'spans_local' while the live rows in 'spans' are left untouched.\
+                Distributed: the Distributed wrap has not been applied (or has been rolled back). Apply it or set the \
+                flag back to false — otherwise span deletes either fail with UNKNOWN_TABLE (60) when 'spans_local' is \
+                absent, or silently delete from a stale 'spans_local' while the live rows in 'spans' are left \
+                untouched.\
                 """.formatted(FLAG));
     }
 
