@@ -387,8 +387,8 @@ class Experiment:
         which is the property streaming alone cannot offer.
 
         Converted records are measured and dropped rather than kept. Retaining them is
-        the second full list this streaming path exists to avoid -- 119,903 of them cost
-        ~376 MiB -- so the conversion is paid again while sending, where it overlaps the
+        the second full list this streaming path exists to avoid, and it grows with the
+        upload, so the conversion is paid again while sending, where it overlaps the
         requests instead of delaying the first one.
         """
         bulk_converters.validate_records(items, project_name=project_name)
@@ -451,15 +451,15 @@ class Experiment:
         that has no oversized item -- which is the only input either path accepts.
 
         ``items`` must not be mutated while this runs. Records are converted here a
-        second time rather than carried over from the sizing pass, because carrying
-        119,903 of them costs ~376 MiB and avoiding that is the point of this path --
-        so a size measured there describes the record as it was then. Nothing is copied
-        on the way through, and this is a generator driven by the sending loop, so a
-        mutation applied from another thread mid-upload lands in the record that gets
-        sent while the size stays behind. Sizing here instead would close that, and
-        costs 43-59% more producer CPU depending on payload size -- conversion is flat
-        per record, sizing scales with bytes, so the heavier the upload the worse the
-        trade. That CPU is what this path exists to remove.
+        second time rather than carried over from the sizing pass, because retaining
+        them is the memory this path exists not to spend -- so a size measured there
+        describes the record as it was then. Nothing is copied on the way through, and
+        this is a generator driven by the sending loop, so a mutation applied from
+        another thread mid-upload lands in the record that gets sent while the size
+        stays behind. Sizing here instead would close that, at a cost that rises with
+        payload size: conversion is flat per record while sizing scales with bytes, so
+        the heavier the upload the worse the trade, and that CPU is what this path
+        exists to remove.
         """
         max_size_MB = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
         max_length = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE
