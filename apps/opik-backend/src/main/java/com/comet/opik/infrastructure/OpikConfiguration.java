@@ -89,7 +89,7 @@ public class OpikConfiguration extends JobConfiguration {
     private OnlineScoringConfig onlineScoring = new OnlineScoringConfig();
 
     @Valid @NotNull @JsonProperty
-    private DatasetExportConfig datasetExport = new DatasetExportConfig();
+    private ExportConfig exportJobs = new ExportConfig();
 
     @Valid @NotNull @JsonProperty
     private AgentInsightsReportConfig agentInsightsReport = new AgentInsightsReportConfig();

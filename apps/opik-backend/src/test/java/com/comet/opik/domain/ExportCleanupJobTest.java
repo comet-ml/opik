@@ -1,9 +1,10 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DatasetExportJob;
-import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.api.DatasetExportParams;
+import com.comet.opik.api.ExportJob;
+import com.comet.opik.api.ExportStatus;
 import com.comet.opik.domain.attachment.FileService;
-import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.infrastructure.ExportConfig;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,10 +31,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class DatasetExportCleanupJobTest {
+class ExportCleanupJobTest {
 
     @Mock
-    private DatasetExportJobService exportJobService;
+    private ExportJobService exportJobService;
 
     @Mock
     private FileService fileService;
@@ -42,13 +43,13 @@ class DatasetExportCleanupJobTest {
     private LockService lockService;
 
     @Mock
-    private DatasetExportConfig exportConfig;
+    private ExportConfig exportConfig;
 
-    private DatasetExportCleanupJob cleanupJob;
+    private ExportCleanupJob cleanupJob;
 
     @BeforeEach
     void setUp() {
-        cleanupJob = new DatasetExportCleanupJob(exportJobService, fileService, lockService, exportConfig);
+        cleanupJob = new ExportCleanupJob(exportJobService, fileService, lockService, exportConfig);
 
         // Mock configuration
         lenient().when(exportConfig.getCleanupTimeout()).thenReturn(Duration.minutes(5));
@@ -74,10 +75,10 @@ class DatasetExportCleanupJobTest {
         String filePath1 = "exports/workspace1/datasets/dataset1/job1.csv";
         String filePath2 = "exports/workspace1/datasets/dataset2/job2.csv";
 
-        DatasetExportJob expiredJob1 = DatasetExportJob.builder()
+        ExportJob expiredJob1 = ExportJob.builder()
                 .id(jobId1)
-                .datasetId(UUID.randomUUID())
-                .status(DatasetExportStatus.COMPLETED)
+                .params(DatasetExportParams.builder().datasetId(UUID.randomUUID()).build())
+                .status(ExportStatus.COMPLETED)
                 .filePath(filePath1)
                 .createdAt(Instant.now().minus(java.time.Duration.ofDays(2)))
                 .lastUpdatedAt(Instant.now().minus(java.time.Duration.ofDays(2)))
@@ -85,10 +86,10 @@ class DatasetExportCleanupJobTest {
                 .createdBy("user1")
                 .build();
 
-        DatasetExportJob expiredJob2 = DatasetExportJob.builder()
+        ExportJob expiredJob2 = ExportJob.builder()
                 .id(jobId2)
-                .datasetId(UUID.randomUUID())
-                .status(DatasetExportStatus.COMPLETED)
+                .params(DatasetExportParams.builder().datasetId(UUID.randomUUID()).build())
+                .status(ExportStatus.COMPLETED)
                 .filePath(filePath2)
                 .createdAt(Instant.now().minus(java.time.Duration.ofDays(1)))
                 .lastUpdatedAt(Instant.now().minus(java.time.Duration.ofDays(1)))
@@ -125,10 +126,10 @@ class DatasetExportCleanupJobTest {
         // Given
         UUID jobId = UUID.randomUUID();
 
-        DatasetExportJob expiredJob = DatasetExportJob.builder()
+        ExportJob expiredJob = ExportJob.builder()
                 .id(jobId)
-                .datasetId(UUID.randomUUID())
-                .status(DatasetExportStatus.FAILED)
+                .params(DatasetExportParams.builder().datasetId(UUID.randomUUID()).build())
+                .status(ExportStatus.FAILED)
                 .filePath(null) // No file path
                 .createdAt(Instant.now().minus(java.time.Duration.ofDays(1)))
                 .lastUpdatedAt(Instant.now().minus(java.time.Duration.ofDays(1)))
@@ -172,10 +173,10 @@ class DatasetExportCleanupJobTest {
         UUID jobId2 = UUID.randomUUID();
         String validFilePath = "exports/workspace1/datasets/dataset1/job1.csv";
 
-        DatasetExportJob jobWithValidPath = DatasetExportJob.builder()
+        ExportJob jobWithValidPath = ExportJob.builder()
                 .id(jobId1)
-                .datasetId(UUID.randomUUID())
-                .status(DatasetExportStatus.COMPLETED)
+                .params(DatasetExportParams.builder().datasetId(UUID.randomUUID()).build())
+                .status(ExportStatus.COMPLETED)
                 .filePath(validFilePath)
                 .createdAt(Instant.now().minus(java.time.Duration.ofDays(1)))
                 .lastUpdatedAt(Instant.now().minus(java.time.Duration.ofDays(1)))
@@ -183,10 +184,10 @@ class DatasetExportCleanupJobTest {
                 .createdBy("user1")
                 .build();
 
-        DatasetExportJob jobWithBlankPath = DatasetExportJob.builder()
+        ExportJob jobWithBlankPath = ExportJob.builder()
                 .id(jobId2)
-                .datasetId(UUID.randomUUID())
-                .status(DatasetExportStatus.COMPLETED)
+                .params(DatasetExportParams.builder().datasetId(UUID.randomUUID()).build())
+                .status(ExportStatus.COMPLETED)
                 .filePath("   ") // Blank path
                 .createdAt(Instant.now().minus(java.time.Duration.ofDays(1)))
                 .lastUpdatedAt(Instant.now().minus(java.time.Duration.ofDays(1)))
@@ -223,10 +224,10 @@ class DatasetExportCleanupJobTest {
         String filePath1 = "exports/workspace1/datasets/dataset1/failed-job1.csv";
 
         // Failed job with partial file (failure after upload started)
-        DatasetExportJob viewedFailedJob1 = DatasetExportJob.builder()
+        ExportJob viewedFailedJob1 = ExportJob.builder()
                 .id(failedJobId1)
-                .datasetId(UUID.randomUUID())
-                .status(DatasetExportStatus.FAILED)
+                .params(DatasetExportParams.builder().datasetId(UUID.randomUUID()).build())
+                .status(ExportStatus.FAILED)
                 .filePath(filePath1)
                 .errorMessage("Export failed due to error")
                 .viewedAt(Instant.now().minus(java.time.Duration.ofHours(2)))
@@ -236,10 +237,10 @@ class DatasetExportCleanupJobTest {
                 .build();
 
         // Failed job without file (failure before upload)
-        DatasetExportJob viewedFailedJob2 = DatasetExportJob.builder()
+        ExportJob viewedFailedJob2 = ExportJob.builder()
                 .id(failedJobId2)
-                .datasetId(UUID.randomUUID())
-                .status(DatasetExportStatus.FAILED)
+                .params(DatasetExportParams.builder().datasetId(UUID.randomUUID()).build())
+                .status(ExportStatus.FAILED)
                 .errorMessage("Another export failure")
                 .viewedAt(Instant.now().minus(java.time.Duration.ofMinutes(30)))
                 .createdAt(Instant.now().minus(java.time.Duration.ofHours(12)))

@@ -77,7 +77,7 @@ class StreamConsumerReaperJobTest {
             "experiment_item_processing_stream", // ExperimentItemProcessingSubscriber
             "experiment_denormalization_stream", // ExperimentAggregatesSubscriber
             "trace_thread_closing_stream", // ClosingTraceThreadSubscriber
-            "dataset-export-test", // DatasetExportJobSubscriber
+            "dataset-export-test", // ExportJobSubscriber
     };
 
     private StreamConsumerReaperJob reaperJob;

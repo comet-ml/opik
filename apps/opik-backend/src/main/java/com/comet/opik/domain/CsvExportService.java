@@ -1,9 +1,10 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.DatasetExportJob;
-import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.api.ExportJob;
+import com.comet.opik.api.ExportParams;
+import com.comet.opik.api.ExportStatus;
 import com.comet.opik.domain.attachment.FileService;
-import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.infrastructure.ExportConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.redis.RedisStreamUtils;
@@ -12,6 +13,8 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RStreamReactive;
@@ -24,8 +27,8 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.UUID;
 
-@ImplementedBy(CsvDatasetExportServiceImpl.class)
-public interface CsvDatasetExportService {
+@ImplementedBy(CsvExportServiceImpl.class)
+public interface CsvExportService {
 
     /**
      * Starts a new CSV export job for the specified dataset.
@@ -36,7 +39,7 @@ public interface CsvDatasetExportService {
      * @return Mono emitting the created or existing export job
      * @throws IllegalStateException if dataset export feature is disabled
      */
-    Mono<DatasetExportJob> startExport(UUID datasetId);
+    Mono<ExportJob> startExport(ExportParams params, String resourceName);
 
     /**
      * Retrieves an export job by its ID.
@@ -45,7 +48,7 @@ public interface CsvDatasetExportService {
      * @return Mono emitting the export job
      * @throws NotFoundException if job doesn't exist or doesn't belong to the current workspace
      */
-    Mono<DatasetExportJob> getJob(UUID jobId);
+    Mono<ExportJob> getJob(UUID jobId);
 
     /**
      * Marks a job as viewed by setting the viewed_at timestamp.
@@ -63,7 +66,7 @@ public interface CsvDatasetExportService {
      *
      * @return Mono emitting list of all export jobs for the workspace
      */
-    Mono<List<DatasetExportJob>> findAllJobs();
+    Mono<List<ExportJob>> findAllJobs();
 
     /**
      * Downloads the exported CSV file for a completed job.
@@ -79,21 +82,21 @@ public interface CsvDatasetExportService {
 
 @Slf4j
 @Singleton
-class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
+class CsvExportServiceImpl implements CsvExportService {
 
-    public static final String LOCK_KEY_PATTERN = "dataset-export:lock:%s:%s";
+    public static final String LOCK_KEY_PATTERN = "export:lock:%s:%s:%s:%s";
 
-    private final DatasetExportJobService jobService;
+    private final ExportJobService jobService;
     private final RedissonReactiveClient redisClient;
-    private final DatasetExportConfig exportConfig;
+    private final ExportConfig exportConfig;
     private final LockService lockService;
     private final FileService fileService;
 
     @Inject
-    public CsvDatasetExportServiceImpl(
-            @NonNull DatasetExportJobService jobService,
+    public CsvExportServiceImpl(
+            @NonNull ExportJobService jobService,
             @NonNull RedissonReactiveClient redisClient,
-            @NonNull @Config("datasetExport") DatasetExportConfig exportConfig,
+            @NonNull @Config("exportJobs") ExportConfig exportConfig,
             @NonNull LockService lockService,
             @NonNull FileService fileService) {
         this.jobService = jobService;
@@ -104,70 +107,82 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
     }
 
     @Override
-    public Mono<DatasetExportJob> startExport(@NonNull UUID datasetId) {
-        if (!exportConfig.isEnabled()) {
-            log.warn("CSV dataset export is disabled; skipping export for dataset: '{}'", datasetId);
-            return Mono.error(new IllegalStateException("Dataset export is disabled"));
+    public Mono<ExportJob> startExport(@NonNull ExportParams params, String resourceName) {
+        if (!exportConfig.isEnabledFor(params.exportType())) {
+            log.warn("CSV export is disabled for type '{}'; skipping", params.exportType());
+            // A disabled surface is a deployment choice, not a server fault: report it as such rather than a 500.
+            return Mono.error(new ServerErrorException(
+                    "Export is not enabled for type '%s' on this installation".formatted(params.exportType()),
+                    Response.Status.NOT_IMPLEMENTED));
         }
 
-        log.info("Starting CSV export for dataset: '{}'", datasetId);
+        log.info("Starting CSV '{}' export", params.exportType());
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
             // Check for existing in-progress jobs first (without lock)
-            return jobService.findInProgressJobs(datasetId)
-                    .flatMap(existingJobs -> {
-                        if (!existingJobs.isEmpty()) {
-                            DatasetExportJob existingJob = existingJobs.getFirst();
-                            log.info("Found existing in-progress export job: '{}'", existingJob.id());
-                            return Mono.just(existingJob);
-                        }
-
+            return findMatchingInProgressJob(params)
+                    .flatMap(existingJob -> {
+                        log.info("Found existing in-progress export job: '{}'", existingJob.id());
+                        return Mono.just(existingJob);
+                    })
+                    .switchIfEmpty(Mono.defer(() -> {
                         // No existing job, acquire lock and create new one
-                        String lockKey = formatLockKey(workspaceId, datasetId);
-                        return executeWithLock(lockKey, workspaceId, datasetId);
-                    });
+                        String lockKey = formatLockKey(workspaceId, userName, params);
+                        return executeWithLock(lockKey, workspaceId, params, resourceName);
+                    }));
         });
     }
 
-    private Mono<DatasetExportJob> executeWithLock(String lockKey, String workspaceId, UUID datasetId) {
-        Mono<DatasetExportJob> action = Mono.defer(() -> jobService.findInProgressJobs(datasetId)
-                .flatMap(existingJobs -> {
-                    // Double-check after acquiring lock
-                    if (!existingJobs.isEmpty()) {
-                        DatasetExportJob existingJob = existingJobs.getFirst();
-                        log.info("Found existing in-progress export job after lock: '{}'", existingJob.id());
-                        return Mono.just(existingJob);
-                    }
+    /**
+     * An in-progress job is reusable only when it covers exactly the same rows, which the params hash already
+     * encodes: two comparisons of different experiments on one dataset hash differently and so never share a file.
+     */
+    private Mono<ExportJob> findMatchingInProgressJob(ExportParams params) {
+        return jobService.findInProgressJobs(params)
+                .flatMap(existingJobs -> existingJobs.stream()
+                        .findFirst()
+                        .map(Mono::just)
+                        .orElseGet(Mono::empty));
+    }
 
-                    // Create new export job and publish to Redis stream
-                    // TTL is taken from config (defaultTtl)
-                    return jobService.createJob(datasetId, exportConfig.getDefaultTtl().toJavaDuration())
-                            .flatMap(job -> publishToRedisStream(job, workspaceId)
-                                    .thenReturn(job));
-                }));
+    private Mono<ExportJob> executeWithLock(String lockKey, String workspaceId, ExportParams params,
+            String resourceName) {
+        Mono<ExportJob> action = Mono
+                .defer(() -> findMatchingInProgressJob(params)
+                        .flatMap(existingJob -> {
+                            // Double-check after acquiring lock
+                            log.info("Found existing in-progress export job after lock: '{}'", existingJob.id());
+                            return Mono.just(existingJob);
+                        })
+                        .switchIfEmpty(Mono.defer(() ->
+                        // Create new export job and publish to Redis stream
+                        // TTL is taken from config (defaultTtl)
+                        jobService.createJob(params, resourceName, exportConfig.getDefaultTtl().toJavaDuration())
+                                .flatMap(job -> publishToRedisStream(job, workspaceId)
+                                        .thenReturn(job)))));
 
         return lockService.executeWithLock(new LockService.Lock(lockKey), action);
     }
 
-    private Mono<Void> publishToRedisStream(DatasetExportJob job, String workspaceId) {
+    private Mono<Void> publishToRedisStream(ExportJob job, String workspaceId) {
         return Mono.deferContextual(ctx -> {
             log.info("Publishing export job to Redis stream: '{}'", job.id());
 
-            DatasetExportMessage message = DatasetExportMessage.builder()
+            ExportMessage message = ExportMessage.builder()
                     .jobId(job.id())
-                    .datasetId(job.datasetId())
                     .workspaceId(workspaceId)
                     .workspaceName(ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null))
                     .build();
 
-            RStreamReactive<String, DatasetExportMessage> stream = redisClient.getStream(
+            RStreamReactive<String, ExportMessage> stream = redisClient.getStream(
                     exportConfig.getStreamName(),
                     exportConfig.getCodec());
 
             return stream.add(RedisStreamUtils.buildAddArgs(
-                    DatasetExportConfig.PAYLOAD_FIELD, message, exportConfig))
+                    ExportConfig.PAYLOAD_FIELD, message, exportConfig))
                     .doOnNext(messageId -> log.info(
                             "Export job published to Redis stream: jobId='{}', messageId='{}'",
                             job.id(), messageId))
@@ -178,12 +193,16 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
         });
     }
 
-    private static String formatLockKey(String workspaceId, UUID datasetId) {
-        return LOCK_KEY_PATTERN.formatted(workspaceId, datasetId);
+    /**
+     * Keyed by caller as well as params: jobs are owned by whoever started them, so two users asking for the same
+     * rows each get their own job and must not serialise behind one another's lock.
+     */
+    private static String formatLockKey(String workspaceId, String userName, ExportParams params) {
+        return LOCK_KEY_PATTERN.formatted(workspaceId, userName, params.exportType(), params.canonicalHash());
     }
 
     @Override
-    public Mono<DatasetExportJob> getJob(@NonNull UUID jobId) {
+    public Mono<ExportJob> getJob(@NonNull UUID jobId) {
         return jobService.getJob(jobId);
     }
 
@@ -193,7 +212,7 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
     }
 
     @Override
-    public Mono<List<DatasetExportJob>> findAllJobs() {
+    public Mono<List<ExportJob>> findAllJobs() {
         return jobService.findAllJobs();
     }
 
@@ -202,7 +221,7 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
         return jobService.getJob(jobId)
                 .flatMap(job -> {
 
-                    if (job.status() == DatasetExportStatus.FAILED) {
+                    if (job.status() == ExportStatus.FAILED) {
                         return Mono
                                 .error(new BadRequestException(
                                         "Export job '%s' failed: %s"
@@ -211,7 +230,7 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
                                                         : "Unknown error")));
                     }
 
-                    if (job.status() != DatasetExportStatus.COMPLETED) {
+                    if (job.status() != ExportStatus.COMPLETED) {
                         return Mono
                                 .error(new BadRequestException(
                                         "Export job '%s' is not ready for download (status: %s)"
