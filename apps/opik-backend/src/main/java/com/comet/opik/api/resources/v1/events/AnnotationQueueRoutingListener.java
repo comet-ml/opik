@@ -68,7 +68,10 @@ public class AnnotationQueueRoutingListener {
         }
 
         // The project-scoped guard when the event names a project; the workspace one otherwise, which the
-        // batch score path needs because a batch may span several projects.
+        // batch score path needs because a batch may span several projects. The workspace variant is not
+        // the scan its name suggests: automation_rules_workspace_action_enabled_idx covers
+        // (workspace_id, action, enabled), so it seeks on an equality prefix and reads the id it needs off
+        // the index. Both flavours are a lookup, not a walk.
         Mono.fromCallable(() -> event.projectId() != null
                 ? automationService.hasEnabledAutomation(event.workspaceId(), event.projectId(), scope)
                 : automationService.hasEnabledAutomation(event.workspaceId(), scope))
