@@ -2593,6 +2593,15 @@ public class SpanDAO {
      * The returned value is the driver's update count summed over those statements, which is {@code 0}: unlike the
      * retention sweeps this statement does not set {@code lightweight_deletes_sync}, so ClickHouse reports nothing for
      * the asynchronous mutation. It is <b>not</b> a count of deleted rows, and no caller reads it.
+     * <p>
+     * <b>A statement failing part-way leaves the partitions already deleted deleted</b>, and no {@code SpansDeleted}
+     * follows — the single-statement form's outcome for a total failure, at finer granularity. Nothing compensates,
+     * and nothing can: ClickHouse has no transaction spanning these mutations, and {@code IN PARTITION} names one
+     * partition per statement, which is why there are several. What a failure here cannot do is cost the cutover its
+     * record, since {@code SpanService.captureDeletions} writes every id to the deletion-events bridge before the
+     * first statement runs. Leaving rows behind is a property of the trace-delete cascade as a whole rather than of
+     * this method — its steps chain with {@code then}, so any one of them failing strands the rest — so a durable
+     * retry belongs with that cascade, not here.
      */
     @WithSpan
     public Mono<Long> deleteByIds(Set<UUID> spanIds, @NonNull UUID projectId) {
