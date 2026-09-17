@@ -319,6 +319,33 @@ def test_payload_size_MB__integer_beyond_orjson_range__sized_by_the_fallback(
 
 
 @pytest.mark.parametrize("mode", MODES)
+def test_payload_size_MB__defect_below_the_encode__propagates(
+    mode, request, monkeypatch
+):
+    """A bug of ours must not arrive dressed as an unmeasurable record.
+
+    The guard covers the encode, because that runs the caller's ``__str__``. Sizing the
+    encoded result runs no caller code, so anything raising there is the SDK's own
+    defect -- and absorbing it would report the caller's data as the problem while the
+    real cause disappeared.
+    """
+    request.getfixturevalue(mode)
+
+    def broken(_encoded):
+        raise AttributeError("sizing is broken")
+
+    monkeypatch.setattr(sequence_splitter, "get_encoded_payload_size_MB", broken)
+    record = _rest_record(evaluate_task_result={"a": "b"})
+
+    # Forces the estimator rather than the encoder-measured path, which does not
+    # reach the estimate at all for a record orjson can encode.
+    monkeypatch.setattr(json_helpers, "ACCELERATED", False)
+
+    with pytest.raises(AttributeError, match="sizing is broken"):
+        bulk_converters.payload_size_MB(record)
+
+
+@pytest.mark.parametrize("mode", MODES)
 def test_payload_size_MB__value_whose_str_raises__reports_the_cause(
     mode, request, caplog, monkeypatch
 ):

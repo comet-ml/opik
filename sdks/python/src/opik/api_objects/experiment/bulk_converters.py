@@ -262,20 +262,23 @@ def _estimated_size_MB(rest_record: Any) -> float:
     an object whose ``__str__`` raises escapes it -- and the estimator runs that same
     encoder, so it is not a refuge from a value the encoder refused.
 
-    Caught broadly because what raises here is the caller's own ``__str__``, which may
-    raise anything, a custom class included -- there is no set of types to name, and
-    naming a few would let the rest crash an upload that this can instead reject
-    cleanly. The breadth is affordable only because nothing is swallowed: the type
-    reaches the caller on the exception, the traceback reaches the log.
+    The ``try`` holds one call, and it is the only one here that runs code belonging to
+    whoever called us. Its breadth is a property of that call rather than of this
+    handler: ``__str__`` may raise anything, a custom exception class included, so
+    there is no set of types to name. Sizing the encoded result is below it on purpose
+    -- nothing there executes caller code, so a failure there is our defect and
+    propagates instead of being reported as an unmeasurable record.
     """
     try:
-        return sequence_splitter.get_payload_size_MB(rest_record)
+        encoded_for_json = jsonable_encoder.encode(rest_record)
     except Exception as error:
         LOGGER.warning(
             "Could not size an experiment item; the upload will reject it.",
             exc_info=True,
         )
         raise UnsizeableRecordError(error) from error
+
+    return sequence_splitter.get_encoded_payload_size_MB(encoded_for_json)
 
 
 def payload_size_MB(rest_record: Any) -> float:
