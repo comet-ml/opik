@@ -63,7 +63,10 @@ public class AnnotationQueueRoutingPublisher {
 
             return stream
                     .add(RedisStreamUtils.buildAddArgs(AnnotationQueueRoutingConfig.PAYLOAD_FIELD, message, config))
-                    .doOnError(throwable -> log.error(
+                    // DEBUG, not ERROR: the buffer logs this failure at ERROR with the group's size and
+                    // the fact that its members stay pending, so raising it here too only duplicates the
+                    // stack trace with less context around it.
+                    .doOnError(throwable -> log.debug(
                             "Failed to publish annotation queue routing message, workspace '{}'",
                             workspaceId, throwable))
                     .then();

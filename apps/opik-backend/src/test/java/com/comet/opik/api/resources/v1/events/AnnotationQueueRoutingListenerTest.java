@@ -24,7 +24,6 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.after;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -111,10 +110,11 @@ class AnnotationQueueRoutingListenerTest {
             when(automationService.hasEnabledAutomation(WORKSPACE_ID, projectId,
                     AnnotationQueue.AnnotationScope.THREAD)).thenReturn(true);
 
-            listener.onFeedbackScoresCreated(event(EntityType.THREAD, projectId, Set.of(threadId), Set.of()));
+            listener.onFeedbackScoresCreated(
+                    event(EntityType.THREAD, projectId, Set.of(threadId), Set.of("moderation")));
 
-            verify(bufferService, timeout(2_000)).record(eq(WORKSPACE_ID), eq(USER_NAME),
-                    eq(AnnotationQueue.AnnotationScope.THREAD), any(), any());
+            verify(bufferService, timeout(2_000)).record(WORKSPACE_ID, USER_NAME,
+                    AnnotationQueue.AnnotationScope.THREAD, Set.of(threadId), Set.of("moderation"));
         }
     }
 
