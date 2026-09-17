@@ -197,7 +197,7 @@ const MorphDialog: React.FunctionComponent<MorphDialogProps> = ({
       morph(previous.rect, previous.radius);
       crossFade();
     }
-  });
+  }, [mode, panelWidth, modalWidth, reducedMotion, morph, crossFade]);
 
   useEffect(() => {
     if (frozenFrame === null) {

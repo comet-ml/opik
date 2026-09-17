@@ -35,11 +35,12 @@ const DatasetPickerSection: React.FunctionComponent<
     icon: EntityIcon,
     noSelectionExplainerId,
     emptyStateDescription,
+    supportsFieldMapping,
   } = ADD_TO_DATASET_TYPE_CONFIG[datasetType];
 
   const {
     selectedDataset,
-    setSelectedDataset,
+    handleDatasetCreated,
     handleDatasetSelect,
     datasetOptions,
     isPending,
@@ -67,8 +68,11 @@ const DatasetPickerSection: React.FunctionComponent<
   );
 
   const renderAlert = () => {
+    const missingInputHint = supportsFieldMapping
+      ? " Turn on advanced mapping to pick the fields to use instead."
+      : "";
     const text = noValidRows
-      ? `There are no rows that can be added as ${entityName} items. The input field is missing.`
+      ? `There are no rows that can be added as ${entityName} items. The input field is missing.${missingInputHint}`
       : `Only rows with input fields will be added as ${entityName} items.`;
 
     if (noValidRows || partialValid) {
@@ -113,7 +117,7 @@ const DatasetPickerSection: React.FunctionComponent<
           )}
           searchPlaceholder={`Search ${entityName}s`}
           isLoading={isPending}
-          disabled={noValidRows}
+          disabled={noValidRows && !supportsFieldMapping}
           buttonClassName="w-full"
           optionsCount={DATASETS_PAGE_SIZE}
           emptyState={emptyDropdownState}
@@ -138,7 +142,7 @@ const DatasetPickerSection: React.FunctionComponent<
       {renderCreateDialog({
         open: openCreateDialog,
         setOpen: setOpenCreateDialog,
-        onDatasetCreated: setSelectedDataset,
+        onDatasetCreated: handleDatasetCreated,
       })}
     </>
   );

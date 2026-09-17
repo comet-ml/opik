@@ -91,7 +91,20 @@ vi.mock("@/ui/use-toast", () => ({
 vi.mock(
   "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog",
   () => ({
-    default: () => <div data-testid="add-edit-test-suite-dialog" />,
+    default: ({
+      onDatasetCreated,
+    }: {
+      onDatasetCreated: (dataset: { id: string; name: string }) => void;
+    }) => (
+      <button
+        data-testid="add-edit-test-suite-dialog"
+        onClick={() =>
+          onDatasetCreated({ id: "suite-new", name: "Brand New Suite" })
+        }
+      >
+        create suite
+      </button>
+    ),
   }),
 );
 
@@ -341,6 +354,27 @@ describe("AddToTestSuiteDialog", () => {
       );
     });
   });
+  it("should drop assertions from the previous suite when a new one is created", async () => {
+    render(<AddToTestSuiteDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Suite 1");
+
+    fireEvent.click(screen.getByRole("button", { name: /Add assertion/i }));
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "The answer is polite" },
+    });
+
+    fireEvent.click(screen.getByTestId("add-edit-test-suite-dialog"));
+    fireEvent.click(screen.getByRole("button", { name: "Add to test suite" }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalled();
+    });
+    expect(mockAddTracesToDataset.mock.calls[0][0]).not.toHaveProperty(
+      "evaluators",
+    );
+  });
+
   it("should never send field mappings for a test suite", async () => {
     render(<AddToTestSuiteDialog {...baseProps} />, { wrapper });
 

@@ -25,5 +25,5 @@ public record CreateDatasetItemsFromTracesRequest(
         @NotNull(message = "enrichment_options must not be null") @Schema(description = "Options for enriching trace data", requiredMode = Schema.RequiredMode.REQUIRED) TraceEnrichmentOptions enrichmentOptions,
         @Schema(description = "Optional evaluators to apply to the created items") List<@Valid EvaluatorItem> evaluators,
         @Schema(description = "Optional execution policy for the created items") @Valid ExecutionPolicy executionPolicy,
-        @Schema(description = "Optional mapping of dataset item field name to a path into the trace, e.g. 'input.input_text'. Takes precedence over the fields produced by enrichment_options.") @SupportedFieldMappingPaths @Size(max = 100, message = "field_mappings cannot exceed 100 entries") Map<String, String> fieldMappings) {
+        @Schema(description = "Optional mapping of dataset item field name to a path into the trace, e.g. 'input.input_text'. Takes precedence over the fields produced by enrichment_options. Ignored for test suite datasets.") @SupportedFieldMappingPaths @Size(max = 100, message = "field_mappings cannot exceed 100 entries") Map<String, String> fieldMappings) {
 }

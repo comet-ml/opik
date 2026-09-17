@@ -72,7 +72,7 @@ vi.mock("@/api/datasets/useAddSpansToDatasetMutation", () => ({
   }),
 }));
 
-const mockDatasetColumns = vi.fn(() => ({
+const POPULATED_DATASET = {
   columns: [
     { name: "input" },
     { name: "expected_output" },
@@ -81,7 +81,11 @@ const mockDatasetColumns = vi.fn(() => ({
     { name: "tone" },
   ],
   total: 412,
-}));
+};
+
+const EMPTY_DATASET = { columns: [], total: 0 };
+
+const mockDatasetColumns = vi.fn(() => POPULATED_DATASET);
 
 vi.mock("@/api/datasets/useDatasetItemsList", () => ({
   default: () => ({ data: mockDatasetColumns() }),
@@ -137,6 +141,7 @@ describe("AddToDatasetDialog", () => {
       },
     });
     vi.clearAllMocks();
+    mockDatasetColumns.mockReturnValue(POPULATED_DATASET);
   });
 
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -164,6 +169,12 @@ describe("AddToDatasetDialog", () => {
     feedback_scores: [],
     comments: [],
     project_id: "project-1",
+  };
+
+  const traceWithoutInput = {
+    ...mockTrace,
+    id: "trace-no-input",
+    input: undefined as unknown as object,
   };
 
   const mockSpan: Span = {
@@ -357,7 +368,7 @@ describe("AddToDatasetDialog", () => {
 
     expect(
       screen.getByText(
-        "There are no rows that can be added as dataset items. The input field is missing.",
+        "There are no rows that can be added as dataset items. The input field is missing. Turn on advanced mapping to pick the fields to use instead.",
       ),
     ).toBeInTheDocument();
   });
@@ -380,7 +391,7 @@ describe("AddToDatasetDialog", () => {
     ).toBeInTheDocument();
   });
 
-  it("should disable dropdown when no valid rows", () => {
+  it("should keep the dropdown open when no valid rows, so advanced mapping stays reachable", () => {
     const propsWithInvalidRows = {
       ...baseProps,
       selectedRows: [{ ...mockTrace, input: undefined as unknown as object }],
@@ -391,7 +402,7 @@ describe("AddToDatasetDialog", () => {
     const trigger = screen.getByRole("button", {
       name: /Select a dataset/i,
     });
-    expect(trigger).toBeDisabled();
+    expect(trigger).toBeEnabled();
   });
 
   it("should call addTracesToDataset mutation when clicking on dataset with only traces", async () => {
@@ -537,6 +548,32 @@ describe("AddToDatasetDialog", () => {
     openAddFieldExplorer();
     navigateToPath(stepsDown);
   };
+
+  it("should reach advanced mapping when no row carries an input", async () => {
+    render(
+      <AddToDatasetDialog {...baseProps} selectedRows={[traceWithoutInput]} />,
+      { wrapper },
+    );
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+
+    openRowExplorer("input");
+    fireEvent.keyDown(document, { key: "ArrowDown" });
+    fireEvent.keyDown(document, { key: "Enter" });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          traceIds: ["trace-no-input"],
+          fieldMappings: expect.objectContaining({ expected_output: "output" }),
+        }),
+        expect.any(Object),
+      );
+    });
+  });
 
   it("should not send field mappings while advanced mapping is off", async () => {
     render(<AddToDatasetDialog {...baseProps} />, { wrapper });
@@ -809,9 +846,9 @@ describe("AddToDatasetDialog", () => {
     openDropdownAndSelect("Test Dataset 1");
     await enableAdvancedMapping();
 
-    expect(
-      screen.getByText("Adding 8 fields · 6 fields are empty for some traces"),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/^Adding 8 fields/)).toHaveTextContent(
+      /fields are empty for some traces$/,
+    );
   });
 
   it("should offer the dataset's existing columns as chips", async () => {
@@ -877,12 +914,12 @@ describe("AddToDatasetDialog", () => {
   });
 
   it("should not warn when the dataset has no items yet", async () => {
-    mockDatasetColumns.mockReturnValueOnce({ columns: [], total: 0 });
+    mockDatasetColumns.mockReturnValue(EMPTY_DATASET);
     render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
     await enableAdvancedMapping();
-    addFieldFromExplorer(2);
+    addFieldFromExplorer(1);
 
     expect(
       screen.queryByText(
@@ -916,5 +953,46 @@ describe("AddToDatasetDialog", () => {
     expect(
       screen.getByRole("button", { name: /^Add \d+ items$/ }),
     ).toBeEnabled();
+  });
+
+  it("keeps rows without an input field out of basic mode", () => {
+    render(
+      <AddToDatasetDialog {...baseProps} selectedRows={[traceWithoutInput]} />,
+      { wrapper },
+    );
+
+    expect(
+      screen.getByText(/There are no rows that can be added/),
+    ).toBeInTheDocument();
+  });
+
+  it("stops filtering on the input field once advanced mapping is on", async () => {
+    render(
+      <AddToDatasetDialog
+        {...baseProps}
+        selectedRows={[mockTrace, traceWithoutInput]}
+      />,
+      { wrapper },
+    );
+
+    openDropdownAndSelect("Test Dataset 1");
+    expect(screen.getByText(/Only rows with input fields/)).toBeInTheDocument();
+
+    await enableAdvancedMapping();
+
+    expect(
+      screen.queryByText(/Only rows with input fields/),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+
+    await waitFor(() => {
+      expect(mockAddTracesToDataset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          traceIds: ["trace-1", "trace-no-input"],
+        }),
+        expect.any(Object),
+      );
+    });
   });
 });

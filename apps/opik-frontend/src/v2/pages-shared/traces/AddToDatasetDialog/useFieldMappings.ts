@@ -122,12 +122,6 @@ const useFieldMappings = ({
     ]);
     const errors: Record<string, FieldRowError> = {};
 
-    FIXED_MAPPING_FIELDS.forEach(({ key }) => {
-      if (!fixedPaths[key]?.trim()) {
-        errors[key] = "no_path";
-      }
-    });
-
     customRows.forEach((row) => {
       const name = row.name.trim();
       if (!name) {
@@ -150,7 +144,7 @@ const useFieldMappings = ({
     });
 
     return errors;
-  }, [customRows, managedRows, fixedPaths]);
+  }, [customRows, managedRows]);
 
   const fieldMappings = useMemo(() => {
     const mappings: Record<string, string> = {};

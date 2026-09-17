@@ -350,14 +350,4 @@ describe("useFieldMappings", () => {
 
     expect(result.current.rowErrors["custom-1"]).toBe("blank");
   });
-
-  it("flags a fixed row whose path was cleared", () => {
-    const { result } = renderMappings();
-
-    act(() => result.current.setFixedPath("input", "   "));
-
-    expect(result.current.rowErrors.input).toBe("no_path");
-    expect(result.current.isValid).toBe(false);
-    expect(result.current.fieldMappings.input).toBeUndefined();
-  });
 });

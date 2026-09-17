@@ -199,14 +199,13 @@ describe("useMappingPreview", () => {
     });
   });
 
-  it("marks spans as deferred and never counts it as empty", () => {
+  it("marks spans as deferred", () => {
     const { result } = renderPreview({
       fixedRows: [],
       managedRows: [{ id: "includeSpans", name: "spans", kind: "managed" }],
     });
 
     expect(result.current.rows[0].cells.spans).toEqual({ kind: "deferred" });
-    expect(result.current.emptyColumnCount).toBe(0);
   });
 
   it("treats an empty usage object as empty", () => {
@@ -217,19 +216,5 @@ describe("useMappingPreview", () => {
     });
 
     expect(result.current.rows[0].cells.usage).toEqual({ kind: "empty" });
-  });
-
-  it("counts columns that are empty for at least one entity", () => {
-    const { result } = renderPreview({
-      customRows: [
-        { id: "custom-1", name: "tone", kind: "custom", path: "input.tone" },
-      ],
-      entities: [
-        buildEntity(),
-        buildEntity({ id: "trace-2", input: { prompt: "second" } }),
-      ],
-    });
-
-    expect(result.current.emptyColumnCount).toBe(1);
   });
 });

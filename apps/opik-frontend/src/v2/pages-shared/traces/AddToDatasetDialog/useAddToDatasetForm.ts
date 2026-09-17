@@ -31,6 +31,7 @@ type UseAddToDatasetFormParams = {
   open: boolean;
   setOpen: (open: boolean) => void;
   datasetType: DATASET_TYPE;
+  skipInputFilter?: boolean;
   getSubmitExtras?: () => Record<string, unknown>;
   onDatasetChange?: () => void;
 };
@@ -40,6 +41,7 @@ const useAddToDatasetForm = ({
   open,
   setOpen,
   datasetType,
+  skipInputFilter = false,
   getSubmitExtras,
   onDatasetChange,
 }: UseAddToDatasetFormParams) => {
@@ -120,8 +122,9 @@ const useAddToDatasetForm = ({
   }, [isPending, datasets, selectedDataset]);
 
   const validRows = useMemo(() => {
+    if (skipInputFilter) return selectedRows;
     return selectedRows.filter((r) => !isUndefined(r.input));
-  }, [selectedRows]);
+  }, [selectedRows, skipInputFilter]);
 
   const validTraces = useMemo(() => {
     return validRows.filter((r) => !isObjectSpan(r));
@@ -229,6 +232,14 @@ const useAddToDatasetForm = ({
     ],
   );
 
+  const handleDatasetCreated = useCallback(
+    (dataset: Dataset) => {
+      setSelectedDataset(dataset);
+      onDatasetChange?.();
+    },
+    [onDatasetChange],
+  );
+
   const handleDatasetSelect = useCallback(
     (datasetId: string) => {
       const dataset = datasetsById.get(datasetId) ?? null;
@@ -247,7 +258,7 @@ const useAddToDatasetForm = ({
 
   return {
     selectedDataset,
-    setSelectedDataset,
+    handleDatasetCreated,
     handleDatasetSelect,
     datasetOptions,
     isPending,

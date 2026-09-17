@@ -65,6 +65,22 @@ const usePanelResize = ({
     document.body.style.userSelect = "none";
   }, [enabled, elementRef]);
 
+  const releaseDrag = useCallback(() => {
+    if (!draggingRef.current) return false;
+    draggingRef.current = false;
+    document.body.style.userSelect = "";
+    const el = elementRef.current;
+    if (el) el.style.transition = restoreTransition.current ?? "";
+    return true;
+  }, [elementRef]);
+
+  useEffect(
+    () => () => {
+      releaseDrag();
+    },
+    [enabled, releaseDrag],
+  );
+
   useEffect(() => {
     if (!enabled) return;
 
@@ -82,11 +98,7 @@ const usePanelResize = ({
     };
 
     const onUp = () => {
-      if (!draggingRef.current) return;
-      draggingRef.current = false;
-      document.body.style.userSelect = "";
-      const el = elementRef.current;
-      if (el) el.style.transition = restoreTransition.current ?? "";
+      if (!releaseDrag()) return;
       localStorage.setItem(storageKey, String(leftRef.current));
       setLeftFraction(leftRef.current);
     };
@@ -97,7 +109,7 @@ const usePanelResize = ({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [enabled, hostWidth, elementRef, storageKey, minWidth]);
+  }, [enabled, hostWidth, elementRef, storageKey, minWidth, releaseDrag]);
 
   return { panelWidth, startResize, isResizing: draggingRef };
 };

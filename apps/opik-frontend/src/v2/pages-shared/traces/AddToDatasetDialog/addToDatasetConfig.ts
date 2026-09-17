@@ -9,6 +9,7 @@ export type AddToDatasetTypeConfig = {
   noSelectionExplainerId: EXPLAINER_ID;
   successExplainerId: EXPLAINER_ID;
   emptyStateDescription: string;
+  supportsFieldMapping: boolean;
 };
 
 export const ADD_TO_DATASET_TYPE_CONFIG: Record<
@@ -22,6 +23,7 @@ export const ADD_TO_DATASET_TYPE_CONFIG: Record<
     successExplainerId: EXPLAINER_ID.i_added_items_to_a_dataset_now_what,
     emptyStateDescription:
       "Define inputs and expected outputs to evaluate your LLM application's performance.",
+    supportsFieldMapping: true,
   },
   [DATASET_TYPE.TEST_SUITE]: {
     entityName: "test suite",
@@ -31,5 +33,6 @@ export const ADD_TO_DATASET_TYPE_CONFIG: Record<
     successExplainerId: EXPLAINER_ID.i_added_traces_to_an_test_suite_now_what,
     emptyStateDescription:
       "Define test cases with assertions to evaluate your LLM application's performance.",
+    supportsFieldMapping: false,
   },
 };

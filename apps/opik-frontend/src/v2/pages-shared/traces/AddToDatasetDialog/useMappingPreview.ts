@@ -109,15 +109,7 @@ const useMappingPreview = ({
     }));
   }, [fixedRows, customRows, managedRows, rowErrors, entities]);
 
-  const emptyColumnCount = useMemo(
-    () =>
-      columns.filter((key) =>
-        rows.some((row) => row.cells[key]?.kind === "empty"),
-      ).length,
-    [columns, rows],
-  );
-
-  return { columns, rows, emptyColumnCount };
+  return { columns, rows };
 };
 
 export default useMappingPreview;

@@ -49,6 +49,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     open,
     setOpen,
     datasetType: DATASET_TYPE.DATASET,
+    skipInputFilter: advanced,
     getSubmitExtras: () => submitExtrasRef.current,
   });
 
@@ -93,7 +94,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     sampleEntities: entities,
   });
 
-  const { columns, rows, emptyColumnCount } = useMappingPreview({
+  const { columns, rows } = useMappingPreview({
     fixedRows: mappings.fixedRows,
     customRows: mappings.customRows,
     managedRows: mappings.managedRows,
@@ -192,12 +193,15 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   );
 
   const entityLabel = hasOnlySpans ? "spans" : "traces";
+  const incompleteFieldCount = Object.values(coverage).filter(
+    ({ covered, total }) => covered < total,
+  ).length;
 
   const previewSummary =
     `Adding ${fieldCountLabel(columns.length)}` +
-    (emptyColumnCount > 0
-      ? ` · ${fieldCountLabel(emptyColumnCount)} ${
-          emptyColumnCount === 1 ? "is" : "are"
+    (incompleteFieldCount > 0
+      ? ` · ${fieldCountLabel(incompleteFieldCount)} ${
+          incompleteFieldCount === 1 ? "is" : "are"
         } empty for some ${entityLabel}`
       : "");
 
