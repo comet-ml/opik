@@ -121,6 +121,15 @@ clickhouse:
 
 ## Configure additional ClickHouse users and profiles
 
+<Warning>
+`clickhouse.additionalProfiles` is a list, and Helm replaces lists wholesale instead of merging
+them. Declaring your own list therefore drops the chart's `default` profile entry unless you repeat
+it, which would silently remove the Distributed insert-queue settings. The examples below keep it.
+
+`prefer_localhost_replica` is in that same `default` entry, so it is dropped by list replacement
+too. Keep the whole entry, not just the batching settings.
+</Warning>
+
 You can create read-only ClickHouse users with custom settings profiles.
 
 ### Using inline passwords
@@ -128,6 +137,14 @@ You can create read-only ClickHouse users with custom settings profiles.
 ```yaml
 clickhouse:
   additionalProfiles:
+    # Keep this `default` entry. Helm replaces lists rather than merging them, so a values file
+    # that declares its own `additionalProfiles` drops the chart's default one — taking the
+    # Distributed insert-queue settings with it, silently.
+    - name: default
+      settings:
+        distributed_background_insert_batch: 1
+        distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
     - name: readonly_profile
       settings:
         readonly: 1
@@ -152,6 +169,14 @@ clickhouse:
       enabled: true
     secretname: clickhouse-admin-pass
   additionalProfiles:
+    # Keep this `default` entry. Helm replaces lists rather than merging them, so a values file
+    # that declares its own `additionalProfiles` drops the chart's default one — taking the
+    # Distributed insert-queue settings with it, silently.
+    - name: default
+      settings:
+        distributed_background_insert_batch: 1
+        distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
     - name: readonly_profile
       settings:
         readonly: 1
