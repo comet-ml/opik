@@ -44,4 +44,29 @@ class OpenAIClientGeneratorTemperatureTest {
     void forwardsTemperatureForModelsThatTakeIt(String modelName) {
         assertThat(judgeParametersFor(modelName).temperature()).isEqualTo(0.7);
     }
+
+    private ChatRequestParameters responsesJudgeParametersFor(String modelName) {
+        var generator = new OpenAIClientGenerator(new LlmProviderClientConfig());
+        var config = LlmProviderClientApiConfig.builder()
+                .apiKey("test-key")
+                .baseUrl("https://openrouter.ai/api/v1")
+                .build();
+        var parameters = LlmAsJudgeModelParameters.builder().name(modelName).temperature(0.7).build();
+
+        return generator.newResponsesApiChatModel(config, parameters, false).defaultRequestParameters();
+    }
+
+    /** The Responses builder gates independently of the Completions one, so it is asserted separately. */
+    @ParameterizedTest
+    @ValueSource(strings = {"anthropic/claude-opus-4.7", "anthropic/claude-sonnet-5",
+            "~anthropic/claude-opus-latest"})
+    void responsesApiDoesNotForwardTemperatureForClaudeModelsThatTakeNone(String modelName) {
+        assertThat(responsesJudgeParametersFor(modelName).temperature()).isNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"anthropic/claude-opus-4.6", "anthropic/claude-3.5-sonnet", "gpt-4o"})
+    void responsesApiForwardsTemperatureForModelsThatTakeIt(String modelName) {
+        assertThat(responsesJudgeParametersFor(modelName).temperature()).isEqualTo(0.7);
+    }
 }
