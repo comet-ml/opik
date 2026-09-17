@@ -6,6 +6,7 @@ import React, {
   useMemo,
 } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
+import { cn } from "@/lib/utils";
 import { JsonValue } from "@/types/shared";
 import { JsonTreePopoverProps } from "./types";
 import {
@@ -49,6 +50,10 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
   onOpenChange,
   searchQuery = "",
   onFocusedPathChange,
+  header,
+  selectedPath,
+  contentClassName,
+  sideOffset = 4,
 }) => {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
     () => new Set(),
@@ -63,12 +68,6 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     },
     [onFocusedPathChange],
   );
-
-  useEffect(() => {
-    if (open) {
-      setExpandedPaths(new Set());
-    }
-  }, [open]);
 
   const { pathToExpand, searchTerm } = useMemo(
     () => parseSearchQuery(searchQuery),
@@ -163,6 +162,17 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
       handleFocusPath(filteredVisiblePaths[0].path);
     }
   }, [open, filteredVisiblePaths, focusedPath, handleFocusPath]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (selectedPath) {
+      setExpandedPaths(computePathsToExpand(selectedPath));
+      handleFocusPath(selectedPath);
+    } else {
+      setExpandedPaths(new Set());
+    }
+  }, [open, selectedPath, handleFocusPath]);
 
   const handleSelect = useCallback(
     (path: string, value: JsonValue) => {
@@ -317,6 +327,7 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
         ref={contentRef}
         className="max-h-[var(--tree-max-height)] overflow-auto"
         style={{ "--tree-max-height": MAX_HEIGHT } as React.CSSProperties}
+        onWheel={(event) => event.stopPropagation()}
       >
         {filteredEntries.map(([key, value]) => {
           const path = Array.isArray(data) ? `[${key.slice(1, -1)}]` : key;
@@ -344,19 +355,24 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
-        className="w-2/3 min-w-[470px] max-w-[600px] p-0"
+        className={cn(
+          "w-2/3 min-w-[470px] max-w-[600px] p-0",
+          contentClassName,
+        )}
         align="start"
         side="bottom"
         onOpenAutoFocus={(e) => e.preventDefault()}
         collisionPadding={16}
-        sideOffset={4}
+        sideOffset={sideOffset}
       >
-        <PopoverHeader
-          searchQuery={searchQuery}
-          pathToExpand={pathToExpand}
-          searchTerm={searchTerm}
-          isArrayAccess={isArrayAccess}
-        />
+        {header ?? (
+          <PopoverHeader
+            searchQuery={searchQuery}
+            pathToExpand={pathToExpand}
+            searchTerm={searchTerm}
+            isArrayAccess={isArrayAccess}
+          />
+        )}
 
         <div className="p-2">{renderTree()}</div>
 
