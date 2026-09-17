@@ -2636,7 +2636,8 @@ public class SpanDAO {
 
     /**
      * Renders and executes one delete statement - unbounded when {@code partition} is null, scoped to it otherwise -
-     * emitting the rows it deleted.
+     * emitting the driver's update count for it, which is {@code 0} for these asynchronous lightweight deletes. See
+     * {@link #deleteByIds(Set, UUID)} for why.
      */
     private Flux<Long> executeDelete(List<UUID> ids, Long partition, UUID projectId, Connection connection) {
         return makeFluxContextAware((userName, workspaceId) -> {

@@ -55,6 +55,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -590,21 +591,19 @@ class SpansPartitionPruningMutationTest {
         // deleteByIds, so a delete now emitting several statements must still leave the bridge record standing.
         var trace = newTrace().build();
         traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
-        var span = newSpan(trace.projectName(), trace.id()).build();
-        spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
-        var projectId = spanResourceClient
-                .getByTraceIdAndProject(trace.id(), trace.projectName(), WORKSPACE_NAME, API_KEY)
-                .content().stream()
-                .filter(found -> found.id().equals(span.id()))
-                .map(Span::projectId)
-                .findFirst()
-                .orElseThrow();
+        var projectId = projectIdOf(trace);
 
-        // A second span on the same trace, in the far-future era, so the cascade fans out across three partitions
-        // rather than one. That is the shape this ticket introduces and the reason AC4 asks for the bridge to be
-        // re-verified: a single-statement cascade would prove nothing new about a delete that now emits several.
-        // Seeded raw, since ingestion rejects a far-future id.
+        // Two spans on the trace, in different eras, so the cascade fans out across three partitions rather than one.
+        // That is the shape this ticket introduces and the reason the bridge needs re-verifying: a single-statement
+        // cascade would prove nothing new about a delete that now emits several.
+        //
+        // Both seeded raw rather than through the ingestion path, which would mint ids at "now" - a week the test
+        // cannot name, and so one whose expected partition could only be derived through the same helper the DAO
+        // uses. Naming the weeks keeps every expected value below independent of the derivation under test. The
+        // cascade reaches these rows the same way either way: it resolves its span ids by trace_id.
+        var recentEraSpanId = idInWeekOf(ERA_MONDAYS.get(1));
         var farFutureSpanId = idInWeekOf(ERA_MONDAYS.getLast());
+        insertRawSpan(projectId, trace.id(), recentEraSpanId);
         insertRawSpan(projectId, trace.id(), farFutureSpanId);
 
         var since = serverNow();
@@ -615,10 +614,10 @@ class SpansPartitionPruningMutationTest {
                 .alias("the cascade removed both spans")
                 .atMost(Duration.ofSeconds(30))
                 .pollInterval(Duration.ofMillis(200))
-                .untilAsserted(() -> assertThat(List.of(liveRowCount(projectId, span.id()),
+                .untilAsserted(() -> assertThat(List.of(liveRowCount(projectId, recentEraSpanId),
                         liveRowCount(projectId, farFutureSpanId))).containsOnly("0"));
 
-        assertThat(bridgeRowCount(Set.of(span.id(), farFutureSpanId)))
+        assertThat(bridgeRowCount(Set.of(recentEraSpanId, farFutureSpanId)))
                 .as("both bridge records are still there after the multi-statement delete that followed them")
                 .isEqualTo("2");
 
@@ -626,7 +625,7 @@ class SpansPartitionPruningMutationTest {
         var sqls = deleteSqlsSince(since, projectId);
         assertThat(sqls.stream().map(this::boundPartitionOf))
                 .as("the cascade pruned to exactly the partitions its two spans resolve to: %s", sqls)
-                .containsExactlyInAnyOrder(weekOf(span.id()),
+                .containsExactlyInAnyOrder(partitionNameOf(ERA_MONDAYS.get(1)),
                         partitionNameOf(ERA_MONDAYS.getLast()),
                         LEGACY_WEEK_OF_FAR_FUTURE_ERA);
     }
@@ -795,7 +794,14 @@ class SpansPartitionPruningMutationTest {
         });
     }
 
-    /** Invokes the DAO under a workspace/user context, as {@code SpanService} does for the live cascade. */
+    /**
+     * Invokes the DAO under a workspace/user context, as {@code SpanService} does for the live cascade.
+     * <p>
+     * Callers read row counts straight afterwards without polling, and that is deterministic rather than lucky:
+     * {@code lightweight_deletes_sync} defaults to {@code 2}, so the statement does not return until its mutation has
+     * been applied. {@link #traceDeleteCascadePrunesAndItsDeletionBridgeRecordSurvives} polls for an unrelated reason
+     * - its trace delete returns before the {@code AsyncEventBus} listener that runs the cascade.
+     */
     private void delete(Set<UUID> spanIds, UUID projectId) {
         spanDAO.deleteByIds(spanIds, projectId)
                 .contextWrite(ctx -> ctx
@@ -830,13 +836,6 @@ class SpansPartitionPruningMutationTest {
     /** The ids as they appear inlined in a statement's {@code id IN [...]} list. */
     private String[] idsOf(List<UUID> ids) {
         return ids.stream().map(UUID::toString).toArray(String[]::new);
-    }
-
-    /** The single weekly partition an ordinary (pre-2106) id resolves to, via the derivation the DAO itself uses. */
-    private long weekOf(UUID id) {
-        var partitions = WeeklyPartitions.groupByPartition(List.of(id)).orElseThrow().keySet();
-        assertThat(partitions).as("an ordinary id resolves to one partition").hasSize(1);
-        return partitions.iterator().next();
     }
 
     /** The partition an {@code IN PARTITION} statement names — exactly one per statement, or none. */
@@ -973,6 +972,16 @@ class SpansPartitionPruningMutationTest {
                 .traceId(traceId)
                 .usage(null)
                 .feedbackScores(null);
+    }
+
+    private UUID projectIdOf(Trace trace) {
+        return traceResourceClient
+                .getTraces(trace.projectName(), null, API_KEY, WORKSPACE_NAME, List.of(), List.of(), 100, Map.of())
+                .content().stream()
+                .filter(found -> found.id().equals(trace.id()))
+                .map(Trace::projectId)
+                .findFirst()
+                .orElseThrow();
     }
 
     private List<UUID> spanIdsOf(Trace trace) {
