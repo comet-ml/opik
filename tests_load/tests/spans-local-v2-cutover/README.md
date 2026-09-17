@@ -322,8 +322,16 @@ $RUNBOOK/scripts/rollback.sh --database opik --stage A
 # --resurrect-ratio matters here too, but for the OPPOSITE reason to the forward replay: a post-cutover
 # delete-then-recreate must end up MASKED on the restored original (the reverse replay deliberately carries no
 # resurrection guard — rollback discards post-cutover writes while honoring post-cutover deletes).
+# --in-progress-ratio is REQUIRED here for its own reason, and it does not default: without it every span is ended, so
+# this window produces no epoch end_time anywhere. That window is the one the runbook means when it says the pre-swap
+# caveat REOPENS on a rollback — the promote makes the Nullable original live again while spanColumnsNonNullable is
+# still true, so absent values land as sentinels until the flag-revert restart. It is the only traffic that reaches the
+# reopened window, and it feeds three things below: the sentinel repair's epoch arm, the negative durations that arm
+# creates, and the reverse reconcile's sentinel->NULL denormalization of end_time. Leave it off and all three read as a
+# clean zero for want of any input.
 python tests_load/tests/spans-local-v2-cutover/delete_traffic.py --tps 3 --duration 300 --resurrect-ratio 0.25 &
-python tests_load/tests/spans-local-v2-cutover/live_traffic.py   --tps 4 --duration 300 &  # -> the discarded writes
+python tests_load/tests/spans-local-v2-cutover/live_traffic.py   --tps 4 --duration 300 --in-progress-ratio 0.15 &
+#   ^ both the writes the rollback discards AND the sentinels the reopened window accrues
 sleep 30   # head start: the post-cutover tail the rollback must reverse. NOT a substitute for the traffic still running.
 $RUNBOOK/scripts/rollback.sh --database opik --stage B --cutover-start '<cutover_start> UTC' \
     --confirm-retention-paused --accept-post-cutover-write-loss
@@ -375,7 +383,10 @@ $RUNBOOK/scripts/rollback.sh --database opik --sentinel-repair-only --confirm-fl
 ```
 
 Watch the **sentinel** counters (`sentinel_end_time`, `sentinel_ttft`) reach `0`: those are the repair's actual success
-criterion. **Expect `sentinel_ttft` to be very much larger than `sentinel_end_time`** — the SDK sets no `ttft` on an
+criterion. **Check they started non-zero**, though — a `sentinel_end_time` that was `0` before the repair means the
+window simply contains no in-flight spans, so the epoch arm was never exercised and reaching `0` proves nothing about
+it. That arm is fed only by `--in-progress-ratio` traffic running *inside* the window: step 3's, if it is still running
+after step 7's flip, and stage B's. **Expect `sentinel_ttft` to be very much larger than `sentinel_end_time`** — the SDK sets no `ttft` on an
 ordinary span, so nearly every span written while the flag was live carries the NaN sentinel, whereas only in-flight
 spans carry the epoch `end_time`. That ratio is the production shape and the driver prints a note saying so; reading it
 as a wrong window is the mistake to avoid.
