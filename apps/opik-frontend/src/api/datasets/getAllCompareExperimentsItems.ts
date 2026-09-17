@@ -18,7 +18,7 @@ export const EXPORT_ROW_LIMIT = 2000;
 export class ExportTooLargeError extends Error {
   constructor(total: number) {
     super(
-      `This view has ${total.toLocaleString()} rows. The browser can export ${EXPORT_ROW_LIMIT.toLocaleString()} at a time - filter the table down, select the rows you want, or export it with the SDK.`,
+      `This view contains ${total.toLocaleString()} rows. The limit that can be exported is ${EXPORT_ROW_LIMIT.toLocaleString()}. Filter it down or export with the SDK.`,
     );
     this.name = "ExportTooLargeError";
   }

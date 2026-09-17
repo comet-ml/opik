@@ -122,14 +122,14 @@ const CompareExperimentsActionsPanel: React.FC<
     "Export functionality is disabled for this installation"
   ) : exceedsExportLimit ? (
     <span>
-      {`This view has ${totalRows.toLocaleString()} rows, more than the ${EXPORT_ROW_LIMIT.toLocaleString()} that can be exported from the browser. Filter it down, select the rows you need, or `}
+      {`This view contains ${totalRows.toLocaleString()} rows. The limit that can be exported is ${EXPORT_ROW_LIMIT.toLocaleString()}. Filter it down or `}
       <a
         href={buildDocsUrl("/evaluation/advanced/export_experiment_results")}
         target="_blank"
         rel="noreferrer"
         className="underline"
       >
-        export it with the SDK
+        export with the SDK
       </a>
       .
     </span>
