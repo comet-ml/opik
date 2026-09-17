@@ -18,7 +18,6 @@ from opik.api_objects.experiment import (
     bulk_item,
     experiment as experiment_module,
 )
-from opik.message_processing.batching import sequence_splitter
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
 
@@ -184,8 +183,7 @@ class TestBulkUploadItemsBatching:
         # Assert the actual ceiling rather than a hand-computed batch size.
         for call in mock_rest_client.experiments.experiment_items_bulk.call_args_list:
             batch_size_MB = sum(
-                sequence_splitter.get_payload_size_MB(item)
-                for item in call.kwargs["items"]
+                bulk_converters.payload_size_MB(item) for item in call.kwargs["items"]
             )
             assert batch_size_MB <= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
 
@@ -829,7 +827,7 @@ class TestBulkUploadItemsValidation:
                 start_time=START_TIME, output={"padding": "x" * 5_000_000}
             )
         )
-        measured_MB = sequence_splitter.get_payload_size_MB(
+        measured_MB = bulk_converters.payload_size_MB(
             bulk_converters.to_rest_record(record)
         )
 

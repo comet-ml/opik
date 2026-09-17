@@ -344,7 +344,7 @@ class Experiment:
         failure_reasons: List[str] = []
 
         for index, item in enumerate(items):
-            size_MB = sequence_splitter.get_payload_size_MB(
+            size_MB = bulk_converters.payload_size_MB(
                 bulk_converters.to_rest_record(item)
             )
             sizes_MB.append(size_MB)
@@ -399,7 +399,7 @@ class Experiment:
             size_MB = (
                 sizes_MB[index]
                 if sizes_MB is not None
-                else sequence_splitter.get_payload_size_MB(rest_item)
+                else bulk_converters.payload_size_MB(rest_item)
             )
 
             if sizes_MB is None and size_MB >= max_size_MB:

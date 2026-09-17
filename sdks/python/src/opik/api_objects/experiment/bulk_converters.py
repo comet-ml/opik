@@ -1,12 +1,19 @@
+import datetime
 from typing import Any, Dict, List, Optional
 
-from opik import exceptions, id_helpers
+import pydantic
+
+from opik import exceptions, id_helpers, json_helpers, jsonable_encoder
+from opik.message_processing.batching import sequence_splitter
 from opik.rest_api import types as rest_api_types
+from opik.rest_api.core import datetime_utils
 from opik.types import FeedbackScoreDict
 from . import bulk_item
 from .. import constants
 
 _JSON_LIKE_FIELDS = ("input", "output", "metadata")
+
+_BYTES_PER_MB = 1024 * 1024
 
 
 def _validate_json_like_fields(
@@ -188,6 +195,52 @@ def validate_records(
         raise exceptions.ValidationError(
             prefix="batch_upload_items", failure_reasons=failure_reasons
         )
+
+
+def _json_shell(value: Any) -> Any:
+    """One value the encoder cannot represent, as a shell it can walk into itself.
+
+    The interior is handed back unconverted on purpose: the encoder comes back here for
+    each member, so a record costs one C-level walk rather than a Python one per node.
+    Fully converting here instead would rebuild in Python exactly what this replaces.
+
+    The two shapes it does convert mirror ``jsonable_encoder.encode`` -- a pydantic model
+    as its fields plus its extras, a datetime through the SDK's own serializer -- so the
+    bytes counted match what that encoder produced. Anything else is rare enough to pay
+    for the full conversion, which never raises: it falls back to ``str(obj)``, so an
+    exotic value cannot fail a measurement.
+    """
+    if isinstance(value, datetime.datetime):
+        return datetime_utils.serialize_datetime(value)
+    if isinstance(value, pydantic.BaseModel):
+        extra = value.__pydantic_extra__
+        return (
+            {**value.__dict__, **extra} if isinstance(extra, dict) else value.__dict__
+        )
+    return jsonable_encoder.encode(value)
+
+
+def payload_size_MB(rest_record: Any) -> float:
+    """Estimate one converted record's JSON size, in megabytes.
+
+    Serialising the record and measuring the result is several times cheaper than the
+    structural estimate in ``sequence_splitter``, which walks the record twice in Python
+    -- once to convert it, once to add up what the conversion would encode to. Here the
+    walk is the encoder's own, which is C where orjson is available and still one pass
+    where it is not. It matters because this runs on the producer thread, which is what
+    bounds a large upload.
+
+    Nothing measured here reaches the wire: the bytes are counted and dropped, and the
+    request body is built by the generated client as before. A record the encoder refuses
+    outright falls back to the structural estimate, so nothing that could be sized before
+    stops being sizeable.
+    """
+    try:
+        encoded = json_helpers.dumps(rest_record, default=_json_shell, sort_keys=False)
+    except Exception:
+        return sequence_splitter.get_payload_size_MB(rest_record)
+
+    return len(encoded) / _BYTES_PER_MB
 
 
 def _to_rest_trace(
