@@ -25,7 +25,8 @@ public class MinIOContainerUtils {
                 .withExposedPorts(9000)
                 .withEnv("MINIO_ROOT_USER", MINIO_USER)
                 .withEnv("MINIO_ROOT_PASSWORD", MINIO_PASSWORD)
-                .withCommand("server /data --address :9000")
+                .withCreateContainerCmdModifier(cmd -> cmd.withEntrypoint("sh", "-c",
+                        "mkdir -p /data && exec minio server /data --address :9000"))
                 .withReuse(true);
     }
 
