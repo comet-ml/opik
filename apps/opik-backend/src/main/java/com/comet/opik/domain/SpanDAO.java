@@ -24,9 +24,11 @@ import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.UsageUtils;
+import com.comet.opik.utils.WeeklyPartitions;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
@@ -64,6 +66,7 @@ import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.infrastructure.FilterUtils.addSortNeedsWideFlag;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
@@ -1322,9 +1325,18 @@ public class SpanDAO {
      * would scan every project's spans in the workspace, and post-wrap would reach the shard without the column
      * {@code spans} is distributed on. The sole caller is {@code SpanService.deleteByTraceIds}, which always carries
      * the owning project the trace delete resolved (OPIK-7483).
+     * <p>
+     * {@code <if(partition)>} adds {@code IN PARTITION}, which scopes which <b>parts</b> the mutation is registered
+     * against — a {@code WHERE} clause cannot, since parts are selected before it is considered, which is why an
+     * unscoped delete of a few rows rewrites every part of the table and times out (OPIK-8230). Omitted for the
+     * unbounded fallback.
+     * <p>
+     * {@code <partition>} is interpolated, not bound: {@code IN PARTITION {p:UInt32}} is a ClickHouse syntax error. Safe
+     * because the value is always a {@code long} from {@link WeeklyPartitions}.
      */
     private static final String DELETE_BY_IDS = """
             DELETE FROM <spans_mutation_table>
+            <if(partition)>IN PARTITION <partition><endif>
             WHERE id IN :ids
             AND workspace_id = :workspace_id
             AND project_id = :project_id
@@ -1340,8 +1352,40 @@ public class SpanDAO {
      * {@code trace_id} while the future partition column {@code id_at} is MATERIALIZED from the span's own UUIDv7 id
      * (migration 000105). A span's id can land in a later week than its {@code trace_id}, so a week bound on
      * {@code id_at} derived from the trace-id range would wrongly exclude valid candidates — whatever the
-     * expression's width, since the objection is which column the range keys on. No partition-pruning predicate is
-     * applied here until {@code spans} can be pruned by a column aligned with {@code trace_id}.
+     * expression's width, since the objection is which column the range keys on.
+     *
+     * <h2>Decision (OPIK-8364): this sweep stays unbounded</h2>
+     *
+     * <p>{@link #deleteByIds(Set, UUID)} scopes itself per partition because it is keyed on the span's own id. This
+     * sweep cannot borrow that, and the alternatives were measured on OPIK-8364 and rejected:</p>
+     * <ul>
+     *     <li><b>A margin over the span-after-trace lag.</b> The distribution is bimodal — a margin of a few weeks
+     *     covers the bulk and then gains nothing however far it is widened, because the residual sits centuries beyond
+     *     its trace. Any margin small enough to prune is small enough to under-delete, which for retention is a
+     *     compliance failure, not a latency one.</li>
+     *     <li><b>A column aligned with {@code trace_id}</b> (OPIK-8241's suggestion). It prunes nothing unless it
+     *     becomes the partition key, a separate DDL decision, and a trace-week key measured no better overall.</li>
+     *     <li><b>Per-workspace treatment</b> — an exact window where a workspace's lag is clean, unbounded where it is
+     *     not. Viable, and the upgrade path if the timing below disappoints; not taken now because it narrows the
+     *     blast radius without removing the failure mode.</li>
+     * </ul>
+     *
+     * <p>{@code IN PARTITION} would not rescue it either: {@code parts_to_do} counts every part that has not yet
+     * advanced to the mutation's version, not the parts holding matching data, so scoping bounds the work per part
+     * rather than the number of parts visited — nothing, for a range spanning every partition.</p>
+     *
+     * <p><b>What this costs beyond mutation time, and what is still open.</b> Partition pruning is also what lets a
+     * lightweight delete reclaim storage: parts outside a mutation's scope are not version-stamped, so they go quiet
+     * and become eligible for the force-merge that physically drops masked rows (OPIK-5295). A sweep that cannot prune
+     * may therefore mask rows without releasing bytes — the outcome partitioning {@code spans} is meant to deliver.
+     * Whether it actually does is <b>not</b> settled by the measurements behind this decision: {@code IN PARTITION}
+     * did not reduce {@code parts_to_do} there either, so scoping and stamping are less tightly coupled than the
+     * reclaim argument assumes. This is the open question, and the condition below is what settles it.</p>
+     *
+     * <p>Accepted on one condition: {@code retention.enabled}, {@code false} by default, must not be turned on for an
+     * install whose {@code spans} has been cut over until one sweep has been measured there — {@code parts_to_do} and
+     * wall time from {@code system.mutations}, <em>and</em> whether the bytes come back. The cost scales with the
+     * table's partition count rather than with the rows the window matches, and reclaim is unproven either way.</p>
      */
     private static final String DELETE_FOR_RETENTION = """
             DELETE FROM <spans_mutation_table>
@@ -1368,7 +1412,9 @@ public class SpanDAO {
      * reads these constants.
      * <p>
      * As in {@link #DELETE_FOR_RETENTION}, no partition-pruning predicate is applied: the range keys on
-     * {@code trace_id} while the partition column {@code id_at} derives from the span's own id.
+     * {@code trace_id} while the partition column {@code id_at} derives from the span's own id. That statement's
+     * Javadoc carries the decision and the measurements behind it (OPIK-8364, half B), which govern this sweep
+     * identically — its per-workspace floors narrow which rows match, never which partitions the mutation visits.
      */
     private static final String DELETE_FOR_RETENTION_BOUNDED = """
             DELETE FROM <spans_mutation_table>
@@ -2539,29 +2585,78 @@ public class SpanDAO {
     /**
      * Deletes the given spans within {@code projectId}, which is required: the delete is always scoped to the full
      * {@code (workspace_id, project_id, id)} sort-key prefix, never to {@code (workspace_id, id)} alone.
+     * <p>
+     * Chunked at {@code ANALYTICS_DELETE_BATCH_SIZE}, each chunk split into one {@code IN PARTITION} statement per
+     * partition its ids resolve to (OPIK-8230) — possible here, unlike the retention sweeps, because the statement is
+     * keyed on the span's <b>own</b> id, so {@link WeeklyPartitions} derives its partitions exactly.
+     * <p>
+     * The returned value is the driver's update count summed over those statements, which is {@code 0}: unlike the
+     * retention sweeps this statement does not set {@code lightweight_deletes_sync}, so ClickHouse reports nothing for
+     * the asynchronous mutation. It is <b>not</b> a count of deleted rows, and no caller reads it.
      */
     @WithSpan
-    public Mono<Long> deleteByIds(@NonNull Set<UUID> spanIds, @NonNull UUID projectId) {
+    public Mono<Long> deleteByIds(Set<UUID> spanIds, @NonNull UUID projectId) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(spanIds), "Argument 'spanIds' must not be empty");
+        // Checked before the ids are stringified, so it holds whichever branch deleteBatch takes: the partitioned path
+        // would otherwise read a null as "underivable", silently take the unbounded fallback, and only then NPE.
+        Preconditions.checkArgument(spanIds.stream().noneMatch(Objects::isNull),
+                "Argument 'spanIds' must not contain null ids");
         var segment = startSegment("spans", "Clickhouse", "delete_by_span_ids");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                    var template = getSTWithLogComment(DELETE_BY_IDS, "delete_spans_by_ids", workspaceId, userName,
-                            spanIds.size());
-                    selectSpansMutationTable(template);
-
-                    var statement = connection.createStatement(template.render())
-                            .bind("ids", spanIds.toArray(UUID[]::new))
-                            .bind("workspace_id", workspaceId)
-                            .bind("project_id", projectId);
-
-                    return Flux.from(statement.execute());
-                }))
-                .flatMap(Result::getRowsUpdated)
+                .flatMapMany(connection -> Flux
+                        .fromIterable(Lists.partition(List.copyOf(spanIds), ANALYTICS_DELETE_BATCH_SIZE))
+                        .concatMap(batch -> deleteBatch(batch, projectId, connection)))
                 .reduce(0L, Long::sum)
-                .doFinally(signalType -> endSegment(segment));
+                .doFinally(_ -> endSegment(segment));
+    }
+
+    /**
+     * Deletes one chunk: one {@code IN PARTITION} statement per partition its ids resolve to, or a single unbounded
+     * statement when they cannot all be derived, or when the target is not partitioned.
+     * <p>
+     * Sequential on purpose: bounded concurrency was measured and deferred (OPIK-8230).
+     */
+    private Flux<Long> deleteBatch(List<UUID> batch, UUID projectId, Connection connection) {
+        // spanColumnsNonNullable doubles as "the mutation target is weekly-partitioned": the same cutover EXCHANGE
+        // drops the Nullable(...) columns and puts the partitioned successor behind the name mutations target. Not the
+        // wrap flag, which governs routing and is still false between the EXCHANGE and the wrap - reading that one
+        // leaves production's deletes unpruned.
+        var grouped = spanColumnsNonNullable()
+                ? WeeklyPartitions.groupByPartition(batch)
+                : Optional.<Map<Long, Set<UUID>>>empty();
+
+        return grouped
+                .map(idsByPartition -> Flux.fromIterable(idsByPartition.entrySet())
+                        .concatMap(entry -> executeDelete(List.copyOf(entry.getValue()), entry.getKey(), projectId,
+                                connection)))
+                .orElseGet(() -> executeDelete(batch, null, projectId, connection));
+    }
+
+    /**
+     * Renders and executes one delete statement - unbounded when {@code partition} is null, scoped to it otherwise -
+     * emitting the rows it deleted.
+     */
+    private Flux<Long> executeDelete(List<UUID> ids, Long partition, UUID projectId, Connection connection) {
+        return makeFluxContextAware((userName, workspaceId) -> {
+            // project_id is in the log comment as well as in the statement: the statement's own copy sits after the
+            // inlined id list, past where ClickHouse truncates query_log.query for a full chunk, so without this a
+            // delete's largest statements are the ones that cannot be attributed.
+            var template = getSTWithLogComment(DELETE_BY_IDS, "delete_spans_by_ids", workspaceId, userName,
+                    "project_id=%s, ids_size=%s".formatted(projectId, ids.size()));
+            selectSpansMutationTable(template);
+            if (partition != null) {
+                template.add("partition", partition);
+            }
+
+            var statement = connection.createStatement(template.render())
+                    .bind("ids", ids.toArray(UUID[]::new))
+                    .bind("workspace_id", workspaceId)
+                    .bind("project_id", projectId);
+
+            return Flux.from(statement.execute());
+        }).flatMap(Result::getRowsUpdated);
     }
 
     private Publisher<Span> mapToDto(Result result) {
