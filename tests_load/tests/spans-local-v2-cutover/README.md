@@ -375,6 +375,12 @@ $RUNBOOK/scripts/reconcile.sh --database opik --report-only \
     --cutover-start '<cutover_start> UTC' --swap-done '<promote_done> UTC'
 $RUNBOOK/scripts/reconcile.sh --database opik --confirm-reimport-successor-writes \
     --confirm-retention-paused --cutover-start '<cutover_start> UTC' --swap-done '<promote_done> UTC'
+#    In THIS direction the gate has a fourth conjunct the forward run does not: the reverse-replay postcondition, which
+#    asserts that no id bridged since cutover_start is live again on the restored table. It is the only check that can
+#    see that case — the four counts are computed from the PARKED table's keys, and a resurrected span is absent there
+#    by construction — so RECONCILED here means the three counts AND that postcondition. Worth provoking once: delete a
+#    trace after the EXCHANGE (step 8's --resurrect-ratio traffic does), then run this having skipped the replay, and
+#    confirm the driver refuses rather than printing RECONCILED off three zeros.
 ```
 
 **Worth provoking once: the reverse usage-range refusal.** It has no traces counterpart, it is the only narrowing in the

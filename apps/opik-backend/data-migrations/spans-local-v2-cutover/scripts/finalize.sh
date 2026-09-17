@@ -57,6 +57,12 @@
 #                     so they are NOT live until reconcile.sh has swept them back. Asserts `reconcile.sh` ran and its
 #                     postcondition returned 0 (missing_keys / stale_keys / payload_mismatch_keys all zero) — on EVERY
 #                     shard, since every statement it issues is shard-local while this DROP is ON CLUSTER.
+#                     IT ALSO ASSERTS THAT `leaked_delete_keys` WAS READ, which RECONCILED does not cover: that count is
+#                     deliberately not part of reconcile.sh's gate, so a clean RECONCILED can sit beside a non-zero leak.
+#                     Read it before running this, because THIS DROP DESTROYS THE ONLY WAY TO COMPUTE IT — the check
+#                     matches live rows against versions spans_pre_cutover_backup holds, so once the backup is gone the
+#                     question cannot be asked again. The leaked ids themselves survive in deletion_events_local and can
+#                     still be re-applied by hand; what is lost is the ability to find out that they were leaked.
 #   --confirm-post-cutover-decision
 #                     AFTER A ROLLBACK, for the RECYCLE of spans_post_rollback_backup, which holds the post-cutover
 #                     writes the promote made non-live. Asserts the accept-or-recover decision rollback.sh printed has
@@ -216,6 +222,11 @@ if [[ "$CONFIRM" == "1" && "$FLAG_GIVEN" != "1" ]]; then
         echo "       missing_keys=0 stale_keys=0 payload_mismatch_keys=0 on EVERY shard:" >&2
         echo "         ./reconcile.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --report-only \\" >&2
         echo "             --gap-start '<delta_start> UTC' --swap-done '<exchange_done> UTC'" >&2
+        echo "       READ ITS 'leaked_delete_keys' LINE TOO. It is NOT part of that gate, so RECONCILED prints beside a" >&2
+        echo "       non-zero leak — captured deletes still live on the successor. This DROP is the last moment the" >&2
+        echo "       number can be obtained at all: the check matches live rows against versions this backup holds, so" >&2
+        echo "       afterwards it cannot be computed. The ids stay in deletion_events_local and can still be re-applied" >&2
+        echo "       by hand; only the means of discovering them goes. Clear a non-zero leak before retiring the backup." >&2
     else
         echo "       This table holds the post-cutover writes the promote made non-live. Recycling it discards them for" >&2
         echo "       good. The flag asserts the accept-or-recover decision rollback.sh printed has been MADE — either" >&2

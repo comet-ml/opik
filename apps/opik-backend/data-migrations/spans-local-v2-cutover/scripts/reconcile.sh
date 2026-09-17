@@ -589,9 +589,10 @@ settle() {
 # rollback.sh's does:
 #
 #   * more than one shard, REVERSE — refused outright. The reverse replay this driver re-runs is shard-local while its
-#     postcondition (000004_rollback_verify_replay.sql) reads clusterAllReplicas, so no single run can satisfy it. Worse
-#     here than in rollback.sh, because that postcondition is advisory in this driver: the run would repair one shard,
-#     warn, and still print RECONCILED off the shard-local four counts. rollback.sh refuses the same combination.
+#     postcondition (000004_rollback_verify_replay.sql) reads clusterAllReplicas, so no single run can satisfy it: it
+#     would report another shard's unreplayed ids against this shard's repair, and since that postcondition GATES this
+#     driver, the run could never converge — it would repair one shard and then fail on every pass for a reason no
+#     further pass can fix. Refusing up front says that plainly instead. rollback.sh refuses the same combination.
 #   * more than one shard, FORWARD — allowed only with --confirm-single-shard, which is then an acknowledgment that this
 #     run covers the connected shard alone and must be repeated on every shard before finalize.sh. Refusing outright
 #     would leave a multi-shard estate with no driver path for a gap the drivers can actually close.
@@ -761,10 +762,16 @@ run_reverse_deletion_replay() {
     clickhouse-client "${CH_ARGS[@]}" --time --multiquery --query "$sql"
 }
 
-# 000004_rollback_verify_replay.sql, unchanged: asserts no id bridged since cutover_start is live again. Advisory here,
-# unlike in rollback.sh — the reconciliation postcondition is the gate this driver exits on, and it would report the same
-# key as a divergence — so this is the one call that belongs in a condition context. It names which check spoke, so a
-# resurrected key is not confused with a sweep that failed to land rows.
+# 000004_rollback_verify_replay.sql, unchanged: asserts no id bridged since cutover_start is live again.
+#
+# THIS IS A GATE, NOT AN ADVISORY, AND THE FOUR COUNTS CANNOT STAND IN FOR IT. Both arms of the postcondition
+# (000006_verify_reconciliation.sql) are PARKED-DRIVEN: every count starts from a row in the parked table and looks up
+# its live version, so missing_keys / stale_keys / payload_mismatch_keys classify only keys the parked side holds. A
+# resurrected span is the opposite shape — live on the restored original, masked or absent on the parked successor — so
+# no count can see it, whatever its value. An earlier revision called this advisory on the grounds that the
+# postcondition "would report the same key as a divergence"; it would not, and that left a failed reverse replay
+# printing RECONCILED. It runs AFTER the settle gate for the same reason the postcondition does: before it, the
+# replay's own mutation may not have applied, and the check would report its own lag.
 verify_reverse_replay() {
     local sql resurrected
     sql="$(cat "$REVERSE_VERIFY_SQL")"
@@ -775,11 +782,15 @@ verify_reverse_replay() {
         echo "  Reverse-replay postcondition OK: no id bridged since cutover_start is live on the restored '$LIVE_TABLE'."
         return 0
     fi
+    # Both remaining branches fail the gate. "Could not be evaluated" is not a pass: this driver's verdict authorises
+    # finalize.sh to drop the parked backup ON CLUSTER, so a check that cannot decide must not certify.
     if ! [[ "$resurrected" =~ ^[0-9]+$ ]]; then
-        echo "  WARNING: reverse-replay postcondition COULD NOT BE EVALUATED — the query returned no usable count." >&2
+        REVERSE_REPLAY_STATE="unreadable"
+        echo "  ERROR: reverse-replay postcondition COULD NOT BE EVALUATED — the query returned no usable count." >&2
     else
-        echo "  WARNING: reverse-replay postcondition FAILED — $resurrected id(s) deleted after cutover_start are live" >&2
-        echo "           again on '$LIVE_TABLE'. The sweep re-imported them and the replay did not mask them." >&2
+        REVERSE_REPLAY_STATE="resurrected:$resurrected"
+        echo "  ERROR: reverse-replay postcondition FAILED — $resurrected id(s) deleted after cutover_start are live" >&2
+        echo "         again on '$LIVE_TABLE'. The sweep re-imported them and the replay did not mask them." >&2
     fi
     return 1
 }
@@ -907,8 +918,12 @@ print_leak_check() {
     return 0
 }
 
+# REVERSE_REPLAY_STATE is "ok" in the forward direction, where there is no reverse replay to verify, so the extra
+# conjunct is inert there. Reset per pass by the loop: a pass-1 failure must not outlive the retry that fixes it.
+REVERSE_REPLAY_STATE="ok"
+
 gate_is_clean() {
-    (( MISSING == 0 && STALE == 0 && PAYLOAD == 0 ))
+    (( MISSING == 0 && STALE == 0 && PAYLOAD == 0 )) && [[ "$REVERSE_REPLAY_STATE" == "ok" ]]
 }
 
 resolve_live_table
@@ -1045,11 +1060,15 @@ while (( PASS < MAX_PASSES )); do
     for block in "${MUTATING_BLOCKS[@]}"; do
         run_block "$block"
     done
+    REVERSE_REPLAY_STATE="ok"
     if [[ "$DIRECTION" == "reverse" ]]; then
         run_reverse_deletion_replay
-        verify_reverse_replay || true
     fi
     settle
+    # After the settle gate, so the replay's own mutation has applied and this reads the estate rather than its lag.
+    if [[ "$DIRECTION" == "reverse" ]]; then
+        verify_reverse_replay || true   # the verdict is carried by REVERSE_REPLAY_STATE, which gate_is_clean reads
+    fi
     read_postcondition || {
         echo "ERROR: the reconciliation postcondition could not be read after pass $PASS. The sweep ran, so treat the" >&2
         echo "       estate as UNVERIFIED rather than reconciled: fix connectivity and re-run (this driver is idempotent)." >&2
@@ -1058,7 +1077,12 @@ while (( PASS < MAX_PASSES )); do
     print_counts
     if gate_is_clean; then
         echo
-        echo "RECONCILED after $PASS pass(es): missing_keys=0 stale_keys=0 payload_mismatch_keys=0."
+        if [[ "$DIRECTION" == "reverse" ]]; then
+            echo "RECONCILED after $PASS pass(es): missing_keys=0 stale_keys=0 payload_mismatch_keys=0, and the"
+            echo "reverse-replay postcondition passed (no id bridged since cutover_start is live again)."
+        else
+            echo "RECONCILED after $PASS pass(es): missing_keys=0 stale_keys=0 payload_mismatch_keys=0."
+        fi
         print_leak_check
         # A shard-local verdict must never read as an estate-wide one: finalize.sh destroys the parked backup ON CLUSTER
         # on the strength of this line, so when the scope was asserted rather than proven, the line says so.
@@ -1087,12 +1111,25 @@ while (( PASS < MAX_PASSES )); do
         fi
         exit 0
     fi
-    echo "  Gate still non-zero after pass $PASS; retrying (concurrent traffic can add to the gap while the sweep runs)."
+    if [[ "$REVERSE_REPLAY_STATE" == "ok" ]]; then
+        echo "  Gate still non-zero after pass $PASS; retrying (concurrent traffic can add to the gap while the sweep runs)."
+    else
+        echo "  Reverse-replay postcondition did not pass on pass $PASS ($REVERSE_REPLAY_STATE); retrying — the replay is"
+        echo "  idempotent, so a re-run re-applies the mask."
+    fi
 done
 
 echo >&2
-echo "RECONCILIATION FAILED: the gate is still non-zero after $MAX_PASSES pass(es) —" >&2
+echo "RECONCILIATION FAILED after $MAX_PASSES pass(es) —" >&2
 echo "  missing_keys=$MISSING stale_keys=$STALE payload_mismatch_keys=$PAYLOAD" >&2
+[[ "$REVERSE_REPLAY_STATE" == "ok" ]] || {
+    echo "  reverse-replay postcondition: $REVERSE_REPLAY_STATE" >&2
+    echo "  A 'resurrected:N' here means N id(s) deleted after cutover_start are live again on the restored table: the" >&2
+    echo "  sweep re-imported them and the replay did not mask them. The four counts above can be ALL ZERO alongside it" >&2
+    echo "  and that is not a contradiction — they are computed from the parked table's keys, and a resurrected row is" >&2
+    echo "  absent there by construction, so only this check can see it. 'unreadable' means the check could not be" >&2
+    echo "  evaluated, which is equally disqualifying: do NOT run finalize.sh on either." >&2
+}
 echo "This is NOT convergence stalling on write volume: the parked table is frozen, so repeated passes cannot keep" >&2
 echo "finding new work unless something else is wrong. Investigate before re-running:" >&2
 echo "  * missing_keys — the sweep did not land those rows. Check the run's errors, and check --swap-done against the" >&2
