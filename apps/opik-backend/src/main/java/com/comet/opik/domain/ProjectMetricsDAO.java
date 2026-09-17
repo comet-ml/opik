@@ -308,6 +308,26 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             )
             """;
 
+    /**
+     * A thread's position on the time axis is {@code min(traces.start_time)}, never the timestamp embedded in
+     * {@code trace_threads.id}. That id is a UUIDv7 minted when the thread row was first created, and
+     * {@link com.comet.opik.domain.threads.TraceThreadIdService} falls back to {@code now()} whenever the caller has
+     * no first-trace timestamp to pass, so for backfilled or bulk-created threads it is a record-keeping artifact
+     * rather than a fact about the conversation. Bucketing on it collapsed whole projects onto their ingestion day
+     * and disagreed with the thread list, which has always sorted and filtered on start_time (OPIK-8335).
+     * <p>
+     * The window is therefore applied twice on purpose. {@code trace_threads_final} narrows to threads holding at
+     * least one trace whose id falls in the window, which is the only cheap predicate available: {@code traces} is
+     * partitioned on the week of {@code id_at} and sorted by {@code (workspace_id, project_id, id)}, whereas
+     * {@code trace_threads} is sorted by {@code (workspace_id, project_id, thread_id, id)} and not partitioned. The
+     * id filter it used to carry pruned nothing: measured on 1M threads, {@code EXPLAIN indexes=1} selects 123/563
+     * granules with it and the same 123/563 without it, by generic exclusion search rather than a key-prefix binary
+     * search. The {@code thread_id} set reaches the key prefix and gets that down to 69/563, paying for it with one
+     * extra pass over the window's traces. That pass is a superset only insofar as a trace's id tracks its
+     * start_time, which is what every trace-side metric here already assumes by bucketing on
+     * {@code UUIDv7ToDateTime(traces.id)}; {@code threads_filtered} then applies the exact start_time bound.
+     * Collapsing the two back into one filter reintroduces the bug.
+     */
     private static final String THREAD_FILTERED_PREFIX = """
             WITH trace_threads_final AS (
                 SELECT
@@ -324,8 +344,20 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
+                <if(uuid_from_time)>
+                AND thread_id IN (
+                    SELECT thread_id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND id >= :uuid_from_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+                )
+                <endif>
             ), traces_final AS (
                 SELECT
                     *
@@ -402,7 +434,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
-                    UUIDv7ToDateTime(toUUID(tt.thread_model_id)) as trace_time,
+                    t.start_time as trace_time,
                     t.end_time as end_time,
                     t.duration as duration,
                     t.first_message as first_message,
@@ -439,6 +471,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 ) AS t
                 JOIN trace_threads_final AS tt ON t.id = tt.thread_id
                 WHERE workspace_id = :workspace_id
+                <if(uuid_from_time)> AND t.start_time >= UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')<endif>
+                <if(uuid_to_time)> AND t.start_time \\<= UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')<endif>
                 <if(thread_feedback_scores_filters)>
                 AND thread_model_id IN (
                     SELECT
