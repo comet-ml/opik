@@ -893,6 +893,88 @@ class TestBulkUploadItemsValidation:
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
 
+class TestBulkUploadItemsStreamingSource:
+    """Uploading from a single-pass source, which is the point of not holding a list."""
+
+    def test_batch_upload_items__generator__sends_every_item_in_the_same_batches(self):
+        experiment, mock_rest_client = _create_experiment()
+        records = [_record(dataset_item_id=f"d{i}") for i in range(2500)]
+
+        # Single-threaded so the recorded order is the send order; with the parallel
+        # default the batches arrive concurrently and the comparison would be testing
+        # completion order rather than batching.
+        experiment.batch_upload_items(iter(records), num_threads=1)
+        from_generator = _sent_batch_sizes(mock_rest_client)
+        ids_from_generator = _sent_dataset_item_ids(mock_rest_client)
+
+        experiment, mock_rest_client = _create_experiment()
+        experiment.batch_upload_items(records, num_threads=1)
+
+        assert from_generator == _sent_batch_sizes(mock_rest_client)
+        assert ids_from_generator == _sent_dataset_item_ids(mock_rest_client)
+        assert len(ids_from_generator) == 2500
+
+    def test_batch_upload_items__generator__is_not_drained_before_the_first_request(
+        self,
+    ):
+        """The property that makes it streaming rather than a list built elsewhere.
+
+        If the source were consumed up front, peak memory would follow the upload
+        rather than the batch, which is the cost this accepts an iterable to avoid.
+        """
+        experiment, mock_rest_client = _create_experiment()
+        produced = []
+
+        def source():
+            for i in range(2500):
+                produced.append(i)
+                yield _record(dataset_item_id=f"d{i}")
+
+        drained_at_first_send = []
+        mock_rest_client.experiments.experiment_items_bulk.side_effect = (
+            lambda **kwargs: drained_at_first_send.append(len(produced))
+        )
+
+        experiment.batch_upload_items(source(), num_threads=1)
+
+        # The first request goes out once a batch is full, not once the source is spent.
+        assert drained_at_first_send[0] < 2500
+        assert len(produced) == 2500
+
+    def test_batch_upload_items__empty_generator__sends_nothing(self):
+        experiment, mock_rest_client = _create_experiment()
+
+        experiment.batch_upload_items(iter([]))
+
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
+    def test_batch_upload_items__generator__invalid_item_found_when_reached(self):
+        """Eager validation needs a second pass, which a generator cannot give.
+
+        So the failure surfaces where a streaming upload can surface it -- when the item
+        is reached, with the batches before it already sent.
+        """
+        experiment, mock_rest_client = _create_experiment()
+        records = [_record(dataset_item_id=f"d{i}") for i in range(1500)]
+        records.append(_record(dataset_item_id=""))
+
+        with pytest.raises(exceptions.ValidationError):
+            experiment.batch_upload_items(iter(records), num_threads=1)
+
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count >= 1
+
+    def test_batch_upload_items__list__still_validates_before_sending_anything(self):
+        """The existing contract is untouched for a re-iterable source."""
+        experiment, mock_rest_client = _create_experiment()
+        records = [_record(dataset_item_id=f"d{i}") for i in range(1500)]
+        records.append(_record(dataset_item_id=""))
+
+        with pytest.raises(exceptions.ValidationError):
+            experiment.batch_upload_items(records)
+
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
+
 class TestBulkUploadItemsRateLimitRetry:
     @patch("opik.api_objects.rest_helpers._sleep")
     def test_batch_upload_items__429_with_retry_after_header__retries_with_correct_delay(

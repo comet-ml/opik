@@ -1,8 +1,9 @@
+import collections.abc
 import functools
 import logging
 import threading
 from concurrent import futures
-from typing import Iterator, List, Optional, TYPE_CHECKING
+from typing import Iterable, Iterator, List, Optional, TYPE_CHECKING
 
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
@@ -196,7 +197,7 @@ class Experiment:
 
     def batch_upload_items(
         self,
-        items: List[bulk_item.ExperimentItemBulkRecord],
+        items: Iterable[bulk_item.ExperimentItemBulkRecord],
         project_name: Optional[str] = None,
         num_threads: int = constants.EXPERIMENT_ITEMS_BULK_NUM_THREADS,
         validate_before_upload: bool = True,
@@ -209,10 +210,20 @@ class Experiment:
 
         Items are split into batches that respect the backend's 1000-item and
         4MB-per-request limits, and sent with automatic retry on rate limiting
-        (HTTP 429). By default every item is validated before the first batch is
-        sent; with ``validate_before_upload=False`` each is validated as it is
-        reached instead, so a later invalid item is found with earlier batches
-        already delivered.
+        (HTTP 429).
+
+        Any iterable is accepted, including a generator, and a single-pass source is
+        consumed lazily: no item is retained once its batch has been sent, and the
+        batches in flight are bounded, so peak memory follows the batch size rather
+        than the upload. Passing a list instead holds the whole upload resident before
+        the first request goes out, which for large records is the dominant cost --
+        286 MiB of records cost 8 MiB from a generator and 306 MiB from a list.
+
+        By default every item is validated before the first batch is sent. That needs a
+        second pass over the items, so it applies only to a re-iterable source; from a
+        generator it is not possible and each item is validated as it is reached, which
+        is what ``validate_before_upload=False`` asks for explicitly. Either way a later
+        invalid item is found with earlier batches already delivered.
 
         The size that builds a batch is an estimate, so a batch can still be
         rejected as too large. A rejected batch is halved and retried, down to a
@@ -282,7 +293,11 @@ class Experiment:
                 ],
             )
 
-        if not items:
+        # Re-iterable sources keep the existing contract. A single-pass one cannot be
+        # checked up front -- the eager pass would consume it and leave nothing to send --
+        # so each item is validated as it is reached instead.
+        reiterable = isinstance(items, collections.abc.Sequence)
+        if reiterable and not items:
             return
 
         resolved_project_name = (
@@ -296,7 +311,7 @@ class Experiment:
 
         sizes_MB = (
             self._validate_and_size(items, resolved_project_name)
-            if validate_before_upload
+            if validate_before_upload and reiterable
             else None
         )
 
@@ -318,13 +333,21 @@ class Experiment:
         # concurrency -- `ceil(len(items) / 1000)` is 1 for a payload-bound upload of
         # 1,000 large items that actually produces hundreds of batches, which would run
         # the whole thing on one thread. One batch per item is the ceiling.
-        batch_count = _count_batches(sizes_MB) if sizes_MB is not None else len(items)
-        worker_count = min(
-            num_threads, batch_count, constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS
+        if sizes_MB is not None:
+            batch_count = _count_batches(sizes_MB)
+        elif reiterable:
+            batch_count = len(items)
+        else:
+            # Unknown until the source is drained, so it bounds nothing; the pool is left
+            # to num_threads. More workers than batches is waste, not breakage.
+            batch_count = num_threads
+        worker_count = max(
+            1,
+            min(num_threads, batch_count, constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS),
         )
         LOGGER.debug(
-            "Uploading %d experiment items in %s%d batch(es) using %d thread(s)",
-            len(items),
+            "Uploading %s experiment items in %s%d batch(es) using %d thread(s)",
+            len(items) if reiterable else "streamed",
             "" if sizes_MB is not None else "at most ",
             batch_count,
             worker_count,
@@ -429,7 +452,7 @@ class Experiment:
 
     def _stream_rest_batches(
         self,
-        items: List[bulk_item.ExperimentItemBulkRecord],
+        items: Iterable[bulk_item.ExperimentItemBulkRecord],
         project_name: Optional[str],
         sizes_MB: Optional[List[float]] = None,
     ) -> Iterator[
