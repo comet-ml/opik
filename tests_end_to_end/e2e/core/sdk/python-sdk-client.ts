@@ -1,3 +1,22 @@
+/**
+ * A seeded span's `usage` map: the three counts every LLM span reports, plus
+ * whatever else the scenario needs.
+ *
+ * Open-ended because the backend's cost calculators read far more than the
+ * trio — audio, cache and reasoning token counts all arrive as extra keys on
+ * this same flat map (`original_usage.completion_tokens_details.reasoning_tokens`
+ * and friends), and the bridge types the field as a plain `dict[str, int]`.
+ *
+ * Note the Python SDK normalises what it is given: a bare OTel key is re-emitted
+ * under the `original_usage.` prefix. A seed that must arrive with the bare key
+ * cannot go through the bridge at all — see `backendClient.createSpan`.
+ */
+export type SpanSeedUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+} & Record<string, number>;
+
 export interface PythonSdkClient {
   createProject(args: { name: string; workspace?: string }): Promise<{ id: string; name: string }>;
   createTrace(args: {
@@ -34,7 +53,7 @@ export interface PythonSdkClient {
       metadata?: Record<string, unknown>;
       model?: string;
       provider?: string;
-      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+      usage?: SpanSeedUsage;
       total_cost?: number;
       parent_index?: number;
     }>;
@@ -60,14 +79,52 @@ export interface PythonSdkClient {
    * One `Dataset.insert(...)` into an existing dataset — and therefore exactly
    * one new dataset version, however many 1000-item batches the SDK splits the
    * payload into. `num_threads` > 1 uploads those batches in parallel.
+   * `deduplication: false` bypasses the content-hash dedup path, so identical
+   * content sent twice is stored twice.
+   *
+   * `num_threads` is deliberately unconstrained so a caller can assert the
+   * SDK's own validation of it: a value it refuses comes back as `value_error`
+   * carrying the ValueError's message with `inserted: 0`, rather than as a
+   * bridge failure. Validation runs before any batch is sent, so a rejected
+   * insert leaves the dataset untouched.
+   *
+   * `enable_json_request_compression: false` selects the uncompressed upload
+   * arm. Omit it to get whatever the deployment is configured for. Either way
+   * `compression_enabled` reports what the upload actually did — read off the
+   * client the bridge built, not echoed from this argument, so the two arms can
+   * be shown to have genuinely differed.
    */
   insertDatasetItems(args: {
     dataset_name: string;
     project_name: string;
     items: Array<Record<string, unknown>>;
     num_threads?: number;
+    deduplication?: boolean;
+    enable_json_request_compression?: boolean;
     workspace?: string;
-  }): Promise<{ dataset_id: string; inserted: number }>;
+  }): Promise<{
+    dataset_id: string;
+    inserted: number;
+    compression_enabled: boolean;
+    value_error: string | null;
+  }>;
+  /**
+   * Several `Dataset.insert(...)` calls sharing ONE `Dataset` object — the
+   * shape `insertDatasetItems` cannot express, because the bridge builds a
+   * fresh client per request and a backend-fetched `Dataset` always starts
+   * with its hash cache unsynced. Reach for this only when one insert's effect
+   * on the NEXT one is the subject; otherwise use `insertDatasetItems`.
+   */
+  insertDatasetItemsSession(args: {
+    dataset_name: string;
+    project_name: string;
+    inserts: Array<{
+      items: Array<Record<string, unknown>>;
+      num_threads?: number;
+      deduplication?: boolean;
+    }>;
+    workspace?: string;
+  }): Promise<{ dataset_id: string; inserted: number[] }>;
   /**
    * One `Dataset.get_items(...)`, reduced to the item ids it returned **in the
    * order it returned them** — the property a concurrent paged read has to
@@ -188,6 +245,7 @@ export interface PythonSdkClient {
     }>;
     workspace?: string;
   }): Promise<{ id: string; name: string }>;
+  /** `deduplication: false` stores identical test cases as separate items. */
   insertTestSuiteItems(args: {
     suite_name: string;
     project_name: string;
@@ -196,7 +254,17 @@ export interface PythonSdkClient {
       assertions?: string[];
       description?: string;
     }>;
+    deduplication?: boolean;
     workspace?: string;
+    /**
+     * Which client factory the suite being inserted into is obtained from.
+     * `get_or_create` (the bridge's default) is what every other caller wants;
+     * `list` reaches the suite through `get_test_suites()`. The two build a
+     * suite object with different local content-hash state, and that state is
+     * what decides whether an insert of an item the suite already holds is
+     * deduplicated — so a spec covering dedup has to name the path it means.
+     */
+    resolve_via?: 'get_or_create' | 'list';
   }): Promise<{ suite_id: string; inserted: number }>;
   runTestSuite(args: {
     suite_name: string;
@@ -335,9 +403,39 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
     }
   }
 
+  /**
+   * Run a bridge write, standing off and retrying while it is rate-limited.
+   *
+   * Project creation is the first call almost every SDK-seeded spec makes, so
+   * on a shared cloud workspace a burst of parallel workers can spend the
+   * per-workspace budget before any of them reaches its subject. A 429 there
+   * fails the whole spec in `Before Hooks`, reporting an ingestion budget as a
+   * product defect.
+   *
+   * Matched on the typed `status`, not the message: a generated id containing
+   * `429` would otherwise make an unrelated 4xx look retryable. Only 429 is
+   * retried — any other status is a real error and must surface at once — and a
+   * rate limit outlasting the whole backoff still throws, because by then it is
+   * not a burst.
+   */
+  async function withRateLimitRetry<T>(write: () => Promise<T>): Promise<T> {
+    const backoffMs = [2_000, 5_000, 10_000, 20_000];
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await write();
+      } catch (err) {
+        const rateLimited = err instanceof PythonSdkBridgeError && err.status === 429;
+        if (!rateLimited || attempt >= backoffMs.length) throw err;
+        await new Promise((resolve) => setTimeout(resolve, backoffMs[attempt]));
+      }
+    }
+  }
+
   return {
     async createProject({ name, workspace }) {
-      return request<{ id: string; name: string }>('POST', '/projects', { name, workspace });
+      return withRateLimitRetry(() =>
+        request<{ id: string; name: string }>('POST', '/projects', { name, workspace }),
+      );
     },
     async createTrace(args) {
       return request<{ id: string; name: string; project_id: string }>('POST', '/traces', args);
@@ -368,9 +466,19 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
       // Multi-batch inserts against a cloud backend outlive the default budget
       // when the workspace is being rate-limited, and a client-side abort here
       // would leave a half-written dataset behind.
-      return request<{ dataset_id: string; inserted: number }>(
+      return request<{
+        dataset_id: string;
+        inserted: number;
+        compression_enabled: boolean;
+        value_error: string | null;
+      }>('POST', '/datasets/insert-items', args, { timeoutMs: 180_000 });
+    },
+    async insertDatasetItemsSession(args) {
+      // Same budget as insertDatasetItems, and for the same reason — except
+      // this route runs several inserts back to back inside one request.
+      return request<{ dataset_id: string; inserted: number[] }>(
         'POST',
-        '/datasets/insert-items',
+        '/datasets/insert-items-session',
         args,
         { timeoutMs: 180_000 },
       );

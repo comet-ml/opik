@@ -6,6 +6,8 @@
 import React, { useCallback, useRef } from "react";
 import { ColumnDef, ColumnSizingState } from "@tanstack/react-table";
 import DataTable from "@/shared/DataTable/DataTable";
+import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
+import StickyScrollTableBodyWrapper from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/StickyScrollTableBodyWrapper";
 import { OnChangeFn, ROW_HEIGHT } from "@/types/shared";
 
 interface ResizeConfig {
@@ -21,6 +23,7 @@ interface StickyScrollTableProps<TData> {
   resizeConfig: ResizeConfig;
   noData: React.ReactNode;
   showLoadingOverlay: boolean;
+  testId: string;
 }
 
 const EMPTY_DATA: never[] = [];
@@ -29,10 +32,6 @@ const HeaderWrapper: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => <div className="[&_tbody]:hidden">{children}</div>;
 
-const BodyWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="border-b [&_thead]:hidden">{children}</div>
-);
-
 const StickyScrollTable = <TData,>({
   columns,
   data,
@@ -40,6 +39,7 @@ const StickyScrollTable = <TData,>({
   resizeConfig,
   noData,
   showLoadingOverlay,
+  testId,
 }: StickyScrollTableProps<TData>) => {
   const headerScrollRef = useRef<HTMLDivElement>(null);
   const bodyScrollRef = useRef<HTMLDivElement>(null);
@@ -60,6 +60,7 @@ const StickyScrollTable = <TData,>({
     <div>
       <div
         ref={headerScrollRef}
+        data-testid={`${testId}-header`}
         className="comet-no-scrollbar sticky top-0 z-10 overflow-x-auto overflow-y-hidden"
         onScroll={handleHeaderScroll}
       >
@@ -74,6 +75,7 @@ const StickyScrollTable = <TData,>({
       </div>
       <div
         ref={bodyScrollRef}
+        data-testid={`${testId}-body`}
         className="overflow-x-auto overflow-y-hidden"
         onScroll={handleBodyScroll}
       >
@@ -84,7 +86,8 @@ const StickyScrollTable = <TData,>({
           resizeConfig={resizeConfig}
           noData={noData}
           showLoadingOverlay={showLoadingOverlay}
-          TableWrapper={BodyWrapper}
+          TableWrapper={StickyScrollTableBodyWrapper}
+          TableBody={DataTableVirtualBody}
         />
       </div>
     </div>

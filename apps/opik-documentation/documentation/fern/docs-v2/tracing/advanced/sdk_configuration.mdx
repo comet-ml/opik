@@ -63,7 +63,11 @@ opik configure --yes
 
 ### Connecting your AI coding assistant
 
-At the end of setup, `opik configure` offers to register [Opik's MCP server](/mcp-server) with the AI clients it finds on your machine, so your assistant can read traces and log scores directly from the chat.
+The one-command path is `uvx opik mcp configure`, which needs no SDK; see
+[Opik's MCP server](/mcp-server). If you are already running `opik configure`, it
+offers the same step at the end: registering the MCP server with the AI clients it
+finds on your machine, so your assistant can read traces and log scores directly
+from the chat.
 
 Pass `--install-mcp` to skip the prompt and register it:
 
@@ -101,7 +105,7 @@ explicitly. Use `--no-install-mcp` / `--no-install-skills` to skip the prompts
 without being asked.
 </Note>
 
-To set this up without re-running the whole configuration, use `opik mcp configure` — see [Opik's MCP server](/mcp-server) for the `--ai-client` flag, the skill pack, and per-client instructions.
+To set this up without re-running the whole configuration, use `uvx opik mcp configure`. See [Opik's MCP server](/mcp-server) for the `--ai-client` flag, the skill pack, and per-client instructions.
 
 ### TypeScript SDK
 

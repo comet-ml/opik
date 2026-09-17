@@ -54,27 +54,56 @@ These roles are available in all Opik organizations and serve as the basis for c
 
 The table below shows the default permissions for each role. Custom roles can combine these permissions differently.
 
-| Group                 | Permission                      | Manage | Write | Annotate | Read |
-| --------------------- | ------------------------------- | ------ | ----- | -------- | ---- |
-| Admin                 | Invite users to workspace       | Yes    | Yes   | No       | No   |
-| Admin                 | Configure workspace settings    | Yes    | No    | No       | No   |
-| Admin                 | Define AI providers             | Yes    | Yes   | No       | No   |
-| Experiment management | Change project settings         | Yes    | No    | No       | No   |
-| Experiment management | Approve and manage models       | Yes    | No    | No       | No   |
-| Observability         | View logs                       | Yes    | Yes   | Yes      | Yes  |
-| Observability         | Log trace, span, or thread      | Yes    | Yes   | No       | No   |
-| Observability         | Delete trace                    | Yes    | Yes   | No       | No   |
-| Observability         | Write comments                  | Yes    | Yes   | Yes      | No   |
-| Observability         | Annotate trace, span, or thread | Yes    | Yes   | Yes      | No   |
-| Observability         | Tag trace                       | Yes    | Yes   | Yes      | No   |
-| Observability         | Define online evaluation rule   | Yes    | Yes   | No       | No   |
-| Observability         | Define alert                    | Yes    | Yes   | No       | No   |
-| Observability         | Create annotation queue         | Yes    | Yes   | No       | No   |
-| Dashboards            | View dashboard                  | Yes    | Yes   | No       | Yes  |
-| Experiments           | View experiments                | Yes    | Yes   | No       | Yes  |
-| Datasets              | View datasets and test suites   | Yes    | Yes   | No       | Yes  |
-| Annotation queues     | View annotation queues          | Yes    | Yes   | Yes      | Yes  |
-| Annotation queues     | Annotate trace, span, or thread | Yes    | Yes   | Yes      | Yes  |
+| Group                    | Permission                      | Manage | Write | Annotate | Read |
+| ------------------------ | ------------------------------- | ------ | ----- | -------- | ---- |
+| Workspace administration | Manage users and roles          | Yes    | No    | No       | No   |
+| Workspace administration | Invite users to workspace       | Yes    | Yes   | No       | No   |
+| Workspace administration | Configure workspace preferences | Yes    | No    | No       | No   |
+| Workspace administration | Configure AI providers          | Yes    | Yes   | No       | No   |
+| Experiment management    | Manage project visibility       | Yes    | No    | No       | No   |
+| Experiment management    | Manage the model registry       | Yes    | No    | No       | No   |
+| Opik observability       | Create Opik projects            | Yes    | Yes   | No       | No   |
+| Opik observability       | Delete Opik projects            | Yes    | Yes   | No       | No   |
+| Opik observability       | View traces and logs            | Yes    | Yes   | Yes      | Yes  |
+| Opik observability       | View unanonymized data          | Yes    | Yes   | Yes      | Yes  |
+| Opik observability       | Log traces, spans, and threads  | Yes    | Yes   | No       | No   |
+| Opik observability       | Annotate traces, spans, and threads | Yes | Yes   | Yes      | No   |
+| Opik observability       | Delete traces, spans, and threads | Yes  | Yes   | No       | No   |
+| Opik observability       | View dashboards                 | Yes    | Yes   | No       | Yes  |
+| Opik observability       | Create dashboards               | Yes    | Yes   | No       | No   |
+| Opik observability       | Edit dashboards                 | Yes    | Yes   | No       | No   |
+| Opik observability       | Delete dashboards               | Yes    | Yes   | No       | No   |
+| Opik development         | View prompts                    | Yes    | Yes   | No       | Yes  |
+| Opik development         | Create prompts                  | Yes    | Yes   | No       | No   |
+| Opik development         | Edit prompts                    | Yes    | Yes   | No       | No   |
+| Opik development         | Delete prompts                  | Yes    | Yes   | No       | No   |
+| Opik development         | Use the agent playground        | Yes    | Yes   | No       | Yes  |
+| Opik development         | Use the prompt playground       | Yes    | Yes   | No       | No   |
+| Opik development         | View optimization runs          | Yes    | Yes   | No       | Yes  |
+| Opik development         | Use the optimization studio     | Yes    | Yes   | No       | No   |
+| Opik development         | Delete optimization runs        | Yes    | Yes   | No       | No   |
+| Opik evaluation          | View datasets and test suites   | Yes    | Yes   | No       | Yes  |
+| Opik evaluation          | Create datasets and test suites | Yes    | Yes   | No       | No   |
+| Opik evaluation          | Edit datasets and test suites   | Yes    | Yes   | No       | No   |
+| Opik evaluation          | Delete datasets and test suites | Yes    | Yes   | No       | No   |
+| Opik evaluation          | View experiments                | Yes    | Yes   | No       | Yes  |
+| Opik evaluation          | Create experiments              | Yes    | Yes   | No       | No   |
+| Opik evaluation          | View annotation queues          | Yes    | Yes   | Yes      | Yes  |
+| Opik evaluation          | Create annotation queues        | Yes    | Yes   | No       | No   |
+| Opik evaluation          | Annotate items in queues        | Yes    | Yes   | Yes      | Yes  |
+| Opik evaluation          | Edit annotation queues          | Yes    | Yes   | No       | No   |
+| Opik evaluation          | Export annotation queue results | Yes    | Yes   | Yes      | Yes  |
+| Opik evaluation          | Delete annotation queues        | Yes    | Yes   | No       | No   |
+| Opik production          | View online evaluation rules    | Yes    | Yes   | No       | Yes  |
+| Opik production          | Manage online evaluation rules  | Yes    | Yes   | No       | No   |
+| Opik production          | View alerts                     | Yes    | Yes   | No       | Yes  |
+| Opik production          | Manage alerts                   | Yes    | Yes   | No       | No   |
+
+<Note>
+  **View unanonymized data** only affects workspaces where anonymization is
+  enabled. [Contact us](https://www.comet.com/site/about-us/contact-us/) to
+  enable anonymization for your organization.
+</Note>
 
 ### Custom roles
 

@@ -27,14 +27,13 @@ schedule==1.2.1
 tiktoken==0.9.0
 redis==6.4.0
 rq==2.6.0
-opik-optimizer==3.1.1
-# gepa must move to >=0.1.0 in the same commit that bumps opik-optimizer to the
-# first release carrying that floor. The published 3.1.1 pinned above still
-# declares gepa>=0.0.7, so 0.0.17 is correct today; the raised floor lands in
-# the next release. Those optimizers require gepa's <curr_param>/<side_info>
-# template markers and the reflection_prompt_template kwarg, neither of which
-# exists on 0.0.x. See OPIK-7510 / OPIK-7639.
-gepa==0.0.17
+opik-optimizer==3.2.0
+# gepa moves with opik-optimizer, in this same commit: 3.2.0 is the first
+# published release whose own metadata declares gepa>=0.1.0, so the floor the
+# note below used to defer has now landed. Those optimizers require gepa's
+# <curr_param>/<side_info> template markers and the reflection_prompt_template
+# kwarg, neither of which exists on 0.0.x. See OPIK-7510 / OPIK-7639.
+gepa==0.1.4
 # Transitive via opik-optimizer, pinned because this image builds it from source: litellm
 # publishes no musllinux or pure-python wheel, and 1.95.0 raised its Rust dependencies to
 # aws-* crates requiring rustc 1.94.1, while the Alpine builder ships rustc 1.91.1.

@@ -1,11 +1,19 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.domain.llm.ChatCompletionService;
+import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.redis.testcontainers.RedisContainer;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.exception.HttpException;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.request.ChatRequest;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.AfterEach;
@@ -49,7 +57,12 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.TestUtils.waitForMillis;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.awaitility.Awaitility.await;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Integration tests for {@link BaseRedisSubscriber}  using real Redis test container.
@@ -346,10 +359,21 @@ class BaseRedisSubscriberTest {
                             new NullPointerException("Non-retryable")),
                     Arguments.of("NumberFormatException (subclass of IllegalArgumentException)",
                             new NumberFormatException("Non-retryable")),
-                    Arguments.of("ClientErrorException (4xx)",
+                    Arguments.of("ClientErrorException (401)",
                             new ClientErrorException("Unauthorized", 401)),
+                    Arguments.of("ClientErrorException (400)",
+                            new ClientErrorException("Bad Request", 400)),
+                    Arguments.of("ClientErrorException (403)",
+                            new ClientErrorException("Forbidden", 403)),
                     Arguments.of("NotFoundException (subclass of ClientErrorException)",
-                            new NotFoundException()));
+                            new NotFoundException()),
+                    // The same contract, but with the exception a real ChatCompletionService.scoreTrace threw
+                    // rather than one built here: both halves of the seam were covered before and their
+                    // agreement was not, which is the half that originally broke.
+                    Arguments.of("permanent 400 from a real scoreTrace", thrownByRealScoreTrace(400, "Bad Request")),
+                    Arguments.of("permanent 401 from a real scoreTrace", thrownByRealScoreTrace(401, "Unauthorized")),
+                    Arguments.of("permanent 403 from a real scoreTrace", thrownByRealScoreTrace(403, "Forbidden")),
+                    Arguments.of("permanent 404 from a real scoreTrace", thrownByRealScoreTrace(404, "Not Found")));
         }
 
         @ParameterizedTest(name = "{0}")
@@ -369,6 +393,80 @@ class BaseRedisSubscriberTest {
             // Non-retryable errors should be removed from the stream
             waitForMessagesAckedAndRemoved();
             assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+        }
+
+        /**
+         * OPIK-8262. {@code ClientErrorException} used to be matched by class, which made every 4xx permanent
+         * — including the statuses that mean "not now" rather than "not ever". That is why
+         * {@code ChatCompletionService.scoreTrace} could not report a truthful 429: it would have been acked
+         * and dropped here. These drive the real subscriber against real Redis, so the distinction is proved
+         * where it actually takes effect rather than in a unit test of the predicate.
+         */
+        @ParameterizedTest(name = "{0} is retried, not dropped")
+        @MethodSource("transientClientErrors")
+        void shouldRetainTransientClientErrorsForRetry(String description, RuntimeException exception) {
+            var messages = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var subscriber = trackSubscriber(TestRedisSubscriber.failingSubscriber(
+                    config, redissonClient, exception));
+            subscriber.start();
+
+            publishMessagesToStream(messages);
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(
+                            () -> assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(messages.size()));
+            // Asserted with during(), not a single poll: ack-and-remove lands slightly after the failure is
+            // counted, so a one-shot size check could pass in that window and a wrongly acknowledged entry
+            // would go unnoticed. Requiring the entry to STAY in the stream, and stay pending for the group,
+            // closes that gap — a permanent classification removes it and both assertions then fail.
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .during(Duration.ofSeconds(1))
+                    .untilAsserted(() -> {
+                        assertThat(stream.size().block())
+                                .as("a transient status must leave the entry in the stream for redelivery")
+                                .isEqualTo((long) messages.size());
+                        assertThat(pendingCount())
+                                .as("and it must still be pending for the group, i.e. never acknowledged")
+                                .isEqualTo((long) messages.size());
+                    });
+            assertThat(subscriber.getSuccessMessageCount().get()).isZero();
+        }
+
+        static Stream<Arguments> transientClientErrors() {
+            return Stream.of(
+                    Arguments.of("408 Request Timeout", new ClientErrorException("Request Timeout", 408)),
+                    Arguments.of("425 Too Early", new ClientErrorException("Too Early", 425)),
+                    Arguments.of("429 Too Many Requests", new ClientErrorException("Too Many Requests", 429)),
+                    // As above: the exception a real scoreTrace threw, so the seam itself is exercised.
+                    Arguments.of("transient 408 from a real scoreTrace",
+                            thrownByRealScoreTrace(408, "Request Timeout")),
+                    Arguments.of("transient 425 from a real scoreTrace", thrownByRealScoreTrace(425, "Too Early")),
+                    Arguments.of("transient 429 from a real scoreTrace",
+                            thrownByRealScoreTrace(429, "Too Many Requests")));
+        }
+
+        /**
+         * Drives a real {@code ChatCompletionService.scoreTrace} against a provider that answers
+         * {@code status} and returns the exception it threw. Only the provider client is a mock — the
+         * classification under test is the production one.
+         */
+        private static RuntimeException thrownByRealScoreTrace(int status, String reason) {
+            var clientConfig = mock(LlmProviderClientConfig.class);
+            when(clientConfig.getMaxAttempts()).thenReturn(1);
+
+            var chatModel = mock(ChatModel.class);
+            when(chatModel.chat(any(ChatRequest.class)))
+                    .thenThrow(new RuntimeException(new HttpException(status, reason)));
+
+            var providerFactory = mock(LlmProviderFactory.class);
+            when(providerFactory.getLanguageModel(anyString(), any())).thenReturn(chatModel);
+
+            var service = new ChatCompletionService(clientConfig, providerFactory);
+            var request = ChatRequest.builder().messages(UserMessage.from("seam")).build();
+            var parameters = LlmAsJudgeModelParameters.builder().name("seam-test-model").build();
+
+            return catchThrowableOfType(RuntimeException.class,
+                    () -> service.scoreTrace(request, parameters, "seam-workspace"));
         }
 
         /**
@@ -694,6 +792,12 @@ class BaseRedisSubscriberTest {
     private void waitForMessagesProcessed(TestRedisSubscriber subscriber, int expectedCount) {
         await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(expectedCount));
+    }
+
+    /** Entries delivered but not yet acknowledged. A wrongly acked entry drops out of this count. */
+    private long pendingCount() {
+        var pending = stream.getPendingInfo(config.getConsumerGroupName()).block();
+        return pending == null ? 0L : pending.getTotal();
     }
 
     private void waitForMessagesAckedAndRemoved() {

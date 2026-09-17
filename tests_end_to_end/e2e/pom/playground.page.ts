@@ -4,6 +4,36 @@ import { loadEnvConfig } from '../config/env.config';
 
 export type RunExperimentSourceMode = 'dataset' | 'test_suite';
 
+/** Empty-state text an output cell shows until its row has been run. */
+const IDLE_CELL_TEXT = 'No runs yet';
+
+/**
+ * A failed run surfaces as the output cell's own value — `processCombination` catches and
+ * writes `error.message` there, with no flag to distinguish it from a real completion, so
+ * text is the only signal available. Kept narrow on purpose: these two are strings Opik
+ * itself emits, whereas a broad /error/i would fire on legitimate model output. Provider
+ * errors are free-form and stay undetected here by design.
+ */
+const RUN_ERROR_TEXT = /\bnot defined\b|returned an empty response/i;
+
+/**
+ * Whether a cell has finished.
+ *
+ * Deliberately does NOT require a test-suite cell's Passed/Failed verdict. A suite cell does
+ * leave the idle state before its verdict lands, but the verdict comes from
+ * `PlaygroundOutputAssertionStatus`, which polls the experiment for up to its own 5-minute
+ * ceiling — far past the 120s callers allow — so requiring it times the wait out on a run
+ * that is working. It also overshoots what these specs claim, which is that a run produces
+ * output, not that its assertions were scored. A spec that wants the verdict should wait on
+ * it explicitly, with a budget to match.
+ *
+ * Text is the only handle here: the idle placeholder carries no testid, so output that
+ * itself contained "No runs yet" would read as idle. Adding one would not help — these specs
+ * run against deployed Opik, so it would not exist in the version under test.
+ */
+const hasProducedOutput = (text: string): boolean =>
+  text.trim() !== '' && !text.includes(IDLE_CELL_TEXT);
+
 export interface PlaygroundVariantConfig {
   /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
   systemPrompt?: string;
@@ -135,51 +165,70 @@ export class PlaygroundPage {
   }
 
   /**
-   * Wait for runs to complete in the experiment-results table.
+   * Wait until a loaded dataset/suite can actually be run.
    *
-   * Polling shape depends on what was loaded:
-   *  - test_suite: rows show "Passed <output>" / "Failed <output>" (LLM-judged).
-   *  - dataset: rows show the raw output cell (no pass/fail label).
-   *
-   * Completion requires BOTH: all "No runs yet" placeholders are gone, AND the
-   * rendered row count meets `expectedRows`. Checking only the placeholder
-   * disappearance lets us return early if the table briefly re-renders during
-   * loading (`No runs yet` is unmounted while rows are still being painted).
+   * The source pill commits with the *selection*, which is strictly before
+   * `useDatasetItemsList` resolves. Running in that window builds the
+   * prompt/item combinations from an empty item list, so every row fails
+   * client-side with "<var> not defined" — no LLM call, no experiment, and a
+   * permanent error state that no later wait can recover. The output cells come
+   * from the same query as the runner's items, so their presence is the signal
+   * that the run has something to iterate.
    */
-  async waitForRunsComplete(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
-    return test.step(`wait for ${opts.expectedRows} run(s) to complete`, async () => {
-      const table = this.resultsTable();
+  async waitForRunReady(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
+    return test.step(`wait for ${opts.expectedRows} row(s) to be run-ready`, async () => {
       await expect
         .poll(
           async () => {
-            const noRunsYet = await table.getByText('No runs yet').count();
-            if (noRunsYet !== 0) return false;
-            const rowCount = await this.countOutputRows();
-            return rowCount >= opts.expectedRows;
+            const total = await this.outputCells().count();
+            return total >= opts.expectedRows && (await this.idleOutputCells().count()) === total;
           },
-          { timeout: opts.timeoutMs ?? 120_000, intervals: [1000, 2000, 3000] },
+          { timeout: opts.timeoutMs ?? 30_000, intervals: [250, 500, 1000] },
         )
         .toBe(true);
     });
   }
 
   /**
-   * Number of result rows that have completed (non-empty output cell).
-   * Counts rows where "No runs yet" is NOT present and the row is in the
-   * results table's right-side variant column.
+   * Wait for every output cell to finish.
+   *
+   * A run that fails writes the failure into the cell as its value, so "no longer idle"
+   * does not mean "succeeded". The failure scan runs inside the poll, not after it: one
+   * errored cell next to one that never ran would otherwise hold the predicate false for
+   * the full timeout and report a bare poll timeout instead of the failure.
    */
-  async countOutputRows(): Promise<number> {
-    const table = this.resultsTable();
-    // The results table has the data-side (left) and the variant-output side (right).
-    // The variant-output side has either "No runs yet" (empty) or actual output text.
-    // We count rows by counting the data-side and subtracting any still-empty cells.
-    const passedFailedCount = await table.getByRole('row', { name: /^(Passed|Failed) / }).count();
-    if (passedFailedCount > 0) return passedFailedCount;
-    // Dataset mode: count rows by their data preview (left table).
-    // Each "row" in the left table corresponds to one expected output row.
-    const itemRows = await table.locator('tr').count();
-    const noRunsYet = await table.getByText('No runs yet').count();
-    return Math.max(0, itemRows - noRunsYet - 1 /* header */);
+  async waitForRunsComplete(opts: { expectedRows: number; timeoutMs?: number }): Promise<void> {
+    return test.step(`wait for ${opts.expectedRows} run(s) to complete`, async () => {
+      let failures: string[] = [];
+      await expect
+        .poll(
+          async () => {
+            const texts = await this.outputCells().allInnerTexts();
+            failures = texts.filter((t) => RUN_ERROR_TEXT.test(t));
+            if (failures.length > 0) return true;
+            return (
+              texts.length >= opts.expectedRows &&
+              texts.every(hasProducedOutput)
+            );
+          },
+          { timeout: opts.timeoutMs ?? 120_000, intervals: [1000, 2000, 3000] },
+        )
+        .toBe(true);
+
+      if (failures.length > 0) {
+        throw new Error(
+          `Playground run failed in ${failures.length} cell(s): ${failures[0].trim()}`,
+        );
+      }
+    });
+  }
+
+  /**
+   * Output cells that have produced content — one per dataset row *per variant*, so this
+   * exceeds the row count whenever more than one variant is configured.
+   */
+  async countCompletedOutputCells(): Promise<number> {
+    return (await this.outputCells().allInnerTexts()).filter(hasProducedOutput).length;
   }
 
   /**
@@ -432,7 +481,136 @@ export class PlaygroundPage {
     });
   }
 
+  /**
+   * Whether the model picker offers a model, by display name. Leaves the picker
+   * closed either way.
+   *
+   * The option list comes from the deployment's own model registry and from the
+   * provider keys configured on the workspace, so a model this suite names may
+   * simply not be there. Probing lets a spec skip on that rather than spend
+   * `setModelForVariant`'s retry budget failing to click an option that will
+   * never appear.
+   */
+  async isModelOffered(index: number, modelDisplayName: string): Promise<boolean> {
+    return test.step(`check whether "${modelDisplayName}" is offered`, async () => {
+      const listbox = this.page.getByRole('listbox');
+      await expect(async () => {
+        await this.modelPicker(index).click();
+        await expect(listbox).toBeVisible({ timeout: 2_000 });
+      }).toPass({ timeout: 15_000 });
+
+      await listbox.getByPlaceholder('Search model').fill(modelDisplayName);
+      const offered = await listbox
+        .getByRole('option', { name: modelDisplayName, exact: true })
+        .first()
+        .waitFor({ state: 'visible', timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
+
+      await this.page.keyboard.press('Escape');
+      await expect(listbox).toBeHidden();
+      return offered;
+    });
+  }
+
+  /** Open a variant's model-parameters popover and wait for it to render. */
+  async openModelParameters(index: number): Promise<void> {
+    return test.step(`open model parameters for variant ${index}`, async () => {
+      await this.modelParametersTrigger(index).click();
+      await this.modelParametersPanel().waitFor({ state: 'visible' });
+    });
+  }
+
+  /** Close the model-parameters popover, and wait until it is really gone. */
+  async closeModelParameters(): Promise<void> {
+    return test.step('close model parameters', async () => {
+      await this.page.keyboard.press('Escape');
+      await this.modelParametersPanel().waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * The open model-parameters popover.
+   *
+   * One is open at a time — it is a `DropdownMenu`, and Radix unmounts the
+   * content of a closed one — so this needs no variant scoping.
+   */
+  modelParametersPanel(): Locator {
+    return this.page.getByRole('menu');
+  }
+
+  /**
+   * The Sampling choice's two options. Anthropic takes Temperature or Top P and
+   * never both, so which one carries `data-state="on"` is the panel's claim
+   * about what the request will contain.
+   */
+  samplingOption(label: 'Temperature' | 'Top P'): Locator {
+    return this.modelParametersPanel().getByRole('radio', { name: label, exact: true });
+  }
+
+  /** Every Sampling option currently selected — asserted to be exactly one. */
+  selectedSamplingOptions(): Locator {
+    return this.modelParametersPanel().locator('[role="radio"][data-state="on"]');
+  }
+
+  /**
+   * The number input of a named slider control, e.g. `temperature` or `topP`.
+   *
+   * Presence is the assertion, not just the value: the panel renders the live
+   * half of the sampling pair and unmounts the other, so a control that is
+   * merely dimmed — or two that are both mounted — is the regression.
+   */
+  sliderInput(controlId: string): Locator {
+    return this.page.getByTestId(`${controlId}-input`);
+  }
+
+  /** The Thinking effort dropdown. Its text is the effort the panel claims. */
+  thinkingEffortSelect(): Locator {
+    return this.modelParametersPanel().getByLabel('Thinking effort');
+  }
+
+  /** Pick a Thinking effort by its displayed label. */
+  async selectThinkingEffort(label: string): Promise<void> {
+    return test.step(`select thinking effort "${label}"`, async () => {
+      await this.thinkingEffortSelect().click();
+      await this.page.getByRole('option', { name: label, exact: true }).click();
+      await expect(this.thinkingEffortSelect()).toHaveText(label);
+    });
+  }
+
+  /** Type a prompt into variant 0's first message row. */
+  async fillFirstMessage(text: string): Promise<void> {
+    return test.step('fill the first message of variant 0', async () => {
+      await this.fillMessageBody(this.variantMessages(0).first(), text);
+    });
+  }
+
+  /** Click Run (free mode) without waiting for the completion to come back. */
+  async clickRun(): Promise<void> {
+    return test.step('click Run', async () => {
+      await this.runButton().click();
+    });
+  }
+
   // ── private helpers ─────────────────────────────────────────────────────
+
+  /**
+   * The gear button that opens a variant's model parameters.
+   *
+   * Anchored to the model picker rather than addressed directly: the trigger
+   * carries no testid and no accessible name (its tooltip is a Radix
+   * `TooltipContent`, not an `aria-label`), and the variant card holds other
+   * `aria-haspopup="menu"` buttons — every message row's role selector is one.
+   * "The menu button immediately after the model picker" is the one stable
+   * description available. A `data-testid` on `PromptModelConfigs`' trigger
+   * would be better, but these specs run against a deployed Opik, where an
+   * attribute added alongside them would not exist in the version under test.
+   */
+  private modelParametersTrigger(index: number): Locator {
+    return this.variantCard(index).locator(
+      'button:has(> [data-testid="select-a-llm-model"]) + button[aria-haspopup="menu"]',
+    );
+  }
 
   private runExperimentTriggerButton(): Locator {
     return this.page
@@ -449,8 +627,189 @@ export class PlaygroundPage {
       .and(this.page.locator('[data-mode="run"], [data-mode="re-run"]'));
   }
 
+  /**
+   * The Playground's own page scroller. Row virtualization measures the table's offset
+   * inside this element, so scrolling for virtualization assertions must drive it rather
+   * than the window.
+   */
+  scrollContainer(): Locator {
+    return this.page.getByTestId('playground-scroll-container');
+  }
+
+  /**
+   * The output grid is two side-by-side `StickyScrollTable`s — dataset variables on the
+   * left, prompt outputs on the right — each split into a sticky header half and a
+   * scrollable body half. Both bodies render the same rows, so virtualization assertions
+   * must name one surface rather than querying the grid as a whole.
+   */
+  variablesPanel(half: 'header' | 'body'): Locator {
+    return this.page.getByTestId(`playground-variables-table-${half}`);
+  }
+
+  outputsPanel(half: 'header' | 'body'): Locator {
+    return this.page.getByTestId(`playground-outputs-table-${half}`);
+  }
+
+  /** Scroll the Playground page body to a ratio of its scrollable height (0 = top, 1 = bottom). */
+  async scrollResultsTo(ratio: number): Promise<void> {
+    return test.step(`scroll results to ${ratio} of the page height`, async () => {
+      await this.scrollContainer().evaluate((el, r) => {
+        el.scrollTop = (el.scrollHeight - el.clientHeight) * r;
+      }, ratio);
+      await this.settle();
+    });
+  }
+
+  /**
+   * Row ids currently mounted in the outputs body. The grid does not set `getRowId`, so
+   * these are TanStack's positional ids within the page, not dataset item ids — enough to
+   * tell one mounted window from another, which is all the virtualization assertions need.
+   * Callers should not assume a dataset ordering: the grid renders items newest-first.
+   */
+  async mountedRowIds(): Promise<string[]> {
+    return test.step('read mounted row ids', async () => {
+      return this.outputsPanel('body')
+        .locator('tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]')
+        .evaluateAll((rows) =>
+          rows.map((r) => r.getAttribute('data-row-id')).filter((v): v is string => Boolean(v)),
+        );
+    });
+  }
+
+  /**
+   * Whether a gap sits between the top of the scroller's viewport and the first mounted row,
+   * once the grid itself has been scrolled past. That is what a stale table offset looks
+   * like: the virtual window is positioned from the wrong origin, so the rows it renders
+   * land below where the scroll position says they should.
+   */
+  async hasBlankBandAboveRows(): Promise<boolean> {
+    return test.step('check for a blank band above the mounted rows', async () => {
+      const viewportTop = await this.scrollContainer().evaluate(
+        (el) => el.getBoundingClientRect().top,
+      );
+
+      return this.outputsPanel('body').evaluate((body, top) => {
+        const wrapper = body.querySelector('[data-table-wrapper]');
+        const firstRow = body.querySelector('tbody tr[data-row-id]');
+        if (!(wrapper instanceof HTMLElement) || !(firstRow instanceof HTMLElement)) return false;
+
+        // Only meaningful once the grid's own top has scrolled above the viewport.
+        if (wrapper.getBoundingClientRect().top >= top) return false;
+
+        return firstRow.getBoundingClientRect().top > top + 1;
+      }, viewportTop);
+    });
+  }
+
+  /**
+   * Drive a horizontal scroll on one panel's body half and report what it actually reached.
+   * Returns the achieved `scrollLeft`, so a caller can fail loudly when the panel is too
+   * narrow to overflow instead of silently comparing two zeroes.
+   */
+  async scrollPanelHorizontallyTo(
+    panel: 'variables' | 'outputs',
+    offset: number,
+  ): Promise<number> {
+    return test.step(`scroll the ${panel} panel horizontally to ${offset}px`, async () => {
+      const body = panel === 'variables' ? this.variablesPanel('body') : this.outputsPanel('body');
+      const reached = await body.evaluate((el, x) => {
+        el.scrollLeft = x;
+        return el.scrollLeft;
+      }, offset);
+      await this.settle();
+      return reached;
+    });
+  }
+
+  /** The `scrollLeft` of a panel's sticky header half and its body half. */
+  async panelScrollOffsets(
+    panel: 'variables' | 'outputs',
+  ): Promise<{ header: number; body: number }> {
+    return test.step(`read ${panel} panel header/body scroll offsets`, async () => {
+      const half = (h: 'header' | 'body') =>
+        panel === 'variables' ? this.variablesPanel(h) : this.outputsPanel(h);
+      const [header, body] = await Promise.all([
+        half('header').evaluate((el) => el.scrollLeft),
+        half('body').evaluate((el) => el.scrollLeft),
+      ]);
+      return { header, body };
+    });
+  }
+
+  /**
+   * Choose a "rows per page" value from the results pagination, then wait for the
+   * replacement body. Changing the size refetches, and `mountedRowIds()` deliberately
+   * ignores the loading tbody, so returning early would let a caller assert against an
+   * empty or stale window.
+   */
+  async setPageSize(size: number): Promise<void> {
+    return test.step(`set page size to ${size}`, async () => {
+      await this.pageSizeTrigger().click();
+      await this.page.getByRole('menuitemcheckbox', { name: String(size), exact: true }).click();
+
+      await expect(this.pageSizeTrigger()).toHaveText(String(size));
+      await expect(
+        this.outputsPanel('body').locator(
+          'tbody:not(.comet-table-body-loading-overlay) tr[data-row-id]',
+        ),
+      ).not.toHaveCount(0);
+      await this.settle();
+    });
+  }
+
+  /** The current "rows per page" value shown by the pagination trigger. */
+  async pageSize(): Promise<number> {
+    return test.step('read the current page size', async () => {
+      return Number((await this.pageSizeTrigger().innerText()).trim());
+    });
+  }
+
+  /**
+   * Scrollable height of the page scroller. Under virtualization this tracks the row count
+   * the virtualizer is sizing for, so it moves when the page size changes even though the
+   * mounted window stays the same size.
+   */
+  async resultsScrollHeight(): Promise<number> {
+    return test.step('read the results scroll height', async () => {
+      return this.scrollContainer().evaluate((el) => el.scrollHeight);
+    });
+  }
+
+  private pageSizeTrigger(): Locator {
+    return this.resultsTable()
+      .locator('..')
+      .getByRole('button', { name: /^(10|50|100|200|500|1000)$/ });
+  }
+
+  /** Two frames: one for the scroll event to dispatch, one for the virtualizer to re-render. */
+  private async settle(): Promise<void> {
+    await this.page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+  }
+
   private resultsTable(): Locator {
     return this.page.getByTestId('playground-results-table');
+  }
+
+  /**
+   * Output cells of the experiment-results table — one per dataset row, per
+   * variant. The table is the shared `DataTable` split into sticky-header and
+   * scrollable-body halves, so body cells carry `data-cell-id="<rowId>_<colId>"`
+   * and the variant columns are `output-<promptId>`.
+   */
+  private outputCells(): Locator {
+    // The `:not(.comet-table-body-loading-overlay)` matters: switching sources keeps the
+    // previous dataset's rows on screen (`keepPreviousData`) while the new items load, and
+    // those rows are idle, so counting them would report ready for the wrong dataset.
+    return this.resultsTable().locator(
+      'tbody:not(.comet-table-body-loading-overlay) tr[data-row-id] td[data-cell-id*="_output-"]',
+    );
+  }
+
+  /** Output cells whose row has not been run yet. */
+  private idleOutputCells(): Locator {
+    return this.outputCells().filter({ hasText: IDLE_CELL_TEXT });
   }
 
   private variantCard(index: number): Locator {
