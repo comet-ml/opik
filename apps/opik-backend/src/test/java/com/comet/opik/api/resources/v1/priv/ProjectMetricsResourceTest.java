@@ -1937,12 +1937,8 @@ class ProjectMetricsResourceTest {
 
             Instant marker = getIntervalStart(interval);
 
-            // Conversations that ran inside the window but whose traces were uploaded after it closed. Membership
-            // is decided on trace ids, the same rule ThreadDAO applies to the list, so they are out of both.
             createThreadsWithTraceIdsMintedAt(projectName, subtract(marker, TIME_BUCKET_3, interval), marker, 3);
 
-            // getMetricsAndAssert always builds five buckets around the marker, so a window that ends early
-            // cannot be expressed through it; assert the returned series directly instead.
             var response = projectMetricsResourceClient.getProjectMetrics(projectId, ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_COUNT)
                     .interval(interval)
@@ -2021,8 +2017,7 @@ class ProjectMetricsResourceTest {
             createThreadsWithTraceIdsMintedAt(projectName, subtract(marker, TIME_BUCKET_3, interval), marker,
                     threadCount);
 
-            // SUT: the conversations ran at marker-3, so that is where they belong, even though every
-            // trace_threads row carries a marker-stamped UUIDv7.
+            // SUT
             Map<String, Long> minus3 = Map.of(ProjectMetricsDAO.NAME_THREADS, (long) threadCount);
 
             getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
@@ -2051,16 +2046,10 @@ class ProjectMetricsResourceTest {
             int bucketsBeforeWindow = TIME_BUCKET_4 + TIME_BUCKET_3;
             createThreadsWithTraceIdsMintedAt(projectName, subtract(marker, bucketsBeforeWindow, interval), marker, 3);
 
-            // SUT: requesting only the last TIME_BUCKET_4 buckets must not surface conversations that ran before them
+            // SUT
             getAndAssertEmpty(projectId, interval, marker);
         }
 
-        /**
-         * Reproduces the production shape behind OPIK-8335: a thread row whose UUIDv7 was minted long after the
-         * conversation it describes. The id of a trace_threads row is derived from the first trace's <b>id</b>
-         * (TraceThreadService -> TraceThreadIdService), never from its start_time, so minting the trace ids at
-         * {@code idsMintedAt} while the traces report {@code startedAt} yields exactly that divergence.
-         */
         private List<String> createThreadsWithTraceIdsMintedAt(String projectName, Instant startedAt,
                 Instant idsMintedAt, int threadCount) {
             List<String> threadIds = IntStream.range(0, threadCount)
