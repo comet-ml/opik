@@ -10,6 +10,7 @@ import com.comet.opik.utils.template.TemplateUtils;
 import io.r2dbc.spi.Statement;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -1084,6 +1086,13 @@ class TracesLocalV2CutoverTest {
         execute("DELETE FROM traces_local WHERE workspace_id = :workspace_id AND project_id = :project_id AND id IN :ids",
                 statement -> statement.bind("workspace_id", workspaceId).bind("project_id", projectId.toString())
                         .bind("ids", postWrapDeleted));
+
+        // The post-cutover rows above were written THROUGH the wrapper, which is the path the application takes once
+        // the wrap is live. With prefer_localhost_replica = 0 (OPIK-8255) such a write is serialised to a queue file
+        // and shipped by a background sender, so it is visible eventually rather than immediately. Await the queue
+        // draining before fingerprinting: the wrapped and un-wrapped reads must be taken over the same rows, or the
+        // comparison below measures queue timing instead of what un-wrap moves.
+        awaitDistributedQueueDrained("traces");
 
         var throughWrapper = fingerprint("traces", Shape.NEW, workspaceId);
 
@@ -3082,6 +3091,33 @@ class TracesLocalV2CutoverTest {
                 """, statement -> statement.bind("cutover_start", cutoverStart));
     }
 
+    /**
+     * Blocks until `traces` has no pending Distributed forwarding files, i.e. every write made through the wrapper has
+     * reached the shard. Needed because {@code prefer_localhost_replica = 0} makes those writes asynchronous
+     * (OPIK-8255); the queue is observed rather than flushed, so the test still exercises the deployed insert path.
+     */
+    private void awaitDistributedQueueDrained(String table) {
+        if (!isDistributed(table)) {
+            return;
+        }
+        Awaitility.await("the Distributed forwarding queue for `%s` drains".formatted(table))
+                .atMost(30, TimeUnit.SECONDS)
+                .pollInterval(200, TimeUnit.MILLISECONDS)
+                .until(() -> pendingDistributedFiles(table) == 0L);
+    }
+
+    /** Pending forwarding files for the table, from {@code system.distribution_queue}. */
+    private long pendingDistributedFiles(String table) {
+        return template.nonTransaction(connection -> Mono.from(connection.createStatement(
+                "SELECT sum(data_files) FROM system.distribution_queue WHERE table = '%s'".formatted(table))
+                .execute())
+                .flatMap(result -> Mono.from(result.map((row, metadata) -> {
+                    var value = row.get(0, Long.class);
+                    return value == null ? 0L : value;
+                }))))
+                .block();
+    }
+
     private boolean isDistributed(String table) {
         return "Distributed".equals(tableEngine(table));
     }
@@ -3123,22 +3159,6 @@ class TracesLocalV2CutoverTest {
 
     private void seedTraces(List<CategorizedId> ids, String workspaceId, UUID projectId) {
         insertRows(ids, workspaceId, projectId, "seed", CategorizedId::createdAt);
-        flushDistributedIfWrapped();
-    }
-
-    /**
-     * Drains the Distributed forwarding queue when `traces` is wrapped, so a write through the wrapper is visible to the
-     * next read. The default profile sets {@code prefer_localhost_replica = 0} (OPIK-8255), under which such a write is
-     * serialised to a queue file and shipped by a background sender rather than written in-process — so a read taken
-     * immediately after races it. That asynchrony is the deployed behaviour and is deliberate; these assertions are
-     * about what the cutover moves, not about queue timing, so the queue is drained rather than waited on.
-     */
-    private void flushDistributedIfWrapped() {
-        if (!isDistributed("traces")) {
-            return;
-        }
-        execute("SYSTEM FLUSH DISTRIBUTED traces", _ -> {
-        });
     }
 
     /**

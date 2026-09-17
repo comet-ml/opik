@@ -2,6 +2,7 @@ package com.comet.opik.db;
 
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -17,6 +18,7 @@ import org.testcontainers.lifecycle.Startables;
 
 import java.sql.Connection;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.db.TracesSchemaParity.BACKUP;
@@ -208,31 +210,35 @@ class TracesSchemaParityPostCutoverTest {
      * written through the wrapper and its computed value read back — the reference migration declares
      * {@code MATERIALIZED length(name)}, so a known name must yield its length.
      *
-     * <p>The probe insert forces {@code distributed_foreground_insert}. The default profile sets
-     * {@code prefer_localhost_replica = 0} (OPIK-8255), under which a write through a Distributed table is
-     * serialised to a queue file and shipped asynchronously — so an immediate read-back races the background
-     * sender and usually sees nothing. That asynchrony is the production behaviour and is deliberate; it is
-     * simply not what this test is about, which is whether the materialized expression computes through the
-     * wrapper. Forcing the insert synchronous makes the probe deterministic without changing the profile.
+     * <p>The write goes through the wrapper deliberately: that is the path the application takes post-cutover, and with
+     * {@code prefer_localhost_replica = 0} (OPIK-8255) it is serialised to a queue file and shipped by a background
+     * sender rather than written in-process. Visibility is therefore eventual, not immediate, so the read-back is
+     * awaited rather than taken once. Awaiting asserts the guarantee the deployed path actually makes; reading once
+     * would assert a stronger one that it does not.
      */
     private void assertDerivedFieldComputesThroughTheWrapper() throws Exception {
         var traceId = java.util.UUID.randomUUID().toString();
         var name = "reference-derived-probe";
         execute("""
                 INSERT INTO %s.%s (id, workspace_id, project_id, name)
-                SETTINGS distributed_foreground_insert = 1
                 VALUES ('%s', 'ws-reference-probe', '%s', '%s')
                 """.formatted(DATABASE_NAME, TRACES, traceId, java.util.UUID.randomUUID(), name));
 
         var sql = "SELECT %s FROM %s.%s WHERE id = '%s'"
                 .formatted(TracesDdlReferenceFixture.DERIVED_COLUMN, DATABASE_NAME, TRACES, traceId);
-        try (var statement = connection.createStatement(); var resultSet = statement.executeQuery(sql)) {
-            assertThat(resultSet.next()).as("the probe row must be readable through the wrapper").isTrue();
-            assertThat(resultSet.getLong(1))
-                    .as("`%s` is MATERIALIZED length(name), so it must compute the probe name's length",
-                            TracesDdlReferenceFixture.DERIVED_COLUMN)
-                    .isEqualTo(name.length());
-        }
+        Awaitility.await("the probe row written through the wrapper becomes readable through it")
+                .atMost(30, TimeUnit.SECONDS)
+                .pollInterval(200, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    try (var statement = connection.createStatement(); var resultSet = statement.executeQuery(sql)) {
+                        assertThat(resultSet.next()).as("the probe row must become readable through the wrapper")
+                                .isTrue();
+                        assertThat(resultSet.getLong(1))
+                                .as("`%s` is MATERIALIZED length(name), so it must compute the probe name's length",
+                                        TracesDdlReferenceFixture.DERIVED_COLUMN)
+                                .isEqualTo(name.length());
+                    }
+                });
     }
 
     @Test
