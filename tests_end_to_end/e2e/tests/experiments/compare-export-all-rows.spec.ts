@@ -73,6 +73,22 @@ test.describe(
           );
         });
 
+        await test.step("Every row carries both compared experiments' outputs", async () => {
+          // The comparison half of the capability. Every count assertion above
+          // is satisfied by a file holding the dataset columns alone, so an
+          // export that lost the per-experiment bands would read as healthy.
+          const rowByInput = new Map(exported.map((row) => [row[INPUT_KEY], row]));
+          for (const experiment of exportComparison.experiments) {
+            const column = `${experiment.name}.output.output`;
+            expect(
+              exportComparison.items.map((item) => rowByInput.get(item.input)?.[column]),
+              `"${column}" on every exported row`,
+            ).toEqual(
+              exportComparison.items.map((item) => `${experiment.name}::${item.input}`),
+            );
+          }
+        });
+
         await test.step('The long value is whole in the file but cut short on screen', async () => {
           const longRow = exported.find(
             (row) => row[INPUT_KEY] === exportComparison.longItemInput,
