@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import pydantic
 
@@ -153,7 +153,7 @@ def _validate_project_name_match(
 
 
 def _validate_project_name_consistency(
-    records: List[bulk_item.ExperimentItemBulkRecord],
+    records: Sequence[bulk_item.ExperimentItemBulkRecord],
     project_name: Optional[str],
     failure_reasons: List[str],
 ) -> None:
@@ -183,7 +183,7 @@ def validate_record(
 
 
 def validate_records(
-    records: List[bulk_item.ExperimentItemBulkRecord],
+    records: Sequence[bulk_item.ExperimentItemBulkRecord],
     project_name: Optional[str],
 ) -> None:
     """Raise :class:`opik.exceptions.ValidationError` if any record is invalid."""

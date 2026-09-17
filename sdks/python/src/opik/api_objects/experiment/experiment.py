@@ -3,7 +3,7 @@ import functools
 import logging
 import threading
 from concurrent import futures
-from typing import Iterable, Iterator, List, Optional, TYPE_CHECKING
+from typing import Iterable, Iterator, List, Optional, Sequence, TYPE_CHECKING
 
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
@@ -295,9 +295,13 @@ class Experiment:
 
         # Re-iterable sources keep the existing contract. A single-pass one cannot be
         # checked up front -- the eager pass would consume it and leave nothing to send --
-        # so each item is validated as it is reached instead.
-        reiterable = isinstance(items, collections.abc.Sequence)
-        if reiterable and not items:
+        # so each item is validated as it is reached instead. Bound as the narrowed
+        # sequence rather than a bool, so `len` and the eager pass are reached only where
+        # the type says they are available.
+        reiterable_items = (
+            items if isinstance(items, collections.abc.Sequence) else None
+        )
+        if reiterable_items is not None and not reiterable_items:
             return
 
         resolved_project_name = (
@@ -310,8 +314,8 @@ class Experiment:
             resolved_project_name = None
 
         sizes_MB = (
-            self._validate_and_size(items, resolved_project_name)
-            if validate_before_upload and reiterable
+            self._validate_and_size(reiterable_items, resolved_project_name)
+            if validate_before_upload and reiterable_items is not None
             else None
         )
 
@@ -335,8 +339,8 @@ class Experiment:
         # the whole thing on one thread. One batch per item is the ceiling.
         if sizes_MB is not None:
             batch_count = _count_batches(sizes_MB)
-        elif reiterable:
-            batch_count = len(items)
+        elif reiterable_items is not None:
+            batch_count = len(reiterable_items)
         else:
             # Unknown until the source is drained, so it bounds nothing; the pool is left
             # to num_threads. More workers than batches is waste, not breakage.
@@ -347,7 +351,7 @@ class Experiment:
         )
         LOGGER.debug(
             "Uploading %s experiment items in %s%d batch(es) using %d thread(s)",
-            len(items) if reiterable else "streamed",
+            len(reiterable_items) if reiterable_items is not None else "streamed",
             "" if sizes_MB is not None else "at most ",
             batch_count,
             worker_count,
@@ -399,7 +403,7 @@ class Experiment:
 
     def _validate_and_size(
         self,
-        items: List[bulk_item.ExperimentItemBulkRecord],
+        items: Sequence[bulk_item.ExperimentItemBulkRecord],
         project_name: Optional[str],
     ) -> List[float]:
         """Check every item before anything is sent, and keep the sizes for batching.
