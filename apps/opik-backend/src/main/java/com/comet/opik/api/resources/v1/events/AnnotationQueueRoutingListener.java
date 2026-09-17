@@ -5,14 +5,15 @@ import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.domain.AnnotationQueueAutomationService;
 import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
 import com.comet.opik.domain.EntityType;
+import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 /**
  * Decides whether a feedback-score event is worth routing work, and hands it off (OPIK-6303).
@@ -40,18 +41,29 @@ import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
  */
 @EagerSingleton
 @Slf4j
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class AnnotationQueueRoutingListener {
 
     private final @NonNull AnnotationQueueAutomationService automationService;
     private final @NonNull AnnotationQueueRoutingBufferService bufferService;
+    private final @NonNull AnnotationQueueRoutingConfig config;
+
+    @Inject
+    public AnnotationQueueRoutingListener(@NonNull AnnotationQueueAutomationService automationService,
+            @NonNull AnnotationQueueRoutingBufferService bufferService,
+            @NonNull @Config("annotationQueueRouting") AnnotationQueueRoutingConfig config) {
+        this.automationService = automationService;
+        this.bufferService = bufferService;
+        this.config = config;
+    }
 
     @Subscribe
     public void onFeedbackScoresCreated(@NonNull FeedbackScoresCreated event) {
         var scope = scopeOf(event.entityType());
 
-        // Spans are never annotation queue items, so they cannot route.
-        if (scope == null || event.entityIds().isEmpty()) {
+        // Spans are never annotation queue items, so they cannot route. The disabled check belongs here
+        // rather than only in the buffer: the guard below is a database round trip on the busiest event in
+        // the system, and a switched-off feature should not pay for it.
+        if (!config.isEnabled() || scope == null || event.entityIds().isEmpty()) {
             return;
         }
 
