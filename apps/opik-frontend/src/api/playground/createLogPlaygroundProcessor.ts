@@ -41,6 +41,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   providerMessages: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   promptLibraryMetadata?: PromptLibraryMetadata;
+  experimentName?: string;
   configs: LLMPromptConfigsType;
   selectedRuleIds: string[] | null;
   datasetItemData?: object;
@@ -265,6 +266,7 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
     ...(run.datasetVersionId && {
       datasetVersionId: run.datasetVersionId,
     }),
+    ...(run.experimentName && { name: run.experimentName }),
     metadata: experimentMetadata,
     ...(run.promptLibraryVersions?.length && {
       prompt_versions: run.promptLibraryVersions,

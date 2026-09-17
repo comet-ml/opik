@@ -3,6 +3,7 @@ import { LogProcessor } from "@/api/playground/createLogPlaygroundProcessor";
 import { DatasetItem } from "@/types/datasets";
 import { PlaygroundPromptType } from "@/types/playground";
 import usePlaygroundStore, {
+  getExperimentNameForPrompt,
   usePromptIds,
   usePromptMap,
   useUpdateOutput,
@@ -271,6 +272,7 @@ const usePromptDatasetItemCombination = ({
           providerMessages,
           promptLibraryVersions,
           promptLibraryMetadata,
+          experimentName: getExperimentNameForPrompt(prompt.id),
           configs: prompt.configs,
           model: prompt.model,
           provider: prompt.provider,
