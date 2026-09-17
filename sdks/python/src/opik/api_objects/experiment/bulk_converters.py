@@ -224,7 +224,7 @@ def _json_shell(value: Any) -> Any:
     return jsonable_encoder.encode(value)
 
 
-class UnsizeableRecordError(Exception):
+class UnmeasurableRecordError(Exception):
     """No encoder and no estimator could measure this record.
 
     Raised rather than returned as a number, because there is no number that tells the
@@ -239,8 +239,8 @@ class UnsizeableRecordError(Exception):
         self.cause = cause
 
 
-def unsizeable_failure_reason(
-    index: int, error: UnsizeableRecordError, max_size_MB: float
+def unmeasurable_failure_reason(
+    index: int, error: UnmeasurableRecordError, max_size_MB: float
 ) -> str:
     """The one wording for an unmeasurable record, shared by both upload paths.
 
@@ -276,7 +276,7 @@ def _estimated_size_MB(rest_record: Any) -> float:
             "Could not size an experiment item; the upload will reject it.",
             exc_info=True,
         )
-        raise UnsizeableRecordError(error) from error
+        raise UnmeasurableRecordError(error) from error
 
     return sequence_splitter.get_encoded_payload_size_MB(encoded_for_json)
 
@@ -299,7 +299,7 @@ def payload_size_MB(rest_record: Any) -> float:
     request body is built by the generated client as before. A record the encoder refuses
     outright falls back to the structural estimate, so nothing that could be sized before
     stops being sizeable. A record neither of them can walk raises
-    :class:`UnsizeableRecordError`, which the caller reports as itself rather than as a
+    :class:`UnmeasurableRecordError`, which the caller reports as itself rather than as a
     size.
     """
     if not json_helpers.ACCELERATED:

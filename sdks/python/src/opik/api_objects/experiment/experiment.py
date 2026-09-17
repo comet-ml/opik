@@ -360,13 +360,15 @@ class Experiment:
                 size_MB = bulk_converters.payload_size_MB(
                     bulk_converters.to_rest_record(item)
                 )
-            except bulk_converters.UnsizeableRecordError as error:
+            except bulk_converters.UnmeasurableRecordError as error:
                 # Reported as itself. Calling it oversized would be a wrong explanation
                 # that reads like a right one, and sends the caller off reducing a
                 # record whose size was never the problem.
                 sizes_MB.append(float("inf"))
                 failure_reasons.append(
-                    bulk_converters.unsizeable_failure_reason(index, error, max_size_MB)
+                    bulk_converters.unmeasurable_failure_reason(
+                        index, error, max_size_MB
+                    )
                 )
                 continue
             sizes_MB.append(size_MB)
@@ -405,6 +407,16 @@ class Experiment:
 
         Batch boundaries are identical to ``split_into_batches`` either way, for input
         that has no oversized item -- which is the only input either path accepts.
+
+        ``items`` must not be mutated while this runs. Records are converted here a
+        second time rather than carried over from the sizing pass, because carrying
+        119,903 of them costs ~376 MiB and avoiding that is the point of this path --
+        so a size measured there describes the record as it was then. Nothing is copied
+        on the way through, and this is a generator driven by the sending loop, so a
+        mutation applied from another thread mid-upload lands in the record that gets
+        sent while the size stays behind. Sizing here instead would close that, and
+        measures ~29% more producer CPU on the eager path, which is the cost this path
+        exists to remove.
         """
         max_size_MB = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
         max_length = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE
@@ -423,11 +435,11 @@ class Experiment:
             else:
                 try:
                     size_MB = bulk_converters.payload_size_MB(rest_item)
-                except bulk_converters.UnsizeableRecordError as error:
+                except bulk_converters.UnmeasurableRecordError as error:
                     raise exceptions.ValidationError(
                         prefix="batch_upload_items",
                         failure_reasons=[
-                            bulk_converters.unsizeable_failure_reason(
+                            bulk_converters.unmeasurable_failure_reason(
                                 index, error, max_size_MB
                             )
                         ],

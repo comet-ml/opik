@@ -319,7 +319,7 @@ def test_payload_size_MB__integer_beyond_orjson_range__sized_by_the_fallback(
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_payload_size_MB__defect_below_the_encode__propagates(
+def test_payload_size_MB__sizing_defect_after_encoding__propagates(
     mode, request, monkeypatch
 ):
     """A bug of ours must not arrive dressed as an unmeasurable record.
@@ -371,7 +371,7 @@ def test_payload_size_MB__value_whose_str_raises__reports_the_cause(
     monkeypatch.setattr(logging.getLogger("opik"), "propagate", True)
 
     with caplog.at_level(logging.WARNING, logger=bulk_converters.LOGGER.name):
-        with pytest.raises(bulk_converters.UnsizeableRecordError) as raised:
+        with pytest.raises(bulk_converters.UnmeasurableRecordError) as raised:
             bulk_converters.payload_size_MB(record)
 
     # The type travels on the exception, so the caller can say what happened rather
