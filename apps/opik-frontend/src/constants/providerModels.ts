@@ -2633,6 +2633,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "stealth/ox-alpha",
     },
     {
+      value: PROVIDER_MODEL_TYPE.STEALTH_UNION_ALPHA,
+      label: "stealth/union-alpha",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.STEPFUN_AI_STEP3,
       label: "stepfun-ai/step3",
     },
