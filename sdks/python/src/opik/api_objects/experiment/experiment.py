@@ -220,10 +220,12 @@ class Experiment:
         286 MiB of records cost 8 MiB from a generator and 306 MiB from a list.
 
         By default every item is validated before the first batch is sent. That needs a
-        second pass over the items, so it applies only to a re-iterable source; from a
-        generator it is not possible and each item is validated as it is reached, which
-        is what ``validate_before_upload=False`` asks for explicitly. Either way a later
-        invalid item is found with earlier batches already delivered.
+        second pass over the items, so it applies only to a re-iterable source: from a
+        list nothing is sent until every item has passed, and a bad one raises with
+        nothing delivered. A generator cannot be walked twice, so each item is validated
+        as it is reached instead -- which is what ``validate_before_upload=False`` asks
+        for explicitly -- and a later invalid item is found with earlier batches already
+        delivered.
 
         The size that builds a batch is an estimate, so a batch can still be
         rejected as too large. A rejected batch is halved and retried, down to a
@@ -253,9 +255,11 @@ class Experiment:
                 ``trace.project_name`` must match it.
             num_threads: Number of batches to upload concurrently. Defaults to
                 ``8``; pass ``1`` to upload sequentially, which is the only way
-                to guarantee batches arrive in order. Capped at the number of
-                batches and at
-                ``constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS``.
+                to guarantee batches arrive in order. Capped at
+                ``constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS``, and at the
+                number of batches where that is known before the upload starts
+                -- from a single-pass source it is not, so the pool is left at
+                ``num_threads``.
             validate_before_upload: Whether every item is checked before the
                 upload starts, rather than as it goes. Every item is validated
                 either way, so this decides when a bad one is reported, not
@@ -349,11 +353,19 @@ class Experiment:
             1,
             min(num_threads, batch_count, constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS),
         )
+        # Only says a number where one was actually counted. For a single-pass source
+        # `batch_count` is the worker bound standing in for a count nobody has, so
+        # printing it as "at most N" would report a ceiling the upload does not have.
+        if sizes_MB is not None:
+            counted = str(batch_count)
+        elif reiterable_items is not None:
+            counted = f"at most {batch_count}"
+        else:
+            counted = "an unknown number of"
         LOGGER.debug(
-            "Uploading %s experiment items in %s%d batch(es) using %d thread(s)",
+            "Uploading %s experiment items in %s batch(es) using %d thread(s)",
             len(reiterable_items) if reiterable_items is not None else "streamed",
-            "" if sizes_MB is not None else "at most ",
-            batch_count,
+            counted,
             worker_count,
         )
         pool = futures.ThreadPoolExecutor(
