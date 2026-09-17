@@ -705,11 +705,11 @@ if [[ -e "$STATE_FILE" ]]; then
     esac
     # Shape check, after the marker: the file is operator-owned, so a corrupted value would otherwise feed a
     # garbage anchor forward to step 2.
-    [[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || { echo "ERROR: $STATE_FILE does not contain a valid backfill_start timestamp ('YYYY-MM-DD HH:MM:SS[.ffffff] UTC')." >&2; exit 1; }
+    [[ "$BACKFILL_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?$ ]] || { echo "ERROR: $STATE_FILE does not contain a valid backfill_start timestamp ('YYYY-MM-DD HH:MM:SS[.ffffff] UTC')." >&2; exit 1; }
     # Logged WITH the marker: this is the only place a resumed run shows the anchor, and it is the value the operator
     # pastes into step 2 and step 3, both of which refuse it without one.
     log "REUSING backfill_start=$BACKFILL_START UTC from $STATE_FILE (resume: original anchor kept)"
-elif [[ "$DRY_RUN" != "1" ]]; then
+else
     # Refuse to mint a FRESH anchor onto a destination that already holds rows. That combination is contradictory:
     # a genuine first run starts from an empty successor (migration 000115 creates it empty; a stage-A rollback
     # truncates it back to empty), so a non-empty destination means this is a RESUME whose original anchor
@@ -730,11 +730,17 @@ elif [[ "$DRY_RUN" != "1" ]]; then
         log "         ./rollback.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} --stage A" >&2
         exit 1
     fi
-    # Captured in UTC because step 2 parses it as UTC (see 000002). Both halves must agree: read back in another
-    # timezone the anchor moves by the server's offset, and a later anchor drops the writes in the gap.
-    BACKFILL_START="$(ch "SELECT toString(now64(6, 'UTC'))")"
-    printf '%s UTC' "$BACKFILL_START" > "$STATE_FILE"
-    log "RECORD backfill_start=$BACKFILL_START UTC  (saved to $STATE_FILE; pass this, marker included, to step 2: 000002_delta_and_deletion_replay.sql)"
+    # MINTING is what --dry-run suppresses, not the guard above. The guard is a statement about the ESTATE and is
+    # equally true in a preview, so running it under --dry-run is what makes the preview faithful: without it a dry run
+    # over a partially-populated destination with no anchor prints a clean plan for a run that would abort on the first
+    # real invocation. Suppressing only the mint keeps --dry-run side-effect free, which is its actual contract.
+    if [[ "$DRY_RUN" != "1" ]]; then
+        # Captured in UTC because step 2 parses it as UTC (see 000002). Both halves must agree: read back in another
+        # timezone the anchor moves by the server's offset, and a later anchor drops the writes in the gap.
+        BACKFILL_START="$(ch "SELECT toString(now64(6, 'UTC'))")"
+        printf '%s UTC' "$BACKFILL_START" > "$STATE_FILE"
+        log "RECORD backfill_start=$BACKFILL_START UTC  (saved to $STATE_FILE; pass this, marker included, to step 2: 000002_delta_and_deletion_replay.sql)"
+    fi
 fi
 
 # The anchor is the Monday of the earliest row; the horizon is the Monday after the latest row. All week boundaries are

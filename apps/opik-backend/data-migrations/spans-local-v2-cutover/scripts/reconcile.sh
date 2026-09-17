@@ -299,7 +299,7 @@ strip_utc_marker() {
             exit 2
             ;;
     esac
-    [[ "$value" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] \
+    [[ "$value" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?$ ]] \
         || { echo "ERROR: $flag must be 'YYYY-MM-DD HH:MM:SS[.ffffff] UTC'." >&2; exit 2; }
     printf '%s' "$value"
 }
@@ -829,6 +829,9 @@ verify_reverse_replay() {
 validate_blocks() {
     local block
     validate_block "$VERIFY_SQL" "verify-$DIRECTION"
+    # Order, not just shape: see require_postcondition_projection. Checked here rather than at read time so it fails
+    # before any mutation, alongside every other block check, instead of inside the command substitution that reads it.
+    require_postcondition_projection "$(extract "$VERIFY_SQL" "verify-$DIRECTION")" "verify-$DIRECTION" || exit 2
     [[ "$DIRECTION" != "forward" ]] || validate_block "$VERIFY_SQL" leak-check-forward
     # Validated in BOTH modes, unlike the mutating blocks: --report-only runs it too (as an advisory), and a mis-marked
     # block that only surfaced on the mutating path would leave the report claiming a safety check it never made.
@@ -909,6 +912,28 @@ read_postcondition() {
     fi
     read -r MISSING STALE PAYLOAD NEWER <<< "$out"
     [[ "$MISSING" =~ ^[0-9]+$ && "$STALE" =~ ^[0-9]+$ && "$PAYLOAD" =~ ^[0-9]+$ && "$NEWER" =~ ^[0-9]+$ ]]
+}
+
+# The four counts are read POSITIONALLY, so their ORDER is part of the contract and nothing above can see it: four
+# integers parse identically whichever column each came from. A projection edited into a different order would assign
+# newer_keys to MISSING and the gate would read a healthy busy estate as clean, or a broken one as fine — and this
+# verdict is what finalize.sh's --confirm-gap-reconciled rests on. `read` already enforces the ARITY (a missing column
+# leaves NEWER empty, an extra one leaves it non-numeric, and both fail the regex above), so what is left to pin is the
+# order, which this does textually against the rendered block. It cannot certify that an aggregate COMPUTES the right
+# thing — SpansLocalV2CutoverTest reimplements these blocks against real data for that — but it turns the one silent
+# failure into a loud one.
+require_postcondition_projection() {
+    local sql="$1" block="$2" aliases
+    aliases="$(grep -oE 'AS (missing_keys|stale_keys|payload_mismatch_keys|newer_keys)' <<<"$sql" \
+        | sed 's/^AS //' | paste -sd, -)"
+    [[ "$aliases" == "missing_keys,stale_keys,payload_mismatch_keys,newer_keys" ]] || {
+        echo "ERROR: the '$block' block in $VERIFY_SQL does not project the four counts in the expected order." >&2
+        echo "       Expected: missing_keys, stale_keys, payload_mismatch_keys, newer_keys" >&2
+        echo "       Found:    ${aliases:-<none>}" >&2
+        echo "       They are read positionally, so a different order would silently assign one count to another and" >&2
+        echo "       the gate would pass a verdict on the wrong number. Restore the projection rather than the reader." >&2
+        return 1
+    }
 }
 
 print_counts() {
@@ -1035,7 +1060,7 @@ assert_shard_scope
 # Widen the gap anchor downward by --slack-seconds, server-side: no host date math and no timezone ambiguity, the same
 # reason every other window bound in this runbook is computed in ClickHouse.
 EFFECTIVE_GAP_START="$(ch "SELECT toString(subtractSeconds(toDateTime64('$GAP_START', 6, 'UTC'), $SLACK_SECONDS))")"
-[[ "$EFFECTIVE_GAP_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] || {
+[[ "$EFFECTIVE_GAP_START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?$ ]] || {
     echo "ERROR: could not compute the slack-widened gap anchor from '$GAP_START' - ${SLACK_SECONDS}s (got '$EFFECTIVE_GAP_START')." >&2
     exit 1
 }

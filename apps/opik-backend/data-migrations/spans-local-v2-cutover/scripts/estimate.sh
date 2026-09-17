@@ -140,10 +140,15 @@ CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" --log_comm
 [[ "$MAX_ROWS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-rows-per-insert must be a positive integer." >&2; exit 2; }
 [[ "$PROBE_ROWS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --probe-rows must be a positive integer." >&2; exit 2; }
 [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || { echo "ERROR: --pause-seconds must be a non-negative integer." >&2; exit 2; }
-[[ "$WRITE_COST_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --write-cost-factor must be a number." >&2; exit 2; }
+# STRICTLY positive, not merely numeric: this is a DIVISOR (READ_RPS / factor), and awk treats division by zero as a
+# fatal error, so a 0 here would kill the run with 'awk: division by zero' instead of this refusal. The second test is
+# what rejects 0, 0.0 and 0.00 while accepting 0.5 — a positive decimal has at least one non-zero digit.
+[[ "$WRITE_COST_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ && "$WRITE_COST_FACTOR" =~ [1-9] ]] || { echo "ERROR: --write-cost-factor must be a number greater than zero." >&2; exit 2; }
 [[ "$MIN_FREE_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --min-free-factor must be a number." >&2; exit 2; }
 [[ "$DEST_COMPRESSION_RATIO" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --dest-compression-ratio must be a number." >&2; exit 2; }
-[[ -z "$ROWS_PER_SEC" || "$ROWS_PER_SEC" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --rows-per-sec must be a number." >&2; exit 2; }
+# Same reason: ROWS_PER_SEC is the divisor in the ETA (rows / rps). Empty is still allowed — that is the "probe it"
+# path, which derives the value and asserts it is positive before use.
+[[ -z "$ROWS_PER_SEC" || ( "$ROWS_PER_SEC" =~ ^[0-9]+(\.[0-9]+)?$ && "$ROWS_PER_SEC" =~ [1-9] ) ]] || { echo "ERROR: --rows-per-sec must be a number greater than zero." >&2; exit 2; }
 
 ch() {
     clickhouse-client "${CH_ARGS[@]}" --query "$1"

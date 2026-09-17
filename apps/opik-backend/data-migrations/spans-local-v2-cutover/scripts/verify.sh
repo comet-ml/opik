@@ -183,7 +183,7 @@ if [[ -n "$WINDOW_FROM" || -n "$WINDOW_TO" ]]; then
     WINDOW_FROM="${WINDOW_FROM% UTC}"
     WINDOW_TO="${WINDOW_TO% UTC}"
     for _bound in "$WINDOW_FROM" "$WINDOW_TO"; do
-        [[ "$_bound" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?$ ]] \
+        [[ "$_bound" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?$ ]] \
             || { echo "ERROR: --window-from/--window-to must be 'YYYY-MM-DD HH:MM:SS[.ffffff]' (an optional ' UTC' marker is accepted): '$_bound'" >&2; exit 2; }
     done
     # Compare on a fraction padded to DateTime64(6)'s six digits, not on the bounds as given. Lexical order is
