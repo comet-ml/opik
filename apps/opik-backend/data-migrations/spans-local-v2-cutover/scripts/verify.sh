@@ -150,7 +150,10 @@ for _ident in "$DATABASE" "$OLD_TABLE" "$NEW_TABLE"; do
     [[ "$_ident" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database/--old-table/--new-table must be ClickHouse identifiers (letters, digits, underscore): '$_ident'" >&2; exit 2; }
 done
 # Numeric args are interpolated into the reference SQL / week arithmetic; require integer shapes so none can alter it.
-[[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
+# The bracket/colon allowance is what makes an IPv6 literal usable (2001:db8::1, or [2001:db8::1]); this is a shape
+# guard, not a parser, and it still admits no shell metacharacter, whitespace, quote or slash. --host is passed as its
+# own argv element, never interpolated into SQL.
+[[ -z "$CH_HOST" || "$CH_HOST" =~ ^\[?[A-Za-z0-9._:-]+\]?$ ]] || { echo "ERROR: --host must be a hostname, IPv4, or IPv6 literal." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
 [[ "$SAMPLE_MOD" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --sample-mod must be a positive integer." >&2; exit 2; }
 [[ "$FROM_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --from-week must be a non-negative integer." >&2; exit 2; }

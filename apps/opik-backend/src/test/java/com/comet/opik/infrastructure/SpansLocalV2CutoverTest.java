@@ -966,25 +966,37 @@ class SpansLocalV2CutoverTest {
                 .isEqualTo(fingerprint("spans", Shape.OLD, workspaceId));
 
         var gapStart = ClickHouseDateTimeFormat.formatMicros(weekInstant(0, 0).minusSeconds(1));
-        assertThat(usageOutOfInt32Range("spans_local_v2", gapStart))
+        // Server-side, and captured before the bridge writes below, so every deletion event lands at or after it and
+        // counts as post-swap. Same clock that stamps event_time, so the ordering is exact rather than hopeful.
+        var swapDone = nowMicros();
+        assertThat(usageOutOfInt32Range(gapStart, swapDone))
                 .as("an ordinary estate reports zero out-of-range values — the precheck is a no-op, not an obstacle")
                 .isZero();
 
         // Now a value only the WIDENED column can hold. This is what a post-cutover write could legitimately produce
         // and what the reverse sweep would narrow back into the original's Int32 column.
+        var overflowId = ID_GENERATOR.generateId().toString();
         execute("""
                 INSERT INTO spans_local_v2 (id, workspace_id, project_id, trace_id, usage, created_at, last_updated_at)
                 VALUES (:id, :workspace_id, :project_id, :trace_id,
                         map('total_tokens', toInt64(3000000000)), now64(6), now64(6))
                 """, statement -> statement
-                .bind("id", ID_GENERATOR.generateId().toString())
+                .bind("id", overflowId)
                 .bind("workspace_id", workspaceId)
                 .bind("project_id", projectId)
                 .bind("trace_id", ID_GENERATOR.generateId().toString()));
 
-        assertThat(usageOutOfInt32Range("spans_local_v2", gapStart))
+        assertThat(usageOutOfInt32Range(gapStart, swapDone))
                 .as("the precheck detects a value the reverse narrowing would WRAP — the failure it exists to refuse")
                 .isEqualTo(1L);
+
+        // And stops counting it once the span is deleted at or after the swap. reverse-sweep excludes those keys, so
+        // they are never narrowed; counting them would refuse the whole reverse reconciliation over a row the sweep
+        // would not touch — and that refusal sends the operator to resolve rows by hand rather than re-running.
+        recordDeletionEvents(Set.of(overflowId), workspaceId, projectId.toString(), "cascade");
+        assertThat(usageOutOfInt32Range(gapStart, swapDone))
+                .as("a post-swap delete removes the row from what the sweep would import, so the precheck must not refuse on it")
+                .isZero();
     }
 
     // --- deletion-bridge properties ------------------------------------------------------------------------------
@@ -2535,18 +2547,36 @@ class SpansLocalV2CutoverTest {
 
     /**
      * 000006's {@code reverse-usage-range-check}: rows the reverse sweep would import whose {@code usage} carries a
-     * value outside {@code Int32}. The table is a parameter only because the test plants its overflow in the successor
-     * shadow rather than staging a whole rollback for it — the shipped block reads
-     * {@code spans_post_rollback_backup}, which is the same schema.
+     * value outside {@code Int32}.
+     * <p>
+     * Reads {@code spans_local_v2} where the shipped block reads {@code spans_post_rollback_backup}: the two carry the
+     * same schema, and planting the overflow in the successor shadow avoids staging a whole rollback for one predicate.
+     * <p>
+     * Carries {@code reverse-sweep}'s post-swap delete exclusion, because the shipped block does: the precheck must
+     * count only what the sweep would actually insert, or it refuses a run over a row the narrowing never touches.
      */
-    private long usageOutOfInt32Range(String table, String gapStart) {
+    private long usageOutOfInt32Range(String gapStart, String swapDone) {
         return scalar("""
                 SELECT count() AS c
-                FROM %s
+                FROM spans_local_v2
                 WHERE (created_at >= toDateTime64(:gap_start, 6, 'UTC')
                     OR last_updated_at >= toDateTime64(:gap_start, 6, 'UTC'))
                   AND arrayExists(v -> v > 2147483647 OR v < -2147483648, mapValues(usage))
-                """.formatted(table), statement -> statement.bind("gap_start", gapStart));
+                  AND (workspace_id, project_id, id) NOT IN (
+                      SELECT
+                          workspace_id,
+                          toFixedString(project_id, 36),
+                          toFixedString(deleted_id, 36)
+                      FROM deletion_events_local
+                      WHERE source_table = 'spans'
+                        AND event_time >= toDateTime64(:swap_done, 6, 'UTC')
+                        AND project_id != ''
+                        AND length(project_id) = 36
+                        AND length(deleted_id) = 36
+                  )
+                """, statement -> statement
+                .bind("gap_start", gapStart)
+                .bind("swap_done", swapDone));
     }
 
     /** The four reconciliation counts, forward: the parked pre-cutover backup (OLD shape) against the live successor. */

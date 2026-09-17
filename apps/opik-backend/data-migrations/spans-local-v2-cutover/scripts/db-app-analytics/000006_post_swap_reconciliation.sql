@@ -209,6 +209,7 @@ WHERE (created_at >= toDateTime64('${GAP_START}', 6, 'UTC')
         AND length(deleted_id) = 36
   )
 SETTINGS max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
+         max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
          min_insert_block_size_bytes = ${MIN_INSERT_BLOCK_SIZE_BYTES},
          log_comment = 'spans_local_v2_cutover:reconcile:forward_sweep';
 -- >>> END forward-sweep
@@ -317,11 +318,30 @@ SETTINGS allow_nondeterministic_mutations = 1,
 -- is not a number a model produces. So the check costs a bounded read of the gap window and normally proves the
 -- narrowing is a no-op. ../reconcile.sh refuses the reverse direction on a non-zero result rather than importing —
 -- resolve those rows by hand (they can be read out of the parked successor, which is retained until finalize.sh).
+--
+-- IT MUST SCOPE ITSELF TO WHAT THE SWEEP WOULD ACTUALLY INSERT, which is why it carries `reverse-sweep`'s post-swap
+-- delete exclusion verbatim. A row deleted at or after the swap is NOT re-imported — that exclusion is what stops the
+-- sweep resurrecting it — so counting it here would refuse a run over a row the narrowing never touches. The refusal is
+-- unrecoverable by re-running (the operator is sent to resolve rows by hand), so a false one is expensive: it stops a
+-- rollback reconciliation on a row that was already deleted on purpose. Keep the two predicates in step; if the sweep's
+-- exclusion changes, this one changes with it.
 SELECT count() AS out_of_int32_range
 FROM ${ANALYTICS_DB_DATABASE_NAME}.spans_post_rollback_backup
 WHERE (created_at >= toDateTime64('${GAP_START}', 6, 'UTC')
     OR last_updated_at >= toDateTime64('${GAP_START}', 6, 'UTC'))
   AND arrayExists(v -> v > 2147483647 OR v < -2147483648, mapValues(usage))
+  AND (workspace_id, project_id, id) NOT IN (
+      SELECT
+          workspace_id,
+          toFixedString(project_id, 36),
+          toFixedString(deleted_id, 36)
+      FROM ${ANALYTICS_DB_DATABASE_NAME}.deletion_events_local
+      WHERE source_table = 'spans'
+        AND event_time >= toDateTime64('${SWAP_DONE}', 6, 'UTC')
+        AND project_id != ''
+        AND length(project_id) = 36
+        AND length(deleted_id) = 36
+  )
 SETTINGS log_comment = 'spans_local_v2_cutover:reconcile:reverse_usage_range_check';
 -- >>> END reverse-usage-range-check
 
@@ -445,6 +465,7 @@ WHERE (created_at >= toDateTime64('${GAP_START}', 6, 'UTC')
         AND length(deleted_id) = 36
   )
 SETTINGS max_partitions_per_insert_block = ${MAX_PARTITIONS_PER_INSERT_BLOCK},
+         max_insert_block_size = ${MAX_INSERT_BLOCK_SIZE},
          min_insert_block_size_bytes = ${MIN_INSERT_BLOCK_SIZE_BYTES},
          log_comment = 'spans_local_v2_cutover:reconcile:reverse_sweep';
 -- >>> END reverse-sweep

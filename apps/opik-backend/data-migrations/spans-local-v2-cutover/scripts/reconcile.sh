@@ -101,6 +101,10 @@
 #                             statement can touch far-future, epoch and ordinary partitions together. INERT ON THE
 #                             REVERSE PATH, whose target is the unpartitioned original; carried anyway so one
 #                             placeholder set serves both directions.
+#   --max-insert-block-size N   rows per part-forming block on both sweeps (SETTINGS max_insert_block_size).
+#                             Default 65536, the value the runbook's threshold table derives for the delta and the
+#                             sweep: it follows the byte bound below as a second, coarser cap on the same statements
+#                             and rarely fires first, so a pathologically narrow row cannot defeat the byte bound.
 #   --min-insert-block-size-bytes N
 #                             SETTINGS min_insert_block_size_bytes for the sweep. Default 33554432 (32 MiB), an
 #                             eighth of backfill.sh's, for the same reason delta_replay.sh tightens it: this statement
@@ -184,6 +188,7 @@ SWAP_DONE=""
 SLACK_SECONDS=300
 MAX_PASSES=3
 MAX_PARTITIONS_PER_INSERT_BLOCK=20000 # partitions per sweep block; same as backfill.sh's. See the option docs.
+MAX_INSERT_BLOCK_SIZE=65536           # rows per sweep block; the same value delta_replay.sh uses on the same shape.
 MIN_INSERT_BLOCK_SIZE_BYTES=33554432  # bytes per sweep block (32 MiB); the term that bounds peak memory on spans rows.
 REPORT_ONLY=0
 CONFIRM_REIMPORT=0
@@ -233,6 +238,7 @@ while [[ $# -gt 0 ]]; do
         --settle-timeout) SETTLE_TIMEOUT="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-passes) MAX_PASSES="${2:?"$1 requires a value"}"; shift 2 ;;
         --max-partitions-per-insert-block) MAX_PARTITIONS_PER_INSERT_BLOCK="${2:?"$1 requires a value"}"; shift 2 ;;
+        --max-insert-block-size) MAX_INSERT_BLOCK_SIZE="${2:?"$1 requires a value"}"; shift 2 ;;
         --min-insert-block-size-bytes) MIN_INSERT_BLOCK_SIZE_BYTES="${2:?"$1 requires a value"}"; shift 2 ;;
         --report-only) REPORT_ONLY=1; shift ;;
         --confirm-reimport-successor-writes) CONFIRM_REIMPORT=1; shift ;;
@@ -251,7 +257,10 @@ done
 [[ -n "$DATABASE" ]] || { echo "ERROR: --database is required" >&2; exit 2; }
 # --database and the three anchors are interpolated into the reference SQL; validate their shapes so none can alter it.
 [[ "$DATABASE" =~ ^[A-Za-z0-9_]+$ ]] || { echo "ERROR: --database must be a ClickHouse identifier (letters, digits, underscore)." >&2; exit 2; }
-[[ -z "$CH_HOST" || "$CH_HOST" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ERROR: --host must be a hostname or IP." >&2; exit 2; }
+# The bracket/colon allowance is what makes an IPv6 literal usable (2001:db8::1, or [2001:db8::1]); this is a shape
+# guard, not a parser, and it still admits no shell metacharacter, whitespace, quote or slash. --host is passed as its
+# own argv element, never interpolated into SQL.
+[[ -z "$CH_HOST" || "$CH_HOST" =~ ^\[?[A-Za-z0-9._:-]+\]?$ ]] || { echo "ERROR: --host must be a hostname, IPv4, or IPv6 literal." >&2; exit 2; }
 [[ -z "$CH_PORT" || "$CH_PORT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --port must be a positive integer." >&2; exit 2; }
 [[ "$RECEIVE_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --receive-timeout must be a positive integer (seconds)." >&2; exit 2; }
 [[ "$SLACK_SECONDS" =~ ^[0-9]+$ ]] || { echo "ERROR: --slack-seconds must be a non-negative integer." >&2; exit 2; }
@@ -263,6 +272,7 @@ done
 # 0 is meaningful (ClickHouse reads it as "unlimited"). Upper-bounded at 6 digits for the same reason as in backfill.sh:
 # an out-of-range value would otherwise be rendered into the SQL and rejected by the server mid-run instead of here.
 [[ "$MAX_PARTITIONS_PER_INSERT_BLOCK" =~ ^(0|[1-9][0-9]{0,5})$ ]] || { echo "ERROR: --max-partitions-per-insert-block must be 0 (unlimited) or 1..999999." >&2; exit 2; }
+[[ "$MAX_INSERT_BLOCK_SIZE" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-insert-block-size must be a positive integer." >&2; exit 2; }
 [[ "$MIN_INSERT_BLOCK_SIZE_BYTES" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --min-insert-block-size-bytes must be a positive integer." >&2; exit 2; }
 
 for _f in "$SWEEP_SQL" "$VERIFY_SQL" "$REVERSE_REPLAY_SQL" "$REVERSE_VERIFY_SQL" "$SETTLE_SQL"; do
@@ -366,8 +376,9 @@ resolve_live_table() {
 # Direction from the live topology, the same signals finalize.sh classifies on: which backup is parked, plus the
 # end_time nullability that says which schema each table carries. Presence of a name is convention; the schema is proof.
 detect_direction() {
-    local pre_cutover_engine post_rollback_end_time_type live_end_time_type
+    local pre_cutover_engine pre_cutover_end_time_type post_rollback_end_time_type live_end_time_type
     pre_cutover_engine="$(spans_engine spans_pre_cutover_backup)"
+    pre_cutover_end_time_type="$(spans_endtime_type spans_pre_cutover_backup)"
     post_rollback_end_time_type="$(spans_endtime_type spans_post_rollback_backup)"
     live_end_time_type="$(spans_endtime_type "$LIVE_TABLE")"
 
@@ -396,6 +407,20 @@ detect_direction() {
             echo "       i.e. it is the ORIGINAL schema, so the EXCHANGE has not run (or has been rolled back) while a" >&2
             echo "       pre-cutover backup name survives. There is no forward gap to sweep from that state. Resolve the" >&2
             echo "       estate by hand." >&2
+            exit 1
+        }
+        # And prove the PARKED side too, not just the live one. Everything the forward sweep does assumes this table is
+        # the ORIGINAL schema: it coalesces a Nullable end_time to the epoch sentinel, length-guards a String
+        # parent_span_id and widens an Int32 usage. Against a successor-shaped table those projections are wrong rather
+        # than merely redundant, and the run would certify the result — after which finalize.sh drops the table
+        # ON CLUSTER. The name is reserved by exchange_and_wrap.sh, so only a hand-mangled estate reaches here; that is
+        # exactly the case this driver refuses rather than guesses at, and it is the rule this function already states.
+        [[ "$pre_cutover_end_time_type" == Nullable* ]] || {
+            echo "ERROR: 'spans_pre_cutover_backup' does not carry the ORIGINAL schema — its end_time is" >&2
+            echo "       '${pre_cutover_end_time_type:-<no end_time column>}', not Nullable. The forward sweep reads that" >&2
+            echo "       table as the pre-cutover source and normalizes it to the successor's shape, so sweeping a" >&2
+            echo "       successor-shaped table under that name would copy wrong values and then certify them." >&2
+            echo "       Resolve the estate by hand; the name is reserved for the table the EXCHANGE displaced." >&2
             exit 1
         }
         return 0
@@ -732,6 +757,7 @@ render() {
     sql="${sql//'${GAP_START}'/$EFFECTIVE_GAP_START}"
     sql="${sql//'${SWAP_DONE}'/$SWAP_DONE}"
     sql="${sql//'${MAX_PARTITIONS_PER_INSERT_BLOCK}'/$MAX_PARTITIONS_PER_INSERT_BLOCK}"
+    sql="${sql//'${MAX_INSERT_BLOCK_SIZE}'/$MAX_INSERT_BLOCK_SIZE}"
     sql="${sql//'${MIN_INSERT_BLOCK_SIZE_BYTES}'/$MIN_INSERT_BLOCK_SIZE_BYTES}"
     printf '%s' "$sql"
 }
