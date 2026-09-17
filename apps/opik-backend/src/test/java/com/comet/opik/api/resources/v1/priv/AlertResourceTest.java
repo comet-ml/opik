@@ -111,6 +111,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
 import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
 import static com.comet.opik.api.AlertEventType.PROMPT_DELETED;
+import static com.comet.opik.api.AlertTriggerConfig.LEGACY_WINDOW_SECONDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
@@ -479,6 +480,199 @@ class AlertResourceTest {
                     mock.getRight())) {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             }
+        }
+    }
+
+    // Own nested class rather than more methods on Create Alert: adding cases there reorders that class and
+    // a sibling then fails on state it had seeded, unrelated to any of this.
+    @Nested
+    @DisplayName("Threshold Config Validation:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThresholdConfigValidation {
+
+        // One workspace for the class: every case here is rejected before anything is persisted, so there is
+        // nothing to isolate, and minting one per case only churns WireMock stubs for no benefit.
+        private Pair<String, String> mock;
+
+        @BeforeAll
+        void setUp() {
+            mock = prepareMockWorkspace();
+        }
+
+        @Test
+        @DisplayName("when a threshold config has no window, then return bad request")
+        void createAlert__whenThresholdConfigHasNoWindow__thenReturnBadRequest() {
+            // Such an alert used to persist and then fail on every run of MetricsAlertJob, so its owner had
+            // an alert that simply never fired and was never told why.
+            var threshold = AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                    .configValue(Map.of(
+                            NAME_CONFIG_KEY, "quality",
+                            THRESHOLD_CONFIG_KEY, "0.5",
+                            OPERATOR_CONFIG_KEY, MetricsAlertJob.Operator.LESS_THAN.getValue()))
+                    .build();
+            var trigger = AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                    .triggerConfigs(List.of(threshold))
+                    .build();
+
+            var alert = generateAlert().toBuilder().triggers(List.of(trigger)).build();
+
+            try (var response = alertResourceClient.createAlertWithResponse(alert, mock.getLeft(),
+                    mock.getRight())) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class)
+                        .getMessage()).contains("'%s'".formatted(WINDOW_CONFIG_KEY));
+            }
+        }
+
+        @Test
+        @DisplayName("when a threshold config has no threshold, then return bad request")
+        void createAlert__whenThresholdConfigHasNoThreshold__thenReturnBadRequest() {
+            var threshold = AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                    .configValue(Map.of(
+                            NAME_CONFIG_KEY, "quality",
+                            WINDOW_CONFIG_KEY, "3600",
+                            OPERATOR_CONFIG_KEY, MetricsAlertJob.Operator.LESS_THAN.getValue()))
+                    .build();
+            var trigger = AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                    .triggerConfigs(List.of(threshold))
+                    .build();
+
+            var alert = generateAlert().toBuilder().triggers(List.of(trigger)).build();
+
+            try (var response = alertResourceClient.createAlertWithResponse(alert, mock.getLeft(),
+                    mock.getRight())) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class)
+                        .getMessage()).contains("'%s'".formatted(THRESHOLD_CONFIG_KEY));
+            }
+        }
+
+        @ParameterizedTest
+        @MethodSource("unusableThresholdConfigValues")
+        @DisplayName("when a threshold config value cannot be used, then return bad request")
+        void createAlert__whenThresholdConfigValueUnusable__thenReturnBadRequest(String scenario,
+                String threshold, String window, String expectedKey) {
+            // Present is not usable: each of these parses fine as a string and then throws inside
+            // MetricsAlertJob on every run, which is the same silent never-fires as a missing key.
+            var config = AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                    .configValue(Map.of(
+                            NAME_CONFIG_KEY, "quality",
+                            THRESHOLD_CONFIG_KEY, threshold,
+                            WINDOW_CONFIG_KEY, window,
+                            OPERATOR_CONFIG_KEY, MetricsAlertJob.Operator.LESS_THAN.getValue()))
+                    .build();
+            var trigger = AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                    .triggerConfigs(List.of(config))
+                    .build();
+
+            var alert = generateAlert().toBuilder().triggers(List.of(trigger)).build();
+
+            try (var response = alertResourceClient.createAlertWithResponse(alert, mock.getLeft(),
+                    mock.getRight())) {
+                assertThat(response.getStatusInfo().getStatusCode()).as(scenario)
+                        .isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                // Status alone would pass on any unrelated rejection of a generated alert, which is what
+                // this is meant to catch. Pin the key the message names.
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                        .as(scenario)
+                        .contains("'%s'".formatted(expectedKey));
+            }
+        }
+
+        @Test
+        @DisplayName("when an update is invalid, then reject it and leave the stored alert untouched")
+        void updateAlert__whenThresholdConfigInvalid__thenRejectAndLeaveAlertUnchanged() {
+            // An update is a full replacement: the existing alert and its configs are deleted and re-saved
+            // in one transaction. If validation ever ran inside that transaction rather than before it, a
+            // rejected payload would take the stored alert with it.
+            var valid = generateAlert().toBuilder()
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                            .triggerConfigs(List.of(thresholdConfig("0.5", "3600")))
+                            .build()))
+                    .build();
+
+            var alertId = alertResourceClient.createAlert(valid, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+            var stored = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            var invalid = valid.toBuilder()
+                    .id(alertId)
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                            .triggerConfigs(List.of(thresholdConfig("0.5", "not-a-number")))
+                            .build()))
+                    .build();
+
+            alertResourceClient.updateAlert(alertId, invalid, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_BAD_REQUEST);
+
+            var afterwards = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+            assertThat(afterwards.triggers()).hasSameSizeAs(stored.triggers());
+            assertThat(afterwards.triggers().getFirst().triggerConfigs())
+                    .as("a rejected full replacement must not destroy the configs it failed to replace")
+                    .hasSameSizeAs(stored.triggers().getFirst().triggerConfigs());
+            assertThat(afterwards.triggers().getFirst().triggerConfigs().getFirst().configValue())
+                    .containsEntry(WINDOW_CONFIG_KEY, "3600");
+        }
+
+        @Test
+        @DisplayName("when a config is sent with only the legacy window key, then it is stored normalized")
+        void createAlert__whenLegacyWindowKeyOnly__thenStoredNormalized() {
+            // Validation reads the legacy key, so such a payload is accepted. Persisting it as sent would
+            // write the old spelling back and keep the migration alive forever.
+            var config = AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                    .configValue(Map.of(
+                            NAME_CONFIG_KEY, "quality",
+                            THRESHOLD_CONFIG_KEY, "0.5",
+                            LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900",
+                            OPERATOR_CONFIG_KEY, MetricsAlertJob.Operator.LESS_THAN.getValue()))
+                    .build();
+            var alert = generateAlert().toBuilder()
+                    .triggers(List.of(AlertTrigger.builder()
+                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                            .triggerConfigs(List.of(config))
+                            .build()))
+                    .build();
+
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var stored = alertResourceClient.getAlertById(alertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            assertThat(stored.triggers().getFirst().triggerConfigs().getFirst().configValue())
+                    .as("the alerts editor reads only the current key, and drops a config it cannot read")
+                    .containsEntry(WINDOW_CONFIG_KEY, "900");
+        }
+
+        private AlertTriggerConfig thresholdConfig(String threshold, String window) {
+            return AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                    .configValue(Map.of(
+                            NAME_CONFIG_KEY, "quality",
+                            THRESHOLD_CONFIG_KEY, threshold,
+                            WINDOW_CONFIG_KEY, window,
+                            OPERATOR_CONFIG_KEY, MetricsAlertJob.Operator.LESS_THAN.getValue()))
+                    .build();
+        }
+
+        static Stream<Arguments> unusableThresholdConfigValues() {
+            return Stream.of(
+                    Arguments.arguments("threshold is not a number", "not-a-number", "3600",
+                            THRESHOLD_CONFIG_KEY),
+                    Arguments.arguments("window is not a number", "0.5", "half an hour", WINDOW_CONFIG_KEY),
+                    Arguments.arguments("window is zero", "0.5", "0", WINDOW_CONFIG_KEY),
+                    Arguments.arguments("window is negative", "0.5", "-900", WINDOW_CONFIG_KEY));
         }
     }
 
@@ -3246,17 +3440,29 @@ class AlertResourceTest {
     private AlertTrigger generateAlertTriggerUpdate(AlertTrigger existingTrigger, AlertTrigger updatedTrigger) {
         // add one new config, update one existing config, keep one existing config unchanged
 
-        var unchangedConfig = existingTrigger.triggerConfigs().get(0);
-        var newConfig = updatedTrigger.triggerConfigs().get(0);
+        var existingConfigs = existingTrigger.triggerConfigs();
+        var newConfigs = updatedTrigger.triggerConfigs();
 
-        var updatedConfigs = updatedTrigger.triggerConfigs().get(1).toBuilder()
-                .id(existingTrigger.triggerConfigs().get(1).id())
-                .build();
+        var unchangedConfig = existingConfigs.get(0);
+        var newConfig = newConfigs.get(0);
+
+        // Podam decides how many configs a trigger gets, so a second one is not guaranteed and this threw
+        // whenever the draw came up short. With only one on either side there is nothing to update in
+        // place: keep one and add one, rather than reusing an id already taken by unchangedConfig.
+        List<AlertTriggerConfig> triggerConfigs;
+        if (existingConfigs.size() > 1 && newConfigs.size() > 1) {
+            var updatedConfig = newConfigs.get(1).toBuilder()
+                    .id(existingConfigs.get(1).id())
+                    .build();
+            triggerConfigs = List.of(unchangedConfig, newConfig, updatedConfig);
+        } else {
+            triggerConfigs = List.of(unchangedConfig, newConfig);
+        }
 
         return updatedTrigger.toBuilder()
                 .id(existingTrigger.id())
                 .alertId(existingTrigger.alertId())
-                .triggerConfigs(List.of(unchangedConfig, newConfig, updatedConfigs))
+                .triggerConfigs(triggerConfigs)
                 .build();
     }
 
