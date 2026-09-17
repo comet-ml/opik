@@ -108,7 +108,7 @@ services:
       - zookeeper:/bitnami/zookeeper
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-03-12T18-04-18Z
+    image: docker.io/cloudpirates/image-minio:RELEASE.2025-10-15T17-29-55Z-hardened
     pull_policy: always
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
