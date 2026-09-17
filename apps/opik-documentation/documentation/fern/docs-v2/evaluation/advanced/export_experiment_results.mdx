@@ -1,0 +1,125 @@
+---
+headline: Exporting experiment results
+og:description: Export the full results of an experiment to CSV with the Opik Python
+  SDK, matching the columns of the comparison page without its row cap.
+og:site_name: Opik Documentation
+og:title: Exporting Experiment Results - Opik
+subtitle: Export a full experiment result set to CSV with the Python SDK
+title: Exporting experiment results
+---
+
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Pass a `project_name` when looking up an experiment so it resolves in the right project.
+</Note>
+
+The experiments comparison page exports what you are looking at: select rows to export those, or export the
+whole filtered result set with nothing selected. That file is built in your browser, so it is capped at
+1,000 rows.
+
+Above that, export with the SDK. It reads the result set through the API, so there is no practical size limit,
+and the script below produces the same columns the comparison page does.
+
+## Exporting an experiment to CSV
+
+One row per dataset item, with the dataset fields, the evaluated output and every feedback score as its own
+column — the shape the comparison page exports.
+
+<CodeGroup>
+
+```python title="Python"
+import csv
+
+import opik
+
+client = opik.Opik()
+
+experiment = client.get_experiments_by_name(
+    name="my-experiment",
+    project_name="my-project",
+)[0]
+
+items = experiment.get_items(max_results=100_000)
+
+# Which columns exist is data-driven: dataset fields and score names vary per item, so collect them first.
+dataset_fields = sorted({key for item in items for key in (item.dataset_item_data or {})})
+score_names = sorted({score["name"] for item in items for score in item.feedback_scores})
+
+header = (
+    [f"dataset.{field}" for field in dataset_fields]
+    + ["output"]
+    + [f"feedback_scores.{name}" for name in score_names]
+)
+
+with open("experiment-results.csv", "w", newline="", encoding="utf-8") as file:
+    writer = csv.writer(file)
+    writer.writerow(header)
+
+    for item in items:
+        data = item.dataset_item_data or {}
+        scores = {score["name"]: score["value"] for score in item.feedback_scores}
+
+        writer.writerow(
+            [data.get(field, "") for field in dataset_fields]
+            + [item.evaluation_task_output]
+            + [scores.get(name, "") for name in score_names]
+        )
+```
+
+</CodeGroup>
+
+## What each item carries
+
+| Field | Description |
+| --- | --- |
+| `id` | The experiment item id |
+| `dataset_item_id` | The dataset item this result belongs to, stable across experiments on the same dataset |
+| `trace_id` | The trace produced by the evaluation task |
+| `dataset_item_data` | The dataset item's fields, as a dictionary |
+| `evaluation_task_output` | What the evaluated application returned |
+| `feedback_scores` | Scores on the item, each with a `name`, `value` and optional `reason` |
+| `assertion_results` | Assertion outcomes, when the experiment defines assertions |
+
+Two differences from the comparison page are worth knowing. Score reasons are available here as
+`score["reason"]`, which the page exports as a separate `feedback_scores.<name>_reason` column — add it the same
+way if you want it. Duration, token usage and estimated cost are not part of an experiment item: they belong to
+the trace, so fetch the trace by `trace_id` when you need them.
+
+`max_results` defaults to 10,000, so raise it for a larger experiment. Values come back untruncated, which is
+what a file wants but does mean a large experiment holds a lot in memory at once — write rows as you go, as
+above, rather than assembling the file first.
+
+## Comparing several experiments in one file
+
+The comparison page prefixes each experiment's columns with its name. To do the same, export each experiment
+and join on `dataset_item_id`, which is the same row across experiments run on one dataset.
+
+<CodeGroup>
+
+```python title="Python"
+experiment_names = ["baseline", "candidate"]
+
+rows: dict[str, dict[str, object]] = {}
+
+for name in experiment_names:
+    experiment = client.get_experiments_by_name(name=name, project_name="my-project")[0]
+
+    for item in experiment.get_items(max_results=100_000):
+        row = rows.setdefault(item.dataset_item_id, {})
+
+        for field, value in (item.dataset_item_data or {}).items():
+            row[f"dataset.{field}"] = value
+
+        row[f"{name}.output"] = item.evaluation_task_output
+
+        for score in item.feedback_scores:
+            row[f"{name}.feedback_scores.{score['name']}"] = score["value"]
+
+header = sorted({key for row in rows.values() for key in row})
+
+with open("experiment-comparison.csv", "w", newline="", encoding="utf-8") as file:
+    writer = csv.DictWriter(file, fieldnames=header)
+    writer.writeheader()
+    writer.writerows(rows.values())
+```
+
+</CodeGroup>

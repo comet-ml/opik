@@ -6,6 +6,8 @@ import first from "lodash/first";
 
 import EvaluateExperimentTracesButton from "@/v2/pages/CompareExperimentsPage/EvaluateExperimentTracesButton/EvaluateExperimentTracesButton";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
+import { EXPORT_ROW_LIMIT } from "@/api/datasets/getAllCompareExperimentsItems";
+import { buildDocsUrl } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
@@ -97,13 +99,41 @@ type CompareExperimentsActionsPanelProps = {
   selectedRows?: ExperimentsCompare[];
   columnsToExport?: string[];
   experiments?: Experiment[];
+  totalRows?: number;
 };
 
 const CompareExperimentsActionsPanel: React.FC<
   CompareExperimentsActionsPanelProps
-> = ({ getDataForExport, selectedRows = [], columnsToExport, experiments }) => {
-  const disabled = !selectedRows?.length;
+> = ({
+  getDataForExport,
+  selectedRows = [],
+  columnsToExport,
+  experiments,
+  totalRows = 0,
+}) => {
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
+
+  // A selection is bounded by the page on screen. With nothing selected the export covers the whole result set,
+  // which is read page by page in the browser - so it is capped, and past the cap the SDK is the way out.
+  const hasSelection = Boolean(selectedRows.length);
+  const exceedsExportLimit = !hasSelection && totalRows > EXPORT_ROW_LIMIT;
+
+  const exportTooltip = !isExportEnabled ? (
+    "Export functionality is disabled for this installation"
+  ) : exceedsExportLimit ? (
+    <span>
+      {`This view has ${totalRows.toLocaleString()} rows, more than the ${EXPORT_ROW_LIMIT.toLocaleString()} that can be exported from the browser. Filter it down, select the rows you need, or `}
+      <a
+        href={buildDocsUrl("/evaluation/advanced/export_experiment_results")}
+        target="_blank"
+        rel="noreferrer"
+        className="underline"
+      >
+        export it with the SDK
+      </a>
+      .
+    </span>
+  ) : undefined;
 
   const singleExperiment =
     experiments?.length === 1 ? experiments[0] : undefined;
@@ -197,15 +227,13 @@ const CompareExperimentsActionsPanel: React.FC<
         <ExportToButton
           buttonSize="icon-2xs"
           disabled={
-            disabled || columnsToExport.length === 0 || !isExportEnabled
+            exceedsExportLimit ||
+            columnsToExport.length === 0 ||
+            !isExportEnabled
           }
           getData={mapRowData}
           generateFileName={generateFileName}
-          tooltipContent={
-            !isExportEnabled
-              ? "Export functionality is disabled for this installation"
-              : undefined
-          }
+          tooltipContent={exportTooltip}
         />
       )}
     </div>
