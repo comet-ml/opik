@@ -4281,6 +4281,52 @@ class ProjectMetricsResourceTest {
         }
 
         @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("OPIK-8335: one epoch-sentinel trace does not null a thread's duration")
+        void whenOneTraceCarriesTheEpochSentinel_thenDurationStillComputed(TimeInterval interval) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Instant ranAt = subtract(marker, TIME_BUCKET_3, interval);
+            long durationMs = 500;
+            String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+
+            List<Trace> traces = List.of(
+                    factory.manufacturePojo(Trace.class).toBuilder()
+                            .id(idGenerator.generateId(ranAt))
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .startTime(ranAt)
+                            .endTime(ranAt.plusMillis(durationMs))
+                            .build(),
+                    factory.manufacturePojo(Trace.class).toBuilder()
+                            .id(idGenerator.generateId(ranAt.plusMillis(1)))
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .startTime(Instant.EPOCH)
+                            .endTime(ranAt.plusMillis(durationMs))
+                            .build());
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.closeTraceThreads(Set.of(threadId), null, projectName, API_KEY, WORKSPACE_NAME);
+
+            var expected = Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION,
+                    BigDecimal.valueOf(durationMs).setScale(9));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_AVERAGE_DURATION)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION), BigDecimal.class,
+                    expected, null, null);
+        }
+
+        @ParameterizedTest
         @MethodSource
         void happyPathWithFilter(Function<TraceThread, TraceThreadFilter> getFilter, List<Integer> expectedIndexes) {
             mockTargetWorkspace();
