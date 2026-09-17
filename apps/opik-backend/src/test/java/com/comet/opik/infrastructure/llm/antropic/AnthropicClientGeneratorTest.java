@@ -66,7 +66,9 @@ class AnthropicClientGeneratorTest {
          */
         @ParameterizedTest
         @ValueSource(strings = {"claude-future-99", "claude-opus-latest", "anthropic/claude-sonnet-latest",
-                "us.anthropic.claude-opus-9-v1:0"})
+                "us.anthropic.claude-opus-9-v1:0",
+                // The legacy prefix has to end where a segment does, or this reads as Claude 3.
+                "claude-30-future"})
         void assumesAnUnplaceableAnthropicIdTakesNone(String modelName) {
             assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isTrue();
         }

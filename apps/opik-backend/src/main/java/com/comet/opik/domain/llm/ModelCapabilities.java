@@ -94,7 +94,7 @@ public class ModelCapabilities {
      */
     public boolean rejectsSamplingParams(String modelName) {
         var canonical = canonicalAnthropicId(modelName);
-        if (canonical.isEmpty() || canonical.startsWith(LEGACY_GENERATION_PREFIX)) {
+        if (canonical.isEmpty() || isLegacyGeneration(canonical)) {
             return false;
         }
         return knownAnthropicId(canonical)
@@ -140,6 +140,12 @@ public class ModelCapabilities {
         }
         // Bedrock appends an inference profile (-v1:0); OpenRouter, a :free or :beta variant.
         return StringUtils.substringBefore(segment.substring(claudeAt), ":").replaceFirst("-v\\d+$", "");
+    }
+
+    /** The prefix has to end where a segment does, or {@code claude-30-future} would read as Claude 3. */
+    private boolean isLegacyGeneration(String canonical) {
+        return canonical.equals(LEGACY_GENERATION_PREFIX)
+                || canonical.startsWith(LEGACY_GENERATION_PREFIX + "-");
     }
 
     /**
