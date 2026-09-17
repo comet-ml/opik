@@ -39,7 +39,7 @@ public interface CsvExportService {
      * @return Mono emitting the created or existing export job
      * @throws IllegalStateException if dataset export feature is disabled
      */
-    Mono<ExportJob> startExport(ExportParams params, String resourceName);
+    Mono<ExportJob> startExport(ExportParams params, String resourceName, UUID projectId);
 
     /**
      * Retrieves an export job by its ID.
@@ -66,7 +66,7 @@ public interface CsvExportService {
      *
      * @return Mono emitting list of all export jobs for the workspace
      */
-    Mono<List<ExportJob>> findAllJobs();
+    Mono<List<ExportJob>> findAllJobs(UUID projectId);
 
     /**
      * Downloads the exported CSV file for a completed job.
@@ -107,7 +107,7 @@ class CsvExportServiceImpl implements CsvExportService {
     }
 
     @Override
-    public Mono<ExportJob> startExport(@NonNull ExportParams params, String resourceName) {
+    public Mono<ExportJob> startExport(@NonNull ExportParams params, String resourceName, UUID projectId) {
         if (!exportConfig.isEnabledFor(params.exportType())) {
             log.warn("CSV export is disabled for type '{}'; skipping", params.exportType());
             // A disabled surface is a deployment choice, not a server fault: report it as such rather than a 500.
@@ -131,7 +131,7 @@ class CsvExportServiceImpl implements CsvExportService {
                     .switchIfEmpty(Mono.defer(() -> {
                         // No existing job, acquire lock and create new one
                         String lockKey = formatLockKey(workspaceId, userName, params);
-                        return executeWithLock(lockKey, workspaceId, params, resourceName);
+                        return executeWithLock(lockKey, workspaceId, params, resourceName, projectId);
                     }));
         });
     }
@@ -149,7 +149,7 @@ class CsvExportServiceImpl implements CsvExportService {
     }
 
     private Mono<ExportJob> executeWithLock(String lockKey, String workspaceId, ExportParams params,
-            String resourceName) {
+            String resourceName, UUID projectId) {
         Mono<ExportJob> action = Mono
                 .defer(() -> findMatchingInProgressJob(params)
                         .flatMap(existingJob -> {
@@ -160,7 +160,8 @@ class CsvExportServiceImpl implements CsvExportService {
                         .switchIfEmpty(Mono.defer(() ->
                         // Create new export job and publish to Redis stream
                         // TTL is taken from config (defaultTtl)
-                        jobService.createJob(params, resourceName, exportConfig.getDefaultTtl().toJavaDuration())
+                        jobService.createJob(params, resourceName, projectId,
+                                exportConfig.getDefaultTtl().toJavaDuration())
                                 .flatMap(job -> publishToRedisStream(job, workspaceId)
                                         .thenReturn(job)))));
 
@@ -212,8 +213,8 @@ class CsvExportServiceImpl implements CsvExportService {
     }
 
     @Override
-    public Mono<List<ExportJob>> findAllJobs() {
-        return jobService.findAllJobs();
+    public Mono<List<ExportJob>> findAllJobs(UUID projectId) {
+        return jobService.findAllJobs(projectId);
     }
 
     @Override

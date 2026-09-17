@@ -287,6 +287,7 @@ export interface DatasetExportJob {
   export_type: "DATASET" | "EXPERIMENT_ITEMS";
   params: ExportJobParams;
   resource_name?: string;
+  project_id?: string;
   status: DATASET_EXPORT_STATUS;
   file_path?: string;
   download_url?: string;

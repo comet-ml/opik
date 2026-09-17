@@ -12,6 +12,7 @@ import {
   useIsHydrated,
 } from "@/store/DatasetExportStore";
 import useDatasetExportJobs from "@/api/datasets/useDatasetExportJobs";
+import { useActiveProjectId } from "@/store/AppStore";
 import { DATASET_EXPORT_STATUS } from "@/types/datasets";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import ExportJobItem from "./ExportJobItem";
@@ -27,10 +28,14 @@ const DatasetExportPanel: React.FC = () => {
   const isHydrated = useIsHydrated();
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
-  // Fetch all export jobs on mount to restore state after page refresh
-  const { data: apiJobs } = useDatasetExportJobs({
-    enabled: !isHydrated,
-  });
+  // The panel is mounted outside the router, so the active project comes from the store rather than the URL.
+  const activeProjectId = useActiveProjectId();
+
+  // Fetch this project's export jobs on mount to restore state after page refresh
+  const { data: apiJobs } = useDatasetExportJobs(
+    { projectId: activeProjectId },
+    { enabled: !isHydrated },
+  );
 
   // Hydrate store from API data
   useEffect(() => {

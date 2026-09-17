@@ -8,11 +8,14 @@ import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
+import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
+import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.time.Instant;
 import java.util.List;
@@ -34,6 +37,7 @@ public interface ExportJobDAO {
                 params,
                 params_hash,
                 resource_name,
+                project_id,
                 status,
                 file_path,
                 error_message,
@@ -49,6 +53,7 @@ public interface ExportJobDAO {
                 :job.params,
                 :job.paramsHash,
                 :job.resourceName,
+                :job.projectId,
                 :job.status,
                 :job.filePath,
                 :job.errorMessage,
@@ -216,10 +221,14 @@ public interface ExportJobDAO {
             FROM export_jobs j
             WHERE j.workspace_id = :workspaceId
             AND j.created_by = :userName
+            <if(project_id)> AND (j.project_id = :project_id OR j.project_id IS NULL) <endif>
             ORDER BY j.id DESC
             """)
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
     List<ExportJob> findByWorkspace(@Bind("workspaceId") String workspaceId,
-            @Bind("userName") String userName);
+            @Bind("userName") String userName,
+            @Define("project_id") @Bind("project_id") UUID projectId);
 
     @SqlUpdate("""
             UPDATE export_jobs

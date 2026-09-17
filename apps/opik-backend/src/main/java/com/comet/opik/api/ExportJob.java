@@ -23,6 +23,8 @@ public record ExportJob(
                 ExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) ExportParams params,
         @Nullable @JsonView({
                 ExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String resourceName,
+        @Nullable @JsonView({
+                ExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
         @JsonView({
                 ExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) ExportStatus status,
         @JsonView({

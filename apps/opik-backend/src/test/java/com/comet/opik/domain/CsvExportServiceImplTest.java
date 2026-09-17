@@ -91,7 +91,7 @@ class CsvExportServiceImplTest {
         when(exportConfig.getDefaultTtl()).thenReturn(DEFAULT_TTL);
 
         // Mock: create new job
-        when(jobService.createJob(any(), any(), eq(DEFAULT_TTL.toJavaDuration()))).thenReturn(Mono.just(newJob));
+        when(jobService.createJob(any(), any(), any(), eq(DEFAULT_TTL.toJavaDuration()))).thenReturn(Mono.just(newJob));
 
         // Mock: Redis stream
         @SuppressWarnings("unchecked")
@@ -107,7 +107,7 @@ class CsvExportServiceImplTest {
 
         // When
         Mono<ExportJob> result = service
-                .startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset")
+                .startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset", null)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -123,7 +123,7 @@ class CsvExportServiceImplTest {
 
         // Verify the flow
         verify(jobService, times(2)).findInProgressJobs(any()); // Initial check + double-check in lock
-        verify(jobService, times(1)).createJob(any(), any(), eq(DEFAULT_TTL.toJavaDuration()));
+        verify(jobService, times(1)).createJob(any(), any(), any(), eq(DEFAULT_TTL.toJavaDuration()));
 
         // Verify stream.add was called with correct params
         ArgumentCaptor<StreamAddParams<String, ExportMessage>> captor = ArgumentCaptor
@@ -145,7 +145,7 @@ class CsvExportServiceImplTest {
 
         // When
         Mono<ExportJob> result = service
-                .startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset")
+                .startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset", null)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -162,7 +162,7 @@ class CsvExportServiceImplTest {
         verify(jobService).findInProgressJobs(any());
 
         // Verify no new job was created
-        verify(jobService, never()).createJob(any(), any(), any());
+        verify(jobService, never()).createJob(any(), any(), any(), any());
     }
 
     @Test
@@ -173,7 +173,7 @@ class CsvExportServiceImplTest {
         when(jobService.findInProgressJobs(any())).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
-        service.startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset")
+        service.startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset", null)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME))
@@ -191,7 +191,7 @@ class CsvExportServiceImplTest {
 
         // When
         Mono<ExportJob> result = service
-                .startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset")
+                .startExport(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset", null)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -206,7 +206,7 @@ class CsvExportServiceImplTest {
 
         // Verify no job service calls were made
         verify(jobService, never()).findInProgressJobs(any());
-        verify(jobService, never()).createJob(any(), any(), any());
+        verify(jobService, never()).createJob(any(), any(), any(), any());
     }
 
     @Test

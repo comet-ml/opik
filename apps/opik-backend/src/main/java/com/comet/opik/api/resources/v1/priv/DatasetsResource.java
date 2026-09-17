@@ -922,7 +922,8 @@ public class DatasetsResource {
         var dataset = service.findById(datasetId);
 
         ExportJob job = csvExportService
-                .startExport(DatasetExportParams.builder().datasetId(datasetId).build(), dataset.name())
+                .startExport(DatasetExportParams.builder().datasetId(datasetId).build(), dataset.name(),
+                        dataset.projectId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -972,7 +973,7 @@ public class DatasetsResource {
 
         String resourceName = "%s-%d-experiments".formatted(dataset.name(), experimentIds.size());
 
-        ExportJob job = csvExportService.startExport(params, resourceName)
+        ExportJob job = csvExportService.startExport(params, resourceName, dataset.projectId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -1035,13 +1036,13 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "200", description = "List of export jobs", content = @Content(array = @ArraySchema(schema = @Schema(implementation = ExportJob.class))))
     })
     @JsonView(ExportJob.View.Public.class)
-    public Response getExportJobs() {
+    public Response getExportJobs(@QueryParam("project_id") UUID projectId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting export jobs for workspaceId '{}'", workspaceId);
+        log.info("Getting export jobs for workspaceId '{}', projectId '{}'", workspaceId, projectId);
 
-        var jobs = csvExportService.findAllJobs()
+        var jobs = csvExportService.findAllJobs(projectId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

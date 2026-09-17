@@ -58,6 +58,7 @@ class ExportJobServiceImplTest {
 
     private static final String WORKSPACE_ID = "test-workspace";
     private static final String USER_NAME = "test-user";
+    private static final UUID PROJECT_ID = UUID.randomUUID();
     private static final UUID DATASET_ID = UUID.randomUUID();
     private static final UUID JOB_ID = UUID.randomUUID();
 
@@ -82,7 +83,7 @@ class ExportJobServiceImplTest {
         // When
         Mono<ExportJob> result = service
                 .createJob(DatasetExportParams.builder().datasetId(DATASET_ID).build(), "test-dataset",
-                        ttl)
+                        PROJECT_ID, ttl)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));

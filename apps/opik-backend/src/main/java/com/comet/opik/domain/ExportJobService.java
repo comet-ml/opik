@@ -34,7 +34,7 @@ public interface ExportJobService {
      * @param ttl       Time-to-live duration for the export file
      * @return Mono emitting the created export job
      */
-    Mono<ExportJob> createJob(ExportParams params, String resourceName, Duration ttl);
+    Mono<ExportJob> createJob(ExportParams params, String resourceName, UUID projectId, Duration ttl);
 
     /**
      * Finds all in-progress (PENDING or PROCESSING) export jobs for a dataset.
@@ -52,7 +52,7 @@ public interface ExportJobService {
      *
      * @return Mono emitting list of the caller's export jobs
      */
-    Mono<List<ExportJob>> findAllJobs();
+    Mono<List<ExportJob>> findAllJobs(UUID projectId);
 
     /**
      * Retrieves an export job by its ID.
@@ -162,7 +162,8 @@ class ExportJobServiceImpl implements ExportJobService {
     private final @NonNull TransactionTemplate template;
 
     @Override
-    public Mono<ExportJob> createJob(@NonNull ExportParams params, String resourceName, @NonNull Duration ttl) {
+    public Mono<ExportJob> createJob(@NonNull ExportParams params, String resourceName, UUID projectId,
+            @NonNull Duration ttl) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -176,6 +177,7 @@ class ExportJobServiceImpl implements ExportJobService {
                         .id(jobId)
                         .params(params)
                         .resourceName(resourceName)
+                        .projectId(projectId)
                         .status(ExportStatus.PENDING)
                         .createdAt(now)
                         .lastUpdatedAt(now)
@@ -219,14 +221,14 @@ class ExportJobServiceImpl implements ExportJobService {
     }
 
     @Override
-    public Mono<List<ExportJob>> findAllJobs() {
+    public Mono<List<ExportJob>> findAllJobs(UUID projectId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
             return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(ExportJobDAO.class);
-                List<ExportJob> jobs = dao.findByWorkspace(workspaceId, userName);
+                List<ExportJob> jobs = dao.findByWorkspace(workspaceId, userName, projectId);
 
                 log.debug("Found '{}' export job(s) for user '{}' in workspace: '{}'", jobs.size(), userName,
                         workspaceId);

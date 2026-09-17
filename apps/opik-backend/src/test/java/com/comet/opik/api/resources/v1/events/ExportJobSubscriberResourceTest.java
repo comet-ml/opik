@@ -79,6 +79,7 @@ class ExportJobSubscriberResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String WORKSPACE_NAME = "test-workspace";
+    private static final UUID PROJECT_ID = UUID.randomUUID();
 
     private static final int AWAIT_TIMEOUT_SECONDS = 30;
 
@@ -164,7 +165,8 @@ class ExportJobSubscriberResourceTest {
 
             // When - Use CsvExportService to create job and publish to Redis stream
             ExportJob job = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset",
+                            PROJECT_ID)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -201,7 +203,8 @@ class ExportJobSubscriberResourceTest {
 
             // When - Use CsvExportService to create job and publish to Redis stream
             ExportJob job = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset",
+                            PROJECT_ID)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -242,21 +245,24 @@ class ExportJobSubscriberResourceTest {
 
             // When - Use CsvExportService to create jobs and publish to Redis stream
             ExportJob job1 = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset1.id()).build(), "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset1.id()).build(), "test-dataset",
+                            PROJECT_ID)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
                     .block();
 
             ExportJob job2 = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset2.id()).build(), "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset2.id()).build(), "test-dataset",
+                            PROJECT_ID)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
                     .block();
 
             ExportJob job3 = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset3.id()).build(), "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset3.id()).build(), "test-dataset",
+                            PROJECT_ID)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -304,7 +310,8 @@ class ExportJobSubscriberResourceTest {
 
             // When - Use CsvExportService to create job and publish to Redis stream
             ExportJob job = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(dataset.id()).build(), "test-dataset",
+                            PROJECT_ID)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -347,7 +354,8 @@ class ExportJobSubscriberResourceTest {
             // When - Use CsvExportService to start export for non-existent dataset
             // The export should complete successfully with an empty file (no columns, no items)
             ExportJob job = csvExportService
-                    .startExport(DatasetExportParams.builder().datasetId(nonExistentDatasetId).build(), "test-dataset")
+                    .startExport(DatasetExportParams.builder().datasetId(nonExistentDatasetId).build(), "test-dataset",
+                            PROJECT_ID)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -397,7 +405,7 @@ class ExportJobSubscriberResourceTest {
             UUID ownJobId = startExportAs(USER).id();
             UUID otherJobId = startExportAs(OTHER_USER).id();
 
-            List<ExportJob> ownJobs = exportJobService.findAllJobs()
+            List<ExportJob> ownJobs = exportJobService.findAllJobs(PROJECT_ID)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -418,12 +426,40 @@ class ExportJobSubscriberResourceTest {
             assertThat(second.createdBy()).isEqualTo(OTHER_USER);
         }
 
+        @Test
+        @DisplayName("should list only jobs belonging to the project being viewed")
+        void findAllJobs_shouldReturnOnlyJobsOfTheRequestedProject() {
+            UUID otherProject = UUID.randomUUID();
+            UUID here = csvExportService
+                    .startExport(DatasetExportParams.builder().datasetId(UUID.randomUUID()).build(),
+                            "in-project", PROJECT_ID)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER))
+                    .block().id();
+            UUID elsewhere = csvExportService
+                    .startExport(DatasetExportParams.builder().datasetId(UUID.randomUUID()).build(),
+                            "other-project", otherProject)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER))
+                    .block().id();
+
+            List<ExportJob> jobs = exportJobService.findAllJobs(PROJECT_ID)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                            .put(RequestContext.USER_NAME, USER))
+                    .block();
+
+            assertThat(jobs).extracting(ExportJob::id).contains(here).doesNotContain(elsewhere);
+        }
+
         private ExportJob startExportAs(String userName) {
             return startExport(DatasetExportParams.builder().datasetId(UUID.randomUUID()).build(), userName);
         }
 
         private ExportJob startExport(DatasetExportParams params, String userName) {
-            return csvExportService.startExport(params, "test-dataset")
+            return csvExportService.startExport(params, "test-dataset", PROJECT_ID)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, userName))
