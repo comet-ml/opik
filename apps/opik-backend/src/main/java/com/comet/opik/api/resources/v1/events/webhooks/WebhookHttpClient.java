@@ -40,6 +40,10 @@ public class WebhookHttpClient {
     private static final String USER_AGENT_VALUE = "Opik-Webhook/1.0";
     public static final String BEARER_PREFIX = "Bearer ";
 
+    // A webhook destination is caller-supplied, so its response body is arbitrary content we should
+    // not let flood the logs. Same cap as the other diagnostic body reads in this service.
+    private static final int MAX_LOGGED_BODY_LENGTH = 512;
+
     private final @NonNull Client httpClient;
     private final @NonNull WebhookConfig webhookConfig;
     private final Logger userFacingLog;
@@ -148,7 +152,8 @@ public class WebhookHttpClient {
                                 // the caller, and the destination is caller-supplied
                                 readResponseBody(response).ifPresent(body -> log.debug(
                                         "Webhook delivery failed, id '{}', status '{}', body '{}'",
-                                        event.getId(), response.getStatus(), body));
+                                        event.getId(), response.getStatus(),
+                                        StringUtils.abbreviate(body, MAX_LOGGED_BODY_LENGTH)));
                                 sink.error(new RetryUtils.RetryableHttpException(
                                         "Webhook failed with status %d".formatted(response.getStatus()),
                                         response.getStatus()));

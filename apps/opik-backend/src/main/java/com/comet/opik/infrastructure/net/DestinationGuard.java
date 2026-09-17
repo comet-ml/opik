@@ -85,7 +85,8 @@ public class DestinationGuard {
         try {
             uri = new URI(url);
         } catch (URISyntaxException exception) {
-            throw new DestinationGuardException("destination is not a valid URL, url '%s'".formatted(url));
+            throw new DestinationGuardException("destination is not a valid URL, url '%s'".formatted(url),
+                    exception);
         }
         // plaintext is the caller's choice, but the scheme must still be one an HTTP client speaks:
         // file://, gopher:// and friends reach places it never should
@@ -103,7 +104,7 @@ public class DestinationGuard {
             addresses = InetAddress.getAllByName(host);
         } catch (UnknownHostException exception) {
             throw new DestinationGuardException(
-                    "destination host could not be resolved, host '%s'".formatted(host));
+                    "destination host could not be resolved, host '%s'".formatted(host), exception);
         }
         for (InetAddress address : addresses) {
             if (isNonPublic(address)) {
