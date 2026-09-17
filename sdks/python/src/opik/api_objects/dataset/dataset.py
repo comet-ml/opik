@@ -734,8 +734,14 @@ class Dataset(DatasetExportOperations):
         """Yield items, dropping ones whose content hash has already been seen.
 
         The hash state spans the whole pass, so a duplicate is caught however far apart
-        the two copies are. Hashes always use the standard library, so item identity does
-        not depend on which serialiser writes the request body.
+        the two copies are.
+
+        A digest is only ever compared with another this client computed: the ones a
+        sync reads back are recomputed here from the items themselves, never carried
+        from the backend. That is what makes identity stable, not the encoder -- orjson
+        and the standard library digest the same content differently, so a digest that
+        travelled would stop matching the moment the two ends disagreed about which
+        encoder they had. Keep it that way, or pin the encoder before sending one.
         """
         for item in items:
             if deduplication:

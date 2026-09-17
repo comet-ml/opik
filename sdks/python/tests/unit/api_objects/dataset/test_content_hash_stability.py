@@ -24,6 +24,11 @@ from unittest.mock import Mock
 import pytest
 
 from opik import json_helpers
+
+try:
+    import orjson
+except ImportError:  # no wheel for this platform
+    orjson = None
 from opik.api_objects.dataset import dataset_item, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
 
@@ -248,4 +253,50 @@ def test_content_hash__set_valued_item__digest_is_pinned(stdlib_encoder):
 
     assert item.content_hash() == (
         "56d8f26305d963aa017a728776dbe66c69846651c498eec63b37b62bc24e5204"
+    )
+
+
+def test_content_hash__differs_between_encoders(monkeypatch):
+    """The reason a digest must never travel, pinned as a fact rather than a worry.
+
+    orjson writes compact separators and real UTF-8; the standard library writes
+    ``", "`` and escapes non-ASCII. Same content, different bytes, different digest.
+    Dedup survives this only because every digest it compares was computed by the
+    client doing the comparing.
+    """
+    if orjson is None:
+        pytest.skip("orjson ships no wheel for this platform")
+    content = {"input": {"b": 2, "a": 1, "text": "héllo 🙂"}}
+
+    monkeypatch.setattr(json_helpers, "_orjson", orjson)
+    accelerated = dataset_item.DatasetItem(**content).content_hash()
+
+    monkeypatch.setattr(json_helpers, "_orjson", None)
+    stdlib = dataset_item.DatasetItem(**content).content_hash()
+
+    assert accelerated != stdlib, (
+        "If these ever match, a digest could safely be sent or stored -- and the "
+        "recompute-on-sync rule this suite protects would no longer be load-bearing"
+    )
+
+
+def test_sync_hashes__recomputes_locally_rather_than_trusting_the_backend():
+    """Dedup identity must come from this client's encoder, not from stored values.
+
+    A digest read back from the backend would have been produced by whichever encoder
+    that uploader had. Recomputing here is what keeps the comparison meaningful.
+    """
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    item = {"input": {"key": "value"}, "expected_output": {"key": "out"}}
+    dataset.insert([item])
+
+    digests = {
+        dataset_item.DatasetItem(**item).content_hash()
+        for item in ({"input": {"key": "value"}, "expected_output": {"key": "out"}},)
+    }
+
+    assert digests <= dataset._hashes, (
+        "The digest the client computes for this content must be the one dedup holds"
     )
