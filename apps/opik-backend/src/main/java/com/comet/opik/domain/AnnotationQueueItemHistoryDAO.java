@@ -11,8 +11,10 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -39,7 +41,14 @@ public interface AnnotationQueueItemHistoryDAO {
 
     Mono<Set<UUID>> findPreviouslyAddedItems(UUID queueId, UUID projectId, Set<UUID> itemIds);
 
-    Mono<Long> deleteByQueueIds(Set<UUID> queueIds, Set<UUID> projectIds);
+    /**
+     * Deletes the ledger for these queues, taking the project each one belongs to.
+     *
+     * <p>Keyed by queue rather than given two independent lists: the predicate is scoped by project to stay
+     * on the sort key, and two lists describe every combination of the two, so one queue could be matched
+     * against another's project.
+     */
+    Mono<Long> deleteByQueueIds(Map<UUID, UUID> projectIdByQueueId);
 
     /**
      * How many items this queue has ever held.
@@ -105,7 +114,7 @@ class AnnotationQueueItemHistoryDAOImpl implements AnnotationQueueItemHistoryDAO
     private static final String DELETE_BY_QUEUE_IDS = """
             DELETE FROM annotation_queue_item_history
             WHERE workspace_id = :workspace_id
-            AND project_id IN :project_ids
+            AND project_id = :project_id
             AND queue_id IN :ids
             """;
 
@@ -174,20 +183,27 @@ class AnnotationQueueItemHistoryDAOImpl implements AnnotationQueueItemHistoryDAO
     }
 
     @Override
-    public Mono<Long> deleteByQueueIds(@NonNull Set<UUID> queueIds, @NonNull Set<UUID> projectIds) {
-        if (queueIds.isEmpty() || projectIds.isEmpty()) {
+    public Mono<Long> deleteByQueueIds(@NonNull Map<UUID, UUID> projectIdByQueueId) {
+        if (projectIdByQueueId.isEmpty()) {
             return Mono.just(0L);
         }
 
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(DELETE_BY_QUEUE_IDS)
-                            .bind("ids", queueIds.toArray(UUID[]::new))
-                            .bind("project_ids", projectIds.toArray(UUID[]::new));
+        // One statement per project, each carrying only its own queues, so a queue is never deleted under a
+        // project it does not belong to. The batch being deleted bounds how many that is.
+        Map<UUID, Set<UUID>> queueIdsByProject = projectIdByQueueId.entrySet().stream()
+                .collect(Collectors.groupingBy(Map.Entry::getValue,
+                        Collectors.mapping(Map.Entry::getKey, Collectors.toSet())));
 
-                    return makeMonoContextAware(bindWorkspaceIdToMono(statement));
-                })
-                .flatMap(Result::getRowsUpdated)
+        return Flux.fromIterable(queueIdsByProject.entrySet())
+                .concatMap(entry -> Mono.from(connectionFactory.create())
+                        .flatMapMany(connection -> {
+                            var statement = connection.createStatement(DELETE_BY_QUEUE_IDS)
+                                    .bind("project_id", entry.getKey())
+                                    .bind("ids", entry.getValue().toArray(UUID[]::new));
+
+                            return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+                        })
+                        .flatMap(Result::getRowsUpdated))
                 .reduce(0L, Long::sum);
     }
 }

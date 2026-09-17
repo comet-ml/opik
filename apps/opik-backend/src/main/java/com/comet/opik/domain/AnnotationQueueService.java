@@ -444,9 +444,10 @@ class AnnotationQueueServiceImpl implements AnnotationQueueService {
             return Mono.fromRunnable(() -> automationService.deleteByQueueIds(workspaceId, List.copyOf(ids)));
         })
                 // History before the queues: the queue rows are what map a queue to its project, and the
-                // ledger delete is scoped by project to stay on the sort key.
-                .then(annotationQueueDAO.findProjectIdsByQueueIds(ids))
-                .flatMap(projectIds -> itemHistoryDAO.deleteByQueueIds(ids, projectIds))
+                // ledger delete is scoped by project to stay on the sort key - so it needs each queue
+                // paired with its own project, not the two as separate lists.
+                .then(annotationQueueDAO.findProjectIdByQueueId(ids))
+                .flatMap(itemHistoryDAO::deleteByQueueIds)
                 .then(annotationQueueDAO.deleteBatch(ids))
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnSuccess(deletedCount -> log.debug("Successfully deleted '{}' annotation queues", deletedCount))

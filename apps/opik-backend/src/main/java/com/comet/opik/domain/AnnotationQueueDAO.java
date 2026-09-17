@@ -67,7 +67,13 @@ public interface AnnotationQueueDAO {
 
     Mono<Long> deleteBatch(Set<UUID> ids);
 
-    Mono<Set<UUID>> findProjectIdsByQueueIds(Set<UUID> ids);
+    /**
+     * The project each of these queues belongs to, keyed by queue id.
+     *
+     * <p>Returned as pairs rather than a set of project ids: callers scope deletes by project to stay on
+     * the sort key, and a flat set lets a queue be matched against another queue's project.
+     */
+    Mono<Map<UUID, UUID>> findProjectIdByQueueId(Set<UUID> ids);
 
     Mono<Long> addItems(UUID queueId, Set<UUID> itemIds, UUID projectId, AnnotationQueueItemSource source);
 
@@ -210,7 +216,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
 
     /** Read before the queues are deleted: their rows are what maps a queue to its project. */
     private static final String SELECT_PROJECT_IDS_BY_QUEUE_IDS = """
-            SELECT DISTINCT project_id
+            SELECT DISTINCT id, project_id
             FROM annotation_queues
             WHERE workspace_id = :workspace_id
             AND id IN :ids
@@ -634,16 +640,22 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     @Override
-    public Mono<Set<UUID>> findProjectIdsByQueueIds(@NonNull Set<UUID> ids) {
+    public Mono<Map<UUID, UUID>> findProjectIdByQueueId(@NonNull Set<UUID> ids) {
         if (ids.isEmpty()) {
-            return Mono.just(Set.of());
+            return Mono.just(Map.of());
         }
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> selectProjectIds(ids, connection))
-                .flatMap(result -> result.map((row, metadata) -> UUID.fromString(
-                        row.get("project_id", String.class))))
-                .collect(Collectors.toSet());
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(SELECT_PROJECT_IDS_BY_QUEUE_IDS)
+                            .bind("ids", ids.toArray(UUID[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, metadata) -> Map.entry(
+                        UUID.fromString(row.get("id", String.class)),
+                        UUID.fromString(row.get("project_id", String.class)))))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (first, second) -> first));
     }
 
     private Publisher<? extends Result> deleteQueues(Set<UUID> ids, Connection connection) {

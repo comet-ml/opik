@@ -92,11 +92,16 @@ public class AnnotationQueueAutomationService {
 
             if (existing.isEmpty()) {
                 ruleDao.saveBaseRule(rule, workspaceId);
-                projectsDao.saveRuleProjects(ruleId, Set.of(projectId), workspaceId);
             } else {
                 ruleDao.updateBaseRule(ruleId, workspaceId, queueName, FULL_SAMPLING_RATE, enabled,
                         EvalTriggerScope.PRODUCTION, null);
+                // The association is rewritten rather than left alone: a rule reached through a queue id
+                // that now names a different project would otherwise keep routing to the first one, and
+                // every read of this rule joins the junction to learn its project.
+                projectsDao.deleteByRuleIds(Set.of(ruleId), workspaceId);
             }
+
+            projectsDao.saveRuleProjects(ruleId, Set.of(projectId), workspaceId);
 
             routerDao.save(ruleId, queueId, scope.getValue(), resolved.getLeft(),
                     resolved.getRight(), userName);
