@@ -13,7 +13,7 @@ const PAGE_SIZE = 100;
  * belongs in the SDK, which streams it. The panel checks this before offering the export; the check inside the
  * fetch covers the case where rows are added between rendering the button and clicking it.
  */
-export const EXPORT_ROW_LIMIT = 1000;
+export const EXPORT_ROW_LIMIT = 2000;
 
 export class ExportTooLargeError extends Error {
   constructor(total: number) {
