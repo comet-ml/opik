@@ -23,6 +23,10 @@ from opik.rest_api.core.api_error import ApiError
 
 START_TIME = datetime.datetime(2026, 8, 4, 12, 0, 0)
 _BASE_URL = "http://opik-bulk-upload-tests.local"
+# The shape the backend's @MaxRequestSize constraint actually returns.
+_TOO_LARGE_BODY = {
+    "errors": ["The request body Request size exceeds the maximum allowed size of 4MB"]
+}
 
 
 def _create_experiment(
@@ -960,3 +964,129 @@ class TestBulkUploadItemsRateLimitRetry:
             )
 
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 2
+
+
+class TestBulkUploadItemsTooLargeSplit:
+    """A batch the server rejects as too large is halved and retried."""
+
+    @staticmethod
+    def _reject_above(delivered: List[str], max_items: int, error: ApiError) -> Any:
+        def upload(**kwargs: Any) -> None:
+            if len(kwargs["items"]) > max_items:
+                raise error
+            delivered.extend(item.dataset_item_id for item in kwargs["items"])
+
+        return upload
+
+    def test_batch_upload_items__422_too_large__is_retried_as_two_halves(self) -> None:
+        experiment, mock_rest_client = _create_experiment()
+        delivered: List[str] = []
+        mock_rest_client.experiments.experiment_items_bulk.side_effect = (
+            self._reject_above(
+                delivered,
+                max_items=2,
+                error=ApiError(status_code=422, headers={}, body=_TOO_LARGE_BODY),
+            )
+        )
+
+        experiment.batch_upload_items(
+            [_record(dataset_item_id=f"item-{i}") for i in range(4)]
+        )
+
+        assert _sent_batch_sizes(mock_rest_client) == [4, 2, 2]
+        assert sorted(delivered) == [f"item-{i}" for i in range(4)]
+
+    def test_batch_upload_items__413__is_retried_as_two_halves(self) -> None:
+        experiment, mock_rest_client = _create_experiment()
+        delivered: List[str] = []
+        mock_rest_client.experiments.experiment_items_bulk.side_effect = self._reject_above(
+            delivered,
+            max_items=2,
+            error=ApiError(
+                status_code=413,
+                headers={},
+                body="Request body exceeds the maximum allowed size of 1048576 bytes",
+            ),
+        )
+
+        experiment.batch_upload_items(
+            [_record(dataset_item_id=f"item-{i}") for i in range(4)]
+        )
+
+        assert _sent_batch_sizes(mock_rest_client) == [4, 2, 2]
+        assert sorted(delivered) == [f"item-{i}" for i in range(4)]
+
+    def test_batch_upload_items__rejected_above_a_threshold__splits_until_it_fits(
+        self,
+    ) -> None:
+        """Halving recurses: one rejection per level until the halves are accepted."""
+        experiment, mock_rest_client = _create_experiment()
+        delivered: List[str] = []
+        mock_rest_client.experiments.experiment_items_bulk.side_effect = (
+            self._reject_above(
+                delivered,
+                max_items=2,
+                error=ApiError(status_code=422, headers={}, body=_TOO_LARGE_BODY),
+            )
+        )
+
+        experiment.batch_upload_items(
+            [_record(dataset_item_id=f"item-{i}") for i in range(16)]
+        )
+
+        assert sorted(delivered) == sorted(f"item-{i}" for i in range(16))
+        assert _sent_batch_sizes(mock_rest_client).count(2) == 8
+
+    def test_batch_upload_items__single_item_still_too_large__raises(self) -> None:
+        experiment, mock_rest_client = _create_experiment()
+        mock_rest_client.experiments.experiment_items_bulk.side_effect = ApiError(
+            status_code=422, headers={}, body=_TOO_LARGE_BODY
+        )
+
+        with pytest.raises(ApiError):
+            experiment.batch_upload_items([_record()])
+
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 1
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ApiError(
+                status_code=422,
+                headers={},
+                body={"errors": ["experimentName must not be blank"]},
+            ),
+            ApiError(status_code=500, headers={}, body="internal server error"),
+        ],
+    )
+    def test_batch_upload_items__error_that_is_not_an_oversized_batch__raises_unsplit(
+        self, error: ApiError
+    ) -> None:
+        experiment, mock_rest_client = _create_experiment()
+        mock_rest_client.experiments.experiment_items_bulk.side_effect = error
+
+        with pytest.raises(ApiError):
+            experiment.batch_upload_items(
+                [_record(dataset_item_id=f"item-{i}") for i in range(4)], num_threads=1
+            )
+
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 1
+
+    def test_batch_upload_items__unreadable_error_body__raises_unsplit(self) -> None:
+        """Classifying must not become a second source of failures."""
+
+        class Unreadable:
+            def __str__(self) -> str:
+                raise RuntimeError("cannot render")
+
+        experiment, mock_rest_client = _create_experiment()
+        mock_rest_client.experiments.experiment_items_bulk.side_effect = ApiError(
+            status_code=422, headers={}, body=Unreadable()
+        )
+
+        with pytest.raises(ApiError):
+            experiment.batch_upload_items(
+                [_record(dataset_item_id=f"item-{i}") for i in range(4)], num_threads=1
+            )
+
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 1

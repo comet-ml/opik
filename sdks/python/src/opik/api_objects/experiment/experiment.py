@@ -11,12 +11,33 @@ from opik.rest_api import types as rest_api_types
 from . import bulk_converters, bulk_item, experiment_item, experiments_client
 from .. import constants, helpers, rest_helpers
 from ...api_objects.prompt import base_prompt
+from ...rest_api.core.api_error import ApiError
 from ... import exceptions
 
 if TYPE_CHECKING:
     from opik.evaluation.metrics import score_result
 
 LOGGER = logging.getLogger(__name__)
+
+# The backend caps a bulk request through a bean-validation constraint (@MaxRequestSize /
+# MaxRequestSizeValidator in opik-backend), which answers 422 carrying this message; the byte
+# count it appends is configurable, so it stays out of the match. A 413 comes only from the
+# pre-parse Content-Length filter, which a deployment can tune below our batch cap.
+_TOO_LARGE_MESSAGE = "request size exceeds the maximum allowed size"
+
+
+def _is_batch_too_large(error: ApiError) -> bool:
+    if error.status_code == 413:
+        return True
+    if error.status_code != 422:
+        return False
+    try:
+        # The body is whatever the client managed to parse -- a model, a dict or a string --
+        # and one that cannot even be rendered is no evidence of an oversized batch.
+        body = str(error.body)
+    except Exception:
+        return False
+    return _TOO_LARGE_MESSAGE in body.lower()
 
 
 def _count_batches(sizes_MB: List[float]) -> int:
@@ -145,19 +166,33 @@ class Experiment:
         batch: List[rest_api_types.ExperimentItemBulkRecordExperimentItemBulkWriteView],
         project_name: Optional[str],
     ) -> None:
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: self._rest_client.experiments.experiment_items_bulk(
-                experiment_id=self.id,
-                experiment_name=self.name,
-                dataset_name=self.dataset_name,
-                project_name=project_name,
-                items=batch,
-            ),
-            operation_name="experiment_items_bulk",
-        )
-        LOGGER.debug(
-            "Successfully sent experiment items bulk batch of size %d", len(batch)
-        )
+        try:
+            rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                lambda: self._rest_client.experiments.experiment_items_bulk(
+                    experiment_id=self.id,
+                    experiment_name=self.name,
+                    dataset_name=self.dataset_name,
+                    project_name=project_name,
+                    items=batch,
+                ),
+                operation_name="experiment_items_bulk",
+            )
+        except ApiError as exception:
+            # The size estimate that built this batch under-read the encoded payload, so send
+            # it as halves rather than failing the upload. A single item cannot be split.
+            if len(batch) <= 1 or not _is_batch_too_large(exception):
+                raise
+            LOGGER.warning(
+                "Batch of %d experiment items was rejected as too large, retrying it as two halves",
+                len(batch),
+            )
+            half = len(batch) // 2
+            self._bulk_upload_batch_with_retry(batch[:half], project_name=project_name)
+            self._bulk_upload_batch_with_retry(batch[half:], project_name=project_name)
+        else:
+            LOGGER.debug(
+                "Successfully sent experiment items bulk batch of size %d", len(batch)
+            )
 
     def batch_upload_items(
         self,
