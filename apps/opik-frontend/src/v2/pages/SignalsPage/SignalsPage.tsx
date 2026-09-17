@@ -267,7 +267,8 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   const hasData = (issuesData?.content?.length ?? 0) > 0;
   const isActive = isJobEnabled || showRunning;
 
-  const showJobControls = isActive || hasData || Boolean(job?.last_scan_at);
+  const showJobControls =
+    isActive || hasData || Boolean(job?.last_scan_at) || Boolean(failedReason);
 
   if (!AssistantSidebar || !ollieEnabled) {
     return (
