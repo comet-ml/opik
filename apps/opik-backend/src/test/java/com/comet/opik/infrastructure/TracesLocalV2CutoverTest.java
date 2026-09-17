@@ -3125,7 +3125,7 @@ class TracesLocalV2CutoverTest {
 
     private void seedTraces(List<CategorizedId> ids, String workspaceId, UUID projectId) {
         insertRows(ids, workspaceId, projectId, "seed", CategorizedId::createdAt);
-        awaitSeedVisible(ids, workspaceId);
+        awaitSeedVisible(ids, workspaceId, projectId);
     }
 
     /**
@@ -3136,8 +3136,12 @@ class TracesLocalV2CutoverTest {
      * queue file and shipped by a background sender, so visibility is eventual. Forcing it synchronous would test a
      * path production does not take. Waiting on the seeded ids asserts the guarantee the real path makes, and polls
      * only this test's own rows -- nothing shared, so no interaction between tests.
+     *
+     * <p>Scoped by project as well as workspace: an id may be seeded into more than one project here, and a barrier
+     * keyed on {@code (workspace_id, id)} alone would count the earlier project's row and release before the rows
+     * this call wrote have landed.
      */
-    private void awaitSeedVisible(List<CategorizedId> ids, String workspaceId) {
+    private void awaitSeedVisible(List<CategorizedId> ids, String workspaceId, UUID projectId) {
         if (ids.isEmpty() || !isDistributed("traces")) {
             return;
         }
@@ -3145,7 +3149,7 @@ class TracesLocalV2CutoverTest {
         Awaitility.await("rows seeded through the Distributed wrapper become readable through it")
                 .atMost(30, TimeUnit.SECONDS)
                 .pollInterval(200, TimeUnit.MILLISECONDS)
-                .until(() -> liveCount("traces", expected, workspaceId) == expected.size());
+                .until(() -> liveCountScoped("traces", expected, workspaceId, projectId) == expected.size());
     }
 
     /**
