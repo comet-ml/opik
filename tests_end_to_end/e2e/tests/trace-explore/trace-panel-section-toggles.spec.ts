@@ -145,12 +145,23 @@ test.describe('Trace Explore — trace panel section toggles', {
         await expectTogglesBothWays(panel, 'Error', false);
       });
 
-      const spanPanel = await test.step('Select the failing span', async () => {
+      const spanPanel = await test.step("Select the failing span with the trace's error left open", async () => {
+        // Left EXPANDED on purpose, and this is the only reason this step does
+        // more than click a span. The Error section is the controlled one, so
+        // with the trace's copy collapsed the assertion below cannot tell a
+        // span that starts closed from one that inherited the state of the node
+        // selected before it — and inheriting it is precisely the drift this
+        // spec exists to catch.
+        await panel.toggleSection('Error');
+        await expect(
+          panel.sectionHeader('Error'),
+          "the trace's Error must be open before the span is selected, or the next assertion proves nothing",
+        ).toHaveAttribute('aria-expanded', 'true');
         await panel.selectSpan(`${testNamespace}-failing-span`);
         return panel;
       });
 
-      await test.step('The span opens in the same shape as the trace did', async () => {
+      await test.step("The span opens in its own shape, not the trace's", async () => {
         await expectSectionStates(spanPanel, {
           Input: 'true',
           Output: 'true',
