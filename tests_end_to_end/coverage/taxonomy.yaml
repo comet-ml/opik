@@ -344,7 +344,7 @@ areas:
       open-thread-panel:       { covered: true,  tier: t1-smoke }
       turn-order-io:           { covered: true,  tier: t1-smoke }
       thread-feedback-score:   { covered: true,  tier: t2-cuj }
-      thread-actions-panel:    { covered: false }
+      thread-actions-panel:    { covered: true,  tier: t2-cuj, note: "the thread panel header's copy-ID and copy-link actions and the overflow menu behind them (OPIK-8342): the copied id read back off the clipboard, the copied link reopening the same conversation on the Threads tab turn for turn, the title tooltip that is the only place the thread id is legible, and the overflow menu's membership asserted exhaustively as Export as CSV / Export as JSON / Delete" }
       thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics; also the thread panel header's duration, asserted at both ends of formatDuration(_, false) — a 3_615_300 ms thread (float remainder 15.300000000000182) rendering as '1h 15.3s', and a 5 ms thread keeping '0.005s'" }
 
     visual:

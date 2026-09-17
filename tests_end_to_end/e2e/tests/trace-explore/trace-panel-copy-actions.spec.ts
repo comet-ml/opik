@@ -1,0 +1,174 @@
+import { test, expect } from '@e2e/fixtures';
+import { LogsPage } from '@e2e/pom/logs.page';
+import { TracePanelPage } from '@e2e/pom/trace-panel.page';
+import { readClipboard } from '@e2e/core/clipboard';
+
+/**
+ * The trace panel's header copy actions (OPIK-8342, shipped in 2.2.68).
+ *
+ * The release moved copy-ID and copy-link out of the panel's overflow menu and
+ * into icon buttons beside the title, and gave the span toolbar a copy-ID of
+ * its own with no link action (`withLink=false`), so a page offers exactly one
+ * link to copy.
+ *
+ * Nothing in the estate had ever asserted a copied value: a grep for
+ * copy/clipboard/share comes back empty. The component's own vitest suite
+ * cannot close that gap either — `clipboard-copy` is mocked there, and under
+ * happy-dom `window.location.href` is not an app URL, so the link action has
+ * never been observed producing something that resolves. The failure mode is
+ * silent in exactly the way that matters: a link that quietly drops its entity
+ * param still looks like a working button.
+ *
+ * So this spec asserts the two things only a real browser can see — the value
+ * that lands on the clipboard, and that pasting the copied link reopens the
+ * same trace.
+ */
+
+/** Chromium refuses a background clipboard read without both grants. */
+test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
+test.describe('Trace panel copy actions — CUJ', { tag: ['@t2-cuj', '@area:traces'] }, () => {
+  test('the panel header copies the trace id, and the copied link reopens the same trace', { tag: ['@cap:traces.open-trace-panel'] }, async ({
+    project,
+    tracedAgent,
+    backendClient,
+    page,
+    context,
+  }) => {
+    const logs = new LogsPage(page);
+
+    const childSpan = await test.step('Resolve the seeded span ids from the API', async () => {
+      // The ids the clipboard has to match come from the server, not from the
+      // page: reading them out of the UI would make the copy assertion
+      // circular.
+      //
+      // Polled, because span ingestion is eventually consistent — a single read
+      // straight after the fixture returns can legitimately come back short,
+      // and that is a wait, not a failure.
+      await expect
+        .poll(
+          async () =>
+            (await backendClient.listSpanRefs({
+              projectId: project.id,
+              traceId: tracedAgent.id,
+            })).length,
+          { timeout: 60_000, intervals: [500, 1_000, 2_000] },
+        )
+        .toBe(tracedAgent.spans.length);
+
+      const spans = await backendClient.listSpanRefs({
+        projectId: project.id,
+        traceId: tracedAgent.id,
+      });
+      const llm = spans.find((s) => s.name === tracedAgent.llmSpan.name);
+      expect(llm, `the '${tracedAgent.llmSpan.name}' span must be readable`).toBeDefined();
+      expect(
+        llm!.parentSpanId,
+        'it must be a CHILD span — a root span would not exercise selecting into the tree',
+      ).not.toBeNull();
+      return llm!;
+    });
+
+    const panel = await test.step('Open the trace panel from Logs', async () => {
+      await logs.goto(project.id);
+      await logs.waitForReady();
+      const p = await logs.openTraceById(tracedAgent.id);
+      await p.waitForFullyLoaded();
+      return p;
+    });
+
+    await test.step('"Copy trace ID" puts exactly the seeded trace id on the clipboard', async () => {
+      await expect(
+        panel.headerCopyIdButton,
+        'the header offers one copy-ID action',
+      ).toHaveCount(1);
+
+      await panel.copyTraceIdFromHeader();
+      expect(
+        await readClipboard(page),
+        'the clipboard must carry the trace id verbatim',
+      ).toBe(tracedAgent.id);
+    });
+
+    await test.step('The button confirms the copy, then returns to its idle state', async () => {
+      // The confirmation is the whole feedback for the action — the release
+      // removed the success toast that used to stand in for it. A button stuck
+      // on "Copied" is as wrong as one that never confirms, so assert both
+      // ends of the 3s timer.
+      await expect(panel.headerCopiedButton, 'the icon swaps to a check').toBeVisible();
+      await expect(
+        panel.headerCopyIdButton,
+        'and swaps back once the timer elapses',
+      ).toBeVisible({ timeout: 15_000 });
+    });
+
+    const copiedLink = await test.step('"Copy trace link" puts a URL on the clipboard', async () => {
+      await panel.copyTraceLinkFromHeader();
+      const link = await readClipboard(page);
+      expect(link, 'the copied link is an absolute app URL').toMatch(/^https?:\/\//);
+      expect(
+        new URL(link).searchParams.get('trace'),
+        'and it carries the trace it was copied from',
+      ).toBe(tracedAgent.id);
+      return link;
+    });
+
+    await test.step('Pasting the copied link reopens the same trace, on the Traces tab', async () => {
+      // A second page rather than a reload: the point is that the link works
+      // standalone, the way a colleague receiving it would use it. Read
+      // nothing from the clipboard past here — a new tab takes focus, and
+      // `navigator.clipboard.readText()` rejects on an unfocused document.
+      const pasted = await context.newPage();
+      try {
+        await pasted.goto(copiedLink);
+        const reopened = new TracePanelPage(pasted, tracedAgent.id);
+        await reopened.waitForFullyLoaded();
+
+        await expect(
+          reopened.traceNameInHeader(tracedAgent.name),
+          'the reopened panel shows the same trace',
+        ).toBeVisible();
+        expect(
+          new URL(pasted.url()).pathname,
+          'on this project\'s Logs page',
+        ).toContain(`/projects/${project.id}/logs`);
+        expect(
+          [null, 'traces'],
+          'and on the Traces tab — the tab is unset (its default) or explicitly traces, never threads or spans',
+        ).toContain(new URL(pasted.url()).searchParams.get('logsType'));
+      } finally {
+        await pasted.close();
+      }
+    });
+
+    await test.step('Selecting a span swaps the toolbar action to "Copy span ID"', async () => {
+      await panel.selectSpan(tracedAgent.llmSpan.name);
+
+      await expect(
+        panel.copySpanIdButton,
+        'the inspect toolbar offers exactly one copy-span-ID action',
+      ).toHaveCount(1);
+      await panel.copySpanId();
+      expect(
+        await readClipboard(page),
+        'the clipboard must carry the seeded span id, not the trace id',
+      ).toBe(childSpan.id);
+    });
+
+    await test.step('A span offers no link of its own — one link action per page', async () => {
+      // `withLink={false}` on the toolbar's copy actions. Asserted as a count
+      // over every link action on screen rather than as "no Copy span link":
+      // the ambiguity this replaced was two buttons promising different scopes
+      // and returning the identical URL, and only counting them catches a
+      // second one coming back under any label.
+      await expect(
+        panel.copyLinkButtons,
+        'exactly one link action is on screen',
+      ).toHaveCount(1);
+      await expect(
+        panel.headerCopyLinkButton,
+        'and it is the header\'s trace link',
+      ).toBeVisible();
+    });
+  });
+});
