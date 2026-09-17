@@ -415,8 +415,9 @@ class Experiment:
         on the way through, and this is a generator driven by the sending loop, so a
         mutation applied from another thread mid-upload lands in the record that gets
         sent while the size stays behind. Sizing here instead would close that, and
-        measures ~29% more producer CPU on the eager path, which is the cost this path
-        exists to remove.
+        costs 43-59% more producer CPU depending on payload size -- conversion is flat
+        per record, sizing scales with bytes, so the heavier the upload the worse the
+        trade. That CPU is what this path exists to remove.
         """
         max_size_MB = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
         max_length = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE
