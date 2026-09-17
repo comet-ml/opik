@@ -308,27 +308,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             )
             """;
 
-    /**
-     * A thread sits on the time axis at {@code min(traces.start_time)} over the window's traces, never at the
-     * timestamp embedded in {@code trace_threads.id}. That id is a UUIDv7 minted when the thread row was first
-     * created, and {@link com.comet.opik.domain.threads.TraceThreadIdService} falls back to {@code now()} whenever
-     * the caller has no first-trace timestamp to pass, so for backfilled or bulk-created threads it is a
-     * record-keeping artifact rather than a fact about the conversation: bucketing on it collapsed whole projects
-     * onto their ingestion day (OPIK-8335).
-     * <p>
-     * Membership and the aggregate are both derived from {@code traces_final}, which is what keeps this in step
-     * with the thread list in {@code ThreadDAO} and with {@code KpiCardDAO}: all three admit the threads holding at
-     * least one trace in the window and read the start time off that same bounded set. Widening this CTE to the
-     * thread's whole history would make the chart disagree with the list beside it for any thread that started
-     * before the window.
-     * <p>
-     * {@code threads_filtered} then bounds {@code start_time} to the window a second time. That is not redundant:
-     * a trace ingested long after it ran has an id inside the window and a start_time outside it, and without the
-     * bound its thread would land on a bucket the caller never asked for, outside the {@code WITH FILL} frame.
-     * The epoch sentinel is excluded from the aggregate because the update path writes it when a trace update
-     * arrives with no prior create ({@code TraceDAO}); one such row would otherwise drag a whole thread to 1970
-     * and hide it from every thread metric.
-     */
     private static final String THREAD_FILTERED_PREFIX = """
             WITH traces_final AS (
                 SELECT
@@ -428,7 +407,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
-                    t.start_time as trace_time,
+                    t.start_time as thread_start_time,
                     t.end_time as end_time,
                     t.duration as duration,
                     t.first_message as first_message,
@@ -931,14 +910,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_THREAD_FEEDBACK_SCORES = """
             %s, thread_feedback_scores AS (
-                SELECT t.trace_time,
+                SELECT t.thread_start_time,
                         fs.name,
                         fs.value
                 FROM feedback_scores_final fs
                 JOIN (
                     SELECT
                         thread_model_id,
-                        trace_time
+                        thread_start_time
                     FROM threads_filtered
                 ) t ON t.thread_model_id = fs.entity_id
             )
@@ -957,7 +936,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_THREAD_FEEDBACK_SCORES_WITH_BREAKDOWN = """
             %s, thread_feedback_scores AS (
-                SELECT t.trace_time,
+                SELECT t.thread_start_time,
                         <group_expression> AS group_name,
                         fs.name,
                         fs.value
@@ -965,7 +944,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 JOIN (
                     SELECT
                         thread_model_id,
-                        trace_time,
+                        thread_start_time,
                         tags,
                         project_id
                     FROM threads_filtered
@@ -1196,7 +1175,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_THREAD_COST = """
             %s, thread_costs AS (
                 SELECT tf.id AS thread_id,
-                       tf.trace_time AS trace_time,
+                       tf.thread_start_time AS thread_start_time,
                        s.total_estimated_cost AS value
                 FROM threads_filtered tf
                 JOIN traces_final tr ON tr.thread_id = tf.id
@@ -1816,6 +1795,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             MetricType.SPAN_TOKEN_USAGE);
 
     private String getTimeField(MetricType metricType) {
+        if (THREAD_METRICS.contains(metricType)) {
+            return "thread_start_time";
+        }
         return SPAN_TIME_METRICS.contains(metricType) ? "span_time" : "trace_time";
     }
 
