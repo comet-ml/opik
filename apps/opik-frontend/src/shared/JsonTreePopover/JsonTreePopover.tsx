@@ -51,6 +51,7 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
   searchQuery = "",
   onFocusedPathChange,
   header,
+  emptyState,
   selectedPath,
   contentClassName,
   sideOffset = 4,
@@ -308,6 +309,19 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
   }, [searchQuery, filteredVisiblePaths, entries, data]);
 
   const renderTree = () => {
+    if (emptyState && entries.length === 0) {
+      return (
+        <div
+          className="max-h-[var(--tree-max-height)] overflow-auto"
+          style={{ "--tree-max-height": MAX_HEIGHT } as React.CSSProperties}
+        >
+          <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+            {emptyState}
+          </div>
+        </div>
+      );
+    }
+
     if (searchQuery.trim() && filteredVisiblePaths.length === 0) {
       return (
         <div

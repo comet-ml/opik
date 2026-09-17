@@ -49,6 +49,7 @@ const DatasetPickerSection: React.FunctionComponent<
   } = form;
 
   const [openCreateDialog, setOpenCreateDialog] = useState<boolean>(false);
+  const [openPicker, setOpenPicker] = useState<boolean>(false);
 
   const {
     permissions: { canCreateDatasets },
@@ -100,6 +101,8 @@ const DatasetPickerSection: React.FunctionComponent<
           Select a {entityName}
         </Label>
         <LoadableSelectBox
+          open={openPicker}
+          onOpenChange={setOpenPicker}
           value={selectedDataset?.id ?? ""}
           onChange={handleDatasetSelect}
           options={datasetOptions}
@@ -142,7 +145,10 @@ const DatasetPickerSection: React.FunctionComponent<
       {renderCreateDialog({
         open: openCreateDialog,
         setOpen: setOpenCreateDialog,
-        onDatasetCreated: handleDatasetCreated,
+        onDatasetCreated: (dataset: Dataset) => {
+          handleDatasetCreated(dataset);
+          setOpenPicker(false);
+        },
       })}
     </>
   );

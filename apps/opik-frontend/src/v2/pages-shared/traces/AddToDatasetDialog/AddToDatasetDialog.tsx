@@ -275,6 +275,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
             advanced={advanced}
             setAdvanced={setAdvanced}
             treeData={treeData}
+            isPendingTree={isPending}
             hasOnlySpans={hasOnlySpans}
             coverage={coverage}
             datasetColumns={columnNames}

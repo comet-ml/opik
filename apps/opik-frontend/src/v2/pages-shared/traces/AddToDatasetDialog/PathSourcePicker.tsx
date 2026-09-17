@@ -11,6 +11,8 @@ type PathSourcePickerProps = {
   badge?: React.ReactNode;
   invalid?: boolean;
   treeData: JsonObject;
+  isPending?: boolean;
+  entityLabel?: string;
   trigger?: React.ReactNode;
   defaultOpen?: boolean;
   sideOffset?: number;
@@ -23,6 +25,8 @@ const PathSourcePicker: React.FunctionComponent<PathSourcePickerProps> = ({
   badge,
   invalid,
   treeData,
+  isPending,
+  entityLabel = "traces",
   trigger,
   defaultOpen = false,
   sideOffset,
@@ -36,7 +40,7 @@ const PathSourcePicker: React.FunctionComponent<PathSourcePickerProps> = ({
       type="button"
       data-testid="path-source-trigger"
       className={cn(
-        "flex h-6 w-full items-center gap-1 rounded-md border border-border bg-white px-2 text-left hover:border-slate-300",
+        "flex h-6 w-full items-center gap-1 rounded-md border border-border bg-background px-2 text-left hover:border-slate-300",
         invalid && "border-destructive",
       )}
     >
@@ -74,6 +78,11 @@ const PathSourcePicker: React.FunctionComponent<PathSourcePickerProps> = ({
       onSelect={(selectedPath) => onSelect(selectedPath)}
       trigger={trigger ?? defaultTrigger}
       selectedPath={path}
+      emptyState={
+        isPending
+          ? `Loading fields from the selected ${entityLabel}...`
+          : `No fields to show. The sampled ${entityLabel} could not be loaded.`
+      }
       contentClassName="w-[var(--radix-popover-trigger-width)] min-w-0 max-w-none"
       sideOffset={sideOffset}
       header={header}

@@ -18,6 +18,7 @@ type FieldMappingSectionProps = {
   advanced: boolean;
   setAdvanced: (advanced: boolean) => void;
   treeData: JsonObject;
+  isPendingTree: boolean;
   hasOnlySpans: boolean;
   coverage: Record<string, FieldCoverage>;
   datasetColumns: string[];
@@ -31,6 +32,7 @@ const FieldMappingSection: React.FunctionComponent<
   advanced,
   setAdvanced,
   treeData,
+  isPendingTree,
   hasOnlySpans,
   coverage,
   datasetColumns,
@@ -53,6 +55,7 @@ const FieldMappingSection: React.FunctionComponent<
     canUseBasicMode,
   } = mappings;
 
+  const entityLabel = hasOnlySpans ? "spans" : "traces";
   const lockedInAdvanced = advanced && !canUseBasicMode;
 
   const [focusNameRowId, setFocusNameRowId] = useState<string | null>(null);
@@ -143,6 +146,8 @@ const FieldMappingSection: React.FunctionComponent<
                       ? undefined
                       : datasetItemCount
                   }
+                  isPending={isPendingTree}
+                  entityLabel={entityLabel}
                   autoFocusName={row.id === focusNameRowId}
                   autoOpenSource={row.id === openSourceRowId}
                   onRename={(name) => renameRow(row.id, name)}
@@ -153,6 +158,8 @@ const FieldMappingSection: React.FunctionComponent<
             )}
             <PathSourcePicker
               treeData={treeData}
+              isPending={isPendingTree}
+              entityLabel={entityLabel}
               sideOffset={-ADD_FIELD_TRIGGER_HEIGHT}
               onSelect={(path) => setFocusNameRowId(addRow(path))}
               trigger={

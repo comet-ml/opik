@@ -28,6 +28,8 @@ type MappingRowProps = {
   coverage?: FieldCoverage;
   rowError?: FieldRowError;
   newColumnItemCount?: number;
+  isPending?: boolean;
+  entityLabel?: string;
   autoFocusName?: boolean;
   autoOpenSource?: boolean;
   onRename?: (name: string) => void;
@@ -41,6 +43,8 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
   coverage,
   rowError,
   newColumnItemCount,
+  isPending,
+  entityLabel,
   autoFocusName,
   autoOpenSource,
   onRename,
@@ -69,7 +73,7 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
   const renderName = () => {
     if (!isCustom) {
       return (
-        <div className="flex h-6 items-center rounded-md border border-border bg-white px-2">
+        <div className="flex h-6 items-center rounded-md border border-border bg-background px-2">
           <span className="comet-body-xs truncate">{row.name}</span>
         </div>
       );
@@ -111,6 +115,8 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
         invalid={rowError === "no_path"}
         defaultOpen={autoOpenSource}
         treeData={treeData}
+        isPending={isPending}
+        entityLabel={entityLabel}
         onSelect={(path) => onPathSelect?.(path)}
       />
     );
@@ -122,7 +128,9 @@ const MappingRow: React.FunctionComponent<MappingRowProps> = ({
       className="rounded-md border border-border px-2 py-[5px]"
     >
       <div className="flex h-6 items-center gap-2">
-        <div className="min-w-0 flex-1">{renderName()}</div>
+        <div className="w-[calc((100%-40px)/2)] min-w-0 shrink-0">
+          {renderName()}
+        </div>
         <Button variant="ghost" size="icon-2xs" disabled className="shrink-0">
           <MoveRight />
         </Button>

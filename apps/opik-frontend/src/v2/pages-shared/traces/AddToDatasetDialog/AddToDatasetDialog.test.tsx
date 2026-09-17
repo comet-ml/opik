@@ -91,12 +91,18 @@ vi.mock("@/api/datasets/useDatasetItemsList", () => ({
   default: () => ({ data: mockDatasetColumns() }),
 }));
 
-vi.mock("@/api/traces/useTracesByIds", () => ({
-  default: ({ traceIds }: { traceIds: string[] }) =>
+type SampleResult = { data?: Partial<Trace>; isPending: boolean };
+
+const mockTracesByIds = vi.fn(
+  ({ traceIds }: { traceIds: string[] }): SampleResult[] =>
     traceIds.map((id) => ({
       data: { id, input: { prompt: "test input", tone: "neutral" } },
       isPending: false,
     })),
+);
+
+vi.mock("@/api/traces/useTracesByIds", () => ({
+  default: (params: { traceIds: string[] }) => mockTracesByIds(params),
 }));
 
 vi.mock("@/api/traces/useSpansByIds", () => ({
@@ -142,6 +148,12 @@ describe("AddToDatasetDialog", () => {
     });
     vi.clearAllMocks();
     mockDatasetColumns.mockReturnValue(POPULATED_DATASET);
+    mockTracesByIds.mockImplementation(({ traceIds }) =>
+      traceIds.map((id) => ({
+        data: { id, input: { prompt: "test input", tone: "neutral" } },
+        isPending: false,
+      })),
+    );
   });
 
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -573,6 +585,32 @@ describe("AddToDatasetDialog", () => {
         expect.any(Object),
       );
     });
+  });
+
+  it("should explain an empty explorer instead of showing a blank popover", async () => {
+    mockTracesByIds.mockImplementation(({ traceIds }) =>
+      traceIds.map(() => ({ data: undefined, isPending: false })),
+    );
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    openAddFieldExplorer();
+
+    expect(await screen.findByText(/could not be loaded/i)).toBeInTheDocument();
+  });
+
+  it("should say the explorer is loading while the samples are in flight", async () => {
+    mockTracesByIds.mockImplementation(({ traceIds }) =>
+      traceIds.map(() => ({ data: undefined, isPending: true })),
+    );
+    render(<AddToDatasetDialog {...baseProps} />, { wrapper });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    openAddFieldExplorer();
+
+    expect(await screen.findByText(/Loading fields/i)).toBeInTheDocument();
   });
 
   it("should not send field mappings while advanced mapping is off", async () => {
