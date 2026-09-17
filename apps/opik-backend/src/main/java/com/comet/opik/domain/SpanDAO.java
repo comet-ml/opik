@@ -51,6 +51,7 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1374,18 +1375,15 @@ public class SpanDAO {
      * advanced to the mutation's version, not the parts holding matching data, so scoping bounds the work per part
      * rather than the number of parts visited — nothing, for a range spanning every partition.</p>
      *
-     * <p><b>What this costs beyond mutation time, and what is still open.</b> Partition pruning is also what lets a
-     * lightweight delete reclaim storage: parts outside a mutation's scope are not version-stamped, so they go quiet
-     * and become eligible for the force-merge that physically drops masked rows (OPIK-5295). A sweep that cannot prune
-     * may therefore mask rows without releasing bytes — the outcome partitioning {@code spans} is meant to deliver.
-     * Whether it actually does is <b>not</b> settled by the measurements behind this decision: {@code IN PARTITION}
-     * did not reduce {@code parts_to_do} there either, so scoping and stamping are less tightly coupled than the
-     * reclaim argument assumes. This is the open question, and the condition below is what settles it.</p>
+     * <p><b>One question is left open.</b> Partition pruning is also what lets a lightweight delete reclaim storage:
+     * unpruned parts stay version-stamped, never go quiet, and never reach the force-merge that drops masked rows
+     * (OPIK-5295), so an unprunable sweep may mask rows without releasing bytes. The measurements do not settle it —
+     * {@code IN PARTITION} did not reduce {@code parts_to_do} either — and the condition below is what will.</p>
      *
-     * <p>Accepted on one condition: {@code retention.enabled}, {@code false} by default, must not be turned on for an
-     * install whose {@code spans} has been cut over until one sweep has been measured there — {@code parts_to_do} and
-     * wall time from {@code system.mutations}, <em>and</em> whether the bytes come back. The cost scales with the
-     * table's partition count rather than with the rows the window matches, and reclaim is unproven either way.</p>
+     * <p>Accepted on one condition, binding the pair rather than either step, so that neither ordering slips past it:
+     * <b>retention and a cut-over {@code spans} must not both be live until one sweep has been measured</b> —
+     * {@code parts_to_do} and wall time from {@code system.mutations}, <em>and</em> whether the bytes come back. The
+     * cost scales with the table's partition count rather than with the rows the window matches.</p>
      */
     private static final String DELETE_FOR_RETENTION = """
             DELETE FROM <spans_mutation_table>
@@ -2590,18 +2588,22 @@ public class SpanDAO {
      * partition its ids resolve to (OPIK-8230) — possible here, unlike the retention sweeps, because the statement is
      * keyed on the span's <b>own</b> id, so {@link WeeklyPartitions} derives its partitions exactly.
      * <p>
-     * The returned value is the driver's update count summed over those statements, which is {@code 0}: unlike the
-     * retention sweeps this statement does not set {@code lightweight_deletes_sync}, so ClickHouse reports nothing for
-     * the asynchronous mutation. It is <b>not</b> a count of deleted rows, and no caller reads it.
+     * <b>Ordering the ids before chunking is what keeps the statement count a sum rather than a product.</b> They
+     * arrive in hash order, so chunking them directly puts every week the delete spans into every chunk, and each
+     * chunk re-groups the same weeks: W weeks in C chunks would register W×C mutations where W would do, breaching
+     * ClickHouse's {@code number_of_mutations_to_delay}/{@code number_of_mutations_to_throw} ceilings, which fail a
+     * cascade rather than slow it. Ordered, each week is contiguous, so only a week split by a chunk boundary costs a
+     * second statement. It also confines the unbounded fallback to the final chunk, since underivable ids sort last.
      * <p>
-     * <b>A statement failing part-way does not roll back the ones before it</b>, and no {@code SpansDeleted} follows
-     * — the single-statement form's outcome for a total failure, at finer granularity. Nothing compensates,
-     * and nothing can: ClickHouse has no transaction spanning these mutations, and {@code IN PARTITION} names one
-     * partition per statement, which is why there are several. What a failure here cannot do is cost the cutover its
-     * record, since {@code SpanService.captureDeletions} writes every id to the deletion-events bridge before the
-     * first statement runs. Leaving rows behind is a property of the trace-delete cascade as a whole rather than of
-     * this method — its steps chain with {@code then}, so any one of them failing strands the rest — so a durable
-     * retry belongs with that cascade, not here.
+     * Returns the driver's update count, which is {@code 0} — ClickHouse reports no row count for a lightweight
+     * delete — not a count of deleted rows, and no caller reads it. Each statement does wait for its mutation
+     * ({@code lightweight_deletes_sync} defaults to {@code 2}), so a wide cascade's wall time is the sum of those
+     * waits; lowering it would trade that for a window where a replica still serves deleted rows, and is not decided
+     * here.
+     * <p>
+     * A statement failing part-way does not roll back the ones before it, and no {@code SpansDeleted} follows. The
+     * deletion-events bridge is unaffected, since {@code SpanService.captureDeletions} runs first, and a durable retry
+     * belongs with the trace-delete cascade, whose steps already strand each other the same way.
      */
     @WithSpan
     public Mono<Long> deleteByIds(Set<UUID> spanIds, @NonNull UUID projectId) {
@@ -2615,10 +2617,22 @@ public class SpanDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> Flux
-                        .fromIterable(Lists.partition(List.copyOf(spanIds), ANALYTICS_DELETE_BATCH_SIZE))
+                        .fromIterable(Lists.partition(orderedByIdAt(spanIds), ANALYTICS_DELETE_BATCH_SIZE))
                         .concatMap(batch -> deleteBatch(batch, projectId, connection)))
                 .reduce(0L, Long::sum)
                 .doFinally(_ -> endSegment(segment));
+    }
+
+    /**
+     * The ids ordered by the timestamp their UUIDv7 embeds — the value {@link WeeklyPartitions} derives a partition
+     * from, so one week's ids come out contiguous; see {@link #deleteByIds(Set, UUID)} for why that matters before
+     * chunking. A non-UUIDv7 id sorts arbitrarily, which costs nothing: its chunk is rejected by the derivation and
+     * takes the unbounded form whatever the order.
+     */
+    private static List<UUID> orderedByIdAt(Set<UUID> spanIds) {
+        return spanIds.stream()
+                .sorted(Comparator.comparingLong(id -> id.getMostSignificantBits() >>> 16))
+                .toList();
     }
 
     /**
@@ -2636,6 +2650,10 @@ public class SpanDAO {
                 ? WeeklyPartitions.groupByPartition(batch)
                 : Optional.<Map<Long, Set<UUID>>>empty();
 
+        // For a far-future id the derivation also names the week a 32-bit id_at would wrap it to - load-bearing for
+        // traces, whose successor carried a 32-bit id_at between 000101 and 000114, and dead weight here: legacy
+        // `spans` is unpartitioned and spans_local_v2 was created DateTime64(0) at 000115. One no-op statement per
+        // far-future id, kept rather than adding a per-family mode to a derivation shared with traces.
         return grouped
                 .map(idsByPartition -> Flux.fromIterable(idsByPartition.entrySet())
                         .concatMap(entry -> executeDelete(List.copyOf(entry.getValue()), entry.getKey(), projectId,
@@ -2645,8 +2663,7 @@ public class SpanDAO {
 
     /**
      * Renders and executes one delete statement - unbounded when {@code partition} is null, scoped to it otherwise -
-     * emitting the driver's update count for it, which is {@code 0} for these asynchronous lightweight deletes. See
-     * {@link #deleteByIds(Set, UUID)} for why.
+     * emitting the driver's update count, which is {@code 0}; see {@link #deleteByIds(Set, UUID)} for why.
      */
     private Flux<Long> executeDelete(List<UUID> ids, Long partition, UUID projectId, Connection connection) {
         return makeFluxContextAware((userName, workspaceId) -> {

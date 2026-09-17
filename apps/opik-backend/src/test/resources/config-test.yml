@@ -114,8 +114,8 @@ databaseAnalyticsDataModel:
   #   cascade may scope itself with IN PARTITION instead of being registered against every part of the table.
   #   IN PARTITION against an unpartitioned table is a hard error (code 248), not a lost optimisation, so setting this
   #   true ahead of the EXCHANGE breaks deletes. Off falls back to the unbounded delete: correct, merely slower. The
-  #   spans retention sweeps are not scoped either way, so do NOT enable retention on an install whose `spans` has
-  #   been cut over until a sweep has been measured there - see SpanDAO.DELETE_FOR_RETENTION.
+  #   spans retention sweeps are not scoped either way: retention and a cut-over `spans` must not both be live until
+  #   a sweep has been measured there - see SpanDAO.DELETE_FOR_RETENTION.
   spanColumnsNonNullable: false
   #  Default: false
   #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also

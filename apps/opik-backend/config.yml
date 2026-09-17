@@ -140,8 +140,8 @@ databaseAnalyticsDataModel:
   #   cascade may scope itself with IN PARTITION instead of being registered against every part of the table.
   #   IN PARTITION against an unpartitioned table is a hard error (code 248), not a lost optimisation, so setting this
   #   true ahead of the EXCHANGE breaks deletes. Off falls back to the unbounded delete: correct, merely slower. The
-  #   spans retention sweeps are not scoped either way, so do NOT enable retention on an install whose `spans` has
-  #   been cut over until a sweep has been measured there - see SpanDAO.DELETE_FOR_RETENTION.
+  #   spans retention sweeps are not scoped either way: retention and a cut-over `spans` must not both be live until
+  #   a sweep has been measured there - see SpanDAO.DELETE_FOR_RETENTION.
   spanColumnsNonNullable: ${ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE:-false}
   #  Default: false
   #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also
@@ -1259,11 +1259,13 @@ environment:
 # Data retention policy enforcement
 # Spans gate (OPIK-8364): unlike the trace sweeps, the spans retention sweeps cannot prune to partitions - their range
 # keys on trace_id while the partition column derives from the span's own id. On an install whose `spans` has been cut
-# over to the weekly-partitioned successor, do NOT enable retention until one sweep has been measured there: its cost
-# scales with the table's partition count rather than with the rows the window matches (parts_to_do and wall time in
-# system.mutations), and it is unproven that an unpruned sweep reclaims storage at all - partition pruning is also what
-# lets a lightweight delete release bytes rather than only mask rows (OPIK-5295). SpanDAO.DELETE_FOR_RETENTION records
-# why, what is open, and what to do if the measurement disappoints.
+# over to the weekly-partitioned successor, retention and that cutover must NOT both be live until one sweep has been
+# measured there - which gates both orderings, since an install already running retention would otherwise cut over
+# without ever crossing a gate worded as "do not enable retention". The cost scales with the table's partition count
+# rather than with the rows the window matches (parts_to_do and wall time in system.mutations), and it is unproven
+# that an unpruned sweep reclaims storage at all - partition pruning is also what lets a lightweight delete release
+# bytes rather than only mask rows (OPIK-5295). SpanDAO.DELETE_FOR_RETENTION records why, what is open, and what to
+# do if the measurement disappoints.
 # The job splits the workspace UUID space into N=executionsPerDay fractions and processes one fraction per tick.
 # Use a value that divides 1440 evenly for consistent interval spacing (e.g., 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 30, 32, 36, 48, 60, 80, 96, 120, 144, 160, 180, 240, 288).
 retention:

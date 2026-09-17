@@ -507,63 +507,82 @@ class SpansPartitionPruningMutationTest {
     }
 
     @Test
-    void requestSpanningTwoChunksPrunesEachChunkIndependently() {
-        // Partitions are derived PER CHUNK, so "all-or-nothing" is a per-statement guarantee, not a per-request one;
-        // every other test here passes one chunk and cannot see that. The underivable id goes in the FIRST chunk and
-        // the derivable ids in the second, which is what makes the test bite: hoisting the derivation out of the
-        // per-chunk step would let chunk one strip pruning from chunk two, and chunk two is what is asserted below.
-        // It is also the only workable arrangement, since chunks are sized [BATCH_SIZE, remainder] and only the
-        // remainder is small enough to read back in full.
+    void chunkingDoesNotMultiplyStatementsByPartition() {
+        // Partitions are derived per chunk, so the order ids are chunked in decides what a delete costs. Interleaved
+        // across two weeks and chunked as they arrive, every chunk holds both weeks and re-groups both - weeks x
+        // chunks statements, enough to reach the mutation-count ceilings that fail a cascade outright. Ordered by
+        // id_at first, each week is contiguous and only the week the boundary splits pays twice.
+        //
+        // No rows are seeded: a delete does not need its ids to exist, and the statement count is the subject.
         var projectId = ID_GENERATOR.generateId();
-        var firstChunkRow = idInWeekOf(ERA_MONDAYS.getFirst());
-        var secondChunkRow = idInWeekOf(ERA_MONDAYS.getLast());
-        insertRawSpan(projectId, firstChunkRow);
-        insertRawSpan(projectId, secondChunkRow);
-
-        // Chunk one: a real row, the underivable id, and filler up to exactly ANALYTICS_DELETE_BATCH_SIZE. Filler ids
-        // match no row - a delete does not need its ids to exist, and the chunk boundary is what is under test.
-        var ordered = new ArrayList<UUID>();
-        ordered.add(firstChunkRow);
-        ordered.add(newOutOfRangeId());
-        while (ordered.size() < ANALYTICS_DELETE_BATCH_SIZE) {
-            ordered.add(idInWeekOf(ERA_MONDAYS.getFirst()));
+        var weeks = List.of(ERA_MONDAYS.get(0), ERA_MONDAYS.get(1));
+        var ids = new ArrayList<UUID>();
+        while (ids.size() < ANALYTICS_DELETE_BATCH_SIZE + 2) {
+            ids.add(idInWeekOf(weeks.get(ids.size() % 2)));
         }
-        // Chunk two: the remainder, all derivable, in two different weeks so the bound set is exact rather than
-        // trivially a single value.
-        var secondChunkCompanion = idInWeekOf(ERA_MONDAYS.get(1));
-        ordered.add(secondChunkRow);
-        ordered.add(secondChunkCompanion);
 
         var since = serverNow();
-        delete(new LinkedHashSet<>(ordered), projectId);
+        delete(new LinkedHashSet<>(ids), projectId);
 
-        assertThat(liveRowCount(projectId, firstChunkRow))
-                .as("the row in the chunk that fell back to unbounded is deleted")
+        // Two weeks over two chunks: one statement each, plus at most one more for the week split by the boundary.
+        // Chunked in arrival order this would be four - two weeks in each of two chunks.
+        var sqls = deleteSqlsSince(since, projectId);
+        assertThat(sqls)
+                .as("two weeks across two chunks cost a sum, not a product: %s", sqls)
+                .hasSizeLessThanOrEqualTo(3);
+        assertThat(sqls.stream().map(this::boundPartitionOf))
+                .as("and every statement is scoped to one of the two weeks")
+                .isSubsetOf(partitionNameOf(weeks.get(0)), partitionNameOf(weeks.get(1)));
+    }
+
+    @Test
+    void requestSpanningTwoChunksPrunesEachChunkIndependently() {
+        // Partitions are derived PER CHUNK, so "all-or-nothing" is a per-statement guarantee, not a per-request one;
+        // every other test here passes one chunk and cannot see that. Ordering puts the underivable id in the final
+        // chunk - its timestamp is the largest - so the chunks before it must still prune. Hoisting the derivation out
+        // of the per-chunk step would collapse them to unbounded too.
+        var projectId = ID_GENERATOR.generateId();
+        var prunedChunkRow = idInWeekOf(ERA_MONDAYS.getFirst());
+        var fallbackChunkRow = idInWeekOf(ERA_MONDAYS.get(1));
+        insertRawSpan(projectId, prunedChunkRow);
+        insertRawSpan(projectId, fallbackChunkRow);
+
+        // Filler in the first era so the earlier chunk is full; the underivable id and one later-era row follow it.
+        var ids = new ArrayList<UUID>();
+        ids.add(prunedChunkRow);
+        while (ids.size() < ANALYTICS_DELETE_BATCH_SIZE) {
+            ids.add(idInWeekOf(ERA_MONDAYS.getFirst()));
+        }
+        ids.add(fallbackChunkRow);
+        ids.add(newOutOfRangeId());
+
+        var since = serverNow();
+        delete(new LinkedHashSet<>(ids), projectId);
+
+        assertThat(liveRowCount(projectId, prunedChunkRow))
+                .as("the row in the chunk that pruned is deleted")
                 .isEqualTo("0");
-        assertThat(liveRowCount(projectId, secondChunkRow))
-                .as("and so is the row in the chunk that pruned")
+        assertThat(liveRowCount(projectId, fallbackChunkRow))
+                .as("and so is the row in the chunk that fell back to unbounded")
                 .isEqualTo("0");
 
         var sqls = deleteSqlsSince(since, projectId);
+        // The final chunk carries the underivable id, so it falls back to exactly one unbounded statement.
         // Identified by the ABSENCE of an IN PARTITION clause rather than by ids_size: the clause sits at the very
         // front of the statement, so it is readable regardless of where query_log truncated the text.
-        var chunkOneSqls = sqls.stream().filter(sql -> !sql.contains("IN PARTITION")).toList();
-        assertThat(chunkOneSqls)
-                .as("the full chunk fell back to exactly one unbounded statement: %s", sqls)
+        var unbounded = sqls.stream().filter(sql -> !sql.contains("IN PARTITION")).toList();
+        assertThat(unbounded)
+                .as("the chunk holding the underivable id fell back to exactly one unbounded statement: %s", sqls)
                 .hasSize(1);
 
-        // Chunk two: the far-future row names two partitions and the companion one, so three statements.
-        var chunkTwoSqls = sqls.stream().filter(sql -> !chunkOneSqls.contains(sql)).toList();
-        assertThat(chunkTwoSqls)
-                .as("the all-derivable chunk prunes even though an earlier chunk could not - one statement per"
-                        + " partition: %s", chunkTwoSqls)
-                .hasSize(3)
-                .allSatisfy(sql -> assertThat(sql).contains("ids_size=1"));
-        assertThat(chunkTwoSqls.stream().map(this::boundPartitionOf))
-                .as("bounded to exactly its own two weeks, plus the legacy representation of the far-future one")
-                .containsExactlyInAnyOrder(partitionNameOf(ERA_MONDAYS.getLast()),
-                        partitionNameOf(ERA_MONDAYS.get(1)),
-                        LEGACY_WEEK_OF_FAR_FUTURE_ERA);
+        // Everything before it still pruned, to the first era alone - the chunk boundary falls inside that week.
+        var pruned = sqls.stream().filter(sql -> sql.contains("IN PARTITION")).toList();
+        assertThat(pruned)
+                .as("the full chunk ahead of it pruned even though a later chunk could not: %s", pruned)
+                .isNotEmpty();
+        assertThat(pruned.stream().map(this::boundPartitionOf))
+                .as("and bound only its own era")
+                .containsOnly(partitionNameOf(ERA_MONDAYS.getFirst()));
     }
 
     @Test
