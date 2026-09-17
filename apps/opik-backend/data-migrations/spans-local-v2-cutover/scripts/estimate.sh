@@ -151,6 +151,12 @@ CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" --log_comm
     || { echo "ERROR: --write-cost-factor must be a number between 1e-6 and 1e6 (it divides, so zero and infinity are both out)." >&2; exit 2; }
 [[ "$MIN_FREE_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --min-free-factor must be a number." >&2; exit 2; }
 [[ "$DEST_COMPRESSION_RATIO" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --dest-compression-ratio must be a number." >&2; exit 2; }
+# Same contract as backfill.sh's check on the same flag, and it belongs here MORE than there: this driver's whole output
+# is the headroom verdict, and the projection is `dest = s * ratio`, so a 0 reports a destination of zero bytes and
+# therefore sufficient headroom on any estate. A value above 1.0 is the mirror error — it projects a plan backfill.sh
+# would then refuse, since a ratio over 1.0 makes the gate looser than sizing from the source.
+[[ "$(awk -v r="$DEST_COMPRESSION_RATIO" 'BEGIN { print (r > 0 && r <= 1.0) ? 1 : 0 }')" == "1" ]] \
+    || { echo "ERROR: --dest-compression-ratio must be in (0, 1.0]. The destination cannot be larger than the source under the 000115/000116 codec set." >&2; exit 2; }
 # Same reason and the same two failure directions: ROWS_PER_SEC is the divisor in the ETA (rows / rps). Empty is still
 # allowed — that is the "probe it" path, which derives the value and asserts it is positive before use.
 [[ -z "$ROWS_PER_SEC" ]] \
