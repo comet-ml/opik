@@ -109,6 +109,17 @@ describe("supportsSamplingParams", () => {
   ])("reads %s the same as the id it decorates", (model, expected) => {
     expect(supportsSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(expected);
   });
+
+  // The backend trims before classifying, so a pasted id with stray whitespace must not be read as
+  // a different model on the two sides — the panel would offer a control the request then drops.
+  it("ignores surrounding whitespace, as the backend does", () => {
+    expect(
+      supportsSamplingParams("  claude-opus-4-7  " as PROVIDER_MODEL_TYPE),
+    ).toBe(false);
+    expect(
+      supportsSamplingParams("  claude-opus-4-6  " as PROVIDER_MODEL_TYPE),
+    ).toBe(true);
+  });
 });
 
 describe("updateProviderConfig — Anthropic", () => {

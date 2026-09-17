@@ -312,6 +312,7 @@ const KNOWN_ANTHROPIC_MODELS = (
  */
 const knownAnthropicId = (model: string): string | undefined => {
   const segment = (model.split("/").pop() ?? "")
+    .trim()
     .toLowerCase()
     .replace(/\./g, "-");
   const claudeAt = segment.indexOf("claude-");
@@ -516,7 +517,7 @@ export type SamplingParams = { temperature?: number; topP?: number };
  * every model behind it, Mistral included, look like Claude and lose its Top P.
  */
 export const isClaudeModel = (model: PROVIDER_MODEL_TYPE | ""): boolean =>
-  /claude/i.test(model.split("/").pop() ?? "");
+  /claude/i.test((model.split("/").pop() ?? "").trim());
 
 /**
  * The single interpreter of temperature/topP for a model: capability gating plus Anthropic's
