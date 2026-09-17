@@ -114,6 +114,8 @@ const FieldMappingSection: React.FunctionComponent<
                 treeData={treeData}
                 coverage={coverage[row.id]}
                 rowError={rowErrors[row.id]}
+                isPending={isPendingTree}
+                entityLabel={entityLabel}
                 onPathSelect={(path) => setFixedPath(row.id, path)}
               />
             ))}

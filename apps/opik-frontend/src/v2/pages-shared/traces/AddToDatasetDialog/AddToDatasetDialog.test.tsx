@@ -105,12 +105,16 @@ vi.mock("@/api/traces/useTracesByIds", () => ({
   default: (params: { traceIds: string[] }) => mockTracesByIds(params),
 }));
 
-vi.mock("@/api/traces/useSpansByIds", () => ({
-  default: ({ spanIds }: { spanIds: string[] }) =>
+const mockSpansByIds = vi.fn(
+  ({ spanIds }: { spanIds: string[] }): SampleResult[] =>
     spanIds.map((id) => ({
       data: { id, input: { prompt: "span input" } },
       isPending: false,
     })),
+);
+
+vi.mock("@/api/traces/useSpansByIds", () => ({
+  default: (params: { spanIds: string[] }) => mockSpansByIds(params),
 }));
 
 vi.mock("@/store/AppStore", () => ({
@@ -151,6 +155,12 @@ describe("AddToDatasetDialog", () => {
     mockTracesByIds.mockImplementation(({ traceIds }) =>
       traceIds.map((id) => ({
         data: { id, input: { prompt: "test input", tone: "neutral" } },
+        isPending: false,
+      })),
+    );
+    mockSpansByIds.mockImplementation(({ spanIds }) =>
+      spanIds.map((id) => ({
+        data: { id, input: { prompt: "span input" } },
         isPending: false,
       })),
     );
@@ -624,6 +634,23 @@ describe("AddToDatasetDialog", () => {
     openAddFieldExplorer();
 
     expect(await screen.findByText(/could not be loaded/i)).toBeInTheDocument();
+  });
+
+  it("should label a fixed row's explorer by flow while samples load", async () => {
+    mockSpansByIds.mockImplementation(({ spanIds }) =>
+      spanIds.map(() => ({ data: undefined, isPending: true })),
+    );
+    render(<AddToDatasetDialog {...baseProps} selectedRows={[mockSpan]} />, {
+      wrapper,
+    });
+
+    openDropdownAndSelect("Test Dataset 1");
+    await enableAdvancedMapping();
+    openRowExplorer("input");
+
+    expect(
+      await screen.findByText(/Loading fields from the selected spans/i),
+    ).toBeInTheDocument();
   });
 
   it("should say the explorer is loading while the samples are in flight", async () => {
