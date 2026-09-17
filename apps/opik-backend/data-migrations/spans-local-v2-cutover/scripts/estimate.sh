@@ -140,15 +140,23 @@ CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" --log_comm
 [[ "$MAX_ROWS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --max-rows-per-insert must be a positive integer." >&2; exit 2; }
 [[ "$PROBE_ROWS" =~ ^[1-9][0-9]*$ ]] || { echo "ERROR: --probe-rows must be a positive integer." >&2; exit 2; }
 [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || { echo "ERROR: --pause-seconds must be a non-negative integer." >&2; exit 2; }
-# STRICTLY positive, not merely numeric: this is a DIVISOR (READ_RPS / factor), and awk treats division by zero as a
-# fatal error, so a 0 here would kill the run with 'awk: division by zero' instead of this refusal. The second test is
-# what rejects 0, 0.0 and 0.00 while accepting 0.5 — a positive decimal has at least one non-zero digit.
-[[ "$WRITE_COST_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ && "$WRITE_COST_FACTOR" =~ [1-9] ]] || { echo "ERROR: --write-cost-factor must be a number greater than zero." >&2; exit 2; }
+# STRICTLY positive AND finite, checked on the value awk will actually parse rather than on the string. This is a
+# DIVISOR (READ_RPS / factor) and awk makes division by zero fatal, so the run would die with 'awk: division by zero'
+# instead of this refusal. A digit test is not enough, because magnitude defeats it in both directions: '0.' followed by
+# 400 zeros and a 1 contains a non-zero digit and underflows to 0, and 1 followed by 400 zeros overflows to inf, which
+# then makes the ETA's own divisor 0. Bounding the PARSED value rules out both, and is the same shape as backfill.sh's
+# --dest-compression-ratio check. The bounds are deliberately far wider than any real derating factor.
+[[ "$WRITE_COST_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] \
+    && [[ "$(awk -v v="$WRITE_COST_FACTOR" 'BEGIN { print (v >= 1e-6 && v <= 1e6) ? 1 : 0 }')" == "1" ]] \
+    || { echo "ERROR: --write-cost-factor must be a number between 1e-6 and 1e6 (it divides, so zero and infinity are both out)." >&2; exit 2; }
 [[ "$MIN_FREE_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --min-free-factor must be a number." >&2; exit 2; }
 [[ "$DEST_COMPRESSION_RATIO" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --dest-compression-ratio must be a number." >&2; exit 2; }
-# Same reason: ROWS_PER_SEC is the divisor in the ETA (rows / rps). Empty is still allowed — that is the "probe it"
-# path, which derives the value and asserts it is positive before use.
-[[ -z "$ROWS_PER_SEC" || ( "$ROWS_PER_SEC" =~ ^[0-9]+(\.[0-9]+)?$ && "$ROWS_PER_SEC" =~ [1-9] ) ]] || { echo "ERROR: --rows-per-sec must be a number greater than zero." >&2; exit 2; }
+# Same reason and the same two failure directions: ROWS_PER_SEC is the divisor in the ETA (rows / rps). Empty is still
+# allowed — that is the "probe it" path, which derives the value and asserts it is positive before use.
+[[ -z "$ROWS_PER_SEC" ]] \
+    || { [[ "$ROWS_PER_SEC" =~ ^[0-9]+(\.[0-9]+)?$ ]] \
+        && [[ "$(awk -v v="$ROWS_PER_SEC" 'BEGIN { print (v >= 1e-6 && v <= 1e12) ? 1 : 0 }')" == "1" ]]; } \
+    || { echo "ERROR: --rows-per-sec must be a number between 1e-6 and 1e12 (it divides, so zero and infinity are both out)." >&2; exit 2; }
 
 ch() {
     clickhouse-client "${CH_ARGS[@]}" --query "$1"

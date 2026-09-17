@@ -923,8 +923,11 @@ read_postcondition() {
 # thing — SpansLocalV2CutoverTest reimplements these blocks against real data for that — but it turns the one silent
 # failure into a loud one.
 require_postcondition_projection() {
-    local sql="$1" block="$2" aliases
-    aliases="$(grep -oE 'AS (missing_keys|stale_keys|payload_mismatch_keys|newer_keys)' <<<"$sql" \
+    local sql="$1" block="$2" aliases masked
+    # Comments stripped first, exactly as require_rendered does: a `--` line mentioning one of these aliases is
+    # documentation, not projection, and counting it would refuse a valid block for describing itself.
+    masked="$(sed 's/--.*$//' <<<"$sql")"
+    aliases="$(grep -oE 'AS (missing_keys|stale_keys|payload_mismatch_keys|newer_keys)' <<<"$masked" \
         | sed 's/^AS //' | paste -sd, -)"
     [[ "$aliases" == "missing_keys,stale_keys,payload_mismatch_keys,newer_keys" ]] || {
         echo "ERROR: the '$block' block in $VERIFY_SQL does not project the four counts in the expected order." >&2

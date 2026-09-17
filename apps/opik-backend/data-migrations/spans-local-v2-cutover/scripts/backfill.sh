@@ -738,7 +738,22 @@ else
         # Captured in UTC because step 2 parses it as UTC (see 000002). Both halves must agree: read back in another
         # timezone the anchor moves by the server's offset, and a later anchor drops the writes in the gap.
         BACKFILL_START="$(ch "SELECT toString(now64(6, 'UTC'))")"
-        printf '%s UTC' "$BACKFILL_START" > "$STATE_FILE"
+        # CLAIM THE ANCHOR ATOMICALLY. The guard above read an empty destination, but two runs can both pass it before
+        # either copies a row, and a plain `>` would then let the second silently replace the first's anchor. That is
+        # the same silent data loss the guard exists to prevent, arriving by a different route: the surviving anchor is
+        # the LATER one, so the delta and the deletion replay are both bounded past rows the other run already copied,
+        # and deletes in that interval leak live across the EXCHANGE. `set -C` makes the redirection fail if the file
+        # exists, so exactly one run wins; it is scoped to a subshell so noclobber does not leak into the rest of the
+        # script. This is a create-if-absent claim rather than a lock deliberately: a lock would need releasing, and a
+        # stale one would block the resume path this driver is built around.
+        if ! (set -C; printf '%s UTC' "$BACKFILL_START" > "$STATE_FILE") 2>/dev/null; then
+            log "ABORT: '$STATE_FILE' appeared while this run was minting an anchor, so another backfill claimed it" >&2
+            log "       first. Two concurrent runs against one destination cannot both be right: whichever anchor" >&2
+            log "       survived would bound the delta and the deletion replay past rows the other has already copied," >&2
+            log "       and deletes in that interval would leak live across the EXCHANGE. Nothing was written by this" >&2
+            log "       run. Let the other finish, then RESUME with the same --state-file — this driver is idempotent." >&2
+            exit 1
+        fi
         log "RECORD backfill_start=$BACKFILL_START UTC  (saved to $STATE_FILE; pass this, marker included, to step 2: 000002_delta_and_deletion_replay.sql)"
     fi
 fi
