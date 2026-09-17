@@ -90,6 +90,15 @@ def _distribution(text: str) -> Dict[str, float]:
 def _kl(
     p: Dict[str, float], q: Dict[str, float], log: Callable[[float], float]
 ) -> float:
+    """KL divergence from p to q, defined only where q covers p's support.
+
+    The implementation's additive smoothing is deliberately not mirrored here: an
+    expectation copied from the code under test stops being an independent check.
+    Where smoothing actually decides the answer -- a token present on one side
+    only -- the definition gives no finite value, so that is a separate case.
+    """
+    uncovered = sorted(set(p) - set(q))
+    assert not uncovered, f"KL is undefined: {uncovered} have no probability in q"
     return sum(
         value * log(value / q[token]) for token, value in p.items() if value > 0.0
     )
