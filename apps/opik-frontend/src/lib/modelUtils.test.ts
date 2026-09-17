@@ -112,6 +112,18 @@ describe("supportsSamplingParams", () => {
 
   // The backend trims before classifying, so a pasted id with stray whitespace must not be read as
   // a different model on the two sides — the panel would offer a control the request then drops.
+  // The legacy prefix has to end where a segment does, matching isLegacyGeneration on the backend.
+  it("does not read claude-30-future as the Claude 3 generation", () => {
+    expect(
+      supportsSamplingParams("claude-30-future" as PROVIDER_MODEL_TYPE),
+    ).toBe(false);
+    expect(
+      supportsSamplingParams(
+        "anthropic/claude-3.5-sonnet" as PROVIDER_MODEL_TYPE,
+      ),
+    ).toBe(true);
+  });
+
   it("ignores surrounding whitespace, as the backend does", () => {
     expect(
       supportsSamplingParams("  claude-opus-4-7  " as PROVIDER_MODEL_TYPE),

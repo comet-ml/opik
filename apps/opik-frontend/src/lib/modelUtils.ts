@@ -308,6 +308,11 @@ const LEGACY_GENERATION_PREFIX = "claude-3";
 // dropdown omits ids that are still reachable through Bedrock and proxies, and the capability map
 // only names the ones that take sampling params. Missing an id here no longer means "assume
 // permissive" — it means the model is treated as taking none, so the set has to be complete.
+// The prefix has to end where a segment does, or `claude-30-future` would read as Claude 3.
+const isLegacyGeneration = (canonical: string): boolean =>
+  canonical === LEGACY_GENERATION_PREFIX ||
+  canonical.startsWith(`${LEGACY_GENERATION_PREFIX}-`);
+
 const KNOWN_ANTHROPIC_MODELS = Array.from(
   new Set([
     ...(PROVIDER_MODELS[PROVIDER_TYPE.ANTHROPIC] ?? []).map(
@@ -393,7 +398,7 @@ export const supportsSamplingParams = (
 
   const canonical = canonicalAnthropicId(model);
   // Not an Anthropic id, or the generation that predates the constraint: leave it alone.
-  if (!canonical || canonical.startsWith(LEGACY_GENERATION_PREFIX)) {
+  if (!canonical || isLegacyGeneration(canonical)) {
     return true;
   }
 
