@@ -227,7 +227,9 @@ jobs:
       - name: Keep BE log in case of failure
         if: failure()
         run: |
-          docker logs opik-backend-1 > ${{ github.workspace }}/opik-backend.log
+          cd ${{ github.workspace }}
+          source scripts/worktree-utils.sh && init_worktree_ports
+          docker logs "${COMPOSE_PROJECT_NAME}-backend-1" > ${{ github.workspace }}/opik-backend.log 2>&1 || true
 
       - name: Attach BE log
         if: failure()
