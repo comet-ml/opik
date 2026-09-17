@@ -1,4 +1,5 @@
 import React, { memo, useMemo, useCallback } from "react";
+import { isCostMetricType } from "./helpers";
 import { useNavigate } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 
@@ -114,10 +115,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;
-  const isCostMetric =
-    metricName === METRIC_NAME_TYPE.COST ||
-    metricName === METRIC_NAME_TYPE.THREAD_COST ||
-    metricName === METRIC_NAME_TYPE.SPAN_COST;
+  const isCostMetric = isCostMetricType(metricName);
   const isDurationMetric =
     metricName === METRIC_NAME_TYPE.TRACE_DURATION ||
     metricName === METRIC_NAME_TYPE.THREAD_DURATION ||
