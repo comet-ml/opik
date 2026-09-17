@@ -61,25 +61,19 @@ type CopyEntityActionsProps = {
   entityId: string;
   entityLabel: CopyEntityLabel;
   className?: string;
+  // A URL is page-scoped, so only the surface that owns the page offers a link
+  // action. Nested entities (a span inside a trace) copy their id only.
+  withLink?: boolean;
 };
 
 const CopyEntityActions: React.FunctionComponent<CopyEntityActionsProps> = ({
   entityId,
   entityLabel,
   className,
+  withLink = true,
 }) => {
   const copyId = useCallback(() => entityId, [entityId]);
-
-  // A trace or thread link must not carry a selected span, otherwise the
-  // "copy trace link" and "copy span link" buttons visible at the same time
-  // would both yield the span-scoped URL.
-  const copyLink = useCallback(() => {
-    if (entityLabel === "span") return window.location.href;
-
-    const url = new URL(window.location.href);
-    url.searchParams.delete("span");
-    return url.toString();
-  }, [entityLabel]);
+  const copyLink = useCallback(() => window.location.href, []);
 
   return (
     <div className={cn("flex shrink-0 items-center gap-1", className)}>
@@ -88,11 +82,13 @@ const CopyEntityActions: React.FunctionComponent<CopyEntityActionsProps> = ({
         label={`Copy ${entityLabel} ID`}
         onCopy={copyId}
       />
-      <CopyActionButton
-        icon={<Link />}
-        label={`Copy ${entityLabel} link`}
-        onCopy={copyLink}
-      />
+      {withLink && (
+        <CopyActionButton
+          icon={<Link />}
+          label={`Copy ${entityLabel} link`}
+          onCopy={copyLink}
+        />
+      )}
     </div>
   );
 };

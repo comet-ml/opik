@@ -301,6 +301,7 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
           <CopyEntityActions
             entityId={dataToView.id}
             entityLabel={isSpan ? "span" : "trace"}
+            withLink={false}
           />
         </>
       )}

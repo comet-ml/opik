@@ -65,37 +65,20 @@ describe("CopyEntityActions", () => {
     expect(mockCopy).toHaveBeenCalledWith(ENTITY_ID);
   });
 
-  it("drops the selected span from a trace link", () => {
-    window.history.replaceState({}, "", "/logs?trace=T1&span=S1&tab=logs");
-    renderActions({ entityLabel: "trace" });
+  it("copies the current url when the copy-link button is clicked", () => {
+    renderActions();
 
     fireEvent.click(screen.getByLabelText("Copy trace link"));
 
-    const copied = new URL(mockCopy.mock.calls[0][0] as string);
-    expect(copied.searchParams.get("span")).toBeNull();
-    expect(copied.searchParams.get("trace")).toBe("T1");
-    expect(copied.searchParams.get("tab")).toBe("logs");
-  });
-
-  it("drops the selected span from a thread link", () => {
-    window.history.replaceState({}, "", "/logs?thread=TH1&span=S1");
-    renderActions({ entityLabel: "thread" });
-
-    fireEvent.click(screen.getByLabelText("Copy thread link"));
-
-    const copied = new URL(mockCopy.mock.calls[0][0] as string);
-    expect(copied.searchParams.get("span")).toBeNull();
-    expect(copied.searchParams.get("thread")).toBe("TH1");
-  });
-
-  it("keeps the selected span in a span link", () => {
-    window.history.replaceState({}, "", "/logs?trace=T1&span=S1");
-    renderActions({ entityLabel: "span" });
-
-    fireEvent.click(screen.getByLabelText("Copy span link"));
-
     expect(mockCopy).toHaveBeenCalledWith(window.location.href);
-    expect(mockCopy.mock.calls[0][0]).toContain("span=S1");
+  });
+
+  it("omits the link button when withLink is false", () => {
+    renderActions({ withLink: false });
+
+    expect(screen.getByLabelText("Copy trace ID")).toBeTruthy();
+    expect(screen.queryByLabelText("Copy trace link")).toBeNull();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
   it("swaps only the clicked button to the check icon", () => {

@@ -73,25 +73,26 @@ describe("TraceDataToolbar header", () => {
     expect(screen.getByText("Span")).toBeTruthy();
   });
 
-  it("renders span-scoped copy actions for a span", () => {
+  // The URL is page-scoped and the panel header already owns a link action, so
+  // this nested toolbar offers the id only.
+  it("renders a span copy-id action without a link action", () => {
     renderToolbar({ dataToView: span });
 
     expect(screen.getByLabelText("Copy span ID")).toBeTruthy();
-    expect(screen.getByLabelText("Copy span link")).toBeTruthy();
+    expect(screen.queryByLabelText("Copy span link")).toBeNull();
   });
 
-  it("renders trace-scoped copy actions for a trace", () => {
+  it("renders a trace copy-id action without a link action", () => {
     renderToolbar({ dataToView: trace });
 
     expect(screen.getByLabelText("Copy trace ID")).toBeTruthy();
-    expect(screen.getByLabelText("Copy trace link")).toBeTruthy();
+    expect(screen.queryByLabelText("Copy trace link")).toBeNull();
   });
 
   it("keeps copy actions visible when annotate actions are hidden", () => {
     renderToolbar({ dataToView: span, hideAnnotateActions: true });
 
     expect(screen.getByLabelText("Copy span ID")).toBeTruthy();
-    expect(screen.getByLabelText("Copy span link")).toBeTruthy();
     expect(screen.queryByTestId("add-to-dropdown")).toBeNull();
   });
 
