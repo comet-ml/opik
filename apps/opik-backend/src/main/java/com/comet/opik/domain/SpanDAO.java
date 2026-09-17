@@ -2594,8 +2594,8 @@ public class SpanDAO {
      * retention sweeps this statement does not set {@code lightweight_deletes_sync}, so ClickHouse reports nothing for
      * the asynchronous mutation. It is <b>not</b> a count of deleted rows, and no caller reads it.
      * <p>
-     * <b>A statement failing part-way leaves the partitions already deleted deleted</b>, and no {@code SpansDeleted}
-     * follows — the single-statement form's outcome for a total failure, at finer granularity. Nothing compensates,
+     * <b>A statement failing part-way does not roll back the ones before it</b>, and no {@code SpansDeleted} follows
+     * — the single-statement form's outcome for a total failure, at finer granularity. Nothing compensates,
      * and nothing can: ClickHouse has no transaction spanning these mutations, and {@code IN PARTITION} names one
      * partition per statement, which is why there are several. What a failure here cannot do is cost the cutover its
      * record, since {@code SpanService.captureDeletions} writes every id to the deletion-events bridge before the
