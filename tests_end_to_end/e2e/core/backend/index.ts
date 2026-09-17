@@ -12,6 +12,7 @@ export {
   type RawApiResult,
   type BackendSort,
   type MetricSeries,
+  toMetricSeries,
   type MetricInterval,
   type MetricBreakdown,
   type WorkspaceMetricType,
