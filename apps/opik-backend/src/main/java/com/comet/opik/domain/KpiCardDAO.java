@@ -369,9 +369,14 @@ class KpiCardDAOImpl implements KpiCardDAO {
      * {@link com.comet.opik.domain.threads.TraceThreadIdService}, so a backfilled project files every thread into
      * whichever period it was ingested in — counts, average duration and cost alike (OPIK-8335).
      * <p>
-     * {@code trace_threads_final} is deliberately unbounded in time: {@code traces_final} already restricts the
-     * query to the doubled window, and the join to it is what scopes the threads. Re-adding an id filter here
-     * drops threads whose row was written outside the window, which is the bug.
+     * {@code trace_threads_final} is narrowed by {@code thread_id IN (SELECT thread_id FROM traces_final)} rather
+     * than by its own id range. The inner join already restricts the result to exactly those threads, so this
+     * changes no row; it only keeps the hash-join build side and the feedback-score {@code IN} sets off every
+     * thread in the project. Re-adding an <em>id</em> filter here instead would drop threads whose row was written
+     * outside the window, which is the bug.
+     * <p>
+     * A thread whose traces were ingested inside the window but ran outside it lands in neither period and is not
+     * counted, which matches the chart in {@code ProjectMetricsDAO}; the thread list still shows it.
      */
     private static final String GET_THREAD_KPI_CARDS = """
             WITH traces_final AS (
@@ -401,6 +406,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                AND thread_id IN (SELECT thread_id FROM traces_final)
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -478,7 +484,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                         t.thread_id as id,
                         t.workspace_id as workspace_id,
                         t.project_id as project_id,
-                        min(t.start_time) as start_time,
+                        minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
                         max(t.end_time) as end_time,
                         if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND min(t.start_time) IS NOT NULL
                                AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
