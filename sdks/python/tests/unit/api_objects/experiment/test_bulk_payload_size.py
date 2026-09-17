@@ -118,6 +118,31 @@ def test_payload_size_MB__accelerated__matches_the_structural_estimate(accelerat
     )
 
 
+def test_payload_size_MB__accelerated__matches_the_structural_estimate_for_multibyte(
+    accelerated,
+):
+    """The same agreement where the two could most plausibly drift apart.
+
+    orjson writes non-ASCII as itself and the estimator counts the UTF-8 bytes, so a
+    record of emoji and accents measures the same either way. Whether either matches
+    the request body byte for byte is a separate question, and the same answer for
+    both: httpx below 0.28 escapes non-ASCII on its way out, so both under-read such a
+    record, exactly as they did before this changed which one runs.
+    """
+    record = _rest_record(
+        trace=bulk_item.ExperimentItemBulkTrace(
+            name="héllo 🙂 café",
+            input={"q": "où est la bibliothèque 📚"},
+            output={"a": "déjà vu 🎉 " * 20},
+            start_time=START_TIME,
+        )
+    )
+
+    assert bulk_converters.payload_size_MB(
+        record
+    ) == sequence_splitter.get_payload_size_MB(record)
+
+
 def test_payload_size_MB__stdlib__falls_back_to_the_estimator(stdlib):
     """Without orjson this must not measure by encoding at all.
 
