@@ -6,19 +6,19 @@ import { ExperimentsCompare } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import { Sorting } from "@/types/sorting";
 
-const PAGE_SIZE = 100;
-
 /**
- * Browser exports are capped: everything is held in memory and serialised in the tab, so a large result set
- * belongs in the SDK, which streams it. The panel checks this before offering the export; the check inside the
- * fetch covers the case where rows are added between rendering the button and clicking it.
+ * A browser export holds the whole result set in memory and serialises it in the tab, so it is capped and
+ * larger result sets belong in the SDK. The cap doubles as the page size: one request covers everything under
+ * it, which is how the rest of the app reads this endpoint, and avoids paging entirely. That matters beyond
+ * round trips - separate pages are separate queries, and rows can shift between them when the sort has ties or
+ * when someone writes to the experiment mid-export.
  */
 export const EXPORT_ROW_LIMIT = 2000;
 
 export class ExportTooLargeError extends Error {
   constructor(total: number) {
     super(
-      `This view has ${total.toLocaleString()} rows, more than the ${EXPORT_ROW_LIMIT.toLocaleString()} that can be exported from the browser. Filter it down, select the rows you need, or export it with the SDK.`,
+      `This view has ${total.toLocaleString()} rows. The browser can export ${EXPORT_ROW_LIMIT.toLocaleString()} at a time - filter the table down, select the rows you want, or export it with the SDK.`,
     );
     this.name = "ExportTooLargeError";
   }
@@ -34,7 +34,7 @@ type GetAllCompareExperimentsItemsParams = {
 };
 
 /**
- * Reads every row behind the current view, page by page, so an export covers the whole result set rather than
+ * Reads every row behind the current view in one request, so an export covers the whole result set rather than
  * the page on screen. Filters, search and sorting are passed through, so the file holds what the table would
  * show if it were one long page.
  */
@@ -42,37 +42,39 @@ const getAllCompareExperimentsItems = async (
   params: GetAllCompareExperimentsItemsParams,
   { signal }: { signal?: AbortSignal } = {},
 ): Promise<ExperimentsCompare[]> => {
-  const rows: ExperimentsCompare[] = [];
-  let page = 1;
+  const data: UseCompareExperimentsListResponse =
+    await getCompareExperimentsList(
+      { signal },
+      {
+        ...params,
+        // Cells are truncated for display; an export has to carry the stored value.
+        truncate: false,
+        page: 1,
+        size: EXPORT_ROW_LIMIT,
+      },
+    );
 
-  for (;;) {
-    const data: UseCompareExperimentsListResponse =
-      await getCompareExperimentsList(
-        { signal },
-        {
-          ...params,
-          // Cells are truncated for display; an export has to carry the stored value.
-          truncate: false,
-          page,
-          size: PAGE_SIZE,
-        },
-      );
+  const total = data?.total;
+  const rows = data?.content;
 
-    const total = data?.total ?? 0;
+  if (!Array.isArray(rows) || typeof total !== "number") {
+    throw new Error(
+      "Export failed: the server returned an unexpected response.",
+    );
+  }
 
-    // Read from the first page, so an oversized result set costs one request rather than all of them.
-    if (total > EXPORT_ROW_LIMIT) {
-      throw new ExportTooLargeError(total);
-    }
+  // The panel keeps the control disabled past the cap, so this only catches rows added between rendering the
+  // button and clicking it.
+  if (total > EXPORT_ROW_LIMIT) {
+    throw new ExportTooLargeError(total);
+  }
 
-    const content = data?.content ?? [];
-    if (!content.length) break;
-
-    rows.push(...content);
-
-    if (rows.length >= total) break;
-
-    page += 1;
+  // A short page here means rows went missing rather than that we reached the end - fail instead of writing a
+  // file that silently holds less than the table showed.
+  if (rows.length !== total) {
+    throw new Error(
+      `Export failed: the server returned ${rows.length.toLocaleString()} of ${total.toLocaleString()} rows.`,
+    );
   }
 
   return rows;

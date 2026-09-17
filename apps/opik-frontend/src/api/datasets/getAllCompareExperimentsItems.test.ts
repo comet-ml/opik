@@ -18,70 +18,79 @@ const PARAMS = {
   experimentsIds: ["experiment-id"],
 };
 
-const rowsPage = (from: number, count: number) =>
-  Array.from({ length: count }, (_, index) => ({ id: `row-${from + index}` }));
+const rows = (count: number) =>
+  Array.from({ length: count }, (_, index) => ({ id: `row-${index}` }));
 
 describe("getAllCompareExperimentsItems", () => {
   beforeEach(() => {
     mockGetCompareExperimentsList.mockReset();
   });
 
-  it("pages until the whole result set is read", async () => {
-    mockGetCompareExperimentsList
-      .mockResolvedValueOnce({ content: rowsPage(0, 100), total: 250 })
-      .mockResolvedValueOnce({ content: rowsPage(100, 100), total: 250 })
-      .mockResolvedValueOnce({ content: rowsPage(200, 50), total: 250 });
-
-    const rows = await getAllCompareExperimentsItems(PARAMS);
-
-    expect(rows).toHaveLength(250);
-    expect(mockGetCompareExperimentsList).toHaveBeenCalledTimes(3);
-    expect(rows.at(-1)).toEqual({ id: "row-249" });
-  });
-
-  it("requests untruncated rows, so cells are not cut short in the file", async () => {
+  it("reads the whole result set in a single request", async () => {
     mockGetCompareExperimentsList.mockResolvedValue({
-      content: rowsPage(0, 1),
-      total: 1,
+      content: rows(250),
+      total: 250,
     });
 
-    await getAllCompareExperimentsItems(PARAMS);
+    const result = await getAllCompareExperimentsItems(PARAMS);
 
+    expect(result).toHaveLength(250);
+    expect(mockGetCompareExperimentsList).toHaveBeenCalledTimes(1);
     expect(mockGetCompareExperimentsList).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ truncate: false }),
+      expect.objectContaining({
+        page: 1,
+        size: EXPORT_ROW_LIMIT,
+        // Cells are truncated for display, so an export must opt out.
+        truncate: false,
+      }),
     );
   });
 
-  it("refuses a result set over the cap after a single request", async () => {
+  it("refuses a result set over the cap", async () => {
     mockGetCompareExperimentsList.mockResolvedValue({
-      content: rowsPage(0, 100),
+      content: rows(EXPORT_ROW_LIMIT),
       total: EXPORT_ROW_LIMIT + 1,
     });
 
     await expect(getAllCompareExperimentsItems(PARAMS)).rejects.toBeInstanceOf(
       ExportTooLargeError,
     );
-    expect(mockGetCompareExperimentsList).toHaveBeenCalledTimes(1);
   });
 
   it("allows a result set exactly at the cap", async () => {
     mockGetCompareExperimentsList.mockResolvedValue({
-      content: rowsPage(0, EXPORT_ROW_LIMIT),
+      content: rows(EXPORT_ROW_LIMIT),
       total: EXPORT_ROW_LIMIT,
     });
 
-    const rows = await getAllCompareExperimentsItems(PARAMS);
-
-    expect(rows).toHaveLength(EXPORT_ROW_LIMIT);
+    await expect(getAllCompareExperimentsItems(PARAMS)).resolves.toHaveLength(
+      EXPORT_ROW_LIMIT,
+    );
   });
 
-  it("stops on an empty page rather than looping", async () => {
-    mockGetCompareExperimentsList.mockResolvedValue({ content: [], total: 10 });
+  it("fails rather than writing a file with fewer rows than the table showed", async () => {
+    mockGetCompareExperimentsList.mockResolvedValue({
+      content: rows(40),
+      total: 50,
+    });
 
-    const rows = await getAllCompareExperimentsItems(PARAMS);
+    await expect(getAllCompareExperimentsItems(PARAMS)).rejects.toThrow(
+      "returned 40 of 50 rows",
+    );
+  });
 
-    expect(rows).toHaveLength(0);
-    expect(mockGetCompareExperimentsList).toHaveBeenCalledTimes(1);
+  it("rejects a response missing content or total", async () => {
+    mockGetCompareExperimentsList.mockResolvedValue({});
+
+    await expect(getAllCompareExperimentsItems(PARAMS)).rejects.toThrow(
+      "unexpected response",
+    );
+  });
+
+  it("returns nothing for an empty result set", async () => {
+    mockGetCompareExperimentsList.mockResolvedValue({ content: [], total: 0 });
+
+    await expect(getAllCompareExperimentsItems(PARAMS)).resolves.toEqual([]);
   });
 });
