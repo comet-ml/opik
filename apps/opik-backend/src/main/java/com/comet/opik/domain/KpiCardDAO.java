@@ -390,8 +390,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND id >= :uuid_from_time
-                AND id \\<= :uuid_to_time
+                AND thread_id IN (SELECT thread_id FROM traces_final)
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -461,6 +460,7 @@ class KpiCardDAOImpl implements KpiCardDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
+                    t.start_time as start_time,
                     t.duration as duration,
                     if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id
                 FROM (
@@ -468,11 +468,11 @@ class KpiCardDAOImpl implements KpiCardDAO {
                         t.thread_id as id,
                         t.workspace_id as workspace_id,
                         t.project_id as project_id,
-                        min(t.start_time) as start_time,
+                        minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
                         max(t.end_time) as end_time,
-                        if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND min(t.start_time) IS NOT NULL
-                               AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
-                           (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
+                        if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
+                               AND notEquals(minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), max(t.end_time)) / 1000.0),
                            NULL) AS duration,
                         count(DISTINCT t.id) * 2 as number_of_messages,
                         <if(trace_thread_first_message_filter)>argMin(t.input, t.start_time) as first_message,<endif>
@@ -524,14 +524,23 @@ class KpiCardDAOImpl implements KpiCardDAO {
                 JOIN traces_final tr ON s.trace_id = tr.id
                 GROUP BY tr.thread_id
             )
+            , thread_periods AS (
+                SELECT
+                    tf.*,
+                    tf.start_time >= UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC')
+                        AND tf.start_time \\<= UUIDv7ToDateTime(toUUID(:id_end), 'UTC') AS is_current,
+                    tf.start_time >= UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')
+                        AND tf.start_time \\< UUIDv7ToDateTime(toUUID(:id_current_start), 'UTC') AS is_previous
+                FROM threads_filtered tf
+            )
             SELECT
-                COUNTIf(tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_count,
-                COUNTIf(tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_count,
-                AVGIf(tf.duration, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_avg_duration,
-                AVGIf(tf.duration, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_avg_duration,
-                SUMIf(tc.cost, tf.thread_model_id >= :id_current_start AND tf.thread_model_id \\<= :id_end) AS current_total_cost,
-                SUMIf(tc.cost, tf.thread_model_id >= :id_prior_start AND tf.thread_model_id \\< :id_current_start) AS previous_total_cost
-            FROM threads_filtered tf
+                COUNTIf(tf.is_current) AS current_count,
+                COUNTIf(tf.is_previous) AS previous_count,
+                AVGIf(tf.duration, tf.is_current) AS current_avg_duration,
+                AVGIf(tf.duration, tf.is_previous) AS previous_avg_duration,
+                SUMIf(tc.cost, tf.is_current) AS current_total_cost,
+                SUMIf(tc.cost, tf.is_previous) AS previous_total_cost
+            FROM thread_periods tf
             LEFT JOIN thread_costs tc ON tf.id = tc.thread_id
             SETTINGS log_comment = '<log_comment>';
             """;
