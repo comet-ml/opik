@@ -211,7 +211,8 @@ def _json_shell(value: Any) -> Any:
     as its fields plus its extras, a datetime through the SDK's own serializer -- so the
     bytes counted match what that encoder produced. Anything else is rare enough to pay
     for the full conversion, which ends in ``str(obj)`` and so can raise for an object
-    that refuses to render one; :func:`payload_size_MB` is where that is absorbed.
+    that refuses to render one; :func:`_estimated_size_MB` is where that is turned
+    into a reportable failure.
     """
     if isinstance(value, datetime.datetime):
         return datetime_utils.serialize_datetime(value)
@@ -223,29 +224,58 @@ def _json_shell(value: Any) -> Any:
     return jsonable_encoder.encode(value)
 
 
+class UnsizeableRecordError(Exception):
+    """No encoder and no estimator could measure this record.
+
+    Raised rather than returned as a number, because there is no number that tells the
+    truth here. Infinity is what the estimator returns for a value it cannot measure,
+    and every caller reads a number that large as "over the per-request limit" -- a
+    plausible, wrong account of an exception thrown inside the encoder, which sends
+    whoever hit it looking at the size of their data.
+    """
+
+    def __init__(self, cause: BaseException) -> None:
+        super().__init__(f"could not measure the record: {type(cause).__name__}")
+        self.cause = cause
+
+
+def unsizeable_failure_reason(
+    index: int, error: UnsizeableRecordError, max_size_MB: float
+) -> str:
+    """The one wording for an unmeasurable record, shared by both upload paths.
+
+    Both paths reject such a record and both have to say why. Two copies of the
+    sentence is two things to keep true of each other, and the whole point of the
+    sentence is that it does not mislead.
+    """
+    return (
+        f"items[{index}] could not be measured: the encoder raised "
+        f"{type(error.cause).__name__}. This is not the {max_size_MB}MB limit; see "
+        f"the logged traceback for the value responsible"
+    )
+
+
 def _estimated_size_MB(rest_record: Any) -> float:
-    """The structural estimate, made total.
+    """The structural estimate, with its one escape route closed.
 
     ``jsonable_encoder.encode`` ends in ``str(obj)`` placed outside its own ``try``, so
     an object whose ``__str__`` raises escapes it -- and the estimator runs that same
-    encoder, so it is not a refuge from a value the encoder refused. Infinity is what
-    the estimator itself returns for a value it cannot measure: the record is then
-    rejected, or batched alone, rather than counted as small.
+    encoder, so it is not a refuge from a value the encoder refused.
 
     Caught broadly because what raises here is the caller's own ``__str__``, which may
-    raise anything, a custom class included -- there is no set of types to name. The
-    cost of that breadth is that the caller is told the record is oversized whichever
-    thing went wrong, so the cause is logged rather than dropped.
+    raise anything, a custom class included -- there is no set of types to name, and
+    naming a few would let the rest crash an upload that this can instead reject
+    cleanly. The breadth is affordable only because nothing is swallowed: the type
+    reaches the caller on the exception, the traceback reaches the log.
     """
     try:
         return sequence_splitter.get_payload_size_MB(rest_record)
-    except Exception:
+    except Exception as error:
         LOGGER.warning(
-            "Could not size an experiment item; it will be treated as oversized "
-            "and the upload rejected. The size limit is not the real cause.",
+            "Could not size an experiment item; the upload will reject it.",
             exc_info=True,
         )
-        return float("inf")
+        raise UnsizeableRecordError(error) from error
 
 
 def payload_size_MB(rest_record: Any) -> float:
@@ -265,8 +295,9 @@ def payload_size_MB(rest_record: Any) -> float:
     Nothing measured here reaches the wire: the bytes are counted and dropped, and the
     request body is built by the generated client as before. A record the encoder refuses
     outright falls back to the structural estimate, so nothing that could be sized before
-    stops being sizeable, and a record neither of them can walk is sized as infinite
-    rather than raising.
+    stops being sizeable. A record neither of them can walk raises
+    :class:`UnsizeableRecordError`, which the caller reports as itself rather than as a
+    size.
     """
     if not json_helpers.ACCELERATED:
         return _estimated_size_MB(rest_record)

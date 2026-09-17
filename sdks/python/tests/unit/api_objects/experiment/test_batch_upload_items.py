@@ -861,6 +861,33 @@ class TestBulkUploadItemsValidation:
         assert "at or above the" in str(exc_info.value)
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
+    def test_batch_upload_items__unmeasurable_item__is_not_reported_as_oversized(self):
+        """A record that cannot be measured must not be blamed on the size limit.
+
+        Sizing runs the caller's own ``__str__`` and it can raise. There is no size to
+        report when it does, and reporting the limit instead is a wrong explanation
+        that reads like a right one: it sends the caller off shrinking a record whose
+        size was never the problem.
+        """
+        experiment, mock_rest_client = _create_experiment()
+
+        class Hostile:
+            def __str__(self) -> str:
+                raise RuntimeError("no string for you")
+
+            __repr__ = __str__
+
+        record = _record(evaluate_task_result={"h": Hostile()})
+
+        with pytest.raises(exceptions.ValidationError) as exc_info:
+            experiment.batch_upload_items([record])
+
+        message = str(exc_info.value)
+        assert "could not be measured" in message
+        assert "RuntimeError" in message
+        assert "at or above" not in message
+        assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
+
 
 class TestBulkUploadItemsRateLimitRetry:
     @patch("opik.api_objects.rest_helpers._sleep")

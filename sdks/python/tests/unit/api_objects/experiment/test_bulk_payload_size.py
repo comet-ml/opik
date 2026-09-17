@@ -319,7 +319,7 @@ def test_payload_size_MB__integer_beyond_orjson_range__sized_by_the_fallback(
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_payload_size_MB__value_whose_str_raises__sized_rather_than_raising(
+def test_payload_size_MB__value_whose_str_raises__reports_the_cause(
     mode, request, caplog, monkeypatch
 ):
     """The one value the fallback cannot absorb, because the fallback is what breaks.
@@ -327,7 +327,7 @@ def test_payload_size_MB__value_whose_str_raises__sized_rather_than_raising(
     ``jsonable_encoder.encode`` ends in ``str(obj)``, outside its own ``try``, so an
     object that refuses to render a string escapes it. Both the encoder and the
     structural estimate go through it, so retrying the estimate raises the same
-    exception again and sizing dies on the record instead of sizing it.
+    exception again and there is no size to return.
     """
     request.getfixturevalue(mode)
 
@@ -343,12 +343,11 @@ def test_payload_size_MB__value_whose_str_raises__sized_rather_than_raising(
     # record -- this logger is a child of it and propagates fine on its own.
     monkeypatch.setattr(logging.getLogger("opik"), "propagate", True)
 
-    # The estimator's own convention for a value it cannot measure: infinite, so the
-    # record is rejected or isolated rather than silently counted as small.
     with caplog.at_level(logging.WARNING, logger=bulk_converters.LOGGER.name):
-        assert bulk_converters.payload_size_MB(record) == float("inf")
+        with pytest.raises(bulk_converters.UnsizeableRecordError) as raised:
+            bulk_converters.payload_size_MB(record)
 
-    # Infinity reaches the caller as "over the size limit", which is not what happened.
-    # The exception that did happen is only recoverable from the log, so it has to be
-    # in it -- with a traceback, since the message cannot name a cause it never saw.
+    # The type travels on the exception, so the caller can say what happened rather
+    # than inventing a size; the traceback that names the value is in the log.
+    assert isinstance(raised.value.cause, RuntimeError)
     assert "no string for you" in caplog.text

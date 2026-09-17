@@ -356,9 +356,19 @@ class Experiment:
         failure_reasons: List[str] = []
 
         for index, item in enumerate(items):
-            size_MB = bulk_converters.payload_size_MB(
-                bulk_converters.to_rest_record(item)
-            )
+            try:
+                size_MB = bulk_converters.payload_size_MB(
+                    bulk_converters.to_rest_record(item)
+                )
+            except bulk_converters.UnsizeableRecordError as error:
+                # Reported as itself. Calling it oversized would be a wrong explanation
+                # that reads like a right one, and sends the caller off reducing a
+                # record whose size was never the problem.
+                sizes_MB.append(float("inf"))
+                failure_reasons.append(
+                    bulk_converters.unsizeable_failure_reason(index, error, max_size_MB)
+                )
+                continue
             sizes_MB.append(size_MB)
             if size_MB >= max_size_MB:
                 failure_reasons.append(
@@ -408,20 +418,29 @@ class Experiment:
             if sizes_MB is None:
                 bulk_converters.validate_record(item, index, project_name)
             rest_item = bulk_converters.to_rest_record(item)
-            size_MB = (
-                sizes_MB[index]
-                if sizes_MB is not None
-                else bulk_converters.payload_size_MB(rest_item)
-            )
+            if sizes_MB is not None:
+                size_MB = sizes_MB[index]
+            else:
+                try:
+                    size_MB = bulk_converters.payload_size_MB(rest_item)
+                except bulk_converters.UnsizeableRecordError as error:
+                    raise exceptions.ValidationError(
+                        prefix="batch_upload_items",
+                        failure_reasons=[
+                            bulk_converters.unsizeable_failure_reason(
+                                index, error, max_size_MB
+                            )
+                        ],
+                    ) from error
 
-            if sizes_MB is None and size_MB >= max_size_MB:
-                raise exceptions.ValidationError(
-                    prefix="batch_upload_items",
-                    failure_reasons=[
-                        f"items[{index}] is {size_MB:.1f}MB, which is at or above the "
-                        f"{max_size_MB}MB per-request limit"
-                    ],
-                )
+                if size_MB >= max_size_MB:
+                    raise exceptions.ValidationError(
+                        prefix="batch_upload_items",
+                        failure_reasons=[
+                            f"items[{index}] is {size_MB:.1f}MB, which is at or above "
+                            f"the {max_size_MB}MB per-request limit"
+                        ],
+                    )
 
             if len(batch) == max_length or batch_size_MB + size_MB > max_size_MB:
                 yield batch
