@@ -1971,6 +1971,92 @@ class ProjectMetricsResourceTest {
                     .intervalEnd(Instant.now())
                     .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class, empty, empty, empty);
         }
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("OPIK-8335: buckets by the first trace's start time, not by when the thread row was created")
+        void whenThreadRowMintedAfterItsTraces_thenBucketsByTraceStartTime(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
+                    WORKSPACE_NAME);
+            Instant marker = getIntervalStart(interval);
+
+            int threadCount = 3;
+            createThreadsWithTraceIdsMintedAt(projectName, subtract(marker, TIME_BUCKET_3, interval), marker,
+                    threadCount);
+
+            // SUT: the conversations ran at marker-3, so that is where they belong, even though every
+            // trace_threads row carries a marker-stamped UUIDv7.
+            Map<String, Long> minus3 = Map.of(ProjectMetricsDAO.NAME_THREADS, (long) threadCount);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COUNT)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREADS), Long.class,
+                    minus3, null, null);
+        }
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        @DisplayName("OPIK-8335: a thread whose traces predate the window is excluded, even if its row is inside it")
+        void whenTracesPredateWindow_thenThreadExcludedDespiteRecentThreadRow(TimeInterval interval) {
+            // setup
+            mockTargetWorkspace();
+            var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(), API_KEY,
+                    WORKSPACE_NAME);
+            mockGetWorkspaceIdByName(WORKSPACE_NAME, WORKSPACE_ID);
+
+            Instant marker = getIntervalStart(interval);
+
+            int bucketsBeforeWindow = TIME_BUCKET_4 + TIME_BUCKET_3;
+            createThreadsWithTraceIdsMintedAt(projectName, subtract(marker, bucketsBeforeWindow, interval), marker, 3);
+
+            // SUT: requesting only the last TIME_BUCKET_4 buckets must not surface conversations that ran before them
+            getAndAssertEmpty(projectId, interval, marker);
+        }
+
+        /**
+         * Reproduces the production shape behind OPIK-8335: a thread row whose UUIDv7 was minted long after the
+         * conversation it describes. The id of a trace_threads row is derived from the first trace's <b>id</b>
+         * (TraceThreadService -> TraceThreadIdService), never from its start_time, so minting the trace ids at
+         * {@code idsMintedAt} while the traces report {@code startedAt} yields exactly that divergence.
+         */
+        private List<String> createThreadsWithTraceIdsMintedAt(String projectName, Instant startedAt,
+                Instant idsMintedAt, int threadCount) {
+            List<String> threadIds = IntStream.range(0, threadCount)
+                    .mapToObj(i -> RandomStringUtils.secure().nextAlphabetic(10))
+                    .toList();
+
+            List<Trace> traces = IntStream.range(0, threadIds.size())
+                    .mapToObj(threadIdx -> IntStream.range(0, 2)
+                            .mapToObj(i -> {
+                                long offset = threadIdx * 10L + i + 1;
+                                return factory.manufacturePojo(Trace.class).toBuilder()
+                                        .id(idGenerator.generateId(idsMintedAt.plusSeconds(offset)))
+                                        .projectName(projectName)
+                                        .threadId(threadIds.get(threadIdx))
+                                        .startTime(startedAt.plusSeconds(offset))
+                                        .build();
+                            })
+                            .toList())
+                    .flatMap(List::stream)
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+            Mono.delay(Duration.ofMillis(100)).block();
+
+            traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
+
+            return threadIds;
+        }
     }
 
     @Nested
