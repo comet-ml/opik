@@ -3152,6 +3152,11 @@ class TracesLocalV2CutoverTest {
      * Batch-insert rows following the {@code TraceDAO.BATCH_INSERT} shape: {@code created_at} is the row's minted time,
      * {@code last_updated_at} is whatever {@code lastUpdatedAt} yields (server-now for upserts, a backdated stamp to
      * exercise the delta's {@code created_at} arm).
+     *
+     * <p>The statement carries no settings the backend does not set, so once `traces` is the Distributed wrapper this
+     * write takes the same asynchronous path production does: with {@code prefer_localhost_replica = 0} (OPIK-8255) it
+     * is serialised to a queue file and shipped by a background sender, and is therefore visible eventually rather
+     * than on return. Callers needing the rows readable should seed via {@link #seedTraces}, which waits for them.
      */
     private void insertRows(List<CategorizedId> ids, String workspaceId, UUID projectId, String name,
             Function<CategorizedId, Instant> lastUpdatedAt) {
