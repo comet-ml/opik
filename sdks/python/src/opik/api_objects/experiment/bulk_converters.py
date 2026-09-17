@@ -207,8 +207,8 @@ def _json_shell(value: Any) -> Any:
     The two shapes it does convert mirror ``jsonable_encoder.encode`` -- a pydantic model
     as its fields plus its extras, a datetime through the SDK's own serializer -- so the
     bytes counted match what that encoder produced. Anything else is rare enough to pay
-    for the full conversion, which never raises: it falls back to ``str(obj)``, so an
-    exotic value cannot fail a measurement.
+    for the full conversion, which ends in ``str(obj)`` and so can raise for an object
+    that refuses to render one; :func:`payload_size_MB` is where that is absorbed.
     """
     if isinstance(value, datetime.datetime):
         return datetime_utils.serialize_datetime(value)
@@ -218,6 +218,21 @@ def _json_shell(value: Any) -> Any:
             {**value.__dict__, **extra} if isinstance(extra, dict) else value.__dict__
         )
     return jsonable_encoder.encode(value)
+
+
+def _estimated_size_MB(rest_record: Any) -> float:
+    """The structural estimate, made total.
+
+    ``jsonable_encoder.encode`` ends in ``str(obj)`` placed outside its own ``try``, so
+    an object whose ``__str__`` raises escapes it -- and the estimator runs that same
+    encoder, so it is not a refuge from a value the encoder refused. Infinity is what
+    the estimator itself returns for a value it cannot measure: the record is then
+    rejected, or batched alone, rather than counted as small.
+    """
+    try:
+        return sequence_splitter.get_payload_size_MB(rest_record)
+    except Exception:
+        return float("inf")
 
 
 def payload_size_MB(rest_record: Any) -> float:
@@ -237,15 +252,16 @@ def payload_size_MB(rest_record: Any) -> float:
     Nothing measured here reaches the wire: the bytes are counted and dropped, and the
     request body is built by the generated client as before. A record the encoder refuses
     outright falls back to the structural estimate, so nothing that could be sized before
-    stops being sizeable.
+    stops being sizeable, and a record neither of them can walk is sized as infinite
+    rather than raising.
     """
     if not json_helpers.ACCELERATED:
-        return sequence_splitter.get_payload_size_MB(rest_record)
+        return _estimated_size_MB(rest_record)
 
     try:
         encoded = json_helpers.dumps(rest_record, default=_json_shell, sort_keys=False)
     except Exception:
-        return sequence_splitter.get_payload_size_MB(rest_record)
+        return _estimated_size_MB(rest_record)
 
     return len(encoded) / _BYTES_PER_MB
 

@@ -247,3 +247,29 @@ def test_payload_size_MB__integer_beyond_orjson_range__sized_by_the_fallback(
     )
 
     assert bulk_converters.payload_size_MB(record) > 0
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_payload_size_MB__value_whose_str_raises__sized_rather_than_raising(
+    mode, request
+):
+    """The one value the fallback cannot absorb, because the fallback is what breaks.
+
+    ``jsonable_encoder.encode`` ends in ``str(obj)``, outside its own ``try``, so an
+    object that refuses to render a string escapes it. Both the encoder and the
+    structural estimate go through it, so retrying the estimate raises the same
+    exception again and sizing dies on the record instead of sizing it.
+    """
+    request.getfixturevalue(mode)
+
+    class Hostile:
+        def __str__(self) -> str:
+            raise RuntimeError("no string for you")
+
+        __repr__ = __str__
+
+    record = _rest_record(evaluate_task_result={"h": Hostile()})
+
+    # The estimator's own convention for a value it cannot measure: infinite, so the
+    # record is rejected or isolated rather than silently counted as small.
+    assert bulk_converters.payload_size_MB(record) == float("inf")
