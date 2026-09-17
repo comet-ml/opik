@@ -82,18 +82,27 @@ export const test = baseTest.extend<SpanCostBucketsFixtures>({
     const traceIds: string[] = [];
 
     try {
-      // Everything here is backdated by days, so a reject-mode env refuses the
-      // very first write.
-      await skipUnlessBackdatedIdsAccepted(
-        backendClient,
-        project.name,
-        DAYS_BACK_EARLY * DAY_MS,
-      );
-
       const early = utcNoonDaysBack(DAYS_BACK_EARLY);
       const late = utcNoonDaysBack(DAYS_BACK_LATE);
 
+      // Everything here is backdated by days, so a reject-mode env refuses the
+      // very first write. Probed with the age of the oldest instant actually
+      // seeded, not with `DAYS_BACK_EARLY * DAY_MS`: the anchors are noon UTC,
+      // so after noon they are up to twelve hours older than that, and a window
+      // sized at exactly four days would accept the probe and then reject the
+      // seed — failing as an opaque 400 where it should have skipped.
+      await skipUnlessBackdatedIdsAccepted(
+        backendClient,
+        project.name,
+        Date.now() - early.getTime(),
+      );
+
       const spanningTraceId = uuid7(early);
+      // Registered before the write, not after: a create that commits and then
+      // fails the client's own check would otherwise leave a backdated trace
+      // behind with nothing holding its id. `deleteTraces` is a no-op for an id
+      // that never landed, so the over-registration costs nothing.
+      traceIds.push(spanningTraceId);
       await backendClient.createTraceWithSource({
         id: spanningTraceId,
         projectName: project.name,
@@ -106,9 +115,9 @@ export const test = baseTest.extend<SpanCostBucketsFixtures>({
         // rather than a span that started after its own trace finished.
         endTime: new Date(late.getTime() + 1_000),
       });
-      traceIds.push(spanningTraceId);
 
       const lateTraceId = uuid7(late);
+      traceIds.push(lateTraceId);
       await backendClient.createTraceWithSource({
         id: lateTraceId,
         projectName: project.name,
@@ -119,7 +128,6 @@ export const test = baseTest.extend<SpanCostBucketsFixtures>({
         startTime: late,
         endTime: new Date(late.getTime() + 1_000),
       });
-      traceIds.push(lateTraceId);
 
       const spans: SpanBatchSeed[] = [
         costedSpan({ traceId: spanningTraceId, name: `${testNamespace}-spanning-early`, moment: early }),
