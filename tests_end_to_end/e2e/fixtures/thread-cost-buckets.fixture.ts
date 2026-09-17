@@ -82,12 +82,20 @@ interface TurnSeed {
   spanCount: number;
 }
 
+/**
+ * `written` is the fixture's own cleanup list, and every id goes into it before
+ * the write that mints it. This function seeds several traces and then one span
+ * batch, so anything that returned the ids only on success would strand the
+ * traces already created when a later turn — or the batch — throws: they are
+ * backdated, so nothing else sweeps them.
+ */
 async function seedThread(
   backendClient: BackendClient,
   projectName: string,
   namespace: string,
   label: string,
   turns: TurnSeed[],
+  written: string[],
 ): Promise<ThreadCostSeedRef> {
   const threadId = `${namespace}-${label}-thread`;
   const traceIds: string[] = [];
@@ -100,6 +108,7 @@ async function seedThread(
     // after OPIK-8335. A seed that moved only one of them could not tell a
     // corrected query from a broken one.
     const traceId = uuid7(turn.moment);
+    written.push(traceId);
     await backendClient.createTraceWithSource({
       id: traceId,
       projectName,
@@ -174,19 +183,26 @@ async function seedThread(
 export const test = baseTest.extend<ThreadCostBucketsFixtures>({
   threadCostBuckets: async ({ backendClient, project, testNamespace }, use, testInfo) => {
     const seeded: ThreadCostSeedRef[] = [];
+    /** Every trace id this fixture minted, recorded before its write. */
+    const written: string[] = [];
 
     try {
-      // The previous-period thread is the oldest write; a reject-mode env
-      // refuses it, and every window here is placed by a backdated id.
-      await skipUnlessBackdatedIdsAccepted(
-        backendClient,
-        project.name,
-        DAYS_BACK_PREVIOUS * DAY_MS,
-      );
-
       const earlyMoment = utcNoonDaysBack(DAYS_BACK_EARLY);
       const lateMoment = utcNoonDaysBack(DAYS_BACK_LATE);
       const previousMoment = utcNoonDaysBack(DAYS_BACK_PREVIOUS);
+
+      // The previous-period thread is the oldest write; a reject-mode env
+      // refuses it, and every window here is placed by a backdated id. Probed
+      // with that instant's real age rather than `DAYS_BACK_PREVIOUS * DAY_MS`:
+      // the anchors are noon UTC, so after noon they are up to twelve hours
+      // older than that, and a window sized at exactly ten days would accept
+      // the probe and then reject the seed — failing as an opaque 400 where it
+      // should have skipped.
+      await skipUnlessBackdatedIdsAccepted(
+        backendClient,
+        project.name,
+        Date.now() - previousMoment.getTime(),
+      );
 
       const spanningThread = await seedThread(
         backendClient,
@@ -197,12 +213,18 @@ export const test = baseTest.extend<ThreadCostBucketsFixtures>({
           { label: 'turn-1', moment: earlyMoment, spanCount: 1 },
           { label: 'turn-2', moment: lateMoment, spanCount: 2 },
         ],
+        written,
       );
       seeded.push(spanningThread);
 
-      const lateThread = await seedThread(backendClient, project.name, testNamespace, 'late', [
-        { label: 'turn-1', moment: lateMoment, spanCount: 1 },
-      ]);
+      const lateThread = await seedThread(
+        backendClient,
+        project.name,
+        testNamespace,
+        'late',
+        [{ label: 'turn-1', moment: lateMoment, spanCount: 1 }],
+        written,
+      );
       seeded.push(lateThread);
 
       const previousThread = await seedThread(
@@ -211,6 +233,7 @@ export const test = baseTest.extend<ThreadCostBucketsFixtures>({
         testNamespace,
         'previous',
         [{ label: 'turn-1', moment: previousMoment, spanCount: 1 }],
+        written,
       );
       seeded.push(previousThread);
 
@@ -259,12 +282,13 @@ export const test = baseTest.extend<ThreadCostBucketsFixtures>({
 
       await use(ref);
     } finally {
-      // In a `finally` and driven by what was actually written: a failure
-      // seeding the third thread must still take the first two with it, or the
-      // next run's thread list starts with a stranger in it.
-      if (!shouldLeaveArtifacts(testInfo) && seeded.length > 0) {
+      // In a `finally` and driven by what was actually written — every id
+      // recorded before its write, so a failure part-way through the third
+      // thread still takes the first two and its own finished turns with it,
+      // rather than leaving the next run's thread list with strangers in it.
+      if (!shouldLeaveArtifacts(testInfo) && written.length > 0) {
         try {
-          await backendClient.deleteTraces(seeded.flatMap((t) => t.traceIds));
+          await backendClient.deleteTraces(written);
         } catch (err) {
           console.warn('[threadCostBuckets fixture] trace delete warning:', err);
         }
