@@ -205,10 +205,12 @@ class TracesSchemaParityPostCutoverTest {
     }
 
     /**
-     * Resolving the column proves the wrapper can see it; it does not prove the expression behind it works. A
-     * materialized column with a valid name and a broken definition would pass every assertion above, so one row is
-     * written through the wrapper and its computed value read back — the reference migration declares
-     * {@code MATERIALIZED length(name)}, so a known name must yield its length.
+     * Verifies that a row written through the wrapper becomes readable through it with the reference field computed:
+     * the migration declares {@code MATERIALIZED length(name)}, so a known name must yield its length.
+     *
+     * <p>Resolving the column proves the wrapper can see it; it does not prove the expression behind it works. A
+     * materialized column with a valid name and a broken definition would pass every assertion above, which is why a
+     * probe row is written and its computed value read back rather than the schema merely inspected.
      *
      * <p>The write goes through the wrapper deliberately: that is the path the application takes post-cutover, and with
      * {@code prefer_localhost_replica = 0} (OPIK-8255) it is serialised to a queue file and shipped by a background

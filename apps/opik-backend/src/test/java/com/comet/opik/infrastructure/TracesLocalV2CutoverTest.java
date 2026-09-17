@@ -10,7 +10,6 @@ import com.comet.opik.utils.template.TemplateUtils;
 import io.r2dbc.spi.Statement;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,7 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -1086,13 +1084,6 @@ class TracesLocalV2CutoverTest {
         execute("DELETE FROM traces_local WHERE workspace_id = :workspace_id AND project_id = :project_id AND id IN :ids",
                 statement -> statement.bind("workspace_id", workspaceId).bind("project_id", projectId.toString())
                         .bind("ids", postWrapDeleted));
-
-        // The post-cutover rows above were written THROUGH the wrapper, which is the path the application takes once
-        // the wrap is live. With prefer_localhost_replica = 0 (OPIK-8255) such a write is serialised to a queue file
-        // and shipped by a background sender, so it is visible eventually rather than immediately. Await the queue
-        // draining before fingerprinting: the wrapped and un-wrapped reads must be taken over the same rows, or the
-        // comparison below measures queue timing instead of what un-wrap moves.
-        awaitDistributedQueueDrained("traces");
 
         var throughWrapper = fingerprint("traces", Shape.NEW, workspaceId);
 
@@ -3091,33 +3082,6 @@ class TracesLocalV2CutoverTest {
                 """, statement -> statement.bind("cutover_start", cutoverStart));
     }
 
-    /**
-     * Blocks until `traces` has no pending Distributed forwarding files, i.e. every write made through the wrapper has
-     * reached the shard. Needed because {@code prefer_localhost_replica = 0} makes those writes asynchronous
-     * (OPIK-8255); the queue is observed rather than flushed, so the test still exercises the deployed insert path.
-     */
-    private void awaitDistributedQueueDrained(String table) {
-        if (!isDistributed(table)) {
-            return;
-        }
-        Awaitility.await("the Distributed forwarding queue for `%s` drains".formatted(table))
-                .atMost(30, TimeUnit.SECONDS)
-                .pollInterval(200, TimeUnit.MILLISECONDS)
-                .until(() -> pendingDistributedFiles(table) == 0L);
-    }
-
-    /** Pending forwarding files for the table, from {@code system.distribution_queue}. */
-    private long pendingDistributedFiles(String table) {
-        return template.nonTransaction(connection -> Mono.from(connection.createStatement(
-                "SELECT sum(data_files) FROM system.distribution_queue WHERE table = '%s'".formatted(table))
-                .execute())
-                .flatMap(result -> Mono.from(result.map((row, metadata) -> {
-                    var value = row.get(0, Long.class);
-                    return value == null ? 0L : value;
-                }))))
-                .block();
-    }
-
     private boolean isDistributed(String table) {
         return "Distributed".equals(tableEngine(table));
     }
@@ -3166,6 +3130,14 @@ class TracesLocalV2CutoverTest {
      * {@code last_updated_at} is whatever {@code lastUpdatedAt} yields (server-now for upserts, a backdated stamp to
      * exercise the delta's {@code created_at} arm).
      */
+    /**
+     * Seeds rows through whatever `traces` currently is — the original table pre-cutover, the Distributed wrapper
+     * after it. {@code distributed_foreground_insert} is set on the statement so the wrapped case completes before the
+     * call returns: the default profile sets {@code prefer_localhost_replica = 0} (OPIK-8255), under which a write
+     * through the wrapper is otherwise serialised to a queue file and shipped asynchronously, and every assertion here
+     * is about what the cutover moves rather than about queue timing. Scoped to this statement so no test observes or
+     * depends on another's queue state.
+     */
     private void insertRows(List<CategorizedId> ids, String workspaceId, UUID projectId, String name,
             Function<CategorizedId, Instant> lastUpdatedAt) {
         var sql = TemplateUtils.getBatchSql("""
@@ -3177,6 +3149,7 @@ class TracesLocalV2CutoverTest {
                     created_at,
                     last_updated_at
                 )
+                SETTINGS distributed_foreground_insert = 1
                 FORMAT Values
                     <items:{item |
                         (
