@@ -46,8 +46,12 @@ class ClickHouseTracesTopologyHealthCheckTest {
     private static final String CLICKHOUSE_SETTING_LOG_COMMENT = "clickhouse_setting_log_comment";
     private static final String EXPECTED_LOG_COMMENT = "health_check:clickhouse-traces-topology";
 
-    private static final String TOPOLOGY_QUERY = "SELECT name, engine FROM system.tables "
-            + "WHERE database = currentDatabase() AND name IN ('traces', 'traces_local')";
+    private static final String TOPOLOGY_QUERY = """
+            SELECT name, engine FROM system.tables \
+            WHERE database = currentDatabase() AND name IN ({table:String}, {localTable:String})\
+            """;
+
+    private static final Map<String, Object> QUERY_PARAMS = Map.of("table", "traces", "localTable", "traces_local");
 
     private static final String FLAG = "databaseAnalyticsDataModel.tracesDistributedWrapEnabled";
 
@@ -161,7 +165,7 @@ class ClickHouseTracesTopologyHealthCheckTest {
     void check__whenQueryFails__thenUnhealthyAndCancelsQuery(String name, Exception failure) throws Exception {
         var failingFuture = mock(CompletableFuture.class);
         when(failingFuture.get(HEALTH_CHECK_TIMEOUT.toMilliseconds(), TimeUnit.MILLISECONDS)).thenThrow(failure);
-        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), argThat(probeServerSettings())))
+        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), eq(QUERY_PARAMS), argThat(probeServerSettings())))
                 .thenReturn(failingFuture);
 
         var actualResult = newHealthCheck(true).execute();
@@ -176,7 +180,7 @@ class ClickHouseTracesTopologyHealthCheckTest {
         var failingFuture = mock(CompletableFuture.class);
         when(failingFuture.get(HEALTH_CHECK_TIMEOUT.toMilliseconds(), TimeUnit.MILLISECONDS))
                 .thenThrow(new InterruptedException("Interrupted call"));
-        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), argThat(probeServerSettings())))
+        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), eq(QUERY_PARAMS), argThat(probeServerSettings())))
                 .thenReturn(failingFuture);
 
         newHealthCheck(true).execute();
@@ -187,7 +191,7 @@ class ClickHouseTracesTopologyHealthCheckTest {
     private HealthCheck.Result check(boolean wrapEnabled, Map<String, String> tables) {
         // Built before when(...) opens: the row mocks are stubbed themselves, and Mockito rejects that mid-stubbing.
         var records = records(tables);
-        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), argThat(probeServerSettings())))
+        when(clickHouseClient.queryRecords(eq(TOPOLOGY_QUERY), eq(QUERY_PARAMS), argThat(probeServerSettings())))
                 .thenReturn(CompletableFuture.completedFuture(records));
 
         return newHealthCheck(wrapEnabled).execute();
@@ -214,7 +218,7 @@ class ClickHouseTracesTopologyHealthCheckTest {
                 })
                 .toList();
         var records = mock(Records.class);
-        when(records.iterator()).thenReturn(rows.iterator());
+        when(records.spliterator()).thenReturn(rows.spliterator());
         return records;
     }
 
