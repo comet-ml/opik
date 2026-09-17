@@ -220,8 +220,8 @@ class TracesSchemaParityPostCutoverTest {
         var name = "reference-derived-probe";
         execute("""
                 INSERT INTO %s.%s (id, workspace_id, project_id, name)
-                VALUES ('%s', 'ws-reference-probe', '%s', '%s')
                 SETTINGS distributed_foreground_insert = 1
+                VALUES ('%s', 'ws-reference-probe', '%s', '%s')
                 """.formatted(DATABASE_NAME, TRACES, traceId, java.util.UUID.randomUUID(), name));
 
         var sql = "SELECT %s FROM %s.%s WHERE id = '%s'"

@@ -3123,6 +3123,22 @@ class TracesLocalV2CutoverTest {
 
     private void seedTraces(List<CategorizedId> ids, String workspaceId, UUID projectId) {
         insertRows(ids, workspaceId, projectId, "seed", CategorizedId::createdAt);
+        flushDistributedIfWrapped();
+    }
+
+    /**
+     * Drains the Distributed forwarding queue when `traces` is wrapped, so a write through the wrapper is visible to the
+     * next read. The default profile sets {@code prefer_localhost_replica = 0} (OPIK-8255), under which such a write is
+     * serialised to a queue file and shipped by a background sender rather than written in-process — so a read taken
+     * immediately after races it. That asynchrony is the deployed behaviour and is deliberate; these assertions are
+     * about what the cutover moves, not about queue timing, so the queue is drained rather than waited on.
+     */
+    private void flushDistributedIfWrapped() {
+        if (!isDistributed("traces")) {
+            return;
+        }
+        execute("SYSTEM FLUSH DISTRIBUTED traces", _ -> {
+        });
     }
 
     /**
