@@ -70,10 +70,13 @@ interface AgentInsightsJobDAO {
 
     // Stamped when the automatic run is enqueued, so the sweep stops picking the project up and the page
     // can tell that run from a finished one. Manual runs do not set it.
+    // Re-checks the enrolment the candidate was selected by, since the rollout can be cancelled mid-sweep:
+    // returns 0 for a project unenrolled since, and the caller then skips the trigger.
     @SqlUpdate("""
             UPDATE agent_insights_jobs
             SET auto_first_run_at = CURRENT_TIMESTAMP(6), last_updated_by = :userName
             WHERE workspace_id = :workspaceId AND project_id = :projectId
+                AND auto_first_run_enrolled AND auto_first_run_at IS NULL
             """)
     int markAutoFirstRun(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,

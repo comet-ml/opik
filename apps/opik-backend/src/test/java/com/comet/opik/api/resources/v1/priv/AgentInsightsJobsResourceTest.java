@@ -23,6 +23,7 @@ import com.comet.opik.api.resources.utils.resources.ReportFailureResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsAutoFirstRunJob;
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
+import com.comet.opik.domain.AgentInsightsJobService;
 import com.comet.opik.domain.AgentInsightsReportClient;
 import com.comet.opik.domain.AgentInsightsTriggerException;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -52,6 +53,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -155,6 +157,7 @@ class AgentInsightsJobsResourceTest {
     private ReportFailureResourceClient reportFailuresClient;
     private AgentInsightsReportJob reportJob;
     private AgentInsightsAutoFirstRunJob autoFirstRunJob;
+    private AgentInsightsJobService jobService;
 
     @BeforeAll
     void beforeAll(ClientSupport client, Injector injector) {
@@ -168,6 +171,7 @@ class AgentInsightsJobsResourceTest {
         this.reportFailuresClient = new ReportFailureResourceClient(client);
         this.reportJob = injector.getInstance(AgentInsightsReportJob.class);
         this.autoFirstRunJob = injector.getInstance(AgentInsightsAutoFirstRunJob.class);
+        this.jobService = injector.getInstance(AgentInsightsJobService.class);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY_2, WORKSPACE_NAME_2, WORKSPACE_ID_2, USER_2);
@@ -594,6 +598,23 @@ class AgentInsightsJobsResourceTest {
         autoFirstRunJob.runSweep(Instant.now(), 10).block();
 
         assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("A candidate unenrolled after the sweep selected it is not run")
+    void autoFirstRun__enrolmentClearedAfterSelection__doesNotRun() {
+        // The rollout is cancelled mid-sweep when the free budget runs out, so candidates already selected
+        // must be re-checked at the stamp rather than run on a cancelled rollout.
+        var projectId = createProject();
+        jobsClient.enrolInAutoFirstRun(true, List.of(projectId)).close();
+        jobsClient.enrolInAutoFirstRun(false, List.of(projectId)).close();
+
+        jobService.autoFirstRun(WORKSPACE_ID, projectId, Instant.now().minus(7, ChronoUnit.DAYS), Instant.now());
+
+        assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).isEmpty();
+        try (var job = jobsClient.get(projectId, API_KEY, WORKSPACE_NAME)) {
+            assertThat(job.readEntity(AgentInsightsJob.class).autoFirstRunAt()).isNull();
+        }
     }
 
     @Test

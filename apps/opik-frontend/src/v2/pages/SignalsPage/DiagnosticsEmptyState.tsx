@@ -94,7 +94,7 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
             </div>
 
             <p className="comet-body-xs text-center text-muted-slate">
-              Diagnostics runs best on {TRACE_THRESHOLD}+ traces. Once you reach{" "}
+              Diagnostics run best on {TRACE_THRESHOLD}+ traces. Once you reach{" "}
               {TRACE_THRESHOLD}, your first diagnostic runs automatically for
               free.
             </p>

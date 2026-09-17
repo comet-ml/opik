@@ -117,15 +117,17 @@ public class AgentInsightsJobService {
                         });
     }
 
-    // System context (no request thread): gives a project that has never had a diagnostic its first one, by
-    // creating its job row and enqueueing a single run.
+    // System context (no request thread): gives an enrolled project that has never had a diagnostic its first
+    // one, by claiming its free run on the job row and enqueueing a single run.
     public void autoFirstRun(@NonNull String workspaceId, @NonNull UUID projectId, @NonNull Instant periodStart,
             @NonNull Instant periodEnd) {
-        transactionTemplate.inTransaction(WRITE, handle -> {
-            handle.attach(AgentInsightsJobDAO.class).markAutoFirstRun(workspaceId, projectId,
-                    RequestContext.SYSTEM_USER);
-            return null;
-        });
+        int stamped = transactionTemplate.inTransaction(WRITE,
+                handle -> handle.attach(AgentInsightsJobDAO.class).markAutoFirstRun(workspaceId, projectId,
+                        RequestContext.SYSTEM_USER));
+        if (stamped == 0) {
+            log.info("Skipping auto first Agent Insights run for project '{}': no longer awaiting one", projectId);
+            return;
+        }
 
         reportPublisher.enqueue(projectId, workspaceId, periodStart, periodEnd, AgentInsightsMetrics.AUTO_FIRST_RUN)
                 .subscribe(

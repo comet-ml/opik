@@ -6,7 +6,8 @@
 -- enrolment endpoint and cleared when the rollout is cancelled
 --
 -- auto_first_run_at is stamped when that automatic run is enqueued. It is what stops the sweep enqueueing a
--- run that is still executing, and paired with last_scan_at it tells a run in progress from a finished one.
+-- run that is still executing, and paired with last_scan_at it distinguishes a run in progress from a
+-- finished one.
 -- Scoped to the automatic run only: manual runs do not set it, so existing rows are correctly NULL and need
 -- no backfill. `status` keeps meaning "is the daily schedule on".
 ALTER TABLE agent_insights_jobs
