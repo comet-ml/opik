@@ -906,8 +906,6 @@ class KpiCardsResourceTest {
         Instant ranAt = intervalStart.minus(30, ChronoUnit.SECONDS);
         int threadCount = 3;
 
-        // Thread rows minted inside the current period for conversations that ran in the previous one, which is
-        // what a backfill produces: the trace_threads UUIDv7 says "now" while the traces say 30s ago.
         createThreadsWithTraceIdsMintedAt(projectName, ranAt, intervalStart.plus(1, ChronoUnit.SECONDS),
                 threadCount);
 
