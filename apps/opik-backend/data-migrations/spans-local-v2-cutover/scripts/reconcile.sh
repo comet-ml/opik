@@ -1028,10 +1028,24 @@ read_postcondition || {
 echo "Postcondition BEFORE any mutation:"
 print_counts
 print_leak_check
+# The reverse postcondition belongs to this reading too, not only to the pass loop's. The four counts are computed from
+# the PARKED table's keys, so a resurrected span — live on the restored original, absent there — cannot appear in them
+# at any value; on a reverse estate whose sweep has nothing left to do, the loop is never entered and this early exit is
+# the ONLY verdict the driver gives. It certifies the estate and authorises finalize.sh exactly as RECONCILED does, so
+# it takes the same conjunct. The check is a single SELECT, so --report-only runs it too and its report states the same
+# verdict a real run would gate on, rather than deferring the finding to a later invocation.
+if [[ "$DIRECTION" == "reverse" ]]; then
+    verify_reverse_replay || true   # verdict carried by REVERSE_REPLAY_STATE, which gate_is_clean reads
+fi
 
 if gate_is_clean; then
-    echo "Nothing to reconcile: every key live in '$PARKED_TABLE' inside the gap window is present on '$LIVE_TABLE' at the"
-    echo "same version or newer. No statement issued."
+    if [[ "$DIRECTION" == "reverse" ]]; then
+        echo "Nothing to reconcile: every key live in '$PARKED_TABLE' inside the gap window is present on '$LIVE_TABLE' at"
+        echo "the same version or newer, and no id bridged since cutover_start is live again. No statement issued."
+    else
+        echo "Nothing to reconcile: every key live in '$PARKED_TABLE' inside the gap window is present on '$LIVE_TABLE' at the"
+        echo "same version or newer. No statement issued."
+    fi
     # Same qualifier as the RECONCILED verdict below, and for the same reason: this is a success outcome an operator
     # acts on with finalize.sh, whose DROP is ON CLUSTER. A shard-local "nothing to do" must not read as an estate-wide
     # one either. (The --report-only exit below needs no qualifier: it exits non-zero saying the estate is NOT
@@ -1050,6 +1064,10 @@ assert_reverse_usage_in_range
 
 if [[ "$REPORT_ONLY" == "1" ]]; then
     echo "--report-only: no mutation issued. The estate is NOT reconciled — re-run without --report-only to sweep it." >&2
+    [[ "$REVERSE_REPLAY_STATE" == "ok" ]] || {
+        echo "       Note what is outstanding here: the four counts above may all be zero, but the reverse-replay" >&2
+        echo "       postcondition is '$REVERSE_REPLAY_STATE'. The work a real run would do is the REPLAY, not the sweep." >&2
+    }
     exit 1
 fi
 
