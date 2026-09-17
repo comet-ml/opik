@@ -84,18 +84,22 @@ test.describe('Trace panel copy actions — CUJ', { tag: ['@t2-cuj', '@area:trac
       ).toHaveCount(1);
 
       await panel.copyTraceIdFromHeader();
+      // Asserted before the clipboard read rather than after it. The
+      // confirmation is on a 3s timer, so a read that runs long takes the check
+      // icon with it and fails for a reason that has nothing to do with the copy.
+      await expect(panel.headerCopiedButton, 'the icon swaps to a check').toBeVisible();
+
       expect(
         await readClipboard(page),
         'the clipboard must carry the trace id verbatim',
       ).toBe(tracedAgent.id);
     });
 
-    await test.step('The button confirms the copy, then returns to its idle state', async () => {
+    await test.step('The confirmation returns to its idle state', async () => {
       // The confirmation is the whole feedback for the action — the release
       // removed the success toast that used to stand in for it. A button stuck
-      // on "Copied" is as wrong as one that never confirms, so assert both
-      // ends of the 3s timer.
-      await expect(panel.headerCopiedButton, 'the icon swaps to a check').toBeVisible();
+      // on "Copied" is as wrong as one that never confirms, which is why both
+      // ends of the 3s timer are asserted.
       await expect(
         panel.headerCopyIdButton,
         'and swaps back once the timer elapses',
@@ -115,9 +119,10 @@ test.describe('Trace panel copy actions — CUJ', { tag: ['@t2-cuj', '@area:trac
 
     await test.step('Pasting the copied link reopens the same trace, on the Traces tab', async () => {
       // A second page rather than a reload: the point is that the link works
-      // standalone, the way a colleague receiving it would use it. Read
-      // nothing from the clipboard past here — a new tab takes focus, and
-      // `navigator.clipboard.readText()` rejects on an unfocused document.
+      // standalone, the way a colleague receiving it would use it. The new tab
+      // takes focus with it, and `navigator.clipboard.readText()` rejects on an
+      // unfocused document — so the span step below re-focuses this page before
+      // it reads the clipboard again.
       const pasted = await context.newPage();
       try {
         await pasted.goto(copiedLink);
@@ -142,6 +147,10 @@ test.describe('Trace panel copy actions — CUJ', { tag: ['@t2-cuj', '@area:trac
     });
 
     await test.step('Selecting a span swaps the toolbar action to "Copy span ID"', async () => {
+      // The pasted tab took focus and has since closed. Claim it back explicitly
+      // rather than relying on the browser handing it over, because the clipboard
+      // read at the end of this step rejects on an unfocused document.
+      await page.bringToFront();
       await panel.selectSpan(tracedAgent.llmSpan.name);
 
       await expect(

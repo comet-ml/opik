@@ -10,9 +10,10 @@ import { test, type Page } from '@playwright/test';
  * - The context must hold `clipboard-read` (and `clipboard-write`, which
  *   Chromium does not grant to a background read). Declare it on the spec:
  *   `test.use({ permissions: ['clipboard-read', 'clipboard-write'] })`.
- * - `navigator.clipboard.readText()` rejects unless the document is focused,
- *   so read on the page that did the copying, and read it BEFORE opening a
- *   second page — a new tab takes focus with it.
+ * - `navigator.clipboard.readText()` rejects unless the document is focused, so
+ *   read on the page that did the copying. A second page takes focus with it,
+ *   so either read before opening one, or `await page.bringToFront()` first —
+ *   do not rely on focus coming back when the other page closes.
  */
 export async function readClipboard(page: Page): Promise<string> {
   return test.step('Read the clipboard', async () =>

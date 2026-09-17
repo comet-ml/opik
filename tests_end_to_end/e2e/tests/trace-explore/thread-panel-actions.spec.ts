@@ -54,11 +54,15 @@ test.describe('Thread panel actions — CUJ', { tag: ['@t2-cuj', '@area:threads'
       await expect(panel.copyIdButton, 'the header offers one copy-ID action').toHaveCount(1);
 
       await panel.copyThreadId();
+      // Asserted before the clipboard read rather than after it. The
+      // confirmation is on a 3s timer, so a read that runs long takes the check
+      // icon with it and fails for a reason that has nothing to do with the copy.
+      await expect(panel.copiedButton, 'the icon confirms the copy').toBeVisible();
+
       expect(
         await readClipboard(page),
         'the clipboard must carry the thread id verbatim',
       ).toBe(conversation.threadId);
-      await expect(panel.copiedButton, 'and the icon confirms the copy').toBeVisible();
     });
 
     await test.step('Hovering the title reveals the full thread id', async () => {
