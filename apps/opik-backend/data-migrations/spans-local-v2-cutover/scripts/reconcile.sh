@@ -1073,7 +1073,9 @@ while (( PASS < MAX_PASSES )); do
             echo "  1. Payload-level picture over exactly the range that was reconciled, alongside the usual weekly compare:"
             echo "       ./verify.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} \\"
             echo "           --old-table spans_pre_cutover_backup --new-table $LIVE_TABLE \\"
-            echo "           --window-from '$EFFECTIVE_GAP_START' --window-to '<now, UTC>'"
+            echo "           --window-from '$EFFECTIVE_GAP_START' --window-to '$SWAP_DONE'"
+            echo "     The upper bound is the swap, not now: the parked table holds nothing created after it, and the"
+            echo "     compare passes only on equal row counts, so a later bound fails on live traffic, not fidelity."
             echo "  2. Keep '$PARKED_TABLE' for the soak. finalize.sh refuses to retire it without --confirm-gap-reconciled,"
             echo "     which is this run."
         else
@@ -1106,6 +1108,6 @@ else
 fi
 echo "      ./verify.sh --database $DATABASE ${CH_HOST:+--host $CH_HOST} ${CH_PORT:+--port $CH_PORT} \\" >&2
 echo "          $verify_pair \\" >&2
-echo "          --window-from '$EFFECTIVE_GAP_START' --window-to '<now, UTC>' --drill-down" >&2
+echo "          --window-from '$EFFECTIVE_GAP_START' --window-to '$SWAP_DONE' --drill-down" >&2
 echo "Do NOT run finalize.sh: the parked backup is the only copy of whatever is still missing." >&2
 exit 1

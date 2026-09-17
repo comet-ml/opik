@@ -784,8 +784,14 @@ operator can now truthfully assert. The gate is the flag's state, not the probe'
    what step 5 swept, alongside the usual bounded weekly compare (see "Verifying the migration"):
    ```bash
    ./scripts/verify.sh --database opik --old-table spans_pre_cutover_backup --new-table spans \
-       --window-from '<delta_start>' --window-to '<now, UTC>'
+       --window-from '<delta_start>' --window-to '<exchange_done, UTC>'
    ```
+   > **The upper bound is the swap, not `now`.** `spans_pre_cutover_backup` froze at the `EXCHANGE`; live `spans` keeps
+   > taking writes. A span **created** after the swap therefore exists on the live side only, and `000005` bounds
+   > `created_at` identically on both sides and passes a window only when `src_rows = dst_rows` — so a window extending
+   > past the swap reports a mismatch for every post-swap span. Under production write rates that is a guaranteed
+   > failure within seconds of the swap, and it would say nothing about fidelity. Use the same `exchange_done` that
+   > bounded step 5's sweep, so this compare covers exactly what was swept and nothing that could not have been.
    This compares the spans **created** in that range — `000005` bounds on `created_at`, which the weekly mode's
    partitioning and its superseded-version logic require — so a span created earlier and merely *updated* in the gap is
    not in it. That set is not left uncovered: it is exactly what step 5 reports as `stale_keys` and
@@ -1732,8 +1738,10 @@ cutover as complete only when all of these hold.
       gap-window spans that were written again after the swap, which the sweep deliberately leaves alone.
       **`exchange_and_wrap.sh` ends with a CUTOVER INCOMPLETE banner naming this command**; the banner is the reason this
       box is first.
-- [ ] **Fidelity over the reconciled range** — `verify.sh --window-from '<delta_start>' --window-to '<now>'` PASSED on
-      the `spans_pre_cutover_backup` / `spans` pair. The four counts already cover presence, version and payload, so
+- [ ] **Fidelity over the reconciled range** — `verify.sh --window-from '<delta_start>' --window-to '<exchange_done>'`
+      PASSED on the `spans_pre_cutover_backup` / `spans` pair. **Bound it at the swap, not at `now`**: the backup holds
+      nothing created after the `EXCHANGE`, and the compare requires equal row counts on both sides, so a later bound
+      fails on live traffic rather than on fidelity. The four counts already cover presence, version and payload, so
       this is the payload-level *picture* rather than a second gate; run it because a `PASSED` line stating the exact
       window is what an incident review will ask for.
 - [ ] **Fidelity over sealed history** — the bounded weekly compare passed (see "Verifying the migration" for the bound
@@ -2498,8 +2506,10 @@ that is infeasible, sample and still get high confidence:
   depend on `min`/`max(created_at)` holding still, and the `PASSED` line states the window it covered.
   ```bash
   ./scripts/verify.sh --database opik --old-table spans_pre_cutover_backup --new-table spans \
-      --window-from '<delta_start>' --window-to '<now, UTC>'
+      --window-from '<delta_start>' --window-to '<exchange_done, UTC>'
   ```
+  Bound the window at the swap, never at `now`: the parked table stops receiving rows there, and the compare passes
+  only when both sides hold the same count, so a later bound fails on post-swap traffic rather than on fidelity.
 
 `verify.sh` exits non-zero if any window **mismatches or is INCONCLUSIVE**, and prints the window bounds either way;
 re-run with `--drill-down` to list the keys that differ or exist on one side only (it runs the `drill-down` block of

@@ -143,12 +143,20 @@ python tests_load/tests/spans-local-v2-cutover/delete_traffic.py --tps 2 --durat
 #    backfill_start it prints.
 $RUNBOOK/scripts/backfill.sh --database opik --max-rows-per-insert 400 --pause-seconds 1 \
     --max-partitions-per-insert-block 20000
-#    Worth doing once, deliberately: re-run with --max-partitions-per-insert-block 2 and confirm ClickHouse ABORTS the
-#    INSERT with TOO_MANY_PARTS rather than degrading. That is the failure the raised cap exists to prevent, and the
-#    seeded far-future/non-v7 ids are what make the window reach enough partitions to trigger it.
-#    Also worth doing once: re-run a window at --min-insert-block-size-bytes 33554432 and compare peak memory and the
-#    part count against the default, in system.query_log and system.parts. That is the one trade-off worth measuring
-#    before production — see the runbook's "Partition spread, and the one setting that matters".
+#    TWO EXPERIMENTS WORTH RUNNING ONCE — AND BOTH NEED AN EMPTY DESTINATION, which is the part that is easy to get
+#    wrong. backfill.sh's resume guard skips any window whose destination already holds at least as many logical rows
+#    as the source, BEFORE issuing the INSERT, so simply re-running with a different setting copies nothing and the
+#    experiment silently does not happen — no abort, no new parts, no query_log row to read. There is no force flag,
+#    deliberately: the guard is what makes a resume safe. So reset first (truncate opik.spans_local_v2 and rm the
+#    anchor together — see "Resetting between iterations"), run the experiment, then reset again before the real run.
+#      (i)  --max-partitions-per-insert-block 2: ClickHouse must ABORT the INSERT with TOO_MANY_PARTS rather than
+#           degrade. That is the failure the raised cap exists to prevent, and the seeded far-future/non-v7 ids are
+#           what make a window reach enough partitions to trigger it. The abort leaves the run part-copied, so the
+#           reset afterwards is mandatory, not tidiness.
+#      (ii) --min-insert-block-size-bytes 33554432 against the default, comparing peak memory and part count in
+#           system.query_log and system.parts. Each arm needs its own reset, or the second measures a skipped run.
+#           This is the one trade-off worth measuring before production — see the runbook's "Partition spread, and
+#           the one setting that matters".
 
 # 5. Delta + deletion replay, anchored at that backfill_start.
 $RUNBOOK/scripts/delta_replay.sh --database opik --backfill-start '<backfill_start> UTC'
@@ -237,9 +245,13 @@ $RUNBOOK/scripts/reconcile.sh --database opik --confirm-retention-paused \
 
 # 10. QA after the sweep. Two different compares, because the swept gap and a fidelity defect live in different weeks:
 #
-#     (a) THE RECONCILED WINDOW — payload-level fidelity over exactly what step 9 swept.
+#     (a) THE RECONCILED WINDOW — payload-level fidelity over exactly what step 9 swept, so the upper bound is step
+#     9's --swap-done, NOT "now". spans_pre_cutover_backup froze at the EXCHANGE; live spans keeps taking writes. Any
+#     span CREATED after the swap therefore exists on the live side only, and 000005 bounds created_at identically on
+#     both sides and passes a window only when src_rows = dst_rows, so extending the window past the swap reports a
+#     mismatch for every post-swap span — a guaranteed failure that says nothing about fidelity.
 $RUNBOOK/scripts/verify.sh --database opik --old-table spans_pre_cutover_backup --new-table spans \
-    --window-from '<delta_start from step 8>' --window-to '<now>'
+    --window-from '<delta_start from step 8>' --window-to '<exchange_done from step 8>'
 #
 #     (b) SEALED HISTORY — bounded below the cutover week, where any mismatch IS a defect.
 $RUNBOOK/scripts/verify.sh --database opik --old-table spans_pre_cutover_backup --new-table spans --to-week last-sealed
