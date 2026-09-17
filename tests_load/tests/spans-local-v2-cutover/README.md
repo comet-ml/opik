@@ -187,6 +187,11 @@ recreate_backend
 #    container is healthy, and everything it writes in that window is a legitimate NULL — anchoring earlier sweeps those
 #    rows in and fails a flip that actually landed. Take the anchor from ClickHouse's own clock, as backfill.sh does for
 #    backfill_start: it is the clock that stamps last_updated_at, so no host/container skew can shift the boundary.
+#    Precision 9 is deliberate and matches spans.last_updated_at's own DateTime64(9, 'UTC') exactly, so the comparison
+#    below needs no coercion. Do NOT round the anchor down to microseconds to "catch boundary writes": that moves the
+#    boundary EARLIER and re-admits writes the outgoing backend made in that microsecond, which is the false-failure
+#    this anchor's placement exists to prevent. Erring later is safe here — the probe needs only that SOME post-restart
+#    sentinel rows exist and that NO post-restart row is NULL, and traffic keeps supplying both for as long as it runs.
 FLIP_AT="$(clickhouse-client --query "SELECT toString(now64(9, 'UTC'))")"
 #
 #    PROVE THE FLIP LANDED, AND DO IT NOW — this is the evidence --confirm-columns-non-nullable asserts in step 8, and
