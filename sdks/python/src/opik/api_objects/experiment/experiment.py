@@ -215,7 +215,7 @@ class Experiment:
         already delivered.
 
         The size that builds a batch is an estimate, so a batch can still be
-        rejected as too large. One that is gets halved and retried, down to a
+        rejected as too large. A rejected batch is halved and retried, down to a
         single item, which raises rather than being split further. The halves are
         sent in order, so a batch that fails this way can leave some of its own
         items delivered; the records are converted once, so a retried half
