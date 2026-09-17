@@ -14,6 +14,9 @@ from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
+from ..types.annotation_queue_automation import AnnotationQueueAutomation
+from ..types.annotation_queue_automation_write import AnnotationQueueAutomationWrite
+from ..types.annotation_queue_items_public import AnnotationQueueItemsPublic
 from ..types.annotation_queue_page_public import AnnotationQueuePagePublic
 from ..types.annotation_queue_public import AnnotationQueuePublic
 from ..types.annotation_queue_write import AnnotationQueueWrite
@@ -152,6 +155,7 @@ class RawAnnotationQueuesClient:
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
+        automation: typing.Optional[AnnotationQueueAutomationWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -179,6 +183,8 @@ class RawAnnotationQueuesClient:
 
         lock_timeout_seconds : typing.Optional[int]
 
+        automation : typing.Optional[AnnotationQueueAutomationWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -200,6 +206,9 @@ class RawAnnotationQueuesClient:
                 "feedback_definition_names": feedback_definition_names,
                 "annotators_per_item": annotators_per_item,
                 "lock_timeout_seconds": lock_timeout_seconds,
+                "automation": convert_and_respect_annotation_metadata(
+                    object_=automation, annotation=AnnotationQueueAutomationWrite, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -421,6 +430,7 @@ class RawAnnotationQueuesClient:
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
+        automation: typing.Optional[AnnotationQueueAutomation] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -444,6 +454,8 @@ class RawAnnotationQueuesClient:
 
         lock_timeout_seconds : typing.Optional[int]
 
+        automation : typing.Optional[AnnotationQueueAutomation]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -462,6 +474,9 @@ class RawAnnotationQueuesClient:
                 "feedback_definition_names": feedback_definition_names,
                 "annotators_per_item": annotators_per_item,
                 "lock_timeout_seconds": lock_timeout_seconds,
+                "automation": convert_and_respect_annotation_metadata(
+                    object_=automation, annotation=AnnotationQueueAutomation, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -616,6 +631,64 @@ class RawAnnotationQueuesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def search_annotation_queue_items(
+        self, id: str, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[AnnotationQueueItemsPublic]:
+        """
+        Returns queue membership metadata — how each item got into the queue — for the given item ids. A lookup rather than a listing: the caller renders the items table from the traces or threads API with its own sort and filters, so it asks for exactly the ids it is displaying. Ids that are not in the queue are omitted.
+
+        Parameters
+        ----------
+        id : str
+
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[AnnotationQueueItemsPublic]
+            Annotation queue items
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/annotation-queues/{jsonable_encoder(id)}/items/search",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    AnnotationQueueItemsPublic,
+                    parse_obj_as(
+                        type_=AnnotationQueueItemsPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
 
 class AsyncRawAnnotationQueuesClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -744,6 +817,7 @@ class AsyncRawAnnotationQueuesClient:
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
+        automation: typing.Optional[AnnotationQueueAutomationWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -771,6 +845,8 @@ class AsyncRawAnnotationQueuesClient:
 
         lock_timeout_seconds : typing.Optional[int]
 
+        automation : typing.Optional[AnnotationQueueAutomationWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -792,6 +868,9 @@ class AsyncRawAnnotationQueuesClient:
                 "feedback_definition_names": feedback_definition_names,
                 "annotators_per_item": annotators_per_item,
                 "lock_timeout_seconds": lock_timeout_seconds,
+                "automation": convert_and_respect_annotation_metadata(
+                    object_=automation, annotation=AnnotationQueueAutomationWrite, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -1013,6 +1092,7 @@ class AsyncRawAnnotationQueuesClient:
         feedback_definition_names: typing.Optional[typing.Sequence[str]] = OMIT,
         annotators_per_item: typing.Optional[int] = OMIT,
         lock_timeout_seconds: typing.Optional[int] = OMIT,
+        automation: typing.Optional[AnnotationQueueAutomation] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1036,6 +1116,8 @@ class AsyncRawAnnotationQueuesClient:
 
         lock_timeout_seconds : typing.Optional[int]
 
+        automation : typing.Optional[AnnotationQueueAutomation]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1054,6 +1136,9 @@ class AsyncRawAnnotationQueuesClient:
                 "feedback_definition_names": feedback_definition_names,
                 "annotators_per_item": annotators_per_item,
                 "lock_timeout_seconds": lock_timeout_seconds,
+                "automation": convert_and_respect_annotation_metadata(
+                    object_=automation, annotation=AnnotationQueueAutomation, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -1192,6 +1277,64 @@ class AsyncRawAnnotationQueuesClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def search_annotation_queue_items(
+        self, id: str, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[AnnotationQueueItemsPublic]:
+        """
+        Returns queue membership metadata — how each item got into the queue — for the given item ids. A lookup rather than a listing: the caller renders the items table from the traces or threads API with its own sort and filters, so it asks for exactly the ids it is displaying. Ids that are not in the queue are omitted.
+
+        Parameters
+        ----------
+        id : str
+
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[AnnotationQueueItemsPublic]
+            Annotation queue items
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/annotation-queues/{jsonable_encoder(id)}/items/search",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    AnnotationQueueItemsPublic,
+                    parse_obj_as(
+                        type_=AnnotationQueueItemsPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),

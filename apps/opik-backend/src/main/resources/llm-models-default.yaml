@@ -1792,6 +1792,8 @@ openrouter:
     label: "sao10k/l3.3-euryale-70b"
   - id: "stealth/ox-alpha"
     label: "stealth/ox-alpha"
+  - id: "stealth/union-alpha"
+    label: "stealth/union-alpha"
   - id: "stepfun-ai/step3"
     label: "stepfun-ai/step3"
   - id: "stepfun/step-3.5-flash"

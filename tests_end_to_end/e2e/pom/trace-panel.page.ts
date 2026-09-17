@@ -265,6 +265,56 @@ export class TracePanelPage {
     });
   }
 
+  /**
+   * The collapsible Error section header. Matched on its accessible name rather
+   * than a testid: the shared CodeBlock renders every section the same way, and
+   * only the title distinguishes them.
+   */
+  get errorSection(): Locator {
+    return this.root.getByRole('button', { name: /^Error$/ });
+  }
+
+  /** Expand the Error section. */
+  async expandError(): Promise<void> {
+    return test.step('Expand the Error section', async () => {
+      await this.errorSection.click();
+      await this.errorSection.and(this.root.locator('[aria-expanded="true"]')).waitFor();
+    });
+  }
+
+  /** Collapse the Error section. */
+  async collapseError(): Promise<void> {
+    return test.step('Collapse the Error section', async () => {
+      await this.errorSection.click();
+      await this.errorSection.and(this.root.locator('[aria-expanded="false"]')).waitFor();
+    });
+  }
+
+  /** The `Fix via MCP` pill, shown once the user opens the error. */
+  get mcpHintButton(): Locator {
+    return this.root.getByTestId('mcp-hint-button');
+  }
+
+  /** Portalled, so it is looked up on the page rather than inside the panel. */
+  get mcpHintPopover(): Locator {
+    return this.page.getByTestId('mcp-hint-popover');
+  }
+
+  /** The hint fades in, so give the animation a moment to land. */
+  async waitForMcpHint(): Promise<void> {
+    return test.step('Wait for the MCP hint to appear', async () => {
+      await this.mcpHintButton.waitFor({ state: 'visible', timeout: 5_000 });
+    });
+  }
+
+  /** Opens the hint popover by hovering the pill, as a user would. */
+  async openMcpHintPopover(): Promise<void> {
+    return test.step('Open the MCP hint popover', async () => {
+      await this.mcpHintButton.hover();
+      await this.mcpHintPopover.waitFor({ state: 'visible' });
+    });
+  }
+
   /** Locator for the Feedback scores tab inside the panel. */
   get feedbackScoresTab(): Locator {
     return this.root.getByRole('tab', { name: 'Feedback scores' });

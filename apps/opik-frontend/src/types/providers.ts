@@ -735,6 +735,7 @@ export enum PROVIDER_MODEL_TYPE {
   SAO10K_L3_1_EURYALE_70B = "sao10k/l3.1-euryale-70b",
   SAO10K_L3_3_EURYALE_70B = "sao10k/l3.3-euryale-70b",
   STEALTH_OX_ALPHA = "stealth/ox-alpha",
+  STEALTH_UNION_ALPHA = "stealth/union-alpha",
   STEPFUN_AI_STEP3 = "stepfun-ai/step3",
   STEPFUN_STEP_3_5_FLASH = "stepfun/step-3.5-flash",
   STEPFUN_STEP_3_5_FLASH_FREE = "stepfun/step-3.5-flash:free",
