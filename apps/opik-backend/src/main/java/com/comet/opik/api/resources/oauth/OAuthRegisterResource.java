@@ -45,7 +45,9 @@ public class OAuthRegisterResource {
             @ApiResponse(responseCode = "429", description = "Registration rate limit exceeded")})
     public Response register(@NotNull @Valid ClientRegistrationRequest request) {
 
-        log.info("MCP OAuth client registration request '{}'", request.clientName());
+        // Deliberately not logging request.clientName() here: it is straight off an unauthenticated endpoint,
+        // and control characters in it forge log lines. The line below logs the sanitised name instead.
+        log.info("MCP OAuth client registration request received");
 
         McpOAuthClient client = clientService.register(request);
         ClientRegistrationResponse body = ClientRegistrationResponseMapper.INSTANCE.toResponse(client);

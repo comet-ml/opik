@@ -119,7 +119,21 @@ public class McpOAuthClientUtils {
      * the connection row and the event untouched; running the same filters on the read path closes that gap
      * without a data migration, and is a no-op for rows written since. {@code name} falls back to the
      * {@code client_id}, as it does at registration, so it can never come back blank.
+     * <p>
+     * The connection overload does the same for a {@code mcp_client_connections} row, which denormalises the
+     * same fields and predates the filters by one migration.
      */
+    public static McpClientConnection sanitizeDisplayFields(@NonNull McpClientConnection connection) {
+        return connection.toBuilder()
+                .clientName(StringUtils.defaultIfBlank(sanitizeDisplayText(connection.clientName()),
+                        connection.clientId()))
+                .softwareId(sanitizeDisplayText(connection.softwareId()))
+                .softwareVersion(sanitizeDisplayText(connection.softwareVersion()))
+                .logoUri(sanitizeDisplayUri(connection.logoUri()))
+                .clientUri(sanitizeDisplayUri(connection.clientUri()))
+                .build();
+    }
+
     public static McpOAuthClient sanitizeDisplayFields(@NonNull McpOAuthClient client) {
         return client.toBuilder()
                 .name(StringUtils.defaultIfBlank(sanitizeDisplayText(client.name()), client.id()))

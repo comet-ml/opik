@@ -48,6 +48,7 @@ interface McpOAuthMapper {
     @Mapping(target = "softwareId", source = "client.softwareId")
     @Mapping(target = "softwareVersion", source = "client.softwareVersion")
     @Mapping(target = "logoUri", source = "client.logoUri")
+    @Mapping(target = "clientUri", source = "client.clientUri")
     @Mapping(target = "firstConnectedAt", ignore = true)
     @Mapping(target = "lastConnectedAt", ignore = true)
     McpClientConnection toConnection(McpOAuthCode code, McpOAuthClient client, String id);

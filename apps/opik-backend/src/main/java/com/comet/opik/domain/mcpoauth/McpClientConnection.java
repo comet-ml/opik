@@ -22,6 +22,7 @@ public record McpClientConnection(
         @Nullable String softwareId,
         @Nullable String softwareVersion,
         @Nullable String logoUri,
+        @Nullable String clientUri,
         @NonNull String resource,
         @NonNull String redirectUri,
         @Nullable Instant firstConnectedAt,

@@ -329,6 +329,7 @@ class McpOAuthClientRegistrationIntegrationTest {
         }
     }
 
+    @Test
     @DisplayName("a row stored before the filters existed is cleaned on the way to the consent page")
     void legacyUnsafeRowIsCleanedOnRead() {
         // Written straight through the DAO, as a registration from before the write-side filters would have been:
@@ -371,6 +372,7 @@ class McpOAuthClientRegistrationIntegrationTest {
                 .clientName("Claude Code")
                 .redirectUris(Set.of(REDIRECT_URI))
                 .logoUri("https://example.test/claude.png")
+                .clientUri("https://claude.com/claude-code")
                 .softwareId("anthropic-claude-code")
                 .softwareVersion("2.1.3")
                 .build());
@@ -396,6 +398,7 @@ class McpOAuthClientRegistrationIntegrationTest {
                         .softwareId("anthropic-claude-code")
                         .softwareVersion("2.1.3")
                         .logoUri("https://example.test/claude.png")
+                        .clientUri("https://claude.com/claude-code")
                         .resource(RESOURCE_URI)
                         .redirectUri(REDIRECT_URI)
                         .build());
@@ -429,6 +432,7 @@ class McpOAuthClientRegistrationIntegrationTest {
                         .softwareId(null)
                         .softwareVersion(null)
                         .logoUri(null)
+                        .clientUri(null)
                         .resource(RESOURCE_URI)
                         .redirectUri(REDIRECT_URI)
                         .build());

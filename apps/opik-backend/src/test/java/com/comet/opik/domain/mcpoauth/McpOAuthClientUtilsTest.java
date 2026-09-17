@@ -139,4 +139,31 @@ class McpOAuthClientUtilsTest {
         assertThat(sanitized.softwareId()).isEqualTo("legacy  id");
         assertThat(sanitized.softwareVersion()).isEqualTo("1.0");
     }
+
+    @Test
+    @DisplayName("the read-side filter cleans a connection row the same way")
+    void readSideFilterCleansAConnectionRow() {
+        var connection = McpClientConnection.builder()
+                .id("row-id")
+                .userName("user")
+                .workspaceName("ws")
+                .workspaceId("ws-id")
+                .clientId("client-id")
+                .clientName("Legacy Host\r\nFAKE LOG LINE")
+                .logoUri("javascript:alert(1)")
+                .clientUri("data:text/html;base64,PHNjcmlwdD4=")
+                .softwareId("legacy" + LINE_SEPARATOR + "id")
+                .resource("http://localhost:8080/api/v1/mcp")
+                .redirectUri("http://127.0.0.1:1234/cb")
+                .build();
+
+        var sanitized = McpOAuthClientUtils.sanitizeDisplayFields(connection);
+
+        assertThat(sanitized.clientName()).isEqualTo("Legacy Host  FAKE LOG LINE");
+        assertThat(sanitized.logoUri()).isNull();
+        assertThat(sanitized.clientUri()).isNull();
+        assertThat(sanitized.softwareId()).isEqualTo("legacy id");
+        assertThat(sanitized.resource()).as("not a display field, untouched")
+                .isEqualTo("http://localhost:8080/api/v1/mcp");
+    }
 }
