@@ -1,4 +1,5 @@
 import datetime
+import logging
 from typing import Any, Dict, List, Optional
 
 import pydantic
@@ -10,6 +11,8 @@ from opik.rest_api.core import datetime_utils
 from opik.types import FeedbackScoreDict
 from . import bulk_item
 from .. import constants
+
+LOGGER = logging.getLogger(__name__)
 
 _JSON_LIKE_FIELDS = ("input", "output", "metadata")
 
@@ -228,10 +231,20 @@ def _estimated_size_MB(rest_record: Any) -> float:
     encoder, so it is not a refuge from a value the encoder refused. Infinity is what
     the estimator itself returns for a value it cannot measure: the record is then
     rejected, or batched alone, rather than counted as small.
+
+    Caught broadly because what raises here is the caller's own ``__str__``, which may
+    raise anything, a custom class included -- there is no set of types to name. The
+    cost of that breadth is that the caller is told the record is oversized whichever
+    thing went wrong, so the cause is logged rather than dropped.
     """
     try:
         return sequence_splitter.get_payload_size_MB(rest_record)
     except Exception:
+        LOGGER.warning(
+            "Could not size an experiment item; it will be treated as oversized "
+            "and the upload rejected. The size limit is not the real cause.",
+            exc_info=True,
+        )
         return float("inf")
 
 

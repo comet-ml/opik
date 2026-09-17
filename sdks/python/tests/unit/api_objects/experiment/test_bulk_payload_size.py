@@ -11,6 +11,7 @@ import datetime
 import decimal
 import enum
 import json
+import logging
 import pathlib
 import uuid
 from typing import Any
@@ -319,7 +320,7 @@ def test_payload_size_MB__integer_beyond_orjson_range__sized_by_the_fallback(
 
 @pytest.mark.parametrize("mode", MODES)
 def test_payload_size_MB__value_whose_str_raises__sized_rather_than_raising(
-    mode, request
+    mode, request, caplog, monkeypatch
 ):
     """The one value the fallback cannot absorb, because the fallback is what breaks.
 
@@ -338,6 +339,16 @@ def test_payload_size_MB__value_whose_str_raises__sized_rather_than_raising(
 
     record = _rest_record(evaluate_task_result={"h": Hostile()})
 
+    # The SDK's own root logger sets propagate=False, which is where caplog loses the
+    # record -- this logger is a child of it and propagates fine on its own.
+    monkeypatch.setattr(logging.getLogger("opik"), "propagate", True)
+
     # The estimator's own convention for a value it cannot measure: infinite, so the
     # record is rejected or isolated rather than silently counted as small.
-    assert bulk_converters.payload_size_MB(record) == float("inf")
+    with caplog.at_level(logging.WARNING, logger=bulk_converters.LOGGER.name):
+        assert bulk_converters.payload_size_MB(record) == float("inf")
+
+    # Infinity reaches the caller as "over the size limit", which is not what happened.
+    # The exception that did happen is only recoverable from the log, so it has to be
+    # in it -- with a traceback, since the message cannot name a cause it never saw.
+    assert "no string for you" in caplog.text
