@@ -309,27 +309,41 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             """;
 
     /**
-     * A thread's position on the time axis is {@code min(traces.start_time)}, never the timestamp embedded in
-     * {@code trace_threads.id}. That id is a UUIDv7 minted when the thread row was first created, and
-     * {@link com.comet.opik.domain.threads.TraceThreadIdService} falls back to {@code now()} whenever the caller has
-     * no first-trace timestamp to pass, so for backfilled or bulk-created threads it is a record-keeping artifact
-     * rather than a fact about the conversation. Bucketing on it collapsed whole projects onto their ingestion day
-     * and disagreed with the thread list, which has always sorted and filtered on start_time (OPIK-8335).
+     * A thread sits on the time axis at {@code min(traces.start_time)} over the window's traces, never at the
+     * timestamp embedded in {@code trace_threads.id}. That id is a UUIDv7 minted when the thread row was first
+     * created, and {@link com.comet.opik.domain.threads.TraceThreadIdService} falls back to {@code now()} whenever
+     * the caller has no first-trace timestamp to pass, so for backfilled or bulk-created threads it is a
+     * record-keeping artifact rather than a fact about the conversation: bucketing on it collapsed whole projects
+     * onto their ingestion day (OPIK-8335).
      * <p>
-     * The window is therefore applied twice on purpose. {@code trace_threads_final} narrows to threads holding at
-     * least one trace whose id falls in the window, which is the only cheap predicate available: {@code traces} is
-     * partitioned on the week of {@code id_at} and sorted by {@code (workspace_id, project_id, id)}, whereas
-     * {@code trace_threads} is sorted by {@code (workspace_id, project_id, thread_id, id)} and not partitioned. The
-     * id filter it used to carry pruned nothing: measured on 1M threads, {@code EXPLAIN indexes=1} selects 123/563
-     * granules with it and the same 123/563 without it, by generic exclusion search rather than a key-prefix binary
-     * search. The {@code thread_id} set reaches the key prefix and gets that down to 69/563, paying for it with one
-     * extra pass over the window's traces. That pass is a superset only insofar as a trace's id tracks its
-     * start_time, which is what every trace-side metric here already assumes by bucketing on
-     * {@code UUIDv7ToDateTime(traces.id)}; {@code threads_filtered} then applies the exact start_time bound.
-     * Collapsing the two back into one filter reintroduces the bug.
+     * Membership and the aggregate are both derived from {@code traces_final}, which is what keeps this in step
+     * with the thread list in {@code ThreadDAO} and with {@code KpiCardDAO}: all three admit the threads holding at
+     * least one trace in the window and read the start time off that same bounded set. Widening this CTE to the
+     * thread's whole history would make the chart disagree with the list beside it for any thread that started
+     * before the window.
+     * <p>
+     * {@code threads_filtered} then bounds {@code start_time} to the window a second time. That is not redundant:
+     * a trace ingested long after it ran has an id inside the window and a start_time outside it, and without the
+     * bound its thread would land on a bucket the caller never asked for, outside the {@code WITH FILL} frame.
+     * The epoch sentinel is excluded from the aggregate because the update path writes it when a trace update
+     * arrives with no prior create ({@code TraceDAO}); one such row would otherwise drag a whole thread to 1970
+     * and hide it from every thread metric.
      */
     private static final String THREAD_FILTERED_PREFIX = """
-            WITH trace_threads_final AS (
+            WITH traces_final AS (
+                SELECT
+                    *
+                FROM traces FINAL
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id \\<> ''
+                <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+            ), trace_threads_final AS (
                 SELECT
                     workspace_id,
                     project_id,
@@ -344,27 +358,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(uuid_from_time)>
-                AND thread_id IN (
-                    SELECT thread_id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND id >= :uuid_from_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
-                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
-                )
-                <endif>
-            ), traces_final AS (
-                SELECT
-                    *
-                FROM traces FINAL
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND thread_id IN (SELECT thread_id FROM trace_threads_final)
+                AND thread_id IN (SELECT thread_id FROM traces_final)
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -452,7 +446,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         t.thread_id as id,
                         t.workspace_id as workspace_id,
                         t.project_id as project_id,
-                        min(t.start_time) as start_time,
+                        minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
                         max(t.end_time) as end_time,
                         if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND min(t.start_time) IS NOT NULL
                                AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
