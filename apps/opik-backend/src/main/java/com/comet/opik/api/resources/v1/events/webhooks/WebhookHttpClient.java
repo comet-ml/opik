@@ -52,8 +52,10 @@ public class WebhookHttpClient {
         this.userFacingLog = UserFacingLoggingFactory.getLogger(this.getClass());
         // plaintext allowed: http webhooks are documented as supported, so the scheme is the
         // operator's call; this guard is here for the destination, not the transport
-        this.destinationGuard = new DestinationGuard(webhookConfig.getDestinationGuard(),
-                DestinationGuard.Scheme.PLAINTEXT_OR_TLS);
+        this.destinationGuard = DestinationGuard.builder()
+                .mode(webhookConfig.getDestinationGuard())
+                .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+                .build();
     }
 
     /**
@@ -145,7 +147,7 @@ public class WebhookHttpClient {
                                 // the target's body stays server-side: this message is returned to
                                 // the caller, and the destination is caller-supplied
                                 readResponseBody(response).ifPresent(body -> log.debug(
-                                        "Webhook '{}' failed with status '{}', body: '{}'",
+                                        "Webhook delivery failed, id '{}', status '{}', body '{}'",
                                         event.getId(), response.getStatus(), body));
                                 sink.error(new RetryUtils.RetryableHttpException(
                                         "Webhook failed with status %d".formatted(response.getStatus()),

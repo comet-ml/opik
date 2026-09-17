@@ -11,11 +11,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @DisplayName("Destination Guard Test")
 class DestinationGuardTest {
 
-    private final DestinationGuard strict = new DestinationGuard(DestinationGuard.Mode.STRICT);
-    private final DestinationGuard relaxed = new DestinationGuard(DestinationGuard.Mode.RELAXED);
+    private final DestinationGuard strict = DestinationGuard.builder()
+            .mode(DestinationGuard.Mode.STRICT)
+            .build();
+    private final DestinationGuard relaxed = DestinationGuard.builder()
+            .mode(DestinationGuard.Mode.RELAXED)
+            .build();
 
-    private final DestinationGuard strictPlaintextAllowed = new DestinationGuard(DestinationGuard.Mode.STRICT,
-            DestinationGuard.Scheme.PLAINTEXT_OR_TLS);
+    private final DestinationGuard strictPlaintextAllowed = DestinationGuard.builder()
+            .mode(DestinationGuard.Mode.STRICT)
+            .scheme(DestinationGuard.Scheme.PLAINTEXT_OR_TLS)
+            .build();
 
     @ParameterizedTest
     @ValueSource(strings = {
