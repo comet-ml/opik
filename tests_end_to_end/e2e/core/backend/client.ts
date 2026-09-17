@@ -787,8 +787,13 @@ export interface AttachmentRef {
  * Shared by the workspace and per-project reads: both endpoints answer in the
  * same `{results: [{name, data: [{time, value}]}]}` shape, and a caller that
  * compares one to the other must not be comparing two different mappings of it.
+ *
+ * Exported for the same reason. A spec that reads a metrics answer off the
+ * page's own network traffic — rather than asking for it again — is comparing
+ * the widget's data to a client read, and re-implementing the flattening there
+ * would let the two agree or disagree on the mapping instead of on the numbers.
  */
-function toMetricSeries(json: unknown): MetricSeries[] {
+export function toMetricSeries(json: unknown): MetricSeries[] {
   const results =
     (json as { results?: Array<{ name?: string; data?: Array<{ time?: string; value?: number | null }> }> } | null)
       ?.results ?? [];

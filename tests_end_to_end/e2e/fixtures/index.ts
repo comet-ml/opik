@@ -1,4 +1,4 @@
-export { test, expect } from './project-scoped-dashboard.fixture';
+export { test, expect } from './thread-cost-buckets.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -160,4 +160,20 @@ export type {
   ProjectScopedDashboardRef,
   ProjectScopedDashboardFixtures,
 } from './project-scoped-dashboard.fixture';
+export type {
+  SpanCostBucketsRef,
+  SpanCostBucketsFixtures,
+} from './span-cost-buckets.fixture';
+export type {
+  ThreadCostSeedRef,
+  ThreadCostBucketsRef,
+  ThreadCostBucketsFixtures,
+} from './thread-cost-buckets.fixture';
+export {
+  COST_PER_SPAN_USD,
+  bucketTotal,
+  bucketsByDay,
+  expectBucketsByDay,
+  utcDayOf,
+} from './cost-buckets';
 export type { ProjectRef } from '../core/backend';
