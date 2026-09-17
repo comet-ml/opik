@@ -27,6 +27,14 @@ import useMappingSampleEntities from "./useMappingSampleEntities";
 const fieldCountLabel = (count: number) =>
   `${count} ${count === 1 ? "field" : "fields"}`;
 
+const itemCountLabel = (count: number) =>
+  `${count} ${count === 1 ? "item" : "items"}`;
+
+const entityCountLabel = (count: number, hasOnlySpans: boolean) => {
+  const entity = hasOnlySpans ? "span" : "trace";
+  return `${count} ${count === 1 ? entity : `${entity}s`}`;
+};
+
 type AddToDatasetDialogProps = {
   selectedRows: Array<Trace | Span>;
   open: boolean;
@@ -231,7 +239,9 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
             (advanced && !mappings.isValid)
           }
         >
-          {itemCount > 0 ? `Add ${itemCount} items` : "Add to dataset"}
+          {itemCount > 0
+            ? `Add ${itemCountLabel(itemCount)}`
+            : "Add to dataset"}
         </Button>
       </div>
     </div>
@@ -246,9 +256,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
       title={
         <span className="flex items-center gap-2">
           Add to dataset
-          <Tag variant="gray">
-            {itemCount} {hasOnlySpans ? "spans" : "traces"}
-          </Tag>
+          <Tag variant="gray">{entityCountLabel(itemCount, hasOnlySpans)}</Tag>
         </span>
       }
       footer={actions}

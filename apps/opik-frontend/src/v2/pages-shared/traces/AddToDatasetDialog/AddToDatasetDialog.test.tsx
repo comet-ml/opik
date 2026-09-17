@@ -224,6 +224,32 @@ describe("AddToDatasetDialog", () => {
     fireEvent.click(items[items.length - 1]);
   };
 
+  it("should use singular labels for a single row", () => {
+    render(<AddToDatasetDialog {...baseProps} selectedRows={[mockTrace]} />, {
+      wrapper,
+    });
+
+    expect(screen.getByText("1 trace")).toBeInTheDocument();
+
+    openDropdownAndSelect("Test Dataset 1");
+
+    expect(
+      screen.getByRole("button", { name: "Add 1 item" }),
+    ).toBeInTheDocument();
+  });
+
+  it("should use plural labels for several rows", () => {
+    render(
+      <AddToDatasetDialog
+        {...baseProps}
+        selectedRows={[mockTrace, mockTrace]}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByText("2 traces")).toBeInTheDocument();
+  });
+
   it("should render the dataset dialog when open", () => {
     render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
@@ -422,7 +448,7 @@ describe("AddToDatasetDialog", () => {
 
     openDropdownAndSelect("Test Dataset 1");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -454,7 +480,7 @@ describe("AddToDatasetDialog", () => {
 
     openDropdownAndSelect("Test Dataset 1");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddSpansToDataset).toHaveBeenCalledWith(
@@ -484,7 +510,7 @@ describe("AddToDatasetDialog", () => {
     fireEvent.click(screen.getByLabelText("Tags"));
     fireEvent.click(screen.getByLabelText("Usage metrics"));
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -517,7 +543,7 @@ describe("AddToDatasetDialog", () => {
     fireEvent.click(screen.getByLabelText("Comments"));
     fireEvent.click(screen.getByLabelText("Metadata"));
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddSpansToDataset).toHaveBeenCalledWith(
@@ -574,7 +600,7 @@ describe("AddToDatasetDialog", () => {
     fireEvent.keyDown(document, { key: "ArrowDown" });
     fireEvent.keyDown(document, { key: "Enter" });
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -617,7 +643,7 @@ describe("AddToDatasetDialog", () => {
     render(<AddToDatasetDialog {...baseProps} />, { wrapper });
 
     openDropdownAndSelect("Test Dataset 1");
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -637,7 +663,7 @@ describe("AddToDatasetDialog", () => {
     fireEvent.keyDown(document, { key: "ArrowDown" });
     fireEvent.keyDown(document, { key: "Enter" });
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -682,7 +708,7 @@ describe("AddToDatasetDialog", () => {
 
     expect(screen.getByPlaceholderText("Field name")).toHaveValue("tone");
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -729,7 +755,7 @@ describe("AddToDatasetDialog", () => {
 
     expect(screen.getByText("Field name is already used")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^Add \d+ items$/ }),
+      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
     ).toBeDisabled();
 
     fireEvent.change(screen.getByPlaceholderText("Field name"), {
@@ -737,7 +763,7 @@ describe("AddToDatasetDialog", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: /^Add \d+ items$/ }),
+      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
     ).toBeEnabled();
   });
 
@@ -753,7 +779,7 @@ describe("AddToDatasetDialog", () => {
     fireEvent.keyDown(document, { key: "ArrowUp" });
     fireEvent.keyDown(document, { key: "Enter" });
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -778,7 +804,7 @@ describe("AddToDatasetDialog", () => {
 
     fireEvent.click(screen.getByText("Tags"));
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -802,7 +828,7 @@ describe("AddToDatasetDialog", () => {
     openRowExplorer("expected_output");
     navigateToPath(1);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddSpansToDataset).toHaveBeenCalledWith(
@@ -915,7 +941,7 @@ describe("AddToDatasetDialog", () => {
     );
     navigateToPath(2);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
@@ -981,7 +1007,7 @@ describe("AddToDatasetDialog", () => {
 
     expect(screen.getByText("Select a field to map")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^Add \d+ items$/ }),
+      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
     ).toBeDisabled();
 
     openRowExplorer("custom-1");
@@ -989,7 +1015,7 @@ describe("AddToDatasetDialog", () => {
 
     expect(screen.queryByText("Select a field to map")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /^Add \d+ items$/ }),
+      screen.getByRole("button", { name: /^Add \d+ items?$/ }),
     ).toBeEnabled();
   });
 
@@ -1022,7 +1048,7 @@ describe("AddToDatasetDialog", () => {
       screen.queryByText(/Only rows with input fields/),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ items?$/ }));
 
     await waitFor(() => {
       expect(mockAddTracesToDataset).toHaveBeenCalledWith(
