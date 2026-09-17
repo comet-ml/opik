@@ -10,15 +10,17 @@ in the SDK that knows which encoder is in use.
 import datetime
 import decimal
 import enum
+import json
 import pathlib
 import uuid
 from typing import Any
 
 import pytest
 
-from opik import json_helpers
+from opik import json_helpers, jsonable_encoder
 from opik.api_objects.experiment import bulk_converters, bulk_item
 from opik.message_processing.batching import sequence_splitter
+from opik.rest_api.core import datetime_utils
 
 try:
     import orjson
@@ -59,6 +61,19 @@ def accelerated(monkeypatch):
 def _rest_record(**kwargs: Any):
     kwargs.setdefault("dataset_item_id", "dataset-item-id")
     return bulk_converters.to_rest_record(bulk_item.ExperimentItemBulkRecord(**kwargs))
+
+
+def _compact_bytes(rest_record: Any) -> int:
+    """The record's JSON length, computed without going through the sizer.
+
+    Compact separators and real UTF-8 are what both encoders write, so this is the
+    number a correct measurement has to produce -- independent of the code under test,
+    which is what makes it usable as an expected value rather than a restatement.
+    """
+    encoded = json.dumps(
+        jsonable_encoder.encode(rest_record), separators=(",", ":"), ensure_ascii=False
+    )
+    return len(encoded.encode("utf-8"))
 
 
 def _full_record():
@@ -159,26 +174,50 @@ def test_payload_size_MB__grows_with_the_record(mode, request):
 
 @pytest.mark.parametrize("mode", MODES)
 @pytest.mark.parametrize(
-    "value",
+    "value,json_form",
     [
-        pytest.param({"set": {1, 2, 3}}, id="set"),
-        pytest.param({"tuple": (1, 2)}, id="tuple"),
-        pytest.param({"decimal": decimal.Decimal("1.5")}, id="decimal"),
-        pytest.param({"uuid": uuid.UUID(int=1)}, id="uuid"),
-        pytest.param({"path": pathlib.PurePath("/tmp/x")}, id="path"),
-        pytest.param({"bytes": b"xy"}, id="bytes"),
-        pytest.param({"date": datetime.date(2026, 8, 4)}, id="date"),
-        pytest.param({"time": datetime.time(1, 2, 3)}, id="time"),
-        pytest.param({"nested": {"dt": START_TIME}}, id="nested-datetime"),
+        pytest.param({"set": {1, 2, 3}}, {"set": [1, 2, 3]}, id="set"),
+        pytest.param({"tuple": (1, 2)}, {"tuple": [1, 2]}, id="tuple"),
+        pytest.param(
+            {"decimal": decimal.Decimal("1.5")}, {"decimal": "1.5"}, id="decimal"
+        ),
+        pytest.param(
+            {"uuid": uuid.UUID(int=1)},
+            {"uuid": "00000000-0000-0000-0000-000000000001"},
+            id="uuid",
+        ),
+        pytest.param(
+            {"path": pathlib.PurePath("/tmp/x")}, {"path": "/tmp/x"}, id="path"
+        ),
+        pytest.param({"bytes": b"xy"}, {"bytes": "eHk="}, id="bytes"),
+        pytest.param(
+            {"date": datetime.date(2026, 8, 4)}, {"date": "2026-08-04"}, id="date"
+        ),
+        pytest.param({"time": datetime.time(1, 2, 3)}, {"time": "01:02:03"}, id="time"),
+        pytest.param(
+            {"nested": {"dt": START_TIME}},
+            {"nested": {"dt": datetime_utils.serialize_datetime(START_TIME)}},
+            id="nested-datetime",
+        ),
     ],
 )
-def test_payload_size_MB__values_a_json_encoder_refuses__still_sized(
-    mode, value, request
+def test_payload_size_MB__values_a_json_encoder_refuses__sized_as_their_json_form(
+    mode, value, json_form, request
 ):
-    """The upload accepts these, so measuring one must not be what rejects it."""
+    """The upload accepts these, so measuring one must not be what rejects it.
+
+    Asserting only that the number is positive would pass for any fallback that
+    returned something, so what is pinned is the exact byte count of the form the
+    value is actually sent as -- the second column, which is what the encoder these
+    records go through renders each one to.
+    """
     request.getfixturevalue(mode)
 
-    assert bulk_converters.payload_size_MB(_rest_record(evaluate_task_result=value)) > 0
+    expected_bytes = _compact_bytes(_rest_record(evaluate_task_result=json_form))
+
+    assert bulk_converters.payload_size_MB(
+        _rest_record(evaluate_task_result=value)
+    ) == pytest.approx(expected_bytes / bulk_converters._BYTES_PER_MB, rel=1e-12)
 
 
 @pytest.mark.parametrize("mode", MODES)
@@ -195,7 +234,11 @@ def test_payload_size_MB__unencodable_value__falls_back_to_the_estimate(mode, re
     cyclic["self"] = cyclic
     record = _rest_record(evaluate_task_result={"cyclic": cyclic})
 
-    with pytest.raises(Exception):
+    # Named rather than bare ``Exception``, which would let an unrelated failure stand
+    # in for the refusal this test exists to provoke. Both encoders end here: orjson
+    # gives up on the recursion and ``json_helpers`` re-encodes with the standard
+    # library, which reports the cycle it found.
+    with pytest.raises(ValueError, match="Circular reference"):
         json_helpers.dumps(record, default=bulk_converters._json_shell, sort_keys=False)
 
     assert bulk_converters.payload_size_MB(record) > 0
