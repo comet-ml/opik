@@ -63,6 +63,9 @@ def aggregate(
         }
 
         text_chunks: List[str] = []
+        # Reasoning models stream lists of content chunks (thinking, then text)
+        # instead of strings; those are kept as plain data, in order.
+        content_chunks: List[Dict[str, Any]] = []
         tool_calls_by_index: Dict[int, Dict[str, Any]] = {}
 
         for chunk in chunks:
@@ -75,8 +78,16 @@ def aggregate(
                 ):
                     aggregated_response["choices"][0]["message"]["role"] = delta.role
 
-                if delta.content:
-                    text_chunks.append(delta.content)
+                if isinstance(delta.content, str):
+                    if delta.content:
+                        text_chunks.append(delta.content)
+                elif delta.content:
+                    for content_chunk in delta.content:
+                        content_chunks.append(
+                            content_chunk.model_dump(mode="json", exclude_none=True)
+                            if hasattr(content_chunk, "model_dump")
+                            else content_chunk
+                        )
 
                 if delta.tool_calls:
                     # Mistral currently emits each tool call complete in a single
@@ -101,7 +112,14 @@ def aggregate(
             if chunk.usage:
                 aggregated_response["usage"] = chunk.usage.model_dump(mode="json")
 
-        aggregated_response["choices"][0]["message"]["content"] = "".join(text_chunks)
+        if content_chunks:
+            if text_chunks:
+                content_chunks.append({"type": "text", "text": "".join(text_chunks)})
+            aggregated_response["choices"][0]["message"]["content"] = content_chunks
+        else:
+            aggregated_response["choices"][0]["message"]["content"] = "".join(
+                text_chunks
+            )
         if tool_calls_by_index:
             aggregated_response["choices"][0]["message"]["tool_calls"] = [
                 tool_calls_by_index[index] for index in sorted(tool_calls_by_index)
