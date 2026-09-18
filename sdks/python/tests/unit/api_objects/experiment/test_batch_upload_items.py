@@ -650,17 +650,18 @@ class TestBulkUploadItemsConcurrency:
         """Abort ends a rate-limit wait instead of leaving it to retry after the call."""
         experiment, mock_rest_client = _create_experiment()
         parked_attempts: List[int] = []
+        parked = threading.Event()
 
         def upload(**kwargs: Any) -> None:
             batch_ids = {item.dataset_item_id for item in kwargs["items"]}
             if "item-0" in batch_ids:
                 parked_attempts.append(1)
+                parked.set()
                 raise ApiError(
                     status_code=429, headers={"RateLimit-Reset": "60"}, body="limited"
                 )
-            deadline = time.monotonic() + 10
-            while not parked_attempts and time.monotonic() < deadline:
-                time.sleep(0.01)
+            # Fail only once the other batch is parked, so the abort has something to stop.
+            assert parked.wait(10)
             raise ApiError(status_code=400, headers={}, body="bad request")
 
         mock_rest_client.experiments.experiment_items_bulk.side_effect = upload
