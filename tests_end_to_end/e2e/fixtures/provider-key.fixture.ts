@@ -47,6 +47,26 @@ export interface UnreachableProviderSeed {
  */
 const UNREACHABLE_BASE_URL = 'http://127.0.0.1:9/v1';
 
+/**
+ * Base URL for a provider that never answers and never refuses.
+ *
+ * `192.0.2.1` is TEST-NET-1 (RFC 5737) — reserved for documentation, routed
+ * nowhere — so a connect to it hangs until it times out instead of being
+ * refused. That is the opposite of what `UNREACHABLE_BASE_URL` wants, and
+ * deliberately so: a refused connect ends a Playground run in milliseconds,
+ * which leaves no window in which a spec can click Stop. Holding the run open
+ * is the whole point here.
+ *
+ * Only for specs that abort the run themselves and assert on the FRONTEND's
+ * reaction. Do NOT point a scoring rule at this — the warning on
+ * `UNREACHABLE_BASE_URL` stands, and an online-scoring message whose provider
+ * call is still connecting when the message is reclaimed is exactly the
+ * non-determinism that URL exists to avoid. Stop aborts the browser's own
+ * request; whether the backend's upstream connect is still timing out behind it
+ * is not something a caller here may depend on either way.
+ */
+const UNRESPONSIVE_BASE_URL = 'http://192.0.2.1/v1';
+
 export interface ProviderKeysFixture {
   /**
    * REST-seeds a Custom provider in OAuth2 token-auth mode against the suite's mock
@@ -63,6 +83,15 @@ export interface ProviderKeysFixture {
    * two spellings drifting apart would be invisible in the log stream.
    */
   createUnreachable(seed: UnreachableProviderSeed): Promise<string>;
+  /**
+   * REST-seeds a Custom provider whose base URL is blackholed, so a call to it
+   * hangs rather than failing — which is what keeps a Playground run open long
+   * enough for a spec to stop it. Registered for teardown deletion.
+   *
+   * Returns the fully-qualified model id, for the same reason
+   * `createUnreachable` does.
+   */
+  createUnresponsive(seed: UnreachableProviderSeed): Promise<string>;
   /**
    * Makes the mock gateway answer `status` for every chat request naming `modelName`,
    * and clears it at teardown.
@@ -124,6 +153,20 @@ export const test = baseTest.extend<ProviderKeyFixtures>({
           // Required whenever `auth_config` is absent. Never sent anywhere: the
           // connection is refused before a request is written.
           api_key: 'unused-the-connection-is-refused',
+          configuration: { models: model },
+        });
+        return model;
+      },
+      async createUnresponsive({ providerName, modelName = 'unresponsive-model' }) {
+        registered.push(providerName);
+        const model = `custom-llm/${providerName}/${modelName}`;
+        await createProviderKey({
+          provider: 'custom-llm',
+          provider_name: providerName,
+          base_url: UNRESPONSIVE_BASE_URL,
+          // Required whenever `auth_config` is absent. Never sent anywhere: the
+          // connect never completes, so no request is ever written.
+          api_key: 'unused-the-connection-never-completes',
           configuration: { models: model },
         });
         return model;

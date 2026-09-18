@@ -37,6 +37,12 @@ const RUN_ERROR_TEXT = /\bnot defined\b|returned an empty response/i;
 const hasProducedOutput = (text: string): boolean =>
   text.trim() !== '' && !text.includes(IDLE_CELL_TEXT);
 
+/** Window key the toast recorder writes into — see `startRecordingToasts`. */
+const TOAST_RECORD_KEY = '__opikRecordedToasts';
+
+/** The title `useRunCompletionToast` gives the toast a finished run raises. */
+const RUN_COMPLETE_TEXT = /Run complete/;
+
 export interface PlaygroundVariantConfig {
   /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
   systemPrompt?: string;
@@ -226,6 +232,82 @@ export class PlaygroundPage {
       .filter({ hasText: 'Run complete' });
   }
 
+  /**
+   * Start recording every toast the page raises, from before the first one can
+   * appear. Must be called BEFORE `goto()` — it installs an init script, so it
+   * also survives a reload.
+   *
+   * `completionToast()` above reads a LIVE locator, which only works when the
+   * run is slow enough that the toast is still on screen when the assertion
+   * runs. It is not, on the runs these specs drive: Radix dismisses a toast on
+   * its own 5s default, and a run against a provider that refuses every
+   * connection finishes in about a second, so a point-in-time read races the
+   * dismissal — and worse, it cannot tell "never raised" from "raised and
+   * already gone", which is exactly the distinction a spec asserting that a
+   * STOPPED run stays silent depends on.
+   *
+   * Scoped to the notification region for the same reason `completionToast()`
+   * is: Radix also portals a visually-hidden `role="status"` announcer carrying
+   * the same text, outside the region, and recording both would double every
+   * toast.
+   */
+  async startRecordingToasts(): Promise<void> {
+    return test.step('start recording toasts', async () => {
+      await this.page.addInitScript((key: string) => {
+        const recorded: Element[] = [];
+        (window as unknown as Record<string, unknown>)[key] = recorded;
+
+        const isToast = (el: Element): boolean =>
+          el.matches('[role="status"]') && el.closest('[role="region"]') !== null;
+
+        new MutationObserver((mutations) => {
+          for (const mutation of mutations) {
+            for (const node of Array.from(mutation.addedNodes)) {
+              if (!(node instanceof Element)) continue;
+              if (isToast(node)) recorded.push(node);
+              // A toast can also arrive nested, when the region itself is the
+              // node that was inserted.
+              for (const nested of Array.from(node.querySelectorAll('[role="status"]'))) {
+                if (isToast(nested)) recorded.push(nested);
+              }
+            }
+          }
+        }).observe(document, { childList: true, subtree: true });
+      }, TOAST_RECORD_KEY);
+    });
+  }
+
+  /**
+   * The text of every toast raised since `startRecordingToasts()`, oldest
+   * first, whether or not it is still on screen.
+   *
+   * Read out of the recorded elements rather than snapshotted when they were
+   * inserted: a detached node keeps its text, and reading late also picks up
+   * any content React committed into the toast after appending it.
+   *
+   * Throws rather than returning `[]` when the recorder was never installed —
+   * an empty array is what half of these assertions are looking for, so a
+   * missing recorder would read as "no toast was raised" and pass.
+   */
+  async recordedToasts(): Promise<string[]> {
+    return test.step('read the recorded toasts', async () => {
+      return this.page.evaluate((key: string) => {
+        const recorded = (window as unknown as Record<string, unknown>)[key];
+        if (!Array.isArray(recorded)) {
+          throw new Error(
+            'no toast recorder on this page — startRecordingToasts() must run before goto()',
+          );
+        }
+        return (recorded as Element[]).map((el) => (el.textContent ?? '').trim());
+      }, TOAST_RECORD_KEY);
+    });
+  }
+
+  /** Recorded toasts that announce a finished run. */
+  async recordedRunCompletionToasts(): Promise<string[]> {
+    return (await this.recordedToasts()).filter((text) => RUN_COMPLETE_TEXT.test(text));
+  }
+
   /** The "Creates: {name}_a  +N more" preview; absent while no name is set. */
   experimentNamePreview(): Locator {
     return this.page.getByTestId('playground-experiment-name-preview');
@@ -277,6 +359,69 @@ export class PlaygroundPage {
   async clickReRun(): Promise<void> {
     return test.step('click Re-run', async () => {
       await this.runButton().click();
+    });
+  }
+
+  // ── per-column run / stop ───────────────────────────────────────────────
+  //
+  // `PlaygroundRunButton` is mounted per variant, and in experiment mode (a
+  // dataset or suite loaded) it renders inside the variant card — in free mode
+  // the same component renders under the OUTPUT column instead, which is why
+  // these are scoped to the card rather than looked up page-wide. It carries no
+  // testid and its label swaps between Run and Stop with the variant's own
+  // state; the accessible name is the only handle. A `data-testid` on it would
+  // be better, but these specs run against a deployed Opik, so an attribute
+  // added alongside them would not exist in the version under test.
+
+  /** The Run control on one variant's card. Present only while that variant is idle. */
+  variantRunButton(index: number): Locator {
+    return this.variantCard(index).getByRole('button', { name: 'Run', exact: true });
+  }
+
+  /** The Stop control on one variant's card. Present only while that variant is running. */
+  variantStopButton(index: number): Locator {
+    return this.variantCard(index).getByRole('button', { name: 'Stop', exact: true });
+  }
+
+  /**
+   * The header's "Stop all", which replaces the Run button for the duration of
+   * a run. Named exactly, so it cannot also match a variant card's "Stop".
+   */
+  stopAllButton(): Locator {
+    return this.page.getByRole('button', { name: 'Stop all', exact: true });
+  }
+
+  /**
+   * Run ONE variant, from its own card.
+   *
+   * The count is asserted rather than `.first()`-ed: a lookup that matched two
+   * buttons would run whichever the DOM happened to order first, and a spec
+   * whose whole claim is "only this column ran" would then be asserting against
+   * a column it did not choose.
+   */
+  async clickVariantRun(index: number): Promise<void> {
+    return test.step(`click Run on variant ${index}`, async () => {
+      const button = this.variantRunButton(index);
+      await expect(button).toHaveCount(1);
+      await button.click();
+    });
+  }
+
+  /** Stop ONE running variant, from its own card. */
+  async clickVariantStop(index: number, timeoutMs = 30_000): Promise<void> {
+    return test.step(`click Stop on variant ${index}`, async () => {
+      const button = this.variantStopButton(index);
+      await expect(button).toHaveCount(1, { timeout: timeoutMs });
+      await button.click();
+    });
+  }
+
+  /** Stop every running variant, from the header. */
+  async clickStopAll(timeoutMs = 30_000): Promise<void> {
+    return test.step('click Stop all', async () => {
+      const button = this.stopAllButton();
+      await expect(button).toBeVisible({ timeout: timeoutMs });
+      await button.click();
     });
   }
 
