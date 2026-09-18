@@ -11,9 +11,13 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Connection;
@@ -44,6 +48,7 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Covers the {@code bulkInsert.v2ClientEnabled} write path — feedback scores streamed to ClickHouse as
@@ -76,6 +81,7 @@ class BulkInsertV2ClientIntegrationTest {
     private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
+    private static final String AUTHOR_FOR_REJECTION = "author-that-never-gets-used";
 
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysqlContainer = MySQLContainerUtils.newMySQLContainer();
@@ -109,13 +115,17 @@ class BulkInsertV2ClientIntegrationTest {
 
     private TraceResourceClient traceResourceClient;
     private ConnectionFactory clickHouseConnectionFactory;
+    private FeedbackScoreDAO feedbackScoreDAO;
+    private ProjectResourceClient projectResourceClient;
 
     @BeforeAll
-    void beforeAll(ClientSupport clientSupport) {
+    void beforeAll(ClientSupport clientSupport, FeedbackScoreDAO feedbackScoreDAO) {
+        this.feedbackScoreDAO = feedbackScoreDAO;
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
+        projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         clickHouseConnectionFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
                 clickHouseContainer, DATABASE_NAME).build();
     }
@@ -236,5 +246,74 @@ class BulkInsertV2ClientIntegrationTest {
         assertThat(readBack)
                 .allSatisfy(stored -> assertThat(stored.valueByAuthor().values())
                         .allSatisfy(entry -> assertThat(entry.sourceQueueId()).isNull()));
+    }
+
+    @Test
+    @DisplayName("an authorless score takes the 8-column feedback_scores branch, not the authored table")
+    void authorlessScoreGoesToTheUnauthoredTable() {
+        // Driven through the DAO rather than HTTP on purpose: FeedbackScoreService#getAuthor reads the
+        // author off the request context, so everything arriving over HTTP has one and only ever
+        // exercises authored_feedback_scores. This is the other branch of toJsonRow -- a different
+        // target table and two fewer columns -- and nothing else in the suite reaches it.
+        // Called at the DAO seam, below the service layer that resolves projectName -> projectId, so the
+        // project has to exist and the id has to be passed explicitly.
+        var projectName = "authorless-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var trace = newTraceBuilder().projectName(projectName).build();
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+
+        var score = newScore(trace.id(), projectName, "relevance").toBuilder()
+                .projectId(projectId)
+                .value(new BigDecimal("0.987654321"))
+                .reason("no author here")
+                .build();
+
+        feedbackScoreDAO.scoreBatchOf(EntityType.TRACE, List.of(score), null)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        Long unauthored = queryOne(
+                ("SELECT count() AS row_count FROM feedback_scores WHERE workspace_id = '%s' "
+                        + "AND entity_id = '%s' AND name = 'relevance'").formatted(WORKSPACE_ID, trace.id()),
+                row -> row.get("row_count", Long.class));
+        assertThat(unauthored).isEqualTo(1L);
+
+        // And nothing leaked into the authored table, which is what a mis-selected branch would look
+        // like -- the row would still be written, just to the wrong place.
+        Long authored = queryOne(
+                ("SELECT count() AS row_count FROM authored_feedback_scores WHERE workspace_id = '%s' "
+                        + "AND entity_id = '%s' AND name = 'relevance'").formatted(WORKSPACE_ID, trace.id()),
+                row -> row.get("row_count", Long.class));
+        assertThat(authored).isEqualTo(0L);
+
+        var stored = queryOne(
+                ("SELECT value, reason, source FROM feedback_scores WHERE workspace_id = '%s' "
+                        + "AND entity_id = '%s' AND name = 'relevance' LIMIT 1").formatted(WORKSPACE_ID, trace.id()),
+                row -> row.get("value", BigDecimal.class) + "|" + row.get("reason", String.class) + "|"
+                        + row.get("source", String.class));
+        assertThat(stored).isEqualTo("0.987654321|no author here|" + score.source().getValue());
+    }
+
+    @Test
+    @DisplayName("a score with no value is rejected by name, on the v2 path too")
+    void scoreWithoutAValueIsRejectedByName() {
+        // The R2DBC binder rejects this per item before binding; the JSONEachRow mapper would instead
+        // NPE inside toJsonRow and take the whole batch down. The check sits ahead of the branch so
+        // both writers fail the same way -- this pins that it still does with v2 selected.
+        var score = newScore(UUID.randomUUID(), "some-project", "relevance").toBuilder()
+                .projectId(UUID.randomUUID())
+                .value(null)
+                .build();
+
+        assertThatThrownBy(() -> feedbackScoreDAO.scoreBatchOf(EntityType.TRACE, List.of(score), AUTHOR_FOR_REJECTION)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block())
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("relevance")
+                .hasMessageContaining("cannot be stored without a value");
     }
 }

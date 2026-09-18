@@ -320,6 +320,14 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     private Mono<Long> insertFeedbackScores(@NonNull EntityType entityType,
             @NonNull List<? extends FeedbackScoreItem> scores, @Nullable String author) {
 
+        // Ahead of the branch, so both writers reject the same input. Callers reaching here through the
+        // API are bean-validated (value is @NotNull) and the online scoring paths drop valueless scores
+        // before batching. A null at this point means a new caller did neither: fail naming the score
+        // instead of the NPE the writer would raise from inside the batch, taking every other score in
+        // it down with this one.
+        scores.forEach(score -> Preconditions.checkArgument(score.value() != null,
+                "Feedback score '%s' cannot be stored without a value", score.name()));
+
         if (configuration.getBulkInsert().v2ClientEnabled()) {
             return insertJsonEachRow(entityType, scores, author);
         }
@@ -408,13 +416,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         for (var i = 0; i < scores.size(); i++) {
 
             var feedbackScoreBatchItem = scores.get(i);
-
-            // Callers reaching here through the API are bean-validated (value is @NotNull) and the online
-            // scoring paths drop valueless scores before batching. A null at this point means a new caller
-            // did neither: fail naming the score instead of raising the NPE that .toString() used to throw
-            // from inside the bind, where it took the whole batch — and every other score in it — down.
-            Preconditions.checkArgument(feedbackScoreBatchItem.value() != null,
-                    "Feedback score '%s' cannot be stored without a value", feedbackScoreBatchItem.name());
 
             statement.bind("entity_type" + i, entityType.getType())
                     .bind("entity_id" + i, feedbackScoreBatchItem.id())

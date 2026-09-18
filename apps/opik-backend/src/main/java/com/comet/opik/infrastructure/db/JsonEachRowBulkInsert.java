@@ -155,9 +155,15 @@ public class JsonEachRowBulkInsert {
                 // fragment of customer content by way of the exception.
                 //
                 // Mono.fromFuture unwraps the CompletionException the client's future fails with, so the
-                // cause seen here is the client's own exception — which is what the resource-layer retry
-                // filter (RetryUtils.handleConnectionError) matches on, since it tests the throwable's
-                // own class.
+                // cause seen here is the client's own exception rather than a wrapper.
+                //
+                // Note the callers' retry (RetryUtils.handleConnectionError, applied in
+                // ExperimentItemBulkIngestionService and the resource layer) matches SocketException
+                // subclasses, and this client fails transport drops with Apache HC's own
+                // NoHttpResponseException, which is not one. So a dropped response is retried on the
+                // R2DBC path and not on this one. That gap is the v2 client's, not this class's — it is
+                // equally true of the DatasetItemVersionDAO queries already running on it — so widening
+                // the filter belongs with the other v2-client settings rather than here.
                 .doOnError(err -> log.error("Failed JSONEachRow insert: table='{}' rows='{}'",
                         table, items.size(), err));
     }
