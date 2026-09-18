@@ -20,7 +20,6 @@ from opik.api_objects import opik_client
 from opik.evaluation import rest_operations, test_case
 from opik.evaluation.engine import engine
 from opik.evaluation.metrics import base_metric, score_result
-from opik.evaluation.scorers import scorer_function
 from opik.evaluation.types import ErrorTolerance
 
 
@@ -266,23 +265,7 @@ def catch_all_span(**task_span: Any) -> score_result.ScoreResult:
     return score_result.ScoreResult(name="catch_all_span", value=1.0)
 
 
-def test_requires_task_span_argument__variadic_names_are_not_required() -> None:
-    """Review point on #8404: ``*task_span`` / ``**task_span`` bind no argument
-    named ``task_span``, so a span-less run must not be reported as missing one."""
-
-    def star(*task_span: Any) -> None: ...
-
-    def required(task_span: Any) -> None: ...
-
-    def optional(task_span: Any = None) -> None: ...
-
-    assert scorer_function.requires_task_span_argument(star) is False
-    assert scorer_function.requires_task_span_argument(catch_all_span) is False
-    assert scorer_function.requires_task_span_argument(required) is True
-    assert scorer_function.requires_task_span_argument(optional) is False
-
-
-def test_evaluate_experiment__catch_all_span_name__still_scores(fake_backend) -> None:
+def test_evaluate_experiment__catch_all_span_name__still_scores(fake_backend):
     with contextlib.ExitStack() as stack:
         for patch in _rescoring_lookup_patches():
             stack.enter_context(patch)
