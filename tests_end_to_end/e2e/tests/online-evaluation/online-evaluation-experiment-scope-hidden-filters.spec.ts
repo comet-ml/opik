@@ -39,11 +39,19 @@ const SEEDED_SAMPLING_RATE = 0.42;
  * what is under test is whether the list survives at all, not how many rows it
  * can hold.
  *
- * The server does not echo this object back verbatim: it strips the frontend's
- * transient `id` and adds `key: ""` where the field was absent (inert for a
- * `string` field). So the read-back is compared on the triple that identifies
- * the filter — field, operator, value — rather than by deep equality, which
- * would fail on that normalisation and say nothing about data loss.
+ * Neither end echoes this object verbatim, and they do not agree with each
+ * other, which is why the comparison below is a triple rather than a deep
+ * equality. Measured against 2.2.66: the GET drops `type` entirely and adds no
+ * `key`, so a rule seeded with the object above reads back as exactly
+ * `{ field, operator, value }`. The outbound PATCH goes the other way — the
+ * dialog rehydrates through `normalizeFilters`/`createFilter`, which re-derive
+ * `type` from the column config and attach a transient `id`.
+ *
+ * So field/operator/value is not a weakened comparison, it is the only one that
+ * holds on BOTH halves: widening it to `type` would pass on the request and
+ * then fail on the read-back against a perfectly healthy server, and `id` is
+ * never persisted at all. What the triple is asked to detect is a filter going
+ * missing or coming back changed, and it detects that on either side.
  */
 const SEEDED_FILTER: BackendFilter = {
   field: 'name',

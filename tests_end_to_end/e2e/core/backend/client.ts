@@ -996,6 +996,19 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           `cannot be read as a filter list.`,
       );
     }
+    // Same reasoning one level down. A caller reads a filter by field/operator/
+    // value, so a `null` or primitive element would either throw a bare
+    // TypeError deep inside the spec's comparison or compare unequal for a
+    // reason that has nothing to do with the behaviour under test. Failing here
+    // names the rule and the index instead.
+    filters.forEach((filter, index) => {
+      if (typeof filter !== 'object' || filter === null || Array.isArray(filter)) {
+        throw new Error(
+          `getAutomationRule: ${ruleId} returned filters[${index}] as ` +
+            `'${filter === null ? 'null' : typeof filter}' — a filter must be an object.`,
+        );
+      }
+    });
     return filters as Array<Record<string, unknown>>;
   };
 
@@ -2683,10 +2696,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             sampling_rate: args.samplingRate,
             enabled: args.enabled ?? true,
             ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
-            // Omitted rather than sent empty: `filters` is nullable on the write
-            // model, and a rule seeded with `[]` is a different starting state
-            // from one seeded with the field absent.
-            ...(args.filters?.length ? { filters: args.filters } : {}),
+            // `filters` is nullable on the write model, and a rule seeded with
+            // `[]` is a different starting state from one seeded with the field
+            // absent — so the caller's distinction is passed through rather than
+            // collapsed. Keyed on `undefined`, not on length: testing `?.length`
+            // would send an explicit `[]` as an omission and make the two
+            // starting states the one thing this comment says they are not.
+            ...(args.filters !== undefined ? { filters: args.filters } : {}),
             code: isThreadScope
               ? { metric: args.metric }
               : { metric: args.metric, arguments: args.arguments },
