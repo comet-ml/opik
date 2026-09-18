@@ -94,31 +94,21 @@ class TestGranted:
         assert consent.granted(verdict, lambda: answer) is answer
 
 
-class TestReadableList:
-    @pytest.mark.parametrize(
-        "names, expected",
-        [
-            ([], ""),
-            (["A"], "A"),
-            (["A", "B"], "A and B"),
-            (["A", "B", "C"], "A, B and C"),
-        ],
-    )
-    def test_reads_as_a_sentence(self, names, expected):
-        assert consent.readable_list(names) == expected
-
-
 class TestPrompts:
-    def test_mcp_prompt__names_what_was_found(self):
-        prompt = consent.mcp_prompt(["Claude Code", "Cursor"])
+    """Only the skill pack's one-liner is left here.
 
-        assert "Claude Code and Cursor" in prompt
-        assert "(y/N)" in prompt, "defaults to no"
+    The plain-text MCP and skills prompts went with the library path:
+    `opik.configure()` no longer offers either, so the CLI is the only thing
+    left that words these questions and it renders its own.
+    """
 
-    def test_skills_prompt__is_recommended_and_defaults_to_yes(self):
-        assert "Recommended" in consent.SKILLS_PROMPT
-        assert "(Y/n)" in consent.SKILLS_PROMPT
+    def test_skill_pack_pitch__says_what_the_pack_is_for(self):
+        assert "instrument" in consent.SKILL_PACK_PITCH
 
-    def test_skills_prompt__does_not_re_list_the_assistants(self):
-        """The server step's results table just named them."""
-        assert "Claude Code" not in consent.SKILLS_PROMPT
+    def test_skill_pack_pitch__does_not_name_the_assistants(self):
+        """The picker lists them; the pitch is about the pack."""
+        assert "Claude Code" not in consent.SKILL_PACK_PITCH
+
+    def test_the_library_prompts_are_gone(self):
+        for name in ("MCP_PROMPT", "SKILLS_PROMPT", "mcp_prompt"):
+            assert not hasattr(consent, name), name
