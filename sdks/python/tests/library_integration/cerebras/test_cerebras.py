@@ -3,6 +3,10 @@ import asyncio
 import cerebras.cloud.sdk as cerebras
 import pytest
 from cerebras.cloud.sdk.types.chat.chat_completion import (
+    ChatChunkResponse,
+    ChatChunkResponseChoice,
+    ChatChunkResponseChoiceDelta,
+    ChatChunkResponseTimeInfo,
     ChatCompletionResponse,
     ChatCompletionResponseChoice,
     ChatCompletionResponseChoiceMessage,
@@ -12,7 +16,12 @@ from cerebras.cloud.sdk.types.chat.chat_completion import (
 
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
-from opik.integrations.cerebras import track_cerebras
+from opik.integrations.cerebras import (
+    chat_completion_chunks_aggregator,
+    opik_tracker,
+    stream_patchers,
+    track_cerebras,
+)
 
 from ...testlib import (
     ANY_BUT_NONE,
@@ -160,3 +169,183 @@ def test_cerebras_chat_completions_create__error__span_and_trace_finished_gracef
     trace_tree = fake_backend.trace_trees[0]
     assert trace_tree.spans[0].error_info is not None
     assert trace_tree.spans[0].provider == "cerebras"
+
+
+def _chunk(content=None, reasoning=None, role=None, finish_reason=None):
+    return ChatChunkResponse(
+        id="c1",
+        object="chat.completion.chunk",
+        created=0,
+        model=MODEL,
+        system_fingerprint="fp_test",
+        time_info=ChatChunkResponseTimeInfo(),
+        choices=[
+            ChatChunkResponseChoice(
+                index=0,
+                finish_reason=finish_reason,
+                delta=ChatChunkResponseChoiceDelta(
+                    role=role, content=content, reasoning=reasoning
+                ),
+            )
+        ],
+    )
+
+
+def test_aggregate__reasoning_deltas__kept_alongside_content():
+    """Cerebras streams reasoning in its own delta field, unlike OpenAI."""
+    aggregated = chat_completion_chunks_aggregator.aggregate(
+        [
+            _chunk(role="assistant"),
+            _chunk(reasoning="The sky scatters "),
+            _chunk(reasoning="short wavelengths."),
+            _chunk(content="Blue."),
+            _chunk(finish_reason="stop"),
+        ]
+    )
+
+    message = aggregated.choices[0]["message"]
+    assert message["content"] == "Blue."
+    assert message["reasoning_content"] == "The sky scatters short wavelengths."
+
+
+def test_aggregate__no_reasoning_deltas__reasoning_key_absent():
+    aggregated = chat_completion_chunks_aggregator.aggregate(
+        [
+            _chunk(role="assistant"),
+            _chunk(content="Blue."),
+            _chunk(finish_reason="stop"),
+        ]
+    )
+
+    assert "reasoning_content" not in aggregated.choices[0]["message"]
+
+
+def test_extract_metadata_from_client__credentials_in_base_url__stripped():
+    """base_url reaches span metadata, so userinfo and query must not ride along."""
+    client = cerebras.Cerebras(
+        api_key="fake-api-key",
+        base_url="https://user:secret@proxy.internal:8443/openai/v1?token=abc#frag",
+    )
+
+    metadata = opik_tracker._extract_metadata_from_client(client)
+
+    assert metadata == {"base_url": "https://proxy.internal:8443/openai/v1"}
+    assert "secret" not in metadata["base_url"]
+    assert "abc" not in metadata["base_url"]
+
+
+def test_patch_sync_stream__two_streams_patched_before_iteration__each_uses_its_own_callback():
+    """The patch is installed on the class, so per-call state must live on the instance."""
+    finalized = []
+
+    def make_callback(tag):
+        def callback(
+            output,
+            error_info,
+            capture_output,
+            generators_span_to_end,
+            generators_trace_to_end,
+        ):
+            finalized.append((tag, generators_span_to_end, output))
+
+        return callback
+
+    class FakeStream(cerebras.Stream):
+        def __init__(self, items):
+            self._items = items
+
+    original = stream_patchers.original_stream_iter_method
+    # patch_sync_stream rebinds cerebras.Stream.__iter__ on the class, so the
+    # class attribute has to be restored too or later tests inherit a wrapper
+    # closed over this test's fake iterator.
+    original_class_iter = cerebras.Stream.__iter__
+    stream_patchers.original_stream_iter_method = lambda self: iter(self._items)
+    try:
+        first = FakeStream(["a1", "a2"])
+        second = FakeStream(["b1", "b2"])
+        stream_patchers.patch_sync_stream(
+            first, "SPAN_A", None, list, make_callback("A")
+        )
+        stream_patchers.patch_sync_stream(
+            second, "SPAN_B", None, list, make_callback("B")
+        )
+
+        assert list(first) == ["a1", "a2"]
+        assert list(second) == ["b1", "b2"]
+    finally:
+        stream_patchers.original_stream_iter_method = original
+        cerebras.Stream.__iter__ = original_class_iter
+
+    assert finalized == [
+        ("A", "SPAN_A", ["a1", "a2"]),
+        ("B", "SPAN_B", ["b1", "b2"]),
+    ]
+
+
+def _mock_stream(chunks):
+    """Stand in for cerebras.Stream without going near the network."""
+    stream = cerebras.Stream.__new__(cerebras.Stream)
+    stream._items = chunks
+    return stream
+
+
+def test_cerebras_chat_completions_create__stream__span_finalized_by_its_own_client(
+    fake_backend, monkeypatch
+):
+    """Two tracked clients, both streaming: each span keeps its own provider.
+
+    This is the end-to-end version of the per-instance wiring — going through
+    track_cerebras() rather than calling patch_sync_stream directly.
+    """
+    original_class_iter = cerebras.Stream.__iter__
+    original_module_iter = stream_patchers.original_stream_iter_method
+    stream_patchers.original_stream_iter_method = lambda self: iter(self._items)
+
+    try:
+        first = track_cerebras(
+            cerebras.Cerebras(api_key="fake-api-key"), provider="provider-one"
+        )
+        second = track_cerebras(
+            cerebras.Cerebras(api_key="fake-api-key"), provider="provider-two"
+        )
+
+        chunks = [
+            _chunk(role="assistant"),
+            _chunk(content="Blue."),
+            _chunk(finish_reason="stop"),
+        ]
+        monkeypatch.setattr(
+            first.chat.completions,
+            "_post",
+            lambda *args, **kwargs: _mock_stream(list(chunks)),
+        )
+        monkeypatch.setattr(
+            second.chat.completions,
+            "_post",
+            lambda *args, **kwargs: _mock_stream(list(chunks)),
+        )
+
+        messages = [{"role": "user", "content": "Why is the sky blue?"}]
+        first_stream = first.chat.completions.create(
+            model=MODEL, messages=messages, stream=True
+        )
+        second_stream = second.chat.completions.create(
+            model=MODEL, messages=messages, stream=True
+        )
+
+        # Consume the first client's stream last: the finalisation callback is a
+        # bound method of that client's decorator, which carries `provider`. If
+        # it came from the class-level closure, this span is finalised by the
+        # second client's decorator and reports provider-two.
+        assert [c for c in second_stream] == chunks
+        assert [c for c in first_stream] == chunks
+
+        opik.flush_tracker()
+    finally:
+        stream_patchers.original_stream_iter_method = original_module_iter
+        cerebras.Stream.__iter__ = original_class_iter
+
+    providers = sorted(
+        span.provider for trace in fake_backend.trace_trees for span in trace.spans
+    )
+    assert providers == ["provider-one", "provider-two"]
