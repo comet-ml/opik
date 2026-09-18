@@ -275,6 +275,19 @@ describe("@track with non-Error thrown values", () => {
 
   const NOT_THROWN = Symbol("call did not throw");
 
+  // `super(message)` would create an own `message` data property that shadows a prototype
+  // getter, so the throwing accessor has to sit on the instance itself.
+  const throwingMessageError = () => {
+    const error = new Error("original message");
+    error.name = "ClassyBoom";
+    Object.defineProperty(error, "message", {
+      get(): never {
+        throw new Error("message getter exploded");
+      },
+    });
+    return error;
+  };
+
   beforeEach(() => {
     trackOpikClient = getTrackOpikClient();
     createTracesSpy = vi
@@ -369,15 +382,39 @@ describe("@track with non-Error thrown values", () => {
     }
   );
 
+  it.each([
+    ["an object with no usable toString", Object.create(null)],
+    ["a throwing toString", { toString: () => {
+        throw new Error("toString exploded");
+      } }],
+    ["an Error whose message getter throws", throwingMessageError()],
+  ] as [string, unknown][])(
+    "still hands back %s and closes both entities",
+    async (_label, thrown) => {
+      const { caught, trace, span } = await failRootSpan(thrown, "sync");
+
+      expect(caught).toBe(thrown);
+      expect(span?.endTime).toBeInstanceOf(Date);
+      expect(trace?.endTime).toBeInstanceOf(Date);
+      expect(typeof trace?.errorInfo?.message).toBe("string");
+      expect(trace?.errorInfo?.message).not.toBe("");
+      expect(typeof trace?.errorInfo?.exceptionType).toBe("string");
+      expect(trace?.errorInfo).toEqual(span?.errorInfo);
+    }
+  );
+
   it("keeps reporting a real Error the way it did before", async () => {
-    const failure = new Error("real-error");
+    const failure = new TypeError("bad-arg");
+    failure.name = "CustomTypeError";
     const { caught, trace, span } = await failRootSpan(failure, "sync");
 
     expect(caught).toBe(failure);
     expect(span?.errorInfo).toMatchObject({
-      message: "real-error",
-      exceptionType: "Error",
+      message: "bad-arg",
+      exceptionType: "CustomTypeError",
     });
+    expect((span?.errorInfo?.traceback as string).length).toBeGreaterThan(0);
+    expect(span?.errorInfo?.traceback).toContain("bad-arg");
     expect(trace?.errorInfo).toEqual(span?.errorInfo);
     expect(trace?.endTime).toBeInstanceOf(Date);
   });

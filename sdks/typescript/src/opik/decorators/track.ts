@@ -152,6 +152,34 @@ function logSuccess({
   }
 }
 
+/**
+ * Turns whatever was thrown into the `ErrorInfo` the span and trace report. Nothing in here may
+ * propagate: this runs inside `executeTrack`'s catch, so an exception would replace the caller's
+ * own failure and skip both `end()` calls. Reading `message`/`name`/`stack` off a non-`Error` does
+ * that for `null`/`undefined`, and `String()` itself throws for a value that cannot be converted
+ * to a primitive (`Object.create(null)`) or whose `toString` throws.
+ */
+function toErrorInfo(error: unknown): {
+  message: string;
+  exceptionType: string;
+  traceback: string;
+} {
+  try {
+    const err = error instanceof Error ? error : new Error(String(error));
+    return {
+      message: err.message,
+      exceptionType: err.name,
+      traceback: err.stack ?? "",
+    };
+  } catch {
+    return {
+      message: "<thrown value could not be described>",
+      exceptionType: "Error",
+      traceback: "",
+    };
+  }
+}
+
 function logError({
   span,
   error,
@@ -161,29 +189,13 @@ function logError({
   error: any;
   trace?: Trace;
 }) {
+  const errorInfo = toErrorInfo(error);
+
   logger.error("Recording execution error:", {
     spanId: span.data.id,
     traceId: trace?.data.id,
-    error:
-      error instanceof Error
-        ? {
-            name: error.name,
-            message: error.message,
-            stack: error.stack,
-          }
-        : error,
+    error: error instanceof Error ? errorInfo : error,
   });
-
-  // Anything can be thrown in JavaScript, but `ErrorInfo` is built from `message`, `name` and
-  // `stack`. Coerce once — like `EvaluationEngine` does — instead of reading those properties off
-  // the thrown value: for `null`/`undefined` that read threw inside this handler, which replaced
-  // the caller's error and left the trace open.
-  const err = error instanceof Error ? error : new Error(String(error));
-  const errorInfo = {
-    message: err.message,
-    exceptionType: err.name,
-    traceback: err.stack ?? "",
-  };
 
   span.update({ errorInfo });
   span.end();
