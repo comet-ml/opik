@@ -11,16 +11,14 @@ def extract_current_langgraph_span_data(
     runnable_config: Dict[str, Any],
 ) -> Optional[span.SpanData]:
     """
-    Extract current span data for async LangGraph nodes.
+    Extract current span data from a LangGraph node config, for explicit trace propagation.
 
-    This helper function is specifically designed for async LangGraph execution using `ainvoke()`.
-    Due to LangChain framework limitations in async scenarios, the execution context is not
-    automatically shared between callbacks (like OpikTracer) and node code. This function
-    extracts the current span data from the LangGraph config, allowing you to propagate
-    trace context to @track-decorated functions via distributed headers.
-
-    For synchronous execution using `invoke()`, this function is not needed as the context
-    is automatically shared.
+    With `OpikTracer.run_inline = True`, LangChain runs the tracer's callbacks in the
+    calling task, so under `ainvoke()` the node code inherits the current trace and span
+    as it already does under `invoke()`, and @track-decorated functions nest automatically.
+    This helper is kept for callers that propagate the trace context explicitly via
+    distributed headers, as versions before the fix for comet-ml/opik#3175 required for
+    async execution.
 
     Args:
         runnable_config: The config dictionary automatically passed to LangGraph node functions,
@@ -45,7 +43,7 @@ def extract_current_langgraph_span_data(
             span_data = extract_current_langgraph_span_data(config)
 
             if span_data is not None:
-                # Propagate trace context to tracked function
+                # Pass the trace context explicitly; without headers the call nests anyway
                 result = process_data(
                     state["value"],
                     opik_distributed_trace_headers=span_data.get_distributed_trace_headers()
@@ -63,7 +61,7 @@ def extract_current_langgraph_span_data(
         app = graph.compile()
         opik_tracer = OpikTracer()
 
-        # Asynchronous execution requires explicit trace context propagation
+        # Asynchronous execution with explicit trace context propagation (optional)
         result = await app.ainvoke({"value": 21}, config={"callbacks": [opik_tracer]})
         ```
     """
