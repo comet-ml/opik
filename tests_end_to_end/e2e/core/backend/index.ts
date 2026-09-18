@@ -20,6 +20,8 @@ export {
   type AttachmentRef,
   type ProjectStatsRef,
   type ExperimentRefDetail,
+  type ExecutePromptSeed,
+  type ExecuteExperimentsResult,
   type TestSuiteRef as BackendTestSuiteRef,
   type TestSuiteItemRef,
   type FeedbackScoreRef,

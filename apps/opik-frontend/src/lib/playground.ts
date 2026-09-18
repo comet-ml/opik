@@ -245,3 +245,29 @@ export const parseCompletionOutput = (run: RunStreamingReturn) => {
     "The AI provider returned an empty response. Please, try again."
   );
 };
+
+export const createCompletionAnnouncer = (
+  expected: number,
+  announce: () => void,
+) => {
+  let registered = 0;
+  let hasFinishedLogging = false;
+  let hasAnnounced = false;
+
+  const fire = () => {
+    if (!hasFinishedLogging || registered < expected || hasAnnounced) return;
+    hasAnnounced = true;
+    announce();
+  };
+
+  return {
+    experimentsRegistered: (count: number) => {
+      registered = count;
+      fire();
+    },
+    loggingFinished: () => {
+      hasFinishedLogging = true;
+      fire();
+    },
+  };
+};

@@ -3,6 +3,7 @@ import { LogProcessor } from "@/api/playground/createLogPlaygroundProcessor";
 import { DatasetItem } from "@/types/datasets";
 import { PlaygroundPromptType } from "@/types/playground";
 import usePlaygroundStore, {
+  getExperimentNamesForPrompts,
   usePromptIds,
   usePromptMap,
   useUpdateOutput,
@@ -34,6 +35,7 @@ import { getTextFromMessageContent } from "@/lib/llm";
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
   prompt: PlaygroundPromptType;
+  experimentName?: string;
 }
 
 const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
@@ -177,23 +179,27 @@ const usePromptDatasetItemCombination = ({
   const promptMap = usePromptMap();
 
   const createCombinations = useCallback((): DatasetItemPromptCombination[] => {
+    const experimentNames = getExperimentNamesForPrompts(promptIds);
+
     if (datasetItems.length > 0 && promptIds.length > 0) {
       return datasetItems.flatMap((di) =>
         promptIds.map((promptId) => ({
           datasetItem: di,
           prompt: promptMap[promptId],
+          experimentName: experimentNames[promptId],
         })),
       );
     }
 
     return promptIds.map((promptId) => ({
       prompt: promptMap[promptId],
+      experimentName: experimentNames[promptId],
     }));
   }, [datasetItems, promptMap, promptIds]);
 
   const processCombination = useCallback(
     async (
-      { datasetItem, prompt }: DatasetItemPromptCombination,
+      { datasetItem, prompt, experimentName }: DatasetItemPromptCombination,
       logProcessor: LogProcessor,
     ) => {
       if (!usePlaygroundStore.getState().isRunningMap[prompt.id]) {
@@ -271,6 +277,7 @@ const usePromptDatasetItemCombination = ({
           providerMessages,
           promptLibraryVersions,
           promptLibraryMetadata,
+          experimentName,
           configs: prompt.configs,
           model: prompt.model,
           provider: prompt.provider,
