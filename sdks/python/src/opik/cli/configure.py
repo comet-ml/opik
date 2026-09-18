@@ -70,10 +70,11 @@ def _setup_assistants(
         # longer silently takes whichever client happened to be listed first.
         assume_confirmed=mcp_verdict.reason is consent.Reason.REQUESTED,
     )
-    # The server's decision is only final once the picker has been through:
-    # reaching it counts as a request, choosing nothing in it is the refusal.
-    if outcome.mcp_declined:
-        mcp_decision = consent.Reason.DECLINED.value
+    # `mcp_decision` answers the permission question and nothing else. Folding a
+    # skipped picker into it relabelled those runs as never having accepted,
+    # which hid the one drop the funnel exists to show: said yes, then chose no
+    # client. That drop is `clients_written == 0` after `requested`, and
+    # `mcp_declined` says whether it was deliberate.
     # `skills_decision` is left as `setup` recorded it: it did the asking.
     return outcome._replace(
         detected=len(detected),
@@ -498,6 +499,9 @@ def configure(
         # counts — the two together say what was on offer and what was taken.
         clients_detected=",".join(sorted(outcome.detected_keys)),
         clients_registered=",".join(sorted(outcome.registered_clients)),
+        # Why a run that accepted still wrote nothing: the user chose no client,
+        # rather than the installer failing or being blocked before it asked.
+        picker_skipped=outcome.mcp_declined,
         # Carried onto the result too: the entry event has it, and a funnel whose
         # steps filter on different things is not measuring one population.
         interactive=interactive,

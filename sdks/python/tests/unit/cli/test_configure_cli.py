@@ -138,10 +138,18 @@ class TestAssistantConfirmation:
 
         assert setup_calls[0]["assume_confirmed"] is False
 
-    def test_declining_in_the_picker__is_reported_as_declined(self):
-        _, _, outcome = self._run(declined=True)
+    def test_skipping_the_picker__is_not_reported_as_declining_permission(self):
+        """The two are different answers and the funnel needs both.
 
-        assert outcome.mcp_decision == "declined"
+        Folding a skipped picker into `mcp_decision` relabelled those runs as
+        never having accepted, which hid the one drop the funnel exists to
+        show: said yes, then chose no client.
+        """
+        _, _, outcome = self._run(answer=True, declined=True)
+
+        assert outcome.mcp_decision == "requested", "they did give permission"
+        assert outcome.clients == 0, "and still registered nothing"
+        assert outcome.mcp_declined is True, "deliberately, not a failure"
 
     def test_no_flags__still_offers_the_skill_pack(self):
         """The pack is a separate question: it needs no MCP server."""
