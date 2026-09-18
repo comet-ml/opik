@@ -489,6 +489,90 @@ class SpansMigrationPreconditionLintTest {
                     .contains("must pair up");
         }
 
+        static Stream<Arguments> divergentBranches() {
+            return Stream.of(
+                    Arguments.of("different index names",
+                            """
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ADD INDEX IF NOT EXISTS idx_a name TYPE set(0) GRANULARITY 1;
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ADD INDEX IF NOT EXISTS idx_a name TYPE set(0) GRANULARITY 1;
+                                    """,
+                            """
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local ADD INDEX IF NOT EXISTS idx_b name TYPE set(0) GRANULARITY 1;
+                                    """),
+                    Arguments.of("different column names",
+                            """
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ADD COLUMN IF NOT EXISTS foo String;
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ADD COLUMN IF NOT EXISTS foo String;
+                                    """,
+                            """
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local ADD COLUMN IF NOT EXISTS bar String;
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ADD COLUMN IF NOT EXISTS bar String;
+                                    """),
+                    Arguments.of("a column the post-cutover branch forgets entirely",
+                            """
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ADD COLUMN IF NOT EXISTS foo String;
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ADD COLUMN IF NOT EXISTS bar String;
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ADD COLUMN IF NOT EXISTS foo String;
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ADD COLUMN IF NOT EXISTS bar String;
+                                    """,
+                            """
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local ADD COLUMN IF NOT EXISTS foo String;
+                                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ADD COLUMN IF NOT EXISTS foo String;
+                                    """));
+        }
+
+        /**
+         * Both branches guarded, paired and keyed on the right shard, yet applying different changes. No parity gate
+         * can see this: the pre-cutover gate has no shard so only ever runs the {@code expectedResult:0} branch, and
+         * the post-cutover gate splices the cutover in first so only ever runs the other. The fleet ends up split —
+         * an install that migrated before cutting over carries one object, one that cut over first carries the other.
+         */
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("divergentBranches")
+        void rejectsBranchesThatApplyDifferentChanges(String description, String preBody, String postBody) {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_change_pre_cutover
+                    %s
+                    %s
+                    --changeset opik:000200_change_post_cutover
+                    %s
+                    %s
+                    """.formatted(GUARD_PRE, preBody, GUARD_POST, postBody);
+
+            assertThat(LINT.problems("000200_change.sql", sql))
+                    .as("%s must be rejected", description)
+                    .singleElement(STRING)
+                    .contains("must apply the same change");
+        }
+
+        /**
+         * The legitimate asymmetry the rule must not flag: a storage-only index reaches both tables pre-cutover but the
+         * shard alone afterwards, and a read-facing column reaches the shadow pre-cutover and the wrapper after. The
+         * tables named differ on purpose; the objects do not.
+         */
+        @Test
+        void acceptsBranchesThatNameTheSameObjectsOnDifferentTables() {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_change_pre_cutover
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ADD COLUMN IF NOT EXISTS foo String;
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ADD INDEX IF NOT EXISTS idx_foo foo TYPE set(0) GRANULARITY 1;
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ADD COLUMN IF NOT EXISTS foo String;
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 ADD INDEX IF NOT EXISTS idx_foo foo TYPE set(0) GRANULARITY 1;
+
+                    --changeset opik:000200_change_post_cutover
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local ADD COLUMN IF NOT EXISTS foo String;
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local ADD INDEX IF NOT EXISTS idx_foo foo TYPE set(0) GRANULARITY 1;
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ADD COLUMN IF NOT EXISTS foo String;
+                    """
+                    .formatted(GUARD_PRE, GUARD_POST);
+
+            assertThat(LINT.problems("000200_change.sql", sql)).isEmpty();
+        }
+
         /**
          * A block-commented mutation is not a mutation. Rejecting one would be a false positive — the kind that teaches
          * people the lint is noise and to work around it.
