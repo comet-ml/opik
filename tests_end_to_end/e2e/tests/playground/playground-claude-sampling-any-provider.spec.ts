@@ -1,3 +1,4 @@
+import type { Request } from '@playwright/test';
 import { test, expect } from '@e2e/fixtures';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 
@@ -44,13 +45,15 @@ const CLAUDE_MODEL = 'claude-opus-4-6';
 const NON_CLAUDE_MODEL = 'mistral-large-2411';
 
 /**
- * A Claude with NO `supportsSamplingParams` row in `ANTHROPIC_MODEL_CAPABILITIES`.
+ * A Claude that `ANTHROPIC_MODEL_CAPABILITIES` does NOT declare sampling-capable.
  *
- * The map's default is "takes neither", so a recognised Claude that is not listed as
- * sampling-capable renders no sampling control at all — a third outcome, distinct from both
- * the exclusive choice above and the two independent sliders a non-Claude gets. That
- * three-way split is the whole of the model-level classification, and `claude-sonnet-5` is
- * the row that exercises the branch `supportsSamplingParams` returns `false` from.
+ * Precisely: `claude-sonnet-5` HAS a row in that map — it declares `thinkingEffortOptions` —
+ * but the row carries no `supportsSamplingParams` key, and an undeclared flag falls through to
+ * the map's "takes neither" default rather than to the permissive branch an unrecognised id
+ * gets. So the panel renders no sampling control at all — a third outcome, distinct from both
+ * the exclusive choice above and the two independent sliders a non-Claude gets. That three-way
+ * split is the whole of the model-level classification, and this is the model that exercises
+ * the `false` branch of `supportsSamplingParams`.
  */
 const CLAUDE_MODEL_WITHOUT_SAMPLING = 'claude-sonnet-5';
 
@@ -67,6 +70,33 @@ const CLAUDE_MODEL_WITH_SAMPLING = 'claude-sonnet-4-6';
 /** The completion proxy, on both the `/opik/api` and bare `/api` mounts. */
 function isChatCompletion(url: string): boolean {
   return new URL(url).pathname.endsWith('/v1/private/chat/completions');
+}
+
+/**
+ * Wait until the backend is FINISHED with a run, not merely until the browser started one.
+ *
+ * `page.waitForRequest` resolves the moment the POST is dispatched, which is strictly before
+ * the backend has opened — or given up on — the upstream connection, and before React has even
+ * committed `isRunning`. So the Run button is still the pre-run one at that point, and
+ * `waitForRunIdle()` on its own can return without having waited for anything: it cannot tell
+ * "the run has not started yet" from "the run is over".
+ *
+ * The response stream closing is the signal that does distinguish them, and it is the one both
+ * callers actually want — a second run needs the first to be over, and the provider-key fixture
+ * must not delete a workspace-global gateway the backend is still resolving.
+ *
+ * Waiting for the run to START instead (Run button hidden, then visible again) would be worse:
+ * over a gateway that refuses the connection the running state can be shorter than a single
+ * poll interval, so requiring it would hang a perfectly healthy run until the timeout.
+ *
+ * Bounded by the test timeout; `response()` is null only if the request never reached the
+ * backend at all, which every assertion above it would already have failed on.
+ */
+async function settleRun(request: Request): Promise<void> {
+  await test.step('wait for the backend to finish with the run', async () => {
+    const response = await request.response();
+    await response?.finished();
+  });
 }
 
 test.describe(
@@ -220,6 +250,7 @@ test.describe(
         const temperatureDisplayed = await test.step(
           'Switching back to Temperature swaps the live control again',
           async () => {
+            await settleRun(topPRequest);
             await playground.waitForRunIdle();
             await playground.openModelParameters(0);
             await playground.samplingOption('Temperature').click();
@@ -269,7 +300,7 @@ test.describe(
         // workspace-global, so a teardown that lands while the backend is still resolving
         // this one leaves a confusing error in the server log — nothing this spec asserts
         // on, but nothing worth leaving behind either.
-        await playground.waitForRunIdle();
+        await settleRun(temperatureRequest);
       },
     );
   },
@@ -396,8 +427,14 @@ test.describe(
       },
     );
 
+    // The title front-loads what distinguishes it from the test above, rather than sharing
+    // its opening clause: `testNamespace` slugs the title and truncates at 40 characters, and
+    // it is what names this run's workspace-global gateway. Two titles agreeing for their
+    // first 40 characters would put both tests on ONE provider key, each deleting the other's
+    // at teardown — and the identical prefix the two already shared left only three
+    // characters in hand.
     test(
-      'A Claude with no sampling-params row sends neither temperature nor top_p, while a non-Claude on the same gateway sends both',
+      'Neither temperature nor top_p is sent for a Claude with no sampling-params row, while a non-Claude on the same gateway sends both',
       { tag: ['@cap:playground.configure-model-settings'] },
       async ({ project, providerKeys, testNamespace, page }) => {
         const providerName = `${testNamespace}-claude-gw`;
@@ -453,6 +490,7 @@ test.describe(
         const nonClaudeRequest = await test.step(
           'Switch to the non-Claude model on the same gateway and run again',
           async () => {
+            await settleRun(claudeRequest);
             await playground.waitForRunIdle();
             await playground.selectModelFromProvider(0, providerName, NON_CLAUDE_MODEL);
 
@@ -482,7 +520,8 @@ test.describe(
           );
         });
 
-        await playground.waitForRunIdle();
+        // As above: let the backend finish with the gateway before teardown deletes it.
+        await settleRun(nonClaudeRequest);
       },
     );
 
@@ -585,7 +624,8 @@ test.describe(
           ).not.toContain('temperature');
         });
 
-        await playground.waitForRunIdle();
+        // As above: let the backend finish with the gateway before teardown deletes it.
+        await settleRun(topPRequest);
       },
     );
   },

@@ -339,13 +339,24 @@ export class PlaygroundPage {
   }
 
   /**
-   * Wait until no run is in flight.
+   * Wait until the header is showing Run rather than "Stop all".
    *
-   * While prompts are running the header replaces Run with a "Stop all" button, so a spec
-   * that runs twice has to let the first run finish before the second click has anything to
-   * hit. The Run button's return is that signal: a run over an unreachable gateway ends in
-   * milliseconds on a refused connection, but "ended" is still a state to wait on rather than
-   * a duration to sleep through.
+   * While prompts are running the header replaces Run with a "Stop all" button that carries
+   * neither the testid nor the `data-mode`, so the Run button's return is the UI's own
+   * statement that nothing is in flight — a state to wait on rather than a duration to sleep
+   * through.
+   *
+   * It is a ONE-SIDED signal, and callers must not read it as "the run is over". The Run
+   * button is equally present in the moment BEFORE a click commits: `page.waitForRequest`
+   * resolves when the POST is dispatched, which is ahead of React committing `isRunning`, so
+   * calling this immediately afterwards can return having waited for nothing. Establish that
+   * the run actually ended first — awaiting the captured request's response to `finished()`
+   * is the deterministic way, and `settleRun` in playground-claude-sampling-any-provider.spec.ts
+   * is the worked example — and use this only to confirm the UI has caught up.
+   *
+   * Waiting for the running state here instead (hidden, then visible again) would be worse: a
+   * run over a gateway that refuses the connection can end inside a single poll interval, so
+   * requiring it would hang a healthy run until the timeout.
    */
   async waitForRunIdle(timeoutMs = 60_000): Promise<void> {
     return test.step('wait for the run to finish', async () => {

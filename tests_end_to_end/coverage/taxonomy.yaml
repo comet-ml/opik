@@ -459,12 +459,14 @@ areas:
       #
       # MERGE NOTE: main and this branch both insert into this area, so expect a conflict in
       # two places. Resolve BOTH by union, never by picking a side:
-      #   - `specs:` is a plain union — main contributes playground-model-parameters.spec.ts
-      #     and playground-virtualized-grid.spec.ts, this branch contributes
-      #     playground-claude-sampling-any-provider.spec.ts. Keep all three, sorted.
-      #     They are deliberately absent from the list below: neither file exists on this
-      #     branch, and listing a spec that is not here would point the coverage builder at
-      #     a missing file.
+      #   - `specs:` is a plain union — keep every entry main has PLUS this branch's
+      #     playground-claude-sampling-any-provider.spec.ts, sorted. Take main's side of the
+      #     list wholesale rather than the enumeration below, which will have rotted: at the
+      #     time of writing main contributed playground-metric-selection.spec.ts (#8349),
+      #     playground-model-parameters.spec.ts and playground-virtualized-grid.spec.ts
+      #     (#8312/#8314), and more may have landed since. They are deliberately absent from
+      #     the list below: none of those files exists on this branch, and listing a spec that
+      #     is not here would point the coverage builder at a missing file.
       #   - this `note:` is already unioned; take it as-is.
       #
       # The Custom LLM half grew a second describe block in a later pass, once #8326's HEAD
