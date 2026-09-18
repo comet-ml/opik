@@ -11,6 +11,7 @@ import {
   AGENT_INSIGHTS_ISSUES_KEY,
   AGENT_INSIGHTS_JOB_KEY,
   OLLIE_CREDITS_KEY,
+  TRACES_KEY,
 } from "@/api/api";
 import { formatDate } from "@/lib/date";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
@@ -44,6 +45,7 @@ import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 import useColumnsOverflow from "@/v2/pages/SignalsPage/useColumnsOverflow";
 
 const RUN_POLL_INTERVAL_MS = 8000;
+const ELIGIBILITY_POLL_INTERVAL_MS = 30_000;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const STALE_AFTER_MS = 3 * DAY_MS;
@@ -232,6 +234,15 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
     }, RUN_POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [showRunning, queryClient]);
+
+  useEffect(() => {
+    if (!awaitsAutoFirstRun) return;
+    const id = window.setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
+      queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_JOB_KEY] });
+    }, ELIGIBILITY_POLL_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [awaitsAutoFirstRun, queryClient]);
 
   useEffect(() => {
     if (!isRunning) return;
