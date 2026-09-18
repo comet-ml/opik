@@ -253,6 +253,7 @@ areas:
     specs:
       - trace-explore/mcp-hint.spec.ts
       - trace-explore/span-cached-token-cost.spec.ts
+      - trace-explore/span-cost-chart.spec.ts
       - trace-explore/span-cost-resolution.spec.ts
       - trace-explore/span-kpi-cards.spec.ts
       - trace-explore/spans-view-pagination.spec.ts
@@ -273,7 +274,7 @@ areas:
       span-model-cost-tokens: { covered: true,  tier: t2-cuj, note: "model/tokens/cost in the span panel, plus server-side price resolution: spans logged with usage and no total_cost, asserted at the API and in the panel, with two undated look-alike model ids as negative controls; also reasoning-token billing on perplexity/sonar-deep-research (the only shipped-price-table model that can observe it) — the reasoning rate applied and subtracted from the standard-output bucket, the bare OTel usage key as a fallback for the original_usage one, and both clamps; also a non-token price key (mistral/voxtral-mini-tts-latest, priced per input character) billed from usage.input_characters, against an identical span carrying the same token counts and no character count as the negative control; also the cache-read branch of resolveCalculator, as two with/without-cached-tokens pairs — one on a model that publishes no cache_read rate (gpt-5.5-pro, re-priced in 2.2.60), where the pair must price identically because every cached token is billed at the full input rate, and one on a model that does (gpt-4.1), where the discount must be exactly the rate difference; asserted at the API and rendered in the panel" }
       trace-tag-add-remove:   { covered: true,  tier: t2-cuj }
       manual-feedback-score:  { covered: true,  tier: t2-cuj }
-      toggle-spans-view:      { covered: true,  tier: t2-cuj, note: "the Spans toggle and paging the table it renders: 130 seeded spans read back as an exact set through offset paging, through the /spans/search cursor and through the rendered table, plus a span whose UUIDv7 id embeds mid-2200 used as the cursor. Also the four KPI cards above the Spans table — count, error rate, avg duration and total cost — and their period-over-period deltas, asserted against the kpi-cards read for both periods" }
+      toggle-spans-view:      { covered: true,  tier: t2-cuj, note: "the Spans toggle and paging the table it renders: 130 seeded spans read back as an exact set through offset paging, through the /spans/search cursor and through the rendered table, plus a span whose UUIDv7 id embeds mid-2200 used as the cursor. Also the four KPI cards above the Spans table — count, error rate, avg duration and total cost — and their period-over-period deltas, asserted against the kpi-cards read for both periods. Also the chart BELOW those cards: selecting Total cost must read SPAN_COST and plot a `span_cost` series bucketed on each span's own time, not trace-level COST — asserted against a seed whose span-time and trace-time spend are mirror images of one identical total, so a chart that agrees with the card above it can still be the wrong series" }
       filter-traces:          { covered: true,  tier: t2-cuj }
       mcp-hint-on-trace-error: { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
       configure-columns:      { covered: false }
@@ -338,6 +339,7 @@ areas:
       - trace-explore/thread-evaluation.spec.ts
       - trace-explore/thread-id-prefilter.spec.ts
       - trace-explore/thread-logging-smoke.spec.ts
+      - trace-explore/thread-stats-start-time.spec.ts
     capabilities:
       list-threads:            { covered: true,  tier: t1-smoke }
       thread-message-count:    { covered: true,  tier: t1-smoke }
@@ -345,7 +347,7 @@ areas:
       turn-order-io:           { covered: true,  tier: t1-smoke }
       thread-feedback-score:   { covered: true,  tier: t2-cuj }
       thread-actions-panel:    { covered: false }
-      thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics; also the thread panel header's duration, asserted at both ends of formatDuration(_, false) — a 3_615_300 ms thread (float remainder 15.300000000000182) rendering as '1h 15.3s', and a 5 ms thread keeping '0.005s'" }
+      thread-level-metrics:    { covered: true,  tier: t2-cuj, note: "conversational metrics; also the thread panel header's duration, asserted at both ends of formatDuration(_, false) — a 3_615_300 ms thread (float remainder 15.300000000000182) rendering as '1h 15.3s', and a 5 ms thread keeping '0.005s'. Also the Threads tab's metrics summary, against threads whose traces ran days before ingestion minted their trace_threads rows: thread cost and thread count bucketed on the thread's earliest trace start rather than on that row's id (a two-day thread's whole cost collapsing into its start bucket, and today — where the rows were really minted — carrying nothing), the chart reading THREAD_COST and plotting `thread_cost` rather than trace-level COST, and the KPI cards putting a thread whose traces ran ten days ago in the previous period" }
 
     visual:
       logs-threads-view:   { covered: true,  state: default, spec: "visual-comparison.spec.ts 03" }

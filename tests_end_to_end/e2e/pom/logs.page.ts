@@ -265,13 +265,42 @@ export class LogsPage {
     });
   }
 
-  /** Open Logs with the Threads tab active for the given project. */
-  async gotoThreads(projectId: string): Promise<void> {
+  /**
+   * Select one of the metrics cards above the table, which is also what chooses
+   * the series the chart below them draws (`MetricsSummary`).
+   *
+   * `type` is the KPI metric key — `count`, `errors`, `avg_duration`,
+   * `total_cost`. The card is a plain div with a click handler and no pressed
+   * state in the accessibility tree, so there is nothing to wait on here: the
+   * observable effect is the chart's own metrics request, which a caller sets a
+   * `waitForResponse` on before calling this.
+   */
+  async selectMetricsCard(type: string): Promise<void> {
+    return test.step(`Select the "${type}" metrics card`, async () => {
+      const card = this.page.getByTestId(`metrics-card-${type}`);
+      // Rather than `.first()`: two cards answering to one key would mean the
+      // click below lands on whichever rendered first, silently.
+      await expect(card, `exactly one "${type}" metrics card`).toHaveCount(1);
+      await card.click();
+    });
+  }
+
+  /**
+   * Open Logs with the Threads tab active for the given project.
+   *
+   * `timeRange` is the page's own `time_range` query param, shared with the
+   * Traces/Spans tab (`DEFAULT_DATE_URL_KEY`). It is also persisted in
+   * localStorage, so a spec that depends on the window must state it rather
+   * than inherit whatever the profile last stored.
+   */
+  async gotoThreads(projectId: string, opts: { timeRange?: string } = {}): Promise<void> {
     return test.step(`Open Logs (Threads) for project ${projectId}`, async () => {
       this.projectId = projectId;
       const env = loadEnvConfig();
+      const params = new URLSearchParams({ logsType: 'threads' });
+      if (opts.timeRange !== undefined) params.set('time_range', opts.timeRange);
       await this.page.goto(
-        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?logsType=threads`,
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?${params}`,
       );
     });
   }
