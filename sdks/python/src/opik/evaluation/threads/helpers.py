@@ -14,8 +14,6 @@ def log_feedback_scores(
     client: threads_client.ThreadsClient,
 ) -> None:
     for result in results:
-        # Failed scores upload at their recorded 0.0 with the error in
-        # ``reason`` so thread-level averages cannot silently drop crashes (#8134).
         feedback_scores = [
             BatchFeedbackScoreDict(
                 id=result.thread_id,
@@ -24,6 +22,7 @@ def log_feedback_scores(
                 reason=score.reason,
             )
             for score in result.scores
+            if not score.scoring_failed
         ]
         client.log_threads_feedback_scores(
             scores=feedback_scores,
