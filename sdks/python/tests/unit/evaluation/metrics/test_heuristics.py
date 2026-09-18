@@ -1041,6 +1041,20 @@ def test_readability__language__changes_real_textstat_result_without_warning():
     )
 
 
+def test_readability__unsupported_language__raises_named_metric_error():
+    metric = Readability(language="xx", track=False)
+
+    with pytest.raises(MetricComputationError, match="Unsupported language 'xx'"):
+        metric.score("This is a simple sentence. Here is another one.")
+
+    # The bad locale must not leak into later metrics in the same process.
+    result = Readability(language="en_US", track=False).score(
+        "This is a simple sentence. Here is another one."
+    )
+    assert 0.0 <= result.value <= 1.0
+    assert not result.scoring_failed
+
+
 def test_readability__concurrent_metrics_with_different_languages__each_scores_with_own_locale():
     ease_per_lang = {"en_US": 60.0, "de_DE": 30.0}
     arrived = {lang: threading.Event() for lang in ease_per_lang}

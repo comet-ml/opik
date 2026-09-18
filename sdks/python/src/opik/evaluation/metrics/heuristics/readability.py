@@ -34,7 +34,9 @@ class Readability(BaseMetric):
         project_name: Optional tracking project name.
         min_grade: Inclusive lower bound for the acceptable grade.
         max_grade: Inclusive upper bound for the acceptable grade.
-        language: Locale forwarded to ``textstat`` when counting syllables.
+        language: ``textstat`` locale (e.g. ``"en_US"``, ``"de_DE"``) applied to the
+            whole computation: syllable counting and both Flesch formulas. A locale
+            ``textstat`` does not know makes ``score`` raise ``MetricComputationError``.
         textstat_module: Optional ``textstat``-compatible module for dependency
             injection (mainly used in tests).
         enforce_bounds: When ``True`` the metric returns ``1.0`` if the grade lies
@@ -96,9 +98,17 @@ class Readability(BaseMetric):
                     "Unable to parse text for readability metrics."
                 )
 
-            syllable_count = self._textstat.syllable_count(cleaned)
-            reading_ease = float(self._textstat.flesch_reading_ease(cleaned))
-            fk_grade = float(self._textstat.flesch_kincaid_grade(cleaned))
+            try:
+                syllable_count = self._textstat.syllable_count(cleaned)
+                reading_ease = float(self._textstat.flesch_reading_ease(cleaned))
+                fk_grade = float(self._textstat.flesch_kincaid_grade(cleaned))
+            except KeyError as exc:
+                # `set_lang` does not validate; textstat only fails on the first
+                # locale-dependent call, with a bare `KeyError: None`. Name the cause.
+                raise MetricComputationError(
+                    f"Unsupported language {self._language!r} for textstat "
+                    "(Readability metric)."
+                ) from exc
 
         words_per_sentence = word_count / sentence_count
         syllables_per_word = syllable_count / word_count if word_count else 0.0
