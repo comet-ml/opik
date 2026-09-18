@@ -31,7 +31,7 @@ from opik.message_processing.batching import sequence_splitter
 from opik import httpx_client, id_helpers, semantic_version
 import opik.exceptions as exceptions
 import opik.config as config
-from .. import constants
+from .. import constants, streaming_upload
 from . import (
     dataset_item,
     identifiers,
@@ -849,9 +849,9 @@ class Dataset(DatasetExportOperations):
 
     def _open_send_pool(
         self, num_threads: int, gzip_level: Optional[int]
-    ) -> streaming_writer.BoundedSendPool:
+    ) -> streaming_upload.BoundedSendPool:
         """Upload sink for one insert. Split out so the worker count is observable."""
-        return streaming_writer.BoundedSendPool(
+        return streaming_upload.BoundedSendPool(
             send=self._send_prepared_body,
             num_threads=num_threads,
             gzip_level=gzip_level,

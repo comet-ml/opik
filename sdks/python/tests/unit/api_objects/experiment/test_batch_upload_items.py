@@ -179,13 +179,13 @@ def captured_worker_counts(monkeypatch: Any) -> List[int]:
     says nothing about the cap in exactly the case where the cap collapses to one.
     """
     counts: List[int] = []
-    original = experiment_module.streaming_writer.BoundedSendPool
+    original = experiment_module.streaming_upload.BoundedSendPool
 
     def spy(**kwargs: Any) -> Any:
         counts.append(kwargs["num_threads"])
         return original(**kwargs)
 
-    monkeypatch.setattr(experiment_module.streaming_writer, "BoundedSendPool", spy)
+    monkeypatch.setattr(experiment_module.streaming_upload, "BoundedSendPool", spy)
     return counts
 
 
@@ -1446,7 +1446,7 @@ class TestBulkUploadItemsCompressionThread:
         self, monkeypatch: Any
     ) -> None:
         experiment, mock_rest_client = _create_experiment()
-        real_gzip_chunks = experiment_module.streaming_writer.gzip_chunks
+        real_gzip_chunks = experiment_module.streaming_upload.gzip_chunks
         compressing_threads: List[str] = []
 
         def recording_gzip_chunks(
@@ -1456,7 +1456,7 @@ class TestBulkUploadItemsCompressionThread:
             return real_gzip_chunks(chunks, level, **kwargs)
 
         monkeypatch.setattr(
-            experiment_module.streaming_writer, "gzip_chunks", recording_gzip_chunks
+            experiment_module.streaming_upload, "gzip_chunks", recording_gzip_chunks
         )
 
         producer_thread = threading.current_thread().name
@@ -1482,7 +1482,7 @@ class TestBulkUploadItemsCompressionThread:
         the pool -- rather than as a rule that a sequential upload is silently breaking.
         """
         experiment, mock_rest_client = _create_experiment()
-        real_gzip_chunks = experiment_module.streaming_writer.gzip_chunks
+        real_gzip_chunks = experiment_module.streaming_upload.gzip_chunks
         compressing_threads: List[str] = []
 
         def recording_gzip_chunks(
@@ -1492,7 +1492,7 @@ class TestBulkUploadItemsCompressionThread:
             return real_gzip_chunks(chunks, level, **kwargs)
 
         monkeypatch.setattr(
-            experiment_module.streaming_writer, "gzip_chunks", recording_gzip_chunks
+            experiment_module.streaming_upload, "gzip_chunks", recording_gzip_chunks
         )
 
         experiment.batch_upload_items([_record()], num_threads=1)

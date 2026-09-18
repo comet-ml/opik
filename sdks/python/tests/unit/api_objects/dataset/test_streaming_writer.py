@@ -13,6 +13,7 @@ import pydantic
 import pytest
 
 from opik import config
+from opik.api_objects import streaming_upload
 from opik.api_objects.dataset import streaming_writer
 from opik.rest_api.types.dataset_item_write import DatasetItemWrite
 from opik.rest_api.core.jsonable_encoder import jsonable_encoder
@@ -51,8 +52,8 @@ def make_pool():
     """A closed-on-teardown pool. A failed assertion must not leak parked workers."""
     pools = []
 
-    def build(**kwargs) -> streaming_writer.BoundedSendPool:
-        pool = streaming_writer.BoundedSendPool(**kwargs)
+    def build(**kwargs) -> streaming_upload.BoundedSendPool:
+        pool = streaming_upload.BoundedSendPool(**kwargs)
         pools.append(pool)
         return pool
 
@@ -131,7 +132,7 @@ def test_flush__no_items__does_nothing():
 
 def test_body__matches_a_one_shot_serialisation_of_the_same_rows():
     """Row-at-a-time assembly must produce the bytes one pass over the rows would."""
-    dumps = streaming_writer.dumps
+    dumps = streaming_upload.dumps
     bodies, flush_callback = _collect()
     writer = _writer(flush_callback)
 
@@ -262,19 +263,19 @@ def test_pool__compression_enabled__body_is_one_gzip_stream_of_the_batch(make_po
     "n_chunks",
     [
         pytest.param(
-            streaming_writer._COMPRESS_BLOCK_CHUNKS - 1,
+            streaming_upload._COMPRESS_BLOCK_CHUNKS - 1,
             id="one-short-block",
         ),
         pytest.param(
-            streaming_writer._COMPRESS_BLOCK_CHUNKS,
+            streaming_upload._COMPRESS_BLOCK_CHUNKS,
             id="exactly-one-block",
         ),
         pytest.param(
-            streaming_writer._COMPRESS_BLOCK_CHUNKS + 1,
+            streaming_upload._COMPRESS_BLOCK_CHUNKS + 1,
             id="block-plus-a-tail",
         ),
         pytest.param(
-            streaming_writer._COMPRESS_BLOCK_CHUNKS * 3 + 7,
+            streaming_upload._COMPRESS_BLOCK_CHUNKS * 3 + 7,
             id="several-blocks",
         ),
     ],
@@ -303,7 +304,7 @@ def test_pool__body_spanning_several_compression_blocks__round_trips(
     # `gzip.decompress` joins a multi-member stream silently, so decoding cleanly does
     # not prove the slices went through one compressor. The class promises one stream
     # per body, and a per-slice `compressobj` would satisfy every assertion above.
-    decompressor = zlib.decompressobj(streaming_writer._GZIP_WBITS)
+    decompressor = zlib.decompressobj(streaming_upload._GZIP_WBITS)
     decompressor.decompress(sent[0])
     assert decompressor.unused_data == b"", "A body must be exactly one gzip member"
 
@@ -540,7 +541,7 @@ def test_add__batch_never_exceeds_the_payload_cap():
         # Re-encoded through the writer's own encoder rather than the standard library:
         # the cap arithmetic does not depend on the serialiser, but the size does, and
         # measuring it a second way would test the second way instead.
-        assert len(streaming_writer.dumps(payload["items"])) <= 300 or (
+        assert len(streaming_upload.dumps(payload["items"])) <= 300 or (
             len(payload["items"]) == 1
         ), "Only a single oversized item may fill a request past the cap"
 
@@ -847,13 +848,13 @@ def test_encode_flexible__set__ordered_canonically_not_by_iteration():
     set: within one process those agree whatever the rule is, so that comparison would
     hold even for the iteration order this replaced.
     """
-    assert streaming_writer.encode_flexible({"gamma", "alpha", "delta", "beta"}) == [
+    assert streaming_upload.encode_flexible({"gamma", "alpha", "delta", "beta"}) == [
         "alpha",
         "beta",
         "delta",
         "gamma",
     ]
-    assert streaming_writer.encode_flexible(frozenset({"b", "a"})) == ["a", "b"]
+    assert streaming_upload.encode_flexible(frozenset({"b", "a"})) == ["a", "b"]
 
 
 def test_encode_flexible__set_of_one_comparable_type__natural_order():
@@ -862,8 +863,8 @@ def test_encode_flexible__set_of_one_comparable_type__natural_order():
     Pinned because the two disagree -- by repr `10` precedes `2` -- so this is what
     fixes which of them is the identity a stored row is matched against.
     """
-    assert streaming_writer.encode_flexible({10, 1, 2}) == [1, 2, 10]
-    assert streaming_writer.encode_flexible({"b", "a", "c"}) == ["a", "b", "c"]
+    assert streaming_upload.encode_flexible({10, 1, 2}) == [1, 2, 10]
+    assert streaming_upload.encode_flexible({"b", "a", "c"}) == ["a", "b", "c"]
 
 
 def test_encode_flexible__set_of_mixed_types__ordered_by_type_then_repr():
@@ -876,9 +877,9 @@ def test_encode_flexible__set_of_mixed_types__ordered_by_type_then_repr():
     `NoneType` < `float` < `int` < `str` is the type name deciding, before the repr ever
     comes into it, which is why `2.5` precedes `1`.
     """
-    assert streaming_writer.encode_flexible({1, "a", None, 2.5}) == [None, 2.5, 1, "a"]
+    assert streaming_upload.encode_flexible({1, "a", None, 2.5}) == [None, 2.5, 1, "a"]
 
 
 def test_encode_flexible__tuple__keeps_the_order_it_was_given():
     """A tuple is ordered by the caller, unlike a set, so canonicalising it would lose data."""
-    assert streaming_writer.encode_flexible(("z", "a", "m")) == ["z", "a", "m"]
+    assert streaming_upload.encode_flexible(("z", "a", "m")) == ["z", "a", "m"]

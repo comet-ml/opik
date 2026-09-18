@@ -7,11 +7,7 @@ from opik import exceptions, id_helpers
 from opik.rest_api import types as rest_api_types
 from opik.types import FeedbackScoreDict
 from . import bulk_item
-from .. import constants
-
-# The dataset path's encoder, reused rather than reimplemented: one hook deciding what
-# the flexible types the generated client accepted are rendered as, for both uploads.
-from ..dataset import streaming_writer
+from .. import constants, streaming_upload
 
 LOGGER = logging.getLogger(__name__)
 
@@ -301,15 +297,15 @@ def serialize_record(rest_record: Any) -> bytes:
 
     ``json_helpers`` answers with orjson where a wheel exists and the standard library
     otherwise, including for the values orjson refuses outright (integers beyond 64
-    bits). ``encode_flexible`` is the dataset path's hook, unchanged and shared: the
-    flexible types the generated client accepted are rendered as it rendered them, and
-    anything else raises rather than being degraded into ``vars(obj)``.
+    bits). ``encode_flexible`` is the hook both uploads share: the flexible types the
+    generated client accepted are rendered as it rendered them, and anything else raises
+    rather than being degraded into ``vars(obj)``.
 
     The ``try`` is broad because the one thing under it that is not ours is the caller's
     own data: an encoder hook reaches ``__str__`` on a value that may raise anything.
     """
     try:
-        return streaming_writer.dumps(_wire_fields(rest_record))
+        return streaming_upload.dumps(_wire_fields(rest_record))
     except Exception as error:
         LOGGER.warning(
             "Could not serialize an experiment item; the upload will reject it.",

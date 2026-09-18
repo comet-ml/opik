@@ -20,8 +20,7 @@ from opik.message_processing import messages, streamer
 from opik.rest_api import client as rest_api_client
 from opik.rest_api import types as rest_api_types
 from . import bulk_converters, bulk_item, experiment_item, experiments_client
-from .. import constants, helpers, rest_helpers
-from ..dataset import streaming_writer
+from .. import constants, helpers, rest_helpers, streaming_upload
 from ...api_objects.prompt import base_prompt
 from ...rest_api.core.api_error import ApiError
 from ...rest_client_configurator import retry_decorator
@@ -235,7 +234,7 @@ class Experiment:
         """
         client, base_url = httpx_client.upload_transport(self._rest_client)
 
-        envelope = streaming_writer.dumps(
+        envelope = streaming_upload.dumps(
             {
                 "experiment_name": self.name,
                 "dataset_name": self.dataset_name,
@@ -322,7 +321,7 @@ class Experiment:
                 chunks, _ = _batch_chunks(upload, part)
                 self._send_batch(
                     upload,
-                    streaming_writer.encode_body(chunks, upload.gzip_level),
+                    streaming_upload.encode_body(chunks, upload.gzip_level),
                     part,
                 )
         else:
@@ -338,13 +337,13 @@ class Experiment:
         sizes_MB: Optional[List[float]],
         worker_count: int,
     ) -> None:
-        """Stream the batches into the bounded send pool the dataset upload uses.
+        """Stream the batches into the bounded send pool shared with the dataset upload.
 
         Same bound, same compress-on-the-worker rule, and at ``worker_count`` of 1 the
         same inline send. ``fail_fast`` is where the two paths differ: a dataset upload
         drains what it has queued, this one drops whatever has not started.
         """
-        pool = streaming_writer.BoundedSendPool(
+        pool = streaming_upload.BoundedSendPool(
             send=functools.partial(self._send_batch, upload),
             num_threads=worker_count,
             gzip_level=upload.gzip_level,

@@ -29,7 +29,8 @@ try:
     import orjson
 except ImportError:  # no wheel for this platform
     orjson = None
-from opik.api_objects.dataset import dataset_item, streaming_writer
+from opik.api_objects import streaming_upload
+from opik.api_objects.dataset import dataset_item
 from opik.api_objects.dataset.dataset import Dataset
 
 from .upload_capture import UploadCapture, make_dataset
@@ -146,7 +147,7 @@ def test_content_hash__ordinary_value__does_not_use_the_fallback(
     def explode(value):
         raise AssertionError("the flexible encoder must not be consulted")
 
-    monkeypatch.setattr(streaming_writer, "encode_flexible", explode)
+    monkeypatch.setattr(streaming_upload, "encode_flexible", explode)
 
     assert dataset_item.DatasetItem(**content).content_hash() == _legacy_digest(
         dataset_item.DatasetItem(**content).get_content()
