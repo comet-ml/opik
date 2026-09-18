@@ -1,6 +1,5 @@
 package com.comet.opik.db;
 
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -23,7 +22,7 @@ import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
  * topology-aware.
  *
  * <p><b>Why, when the parity gates already cover this.</b> The gates are correct but expensive and indirect — they spin
- * up ClickHouse and ZooKeeper, apply 100-plus migrations twice, and report the <i>consequence</i> (a column missing from
+ * up ClickHouse and ZooKeeper, apply the whole changelog twice, and report the <i>consequence</i> (a column missing from
  * the shadow) rather than the cause. This runs in milliseconds with no container and names the file and changeset, so
  * the common mistake is caught at the point it was made. It is a fast path in front of the gates, not a replacement: it
  * checks that a guard is present, and only the gates can check the DDL is actually right.
@@ -32,7 +31,7 @@ import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
  * real directory, which is what actually blocks a bad PR. But no shipped migration after the splice point mutates a
  * trace table today, so that test never reaches the interesting branch — on its own it would pass regardless of what
  * the lint's patterns did, which is precisely the trap a guard like this falls into. {@link LintDecision} therefore
- * exercises {@link TracesMigrationPreconditionLint} directly against inline migrations, one per way of getting it wrong.
+ * exercises {@link CutoverMigrationPreconditionLint} directly against inline migrations, one per way of getting it wrong.
  *
  * <p><b>Coverage starts strictly after {@link #CUTOVER_SPLICE_POINT}.</b> Shipped migrations are append-only and never
  * edited, so the ones that mutate {@code traces} unguarded ({@code 000091_add_id_at_to_traces},
@@ -42,40 +41,39 @@ import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
  * and therefore the first point at which two branches become mandatory. That boundary needs no maintenance and cannot
  * be widened by accident.
  *
- * <p>The playbook this enforces is {@code apps/opik-backend/docs/traces-schema-ddl.md}.
+ * <p>The playbook this enforces is {@code apps/opik-backend/docs/cutover-table-schema-ddl.md}.
  */
-@DisplayName("Traces Migration Precondition Lint")
 class TracesMigrationPreconditionLintTest {
+
+    private static final CutoverMigrationPreconditionLint LINT = CutoverMigrationPreconditionLint.TRACES;
 
     /** Relative to the Maven module directory ({@code apps/opik-backend}), the working directory locally and in CI. */
     private static final Path MIGRATIONS = Path.of("src/main/resources/liquibase/db-app-analytics/migrations");
 
     /**
      * The last migration that runs before an install can have cut over. Everything after it must tolerate both
-     * topologies; everything up to and including it ran pre-cutover only. Matches the splice point the post-cutover
-     * gate uses.
+     * topologies; everything up to and including it ran pre-cutover only. Declared on the lint constant, so it is the
+     * same value the post-cutover gate splices at.
      */
-    private static final String CUTOVER_SPLICE_POINT = "000114_recreate_traces_local_v2_id_at_datetime64.sql";
+    private static final String CUTOVER_SPLICE_POINT = LINT.getCutoverSplicePoint();
 
     @Nested
-    @DisplayName("shipped migrations")
     class ShippedMigrations {
 
         @Test
-        @DisplayName("every trace-mutating migration after the splice point is topology-aware")
         void everyTraceMutatingMigrationAfterTheSplicePointIsTopologyAware() throws IOException {
             var migrations = migrationsAfterTheSplicePoint();
 
             var problems = new ArrayList<String>();
             for (var migration : migrations) {
-                problems.addAll(TracesMigrationPreconditionLint.problems(
+                problems.addAll(LINT.problems(
                         migration.getFileName().toString(), Files.readString(migration)));
             }
 
             assertThat(problems)
                     .as("""
                             a migration that mutates `traces` or `traces_local` must ship as two complementary \
-                            changesets guarded on whether traces_local exists. See docs/traces-schema-ddl.md and the \
+                            changesets guarded on whether traces_local exists. See docs/cutover-table-schema-ddl.md and the \
                             reference migration it links.\
                             """)
                     .isEmpty();
@@ -86,7 +84,6 @@ class TracesMigrationPreconditionLintTest {
          * the directory moved and the scan above had quietly become a no-op.
          */
         @Test
-        @DisplayName("the scan covers the migrations added after the splice point")
         void theScanCoversMigrationsAfterTheSplicePoint() throws IOException {
             assertThat(migrationsAfterTheSplicePoint())
                     .as("migrations must exist after %s; if none do, this lint is scanning nothing",
@@ -97,8 +94,10 @@ class TracesMigrationPreconditionLintTest {
         /** Migrations strictly after the splice point, in the lexicographic order the changelog applies them. */
         private List<Path> migrationsAfterTheSplicePoint() throws IOException {
             assertThat(MIGRATIONS)
-                    .as("the migrations directory must be readable at %s (relative to apps/opik-backend); if it moved, "
-                            + "update this lint rather than dropping it", MIGRATIONS)
+                    .as("""
+                            the migrations directory must be readable at %s (relative to apps/opik-backend); if it \
+                            moved, update this lint rather than dropping it\
+                            """, MIGRATIONS)
                     .isDirectory();
 
             // Recursive on purpose: Liquibase's `includeAll path="migrations/"` descends into subdirectories, so a
@@ -124,42 +123,37 @@ class TracesMigrationPreconditionLintTest {
 
     /**
      * The lint's decision, exercised directly. Each case is a way a real migration could be written; the point is that
-     * changing a pattern in {@link TracesMigrationPreconditionLint} breaks one of these rather than silently accepting
+     * changing a pattern in {@link CutoverMigrationPreconditionLint} breaks one of these rather than silently accepting
      * an unguarded migration.
      */
     @Nested
-    @DisplayName("lint decision")
     class LintDecision {
 
+        /** Spliced into the fixtures below with {@code %s}, so each reads as the one migration file it represents. */
         private static final String GUARD_PRE = """
                 --preconditions onFail:MARK_RAN onError:HALT
-                --precondition-sql-check expectedResult:0 SELECT count() FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'traces_local'
-                """;
+                --precondition-sql-check expectedResult:0 SELECT count() FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'traces_local'""";
         private static final String GUARD_POST = """
                 --preconditions onFail:MARK_RAN onError:HALT
-                --precondition-sql-check expectedResult:1 SELECT count() FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'traces_local'
-                """;
+                --precondition-sql-check expectedResult:1 SELECT count() FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'traces_local'""";
 
         @Test
-        @DisplayName("accepts the guarded two-branch pattern")
         void acceptsTheGuardedTwoBranchPattern() {
             var sql = """
                     --liquibase formatted sql
                     --changeset opik:000200_add_foo_pre_cutover
-                    """ + GUARD_PRE
-                    + """
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
 
-                            --changeset opik:000200_add_foo_post_cutover
-                            """
-                    + GUARD_POST
-                    + """
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
-                            """;
+                    --changeset opik:000200_add_foo_post_cutover
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    """
+                    .formatted(GUARD_PRE, GUARD_POST);
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql)).isEmpty();
+            assertThat(LINT.problems("000200_add_foo.sql", sql)).isEmpty();
         }
 
         /**
@@ -167,20 +161,19 @@ class TracesMigrationPreconditionLintTest {
          * than the one performing the mutation, so the mutation itself runs unconditionally on both topologies.
          */
         @Test
-        @DisplayName("rejects a mutation guarded only by a different changeset")
         void rejectsAMutationGuardedByADifferentChangeset() {
             var sql = """
                     --liquibase formatted sql
                     --changeset opik:000200_guarded_but_unrelated
-                    """ + GUARD_PRE
-                    + """
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
 
-                            --changeset opik:000200_unguarded_traces_change
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
-                            """;
+                    --changeset opik:000200_unguarded_traces_change
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    """
+                    .formatted(GUARD_PRE);
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_mixed.sql", sql))
+            assertThat(LINT.problems("000200_mixed.sql", sql))
                     .singleElement(STRING)
                     .contains("000200_unguarded_traces_change");
         }
@@ -190,24 +183,22 @@ class TracesMigrationPreconditionLintTest {
          * cut-over install never receives the change while its ledger says it did.
          */
         @Test
-        @DisplayName("rejects a single branch even when correctly guarded")
         void rejectsASingleBranch() {
             var sql = """
                     --liquibase formatted sql
                     --changeset opik:000200_add_foo_pre_cutover
-                    """ + GUARD_PRE
-                    + """
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
-                            """;
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    """
+                    .formatted(GUARD_PRE);
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+            assertThat(LINT.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
                     .contains("BOTH complementary branches");
         }
 
         /** Header prose is before the first changeset, so it can never satisfy the guard for a later mutation. */
         @Test
-        @DisplayName("rejects a mutation whose only guard is header prose")
         void rejectsAMutationGuardedOnlyByHeaderProse() {
             var sql = """
                     --liquibase formatted sql
@@ -219,14 +210,13 @@ class TracesMigrationPreconditionLintTest {
                     ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
                     """;
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+            assertThat(LINT.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
                     .contains("without a complete topology guard");
         }
 
         /** Prose inside the changeset that merely discusses a trace mutation must not trip the lint. */
         @Test
-        @DisplayName("ignores commented-out and discussed mutations")
         void ignoresCommentedOutMutations() {
             var sql = """
                     --liquibase formatted sql
@@ -236,7 +226,7 @@ class TracesMigrationPreconditionLintTest {
                     ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
                     """;
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo_to_spans.sql", sql)).isEmpty();
+            assertThat(LINT.problems("000200_add_foo_to_spans.sql", sql)).isEmpty();
         }
 
         /**
@@ -275,14 +265,13 @@ class TracesMigrationPreconditionLintTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource("unguardedMutations")
-        @DisplayName("rejects an unguarded trace mutation in any form")
         void rejectsUnguardedMutations(String description, String statement) {
             var sql = """
                     --liquibase formatted sql
                     --changeset opik:000200_unguarded
                     """ + statement + "\n";
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_unguarded.sql", sql))
+            assertThat(LINT.problems("000200_unguarded.sql", sql))
                     .as("%s must be recognised as a trace mutation and rejected", description)
                     .singleElement(STRING)
                     .contains("without a complete topology guard");
@@ -294,7 +283,6 @@ class TracesMigrationPreconditionLintTest {
          * evaluates the same on both topologies and so guards nothing at all.
          */
         @Test
-        @DisplayName("rejects a guard whose sqlCheck does not query system.tables")
         void rejectsAGuardThatDoesNotQueryTheTopology() {
             var sql = """
                     --liquibase formatted sql
@@ -304,7 +292,7 @@ class TracesMigrationPreconditionLintTest {
                     ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
                     """;
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+            assertThat(LINT.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
                     .contains("without a complete topology guard");
         }
@@ -315,29 +303,24 @@ class TracesMigrationPreconditionLintTest {
          * post-cutover one never does.
          */
         @Test
-        @DisplayName("rejects branches that do not pair up")
         void rejectsUnpairedBranches() {
             var sql = """
                     --liquibase formatted sql
                     --changeset opik:000200_add_foo_pre_cutover
-                    """ + GUARD_PRE
-                    + """
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
 
-                            --changeset opik:000200_add_bar_pre_cutover
-                            """
-                    + GUARD_PRE
-                    + """
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS bar String DEFAULT '';
+                    --changeset opik:000200_add_bar_pre_cutover
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS bar String DEFAULT '';
 
-                            --changeset opik:000200_add_foo_post_cutover
-                            """
-                    + GUARD_POST
-                    + """
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
-                            """;
+                    --changeset opik:000200_add_foo_post_cutover
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    """
+                    .formatted(GUARD_PRE, GUARD_PRE, GUARD_POST);
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+            assertThat(LINT.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
                     .contains("must pair up");
         }
@@ -347,7 +330,6 @@ class TracesMigrationPreconditionLintTest {
          * people the lint is noise and to work around it.
          */
         @Test
-        @DisplayName("ignores a block-commented mutation")
         void ignoresABlockCommentedMutation() {
             var sql = """
                     --liquibase formatted sql
@@ -358,7 +340,7 @@ class TracesMigrationPreconditionLintTest {
                     ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
                     """;
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo_to_spans.sql", sql)).isEmpty();
+            assertThat(LINT.problems("000200_add_foo_to_spans.sql", sql)).isEmpty();
         }
 
         /**
@@ -366,31 +348,29 @@ class TracesMigrationPreconditionLintTest {
          * they inherit a guard written for something else. The lint must not accept that arrangement quietly.
          */
         @Test
-        @DisplayName("rejects a malformed changeset header that would fold its statements into the previous changeset")
         void rejectsAMalformedChangesetHeader() {
             var sql = """
                     --liquibase formatted sql
                     --changeset opik:000200_add_foo_pre_cutover
-                    """ + GUARD_PRE
-                    + """
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
 
-                            --changeset
-                            ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS bar String DEFAULT '';
-                            """;
+                    --changeset
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS bar String DEFAULT '';
+                    """
+                    .formatted(GUARD_PRE);
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+            assertThat(LINT.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
                     .contains("does not name an author:id");
         }
 
         /**
-         * The silent-failure case: {@code --changeset a:b id:c} is already used by 26 shipped changesets, and a header
-         * pattern anchored after {@code author:id} matched none of them. With no changeset parsed every check was
-         * skipped, so the migration passed unexamined — the worst possible outcome for a guard.
+         * The silent-failure case: {@code --changeset a:b id:c} is a shape many shipped changesets already use, and a
+         * header pattern anchored after {@code author:id} matches none of them. With no changeset parsed every check
+         * below is skipped and the migration passes unexamined — the worst possible outcome for a guard.
          */
         @Test
-        @DisplayName("still parses a changeset header carrying Liquibase attributes")
         void parsesAttributedChangesetHeaders() {
             var sql = """
                     --liquibase formatted sql
@@ -398,7 +378,7 @@ class TracesMigrationPreconditionLintTest {
                     ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
                     """;
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+            assertThat(LINT.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
                     .contains("000200_add_foo")
                     .contains("without a complete topology guard");
@@ -406,7 +386,6 @@ class TracesMigrationPreconditionLintTest {
 
         /** And an unparseable header must fail rather than pass, so "checked nothing" can never read as "all clear". */
         @Test
-        @DisplayName("rejects a trace mutation whose changeset header cannot be parsed")
         void rejectsAnUnparseableChangesetHeader() {
             var sql = """
                     --liquibase formatted sql
@@ -414,33 +393,44 @@ class TracesMigrationPreconditionLintTest {
                     ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
                     """;
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+            assertThat(LINT.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
                     .contains("no `--changeset` header could be parsed");
         }
 
+        static Stream<Arguments> incompleteGuardDirectives() {
+            return Stream.of(
+                    Arguments.of("onError:HALT missing, so a precondition that cannot be evaluated falls through to a "
+                            + "guessed topology instead of stopping", "--preconditions onFail:MARK_RAN"),
+                    Arguments.of("onFail:MARK_RAN missing, so the skipped branch is left unrecorded and retried "
+                            + "against the wrong topology on a later startup", "--preconditions onError:HALT"),
+                    Arguments.of("no --preconditions line at all, leaving the sqlCheck inert",
+                            "-- the preconditions line belongs here"));
+        }
+
         /**
-         * {@code onError:HALT} is one of the four load-bearing details the playbook names: without it a precondition
-         * that cannot be evaluated falls through to a guessed topology instead of stopping.
+         * Both directives the playbook names are load-bearing, and {@code guarded} requires both, so each has to be
+         * shown to fail on its own — a check that only ever saw one missing would not notice the other being dropped.
          */
-        @Test
-        @DisplayName("rejects a guard missing onError:HALT")
-        void rejectsAGuardMissingOnErrorHalt() {
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("incompleteGuardDirectives")
+        void rejectsAnIncompleteGuard(String description, String preconditions) {
             var sql = """
                     --liquibase formatted sql
                     --changeset opik:000200_add_foo_pre_cutover
-                    --preconditions onFail:MARK_RAN
+                    %s
                     --precondition-sql-check expectedResult:0 SELECT count() FROM system.tables WHERE name = 'traces_local'
                     ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS foo String DEFAULT '';
-                    """;
+                    """
+                    .formatted(preconditions);
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_add_foo.sql", sql))
+            assertThat(LINT.problems("000200_add_foo.sql", sql))
+                    .as("%s must be rejected", description)
                     .singleElement(STRING)
                     .contains("without a complete topology guard");
         }
 
         @Test
-        @DisplayName("ignores a migration that only reads traces")
         void ignoresAMigrationThatOnlyReadsTraces() {
             var sql = """
                     --liquibase formatted sql
@@ -448,7 +438,41 @@ class TracesMigrationPreconditionLintTest {
                     INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.trace_summary SELECT workspace_id, count() FROM ${ANALYTICS_DB_DATABASE_NAME}.traces GROUP BY workspace_id;
                     """;
 
-            assertThat(TracesMigrationPreconditionLint.problems("000200_seed_summary.sql", sql)).isEmpty();
+            assertThat(LINT.problems("000200_seed_summary.sql", sql)).isEmpty();
+        }
+
+        /**
+         * The reference fixture is the shape the playbook tells people to copy, so it must pass the lint that enforces
+         * the playbook. If the two ever disagree, one of them is wrong and a migration writer following the reference
+         * would be blocked by CI — which is how a guard loses its authority. The container gates prove the reference
+         * <i>applies</i> correctly on both topologies; only this proves the lint agrees it is well-formed.
+         */
+        @Test
+        void acceptsTheShippedReferenceFixture() throws IOException {
+            var reference = Path
+                    .of("src/test/resources/liquibase/traces-ddl-reference/migrations/reference_topology_aware_change.sql");
+            assertThat(reference)
+                    .as("the traces reference migration must be readable at %s (relative to apps/opik-backend)",
+                            reference)
+                    .isRegularFile();
+
+            assertThat(LINT.problems(reference.getFileName().toString(), Files.readString(reference)))
+                    .as("the reference the playbook tells people to copy must satisfy the lint that enforces it")
+                    .isEmpty();
+        }
+
+        /** And the negative control must fail it, or the fixture is not a control at all. */
+        @Test
+        void rejectsTheShippedUnguardedFixture() throws IOException {
+            var unguarded = Path
+                    .of("src/test/resources/liquibase/traces-ddl-unguarded/migrations/unguarded_traces_change.sql");
+            assertThat(unguarded)
+                    .as("the traces negative control must be readable at %s (relative to apps/opik-backend)", unguarded)
+                    .isRegularFile();
+
+            assertThat(LINT.problems(unguarded.getFileName().toString(), Files.readString(unguarded)))
+                    .singleElement(STRING)
+                    .contains("without a complete topology guard");
         }
 
     }
