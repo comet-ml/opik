@@ -233,6 +233,19 @@ def test_litellm_stub_survives_the_real_integration_having_been_imported(
 
     stub = _install_litellm_stub(monkeypatch)
 
+    # Both documented import forms resolve through the parent attribute, so both
+    # are pinned here — the model below only exercises the first.
+    from opik.integrations import litellm as from_import_form
+
+    assert from_import_form is sys.modules["opik.integrations.litellm"], (
+        "`from opik.integrations import litellm` did not resolve to the stub"
+    )
+
+    # `enable_litellm_models_monitoring` defaults to True, which is what makes
+    # `track=True` reach the import at all. Pinned rather than relied on, so that
+    # flipping the default would fail this test instead of making it vacuous.
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
+
     model = litellm_chat_model.LiteLLMChatModel(model_name="gpt-4o", track=True)
 
     # The stub's `track_completion` hands the function straight back, so identity
