@@ -1925,7 +1925,7 @@ class ProjectMetricsResourceTest {
 
         @ParameterizedTest
         @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("OPIK-8335: traces ingested after the window end stay out, matching the thread list")
+        @DisplayName("traces ingested after the window end stay out, matching the thread list")
         void whenTracesIngestedAfterWindowEnd_thenThreadNotCounted(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -2003,7 +2003,7 @@ class ProjectMetricsResourceTest {
 
         @ParameterizedTest
         @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("OPIK-8335: buckets by the first trace's start time, not by when the thread row was created")
+        @DisplayName("buckets by the first trace's start time, not by when the thread row was created")
         void whenThreadRowMintedAfterItsTraces_thenBucketsByTraceStartTime(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -2031,7 +2031,7 @@ class ProjectMetricsResourceTest {
 
         @ParameterizedTest
         @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("OPIK-8335: a thread whose traces predate the window is excluded, even if its row is inside it")
+        @DisplayName("a thread whose traces predate the window is excluded, even if its row is inside it")
         void whenTracesPredateWindow_thenThreadExcludedDespiteRecentThreadRow(TimeInterval interval) {
             // setup
             mockTargetWorkspace();
@@ -4282,7 +4282,7 @@ class ProjectMetricsResourceTest {
 
         @ParameterizedTest
         @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("OPIK-8335: one epoch-sentinel trace does not null a thread's duration")
+        @DisplayName("one epoch-sentinel trace does not null a thread's duration")
         void whenOneTraceCarriesTheEpochSentinel_thenDurationStillComputed(TimeInterval interval) {
             mockTargetWorkspace();
 
@@ -4598,7 +4598,7 @@ class ProjectMetricsResourceTest {
 
         @ParameterizedTest
         @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
-        @DisplayName("OPIK-8335: cost lands in the bucket the traces ran in, not the one their ids were minted in")
+        @DisplayName("cost lands in the bucket the traces ran in, not the one their ids were minted in")
         void whenThreadRowMintedAfterItsTraces_thenCostBucketsByTraceStartTime(TimeInterval interval) {
             mockTargetWorkspace();
 
