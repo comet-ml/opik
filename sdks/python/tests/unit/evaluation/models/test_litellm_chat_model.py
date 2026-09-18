@@ -12,6 +12,8 @@ from opik.evaluation.models import models_factory
 from opik.evaluation.models.litellm import litellm_chat_model, response_parser
 from opik.evaluation.models import base_model
 
+from ....testlib import patch_submodule
+
 
 def _install_litellm_stub(monkeypatch, *, supported_params=None):
     stub_module = types.ModuleType("litellm")
@@ -58,9 +60,11 @@ def _install_litellm_stub(monkeypatch, *, supported_params=None):
 
     litellm_integration_stub = types.ModuleType("opik.integrations.litellm")
     litellm_integration_stub.track_completion = mock_track_completion
-    monkeypatch.setitem(
-        sys.modules, "opik.integrations.litellm", litellm_integration_stub
-    )
+    # `LiteLLMChatModel.__init__` reaches this with `import opik.integrations.litellm
+    # as litellm_integration`, which binds through the parent package's attribute
+    # rather than through `sys.modules`. Patching `sys.modules` alone leaves the
+    # stub in place only until some other test imports the real submodule.
+    patch_submodule(monkeypatch, "opik.integrations.litellm", litellm_integration_stub)
 
     return stub_module
 
@@ -204,6 +208,45 @@ def test_litellm_chat_model_drops_temperature_for_provider_prefixed_gpt5(
     assert stub._calls, "Expected completion to be invoked"
     _, _, kwargs = stub._calls[-1]
     assert "temperature" not in kwargs
+    assert not caplog.records
+
+
+def test_litellm_stub_survives_the_real_integration_having_been_imported(
+    monkeypatch, caplog
+):
+    """The two tests above passed on their own and failed inside the full suite.
+
+    `LiteLLMChatModel.__init__` reaches the tracking decorator with
+    `import opik.integrations.litellm as litellm_integration`, and that binds
+    through `opik.integrations`' own `litellm` attribute rather than through
+    `sys.modules`. The import system sets that attribute the first time anything
+    in the process imports the real submodule, so a `sys.modules`-only stub was
+    silently bypassed from that point on: the model wrapped `litellm.completion`
+    in the *real* tracking decorator, which builds an `OpikConfig` on every call
+    and logs about the test config path the `skip_local_configuration_file`
+    fixture points at.
+
+    The import below is the only thing this test adds over its neighbours, and it
+    is what some earlier test in the same process was doing.
+    """
+    import opik.integrations.litellm  # noqa: F401
+
+    stub = _install_litellm_stub(monkeypatch)
+
+    model = litellm_chat_model.LiteLLMChatModel(model_name="gpt-4o", track=True)
+
+    # The stub's `track_completion` hands the function straight back, so identity
+    # is what tells the two decorators apart. `opik_tracked` does not: the real
+    # decorator sets it on its own wrapper as well.
+    assert model._litellm_completion is stub.completion, (
+        "the real opik.integrations.litellm was used instead of the stub"
+    )
+
+    caplog.set_level(logging.WARNING)
+    caplog.clear()
+    model.generate_string("hello")
+
+    assert stub._calls, "Expected completion to be invoked"
     assert not caplog.records
 
 
