@@ -28,6 +28,7 @@ type UseTraceFeedbackScoreSetMutationParams = {
   value: number;
   reason?: string;
   sourceQueueId?: string;
+  silent?: boolean;
 };
 
 const useTraceFeedbackScoreSetMutation = () => {
@@ -60,7 +61,14 @@ const useTraceFeedbackScoreSetMutation = () => {
 
       return data;
     },
-    onError: (error: AxiosError) => {
+    onError: (
+      error: AxiosError,
+      variables: UseTraceFeedbackScoreSetMutationParams,
+    ) => {
+      if (variables?.silent) {
+        return;
+      }
+
       const message = get(
         error,
         ["response", "data", "message"],
