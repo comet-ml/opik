@@ -187,13 +187,16 @@ def setup_mcp_server(
         ],
     )
 
-    selected_targets = _confirm_targets(
-        candidates, host_keys, assume_confirmed, display
-    )
+    confirmation = _confirm_targets(candidates, host_keys, assume_confirmed, display)
+    selected_targets = confirmation.targets
     if len(selected_targets) == 0:
-        display.skipped(
-            "Skipped MCP server setup. Run `opik mcp configure` anytime to set it up."
-        )
+        if confirmation.manual_requested:
+            _report_manual_setup(server_spec, display)
+        else:
+            display.skipped(
+                "Skipped MCP server setup. Run `opik mcp configure` anytime to set "
+                "it up."
+            )
         # The one empty result that is a decision rather than a dead end: the
         # picker is the question now, so choosing nothing in it — or cancelling —
         # is the user saying no, and the funnel has to be able to tell that from
@@ -394,19 +397,31 @@ def _candidate_targets(
     return mcp_targets.detected_targets()
 
 
+class _Confirmation(NamedTuple):
+    """What the picker came back with.
+
+    ``manual_requested`` is why this is not just a list: "none of these is my
+    client" and "no thanks" both register nothing, but only one of them has an
+    answer worth printing.
+    """
+
+    targets: List[mcp_targets.HostTarget]
+    manual_requested: bool = False
+
+
 def _confirm_targets(
     candidates: List[mcp_targets.HostTarget],
     host_keys: Optional[List[str]],
     assume_confirmed: bool,
     display: mcp_view.InstallView,
-) -> List[mcp_targets.HostTarget]:
+) -> _Confirmation:
     """Narrow the candidates to what the user actually agreed to.
 
     Naming hosts explicitly, or having already been asked by the caller, is the
     agreement — so neither re-prompts.
     """
     if host_keys or assume_confirmed:
-        return candidates
+        return _Confirmation(candidates)
 
     chosen = display.choose_hosts(
         title="Which AI client should the Opik MCP server be set up for?",
@@ -421,24 +436,54 @@ def _confirm_targets(
         preselected=[],
     )
     if chosen is None:
-        return []
+        return _Confirmation([])
+    if mcp_view.MANUAL_SETUP in chosen:
+        return _Confirmation([], manual_requested=True)
     by_key = {target.key: target for target in candidates}
-    return [by_key[key] for key in chosen if key in by_key]
+    return _Confirmation([by_key[key] for key in chosen if key in by_key])
+
+
+def _manual_setup_text(server_spec: mcp_spec.McpServerSpec) -> str:
+    """The block to paste, and where the per-host instructions live.
+
+    Shared by the two ways of arriving here — nothing was detected, or the user
+    said none of what was detected is their client — because the answer to both
+    is the same config and the same link.
+    """
+    block = mcp_spec.redact_block_for_display(server_spec.to_block())
+    manual_config = json.dumps({"mcpServers": {"opik-mcp": block}}, indent=2)
+    return (
+        f"Add this to your client's MCP config by hand "
+        f'(VS Code uses "servers" instead of "mcpServers"):\n{manual_config}\n\n'
+        f"See {MCP_DOCS_URL} for per-client instructions."
+    )
+
+
+def _report_manual_setup(
+    server_spec: mcp_spec.McpServerSpec, display: mcp_view.InstallView
+) -> None:
+    """Answer "my AI client is not listed" with something to act on.
+
+    The row exists so that a client Opik cannot detect is a dead end with a way
+    out rather than a silent decline — which is what it used to be, and what the
+    funnel counted it as.
+    """
+    display.problem(
+        f"Opik can register itself with "
+        f"{', '.join(target.display_name for target in mcp_targets.HOST_TARGETS)}.\n\n"
+        f"For anything else:\n\n{_manual_setup_text(server_spec)}"
+    )
 
 
 def _report_no_host_detected(
     server_spec: mcp_spec.McpServerSpec, display: mcp_view.InstallView
 ) -> None:
-    block = mcp_spec.redact_block_for_display(server_spec.to_block())
-    manual_config = json.dumps({"mcpServers": {"opik-mcp": block}}, indent=2)
     display.problem(
         f"No supported AI client was detected "
         f"({', '.join(target.display_name for target in mcp_targets.HOST_TARGETS)}).\n\n"
         f"Name one directly:\n"
         f"    opik mcp configure --ai-client claude-code\n\n"
-        f"Or add this to your host's MCP config by hand "
-        f'(VS Code uses "servers" instead of "mcpServers"):\n{manual_config}\n\n'
-        f"See {MCP_DOCS_URL} for per-host instructions."
+        f"Or:\n\n{_manual_setup_text(server_spec)}"
     )
 
 

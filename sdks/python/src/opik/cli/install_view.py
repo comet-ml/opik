@@ -316,15 +316,23 @@ class RichInstallView(mcp_view.InstallView):
             + [
                 selector.Choice(key=c.key, label=c.label, hint=c.hint)
                 for c in candidates
+            ]
+            + [
+                selector.Choice(
+                    key=mcp_view.MANUAL_SETUP,
+                    label=mcp_view.MANUAL_SETUP_LABEL,
+                    hint="show manual setup",
+                )
             ],
             preselected=preselected,
         )
-        # Escape is how this is declined — there is no Skip row. It was one more
-        # thing to read past in a list whose whole job is to be scanned, and the
-        # footer already names Escape. The numbered-menu fallback keeps its own
-        # Skip, because there is no Escape at an `input()` prompt.
+        # Escape still declines silently. This row is the other kind of no — the
+        # detection missed their client — and it is worth its place because the
+        # answer to it is a link rather than nothing.
         if chosen is None:
             return None
+        if mcp_view.MANUAL_SETUP in chosen:
+            return [mcp_view.MANUAL_SETUP]
         if _ALL in chosen:
             return [c.key for c in candidates]
         return [key for key in chosen if key != _ALL]

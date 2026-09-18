@@ -57,6 +57,16 @@ class TargetResult:
         return self.summary or self.detail
 
 
+#: The picker row for "none of these is my client". Returned in place of host
+#: keys, so the installer answers it with the manual-setup instructions rather
+#: than treating it as a silent decline. Not a host key and cannot collide with
+#: one: `mcp_targets.HOST_KEYS` are plain names like `claude-code`.
+MANUAL_SETUP = "__manual__"
+
+#: Label for that row, shared so the rich picker and the numbered menu agree.
+MANUAL_SETUP_LABEL = "My AI client is not listed"
+
+
 #: How the sign-in step is phrased, once, so both views agree.
 SIGN_IN_HINT = (
     "Depending on your assistant, you will either be prompted with a sign-in "
@@ -205,12 +215,14 @@ def numbered_menu(title: str, candidates: List[HostChoice]) -> Optional[List[str
 
     host_count = len(candidates)
     all_choice = host_count + 1
-    skip_choice = host_count + 2
+    manual_choice = host_count + 2
+    skip_choice = host_count + 3
 
     lines = [title]
     for index, candidate in enumerate(candidates, start=1):
         lines.append(f"  {index} - {candidate.label}")
     lines.append(f"  {all_choice} - All of the above")
+    lines.append(f"  {manual_choice} - {MANUAL_SETUP_LABEL}")
     lines.append(f"  {skip_choice} - Skip")
     lines.append("\nEnter a number, or several separated by commas (e.g. 1,2)\n> ")
     prompt = "\n".join(lines)
@@ -226,6 +238,8 @@ def numbered_menu(title: str, candidates: List[HostChoice]) -> Optional[List[str
 
         if skip_choice in numbers:
             return []
+        if manual_choice in numbers:
+            return [MANUAL_SETUP]
         if all_choice in numbers:
             return [candidate.key for candidate in candidates]
         if all(1 <= number <= host_count for number in numbers):

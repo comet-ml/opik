@@ -239,12 +239,20 @@ class TestChooseHosts:
         assert chosen == ["claude-code", "codex"]
 
     def test_logging_view__skip(self, monkeypatch):
-        monkeypatch.setattr("builtins.input", lambda prompt: "5")
+        """3 candidates, so 4 is All, 5 is "not listed" and 6 is Skip."""
+        monkeypatch.setattr("builtins.input", lambda prompt: "6")
 
         assert (
             mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates(), [])
             == []
         )
+
+    def test_logging_view__client_not_listed(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda prompt: "5")
+
+        assert mcp_view.LoggingInstallView().choose_hosts(
+            "pick", self._candidates(), []
+        ) == [mcp_view.MANUAL_SETUP]
 
     def test_logging_view__invalid_then_valid__retries(self, monkeypatch):
         monkeypatch.setattr("builtins.input", mock.Mock(side_effect=["x", "99", "2"]))
@@ -347,17 +355,24 @@ class TestTheAllRow:
         )
         return chosen, seen["choices"]
 
-    def test_all_is_the_first_row(self, monkeypatch):
+    def test_all_is_the_first_row_and_not_listed_the_last(self, monkeypatch):
         _, choices = self._choose(monkeypatch, [])
 
         assert choices[0].label == "All"
-        assert [c.label for c in choices[1:]] == ["Claude Code", "Codex", "Cursor"]
+        assert choices[-1].label == mcp_view.MANUAL_SETUP_LABEL
+        assert [c.label for c in choices[1:-1]] == ["Claude Code", "Codex", "Cursor"]
 
     def test_no_skip_row(self, monkeypatch):
-        """Escape declines; a Skip row was one more thing to read past."""
+        """Escape is the silent decline; the extra row is the one with an answer."""
         _, choices = self._choose(monkeypatch, [])
 
         assert "Skip" not in [c.label for c in choices]
+
+    def test_not_listed__returns_the_sentinel_alone(self, monkeypatch):
+        """It must not reach the installer as a host key, or nothing installs."""
+        chosen, _ = self._choose(monkeypatch, [mcp_view.MANUAL_SETUP, "codex"])
+
+        assert chosen == [mcp_view.MANUAL_SETUP]
 
     def test_choosing_all__expands_to_every_candidate(self, monkeypatch):
         from opik.cli import install_view as rich_view
