@@ -223,10 +223,11 @@ class ThreadDAOImplTest {
         void threadByIdDoesNotUseSpansFinal() {
             String sql = ThreadDAOImpl.SELECT_TRACES_THREAD_BY_ID;
 
-            assertThat(sql).doesNotContain("FROM spans final");
+            assertThat(sql).doesNotContainPattern("(?i)\\bFROM\\s+spans\\s+FINAL\\b");
 
             String spansDeduped = cte(sql, "spans_deduped AS (", "), spans_agg AS (");
-            assertThat(spansDeduped).contains("FROM spans");
+            assertThat(spansDeduped).containsPattern("FROM\\s+spans\\s*\\n");
+            assertThat(spansDeduped).doesNotContainPattern("(?i)\\bFROM\\s+spans\\s+FINAL\\b");
             assertThat(spansDeduped).contains("AND trace_id IN (SELECT DISTINCT id FROM traces_ids)");
             assertThat(spansDeduped)
                     .contains("ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC");
@@ -234,7 +235,7 @@ class ThreadDAOImplTest {
 
             String spansAgg = cte(sql, "spans_agg AS (", "), trace_threads_ids AS (");
             assertThat(spansAgg).contains("FROM spans_deduped");
-            assertThat(spansAgg).doesNotContain("FROM spans final");
+            assertThat(spansAgg).doesNotContainPattern("(?i)\\bFROM\\s+spans\\s+FINAL\\b");
         }
 
         private static String cte(String sql, String startMarker, String endMarker) {
