@@ -24,16 +24,13 @@ def _compute_average_scores(
 
     for result in test_results:
         for score in result.score_results:
-            # Failed scores count at their recorded 0.0 so the average covers
-            # all scored items, not just survivors (#8134); the count of
-            # failures stays visible via the returned failed_scores mapping.
             if score.scoring_failed:
                 score_failed[score.name] += 1
-            # A failure contributes the 0.0 the engine records, never whatever
-            # value the raising metric left behind: a non-finite one would turn
-            # this average into nan while the final statistics dropped it.
-            score_totals[score.name] += 0.0 if score.scoring_failed else score.value
-            score_counts[score.name] += 1
+                score_counts[score.name] += 0
+            else:
+                score_totals[score.name] += score.value
+                score_counts[score.name] += 1
+                score_failed[score.name] += 0
 
     average_scores = {
         name: "None" if counts == 0 else f"{score_totals[name] / counts:.4f}"
