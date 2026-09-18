@@ -1157,9 +1157,9 @@ agentInsightsReport:
 # Configuration for automatic annotation queue population (OPIK-6303). A feedback-score event is guarded
 # in the listener and the routing work is done by a stream consumer, so it survives a replica restart.
 annotationQueueRouting:
-  # Default: true
+  # Default: false
   # Description: When false, score events are never published and nothing is routed automatically
-  enabled: ${ANNOTATION_QUEUE_ROUTING_ENABLED:-true}
+  enabled: ${ANNOTATION_QUEUE_ROUTING_ENABLED:-false}
   # Default: annotation-queue-routing
   # Description: Redis stream name for queued annotation queue routing work
   streamName: ${ANNOTATION_QUEUE_ROUTING_STREAM_NAME:-'annotation-queue-routing'}
