@@ -1,5 +1,4 @@
-import { test, expect } from '@e2e/fixtures';
-import { bucketTotal, bucketsByDay, expectBucketsByDay } from '@e2e/fixtures';
+import { test, expect, bucketTotal, bucketsByDay, expectBucketsByDay } from '@e2e/fixtures';
 import { toMetricSeries } from '@e2e/core/backend';
 import { LogsPage } from '@e2e/pom/logs.page';
 

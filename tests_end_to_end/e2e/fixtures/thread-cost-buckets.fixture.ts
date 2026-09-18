@@ -8,6 +8,7 @@ import {
   DAYS_BACK_LATE,
   DAYS_BACK_PREVIOUS,
   costedSpan,
+  deleteSeededTraces,
   utcDayOf,
   utcNoonDaysBack,
 } from './cost-buckets';
@@ -287,11 +288,7 @@ export const test = baseTest.extend<ThreadCostBucketsFixtures>({
       // thread still takes the first two and its own finished turns with it,
       // rather than leaving the next run's thread list with strangers in it.
       if (!shouldLeaveArtifacts(testInfo) && written.length > 0) {
-        try {
-          await backendClient.deleteTraces(written);
-        } catch (err) {
-          console.warn('[threadCostBuckets fixture] trace delete warning:', err);
-        }
+        await deleteSeededTraces(backendClient, written, 'threadCostBuckets');
       }
     }
   },

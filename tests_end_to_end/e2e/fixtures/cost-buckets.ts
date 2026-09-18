@@ -1,5 +1,5 @@
 import { expect } from '@playwright/test';
-import { uuid7, type MetricSeries, type SpanBatchSeed } from '../core/backend';
+import { uuid7, type BackendClient, type MetricSeries, type SpanBatchSeed } from '../core/backend';
 
 /**
  * The vocabulary the two cost-bucketing seeds share (OPIK-8335): one priced LLM
@@ -104,6 +104,38 @@ export function costedSpan(args: {
       total_tokens: PROMPT_TOKENS + COMPLETION_TOKENS,
     },
   };
+}
+
+/**
+ * Delete the traces a seed wrote — the whole batch first, then one id at a time.
+ *
+ * Explicit, because nothing else sweeps these: deleting the project does not
+ * take its traces with it, and `global-teardown`'s run-prefix sweep does not
+ * know about traces at all. The batch is a single request, so one bad id loses
+ * every other trace with it — hence the per-id retry, which is the same shape
+ * `id-aged-traces` and `far-future-error-traces`, the estate's other
+ * backdated-trace seeds, already use. Never throws: a cleanup failure must not
+ * replace the test's own error.
+ */
+export async function deleteSeededTraces(
+  backendClient: BackendClient,
+  ids: string[],
+  fixtureLabel: string,
+): Promise<void> {
+  try {
+    await backendClient.deleteTraces(ids);
+    return;
+  } catch (err) {
+    console.warn(`[${fixtureLabel} fixture] batch trace delete failed, retrying per id:`, err);
+  }
+
+  for (const id of ids) {
+    try {
+      await backendClient.deleteTraces([id]);
+    } catch (err) {
+      console.warn(`[${fixtureLabel} fixture] could not delete ${id}:`, err);
+    }
+  }
 }
 
 /**
