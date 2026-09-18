@@ -808,7 +808,9 @@ databaseAnalyticsDataModel:
   tracesDistributedWrapEnabled: false
   # Spans sibling: turn true in lockstep with applying the spans Distributed wrap, so span cascade/retention
   # mutations target spans_local. Leave false while spans is still a MergeTree. Flips independently of the trace
-  # flag, and is not covered by the `clickhouse-traces-topology` readiness probe.
+  # flag, and has its own `clickhouse-spans-topology` readiness probe with the same fail-fast behaviour: if this
+  # disagrees with the actual `spans` engine in either direction, the backend fails readiness at startup with a
+  # message naming the flag and the observed engine, and clears on the next probe once the two are back in step.
   spansDistributedWrapEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the

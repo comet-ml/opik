@@ -31,7 +31,7 @@ import {
   useSetSelectedRuleIds,
   useResetDatasetFilters,
   useResetOutputMap,
-  useSetExperimentNamePrefix,
+  useSetExperimentName,
   useSetDatasetType,
   useDatasetType,
   useDatasetFilters,
@@ -79,7 +79,7 @@ const PlaygroundHeader = ({
   const setSelectedRuleIds = useSetSelectedRuleIds();
   const resetDatasetFilters = useResetDatasetFilters();
   const resetOutputMap = useResetOutputMap();
-  const setExperimentNamePrefix = useSetExperimentNamePrefix();
+  const setExperimentName = useSetExperimentName();
   const isRunning = useIsRunning();
   const setDatasetType = useSetDatasetType();
   const currentDatasetType = useDatasetType();
@@ -241,7 +241,7 @@ const PlaygroundHeader = ({
     onChangeDatasetId(null);
     resetDatasetFilters();
     setSelectedRuleIds(null);
-    setExperimentNamePrefix(null);
+    setExperimentName(null);
     setDatasetType(null);
   }, [
     clearCreatedExperiments,
@@ -249,7 +249,7 @@ const PlaygroundHeader = ({
     onChangeDatasetId,
     resetDatasetFilters,
     setSelectedRuleIds,
-    setExperimentNamePrefix,
+    setExperimentName,
     setDatasetType,
   ]);
 
