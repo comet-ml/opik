@@ -684,8 +684,10 @@ areas:
       # (deleted-queue URL loads forever instead of showing a not-found state).
       # Fixing that bug turns the run red until the annotation is removed.
       delete-queue:            { covered: true,  tier: t2-cuj, note: "row-actions delete; sibling queue + source traces asserted to survive; deleted-queue URL known-failure OPIK-7903" }
+      queue-items-tab:         { covered: false, note: "QueueItemsTab — default tab; one key, not two, for the Trace/Thread variants the queue scope picks between" }
       queue-configuration-tab: { covered: false }
       add-traces-to-queue:     { covered: false }
+      remove-items-from-queue: { covered: false, note: "Remove from queue — row action and bulk panel share one deleteItems mutation" }
       sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
       export-annotated-data:   { covered: false }
 
