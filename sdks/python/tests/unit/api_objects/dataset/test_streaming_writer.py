@@ -5,7 +5,9 @@ import decimal
 import enum
 import gzip
 import json
+import logging
 import threading
+import time
 import uuid
 import zlib
 
@@ -332,6 +334,44 @@ def test_pool__worker_error__is_reraised_to_the_producer(make_pool):
 
     with pytest.raises(ValueError):
         pool.close()
+
+
+def test_pool__abort__stops_and_waits_only_a_bounded_time_for_started_sends(
+    monkeypatch, caplog
+):
+    monkeypatch.setattr(streaming_upload, "ABORT_WAIT_SECONDS", 0.2)
+    stop = threading.Event()
+    release = threading.Event()
+    started = []
+
+    def send(body: bytes, _payload=None) -> None:
+        started.append(body)
+        # Ignores the stop signal, as a request already on the wire does.
+        release.wait(10)
+
+    # Not `make_pool`: its teardown closes the pool, and this one is already aborted.
+    pool = streaming_upload.BoundedSendPool(
+        send=send, num_threads=2, gzip_level=None, fail_fast=True, stop_event=stop
+    )
+    try:
+        for index in range(4):
+            _submit(pool, [f"body-{index}".encode()])
+        deadline = time.monotonic() + 5
+        while len(started) < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert len(started) == 2
+
+        started_at = time.monotonic()
+        with caplog.at_level(logging.WARNING, logger=streaming_upload.LOGGER.name):
+            pool.abort()
+
+        assert stop.is_set()
+        assert time.monotonic() - started_at < 2
+        assert "2 upload request(s) still running" in caplog.text
+    finally:
+        release.set()
+    pool._pool.shutdown(wait=True)
+    assert len(started) == 2, "No queued body may start after abort"
 
 
 def _executor_threads(pool) -> int:
