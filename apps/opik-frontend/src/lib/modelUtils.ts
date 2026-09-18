@@ -298,11 +298,20 @@ const SAMPLING_CAPABLE_MODELS = Object.entries(ANTHROPIC_MODEL_CAPABILITIES)
   .map(([model]) => model);
 
 /**
- * Claude 3 spells the generation before the family (`claude-3-5-sonnet`); Claude 4 onward spells it
- * after (`claude-sonnet-4-5`). That whole generation takes sampling params, so it is recognised by
- * shape rather than listed. The backend applies the same prefix.
+ * The generations that predate the constraint, recognised by shape rather than listed: they all take
+ * sampling params. Claude 3 and earlier spell the version before the family (`claude-3-5-sonnet`) or
+ * omit it (`claude-instant`); Claude 4 onward spells it after (`claude-sonnet-4-5`). The backend
+ * applies the same set.
  */
-const LEGACY_GENERATION_PREFIX = "claude-3";
+const LEGACY_GENERATION_PREFIXES = [
+  "claude-2",
+  "claude-3",
+  "claude-v2",
+  "claude-instant",
+];
+
+const LATEST_ALIAS_SUFFIX = "-latest";
+const RELEASE_DATE = /^\d{8}$/;
 
 // The union of both lists, because neither alone is the set of Anthropic models we know: the
 // dropdown omits ids that are still reachable through Bedrock and proxies, and the capability map
@@ -310,8 +319,12 @@ const LEGACY_GENERATION_PREFIX = "claude-3";
 // permissive" — it means the model is treated as taking none, so the set has to be complete.
 // The prefix has to end where a segment does, or `claude-30-future` would read as Claude 3.
 const isLegacyGeneration = (canonical: string): boolean =>
-  canonical === LEGACY_GENERATION_PREFIX ||
-  canonical.startsWith(`${LEGACY_GENERATION_PREFIX}-`);
+  LEGACY_GENERATION_PREFIXES.some(
+    (prefix) => canonical === prefix || canonical.startsWith(`${prefix}-`),
+  );
+
+const familyToken = (id: string): string =>
+  id.replace(/^claude-/, "").split("-")[0];
 
 const KNOWN_ANTHROPIC_MODELS = Array.from(
   new Set([
@@ -321,6 +334,42 @@ const KNOWN_ANTHROPIC_MODELS = Array.from(
     ...Object.keys(ANTHROPIC_MODEL_CAPABILITIES),
   ]),
 );
+
+/**
+ * The family words Anthropic actually ships, read off the known ids so a sync that adds a family adds
+ * it here too. A name whose family we do not recognise is not treated as an Anthropic id at all:
+ * `claude-prod` behind a gateway is a deployment someone named, and says nothing about which Claude
+ * is serving it, so it keeps the sampling params set on it.
+ */
+const FAMILY_TOKENS = new Set(
+  KNOWN_ANTHROPIC_MODELS.map(familyToken).filter(
+    (token) => !/^\d+$/.test(token),
+  ),
+);
+
+const namesAnAnthropicModel = (id: string): boolean =>
+  isLegacyGeneration(id) || FAMILY_TOKENS.has(familyToken(id));
+
+/**
+ * Comparable version segments, with any release date dropped so `claude-opus-4-6` outranks
+ * `claude-opus-4-20250514` instead of losing to the larger number.
+ */
+const versionKey = (id: string): string =>
+  id
+    .split("-")
+    .filter((segment) => /^\d+$/.test(segment) && !RELEASE_DATE.test(segment))
+    .map((segment) => segment.padStart(4, "0"))
+    .join(".");
+
+/**
+ * The newest known member of a family, which is what `claude-opus-latest` names. A floating alias has
+ * to be read as the model it currently resolves to: `claude-haiku-latest` is Haiku 4.5, which does
+ * take sampling params, and the same model under its own id already says so.
+ */
+const newestInFamily = (familyPrefix: string): string | undefined =>
+  KNOWN_ANTHROPIC_MODELS.filter((id) => id.startsWith(`${familyPrefix}-`)).sort(
+    (a, b) => versionKey(b).localeCompare(versionKey(a)),
+  )[0];
 
 /**
  * The Anthropic id a routed model name denotes, when we know it.
@@ -347,25 +396,40 @@ const canonicalAnthropicId = (model: string): string => {
   if (prefix && !prefix.endsWith("anthropic-")) {
     return "";
   }
-  // Bedrock appends an inference profile (-v1:0); OpenRouter, a :free or :beta variant.
-  return segment
-    .slice(claudeAt)
-    .split(":")[0]
-    .replace(/-v\d+$/, "");
+  // Bedrock appends an inference profile (-v1:0); OpenRouter, a :free or :beta variant. Never strip
+  // down to the bare family word: `claude-v2` is Claude 2, not a decorated `claude`.
+  const bare = segment.slice(claudeAt).split(":")[0];
+  const stripped = bare.replace(/-v\d+$/, "");
+  const id = stripped.includes("-") ? stripped : bare;
+
+  return namesAnAnthropicModel(id) ? id : "";
+};
+
+// A prefix names the model only when it ends where a segment does, so `claude-opus-4-1` is not
+// `claude-opus-4`. A numeric segment is the next version rather than a variant of this one — an
+// unlisted `claude-sonnet-4-6-1` must not inherit `claude-sonnet-4-6`'s capability — while a named
+// variant (`-fast`) and a release date still name the same model.
+const namesModel = (canonical: string, id: string): boolean => {
+  if (canonical === id) {
+    return true;
+  }
+  if (canonical.startsWith(`${id}-`)) {
+    const next = canonical.slice(id.length + 1).split("-")[0];
+    return RELEASE_DATE.test(next) || !/^\d+$/.test(next);
+  }
+  return (
+    id.startsWith(`${canonical}-`) &&
+    RELEASE_DATE.test(id.slice(canonical.length + 1))
+  );
 };
 
 const knownAnthropicId = (canonical: string): string | undefined => {
-  // A prefix names the model only when it ends where a segment does, so `claude-opus-4-1` is not
-  // `claude-opus-4`. The release date is optional on either side, because providers drop it as often
-  // as they add it — but only a whole date is matched across, or `claude-opus-4` would claim
-  // `claude-opus-4-8`.
-  return KNOWN_ANTHROPIC_MODELS.filter(
-    (id) =>
-      canonical === id ||
-      canonical.startsWith(`${id}-`) ||
-      (id.startsWith(`${canonical}-`) &&
-        /^\d{8}$/.test(id.slice(canonical.length + 1))),
-  ).sort((a, b) => b.length - a.length)[0];
+  if (canonical.endsWith(LATEST_ALIAS_SUFFIX)) {
+    return newestInFamily(canonical.slice(0, -LATEST_ALIAS_SUFFIX.length));
+  }
+  return KNOWN_ANTHROPIC_MODELS.filter((id) => namesModel(canonical, id)).sort(
+    (a, b) => b.length - a.length,
+  )[0];
 };
 
 /**
@@ -376,8 +440,8 @@ const knownAnthropicId = (canonical: string): string | undefined => {
  * this list than an older one missing from it. The two failures are not equal: assuming it takes none
  * omits a parameter, while assuming it takes them fails the whole request.
  *
- * Two exceptions stay permissive. Claude 3 predates the constraint entirely, and a name that is not
- * an Anthropic id at all may be a capable Claude a proxy renamed.
+ * Two exceptions stay permissive. The generations before Claude 4 predate the constraint entirely,
+ * and a name that is not an Anthropic id at all may be a capable Claude a proxy renamed.
  *
  * Matching goes through knownAnthropicId, because the same models arrive through Bedrock and
  * OpenAI-compatible proxies under prefixed, dotted and dated ids.

@@ -11,6 +11,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -21,6 +22,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @UtilityClass
 public class ModelCapabilities {
@@ -51,12 +53,25 @@ public class ModelCapabilities {
     private static final int DATE_SUFFIX_LENGTH = 8;
 
     /**
-     * Claude 3 spells the generation before the family ({@code claude-3-5-sonnet}); Claude 4 onward
-     * spells it after ({@code claude-sonnet-4-5}). That whole generation takes sampling params, so it
-     * is recognised by shape instead of being listed, and the allow-list only has to name models from
-     * the generation where taking none became the norm.
+     * The generations that predate the constraint, recognised by shape instead of being listed: they
+     * all take sampling params, so the allow-list only has to name models from the generation where
+     * taking none became the norm. Claude 3 and earlier spell the version before the family
+     * ({@code claude-3-5-sonnet}) or omit it ({@code claude-instant}); Claude 4 onward spells it
+     * after ({@code claude-sonnet-4-5}).
      */
-    private static final String LEGACY_GENERATION_PREFIX = "claude-3";
+    private static final Set<String> LEGACY_GENERATION_PREFIXES = Set.of(
+            "claude-2", "claude-3", "claude-v2", "claude-instant");
+
+    /**
+     * The family words Anthropic actually ships, read off the enum so a sync that adds a family adds
+     * it here too. An id whose family we do not recognise is not treated as an Anthropic id at all.
+     */
+    private static final Set<String> FAMILY_TOKENS = AnthropicModelName.allModelIds().stream()
+            .map(id -> StringUtils.substringBefore(StringUtils.removeStart(id, "claude-"), "-"))
+            .filter(token -> !StringUtils.isNumeric(token))
+            .collect(Collectors.toUnmodifiableSet());
+
+    private static final String LATEST_ALIAS_SUFFIX = "-latest";
 
     private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = loadCapabilities();
 
@@ -103,6 +118,32 @@ public class ModelCapabilities {
     }
 
     /**
+     * The newest listed member of a family, which is what {@code claude-opus-latest} names.
+     *
+     * <p>A floating alias has to be read as the model it currently resolves to, not left unplaceable:
+     * {@code claude-haiku-latest} is Haiku 4.5, which does take sampling params, and classifying it
+     * by the unplaceable default would silently drop a temperature someone set — the same model under
+     * its own id keeps one.
+     */
+    private Optional<String> newestInFamily(String familyPrefix) {
+        return AnthropicModelName.allModelIds().stream()
+                .filter(id -> id.startsWith(familyPrefix + "-"))
+                .max(Comparator.comparing(ModelCapabilities::versionKey));
+    }
+
+    /**
+     * Comparable version segments, with any release date dropped so {@code claude-opus-4-6} outranks
+     * {@code claude-opus-4-20250514} instead of losing to the larger number.
+     */
+    private String versionKey(String modelId) {
+        return Arrays.stream(modelId.split("-"))
+                .filter(StringUtils::isNumeric)
+                .filter(segment -> segment.length() != DATE_SUFFIX_LENGTH)
+                .map(segment -> StringUtils.leftPad(segment, 4, '0'))
+                .collect(Collectors.joining("."));
+    }
+
+    /**
      * The Anthropic id a routed model name denotes, when we know it.
      *
      * <p>One model arrives spelled three ways: Anthropic's own {@code claude-opus-4-6}, Bedrock's
@@ -112,6 +153,9 @@ public class ModelCapabilities {
      * {@code claude-opus-4-9} reads as itself rather than as the {@code claude-opus-4} it begins with.
      */
     private Optional<String> knownAnthropicId(String canonical) {
+        if (canonical.endsWith(LATEST_ALIAS_SUFFIX)) {
+            return newestInFamily(StringUtils.removeEnd(canonical, LATEST_ALIAS_SUFFIX));
+        }
         return AnthropicModelName.allModelIds().stream()
                 .filter(id -> namesModel(canonical, id))
                 .max(Comparator.comparingInt(String::length));
@@ -139,13 +183,34 @@ public class ModelCapabilities {
             return "";
         }
         // Bedrock appends an inference profile (-v1:0); OpenRouter, a :free or :beta variant.
-        return StringUtils.substringBefore(segment.substring(claudeAt), ":").replaceFirst("-v\\d+$", "");
+        var id = stripInferenceProfile(StringUtils.substringBefore(segment.substring(claudeAt), ":"));
+        return namesAnAnthropicModel(id) ? id : "";
+    }
+
+    /**
+     * Anthropic names a model {@code claude-<family>-<version>}, or puts the version first in the
+     * legacy generations. A name that fits neither is a deployment someone chose — {@code claude-prod}
+     * behind a gateway — and saying nothing about which Claude it is, it keeps the sampling params set
+     * on it rather than being assumed to take none.
+     */
+    private boolean namesAnAnthropicModel(String id) {
+        return isLegacyGeneration(id)
+                || FAMILY_TOKENS.contains(StringUtils.substringBefore(StringUtils.removeStart(id, "claude-"), "-"));
+    }
+
+    /**
+     * Bedrock's inference profile suffix, removed — but never down to the bare family word, because
+     * {@code claude-v2} is Claude 2 rather than a decorated {@code claude}.
+     */
+    private String stripInferenceProfile(String id) {
+        var stripped = id.replaceFirst("-v\\d+$", "");
+        return StringUtils.contains(stripped, "-") ? stripped : id;
     }
 
     /** The prefix has to end where a segment does, or {@code claude-30-future} would read as Claude 3. */
     private boolean isLegacyGeneration(String canonical) {
-        return canonical.equals(LEGACY_GENERATION_PREFIX)
-                || canonical.startsWith(LEGACY_GENERATION_PREFIX + "-");
+        return LEGACY_GENERATION_PREFIXES.stream()
+                .anyMatch(prefix -> canonical.equals(prefix) || canonical.startsWith(prefix + "-"));
     }
 
     /**
@@ -155,14 +220,20 @@ public class ModelCapabilities {
      * would claim {@code claude-opus-4-8}.
      */
     private boolean namesModel(String canonical, String modelId) {
-        if (canonical.equals(modelId) || canonical.startsWith(modelId + "-")) {
+        if (canonical.equals(modelId)) {
             return true;
         }
-        if (!modelId.startsWith(canonical + "-")) {
-            return false;
+        if (canonical.startsWith(modelId + "-")) {
+            // A numeric segment is the next version, not a variant of this one: claude-fable-5-1 is
+            // its own model, while claude-opus-4-6-fast and a dated build are still claude-opus-4-6.
+            var next = StringUtils.substringBefore(canonical.substring(modelId.length() + 1), "-");
+            return isReleaseDate(next) || !StringUtils.isNumeric(next);
         }
-        var suffix = modelId.substring(canonical.length() + 1);
-        return suffix.length() == DATE_SUFFIX_LENGTH && StringUtils.isNumeric(suffix);
+        return modelId.startsWith(canonical + "-") && isReleaseDate(modelId.substring(canonical.length() + 1));
+    }
+
+    private boolean isReleaseDate(String segment) {
+        return segment.length() == DATE_SUFFIX_LENGTH && StringUtils.isNumeric(segment);
     }
 
     /**

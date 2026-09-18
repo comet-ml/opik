@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class SamplingParamsNormalizerTest {
@@ -159,6 +161,41 @@ class SamplingParamsNormalizerTest {
         var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, null));
 
         assertThat(normalized.temperature()).isEqualTo(0.7);
+    }
+
+    /**
+     * Extended thinking refuses the sampling params on any Claude, capable or not — the API answers
+     * "temperature may only be set to 1 when thinking is enabled" and "top_p must be greater than or
+     * equal to 0.95 or unset when thinking is enabled". The Anthropic provider's mapper gated this;
+     * the routes that reach a Claude without it did not.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"enabled", "adaptive", "ENABLED"})
+    void dropsBothWhenExtendedThinkingIsEnabled(String type) {
+        var normalized = SamplingParamsNormalizer.normalizeRequest(
+                thinkingRequest("custom-llm/gw/claude-sonnet-4-6", 0.7, 0.9, type));
+
+        assertThat(normalized.temperature()).isNull();
+        assertThat(normalized.topP()).isNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"disabled", "DISABLED", "  "})
+    void leavesSamplingParamsWhenThinkingIsNotEnabled(String type) {
+        var normalized = SamplingParamsNormalizer.normalizeRequest(
+                thinkingRequest("custom-llm/gw/claude-sonnet-4-6", 0.7, null, type));
+
+        assertThat(normalized.temperature()).isEqualTo(0.7);
+    }
+
+    private static ChatCompletionRequest thinkingRequest(String model, Double temperature, Double topP,
+            String thinkingType) {
+        return ChatCompletionRequest.builder()
+                .model(model)
+                .temperature(temperature)
+                .topP(topP)
+                .customParameters(Map.of("thinking", Map.of("type", thinkingType)))
+                .build();
     }
 
     @Test

@@ -112,16 +112,39 @@ describe("supportsSamplingParams", () => {
 
   // The backend trims before classifying, so a pasted id with stray whitespace must not be read as
   // a different model on the two sides — the panel would offer a control the request then drops.
-  // The legacy prefix has to end where a segment does, matching isLegacyGeneration on the backend.
-  it("does not read claude-30-future as the Claude 3 generation", () => {
-    expect(
-      supportsSamplingParams("claude-30-future" as PROVIDER_MODEL_TYPE),
-    ).toBe(false);
-    expect(
-      supportsSamplingParams(
-        "anthropic/claude-3.5-sonnet" as PROVIDER_MODEL_TYPE,
-      ),
-    ).toBe(true);
+  // Anthropic names models claude-<family>-<version>. A name fitting no family it ships is someone's
+  // own deployment name and says nothing about which Claude is behind it, so it keeps its params.
+  it.each([
+    "claude-prod",
+    "claude-internal-v3",
+    "custom-llm/gw/my-claude-prod",
+    "claude-30-future",
+    "claude-future-99",
+  ])("treats %s as a deployment name, not an Anthropic id", (model) => {
+    expect(supportsSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(true);
+  });
+
+  // A floating alias has to read as the model it resolves to, so the families cannot share one
+  // answer — and claude-haiku-latest must agree with claude-haiku-4-5 under its own id.
+  it.each([
+    ["~anthropic/claude-haiku-latest", true],
+    ["~anthropic/claude-opus-latest", false],
+    ["~anthropic/claude-sonnet-latest", false],
+    ["~anthropic/claude-fable-latest", false],
+  ])("reads %s as its family's newest member", (model, expected) => {
+    expect(supportsSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(expected);
+  });
+
+  it.each([
+    // The generations that predate the constraint, incl. surviving the -v1 strip.
+    ["anthropic/claude-3.5-sonnet", true],
+    ["anthropic.claude-v2:1", true],
+    ["anthropic.claude-instant-v1", true],
+    // A numeric segment is the next version, not a variant of claude-sonnet-4-6.
+    ["claude-sonnet-4-6-1", false],
+    ["anthropic/claude-opus-4.6-fast", true],
+  ])("classifies %s by generation and segment boundary", (model, expected) => {
+    expect(supportsSamplingParams(model as PROVIDER_MODEL_TYPE)).toBe(expected);
   });
 
   it("ignores surrounding whitespace, as the backend does", () => {
