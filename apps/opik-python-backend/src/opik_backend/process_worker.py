@@ -269,6 +269,9 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
 
 # Cap on how many wrapped causes are reported before the frames.
 MAX_CAUSE_CHAIN = 5
+# Cap on how many are visited to find them, so a wide exception group cannot make
+# the walk itself the expensive part.
+MAX_CAUSE_VISITS = 100
 
 
 def user_facing_stacktrace(skip_frames: int = 1) -> str:
@@ -298,7 +301,10 @@ def user_facing_stacktrace(skip_frames: int = 1) -> str:
     causes = []
     seen = set()
     queue = [exc]
-    while queue:
+    # Bounded on the way in, not just on the way out: a group can carry arbitrarily
+    # many members, and formatting them all before discarding most is work done on
+    # behalf of whatever the metric raised.
+    while queue and len(causes) < MAX_CAUSE_VISITS:
         current = queue.pop(0)
         if current is None or id(current) in seen:
             continue
@@ -320,8 +326,9 @@ def user_facing_stacktrace(skip_frames: int = 1) -> str:
     # the root, and dropping the tail would lose the root -- the one this exists to
     # surface -- on any chain deeper than the budget.
     if len(causes) > MAX_CAUSE_CHAIN:
-        kept = MAX_CAUSE_CHAIN - 1
-        causes = causes[:kept] + [f"... {len(causes) - MAX_CAUSE_CHAIN} more", causes[-1]]
+        # Two of the budget go to the marker and the root, so the head keeps the rest.
+        kept = MAX_CAUSE_CHAIN - 2
+        causes = causes[:kept] + [f"... {len(causes) - kept - 1} more", causes[-1]]
     cause = "\ncaused by: ".join(causes)
     frames = "".join(traceback.format_tb(tb)).rstrip()
     return f"{cause}\n{frames}" if frames else cause
@@ -501,9 +508,14 @@ def required_score_params(code: str) -> List[str]:
     if metric_class is None:
         return []
     # A class that sorts earlier and declares score() may subclass an imported base,
-    # which is invisible here but makes it the one runtime instantiates.
+    # which is invisible here but makes it the one runtime instantiates. One with no
+    # bases at all cannot be a metric, so it is not a reason to give up.
     for node in _top_level_classdefs(tree):
-        if node.name < metric_class.name and _score_funcdef(node) is not None:
+        if (
+            node.name < metric_class.name
+            and _class_base_names(node)
+            and _score_funcdef(node) is not None
+        ):
             return []
     score = _score_funcdef_with_inheritance(tree, metric_class)
     if score is None:

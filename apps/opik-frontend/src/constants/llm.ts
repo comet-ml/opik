@@ -960,7 +960,7 @@ const DEFAULT_PYTHON_CODE_METRIC =
   "        self.name = name\n" +
   "\n" +
   "    def score(self, input: str, output: str, metadata: Optional[str] = None, **ignored_kwargs: Any):\n" +
-  "        # Add you logic here\n" +
+  "        # Add your logic here\n" +
   "\n" +
   "        return score_result.ScoreResult(\n" +
   "            value=0,\n" +
@@ -1000,7 +1000,7 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
     "    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:\n" +
     "        # conversation is a List[Dict] where each dict has:\n" +
     '        # {"role": "user" | "assistant", "content": "message text"}\n' +
-    "        # Add you logic here\n" +
+    "        # Add your logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
     "            value=0,\n" +
