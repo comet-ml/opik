@@ -17,6 +17,7 @@ import org.testcontainers.lifecycle.Startables;
 
 import java.sql.Connection;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -24,14 +25,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The post-cutover half of the trace DDL topology guard, and the reason the guard exists: it applies the real changelog
- * against the topology a cut-over install actually runs.
+ * The post-cutover half of the span DDL topology guard, and the reason the guard exists: it applies the real changelog
+ * against the topology a cut-over install actually runs. The spans counterpart of
+ * {@link TracesSchemaParityPostCutoverTest}.
  *
  * <p><b>How the topology is reached.</b> The cutover is operator work, not a migration, so no changelog apply can
- * produce it. This test stops the changelog after the shadow-table migration ({@link #CUTOVER_SPLICE_POINT}), splices
- * in the runbook's {@code EXCHANGE} + {@code Distributed} wrap, then resumes the changelog. Every migration after the
- * splice point — including whichever one a pull request is adding — therefore runs against the live post-cutover
- * layout: {@code traces} a {@code Distributed} wrapper, {@code traces_local} the partitioned shard beneath it.
+ * produce it. This test stops the changelog after the last migration that shapes the shadow table
+ * ({@link #CUTOVER_SPLICE_POINT}), splices in the runbook's {@code EXCHANGE} + {@code Distributed} wrap, then resumes
+ * the changelog. Every migration after the splice point — including whichever one a pull request is adding —
+ * therefore runs against the live post-cutover layout: {@code spans} a {@code Distributed} wrapper, {@code spans_local}
+ * the partitioned shard beneath it.
  *
  * <p><b>The failure this catches is silent.</b> Post-cutover, a shard-only {@code ADD COLUMN} succeeds — ClickHouse
  * raises nothing — but the column is not readable through the wrapper, so the feature that added it is broken on every
@@ -39,23 +42,24 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@link #shardOnlyColumnIsUnreadableUntilTheWrapperIsAlteredToo()} pins both that behaviour and its remedy, so the
  * playbook's "read-facing changes go to both" rule is backed by an executable demonstration rather than by assertion.
  *
- * <p><b>Splice, not a rewritten changelog.</b> The spliced statements mirror the shipped reference SQL
- * ({@code data-migrations/traces-local-v2-cutover/scripts/db-app-analytics/000003_exchange_and_wrap.sql}) and the
- * inline statements {@code TracesLocalV2CutoverTest} already validates end to end; this test asserts what the resulting
- * <i>schema</i> looks like to later migrations, not that the cutover moves data correctly, which is that test's job.
+ * <p><b>Splice, not a rewritten changelog.</b> The spliced statements mirror the reference SQL the spans runbook ships
+ * ({@code data-migrations/spans-local-v2-cutover/scripts/db-app-analytics/000003_exchange_and_wrap.sql}, OPIK-8366) and
+ * the inline statements {@code SpansDistributedWrapMutationTest} already uses; this test asserts what the resulting
+ * <i>schema</i> looks like to later migrations, not that the cutover moves data correctly, which is that runbook's
+ * own gate's job.
  *
- * <p><b>Dedicated, non-reused containers</b> because the splice destructively swaps the live {@code traces} table, and
+ * <p><b>Dedicated, non-reused containers</b> because the splice destructively swaps the live {@code spans} table, and
  * the negative tests then drift it further. A container reused across suites (CI sets
- * {@code TESTCONTAINERS_REUSE_ENABLE}) would hand a post-cutover {@code traces} to whatever ran next.
+ * {@code TESTCONTAINERS_REUSE_ENABLE}) would hand a post-cutover {@code spans} to whatever ran next.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-class TracesSchemaParityPostCutoverTest {
+class SpansSchemaParityPostCutoverTest {
 
-    private static final CutoverSchemaParity PARITY = CutoverSchemaParity.TRACES;
-    private static final CutoverDdlReferenceFixture FIXTURE = CutoverDdlReferenceFixture.TRACES;
+    private static final CutoverSchemaParity PARITY = CutoverSchemaParity.SPANS;
+    private static final CutoverDdlReferenceFixture FIXTURE = CutoverDdlReferenceFixture.SPANS;
 
-    private static final String TRACES = PARITY.getLive();
+    private static final String SPANS = PARITY.getLive();
     private static final String SHADOW = PARITY.getShadow();
     private static final String SHARD = PARITY.getShard();
     private static final String BACKUP = PARITY.getBackup();
@@ -66,11 +70,10 @@ class TracesSchemaParityPostCutoverTest {
      * cuts over. Everything after it must tolerate both topologies. Taken from the lint rather than restated, because
      * the boundary this splices at and the boundary the lint starts checking at are the same fact.
      */
-    private static final String CUTOVER_SPLICE_POINT = CutoverMigrationPreconditionLint.TRACES
-            .getCutoverSplicePoint();
+    private static final String CUTOVER_SPLICE_POINT = CutoverMigrationPreconditionLint.SPANS.getCutoverSplicePoint();
 
     /** The temp name the gapless wrap builds the wrapper under before the atomic rotation. */
-    private static final String TEMP_WRAPPER = "traces_dist";
+    private static final String TEMP_WRAPPER = "spans_dist";
 
     private final Network network = Network.newNetwork();
     private final GenericContainer<?> zookeeper = ClickHouseContainerUtils.newZookeeperContainer(false, network);
@@ -110,7 +113,7 @@ class TracesSchemaParityPostCutoverTest {
     @Test
     @Order(1)
     void spliceLeavesPostCutoverTopology() throws Exception {
-        assertThat(tableExists(TRACES)).as("`%s` must exist as the wrapper", TRACES).isTrue();
+        assertThat(tableExists(SPANS)).as("`%s` must exist as the wrapper", SPANS).isTrue();
         assertThat(tableExists(SHARD)).as("`%s` must exist as the shard", SHARD).isTrue();
         assertThat(tableExists(BACKUP)).as("the parked pre-cutover data `%s` must be retained", BACKUP).isTrue();
 
@@ -153,7 +156,7 @@ class TracesSchemaParityPostCutoverTest {
 
     /**
      * The reference migration's post-cutover branch, applied to the topology it is written for — the same single file
-     * that {@link TracesSchemaParityPreCutoverTest} applies to the other one. Proves the guard selects the correct
+     * that {@link SpansSchemaParityPreCutoverTest} applies to the other one. Proves the guard selects the correct
      * branch from the runtime topology, that the read-facing field reaches both the shard and the wrapper while the
      * storage-only index reaches the shard alone, and that the field is genuinely readable afterwards.
      */
@@ -167,12 +170,12 @@ class TracesSchemaParityPostCutoverTest {
                 .isEqualTo(CutoverDdlReferenceFixture.EXECUTED);
         assertThat(FIXTURE.execType(connection, FIXTURE.getPreCutoverChangeSet()))
                 .as("""
-                        the pre-cutover branch must be recorded MARK_RAN: its statements name traces_local_v2, which no \
+                        the pre-cutover branch must be recorded MARK_RAN: its statements name spans_local_v2, which no \
                         longer exists here, so running them would fail the migration on every cut-over install\
                         """)
                 .isEqualTo(CutoverDdlReferenceFixture.MARK_RAN);
 
-        var wrapper = TableSchema.read(connection, DATABASE_NAME, TRACES);
+        var wrapper = TableSchema.read(connection, DATABASE_NAME, SPANS);
         var shard = TableSchema.read(connection, DATABASE_NAME, SHARD);
 
         // The full declared contract on both, not merely the name: a column of this name with the wrong type or
@@ -218,15 +221,15 @@ class TracesSchemaParityPostCutoverTest {
      * would assert a stronger one that it does not.
      */
     private void assertDerivedFieldComputesThroughTheWrapper() throws Exception {
-        var traceId = java.util.UUID.randomUUID().toString();
+        var spanId = UUID.randomUUID().toString();
         var name = "reference-derived-probe";
         execute("""
-                INSERT INTO %s.%s (id, workspace_id, project_id, name)
-                VALUES ('%s', 'ws-reference-probe', '%s', '%s')
-                """.formatted(DATABASE_NAME, TRACES, traceId, java.util.UUID.randomUUID(), name));
+                INSERT INTO %s.%s (id, workspace_id, project_id, trace_id, name)
+                VALUES ('%s', 'ws-reference-probe', '%s', '%s', '%s')
+                """.formatted(DATABASE_NAME, SPANS, spanId, UUID.randomUUID(), UUID.randomUUID(), name));
 
         var sql = "SELECT %s FROM %s.%s WHERE id = '%s'"
-                .formatted(CutoverDdlReferenceFixture.DERIVED_COLUMN, DATABASE_NAME, TRACES, traceId);
+                .formatted(CutoverDdlReferenceFixture.DERIVED_COLUMN, DATABASE_NAME, SPANS, spanId);
         Awaitility.await("the probe row written through the wrapper becomes readable through it")
                 .atMost(30, TimeUnit.SECONDS)
                 .pollInterval(200, TimeUnit.MILLISECONDS)
@@ -255,7 +258,7 @@ class TracesSchemaParityPostCutoverTest {
     }
 
     /**
-     * The negative control on this topology: the unguarded {@code ALTER TABLE traces} lands on the Distributed wrapper,
+     * The negative control on this topology: the unguarded {@code ALTER TABLE spans} lands on the Distributed wrapper,
      * which accepts it as metadata, so the column resolves on reads while no shard stores it.
      */
     @Test
@@ -263,7 +266,7 @@ class TracesSchemaParityPostCutoverTest {
     void unguardedMigrationAppliesCleanlyAndIsRejected() throws Exception {
         MigrationUtils.runClickhouseChangelog(clickHouse, FIXTURE.getUnguardedChangelog());
 
-        assertThat(TableSchema.read(connection, DATABASE_NAME, TRACES).columnNames())
+        assertThat(TableSchema.read(connection, DATABASE_NAME, SPANS).columnNames())
                 .as("the unguarded ALTER reaches the wrapper, so it applies without error")
                 .contains(CutoverDdlReferenceFixture.UNGUARDED_COLUMN);
         assertThat(TableSchema.read(connection, DATABASE_NAME, SHARD).columnNames())
@@ -275,7 +278,7 @@ class TracesSchemaParityPostCutoverTest {
                 .hasMessageContaining(CutoverDdlReferenceFixture.UNGUARDED_COLUMN);
 
         execute("ALTER TABLE %s.%s DROP COLUMN %s"
-                .formatted(DATABASE_NAME, TRACES, CutoverDdlReferenceFixture.UNGUARDED_COLUMN));
+                .formatted(DATABASE_NAME, SPANS, CutoverDdlReferenceFixture.UNGUARDED_COLUMN));
         PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
     }
 
@@ -317,12 +320,12 @@ class TracesSchemaParityPostCutoverTest {
                 .hasMessageContaining("drift_shard_only");
 
         // The remedy: the wrapper takes the same ADD COLUMN as metadata only, and the column then reads.
-        execute("ALTER TABLE %s.%s ADD COLUMN drift_shard_only String".formatted(DATABASE_NAME, TRACES));
+        execute("ALTER TABLE %s.%s ADD COLUMN drift_shard_only String".formatted(DATABASE_NAME, SPANS));
 
         PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
         selectColumns(List.of("drift_shard_only"));
 
-        execute("ALTER TABLE %s.%s DROP COLUMN drift_shard_only".formatted(DATABASE_NAME, TRACES));
+        execute("ALTER TABLE %s.%s DROP COLUMN drift_shard_only".formatted(DATABASE_NAME, SPANS));
         execute("ALTER TABLE %s.%s DROP COLUMN drift_shard_only".formatted(DATABASE_NAME, SHARD));
         PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
     }
@@ -337,14 +340,14 @@ class TracesSchemaParityPostCutoverTest {
     void materializedExpressionDriftIsCaught() throws Exception {
         execute("ALTER TABLE %s.%s ADD COLUMN drift_expression UInt64 MATERIALIZED length(name)"
                 .formatted(DATABASE_NAME, SHARD));
-        execute("ALTER TABLE %s.%s ADD COLUMN drift_expression UInt64 MATERIALIZED length(thread_id)"
-                .formatted(DATABASE_NAME, TRACES));
+        execute("ALTER TABLE %s.%s ADD COLUMN drift_expression UInt64 MATERIALIZED length(trace_id)"
+                .formatted(DATABASE_NAME, SPANS));
 
         assertThatThrownBy(() -> PARITY.assertPostCutoverParity(connection, DATABASE_NAME))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("drift_expression");
 
-        execute("ALTER TABLE %s.%s DROP COLUMN drift_expression".formatted(DATABASE_NAME, TRACES));
+        execute("ALTER TABLE %s.%s DROP COLUMN drift_expression".formatted(DATABASE_NAME, SPANS));
         execute("ALTER TABLE %s.%s DROP COLUMN drift_expression".formatted(DATABASE_NAME, SHARD));
         PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
     }
@@ -356,41 +359,42 @@ class TracesSchemaParityPostCutoverTest {
     @Test
     @Order(12)
     void wrapperOnlyColumnIsCaught() throws Exception {
-        execute("ALTER TABLE %s.%s ADD COLUMN drift_wrapper_only String".formatted(DATABASE_NAME, TRACES));
+        execute("ALTER TABLE %s.%s ADD COLUMN drift_wrapper_only String".formatted(DATABASE_NAME, SPANS));
 
         assertThatThrownBy(() -> PARITY.assertPostCutoverParity(connection, DATABASE_NAME))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("drift_wrapper_only");
 
-        execute("ALTER TABLE %s.%s DROP COLUMN drift_wrapper_only".formatted(DATABASE_NAME, TRACES));
+        execute("ALTER TABLE %s.%s DROP COLUMN drift_wrapper_only".formatted(DATABASE_NAME, SPANS));
         PARITY.assertPostCutoverParity(connection, DATABASE_NAME);
     }
 
-    /** Cutover step 3, exchange block — mirrors 000003_exchange_and_wrap.sql. */
+    /** Cutover step 3, exchange block — mirrors the runbook's 000003_exchange_and_wrap.sql. */
     private void exchangeTables() throws Exception {
         execute("EXCHANGE TABLES %s.%s AND %s.%s ON CLUSTER '{cluster}'"
-                .formatted(DATABASE_NAME, TRACES, DATABASE_NAME, SHADOW));
+                .formatted(DATABASE_NAME, SPANS, DATABASE_NAME, SHADOW));
         execute("RENAME TABLE %s.%s TO %s.%s ON CLUSTER '{cluster}'"
                 .formatted(DATABASE_NAME, SHADOW, DATABASE_NAME, BACKUP));
     }
 
     /**
-     * Cutover step 3, wrap block — mirrors 000003_exchange_and_wrap.sql. Gapless: the wrapper is built under a temp
-     * name first (its {@code traces_local} target need not exist yet, as Distributed resolves it lazily), then a single
-     * atomic multi-target RENAME rotates the data to {@code traces_local} and the wrapper into {@code traces}.
+     * Cutover step 3, wrap block — mirrors the runbook's 000003_exchange_and_wrap.sql. Gapless: the wrapper is built
+     * under a temp name first (its {@code spans_local} target need not exist yet, as Distributed resolves it lazily),
+     * then a single atomic multi-target RENAME rotates the data to {@code spans_local} and the wrapper into
+     * {@code spans}.
      */
     private void wrapInDistributed() throws Exception {
         execute("""
                 CREATE TABLE %s.%s ON CLUSTER '{cluster}' AS %s.%s
                 ENGINE = Distributed('{cluster}', '%s', '%s', sipHash64(project_id))
-                """.formatted(DATABASE_NAME, TEMP_WRAPPER, DATABASE_NAME, TRACES, DATABASE_NAME, SHARD));
+                """.formatted(DATABASE_NAME, TEMP_WRAPPER, DATABASE_NAME, SPANS, DATABASE_NAME, SHARD));
         execute("""
                 RENAME TABLE
                     %s.%s TO %s.%s,
                     %s.%s TO %s.%s
                     ON CLUSTER '{cluster}'
-                """.formatted(DATABASE_NAME, TRACES, DATABASE_NAME, SHARD,
-                DATABASE_NAME, TEMP_WRAPPER, DATABASE_NAME, TRACES));
+                """.formatted(DATABASE_NAME, SPANS, DATABASE_NAME, SHARD,
+                DATABASE_NAME, TEMP_WRAPPER, DATABASE_NAME, SPANS));
     }
 
     /**
@@ -398,7 +402,7 @@ class TracesSchemaParityPostCutoverTest {
      * whether the wrapper can resolve every column, not what the (empty) table holds.
      */
     private void selectColumns(List<String> columns) throws Exception {
-        var sql = "SELECT %s FROM %s.%s LIMIT 0".formatted(String.join(", ", columns), DATABASE_NAME, TRACES);
+        var sql = "SELECT %s FROM %s.%s LIMIT 0".formatted(String.join(", ", columns), DATABASE_NAME, SPANS);
         try (var statement = connection.createStatement(); var resultSet = statement.executeQuery(sql)) {
             assertThat(resultSet.next()).as("LIMIT 0 returns no rows").isFalse();
         }
