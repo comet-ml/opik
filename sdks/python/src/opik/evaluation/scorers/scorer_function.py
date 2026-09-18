@@ -59,7 +59,16 @@ def requires_task_span_argument(scorer_function: ScorerFunction) -> bool:
     """True only when the scorer cannot be called without the span.
 
     A defaulted ``task_span`` is documented as optional, so that scorer still
-    runs when the caller has no span to bind.
+    runs when the caller has no span to bind. ``*task_span``/``**task_span``
+    are excluded as well: they bind no argument named ``task_span``, so a
+    variadic parameter of that name never makes the span required.
     """
     parameter = inspect.signature(scorer_function).parameters.get("task_span")
-    return parameter is not None and parameter.default is inspect.Parameter.empty
+    if parameter is None:
+        return False
+    if parameter.kind in (
+        inspect.Parameter.VAR_POSITIONAL,
+        inspect.Parameter.VAR_KEYWORD,
+    ):
+        return False
+    return parameter.default is inspect.Parameter.empty
