@@ -431,7 +431,7 @@ def test_kl_divergence__zero_smoothing_and_missing_token__raises_metric_error(
     assert (
         str(exc_info.value)
         == f"Token '{missing_token}' is absent from the other text, so the KL "
-        "divergence is undefined with smoothing=0.0. Pass a positive smoothing "
+        "divergence is infinite with smoothing=0.0. Pass a positive smoothing "
         "value (KL divergence metric)."
     )
 

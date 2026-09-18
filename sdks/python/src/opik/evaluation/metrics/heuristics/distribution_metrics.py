@@ -260,10 +260,23 @@ class KLDivergence(_DistributionMetricBase):
         direction: Direction to compute (``"pq"``, ``"qp"``, or ``"avg"`` for
             symmetric).
         normalize: Whether to normalise token counts to probabilities first.
-        smoothing: Additive smoothing constant to avoid divide-by-zero.
+        smoothing: Additive smoothing constant to avoid divide-by-zero. With
+            ``smoothing=0.0`` a token missing from the direction's reference
+            side makes the divergence infinite and the metric raises instead
+            of returning a score (see ``Raises``).
         name: Display name for the metric result.
         track: Whether to automatically track metric results.
         project_name: Optional tracking project name.
+
+    Raises:
+        MetricComputationError:
+            - If ``output`` or ``reference`` is empty, or tokenizes to no tokens.
+            - If ``smoothing=0.0`` and the distribution a direction integrates
+              over has a token the other one lacks: the divergence is then
+              positive infinity, which is not a usable score. The sum only runs
+              over the first distribution's support, so a token missing in the
+              opposite direction is not an error and ``"pq"`` and ``"qp"`` can
+              disagree on the same pair of texts.
 
     Example:
         >>> from opik.evaluation.metrics import KLDivergence
@@ -328,12 +341,14 @@ class KLDivergence(_DistributionMetricBase):
             p_val = self._smooth(p_val)
             q_val = self._smooth(q_dist.get(token, 0.0))
             if q_val == 0.0:
-                # Without smoothing the divergence is undefined (infinite) whenever a
-                # token of one text is absent from the other; report that instead of
-                # letting a ZeroDivisionError escape.
+                # Without smoothing the divergence is +inf whenever a token of one
+                # text is absent from the other. Raise rather than return inf: an
+                # inf score would silently poison any average over the batch,
+                # whereas a MetricComputationError leaves the rest of the run usable
+                # (and a ZeroDivisionError must not escape either way).
                 raise MetricComputationError(
                     f"Token {token!r} is absent from the other text, so the KL "
-                    "divergence is undefined with smoothing=0.0. Pass a positive "
+                    "divergence is infinite with smoothing=0.0. Pass a positive "
                     "smoothing value (KL divergence metric)."
                 )
             divergence += p_val * math.log(p_val / q_val)
