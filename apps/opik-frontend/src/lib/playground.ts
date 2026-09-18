@@ -11,6 +11,7 @@ import {
 import {
   getDefaultTemperatureForModel,
   getDefaultThinkingLevel,
+  isClaudeModel,
   supportsAnthropicThinkingEffort,
   supportsGeminiThinkingLevel,
   supportsOpenAIReasoningEffort,
@@ -74,8 +75,12 @@ export const restoreMissingConfigKeys = (
     return prompt;
   }
 
+  // Claude rejects temperature and top_p together whoever serves it, so a stored config carrying
+  // neither is a deliberate choice — restoring the provider's defaults would silently turn it back
+  // into temperature-at-default on the next reload.
   const exclusiveSamplingPair =
-    parseComposedProviderType(prompt.provider) === PROVIDER_TYPE.ANTHROPIC;
+    parseComposedProviderType(prompt.provider) === PROVIDER_TYPE.ANTHROPIC ||
+    (typeof prompt.model === "string" && isClaudeModel(prompt.model));
   const stored = prompt.configs as Record<string, unknown> | undefined | null;
   const configs = stored ?? {};
   const restored: Record<string, unknown> = { ...configs };
