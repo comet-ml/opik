@@ -20,12 +20,21 @@ def build_conversation_turns(
 
     Returns:
         List[types.ConversationTurn]: A list of `ConversationTurn` objects, where
-            each object represents a pair of user input and assistant output messages.
+            each object represents a pair of user input and assistant output
+            messages. A user message that no assistant message answers is
+            returned as a turn with `output=None`, so it stays in the
+            conversation instead of being replaced by the next user message.
     """
     turns = []
     user_input = None
     for message_dict in conversation:
         if message_dict["role"] == "user":
+            # A user message that went unanswered is still a turn - the tail branch
+            # below relies on that. It has to stay true mid-conversation too, otherwise
+            # the next user message overwrites the pending one and that message never
+            # reaches the judges, which score the windows built from these turns.
+            if user_input is not None:
+                turns.append(types.ConversationTurn(input=user_input, output=None))
             user_input = message_dict
         elif message_dict["role"] == "assistant" and user_input is not None:
             current_turn = types.ConversationTurn(input=user_input, output=message_dict)

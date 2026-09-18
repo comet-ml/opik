@@ -51,6 +51,22 @@ def test_extract_turns_windows_from_conversation__happy_path():
     assert turns_windows[1] == conversation
 
 
+def test_extract_turns_windows_from_conversation__unanswered_turn_reaches_the_window():
+    """What the sliding-window judges see must be the whole thread."""
+    conversation = [
+        {"role": "user", "content": "Hello!"},
+        {"role": "user", "content": "Actually, what is the overdraft fee?"},
+        {"role": "assistant", "content": "It is 5%."},
+    ]
+
+    turns_windows = conversation_helpers.extract_turns_windows_from_conversation(
+        conversation=conversation, window_size=2
+    )
+
+    assert len(turns_windows) == 2
+    assert turns_windows[-1] == conversation
+
+
 def test_extract_turns_windows_from_conversation__empty_conversation__raises_error():
     conversation = []
 
