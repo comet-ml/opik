@@ -1,8 +1,9 @@
 --liquibase formatted sql
 
 -- REFERENCE MIGRATION for the topology-aware spans DDL pattern (OPIK-8377). TEST FIXTURE, NOT A SHIPPED MIGRATION.
--- The spans counterpart of liquibase/traces-ddl-reference/migrations/reference_topology_aware_change.sql (OPIK-7772);
--- the pattern is identical, because the two families' cutovers are.
+-- The spans counterpart of liquibase/traces-ddl-reference/migrations/reference_topology_aware_change.sql (OPIK-7772).
+-- The pattern is identical because both families cut over the same way: an EXCHANGE that promotes the shadow into the
+-- live name, then a Distributed wrapper over the renamed shard. Only the table names differ.
 --
 -- ISOLATION. This file is under src/test/resources, so the shipped changelog's includeAll over
 -- liquibase/db-app-analytics/migrations/ cannot reach it and no deployment can apply it. It has no migration number and

@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * <p><b>The backfill legs are pending, and say so.</b> The third traces leg — the cutover backfill's explicit column
  * list — has no spans equivalent yet: the backfill ships with OPIK-8366. Rather than quietly comparing against nothing,
- * {@code CutoverSchemaParity.SPANS} declares the pending ticket and {@link #backfillLegsArePendingTheCutoverTooling}
+ * {@code CutoverSchemaParity.SPANS} declares the pending ticket and {@link #backfillLegsRemainPendingUntilCutoverToolingLands}
  * pins that declaration against the filesystem, so the skip cannot outlive the reason for it.
  *
  * <p><b>Two differences traces does not have.</b> The spans cutover also changes the sorting key (OPIK-7750 drops
@@ -129,7 +129,7 @@ class SpansSchemaParityPreCutoverTest {
      */
     @Test
     @Order(3)
-    void backfillLegsArePendingTheCutoverTooling() {
+    void backfillLegsRemainPendingUntilCutoverToolingLands() {
         assertThat(PARITY.getBackfillSql())
                 .as("""
                         %s ships the spans cutover backfill. Until it lands there is no column list to compare against, \

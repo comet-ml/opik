@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -64,6 +65,16 @@ enum CutoverMigrationPreconditionLint {
             .compile("(?im)^\\s*--\\s*preconditions\\b.*\\bonError:HALT\\b");
 
     private static final Set<String> REQUIRED_BRANCHES = Set.of("0", "1");
+
+    /**
+     * The column, index or projection a statement adds, drops or modifies. Group 1 is the identifier, which is what
+     * {@link #assertBranchesTouchTheSameObjects} compares across the two branches.
+     *
+     * <p>Settings and TTLs are deliberately absent: {@code MODIFY SETTING} and {@code MODIFY TTL} name no object, and
+     * both are legitimately allowed to differ between a shard and the table it will replace.
+     */
+    private static final Pattern MUTATED_OBJECT = Pattern.compile("(?i)\\b(?:ADD|DROP|MODIFY|MATERIALIZE|CLEAR)\\s+"
+            + "(?:COLUMN|INDEX|PROJECTION)\\s+(?:IF\\s+(?:NOT\\s+)?EXISTS\\s+)?[`\"]?([A-Za-z_][A-Za-z0-9_]*)[`\"]?");
 
     /** A {@code /* ... *}{@code /} block, non-greedy and spanning lines. */
     private static final Pattern BLOCK_COMMENT = Pattern.compile("(?s)/\\*.*?\\*/");
@@ -147,6 +158,7 @@ enum CutoverMigrationPreconditionLint {
         var problems = new ArrayList<String>();
         var guardedBranches = new LinkedHashSet<String>();
         var branchCounts = new LinkedHashMap<String, Integer>();
+        var branchObjects = new LinkedHashMap<String, Set<String>>();
         boolean mutatesFamilyTable = false;
 
         var changeSets = changeSets(sql);
@@ -194,6 +206,8 @@ enum CutoverMigrationPreconditionLint {
             if (guarded) {
                 guardedBranches.add(check.group(1));
                 branchCounts.merge(check.group(1), 1, Integer::sum);
+                branchObjects.computeIfAbsent(check.group(1), branch -> new LinkedHashSet<>())
+                        .addAll(mutatedObjectsIn(statements));
             } else {
                 problems.add("""
                         %s: changeset '%s' mutates a %s table without a complete topology guard — it needs \
@@ -214,11 +228,6 @@ enum CutoverMigrationPreconditionLint {
         // Branches must come in pairs. Counting rather than set-testing catches the file that guards two mutations to
         // the same topology and one to the other: the SET is still {0, 1}, so it looks complementary, while one
         // topology in fact receives a change the other never does.
-        //
-        // This is a structural check and stops there on purpose. Whether two branches express the *same* change is a
-        // question about the DDL, not about its shape, and answering it is what the container-based parity gates do —
-        // they apply the migration to each topology and compare the resulting schemas. A regex lint that tried would
-        // either approximate it or block legitimate migrations.
         if (mutatesFamilyTable && problems.isEmpty()
                 && !branchCounts.getOrDefault("0", 0).equals(branchCounts.getOrDefault("1", 0))) {
             problems.add("""
@@ -228,7 +237,45 @@ enum CutoverMigrationPreconditionLint {
                     """.formatted(fileName, branchCounts.getOrDefault("0", 0), branchCounts.getOrDefault("1", 0)));
         }
 
+        if (mutatesFamilyTable && problems.isEmpty()) {
+            assertBranchesTouchTheSameObjects(fileName, branchObjects, problems);
+        }
+
         return problems;
+    }
+
+    /**
+     * The two branches must name the same columns, indices and projections. Which <i>tables</i> they target differs by
+     * design — that is the whole point of branching — but the objects being added, dropped or modified are the change
+     * itself, and both topologies must receive it.
+     *
+     * <p>Nothing else covers this, and it is not the structural check it looks like. Each parity gate applies a
+     * migration to <b>one</b> topology: the pre-cutover gate never has a shard, so it only ever runs the
+     * {@code expectedResult:0} branch, and the post-cutover gate splices the cutover in before the migration, so it
+     * only ever runs the other. Neither ever sees both outcomes, so a file adding {@code idx_a} pre-cutover and
+     * {@code idx_b} post-cutover satisfies every gate while leaving the fleet permanently split: an install that
+     * migrated before cutting over carries {@code idx_a} on its shard, one that cut over first carries {@code idx_b}.
+     *
+     * <p>Comparing identifiers rather than statements keeps it free of false positives. The legitimate asymmetries are
+     * all about placement — a storage-only change reaches both tables pre-cutover but the shard alone after it, and a
+     * {@code MATERIALIZE} may be worth doing on one side only — and none of them change which object is named.
+     */
+    private void assertBranchesTouchTheSameObjects(String fileName, Map<String, Set<String>> branchObjects,
+            List<String> problems) {
+        var preCutover = branchObjects.getOrDefault("0", Set.of());
+        var postCutover = branchObjects.getOrDefault("1", Set.of());
+        if (preCutover.equals(postCutover)) {
+            return;
+        }
+
+        problems.add(
+                """
+                        %s: the guarded branches must apply the same change — the pre-cutover branch names %s and the \
+                        post-cutover branch names %s. Which tables each targets differs by design, but the columns, indices and \
+                        projections must not: an install that migrated before cutting over would end up with a different schema \
+                        from one that cut over first, and no parity gate can see it because each only ever runs one branch.\
+                        """
+                        .formatted(fileName, preCutover, postCutover));
     }
 
     /**
@@ -245,6 +292,16 @@ enum CutoverMigrationPreconditionLint {
      * {@code sqlCheck} "on the changeset itself", which for a combined migration produces exactly that broken shape and
      * then passes both families' lints.
      */
+    /** Every column, index and projection {@code statements} names, lower-cased so casing cannot split a pair. */
+    private Set<String> mutatedObjectsIn(String statements) {
+        var objects = new LinkedHashSet<String>();
+        var matcher = MUTATED_OBJECT.matcher(statements);
+        while (matcher.find()) {
+            objects.add(matcher.group(1).toLowerCase());
+        }
+        return objects;
+    }
+
     private CutoverMigrationPreconditionLint otherFamilyMutating(String statements) {
         for (var family : values()) {
             if (family != this && family.mutation.matcher(statements).find()) {

@@ -9,9 +9,14 @@ silent — they raise nothing at migration time and surface as broken reads or l
 This page was written for `traces` (OPIK-7772) and generalised when `spans` became the second family (OPIK-8377). The
 rules are the same for both, because the two cutovers are the same cutover; where a family differs, it is called out.
 
-CI enforces everything on this page. If you follow the playbook you will not need to think about it again; if you do not,
-`TracesSchemaParity*Test` / `SpansSchemaParity*Test` will fail your PR with a message pointing at the specific rule you
-missed.
+CI enforces the mechanical rules on this page — schema parity across both topologies, and the shape of a guarded
+migration. Get one of those wrong and `TracesSchemaParity*Test` / `SpansSchemaParity*Test` or the precondition lint will
+fail your PR with a message pointing at the rule you missed.
+
+**Two rules here are not machine-checked, and are yours to keep.** The
+[freeze rule](#freeze-rule-no-cutover-table-schema-ddl-during-that-tables-cutover-soak) during a cutover soak, and the
+[single-node precondition limitation](#known-limitation-the-guard-is-evaluated-on-one-node). Nothing in CI will stop you
+shipping against either: the gates read a schema, and neither of those is visible in one.
 
 ---
 
@@ -235,7 +240,7 @@ The freeze is **per family**: a traces soak does not freeze spans DDL, and vice 
 |---|---|
 | `TracesSchemaParityPreCutoverTest` / `SpansSchemaParityPreCutoverTest` | applies the real changelog as a fresh install does, then asserts parity: `<x>` ≅ the `<x>_local_v2` shadow ≅ the backfill column list (the backfill leg is pending for spans — see below) |
 | `TracesSchemaParityPostCutoverTest` / `SpansSchemaParityPostCutoverTest` | stops the changelog after the family's splice point, splices in the runbook's `EXCHANGE` + wrap, resumes — so **your** migration runs on the post-cutover topology — then asserts the wrapper exposes exactly the shard's columns |
-| `TracesMigrationPreconditionLintTest` / `SpansMigrationPreconditionLintTest` | a fast, container-free check that a migration mutating the family's tables **strictly after** its splice point carries the guard **on the mutating changeset itself**, keyed on **its own** shard, ships **both** complementary branches, and does not mutate the other family in the same changeset |
+| `TracesMigrationPreconditionLintTest` / `SpansMigrationPreconditionLintTest` | a fast, container-free check that a migration mutating the family's tables **strictly after** its splice point carries the guard **on the mutating changeset itself**, keyed on **its own** shard, ships **both** complementary branches applying the **same** change, and does not mutate the other family in the same changeset |
 | `Trace/SpanMutationRoutingArchTest` and `Trace/SpanMutationSqlRoutingTest` | runtime DAO mutations resolve their table through `TraceDAOImpl#tracesMutationTable()` / `SpanDAO#selectSpansMutationTable` and never name a physical table directly |
 
 The splice point is the last migration that shapes the family's shadow table, and is declared once, on
@@ -268,6 +273,9 @@ Common failures:
   side, or the two have converged and the entry is now dead. Either fix the change or delete the entry.
 * *"mutates both ... tables"* — one changeset touches both families. Split it into a guarded pair per family, as
   [One family per changeset](#one-family-per-changeset) shows.
+* *"must apply the same change"* — your two branches name different columns or indices. Which tables each branch targets
+  differs by design; which objects they name must not, or installs end up split by the order in which they migrated and
+  cut over. No parity gate can catch this, because each only ever runs one branch.
 * The **lint** failing otherwise means your new migration mutates a cutover table with no precondition guard at all, or
   with one keyed on the wrong family's shard — start from the pattern above.
 
@@ -296,7 +304,7 @@ tolerance.
 
 The spans cutover backfill ships with **OPIK-8366**. Until it lands there is no column list to compare against, so
 `CutoverSchemaParity.SPANS` declares a `backfillPendingTicket` and skips its two backfill legs. That skip is not silent:
-`SpansSchemaParityPreCutoverTest.backfillLegsArePendingTheCutoverTooling` asserts the file is still absent, so the day
+`SpansSchemaParityPreCutoverTest.backfillLegsRemainPendingUntilCutoverToolingLands` asserts the file is still absent, so the day
 the backfill merges that test fails and forces whoever merged it to clear the marker — at which point the legs start
 asserting on their own, and the spans gate becomes three-way like the traces one.
 
