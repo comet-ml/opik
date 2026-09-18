@@ -23,6 +23,10 @@ import java.util.concurrent.TimeUnit;
  * consumer. The stream is what makes that work survive a replica restart — there is no backfill or manual
  * re-run to recover a dropped event, so an in-memory handoff would lose a trace from a review queue
  * permanently and silently.
+ *
+ * <p>Values live in {@code config.yml} and its test counterpart, which is the single source of truth:
+ * no field carries a Java default, so a key missing from the yaml fails validation at boot rather than
+ * silently taking a value that appears nowhere on disk.
  */
 @Data
 public class AnnotationQueueRoutingConfig implements StreamConfiguration {
@@ -30,10 +34,10 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     public static final String PAYLOAD_FIELD = "message";
 
     @Valid @JsonProperty
-    private boolean enabled = true;
+    private boolean enabled;
 
     @Valid @NotBlank @JsonProperty
-    private String streamName = "annotation-queue-routing";
+    private String streamName;
 
     /**
      * How long an entity waits after its first score before it is evaluated. Later scores on the same
@@ -42,33 +46,36 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 500, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration debounceDelay = Duration.seconds(5);
+    private Duration debounceDelay;
 
     /** How often the flush job looks for entities whose window has elapsed. */
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 500, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
-    private Duration jobInterval = Duration.seconds(2);
+    private Duration jobInterval;
 
     /** Entities taken per flush; also the cap on how many entity ids one published message can carry. */
     @Valid @JsonProperty
-    @Min(1) @Max(10000) private int jobBatchSize = 500;
+    @Min(1) @Max(10000) private int jobBatchSize;
 
+    // Kept at or below jobInterval: a lease longer than the cycle would make the next tick a no-op.
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    private Duration jobLockTime = Duration.seconds(4);
+    @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
+    private Duration jobLockTime;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-    private Duration jobLockWaitTime = Duration.milliseconds(300);
+    @MaxDuration(value = 5, unit = TimeUnit.SECONDS)
+    private Duration jobLockWaitTime;
 
     @Valid @NotBlank @JsonProperty
-    private String consumerGroupName = "annotation-queue-routing-consumers";
+    private String consumerGroupName;
 
     // Each message fans out to one MySQL read, one ClickHouse read and up to one write per matching queue,
     // so this is the main lever on concurrent database work when scores arrive in bursts.
     @Valid @JsonProperty
-    @Min(1) @Max(100) private int consumerBatchSize = 10;
+    @Min(1) @Max(100) private int consumerBatchSize;
 
     // These three set the throughput ceiling together, and it is easy to under-provision by accident:
     // new messages per second per replica is roughly
@@ -80,7 +87,8 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     // trimming starts discarding the oldest messages, which is silent. Matches the onlineScoring tuning.
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-    private Duration poolingInterval = Duration.milliseconds(500);
+    @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
+    private Duration poolingInterval;
 
     // How long to wait before re-reading scores for entities the event named but the first read found
     // none for. Covers ClickHouse replication lag and the async-insert buffer window
@@ -88,28 +96,29 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 50, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 10, unit = TimeUnit.SECONDS)
-    private Duration staleReadRetryDelay = Duration.milliseconds(500);
+    private Duration staleReadRetryDelay;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 20, unit = TimeUnit.SECONDS)
-    private Duration longPollingDuration = Duration.seconds(5);
+    private Duration longPollingDuration;
 
     @JsonProperty
-    @Min(1) @Max(10) private int maxRetries = 3;
+    @Min(1) @Max(10) private int maxRetries;
 
     @JsonProperty
-    @Min(2) private int claimIntervalRatio = 10;
+    @Min(2) @Max(100) private int claimIntervalRatio;
 
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
-    private Duration pendingMessageDuration = Duration.minutes(5);
+    @MaxDuration(value = 1, unit = TimeUnit.HOURS)
+    private Duration pendingMessageDuration;
 
     @JsonProperty
-    @Min(1000) @Max(10_000_000) private int streamMaxLen = 100_000;
+    @Min(1000) @Max(10_000_000) private int streamMaxLen;
 
     @JsonProperty
-    @Min(0) @Max(10_000) private int streamTrimLimit = 1000;
+    @Min(1) @Max(10_000) private int streamTrimLimit;
 
     // Lazy codec creation so it picks up the configured JsonUtils mapper.
     @Override

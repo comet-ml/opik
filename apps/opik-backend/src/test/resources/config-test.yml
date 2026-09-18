@@ -1122,3 +1122,66 @@ optimizationStalledReaper:
 environment:
   # Low ceiling for tests so cap-related scenarios don't need to insert many environments.
   maxPerWorkspace: 5
+
+annotationQueueRouting:
+  # Default: false in production, true here so the tests exercise the pipeline
+  # Description: When false, score events are never published and nothing is routed automatically
+  enabled: true
+  # Default: annotation-queue-routing
+  # Description: Redis stream name for queued annotation queue routing work
+  streamName: 'annotation-queue-routing'
+  # Default: 5s
+  # Description: How long an entity waits after its first score before being evaluated. Later scores on the
+  #   same entity land inside the window and collapse into one evaluation rather than repeating it. The
+  #   deadline is set by the first score and is NOT reset by later ones, so a continuously scored entity
+  #   cannot starve.
+  debounceDelay: 5s
+  # Default: 2s
+  # Description: How often the flush job drains entities whose debounce window has elapsed
+  jobInterval: 2s
+  # Default: 500
+  # Description: Entities taken per flush, and the cap on how many entity ids one published message carries
+  jobBatchSize: 500
+  # Default: 4s
+  # Description: How long the flush job holds its lock before it is released
+  jobLockTime: 4s
+  # Default: 300ms
+  # Description: How long the flush job waits to acquire the lock before giving up until the next tick
+  jobLockWaitTime: 300ms
+  # Default: annotation-queue-routing-consumers
+  # Description: Consumer group name for annotation queue routing
+  consumerGroupName: 'annotation-queue-routing-consumers'
+  # Default: 10
+  # Description: Messages processed per batch; the main cap on concurrent database work during score bursts
+  consumerBatchSize: 10
+  # Default: 500ms
+  # Description: How often to poll Redis for new routing work. Together with consumerBatchSize and
+  #   claimIntervalRatio this sets the throughput ceiling: new messages per second per replica is about
+  #   consumerBatchSize / (poolingInterval x claimIntervalRatio), because every claimIntervalRatio-th tick
+  #   spends its turn on autoClaim rather than reading new work. Set too low and the backlog grows until
+  #   streamMaxLen trimming silently discards the oldest messages.
+  poolingInterval: 500ms
+  # Default: 500ms
+  # Description: Delay before re-reading scores for entities the event named but the first read found none
+  #   for — covers ClickHouse replication lag and the async-insert buffer window. Only paid when an
+  #   inconsistency is actually detected.
+  staleReadRetryDelay: 500ms
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling)
+  longPollingDuration: 5s
+  # Default: 3
+  # Description: Maximum number of retries for a failing message before it is dropped
+  maxRetries: 3
+  # Default: 10
+  # Description: Claim pending messages every N polling intervals. Lower values recover stuck work sooner
+  #   but cost new-message throughput, since a claim tick reads nothing new — see poolingInterval above.
+  claimIntervalRatio: 10
+  # Default: 5m
+  # Description: How long a message can stay pending before it is auto-claimed by another consumer
+  pendingMessageDuration: 5m
+  # Default: 100000
+  # Description: Maximum stream length before old entries are trimmed
+  streamMaxLen: 100000
+  # Default: 1000
+  # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+  streamTrimLimit: 1000

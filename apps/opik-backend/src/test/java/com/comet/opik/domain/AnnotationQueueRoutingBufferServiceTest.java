@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.TestConfigUtils;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,7 +72,10 @@ class AnnotationQueueRoutingBufferServiceTest {
 
     @BeforeEach
     void setUp() {
-        config = new AnnotationQueueRoutingConfig();
+        // The shipped configuration, read from the same file the app boots with, rather than values
+        // restated here that would drift from it. Individual tests override a field when they are
+        // deliberately exercising something other than the shipped behaviour.
+        config = TestConfigUtils.loadConfigTest().getAnnotationQueueRouting();
 
         when(redisClient.getScoredSortedSet(AnnotationQueueRoutingBufferService.PENDING_SET_KEY))
                 .thenReturn(pending);
