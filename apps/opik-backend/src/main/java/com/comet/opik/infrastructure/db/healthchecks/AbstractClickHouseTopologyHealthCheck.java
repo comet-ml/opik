@@ -7,6 +7,8 @@ import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Map;
+import java.util.Spliterator;
+import java.util.Spliterators;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -156,9 +158,15 @@ abstract class AbstractClickHouseTopologyHealthCheck extends AbstractClickHouseH
     /**
      * Collected eagerly because {@link Records} is a single-pass cursor over the response, while both table names are
      * looked up independently — and, on the healthy-unwrapped path, one of them not at all.
+     *
+     * <p>The stream is built from {@link Records#iterator()} rather than {@code spliterator()} so that every test in
+     * this package stubs the same method. {@code spliterator()} is an {@link Iterable} default that a mock leaves
+     * {@code null}, so a probe test copied from a sibling that stubs only {@code iterator()} would fail on an NPE from
+     * the stream instead of on what it meant to assert.
      */
     private Map<String, String> readEngines(Records records) {
-        return StreamSupport.stream(records.spliterator(), false)
+        var rows = Spliterators.spliteratorUnknownSize(records.iterator(), Spliterator.ORDERED);
+        return StreamSupport.stream(rows, false)
                 .collect(Collectors.toMap(row -> row.getString(NAME_COLUMN), row -> row.getString(ENGINE_COLUMN)));
     }
 

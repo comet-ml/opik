@@ -120,8 +120,9 @@ Start from the health check message — it names both the setting and the engine
 
 ```bash
 # Kubernetes — the Helm chart's Service does not expose the admin port, so forward it.
-# Substitute your namespace; every command below assumes the same one.
-kubectl -n <namespace> port-forward deploy/<release-name>-backend 8081:8081
+# Substitute your namespace; every command below assumes the same one. The workload is named after
+# the chart rather than the release, so it stays `opik-backend` unless you set `nameOverride`.
+kubectl -n <namespace> port-forward deploy/opik-backend 8081:8081
 curl -s localhost:8081/healthcheck | jq '.["clickhouse-spans-topology"], .["clickhouse-traces-topology"]'
 
 # Docker Compose — published on the host only when you start with the override file
@@ -169,7 +170,7 @@ Then set the flag to match, for whichever table is out of step:
 - `spans` is `Distributed` and `spans_local` exists → set the same key to `true` and restart.
 
 <Callout intent="warning">
-  **On Helm, an explicit env entry wins over the chart value.** The chart derives `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED` / `ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED` from `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` / `databaseAnalyticsDataModel.spansDistributedWrapEnabled` **only when that key is not already set under `component.backend.env`** — an explicit entry there takes precedence. So if you change the top-level value, restart, and the check still reports the old expectation, you have a stale override: update or remove the entry under `component.backend.env`. Confirm what the backend actually receives — both keys at once — with `kubectl -n <namespace> get configmap <release-name>-backend -o jsonpath='{.data.ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED}{"\n"}{.data.ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED}{"\n"}'`.
+  **On Helm, an explicit env entry wins over the chart value.** The chart derives `ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED` / `ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED` from `databaseAnalyticsDataModel.tracesDistributedWrapEnabled` / `databaseAnalyticsDataModel.spansDistributedWrapEnabled` **only when that key is not already set under `component.backend.env`** — an explicit entry there takes precedence. So if you change the top-level value, restart, and the check still reports the old expectation, you have a stale override: update or remove the entry under `component.backend.env`. Confirm what the backend actually receives — both keys at once — with `kubectl -n <namespace> get configmap opik-backend -o jsonpath='{.data.ANALYTICS_DB_DATA_MODEL_TRACES_DISTRIBUTED_WRAP_ENABLED}{"\n"}{.data.ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED}{"\n"}'` (the ConfigMap is named after the chart too).
 </Callout>
 
 The check re-evaluates on every probe, so readiness returns on its own once the two sides agree — no further action beyond the restart that picks up the new setting.

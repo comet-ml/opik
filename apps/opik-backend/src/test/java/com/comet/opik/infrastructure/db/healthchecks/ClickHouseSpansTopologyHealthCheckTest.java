@@ -256,7 +256,7 @@ class ClickHouseSpansTopologyHealthCheckTest {
                 })
                 .toList();
         var records = mock(Records.class);
-        when(records.spliterator()).thenReturn(rows.spliterator());
+        when(records.iterator()).thenReturn(rows.iterator());
         return records;
     }
 
