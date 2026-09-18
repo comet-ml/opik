@@ -1,5 +1,6 @@
 from typing import Any, Callable, Dict, Optional, List, Union
 
+from opik import exceptions
 from opik.evaluation.metrics import base_metric, score_result
 
 from . import scorer_function
@@ -94,9 +95,22 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
         Returns:
             ScoreResult from the wrapped scorer function
         """
-        if task_span is not None and scorer_function.has_task_span_in_parameters(
+        needs_task_span = scorer_function.has_task_span_in_parameters(self.scorer)
+
+        if task_span is None and scorer_function.requires_task_span_argument(
             self.scorer
         ):
+            # Nothing bound a span and the scorer cannot run without one. It is
+            # reported as the missing argument it is: calling the scorer anyway
+            # would surface a TypeError from user code instead, which the
+            # tolerance rules do not treat as a score argument failure.
+            raise exceptions.ScoreMethodMissingArguments(
+                score_name=self.name,
+                missing_required_arguments=["task_span"],
+                available_keys=["dataset_item", "task_outputs", *sorted(kwargs)],
+            )
+
+        if needs_task_span and task_span is not None:
             return self.scorer(
                 dataset_item=dataset_item,
                 task_outputs=task_outputs,

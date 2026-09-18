@@ -53,3 +53,13 @@ def validate_scorer_function(scorer_function: ScorerFunction) -> None:
 
 def has_task_span_in_parameters(scorer_function: ScorerFunction) -> bool:
     return "task_span" in inspect.signature(scorer_function).parameters
+
+
+def requires_task_span_argument(scorer_function: ScorerFunction) -> bool:
+    """True only when the scorer cannot be called without the span.
+
+    A defaulted ``task_span`` is documented as optional, so that scorer still
+    runs when the caller has no span to bind.
+    """
+    parameter = inspect.signature(scorer_function).parameters.get("task_span")
+    return parameter is not None and parameter.default is inspect.Parameter.empty
