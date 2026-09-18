@@ -4307,7 +4307,9 @@ class ProjectMetricsResourceTest {
                             .projectName(projectName)
                             .threadId(threadId)
                             .startTime(Instant.EPOCH)
-                            .endTime(ranAt.plusMillis(durationMs))
+                            // ends after the real trace: if max(end_time) ignored the sentinel guard the
+                            // thread's duration would stretch to here
+                            .endTime(ranAt.plusMillis(durationMs * 4))
                             .build());
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
