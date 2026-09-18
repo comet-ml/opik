@@ -44,8 +44,9 @@
 -- the flip that enabled the wrap. It is the ONLY flag this reverses, and `spanColumnsNonNullable` must stay `true`: the
 -- live table keeps the successor's sentinel schema, which un-wrapping preserves. Contrast stage B/C, which restore the
 -- unpartitioned original and so also revert `spanColumnsNonNullable` (stage C both flags), plus the sentinel/duration
--- repair. Span-delete partition pruning is not a flag at all and is not this cutover's to deliver — it is OPIK-8364, and
--- until it lands the span delete path is unpruned on both sides of the swap alike.
+-- repair. Span-delete partition pruning needs no separate revert either: OPIK-8364 attached it to
+-- `spanColumnsNonNullable`, which this stage leaves `true`, and the table it scopes against stays weekly-partitioned
+-- through an un-wrap.
 
 -- 1. Gapless un-wrap: rotate both names atomically.
 SET log_comment = 'spans_local_v2_rollback:unwrap';

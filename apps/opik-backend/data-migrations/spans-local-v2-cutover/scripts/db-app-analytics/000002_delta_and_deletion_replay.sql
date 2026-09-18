@@ -240,8 +240,9 @@ SETTINGS allow_nondeterministic_mutations = 1,
 -- retention delete path does not fire during the cutover. The only deletes in this window are user-initiated cascades,
 -- and those ARE captured by the bridge. If retention is ever enabled, pause it for the window (or land retention-path
 -- capture). Note the spans retention sweep is WORSE than the traces one to leave running: SpanDAO.DELETE_FOR_RETENTION
--- filters on trace_id only and applies no partition-pruning predicate at all (OPIK-8364, half B), so it is planned
--- against every part of the table.
+-- filters on trace_id only and applies no partition-pruning predicate at all -- unchanged by OPIK-8364, which scoped
+-- the cascade and deliberately left the sweep alone (a week bound from a trace_id range would drop valid candidates,
+-- since a span's id_at comes from its own UUIDv7) -- so it is planned against every part of the table.
 
 -- rollback: none for the delta-insert (it only adds newest versions that ReplacingMergeTree dedups); the replay is
 --           idempotent. If aborting the cutover here, TRUNCATE spans_local_v2 (rollback.sh --stage A) and see the

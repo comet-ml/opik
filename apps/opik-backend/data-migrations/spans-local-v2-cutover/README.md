@@ -487,11 +487,12 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     the readiness gap below is open. If a wrap IS planned, it needs its own window, its own grants (stage C's and the
     wrap's), and an answer to
     ["the readiness gap"](#the-readiness-gap-that-opik-7799-left-open).
-17. **Know that the span delete path is unpruned on both sides** — OPIK-8364 is open, so `SpanDAO.DELETE_BY_IDS` emits
-    no partition predicate at all (the "Span-delete partition pruning does not exist yet" note at the end of
-    ["The final cutover window"](#the-final-cutover-window) carries the detail). Nothing in the cutover changes it and
-    nothing in the cutover depends on it, but delete latency through the window is worth watching as a throttle signal
-    on the backfill.
+17. **Know that the span delete cascade prunes on `spanColumnsNonNullable`, the flag this cutover already flips.**
+    OPIK-8364 has landed: `SpanDAO#deleteBatch` groups ids by weekly partition and emits `IN PARTITION` when that flag
+    is `true`, and falls back to the unbounded delete when it is `false`. The flag therefore carries two meanings at
+    once — "writes and reads speak sentinel" and "the mutation target is weekly-partitioned" — which is the same
+    coupling `traceColumnsNonNullable` has on traces. See ["Span-delete partition pruning rides the sentinel
+    flag"](#span-delete-partition-pruning-rides-the-sentinel-flag) for what that costs between the flip and the swap.
 18. Schedule during off-peak hours — and budget **days**, not hours, for the backfill. `estimate.sh` will say how many.
 
 ## The sequence
@@ -1027,9 +1028,16 @@ write, and sentinel→`null` translation on read, filter and sort. It is a **con
 converted to the column DEFAULT, which is the sentinel, so writes succeed on either setting). It goes first because the
 **read** side must already speak sentinel the instant the successor is live under the name `spans`: while the flag is
 `false` against the successor, an absent `end_time` reads back as `1970-01-01` rather than `null`, and absent-value
-filters/sorts are wrong. Doing it first is safe because `true` is write-compatible with **both** schemas — binding the
-epoch/NaN sentinel into the *still-Nullable* source column is valid — and the copy machinery tolerates the resulting
-NULL/epoch mix (backfill `coalesce`, verify normalizes both to `0`).
+filters/sorts are wrong — silently, for as long as the rollout takes. Writes are compatible with **both** schemas
+(binding the epoch/NaN sentinel into the *still-Nullable* source column is valid) and the copy machinery tolerates the
+resulting NULL/epoch mix (backfill `coalesce`, verify normalizes both to `0`).
+
+*What it does cost, and why that is the accepted trade.* Since OPIK-8364 the same flag also turns on `IN PARTITION`
+scoping for the span delete cascade, so between this flip and the `EXCHANGE` a cascade is scoped against an original
+that is not partitioned and ClickHouse answers code 248 — trace deletes return 500 until the swap, and succeed on
+retry after it. Nothing else is affected: ingestion, reads and the copy are untouched. The exposure is exactly the
+interval you choose to leave between the rollout and the swap, and traces takes the same one for the same reason (see
+["Span-delete partition pruning rides the sentinel flag"](#span-delete-partition-pruning-rides-the-sentinel-flag)).
 
 *Two caveats for the pre-swap window, so keep it short and off-peak.* Both affect rows written while the flag is `true`
 and `spans` is still the Nullable original — and note the window does not close at the `EXCHANGE`: on a rollback it
@@ -1050,34 +1058,46 @@ the `spanColumnsNonNullable` flip").
 
 On rollback, after swapping the Nullable original back, revert the flag to `false` **and** run that repair.
 
-**Span-delete partition pruning does not exist yet, and that is a difference in kind from traces, not a smaller version
-of it.** By the time the traces cutover ran, OPIK-6901 had already made a trace `DELETE` bind itself to the weekly
-partitions its own ids resolve to, so the runbook could say the pruning "needs no flip at all" and move on. On spans
-there is nothing to flip because there is nothing to prune with: **OPIK-8364 is open**, and `SpanDAO.DELETE_BY_IDS`
-emits `WHERE id IN :ids AND workspace_id = :workspace_id AND project_id = :project_id` with no partition predicate at
-all.
+#### Span-delete partition pruning rides the sentinel flag
 
-Three consequences, all of which the window has to absorb rather than fix:
+**OPIK-8364 landed, and it attached span-delete partition pruning to `spanColumnsNonNullable` rather than to a flag of
+its own.** `SpanDAO#deleteBatch` reads that flag and, when it is `true`, groups the batch by weekly partition and scopes
+each statement with `IN PARTITION`; when `false` it issues the unbounded delete. Its own comment gives the reason the
+two share a flag: the same `EXCHANGE` that drops the `Nullable(...)` columns is what puts the partitioned successor
+behind the name mutations target, so the two facts have only ever flipped together. `traceColumnsNonNullable` carries
+the identical double meaning on traces.
 
-- **The span delete path is unpruned on BOTH sides of the swap**, so the swap neither improves nor degrades it. That is
-  the one piece of good news here: there is no flag, no ordering constraint and nothing to revert on rollback, for the
-  opposite reason to traces' — not because the predicate is universally correct, but because it is universally absent.
-- **A delete during the window is planned against every part of the successor**, which after the backfill means every
-  one of many thousands of weekly partitions rather than the source's single unpartitioned part set. The rows it
-  touches are the same; the planning is not. Watch delete latency through the window and treat a regression as a throttle signal on the
-  backfill, not as a cutover fault.
-- **The retention sweep is worse still, and that is why pausing it is not a formality here.**
+**The consequence for this window is a known, accepted cost, and it is the same one traces takes.** This runbook flips
+the flag first and deliberately early — "while there is slack", as step 1 of the final window says — so between that
+flip and the `EXCHANGE` the cascade emits `IN PARTITION` against an original that is not partitioned. ClickHouse
+answers that with code 248 rather than ignoring it, so **span cascade deletes fail for the length of that window**: a
+user deleting a trace gets a 500 and can retry after the swap. It is bounded by how long you leave between the rollout
+and the swap, which is the same knob traces used, and it does not touch ingestion, reads or the copy.
+
+**Flipping the other way is worse, which is why the order stands.** Holding the flag `false` until after the swap keeps
+deletes working but puts every backend on the wrong side of the read path the instant the successor goes live: an
+absent `end_time` reads back as `1970-01-01` instead of `null`, and absent-value filters and sorts are wrong — silently,
+for as long as the rollout takes. A failed delete announces itself; a wrong read does not.
+
+Two further consequences the window absorbs rather than fixes:
+
+- **After the swap the pruning is a net gain**, not a neutral: a delete is planned against the handful of weekly
+  partitions its ids resolve to instead of the source's single unpartitioned part set. Watch delete latency through the
+  window anyway and treat a regression as a throttle signal on the backfill, not as a cutover fault.
+- **The retention sweep does NOT prune either way, and that is why pausing it is not a formality here.**
   `SpanDAO.DELETE_FOR_RETENTION` filters on `trace_id` only, and its own Javadoc records why no partition predicate is
   applied: a span's `id_at` derives from the span's own UUIDv7, which can land in a later week than its `trace_id`, so
-  a week bound derived from a trace-id range would wrongly exclude valid candidates. Retention is disabled in every
-  deployment and the Go/No-Go asserts it — but on traces a stray sweep would have been a pruned mutation, and here it
-  would be a full-table one over the whole source, on top of leaking across the swap.
+  a week bound derived from a trace-id range would wrongly exclude valid candidates. That is unchanged by OPIK-8364,
+  which scoped the cascade and left the sweep alone. Retention is disabled in every deployment and the Go/No-Go asserts
+  it — but on traces a stray sweep would have been a pruned mutation, and here it would be a full-table one over the
+  whole source, on top of leaking across the swap. `config.yml` records the standing constraint that follows: retention
+  and a cut-over `spans` must not both be live until a sweep has been measured on the partitioned table.
 
-`WeeklyPartitions`, the derivation OPIK-6901 built for traces, is reusable when OPIK-8364 lands: `spans_local_v2`'s
-`id_at` is `DateTime64(0,'UTC')` and the original's is a 32-bit `DateTime` (migration 000105), exactly the pair that
-derivation handles by naming the week under each type. Nothing in this cutover blocks it, and nothing in it depends on
-it. Coverage for the traces equivalents sits in `TracesPartitionPruningMutationTest` and
-`TracesLegacyTablePruningMutationTest`; the spans counterparts belong to OPIK-8364, not here.
+`WeeklyPartitions`, the derivation OPIK-6901 built for traces, is what OPIK-8364 reused: `spans_local_v2`'s `id_at` is
+`DateTime64(0,'UTC')` and the original's is a 32-bit `DateTime` (migration 000105), exactly the pair that derivation
+handles by naming the week under each type. Nothing in this cutover blocks it and nothing in it depends on it beyond
+the flag ordering above. Coverage lives with the feature, not here: `SpansPartitionPruningMutationTest` alongside the
+traces `TracesPartitionPruningMutationTest` and `TracesLegacyTablePruningMutationTest`.
 
 ## Batching and throttling
 
