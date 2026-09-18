@@ -1,7 +1,7 @@
 """`Experiment.batch_upload_items` against a real backend.
 
 The unit tests drive the upload through a mock transport and assert on the body they
-captured: the envelope built by hand around orjson-serialised fragments, the gzip level
+captured: the envelope built by hand around pre-serialised fragments, the gzip level
 and the `Content-Encoding` that labels it, the headers `wrapper_headers` recovers and
 the transport `upload_transport` resolves. A body the backend would reject -- a wrong
 envelope key, a missing header, an omitted field sent as null -- passes every one of
@@ -57,7 +57,7 @@ def _create_dataset(
 def _wait_for_experiment_items(
     experiment: experiment_module.Experiment, expected: int
 ) -> List[experiment_item.ExperimentItemContent]:
-    """Every stored item of the experiment, once at least `expected` are readable.
+    """Every stored experiment item, once at least `expected` items are readable.
 
     Reads up to twice as many as expected, so a duplicated item is returned rather
     than cut off by the limit and the caller's exactly-once check can see it.
@@ -184,9 +184,10 @@ def _content_records(
 ) -> List[opik.ExperimentItemBulkRecord]:
     """One record per shape the backend accepts, with non-ASCII text throughout.
 
-    orjson writes non-ASCII as raw UTF-8 rather than as `\\u` escapes, so the text is
-    what shows whether the body's encoding is declared and decoded the way it was
-    written.
+    With orjson installed, non-ASCII goes out as raw UTF-8, and that form only survives
+    if the body's charset is declared and decoded the way it was written. The
+    standard-library fallback escapes it as `\\u` sequences instead. Either way the text
+    must come back intact.
     """
     return [
         # No trace: the backend creates one, with this as its output.
@@ -286,11 +287,11 @@ def test_batch_upload_items__every_record_shape__stores_exactly_what_was_sent(
         validate_before_upload=validate_before_upload,
     )
 
-    stored = {
-        item.dataset_item_id: item
-        for item in _wait_for_experiment_items(experiment, len(records))
-    }
-    _assert_each_dataset_item_once(list(stored.values()), list(ids_by_index.values()))
+    # Checked on the list as read, before keying it by dataset item would collapse a
+    # duplicate into one entry.
+    stored_items = _wait_for_experiment_items(experiment, len(records))
+    _assert_each_dataset_item_once(stored_items, list(ids_by_index.values()))
+    stored = {item.dataset_item_id: item for item in stored_items}
 
     task_result_item = stored[ids_by_index[0]]
     assert task_result_item.evaluation_task_output == {"answer": "Київ — 東京 — ✓ 🚀"}
