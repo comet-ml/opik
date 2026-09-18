@@ -805,28 +805,23 @@ class Dataset(DatasetExportOperations):
     def _upload_transport(self) -> Tuple[httpx.Client, str]:
         """The HTTP client and base URL used to send prepared request bodies.
 
-        A `Dataset` always has a REST client, and the transport underneath it is the very
-        `OpikHttpxClient` the owning client holds -- the same object, carrying the same
-        auth, workspace headers and compression setting -- so a `Dataset` built from a REST
-        client alone resolves a transport like any other, as the read side already does in
-        `parallel_items_reader`. The constructor arguments win where they were supplied.
+        A `Dataset` always has a REST client, and the traversal down to its transport is
+        shared with the experiment upload -- see `httpx_client.upload_transport`, and
+        `parallel_items_reader` for the read side. The constructor arguments win where
+        they were supplied.
         """
-        httpx_client_ = self._rest_httpx_client
-        base_url = self._url_override
+        return httpx_client.upload_transport(
+            self._rest_client,
+            client=self._rest_httpx_client,
+            base_url=self._url_override,
+        )
 
-        if httpx_client_ is None:
-            httpx_client_ = self._rest_client._client_wrapper.httpx_client.httpx_client
-        if base_url is None:
-            base_url = self._rest_client._client_wrapper.get_base_url()
+    def _send_prepared_body(self, body: bytes, _payload: Any = None) -> None:
+        """Send one already-serialised request body.
 
-        if httpx_client_ is None or base_url is None:
-            raise exceptions.OpikException(
-                "The dataset's REST client exposes no HTTP transport to upload through"
-            )
-        return httpx_client_, base_url
-
-    def _send_prepared_body(self, body: bytes) -> None:
-        """Send one already-serialised request body."""
+        The pool hands a send whatever `submit` carried alongside the body; a dataset
+        batch carries nothing, because a rejected one is never re-split.
+        """
         httpx_client_, base_url = self._upload_transport()
 
         def send() -> None:

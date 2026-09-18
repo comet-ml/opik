@@ -1,8 +1,6 @@
 import collections.abc
 import functools
 import logging
-import threading
-from concurrent import futures
 from typing import (
     Dict,
     Iterable,
@@ -11,6 +9,7 @@ from typing import (
     NamedTuple,
     Optional,
     Sequence,
+    Tuple,
     TYPE_CHECKING,
 )
 
@@ -34,6 +33,9 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 _BULK_PATH = "v1/private/experiments/items/bulk"
+
+# Closes the item array and the envelope the prefix opened.
+_BULK_SUFFIX = b"]}"
 
 # The backend caps a bulk request through a bean-validation constraint (@MaxRequestSize /
 # MaxRequestSizeValidator in opik-backend), which answers 422 carrying this message; the byte
@@ -73,19 +75,26 @@ class _BulkUpload(NamedTuple):
     gzip_level: Optional[int]
 
 
-def _batch_chunks(upload: _BulkUpload, payloads: List[bytes]) -> List[bytes]:
-    """The pieces of one request body: the envelope spliced around the fragments.
+def _batch_chunks(
+    upload: _BulkUpload, payloads: List[bytes]
+) -> Tuple[List[bytes], int]:
+    """The pieces of one request body, and the size of the body they make.
 
     Pieces rather than one buffer, so the comma between two records never copies the
-    record before it, and so the gzip below can take them a slice at a time.
+    record before it, and so the gzip below can take them a slice at a time. The size is
+    counted here because it is what the send pool budgets in, and summing it afterwards
+    would walk the pieces a second time.
     """
     chunks: List[bytes] = [upload.prefix]
+    body_bytes = len(upload.prefix) + len(_BULK_SUFFIX)
     for index, payload in enumerate(payloads):
         if index:
             chunks.append(b",")
+            body_bytes += 1
         chunks.append(payload)
-    chunks.append(b"]}")
-    return chunks
+        body_bytes += len(payload)
+    chunks.append(_BULK_SUFFIX)
+    return chunks, body_bytes
 
 
 def _count_batches(sizes_MB: List[float]) -> int:
@@ -212,12 +221,11 @@ class Experiment:
     def _open_bulk_upload(self, project_name: Optional[str]) -> _BulkUpload:
         """The transport and envelope every batch of this upload is sent through.
 
-        The transport underneath the REST client is the very `OpikHttpxClient` the owning
-        client holds -- same auth, same workspace headers, same compression setting -- so
-        an `Experiment` built from a REST client alone resolves one like any other. Auth
-        and workspace live on the generated client's wrapper instead when the REST client
-        was built directly, which is what `wrapper_headers` recovers; without it such a
-        client would upload unauthenticated.
+        The transport is resolved by the same helper the dataset upload uses, so both
+        paths reach it the same way. Auth and workspace live on the generated client's
+        wrapper instead of on the transport when the REST client was built directly,
+        which is what `wrapper_headers` recovers; without it such a client would upload
+        unauthenticated.
 
         The envelope is serialised by the same encoder as the records, so the experiment
         and dataset names are escaped the same way, and spliced open ready for the item
@@ -225,13 +233,7 @@ class Experiment:
         included as an explicit null when there is none -- the backend reads absent and
         null differently, so dropping it is not the same request.
         """
-        wrapper = self._rest_client._client_wrapper
-        client = wrapper.httpx_client.httpx_client
-        base_url = wrapper.get_base_url()
-        if client is None or base_url is None:
-            raise exceptions.OpikException(
-                "The experiment's REST client exposes no HTTP transport to upload through"
-            )
+        client, base_url = httpx_client.upload_transport(self._rest_client)
 
         envelope = streaming_writer.dumps(
             {
@@ -287,30 +289,20 @@ class Experiment:
             operation_name="experiment_items_bulk",
         )
 
-    def _bulk_upload_batch_with_retry(
-        self,
-        batch: List[bytes],
-        upload: _BulkUpload,
-    ) -> None:
-        """Join, compress and send one batch of serialised records.
+    def _send_batch(self, upload: _BulkUpload, body: bytes, batch: List[bytes]) -> None:
+        """Send one prepared body, halving the batch if the server rejects its size.
 
-        Runs on the sending worker, and everything expensive here is deliberate: zlib
-        releases the GIL, so compression is the one part of an upload that parallelises
-        across workers, and doing it on the producer would funnel all of it through one
-        thread. `send_prepared_json` bypasses `OpikHttpxClient.build_request`, so the
-        automatic compression does not apply and this is where it happens instead.
+        Runs on the sending worker, which has already compressed `body` -- zlib releases
+        the GIL, so compression is the one part of an upload that parallelises across
+        workers, and doing it on the producer would funnel all of it through one thread.
+        `send_prepared_json` bypasses `OpikHttpxClient.build_request`, so the automatic
+        compression does not apply and the pool does it instead.
 
-        The fragments are kept rather than released as they are compressed, because a
-        rejected batch is re-sent as halves and needs them again. A half re-joins the
-        same bytes, so every id in it is the one already sent -- nothing is re-converted
+        `batch` is the record fragments the body was built from, carried through the pool
+        because the bytes alone cannot be split back up. A half re-joins the same
+        fragments, so every id in it is the one already sent -- nothing is re-converted
         and nothing can be minted twice.
         """
-        chunks = _batch_chunks(upload, batch)
-        body = (
-            b"".join(chunks)
-            if upload.gzip_level is None
-            else streaming_writer.gzip_chunks(chunks, upload.gzip_level)
-        )
         try:
             self._send_prepared_body(upload, body)
         except ApiError as exception:
@@ -323,12 +315,50 @@ class Experiment:
                 len(batch),
             )
             half = len(batch) // 2
-            self._bulk_upload_batch_with_retry(batch[:half], upload)
-            self._bulk_upload_batch_with_retry(batch[half:], upload)
+            for part in (batch[:half], batch[half:]):
+                # Compressed here rather than back through the pool: this already runs on
+                # a worker, and re-submitting from one would wait on the pool that is
+                # waiting on it.
+                chunks, _ = _batch_chunks(upload, part)
+                self._send_batch(
+                    upload,
+                    streaming_writer.encode_body(chunks, upload.gzip_level),
+                    part,
+                )
         else:
             LOGGER.debug(
                 "Successfully sent experiment items bulk batch of size %d", len(batch)
             )
+
+    def _upload_batches(
+        self,
+        upload: _BulkUpload,
+        items: Iterable[bulk_item.ExperimentItemBulkRecord],
+        project_name: Optional[str],
+        sizes_MB: Optional[List[float]],
+        worker_count: int,
+    ) -> None:
+        """Stream the batches into the bounded send pool the dataset upload uses.
+
+        Same bound, same compress-on-the-worker rule, and at ``worker_count`` of 1 the
+        same inline send. ``fail_fast`` is where the two paths differ: a dataset upload
+        drains what it has queued, this one drops whatever has not started.
+        """
+        pool = streaming_writer.BoundedSendPool(
+            send=functools.partial(self._send_batch, upload),
+            num_threads=worker_count,
+            gzip_level=upload.gzip_level,
+            fail_fast=True,
+            thread_name_prefix="opik_experiment_items_bulk",
+        )
+        try:
+            for batch in self._stream_rest_batches(items, project_name, sizes_MB):
+                chunks, body_bytes = _batch_chunks(upload, batch)
+                pool.submit(chunks, len(batch), body_bytes, payload=batch)
+        except BaseException:
+            pool.abort()
+            raise
+        pool.close()
 
     def batch_upload_items(
         self,
@@ -462,15 +492,11 @@ class Experiment:
         upload = self._open_bulk_upload(resolved_project_name)
 
         if num_threads == 1:
-            for batch in self._stream_rest_batches(
-                items, resolved_project_name, sizes_MB
-            ):
-                self._bulk_upload_batch_with_retry(batch, upload)
+            # One worker is no pool at all: each body is compressed and sent inline, in
+            # order, on this thread.
+            self._upload_batches(upload, items, resolved_project_name, sizes_MB, 1)
             return
 
-        # Deliberately not a `with` block: ThreadPoolExecutor.__exit__ always calls
-        # shutdown(wait=True), which would re-join batches we just chose not to wait for
-        # and park the caller behind a batch stuck in the rate-limit retry loop.
         # More workers than batches is pure waste, and an unbounded caller-supplied value
         # would spawn a thread per batch. The sizes make the count exact; without them
         # the bound has to be an OVER-estimate, because an under-estimate silently caps
@@ -504,46 +530,9 @@ class Experiment:
             counted,
             worker_count,
         )
-        pool = futures.ThreadPoolExecutor(
-            max_workers=worker_count, thread_name_prefix="opik_experiment_items_bulk"
+        self._upload_batches(
+            upload, items, resolved_project_name, sizes_MB, worker_count
         )
-        # Bound the batches alive at once. Without it the producer would run the whole
-        # upload into the pool's queue, which is the materialisation this streaming path
-        # exists to avoid.
-        slots = threading.Semaphore(worker_count * 2)
-        first_error: List[BaseException] = []
-
-        def _released(future: "futures.Future") -> None:
-            # Record before releasing: a producer blocked in `acquire` wakes on the
-            # release, and would pass the `first_error` check and submit one more batch
-            # if the failure were not already visible.
-            error = future.exception()
-            if error is not None and not first_error:
-                first_error.append(error)
-            slots.release()
-
-        submitted = []
-        try:
-            for batch in self._stream_rest_batches(
-                items, resolved_project_name, sizes_MB
-            ):
-                # Stop producing once a batch has failed, so a failed upload does not
-                # keep sending. The eager path gets this from cancel_futures below.
-                if first_error:
-                    break
-                slots.acquire()
-                future = pool.submit(self._bulk_upload_batch_with_retry, batch, upload)
-                future.add_done_callback(_released)
-                submitted.append(future)
-            for future in futures.as_completed(submitted):
-                future.result()
-        except BaseException:
-            # Fail fast: drop batches that have not started and return without joining
-            # the ones already in flight.
-            pool.shutdown(wait=False, cancel_futures=True)
-            raise
-        else:
-            pool.shutdown(wait=True)
 
     def _validate_and_size(
         self,

@@ -161,6 +161,21 @@ def gzip_chunks(chunks: List[bytes], level: int, *, release: bool = False) -> by
     return body
 
 
+def encode_body(
+    chunks: List[bytes], gzip_level: Optional[int], *, release: bool = False
+) -> bytes:
+    """One request body from its pieces, gzipped unless `gzip_level` is None.
+
+    The uncompressed join needs every piece at once, so that copy is transient rather
+    than progressive; `release` applies to the gzip path, which can give the pieces up as
+    it consumes them. A caller that may need them afterwards -- the experiment path
+    re-sends a rejected batch as halves -- leaves it off.
+    """
+    if gzip_level is None:
+        return b"".join(chunks)
+    return gzip_chunks(chunks, gzip_level, release=release)
+
+
 class StreamingBatchWriter:
     """Accumulate serialised items and emit complete request bodies.
 
@@ -279,17 +294,32 @@ class BoundedSendPool:
     upload never starts the full ceiling; a single worker compresses and sends inline and
     starts no thread at all. The first failure is re-raised to the producer. There is no
     rollback, so bodies already accepted stay persisted.
+
+    `send` is given the finished body and whatever `submit` carried alongside it. The
+    dataset upload carries nothing; the experiment upload carries the record fragments the
+    body was built from, because a batch the server rejects as too large is halved and
+    re-sent and the bytes alone cannot be split back up.
+
+    `fail_fast` decides what a failure costs the rest of the upload. Off -- the dataset
+    path -- everything already queued is drained and awaited, so those bodies land and the
+    error surfaces after them. On, a failure is recorded as it happens, so the next
+    `submit` raises instead of feeding the pool further, and `close` drops whatever has
+    not started rather than joining what has.
     """
 
     def __init__(
         self,
         *,
-        send: Callable[[bytes], None],
+        send: Callable[[bytes, Any], None],
         num_threads: int,
         gzip_level: Optional[int],
+        fail_fast: bool = False,
+        thread_name_prefix: str = "",
     ) -> None:
         self._send = send
         self._gzip_level = gzip_level
+        self._fail_fast = fail_fast
+        self._first_error: Optional[BaseException] = None
         # Two bodies per worker, so one is always ready as the network drains the last.
         self._max_pending = num_threads * 2
         self._max_pending_bytes = self._max_pending * _max_batch_bytes()
@@ -298,26 +328,27 @@ class BoundedSendPool:
         self._pending: Dict["futures.Future[None]", int] = {}
         self._pending_bytes = 0
         self._pool: Optional[futures.ThreadPoolExecutor] = (
-            futures.ThreadPoolExecutor(max_workers=num_threads)
+            futures.ThreadPoolExecutor(
+                max_workers=num_threads, thread_name_prefix=thread_name_prefix
+            )
             if num_threads > 1
             else None
         )
 
-    def _compress_and_send(self, chunks: List[bytes]) -> None:
-        """Send one body. Takes ownership of `chunks` and empties it."""
-        if self._gzip_level is None:
-            # The join needs every piece at once, so this one copy is transient rather
-            # than progressive. It is freed before the send, like the compressed path.
-            body = b"".join(chunks)
-        else:
-            # Released a slice at a time, so compressing never holds all of the batch raw
-            # and all of it compressed at once. Nothing here re-sends these pieces.
-            body = gzip_chunks(chunks, self._gzip_level, release=True)
+    def _compress_and_send(self, chunks: List[bytes], payload: Any) -> None:
+        """Send one body. Takes ownership of `chunks` and empties it.
+
+        The pieces are released a slice at a time as they are compressed, so this never
+        holds all of the batch raw and all of it compressed at once. Nothing here re-sends
+        them: a caller that does re-send keeps its own reference to the fragments -- which
+        is what `payload` carries -- rather than to this list.
+        """
+        body = encode_body(chunks, self._gzip_level, release=True)
         # Emptied before the send, never after: the executor holds this list for the whole
         # call, so a send parked in a read timeout, a retry or a 429 wait would otherwise
         # pin a second copy of the body.
         chunks.clear()
-        self._send(body)
+        self._send(body, payload)
 
     def _collect(self) -> None:
         """Wait for at least one body to land, and re-raise whatever it failed with."""
@@ -342,16 +373,38 @@ class BoundedSendPool:
             or self._pending_bytes + body_bytes > self._max_pending_bytes
         )
 
-    def submit(self, chunks: List[bytes], item_count: int, body_bytes: int) -> None:
+    def _record_failure(self, future: "futures.Future[None]") -> None:
+        """Note a failed body as it lands, rather than at the next collect.
+
+        A producer that is not at capacity never collects, so without this it would keep
+        feeding the pool until it was -- which is the opposite of failing fast.
+        """
+        if future.cancelled():
+            return
+        error = future.exception()
+        if error is not None and self._first_error is None:
+            self._first_error = error
+
+    def submit(
+        self,
+        chunks: List[bytes],
+        item_count: int,
+        body_bytes: int,
+        payload: Any = None,
+    ) -> None:
         """Send one body, blocking while the pool is at capacity.
 
         Takes ownership of `chunks`: it is emptied on a worker thread at an unpredictable
-        time, so a caller that reuses the list gets an empty request body.
+        time, so a caller that reuses the list gets an empty request body. `payload` is
+        handed back to `send` untouched, for a sender that needs more than the bytes.
         """
-        LOGGER.debug("Sending dataset items batch of size %d", item_count)
+        LOGGER.debug("Sending items batch of size %d", item_count)
         if self._pool is None:
-            self._compress_and_send(chunks)
+            self._compress_and_send(chunks, payload)
             return
+
+        if self._first_error is not None:
+            raise self._first_error
 
         # Waiting here is the back-pressure: the producer cannot run ahead of the network
         # by more than these bounds hold.
@@ -360,17 +413,33 @@ class BoundedSendPool:
 
         # Charged only once there is a future to discharge it, so a submit that fails to
         # start a thread does not strand the bytes in the budget.
-        future = self._pool.submit(self._compress_and_send, chunks)
+        future = self._pool.submit(self._compress_and_send, chunks, payload)
         self._pending[future] = body_bytes
         self._pending_bytes += body_bytes
+        if self._fail_fast:
+            future.add_done_callback(self._record_failure)
+
+    def abort(self) -> None:
+        """Drop the bodies that have not started and return without joining those that have."""
+        if self._pool is not None:
+            self._pool.shutdown(wait=False, cancel_futures=True)
 
     def close(self) -> None:
         if self._pool is None:
             return
         try:
+            if self._first_error is not None:
+                raise self._first_error
             for future in futures.as_completed(self._pending):
                 future.result()
-        finally:
+        except BaseException:
+            # A fail-fast caller is not waiting for the rest: a body parked in the
+            # rate-limit retry loop would otherwise hold the producer here.
+            self._pool.shutdown(
+                wait=not self._fail_fast, cancel_futures=self._fail_fast
+            )
+            raise
+        else:
             self._pool.shutdown(wait=True)
 
 

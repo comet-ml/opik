@@ -1,6 +1,5 @@
 """Tests for ``Experiment.batch_upload_items`` — validation, batching and retry."""
 
-import concurrent.futures as concurrent_futures
 import datetime
 import gzip
 import json
@@ -71,28 +70,29 @@ def _wire(value: Any) -> Any:
 
 
 class _RecordingTransport:
-    """Stands in for the httpx client the upload prepares bodies for.
+    """Records what the upload actually put on the wire.
+
+    Installed as the handler of an ``httpx.MockTransport`` on the client the REST client
+    is *constructed* with, so these tests exercise the same transport resolution
+    production does instead of a client internal replaced after the fact.
 
     It decodes each body and calls the same mock the generated client used to be, with
     the arguments that client took, so a mock-based assertion still describes one
-    request -- but now by way of the bytes that were really put on the wire.
+    request -- but now by way of the bytes that were really put on the wire. A test that
+    injects a failure sets a ``side_effect`` on that mock; raising it from here is what
+    the send sees.
     """
 
     def __init__(self, mock_rest_client: Mock) -> None:
         self._mock = mock_rest_client
         self.bodies: List[bytes] = []
-        self.requests: List[Tuple[str, str, Optional[dict]]] = []
+        self.requests: List[httpx.Request] = []
 
-    def request(
-        self,
-        method: str,
-        url: str,
-        content: bytes = b"",
-        headers: Optional[dict] = None,
-    ) -> httpx.Response:
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        content = request.read()
         body = gzip.decompress(content) if content[:2] == b"\x1f\x8b" else content
         self.bodies.append(body)
-        self.requests.append((method, url, headers))
+        self.requests.append(request)
         envelope = json.loads(body)
         self._mock.experiments.experiment_items_bulk(
             experiment_id=envelope["experiment_id"],
@@ -124,16 +124,29 @@ def no_inner_retry(monkeypatch: Any) -> None:
 def _create_experiment(
     project_name: Optional[str] = None,
 ) -> Tuple[experiment_module.Experiment, Mock]:
+    """A real REST client whose transport is a recorder, plus the mock it replays onto.
+
+    The REST client is the generated one, built around an ``httpx.Client`` carrying an
+    ``httpx.MockTransport``, so the upload resolves its transport, base URL and headers
+    exactly as it does in production -- a broken wiring fails here rather than passing
+    against an injected stand-in. The returned ``Mock`` is only the assertion surface:
+    every request the recorder sees is replayed onto it, and ``.transport`` exposes the
+    raw bodies.
+    """
     mock_rest_client = Mock()
     transport = _RecordingTransport(mock_rest_client)
-    mock_rest_client._client_wrapper.httpx_client.httpx_client = transport
-    mock_rest_client._client_wrapper.get_base_url.return_value = _BASE_URL
+    rest_client = rest_api_client.OpikApi(
+        base_url=_BASE_URL,
+        api_key="api-key",
+        workspace_name="workspace",
+        httpx_client=httpx.Client(transport=httpx.MockTransport(transport.handle)),
+    )
     mock_rest_client.transport = transport
     experiment = experiment_module.Experiment(
         id="experiment-id",
         name="experiment-name",
         dataset_name="dataset-name",
-        rest_client=mock_rest_client,
+        rest_client=rest_client,
         streamer=Mock(),
         experiments_client=Mock(),
         project_name=project_name,
@@ -155,6 +168,25 @@ def _sent_batch_sizes(mock_rest_client: Mock) -> List[int]:
         len(call.kwargs["items"])
         for call in mock_rest_client.experiments.experiment_items_bulk.call_args_list
     ]
+
+
+@pytest.fixture
+def captured_worker_counts(monkeypatch: Any) -> List[int]:
+    """The worker count each upload asks the shared send pool for.
+
+    Observed at the pool rather than at ``ThreadPoolExecutor``, because a count of one
+    starts no thread at all -- that body is compressed and sent inline -- so the executor
+    says nothing about the cap in exactly the case where the cap collapses to one.
+    """
+    counts: List[int] = []
+    original = experiment_module.streaming_writer.BoundedSendPool
+
+    def spy(**kwargs: Any) -> Any:
+        counts.append(kwargs["num_threads"])
+        return original(**kwargs)
+
+    monkeypatch.setattr(experiment_module.streaming_writer, "BoundedSendPool", spy)
+    return counts
 
 
 def _sent_dataset_item_ids(mock_rest_client: Mock) -> List[str]:
@@ -500,39 +532,24 @@ class TestBulkUploadItemsConcurrency:
         )
 
     def test_batch_upload_items__num_threads_far_exceeds_batches__worker_count_is_capped(
-        self,
+        self, captured_worker_counts: List[int]
     ) -> None:
         """An unbounded caller value would otherwise spawn a thread per batch."""
         experiment, mock_rest_client = _create_experiment()
-        captured_max_workers: List[int] = []
-        real_executor = concurrent_futures.ThreadPoolExecutor
-
-        def spy(*args: Any, **kwargs: Any) -> Any:
-            captured_max_workers.append(kwargs["max_workers"])
-            return real_executor(*args, **kwargs)
 
         records = [_record(dataset_item_id=f"item-{i}") for i in range(3)]
 
-        with patch.object(
-            experiment_module.futures, "ThreadPoolExecutor", side_effect=spy
-        ):
-            experiment.batch_upload_items(records, num_threads=5000)
+        experiment.batch_upload_items(records, num_threads=5000)
 
         # 3 records fit in a single batch, so one worker is enough.
-        assert captured_max_workers == [1]
+        assert captured_worker_counts == [1]
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 1
 
     def test_batch_upload_items__num_threads_not_given__fans_out_to_the_default(
-        self,
+        self, captured_worker_counts: List[int]
     ) -> None:
         """The default is the tuned worker count, not a sequential upload."""
         experiment, mock_rest_client = _create_experiment()
-        captured_max_workers: List[int] = []
-        real_executor = concurrent_futures.ThreadPoolExecutor
-
-        def spy(*args: Any, **kwargs: Any) -> Any:
-            captured_max_workers.append(kwargs["max_workers"])
-            return real_executor(*args, **kwargs)
 
         # More batches than workers, so the cap under test is the default
         # rather than the batch count.
@@ -541,12 +558,9 @@ class TestBulkUploadItemsConcurrency:
         )
         records = [_record(dataset_item_id=f"item-{i}") for i in range(items_count)]
 
-        with patch.object(
-            experiment_module.futures, "ThreadPoolExecutor", side_effect=spy
-        ):
-            experiment.batch_upload_items(records)
+        experiment.batch_upload_items(records)
 
-        assert captured_max_workers == [constants.EXPERIMENT_ITEMS_BULK_NUM_THREADS]
+        assert captured_worker_counts == [constants.EXPERIMENT_ITEMS_BULK_NUM_THREADS]
 
     def test_batch_upload_items__num_threads_below_one__raises_validation_error(
         self,
@@ -799,7 +813,7 @@ class TestBulkUploadItemsValidation:
         assert "items[1].dataset_item_id must be a non-empty string" in message
 
     def test_batch_upload_items__streaming_a_payload_bound_upload__stays_concurrent(
-        self,
+        self, captured_worker_counts: List[int]
     ) -> None:
         """A bound on the batch count has to over-estimate, never under-estimate.
 
@@ -808,12 +822,6 @@ class TestBulkUploadItemsValidation:
         produce many batches, which would silently run the whole thing on one worker.
         """
         experiment, mock_rest_client = _create_experiment()
-        captured_max_workers: List[int] = []
-        real_executor = concurrent_futures.ThreadPoolExecutor
-
-        def spy(*args: Any, **kwargs: Any) -> Any:
-            captured_max_workers.append(kwargs["max_workers"])
-            return real_executor(*args, **kwargs)
 
         # Under the 1000-item limit, but each item is a large fraction of the size cap,
         # so the payload closes every batch and there are far more than one.
@@ -828,12 +836,9 @@ class TestBulkUploadItemsValidation:
             for i in range(12)
         ]
 
-        with patch.object(
-            experiment_module.futures, "ThreadPoolExecutor", side_effect=spy
-        ):
-            experiment.batch_upload_items(
-                records, num_threads=4, validate_before_upload=False
-            )
+        experiment.batch_upload_items(
+            records, num_threads=4, validate_before_upload=False
+        )
 
         # Concurrency is the subject, but a test that only counts batches would also
         # pass if items were dropped or duplicated, so check delivery too. Batches are
@@ -851,7 +856,7 @@ class TestBulkUploadItemsValidation:
             max(_sent_batch_sizes(mock_rest_client))
             <= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE
         )
-        assert captured_max_workers == [4]
+        assert captured_worker_counts == [4]
 
     def test_batch_upload_items__streaming_validation__sends_until_the_bad_item(
         self,
