@@ -78,21 +78,6 @@ public class JsonEachRowBulkInsert {
 
     private static final SerializedString EMPTY_ROOT_SEPARATOR = new SerializedString("");
 
-    /**
-     * Initial buffer size per row. Only an allocation hint: {@link ByteArrayOutputStream} doubles when
-     * it is wrong, and a doubling copy of a large batch is exactly the churn worth avoiding here.
-     */
-    private static final int ESTIMATED_ROW_BYTES = 256;
-
-    /**
-     * Ceiling on that hint. Two reasons, and the second is the one that bites: a wrong guess should cost
-     * a few doublings rather than a large eager allocation the batch may never need, and
-     * {@code size() * ESTIMATED_ROW_BYTES} overflows {@code int} past ~8.4M rows, which would reach
-     * {@link ByteArrayOutputStream} as a negative capacity and fail the batch with "Negative initial
-     * size" instead of writing it. The arithmetic below is done in {@code long} so that cannot happen.
-     */
-    private static final int MAX_INITIAL_BUFFER_BYTES = 8 * 1024 * 1024;
-
     private final Client clickHouseClient;
 
     private final ObjectWriter rowWriter;
@@ -207,8 +192,7 @@ public class JsonEachRowBulkInsert {
     private <T> ByteArrayOutputStream serialize(Collection<T> items, Function<T, ObjectNode> rowMapper)
             throws IOException {
 
-        var initialSize = (int) Math.min((long) items.size() * ESTIMATED_ROW_BYTES, MAX_INITIAL_BUFFER_BYTES);
-        var payload = new ByteArrayOutputStream(initialSize);
+        var payload = new ByteArrayOutputStream();
         try (var writer = new BufferedWriter(new OutputStreamWriter(payload, StandardCharsets.UTF_8))) {
             JsonGenerator generator = JsonUtils.getMapper().getFactory().createGenerator(writer);
             // The generator writes into, but does not own, the writer: the enclosing
