@@ -75,7 +75,7 @@ class _BulkUpload(NamedTuple):
     #: None sends the body uncompressed, for a client configured with compression off.
     gzip_level: Optional[int]
     #: Set when the upload is aborted, so no send starts another request after it.
-    stop: threading.Event
+    stop_event: threading.Event
 
 
 def _batch_chunks(
@@ -263,7 +263,7 @@ class Experiment:
             gzip_level=(
                 opik_config.experiment_upload_compression_level if compressing else None
             ),
-            stop=threading.Event(),
+            stop_event=threading.Event(),
         )
 
     def _send_prepared_body(self, upload: _BulkUpload, body: bytes) -> None:
@@ -271,7 +271,7 @@ class Experiment:
 
         def send() -> None:
             # Checked per attempt, so the REST retry below starts no request after an abort.
-            if upload.stop.is_set():
+            if upload.stop_event.is_set():
                 raise futures.CancelledError("experiment items bulk upload aborted")
             response = httpx_client.send_prepared_json(
                 upload.client,
@@ -294,7 +294,7 @@ class Experiment:
         rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             retry_decorator.opik_rest_retry(send),
             operation_name="experiment_items_bulk",
-            stop_event=upload.stop,
+            stop_event=upload.stop_event,
         )
 
     def _send_batch(self, upload: _BulkUpload, body: bytes, batch: List[bytes]) -> None:
@@ -358,7 +358,7 @@ class Experiment:
             gzip_level=upload.gzip_level,
             fail_fast=True,
             thread_name_prefix="opik_experiment_items_bulk",
-            stop_event=upload.stop,
+            stop_event=upload.stop_event,
         )
         try:
             for batch in self._stream_rest_batches(items, project_name, sizes_MB):

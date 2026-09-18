@@ -229,7 +229,7 @@ class BoundedSendPool:
         stop_event: Optional[threading.Event] = None,
     ) -> None:
         self._send = send
-        self._stop = stop_event if stop_event is not None else threading.Event()
+        self._stop_event = stop_event if stop_event is not None else threading.Event()
         self._gzip_level = gzip_level
         self._fail_fast = fail_fast
         self._first_error: Optional[BaseException] = None
@@ -345,7 +345,7 @@ class BoundedSendPool:
         at interpreter exit, so it can still delay exit until its in-flight request -- or
         a retry backoff it is already sleeping through -- ends.
         """
-        self._stop.set()
+        self._stop_event.set()
         self._aborted = True
         if self._pool is None:
             return
