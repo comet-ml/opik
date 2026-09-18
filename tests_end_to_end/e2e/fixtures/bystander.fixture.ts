@@ -17,6 +17,7 @@ export interface BystanderFixtures {
   bystanderExperiment: BystanderExperimentRef;
   bystanderTestSuite: BystanderTestSuiteRef;
   registerDatasetCleanup: (id: string, name: string) => void;
+  registerExperimentCleanup: (id: string, name: string) => void;
 }
 
 /**
@@ -113,6 +114,32 @@ export const test = baseTest.extend<BystanderFixtures>({
           await backendClient.deleteDataset(id);
         } catch (err) {
           console.warn(`[registerDatasetCleanup] delete warning for ${name}:`, err);
+        }
+      }
+    }
+  },
+
+  /**
+   * For experiments a test causes to be created rather than seeds — a Playground
+   * Re-run, or a `/experiments/execute` call — where the id only exists once the
+   * write has already happened. Register it the moment the response carries it.
+   *
+   * Experiments do NOT cascade with their project's deletion, and the
+   * run-prefix sweep in `global-teardown.ts` only fires once at the end of the
+   * whole run, so without this a mid-run failure leaves them behind for every
+   * later spec that lists experiments to trip over.
+   */
+  registerExperimentCleanup: async ({ backendClient }, use, testInfo) => {
+    const registry: Array<{ id: string; name: string }> = [];
+    await use((id, name) => {
+      registry.push({ id, name });
+    });
+    if (!shouldLeaveArtifacts(testInfo)) {
+      for (const { id, name } of registry) {
+        try {
+          await backendClient.deleteExperiment(id);
+        } catch (err) {
+          console.warn(`[registerExperimentCleanup] delete warning for ${name}:`, err);
         }
       }
     }
