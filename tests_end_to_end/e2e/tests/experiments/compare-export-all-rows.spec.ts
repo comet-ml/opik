@@ -6,9 +6,10 @@ import { CompareExperimentsPage } from '@e2e/pom/compare-experiments.page';
  *
  * Every assertion here is about the FILE, not the page. The export is assembled
  * in the tab and handed to the browser as a download, so the failure it exists
- * to catch — a file that quietly holds the 100 rows on screen instead of all
- * 250, or values cut short at the display truncation — looks perfectly healthy
- * from the DOM. Nothing else under tests/experiments reads a downloaded file.
+ * to catch — a file that quietly holds the page on screen instead of all 250
+ * seeded rows, or values cut short at the display truncation — looks perfectly
+ * healthy from the DOM. Nothing else under tests/experiments reads a downloaded
+ * file.
  */
 
 /** The dataset column the exported rows are keyed on. */
@@ -37,7 +38,7 @@ test.describe(
   { tag: ['@t2-cuj', '@area:experiments'] },
   () => {
     test(
-      'exporting with no rows selected covers every page and carries untruncated values',
+      'exporting with no rows selected covers the whole result set and carries untruncated values',
       { tag: ['@cap:experiments.export-comparison'] },
       async ({ exportComparison, project, page }) => {
         test.slow();
@@ -67,7 +68,8 @@ test.describe(
           expect(exported, 'exported rows').toHaveLength(exportComparison.rowCount);
           // The whole answer, not just "mine are in it": a file that also
           // carried rows from another comparison would satisfy a subset check,
-          // and a file that held only the page on screen would not reach 250.
+          // and a file that held only the page on screen would fall short of
+          // the seeded count.
           expect(sorted(columnValues(exported, INPUT_KEY)), 'exported dataset inputs').toEqual(
             sorted(exportComparison.items.map((i) => i.input)),
           );

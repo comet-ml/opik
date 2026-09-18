@@ -1751,7 +1751,8 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
 
     /**
      * One page of the same read, with the envelope kept — the exact request the
-     * comparison grid issues, and the one the browser export pages through.
+     * comparison grid issues, and the one the browser export reissues over the
+     * whole result set.
      *
      * `total` is part of the answer rather than a convenience: a seed that has
      * only half landed still returns a well-formed page, so a fixture that
@@ -3411,11 +3412,11 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * `POST /v1/private/traces/batch` — many traces in one request.
      *
      * The trace equivalent of `createSpansBatch`, and for the same reason: a
-     * comparison big enough to page is hundreds of traces, and writing them one
-     * at a time through `createTraceWithSource` is both slow and the quickest
-     * route to the workspace ingestion rate limit — which surfaces as a seed
-     * that half landed, the worst possible input to a spec whose subject is
-     * "the export covers every page".
+     * comparison wide enough to be worth exporting is hundreds of traces, and
+     * writing them one at a time through `createTraceWithSource` is both slow
+     * and the quickest route to the workspace ingestion rate limit — which
+     * surfaces as a seed that half landed, the worst possible input to a spec
+     * whose subject is "the export covers the whole result set".
      *
      * `source` is fixed at `sdk`: these are experiment evaluation traces, which
      * is what the SDK's own `evaluate()` writes, and the compare grid reads
@@ -3443,6 +3444,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             name: trace.name,
             start_time: (trace.startTime ?? now).toISOString(),
             end_time: (trace.endTime ?? now).toISOString(),
+            source: 'sdk' as const,
             ...(trace.input === undefined ? {} : { input: trace.input }),
             ...(trace.output === undefined ? {} : { output: trace.output }),
           })),

@@ -47,12 +47,17 @@ export interface ExportComparisonFixtures {
 /**
  * 250 rows.
  *
- * The browser export reads the result set in pages of 100 (`PAGE_SIZE` in
- * `getAllCompareExperimentsItems.ts`), so 250 spans three pages and the last
- * one is partial. A count that divided evenly would let a reader that dropped
- * or duplicated a whole page still finish on a clean boundary — the exact
- * shape of paging bug this seed exists to catch. It is also well clear of the
- * table's own page size, so "the file holds the page on screen" fails loudly.
+ * Comfortably more than one screen and more than the table's own page, so the
+ * failure this spec exists to catch — a file holding the rows on screen rather
+ * than the whole result set — lands on a count nothing else produces. It also
+ * sits well under `EXPORT_ROW_LIMIT` (2,000 in
+ * `getAllCompareExperimentsItems.ts`), so the export is offered rather than
+ * refused; the over-the-cap branch is deliberately out of scope here, since
+ * seeding past that cap costs far more than the assertion is worth.
+ *
+ * Odd multiple of the table page on purpose: a count that divided evenly into
+ * whatever the read chunks by would let a reader that dropped or duplicated a
+ * whole chunk still finish on a clean boundary.
  */
 const ROW_COUNT = 250;
 

@@ -4,8 +4,9 @@ import { loadEnvConfig } from '../config/env.config';
 
 /**
  * How long an export may take to reach the browser as a download. Generous
- * because an unscoped export is one request per 100 rows before the file
- * exists at all, and this budget is a failure message rather than a wait.
+ * because an unscoped export re-reads the whole result set untruncated, and
+ * then serialises it in the tab, before the file exists at all; this budget is
+ * a failure message rather than a wait.
  */
 const EXPORT_TIMEOUT_MS = 60_000;
 
@@ -326,10 +327,21 @@ export class CompareExperimentsPage {
     });
   }
 
+  /**
+   * The control exists and is offered.
+   *
+   * Two different reasons it can be disabled, and the message says so because
+   * only one of them is a bug: the `export_enabled` service toggle is off for
+   * this deployment (it varies — the sibling `dataset_export_enabled` ships off
+   * in OSS), or the result set is past `EXPORT_ROW_LIMIT`.
+   */
   async expectExportEnabled(): Promise<void> {
     await test.step('the export control is offered', async () => {
       await expect(this.exportButton, 'export button').toHaveCount(1);
-      await expect(this.exportButton, 'export button').toBeEnabled();
+      await expect(
+        this.exportButton,
+        'export button — if this is disabled, check the `export_enabled` service toggle on this deployment and that the view is under EXPORT_ROW_LIMIT before assuming the export is broken',
+      ).toBeEnabled();
     });
   }
 
@@ -340,8 +352,9 @@ export class CompareExperimentsPage {
    * browser as a download, so the only way to tell "the file holds every row"
    * from "the file holds the page on screen" is to read the bytes on disk.
    *
-   * With nothing selected the export reads the whole result set page by page,
-   * so the click can outlive the default action budget on a large comparison.
+   * With nothing selected the export re-reads the whole result set untruncated
+   * before writing anything, so the click can outlive the default action budget
+   * on a large comparison.
    */
   async exportAsJson(): Promise<Record<string, unknown>[]> {
     return test.step('export the view as JSON and read the downloaded file', async () => {
