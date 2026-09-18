@@ -2,9 +2,10 @@
 
 ``calculate_aggregated_statistics`` has never counted a metric's failed scores, so
 ``result.scores["m"].mean`` over 5 survivors was indistinguishable from a mean over
-10 trials. These tests pin the two things that fix it: ``failed_count`` on the
-aggregate, and a named WARNING for the one case that still has no mean to attach
-the count to (a metric that failed on every trial).
+10 scores. These tests pin the three things that fix it: ``failed_count`` on the
+aggregate, a named WARNING for the one case that still has no mean to attach the
+count to (a metric whose every score failed), and what each warning is about - the
+metric name, and the dataset item when one call aggregates a single item.
 
 The survivor statistics themselves are deliberately unchanged: a failed score is
 not averaged in at the ``0.0`` the engine records for it, because that would make a
@@ -83,7 +84,7 @@ def test_partial_failures_keep_the_survivor_mean_and_report_the_count(
     assert "5 remaining" in message
 
 
-def test_the_reported_counts_add_up_to_the_trials_the_metric_ran_on():
+def test_the_reported_counts_add_up_to_the_score_records_the_metric_produced():
     results = [
         _result("item-0", 1, [_score("a", 1.0), _score("b", 0.0, scoring_failed=True)]),
         _result("item-1", 1, [_score("a", 0.0, scoring_failed=True), _score("b", 1.0)]),
@@ -104,6 +105,33 @@ def test_the_reported_counts_add_up_to_the_trials_the_metric_ran_on():
         assert len(stats.values) + stats.failed_count == attempted[name]
     assert statistics_by_name["a"].mean == pytest.approx(1.0)
     assert statistics_by_name["b"].mean == pytest.approx(1.0)
+
+
+def test_one_trial_can_produce_several_records_under_one_name():
+    """``failed_count`` counts records, not trials, and this says which one it is.
+
+    ``metrics_evaluator._compute_metric_scores`` extends its list with everything a
+    metric returns, so one trial can contribute several scores under one name. The
+    denominator therefore has to be read as records: collapsing it to trials would
+    change which values the mean is taken over, which is not what this counts.
+    """
+    one_trial = _result(
+        "item-0",
+        1,
+        [
+            _score("multi", 1.0),
+            _score("multi", 0.0),
+            _score("multi", 0.0, scoring_failed=True),
+        ],
+    )
+
+    stats = score_statistics.calculate_aggregated_statistics([one_trial])["multi"]
+
+    assert stats.values == [1.0, 0.0]
+    assert stats.mean == pytest.approx(0.5)
+    assert stats.failed_count == 1
+    # 3 records came out of 1 trial, so the sum is not a trial count.
+    assert len(stats.values) + stats.failed_count == 3
 
 
 def test_a_metric_that_failed_on_every_trial_is_named_in_a_warning(logger: mock.Mock):
@@ -197,6 +225,62 @@ def test_the_per_dataset_item_view_reports_its_own_counts_per_item():
     assert "m" not in item_results["item-2"].scores
 
 
+def test_an_aggregation_over_one_dataset_item_says_which_one(logger: mock.Mock):
+    """The grouped view calls this function once per item, so its warnings repeat.
+
+    Without the item each call is about, a thousand-item evaluation produces a
+    thousand byte-identical lines that cannot be told apart or searched for.
+    """
+    results = [
+        _result("item-1", 1, [_score("m", 1.0)]),
+        _result("item-1", 2, [_score("m", 0.0, scoring_failed=True)]),
+        _result("item-2", 1, [_score("m", 0.0, scoring_failed=True)]),
+        _result("item-2", 2, [_score("m", 0.0, scoring_failed=True)]),
+    ]
+    eval_result = evaluation_result.EvaluationResult(
+        experiment_id="exp1",
+        dataset_id="dataset1",
+        experiment_name="experiment",
+        test_results=results,
+        experiment_url="http://test.comet.com",
+        trial_count=4,
+    )
+
+    eval_result.group_by_dataset_item_view()
+
+    messages = [call[0][0] for call in logger.warning.call_args_list]
+    assert len(messages) == 2
+    assert len(set(messages)) == 2
+    assert "of dataset item 'item-1'" in messages[0]
+    assert "of dataset item 'item-2'" in messages[1]
+
+
+def test_an_aggregation_over_several_items_claims_no_single_item(logger: mock.Mock):
+    score_statistics.calculate_aggregated_statistics(_five_ok_five_failed())
+
+    message = logger.warning.call_args[0][0]
+    assert "dataset item" not in message
+
+
+def test_a_dataset_item_id_carrying_controls_cannot_forge_a_second_log_line(
+    logger: mock.Mock,
+):
+    newline, escape = chr(10), chr(27)
+    hostile_id = "id" + newline + "OPIK: every score passed" + escape + "[31mred"
+    results = [
+        _result(hostile_id, 1, [_score("m", 0.0, scoring_failed=True)]),
+        _result(hostile_id, 2, [_score("m", 0.0, scoring_failed=True)]),
+    ]
+
+    score_statistics.calculate_aggregated_statistics(results)
+
+    assert logger.warning.call_count == 1
+    message = logger.warning.call_args[0][0]
+    assert newline not in message
+    assert escape not in message
+    assert chr(92) + "n" in message
+
+
 def test_failed_count_defaults_to_zero_so_existing_construction_still_works():
     positional = score_statistics.ScoreStatistics(1.0, 1.0, 1.0, [1.0], None)
     keyword = score_statistics.ScoreStatistics(mean=1.0, max=1.0, min=1.0, values=[1.0])
@@ -243,6 +327,6 @@ def test_an_oversized_metric_name_is_capped_in_the_log(logger: mock.Mock):
 
     message = logger.warning.call_args[0][0]
     assert "... (truncated)." in message
-    assert "m" * score_statistics.MAX_LOGGED_METRIC_NAME_LENGTH not in message
+    assert "m" * score_statistics.MAX_LOGGED_LABEL_LENGTH not in message
     assert len(message) < 400
     assert chr(10) not in message
