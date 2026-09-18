@@ -896,7 +896,7 @@ class KpiCardsResourceTest {
     }
 
     @Test
-    @DisplayName("OPIK-8335: threads fall in the period their traces ran, not the one their row was written in")
+    @DisplayName("threads fall in the period their traces ran, not the one their row was written in")
     void threadPeriodsFollowTraceStartTimeNotThreadRowCreation() {
         mockTargetWorkspace();
         var projectName = RandomStringUtils.secure().nextAlphabetic(10);
