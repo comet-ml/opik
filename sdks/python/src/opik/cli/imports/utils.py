@@ -500,17 +500,30 @@ _EXPERIMENT_IMPORT_FIELDS = [
     "last_updated_by",
 ]
 
+# Not a backend-gap field like the lists above, and so outside their TODO: import
+# always mints a new trace id rather than reusing the exported one, so the
+# exported id is preserved as _import_id. Once the local migration manifest is
+# gone, that is the only link from an imported trace back to the one it came
+# from.
+_TRACE_SOURCE_ID_FIELD = "id"
+
 
 def build_import_metadata(
     source: Dict[str, Any],
     fields: List[str],
-    existing_metadata: Optional[Dict[str, Any]] = None,
-) -> Optional[Dict[str, Any]]:
+    existing_metadata: Optional[Any] = None,
+) -> Optional[Any]:
     """Return a metadata dict that includes import-preserved fields under _import_* keys.
 
     Only fields with non-None values are added. If there is nothing to add and
     existing_metadata is None, returns None so callers that had no metadata
     continue to send no metadata.
+
+    Metadata is an arbitrary JSON value on the wire, not necessarily an object:
+    a client writing through the REST API can store an array or a scalar there.
+    Those have nowhere to carry the _import_* keys, so they are returned
+    untouched rather than failing the item — keeping the exported metadata
+    matters more than annotating it.
     """
     import_fields = {
         f"_import_{field}": source[field]
@@ -519,9 +532,29 @@ def build_import_metadata(
     }
     if not import_fields:
         return existing_metadata
+    if existing_metadata is not None and not isinstance(existing_metadata, dict):
+        return existing_metadata
     merged: Dict[str, Any] = dict(existing_metadata) if existing_metadata else {}
     merged.update(import_fields)
     return merged
+
+
+def sort_trace_files_chronologically(trace_files: List[Path]) -> List[Path]:
+    """Order exported trace files by the id they were exported under.
+
+    ``Path.glob`` yields filesystem order, which is arbitrary. Export names each
+    file ``trace_<id>.json`` and those ids are UUIDv7, whose leading bits encode
+    creation time, so sorting on the file name restores the order the source
+    project listed the traces in — the trace list and the thread view are both
+    ordered by id by default, not by start_time. Creating them in that order
+    carries the ordering over to the destination, since the new ids are minted
+    one after another and UUIDv7 generation is monotonic.
+
+    The guarantee is per run: a resumed import skips the files it already
+    completed, so one that failed and succeeds on the retry lands after the
+    traces that originally followed it.
+    """
+    return sorted(trace_files, key=lambda trace_file: trace_file.name)
 
 
 def sort_spans_topologically(spans_info: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
