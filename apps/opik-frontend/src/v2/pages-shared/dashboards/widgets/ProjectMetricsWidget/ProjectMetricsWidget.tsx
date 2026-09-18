@@ -114,7 +114,9 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;
-  const isCostMetric = metricName === METRIC_NAME_TYPE.COST;
+  const isCostMetric =
+    metricName === METRIC_NAME_TYPE.COST ||
+    metricName === METRIC_NAME_TYPE.SPAN_COST;
   const isDurationMetric =
     metricName === METRIC_NAME_TYPE.TRACE_DURATION ||
     metricName === METRIC_NAME_TYPE.THREAD_DURATION ||
