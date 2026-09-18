@@ -1,4 +1,5 @@
 import { getTrackOpikClient } from "@/decorators/track";
+import { logger } from "@/utils/logger";
 import {
   getTrackContext,
   resetTracingToConfigDefault,
@@ -417,5 +418,41 @@ describe("@track with non-Error thrown values", () => {
     expect(span?.errorInfo?.traceback).toContain("bad-arg");
     expect(trace?.errorInfo).toEqual(span?.errorInfo);
     expect(trace?.endTime).toBeInstanceOf(Date);
+  });
+
+  const loggedError = async (thrown: unknown): Promise<unknown> => {
+    const errorLog = vi
+      .spyOn(logger, "error")
+      .mockImplementation(() => undefined as never);
+    let details: unknown[] | undefined;
+    try {
+      await failRootSpan(thrown, "sync");
+      details = errorLog.mock.calls.find(
+        (call) =>
+          typeof call[1] === "object" && call[1] !== null && "spanId" in call[1]
+      );
+    } finally {
+      // mockRestore() also clears the recorded calls, so read them first
+      errorLog.mockRestore();
+    }
+    expect(details).toBeDefined();
+    return (details?.[1] as { error: unknown }).error;
+  };
+
+  it("logs a real Error as { name, message, stack } so log consumers keep working", async () => {
+    const failure = new TypeError("bad-arg");
+    failure.name = "CustomTypeError";
+
+    expect(await loggedError(failure)).toEqual({
+      name: "CustomTypeError",
+      message: "bad-arg",
+      stack: failure.stack,
+    });
+  });
+
+  it("logs a non-Error thrown value as-is, the way it did before", async () => {
+    const thrown = { code: "E_LIMIT" };
+
+    expect(await loggedError(thrown)).toBe(thrown);
   });
 });

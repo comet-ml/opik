@@ -194,7 +194,16 @@ function logError({
   logger.error("Recording execution error:", {
     spanId: span.data.id,
     traceId: trace?.data.id,
-    error: error instanceof Error ? errorInfo : error,
+    // `errorInfo` is what the backend receives; the log line keeps its pre-existing
+    // { name, message, stack } shape so log consumers that match those keys still work.
+    error:
+      error instanceof Error
+        ? {
+            name: errorInfo.exceptionType,
+            message: errorInfo.message,
+            stack: errorInfo.traceback,
+          }
+        : error,
   });
 
   span.update({ errorInfo });
