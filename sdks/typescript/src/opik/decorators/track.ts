@@ -174,25 +174,22 @@ function logError({
         : error,
   });
 
-  if (error instanceof Error) {
-    span.update({
-      errorInfo: {
-        message: error.message,
-        exceptionType: error.name,
-        traceback: error.stack ?? "",
-      },
-    });
-  }
+  // Anything can be thrown in JavaScript, but `ErrorInfo` is built from `message`, `name` and
+  // `stack`. Coerce once — like `EvaluationEngine` does — instead of reading those properties off
+  // the thrown value: for `null`/`undefined` that read threw inside this handler, which replaced
+  // the caller's error and left the trace open.
+  const err = error instanceof Error ? error : new Error(String(error));
+  const errorInfo = {
+    message: err.message,
+    exceptionType: err.name,
+    traceback: err.stack ?? "",
+  };
+
+  span.update({ errorInfo });
   span.end();
 
   if (trace) {
-    trace.update({
-      errorInfo: {
-        message: error.message,
-        exceptionType: error.name,
-        traceback: error.stack ?? "",
-      },
-    });
+    trace.update({ errorInfo });
     trace.end();
   }
 }

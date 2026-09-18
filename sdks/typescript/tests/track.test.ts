@@ -265,3 +265,120 @@ describe("Track decorator", () => {
     });
   });
 });
+
+describe("@track with non-Error thrown values", () => {
+  let trackOpikClient: ReturnType<typeof getTrackOpikClient>;
+  let createTracesSpy: MockInstance;
+  let createSpansSpy: MockInstance;
+  let updateTracesSpy: MockInstance;
+  let updateSpansSpy: MockInstance;
+
+  const NOT_THROWN = Symbol("call did not throw");
+
+  beforeEach(() => {
+    trackOpikClient = getTrackOpikClient();
+    createTracesSpy = vi
+      .spyOn(trackOpikClient.api.traces, "createTraces")
+      .mockImplementation(mockAPIFunction);
+    updateTracesSpy = vi
+      .spyOn(trackOpikClient.api.traces, "updateTrace")
+      .mockImplementation(mockAPIFunction);
+    createSpansSpy = vi
+      .spyOn(trackOpikClient.api.spans, "createSpans")
+      .mockImplementation(mockAPIFunction);
+    updateSpansSpy = vi
+      .spyOn(trackOpikClient.api.spans, "updateSpan")
+      .mockImplementation(mockAPIFunction);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    createTracesSpy.mockRestore();
+    updateTracesSpy.mockRestore();
+    createSpansSpy.mockRestore();
+    updateSpansSpy.mockRestore();
+  });
+
+  const nonErrorFailures: [string, unknown][] = [
+    ["undefined", undefined],
+    ["null", null],
+    ["string", "boom"],
+    ["object", { code: 42 }],
+  ];
+
+  const failRootSpan = async (thrown: unknown, mode: "sync" | "async") => {
+    createTracesSpy.mockClear();
+    createSpansSpy.mockClear();
+
+    const failing = track(
+      { name: "throws-non-error" },
+      mode === "async"
+        ? async () => Promise.reject(thrown)
+        : () => {
+            throw thrown;
+          }
+    );
+
+    let caught: unknown = NOT_THROWN;
+    try {
+      await failing();
+    } catch (error) {
+      caught = error;
+    }
+    await trackOpikClient.flush();
+
+    return {
+      caught,
+      trace: createTracesSpy.mock.calls[0]?.[0]?.traces?.[0],
+      span: createSpansSpy.mock.calls[0]?.[0]?.spans?.[0],
+    };
+  };
+
+  it.each(nonErrorFailures)(
+    "hands the thrown %s back to the caller unchanged",
+    async (_label, thrown) => {
+      const { caught } = await failRootSpan(thrown, "sync");
+      expect(caught).toBe(thrown);
+    }
+  );
+
+  it.each(nonErrorFailures)(
+    "closes and reports the trace for a non-Error %s failure",
+    async (_label, thrown) => {
+      const { trace, span } = await failRootSpan(thrown, "sync");
+
+      expect(createSpansSpy).toHaveBeenCalledTimes(1);
+      expect(createTracesSpy).toHaveBeenCalledTimes(1);
+      expect(span?.endTime).toBeInstanceOf(Date);
+      expect(trace?.endTime).toBeInstanceOf(Date);
+      expect(trace?.errorInfo).toEqual(span?.errorInfo);
+      expect(trace?.errorInfo?.message).toBe(String(thrown));
+      expect(typeof trace?.errorInfo?.exceptionType).toBe("string");
+      expect(typeof trace?.errorInfo?.traceback).toBe("string");
+    }
+  );
+
+  it.each(nonErrorFailures)(
+    "hands a rejected promise of %s back to the caller and closes the trace",
+    async (_label, thrown) => {
+      const { caught, trace } = await failRootSpan(thrown, "async");
+
+      expect(caught).toBe(thrown);
+      expect(trace?.endTime).toBeInstanceOf(Date);
+    }
+  );
+
+  it("keeps reporting a real Error the way it did before", async () => {
+    const failure = new Error("real-error");
+    const { caught, trace, span } = await failRootSpan(failure, "sync");
+
+    expect(caught).toBe(failure);
+    expect(span?.errorInfo).toMatchObject({
+      message: "real-error",
+      exceptionType: "Error",
+    });
+    expect(trace?.errorInfo).toEqual(span?.errorInfo);
+    expect(trace?.endTime).toBeInstanceOf(Date);
+  });
+});
