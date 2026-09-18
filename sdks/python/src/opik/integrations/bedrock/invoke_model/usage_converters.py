@@ -74,13 +74,21 @@ def openai_to_bedrock_usage(openai_usage: Dict[str, Any]) -> Dict[str, Any]:
 
 def nova_to_bedrock_usage(nova_usage: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Convert Nova-style usage (already in Bedrock format) - pass through.
-    Nova already uses Bedrock format (inputTokens, outputTokens).
+    Pass Nova usage through, since Nova already reports Bedrock format.
+
+    Every reported field is preserved, not just inputTokens and outputTokens, so
+    cache counters (cacheReadInputTokens, cacheWriteInputTokens) and any field
+    Bedrock adds later reach the span instead of being dropped here.
+
+    totalTokens stays derived from the input and output counts the caller settled
+    on, so it cannot disagree with them when the stream aggregator overrides those
+    counts from amazon-bedrock-invocationMetrics.
     """
     input_tokens = nova_usage.get("inputTokens", 0)
     output_tokens = nova_usage.get("outputTokens", 0)
 
     return {
+        **nova_usage,
         "inputTokens": input_tokens,
         "outputTokens": output_tokens,
         "totalTokens": input_tokens + output_tokens,
