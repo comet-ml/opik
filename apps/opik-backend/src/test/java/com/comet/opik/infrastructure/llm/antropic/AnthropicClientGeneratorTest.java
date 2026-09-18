@@ -48,9 +48,58 @@ class AnthropicClientGeneratorTest {
             assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
         }
 
+        /**
+         * A name that is not an Anthropic id tells us nothing about the model behind it, so nothing is
+         * stripped: the proxy may be serving a capable Claude under a name of its own.
+         */
         @ParameterizedTest
-        @ValueSource(strings = {"some-unknown-model", "claude-future-99", "custom-llm/gw/my-claude-deployment"})
-        void staysPermissiveForModelsItCannotPlace(String modelName) {
+        @ValueSource(strings = {"some-unknown-model", "custom-llm/gw/my-claude-deployment",
+                "custom-llm/claude-gw/mistral-large",
+                // Anthropic names models claude-<family>-<version>. These fit no family it ships, so
+                // they are someone's deployment name and say nothing about which Claude is behind it.
+                "custom-llm/gw/claude-prod", "custom-llm/gw/claude-internal-v3", "claude-future-99",
+                "claude-30-future"})
+        void staysPermissiveForNamesThatAreNotAnthropicIds(String modelName) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
+        }
+
+        /**
+         * A floating alias has to be read as the model it resolves to. Haiku's newest member takes
+         * sampling params and the other three families' do not, so the aliases must not share one
+         * answer — and claude-haiku-latest must agree with claude-haiku-4-5 under its own id.
+         */
+        @ParameterizedTest
+        @CsvSource({
+                "~anthropic/claude-haiku-latest, false",
+                "~anthropic/claude-opus-latest, true",
+                "~anthropic/claude-sonnet-latest, true",
+                "~anthropic/claude-fable-latest, true"})
+        void readsAFloatingAliasAsTheFamilysNewestMember(String modelName, boolean rejects) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isEqualTo(rejects);
+        }
+
+        /**
+         * An Anthropic id we cannot place is assumed to take none. It is far more often a model newer
+         * than the capability list than an older one missing from it, and the floating aliases settle
+         * it: claude-opus-latest follows the newest model by definition.
+         */
+        @ParameterizedTest
+        @ValueSource(strings = {"us.anthropic.claude-opus-9-v1:0", "claude-opus-99",
+                // A numeric segment is the next version, not a variant: an unlisted point release
+                // must not inherit claude-sonnet-4-6's capability.
+                "claude-sonnet-4-6-1"})
+        void assumesAnUnplaceableAnthropicIdTakesNone(String modelName) {
+            assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isTrue();
+        }
+
+        /** Claude 3 predates the constraint, and is recognised by shape rather than being listed. */
+        @ParameterizedTest
+        @ValueSource(strings = {"claude-3-haiku", "anthropic/claude-3.5-sonnet", "anthropic/claude-3.5-haiku",
+                "us.anthropic.claude-3-5-sonnet-20240620-v1:0",
+                // Claude 2 and Instant predate it too, and must survive the inference-profile strip
+                // rather than collapsing to the bare family word.
+                "anthropic.claude-v2:1", "anthropic.claude-instant-v1", "claude-2-1"})
+        void staysPermissiveForTheGenerationThatPredatesTheConstraint(String modelName) {
             assertThat(ModelCapabilities.rejectsSamplingParams(modelName)).isFalse();
         }
 
