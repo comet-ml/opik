@@ -204,6 +204,13 @@ SETTLE_TIMEOUT_MAX=7200   # its accepted ceiling; the validation below explains 
 # side of the swap. Only the BUDGET differs (600 here against 1800 there), for the reason --settle-timeout gives.
 # The age threshold is 1800s because a single spans part can approach the 150 GiB ClickHouse permits, so one legitimate
 # GET_PART takes ~17 minutes at 150 MiB/s; the traces value of 60s described ~1 GiB parts.
+#
+# NOTE THE CONSEQUENCE OF THE 600s BUDGET AGAINST THIS 1800s THRESHOLD: the verdict is `age > SETTLE_STUCK_AGE_SECONDS`,
+# so here an entry has to be at least 1200s old when polling STARTS to be judged on age at all. The age arm is therefore
+# a check on pre-existing lag, and num_tries / last_exception are what catch lag beginning inside the window. That split
+# is deliberate -- this gate runs post-swap, where the budget is bounded by how long reconciliation can wait rather than
+# by a maintenance window -- but read a pass here as "no long-standing lag, nothing retrying or erroring" rather than as
+# "the queue is empty". See exchange_and_wrap.sh's --settle-timeout help for the same note on the pre-swap side.
 SETTLE_POLL_SECONDS=15
 SETTLE_STUCK_AGE_SECONDS=1800
 SETTLE_STUCK_NUM_TRIES=3

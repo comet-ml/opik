@@ -687,9 +687,12 @@ if [[ "$UNWRAP_ONLY" == "1" ]]; then
     echo "     flag at all. No sentinel/duration repair is needed either (that is a stage B/C concern)."
     echo "  3. The partition metrics relabel back: the opik.clickhouse.partition.* parts gauges move from"
     echo "     table=\"spans_local\" to table=\"spans\", so restore any dashboards/alerts adjusted at wrap time. AND if the"
-    echo "     wrap-time option to point PARTITION_METRICS_LWD_TABLES at 'spans_local' was taken, revert it to 'spans'"
-    echo "     now: that table is gone, so the LWD scan would fail (Code 60) and opik.clickhouse.partition.lwd_rows would"
-    echo "     go silently empty while the other gauges come back. Default is 'spans,spans' — untouched installs are fine."
+    echo "     wrap-time option to point PARTITION_METRICS_LWD_TABLES at 'spans_local' was taken, move THAT ENTRY back"
+    echo "     to 'spans' now, leaving the traces entry as it stands: that table is gone, so the LWD scan would fail"
+    echo "     (Code 60) and opik.clickhouse.partition.lwd_rows would go silently empty while the other gauges come back."
+    echo "     The variable holds BOTH tables (shipped default 'traces,spans'), so setting it to a bare 'spans' blanks the"
+    echo "     traces gauges instead — and after the traces cutover its entry may legitimately read 'traces_local'."
+    echo "     Untouched installs need nothing."
     echo
     echo "To re-apply the wrap later, once the cause is understood:"
     if [[ -n "$(spans_engine spans_pre_cutover_backup)" ]]; then

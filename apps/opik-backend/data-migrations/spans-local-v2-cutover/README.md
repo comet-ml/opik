@@ -719,7 +719,8 @@ operator can now truthfully assert. The gate is the flag's state, not the probe'
 > `opik.clickhouse.partition.*` parts gauges relabel from `table="spans"` to `table="spans_local"`, while the
 > lightweight-delete-mask gauge (read through the wrapper) stays labelled `spans`. Any dashboard/alert keyed on
 > `table="spans"` goes blank when the wrap lands — update them in the same window, or point
-> `PARTITION_METRICS_LWD_TABLES` (default `spans,spans`) at `spans_local` for label consistency.
+> `PARTITION_METRICS_LWD_TABLES` (default `traces,spans`) at `spans_local` for label consistency — changing the
+> **spans entry only**, since the same variable carries the traces table.
 >
 > **Applying the deferred wrap later:** once the retarget flag (`spansDistributedWrapEnabled=true`) is live across the
 > backend fleet, run
@@ -1970,10 +1971,13 @@ Partition pruning needs no attention in either direction — it carries no flag 
 
 **Monitoring reverses with it.** The `opik.clickhouse.partition.*` parts gauges relabel back from `table="spans_local"`
 to `table="spans"`, so restore anything adjusted at wrap time. And if the wrap-time option to point
-`PARTITION_METRICS_LWD_TABLES` at `spans_local` was taken (see "Monitoring consequence of the flip"), **revert it to
-`spans`** — that table no longer exists after the un-wrap, so the LWD scan fails with `Code 60` and
-`opik.clickhouse.partition.lwd_rows` goes silently empty while every other gauge returns. Installs left at the default
-(`spans,spans`) need nothing.
+`PARTITION_METRICS_LWD_TABLES` at `spans_local` was taken (see "Monitoring consequence of the flip"), **revert the
+spans entry from `spans_local` back to `spans`, leaving the traces entry exactly as it stands** — that table no longer
+exists after the un-wrap, so the LWD scan fails with `Code 60` and `opik.clickhouse.partition.lwd_rows` goes silently
+empty while every other gauge returns. The variable carries BOTH tables (shipped default `traces,spans`), so setting it
+to a bare `spans` blanks the traces gauges the same way; and after the traces cutover its traces entry may legitimately
+read `traces_local`, which is why the instruction is "move the spans entry", not "restore a literal value". Installs
+left at the default need nothing.
 
 **Scope limit.** This undoes sharding only. A fidelity defect in the successor, a partition-count or merge-load
 regression, or a query regression from the new layout are all *cutover* problems — `--unwrap-only` changes none of them.

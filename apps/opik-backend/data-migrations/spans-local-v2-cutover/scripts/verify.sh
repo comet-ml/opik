@@ -492,6 +492,17 @@ fi
 # The PASSED line states the range it covered, so a pass can never be read as broader than it was — the same reason the
 # weekly form prints its bounds and stride. In window mode that is the explicit window, which is the whole point of the
 # mode: a reconciliation compare has to be quotable as "this exact range was checked".
+#
+# STATING THE COVERAGE IS NOT THE SAME AS DISQUALIFYING THE RUN. The runbook's Go/No-Go requires the pre-EXCHANGE gate
+# to be a FULL weekly compare, because sampling, a stride or a narrowed week range can hash a single-row deletion leak
+# out and still report ok=1 — and "PASSED" is the word an operator quotes into that checklist, with the coverage
+# trailing behind it. So a weekly run carrying any of those says so in the verdict itself. Window mode is a different
+# tool (the post-swap reconciled range) and prints its own explicit bounds, so it is not labelled against a gate it was
+# never meant to satisfy.
+PARTIAL=""
+if (( WINDOW_MODE != 1 )) && { (( SAMPLE_MOD != 1 )) || (( ${#WEEK_BOUND_FLAGS[@]} > 0 )); }; then
+    PARTIAL=" (PARTIAL — NOT valid as the pre-EXCHANGE gate)"
+fi
 if (( WINDOW_MODE == 1 )); then
     # "created in" rather than just the range: 000005 bounds on created_at, so a span created earlier and merely
     # updated inside the window is not in this compare (see --window-from's doc). Saying so on the PASSED line is what
@@ -502,10 +513,10 @@ else
     COVERED="weeks [$FROM_WEEK..$TO_WEEK] stride $WEEKS_STRIDE, sample 1/$SAMPLE_MOD"
 fi
 if [[ "$artifacts" != "0" ]]; then
-    log "PASSED: all $checked windows match ($COVERED); $artifacts window(s) held a superseded-version"
+    log "PASSED$PARTIAL: all $checked windows match ($COVERED); $artifacts window(s) held a superseded-version"
     log "        artifact only — a key written more than once lands its stale version in an earlier created_at week on"
     log "        one side. Live data is identical on both sides and no key in those windows had a tied newest version,"
     log "        so the re-check was decisive; nothing to fix (see the confirm-keys block)."
 else
-    log "PASSED: all $checked windows match ($COVERED)."
+    log "PASSED$PARTIAL: all $checked windows match ($COVERED)."
 fi

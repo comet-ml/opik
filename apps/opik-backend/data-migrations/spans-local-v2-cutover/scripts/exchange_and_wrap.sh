@@ -70,10 +70,22 @@
 #                             150 GiB by default. A replica fetching one of those at a conservative 150 MiB/s takes
 #                             ~17 minutes — so a 60s "stuck" verdict would fail this gate on a perfectly healthy
 #                             fetch, and a 120s budget would never let one complete.
-#                             SETTLE_STUCK_AGE_SECONDS is therefore 1800 (~1.8x that fetch) and the default budget
-#                             matches it, so AGE remains a reachable verdict rather than a dead one. The ceiling is
-#                             raised to 7200 for the same reason the traces ceiling was 3600: past it, aborting and
-#                             resolving the lag beats waiting.
+#                             SETTLE_STUCK_AGE_SECONDS is therefore 1800 (~1.8x that fetch). The ceiling is raised to
+#                             7200 for the same reason the traces ceiling was 3600: past it, aborting and resolving the
+#                             lag beats waiting.
+#
+#                             WHAT THE AGE ARM ACTUALLY COVERS, since the default budget EQUALS the threshold. The
+#                             verdict is `age > SETTLE_STUCK_AGE_SECONDS`, so an entry that first appears after polling
+#                             starts is at most ~1800s old when the budget runs out and can never be judged on age; the
+#                             age arm therefore reports lag that was ALREADY present when the gate began. That is the
+#                             intended split rather than a hole -- a 150 GiB fetch starting during the gate and
+#                             progressing normally is not stuck, and failing the gate on it would abort a healthy
+#                             cutover -- but it means "settled" here is "no pre-existing lag, and nothing retrying or
+#                             erroring", not "nothing outstanding". num_tries and last_exception are what catch lag
+#                             that BEGINS inside the window. Traces ran 120s against a 60s threshold, so its age arm
+#                             also caught lag beginning in the first half; raising this budget to buy the same margin
+#                             would add up to another 30 minutes of tail between the final delta and the swap, which
+#                             reconcile.sh then has to carry -- the trade this default deliberately declines.
 #
 #                             THE WAIT IS TAIL, AND ON SPANS IT IS THE LARGEST PART OF IT. Every second here lands
 #                             between the final delta and the swap, so it is writes reconcile.sh has to carry. That is

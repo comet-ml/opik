@@ -225,6 +225,7 @@ MIN_FREE_FACTOR="1.35"    # multiple of the PROJECTED DESTINATION size node free
 DEST_COMPRESSION_RATIO="0.381"  # destination on-disk size as a fraction of the source's (measured in OPIK-7400).
 STATE_FILE="./spans_cutover_backfill_start"  # backfill_start is persisted here and reused on resume (one anchor).
 CONFIRM_TIERED_HEADROOM=0 # required when the destination storage_policy is tiered/mismatched (see preflight_capacity).
+FREE_FLOOR_BYTES=0        # per-week free-space floor, set by preflight_capacity; 0 disables (as --min-free-factor 0 does).
 
 # Floor on adaptive splitting: never divide a window shorter than this. Guards against splitting forever on a single
 # hot instant; such a window is inserted whole (memory is still bounded by block squashing).
@@ -300,6 +301,12 @@ CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" --log_comm
 [[ -z "$TO_WEEK" || "$TO_WEEK" =~ ^[0-9]+$ ]] || { echo "ERROR: --to-week must be a non-negative integer." >&2; exit 2; }
 [[ "$PAUSE_SECONDS" =~ ^[0-9]+$ ]] || { echo "ERROR: --pause-seconds must be a non-negative integer." >&2; exit 2; }
 [[ "$DIVERGENCE" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --divergence must be a number." >&2; exit 2; }
+# A FRACTION, and strictly below 1.0. The shortfall test is `(src - dst) / src > divergence`, whose left side cannot
+# exceed 1.0, so a tolerance at or above 1.0 makes the test unreachable and a settled window with src > 0 and dst = 0
+# reports OK — the abort silently disabled by the flag meant to tune it. Bounded for the same reason
+# --dest-compression-ratio is: an out-of-range value here does not fail loudly, it removes a check.
+[[ "$(awk -v p="$DIVERGENCE" 'BEGIN { print (p >= 0 && p < 1.0) ? 1 : 0 }')" == "1" ]] \
+    || { echo "ERROR: --divergence must be a fraction in [0, 1.0). It is the tolerated shortfall ratio, so a value at or above 1.0 disables the shortfall abort entirely." >&2; exit 2; }
 [[ "$MIN_FREE_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --min-free-factor must be a number." >&2; exit 2; }
 [[ "$DEST_COMPRESSION_RATIO" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "ERROR: --dest-compression-ratio must be a number." >&2; exit 2; }
 # A ratio above 1.0 would make the gate LOOSER than sizing from the source, which is the one direction this parameter
@@ -455,6 +462,10 @@ preflight_capacity() {
             log "       gate is NOT one of them: both would make the same copy run with less margin, not more room." >&2
             exit 1
         fi
+        # The margin the gate just required, published for the per-week re-check below. --min-free-factor buys room for
+        # merge scratch and for the projection being wrong; (factor - 1) x projection IS that room, so losing all of it
+        # mid-copy means the run is no longer inside the envelope the gate approved.
+        FREE_FLOOR_BYTES="$(awk -v d="$dest_bytes" -v k="$MIN_FREE_FACTOR" 'BEGIN { printf "%d", d * (k - 1) }')"
         # Thin-headroom band. Not fatal — the gate passed — but a multi-day copy that also has to absorb merges on a
         # many-thousand-partition destination is exactly where a few hundred GiB of slack disappears without warning.
         if [[ "$(awk -v f="$free_bytes" -v n="$need" 'BEGIN { print (f - n < 3298534883328) ? 1 : 0 }')" == "1" ]]; then
@@ -772,6 +783,27 @@ for (( week=FROM_WEEK; week<=TO_WEEK; week++ )); do
     LO="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $week))") 00:00:00"
     HI="$(ch "SELECT toString(addWeeks(toDate('$ANCHOR'), $((week + 1))))") 00:00:00"
     process_range "week $week" "$LO" "$HI"
+    # RE-READ FREE SPACE BETWEEN WEEKS. preflight_capacity is one reading taken before a copy that runs for days, and on
+    # spans it approves a much thinner envelope than the traces gate did — 1.35 x a MEASURED 0.381 compression ratio,
+    # about half the source, where traces demanded twice it. If that ratio is optimistic for this estate, nothing else
+    # notices until the volume fills mid-window, which is the expensive moment: a full disk aborts the INSERT and leaves
+    # the destination part-copied with merges still to settle. A week boundary is the cheap place to stop instead — the
+    # anchor is persisted, the copy is idempotent, and `--from-week` resumes exactly here once space is recovered.
+    if [[ "$DRY_RUN" != "1" && "$FREE_FLOOR_BYTES" != "0" ]]; then
+        FREE_NOW="$(ch "SELECT sum(free_space) FROM system.disks")"
+        if [[ "$(awk -v f="$FREE_NOW" -v n="$FREE_FLOOR_BYTES" 'BEGIN { print (f < n) ? 1 : 0 }')" == "1" ]]; then
+            log "ABORT after week $week: node free disk $(bytes_tib "$FREE_NOW") TiB has fallen below the margin the" >&2
+            log "       capacity gate required ($(bytes_tib "$FREE_FLOOR_BYTES") TiB = (--min-free-factor - 1) x the projected" >&2
+            log "       destination). The copy is no longer inside the envelope that gate approved, so the projected" >&2
+            log "       --dest-compression-ratio is running optimistic for this estate, merges are holding more scratch" >&2
+            log "       than allowed for, or something else on the node took the space." >&2
+            log "       Nothing is lost: the anchor in '$STATE_FILE' stands and the copy is idempotent. Recover space" >&2
+            log "       (the runbook's headroom section names the levers), then resume with --from-week $((week + 1))." >&2
+            log "       Re-measure the ratio against what the destination actually holds before resuming — raising" >&2
+            log "       --dest-compression-ratio to clear this check would only shrink the same envelope further." >&2
+            exit 1
+        fi
+    fi
 done
 
 log "Backfill complete for weeks [$FROM_WEEK..$TO_WEEK]. Proceed to step 2 (delta + deletion replay)."
