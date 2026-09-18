@@ -32,8 +32,8 @@ Read `<x>` as `traces` or `spans` throughout.
 | `<x>_pre_cutover_backup` | *does not exist* | the parked pre-cutover data, kept through the soak |
 
 The cutover is performed by the operator runbook in
-[`data-migrations/traces-local-v2-cutover`](../data-migrations/traces-local-v2-cutover/README.md) (spans: its
-counterpart, OPIK-8366), **not** by Liquibase. So the changelog has no idea which topology it is running against, and
+[`data-migrations/traces-local-v2-cutover`](../data-migrations/traces-local-v2-cutover/README.md) and
+[`data-migrations/spans-local-v2-cutover`](../data-migrations/spans-local-v2-cutover/README.md), **not** by Liquibase. So the changelog has no idea which topology it is running against, and
 the two states coexist across the fleet for months: installs cut over on their own cadence, and fresh ones still
 start pre-cutover. The two families cut over **independently**, so an install can be
 post-cutover for traces and pre-cutover for spans; a guard must interrogate its own family's shard and no other.
@@ -84,8 +84,8 @@ needs every column and can accept none of the storage attributes.
 Plus one obligation no table-to-table comparison can infer:
 
 > A **preserved** (non-derived) column must also be added to the cutover backfill's explicit column list
-> ([`000001_backfill_traces_local_v2.sql`](../data-migrations/traces-local-v2-cutover/scripts/db-app-analytics/000001_backfill_traces_local_v2.sql),
-> and its spans counterpart once OPIK-8366 lands).
+> ([traces](../data-migrations/traces-local-v2-cutover/scripts/db-app-analytics/000001_backfill_traces_local_v2.sql),
+> [spans](../data-migrations/spans-local-v2-cutover/scripts/db-app-analytics/000001_backfill_spans_local_v2.sql)).
 > Otherwise the cutover copies the column as its default and the data is silently lost.
 >
 > A **derived** (`MATERIALIZED` **or** `ALIAS`) column must **not** be added there — the destination computes it, and
@@ -238,7 +238,7 @@ The freeze is **per family**: a traces soak does not freeze spans DDL, and vice 
 
 | gate | what it asserts |
 |---|---|
-| `TracesSchemaParityPreCutoverTest` / `SpansSchemaParityPreCutoverTest` | applies the real changelog as a fresh install does, then asserts parity: `<x>` ≅ the `<x>_local_v2` shadow ≅ the backfill column list (the backfill leg is pending for spans — see below) |
+| `TracesSchemaParityPreCutoverTest` / `SpansSchemaParityPreCutoverTest` | applies the real changelog as a fresh install does, then asserts three-way parity: `<x>` ≅ the `<x>_local_v2` shadow ≅ the backfill column list |
 | `TracesSchemaParityPostCutoverTest` / `SpansSchemaParityPostCutoverTest` | stops the changelog after the family's splice point, splices in the runbook's `EXCHANGE` + wrap, resumes — so **your** migration runs on the post-cutover topology — then asserts the wrapper exposes exactly the shard's columns |
 | `TracesMigrationPreconditionLintTest` / `SpansMigrationPreconditionLintTest` | a fast, container-free check that a migration mutating the family's tables **strictly after** its splice point carries the guard **on the mutating changeset itself**, keyed on **its own** shard, ships **both** complementary branches applying the **same** change, and does not mutate the other family in the same changeset |
 | `Trace/SpanMutationRoutingArchTest` and `Trace/SpanMutationSqlRoutingTest` | runtime DAO mutations resolve their table through `TraceDAOImpl#tracesMutationTable()` / `SpanDAO#selectSpansMutationTable` and never name a physical table directly |
@@ -300,14 +300,6 @@ Adding to any of these lists is a decision. Each entry carries the reason it exi
 you — an entry whose difference has gone must be removed by hand, which is what stops the lists growing into blanket
 tolerance.
 
-### The one leg spans does not have yet
-
-The spans cutover backfill ships with **OPIK-8366**. Until it lands there is no column list to compare against, so
-`CutoverSchemaParity.SPANS` declares a `backfillPendingTicket` and skips its two backfill legs. That skip is not silent:
-`SpansSchemaParityPreCutoverTest.backfillLegsRemainPendingUntilCutoverToolingLands` asserts the file is still absent, so the day
-the backfill merges that test fails and forces whoever merged it to clear the marker — at which point the legs start
-asserting on their own, and the spans gate becomes three-way like the traces one.
-
 ## Append-only
 
 Shipped migrations are **never edited** — not to fix them, not to add a precondition to one that predates the cutover.
@@ -329,7 +321,9 @@ from OPIK-7772.
 
 ## References
 
-* Cutover runbook and its reference SQL: [`data-migrations/traces-local-v2-cutover`](../data-migrations/traces-local-v2-cutover/README.md); spans: OPIK-8366
+* Cutover runbooks and their reference SQL:
+  [traces](../data-migrations/traces-local-v2-cutover/README.md),
+  [spans](../data-migrations/spans-local-v2-cutover/README.md)
 * Reference migrations (both branches):
   [traces](../src/test/resources/liquibase/traces-ddl-reference/migrations/reference_topology_aware_change.sql),
   [spans](../src/test/resources/liquibase/spans-ddl-reference/migrations/reference_topology_aware_change.sql)
