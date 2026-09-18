@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset miguelg:000102_add_auto_first_run_columns_to_agent_insights_jobs
+--changeset miguelg:000103_add_auto_first_run_columns_to_agent_insights_jobs
 --comment: Add auto_first_run_enrolled and auto_first_run_at to agent_insights_jobs
 
 -- auto_first_run_enrolled marks the projects the auto-first-run rollout applies to. It is set by the internal

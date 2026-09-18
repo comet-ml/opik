@@ -52,6 +52,24 @@ describe("DiagnosticsEmptyState", () => {
       });
     });
 
+    it("says the run is imminent once the threshold is reached", () => {
+      render(<DiagnosticsEmptyState {...awaiting} traceCount={100} />);
+
+      expect(
+        screen.getByText(
+          /will start automatically within the next few minutes/,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("says how the run is earned while still below the threshold", () => {
+      render(<DiagnosticsEmptyState {...awaiting} traceCount={99} />);
+
+      expect(
+        screen.getByText(/Once you reach 100, your first diagnostic will run/),
+      ).toBeInTheDocument();
+    });
+
     it("offers no run button, since the run is coming automatically", () => {
       render(<DiagnosticsEmptyState {...awaiting} traceCount={20} />);
 
@@ -90,11 +108,14 @@ describe("DiagnosticsEmptyState", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("offers the docs without configure permission, rather than nothing at all", () => {
+    it("explains the missing permission instead of showing nothing at all", () => {
       render(<DiagnosticsEmptyState {...props} canConfigure={false} />);
 
       expect(
-        screen.getByRole("link", { name: /Read docs/ }),
+        screen.getByText(/Running a diagnostic needs manage access/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: /View docs/ }),
       ).toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: /Run your first diagnostic/ }),

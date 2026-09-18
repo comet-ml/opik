@@ -42,6 +42,7 @@ import OutOfCreditsButton from "@/v2/pages/SignalsPage/OutOfCreditsButton";
 import DiagnosticsSettingsDialog from "@/v2/pages/SignalsPage/DiagnosticsSettingsDialog";
 import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 import useColumnsOverflow from "@/v2/pages/SignalsPage/useColumnsOverflow";
+import { AUTO_FIRST_RUN_MIN_TRACES } from "@/v2/pages/SignalsPage/helpers";
 
 const RUN_POLL_INTERVAL_MS = 8000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -224,14 +225,19 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
     if (job?.last_scan_at) markSeen(job.last_scan_at);
   }, [job?.last_scan_at, markSeen]);
 
+  // Past the threshold the sweep claims the project within its 10-minute cadence, so poll until it
+  // does: the page then leaves the empty state on its own instead of on a reload.
+  const autoRunImminent =
+    awaitsAutoFirstRun && windowTraceCount >= AUTO_FIRST_RUN_MIN_TRACES;
+
   useEffect(() => {
-    if (!showRunning) return;
+    if (!showRunning && !autoRunImminent) return;
     const id = window.setInterval(() => {
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_ISSUES_KEY] });
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_JOB_KEY] });
     }, RUN_POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [showRunning, queryClient]);
+  }, [showRunning, autoRunImminent, queryClient]);
 
   useEffect(() => {
     if (!isRunning) return;

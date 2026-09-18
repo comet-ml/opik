@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowUpRight, Play } from "lucide-react";
+import { ArrowUpRight, Eye, Play } from "lucide-react";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import { Button } from "@/ui/button";
 import { useTheme } from "@/contexts/theme-provider";
@@ -8,9 +8,9 @@ import OutOfCreditsButton from "@/v2/pages/SignalsPage/OutOfCreditsButton";
 import sampleIssuesLightUrl from "/images/diagnostics-sample-issues-light.svg";
 import sampleIssuesDarkUrl from "/images/diagnostics-sample-issues-dark.svg";
 
+import { AUTO_FIRST_RUN_MIN_TRACES as TRACE_THRESHOLD } from "@/v2/pages/SignalsPage/helpers";
+
 const DIAGNOSTICS_DOCS_URL = buildDocsUrl("/tracing/diagnostics");
-// Matches the backend's threshold; the run fires when a project crosses it.
-const TRACE_THRESHOLD = 100;
 
 type DiagnosticsEmptyStateProps = {
   awaitsAutoFirstRun: boolean;
@@ -47,6 +47,27 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
     </Button>
   );
 
+  const limitedAccessPanel = (
+    <div className="flex w-full flex-col gap-3 rounded-lg bg-muted p-4">
+      <div className="flex gap-2">
+        <Eye className="mt-0.5 size-4 shrink-0 text-muted-slate" />
+        <p className="comet-body-xs text-muted-slate">
+          You have limited access to this project. Running a diagnostic needs
+          manage access — findings will appear here once someone runs one.
+        </p>
+      </div>
+      <a
+        href={DIAGNOSTICS_DOCS_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="comet-body-xs ml-6 flex w-fit items-center gap-1 text-foreground-secondary underline underline-offset-4"
+      >
+        View docs
+        <ArrowUpRight className="size-3.5" />
+      </a>
+    </div>
+  );
+
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-8 py-10">
       <div className="flex w-full max-w-[480px] flex-col items-center gap-6">
@@ -55,8 +76,9 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
             Find what&apos;s breaking in your agent
           </h2>
           <p className="comet-body-s text-muted-slate">
-            Use diagnostics to read your traces and return non-error issues
-            ranked by impact.
+            Tool-call loops, hallucinations, latency creep only look like
+            problems across hundreds of traces. Diagnostics reads them all,
+            groups recurrences, and returns a root cause and fix.
           </p>
         </div>
 
@@ -94,15 +116,15 @@ const DiagnosticsEmptyState: React.FC<DiagnosticsEmptyStateProps> = ({
             </div>
 
             <p className="comet-body-xs text-center text-muted-slate">
-              Diagnostics run best on {TRACE_THRESHOLD}+ traces. Once you reach{" "}
-              {TRACE_THRESHOLD}, your first diagnostic runs automatically for
-              free.
+              {reached === TRACE_THRESHOLD
+                ? `You've reached ${TRACE_THRESHOLD} traces. Your first diagnostic will start automatically within the next few minutes, for free.`
+                : `Diagnostics run best on ${TRACE_THRESHOLD}+ traces. Once you reach ${TRACE_THRESHOLD}, your first diagnostic will run automatically for free.`}
             </p>
 
             {docsButton}
           </>
         ) : !canConfigure ? (
-          docsButton
+          limitedAccessPanel
         ) : isOutOfCredits ? (
           <OutOfCreditsButton
             large
