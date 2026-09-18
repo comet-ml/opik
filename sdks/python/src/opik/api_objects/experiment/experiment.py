@@ -1,7 +1,20 @@
+import collections.abc
 import functools
 import logging
+import threading
 from concurrent import futures
-from typing import List, Optional, TYPE_CHECKING
+from typing import (
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    NamedTuple,
+    Optional,
+    Sequence,
+    TYPE_CHECKING,
+)
+
+import httpx
 
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
@@ -9,44 +22,86 @@ from opik.rest_api import client as rest_api_client
 from opik.rest_api import types as rest_api_types
 from . import bulk_converters, bulk_item, experiment_item, experiments_client
 from .. import constants, helpers, rest_helpers
+from ..dataset import streaming_writer
 from ...api_objects.prompt import base_prompt
-from ... import exceptions
+from ...rest_api.core.api_error import ApiError
+from ...rest_client_configurator import retry_decorator
+from ... import config, exceptions, httpx_client
 
 if TYPE_CHECKING:
     from opik.evaluation.metrics import score_result
 
 LOGGER = logging.getLogger(__name__)
 
+_BULK_PATH = "v1/private/experiments/items/bulk"
 
-def _raise_on_oversized_items(
-    rest_items: List[
-        rest_api_types.ExperimentItemBulkRecordExperimentItemBulkWriteView
-    ],
-) -> None:
-    """Reject items that cannot fit in a request on their own.
+# The backend caps a bulk request through a bean-validation constraint (@MaxRequestSize /
+# MaxRequestSizeValidator in opik-backend), which answers 422 carrying this message; the byte
+# count it appends is configurable, so it stays out of the match. A 413 comes only from the
+# pre-parse Content-Length filter, which a deployment can tune below our batch cap.
+_TOO_LARGE_MESSAGE = "request size exceeds the maximum allowed size"
 
-    ``split_into_batches`` puts an oversized item in a batch by itself rather
-    than dropping it, which would send a request the backend is guaranteed to
-    reject with a 422. Failing here names the offending item instead.
 
-    The bound is inclusive, matching ``split_into_batches``: an item measuring
-    exactly the limit already fills a batch on its own, leaving no room for the
-    request envelope.
+def _is_batch_too_large(error: ApiError) -> bool:
+    if error.status_code == 413:
+        return True
+    if error.status_code != 422:
+        return False
+    try:
+        # The body is whatever the client managed to parse -- a model, a dict or a string --
+        # and one that cannot even be rendered is no evidence of an oversized batch.
+        body = str(error.body)
+    except Exception:
+        return False
+    return _TOO_LARGE_MESSAGE in body.lower()
+
+
+class _BulkUpload(NamedTuple):
+    """Everything one upload needs to turn serialised records into requests.
+
+    Resolved once per call rather than per batch: the envelope is the same for every
+    request, and `Experiment.name` behind it can cost a round trip the first time it is
+    read.
     """
-    failure_reasons = [
-        f"items[{index}] is {size_MB:.1f}MB, which is at or above the "
-        f"{constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB}MB per-request limit"
-        for index, size_MB in (
-            (index, sequence_splitter.get_payload_size_MB(item))
-            for index, item in enumerate(rest_items)
-        )
-        if size_MB >= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
-    ]
 
-    if failure_reasons:
-        raise exceptions.ValidationError(
-            prefix="batch_upload_items", failure_reasons=failure_reasons
-        )
+    client: httpx.Client
+    base_url: str
+    headers: Dict[str, str]
+    #: The envelope up to and including `"items":[`, for the item fragments to follow.
+    prefix: bytes
+    #: None sends the body uncompressed, for a client configured with compression off.
+    gzip_level: Optional[int]
+
+
+def _batch_chunks(upload: _BulkUpload, payloads: List[bytes]) -> List[bytes]:
+    """The pieces of one request body: the envelope spliced around the fragments.
+
+    Pieces rather than one buffer, so the comma between two records never copies the
+    record before it, and so the gzip below can take them a slice at a time.
+    """
+    chunks: List[bytes] = [upload.prefix]
+    for index, payload in enumerate(payloads):
+        if index:
+            chunks.append(b",")
+        chunks.append(payload)
+    chunks.append(b"]}")
+    return chunks
+
+
+def _count_batches(sizes_MB: List[float]) -> int:
+    """How many batches the sizes produce, by the same rule as the batching loop."""
+    max_size_MB = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
+    max_length = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE
+
+    batches, length, total_MB = 0, 0, 0.0
+    for size_MB in sizes_MB:
+        if length == max_length or total_MB + size_MB > max_size_MB:
+            batches += 1
+            length, total_MB = 1, size_MB
+        else:
+            length += 1
+            total_MB += size_MB
+    return batches + 1 if length else max(batches, 1)
 
 
 class Experiment:
@@ -154,30 +209,133 @@ class Experiment:
             )
             self._streamer.put(create_experiment_items_batch_message)
 
-    def _bulk_upload_batch_with_retry(
-        self,
-        batch: List[rest_api_types.ExperimentItemBulkRecordExperimentItemBulkWriteView],
-        project_name: Optional[str],
-    ) -> None:
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: self._rest_client.experiments.experiment_items_bulk(
-                experiment_id=self.id,
-                experiment_name=self.name,
-                dataset_name=self.dataset_name,
-                project_name=project_name,
-                items=batch,
+    def _open_bulk_upload(self, project_name: Optional[str]) -> _BulkUpload:
+        """The transport and envelope every batch of this upload is sent through.
+
+        The transport underneath the REST client is the very `OpikHttpxClient` the owning
+        client holds -- same auth, same workspace headers, same compression setting -- so
+        an `Experiment` built from a REST client alone resolves one like any other. Auth
+        and workspace live on the generated client's wrapper instead when the REST client
+        was built directly, which is what `wrapper_headers` recovers; without it such a
+        client would upload unauthenticated.
+
+        The envelope is serialised by the same encoder as the records, so the experiment
+        and dataset names are escaped the same way, and spliced open ready for the item
+        fragments. Its keys are the ones the generated client sent, `project_name`
+        included as an explicit null when there is none -- the backend reads absent and
+        null differently, so dropping it is not the same request.
+        """
+        wrapper = self._rest_client._client_wrapper
+        client = wrapper.httpx_client.httpx_client
+        base_url = wrapper.get_base_url()
+        if client is None or base_url is None:
+            raise exceptions.OpikException(
+                "The experiment's REST client exposes no HTTP transport to upload through"
+            )
+
+        envelope = streaming_writer.dumps(
+            {
+                "experiment_name": self.name,
+                "dataset_name": self.dataset_name,
+                "experiment_id": self.id,
+                "project_name": project_name,
+            }
+        )
+
+        opik_config = config.OpikConfig()
+        # The enable flag gates the level: a client built with compression off must not be
+        # handed gzipped bodies, whatever level is configured. A transport carrying no
+        # setting of its own -- a REST client built directly sends through a plain httpx
+        # client -- takes the configured one.
+        compressing = httpx_client.compresses_json_requests(
+            client, default=opik_config.enable_json_request_compression
+        )
+        return _BulkUpload(
+            client=client,
+            base_url=base_url,
+            headers=httpx_client.wrapper_headers(self._rest_client),
+            prefix=envelope[:-1] + b',"items":[',
+            gzip_level=(
+                opik_config.experiment_upload_compression_level if compressing else None
             ),
+        )
+
+    def _send_prepared_body(self, upload: _BulkUpload, body: bytes) -> None:
+        """Send one already-serialised request body."""
+
+        def send() -> None:
+            response = httpx_client.send_prepared_json(
+                upload.client,
+                upload.base_url,
+                _BULK_PATH,
+                body,
+                headers=upload.headers,
+            )
+            if response.status_code >= 300:
+                raise ApiError(
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    body=response.text,
+                )
+
+        # `rest_client_configurator` wraps every generated client method in this retry, so
+        # a body sent through the raw sender has to carry it too or the bulk path would be
+        # the one path that gives up on a transient 5xx. Nested as it is there: retries
+        # inside, the rate-limit wait outside.
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            retry_decorator.opik_rest_retry(send),
             operation_name="experiment_items_bulk",
         )
-        LOGGER.debug(
-            "Successfully sent experiment items bulk batch of size %d", len(batch)
+
+    def _bulk_upload_batch_with_retry(
+        self,
+        batch: List[bytes],
+        upload: _BulkUpload,
+    ) -> None:
+        """Join, compress and send one batch of serialised records.
+
+        Runs on the sending worker, and everything expensive here is deliberate: zlib
+        releases the GIL, so compression is the one part of an upload that parallelises
+        across workers, and doing it on the producer would funnel all of it through one
+        thread. `send_prepared_json` bypasses `OpikHttpxClient.build_request`, so the
+        automatic compression does not apply and this is where it happens instead.
+
+        The fragments are kept rather than released as they are compressed, because a
+        rejected batch is re-sent as halves and needs them again. A half re-joins the
+        same bytes, so every id in it is the one already sent -- nothing is re-converted
+        and nothing can be minted twice.
+        """
+        chunks = _batch_chunks(upload, batch)
+        body = (
+            b"".join(chunks)
+            if upload.gzip_level is None
+            else streaming_writer.gzip_chunks(chunks, upload.gzip_level)
         )
+        try:
+            self._send_prepared_body(upload, body)
+        except ApiError as exception:
+            # This deployment caps a request below our own cap, so send it as halves
+            # rather than failing the upload. A single item cannot be split.
+            if len(batch) <= 1 or not _is_batch_too_large(exception):
+                raise
+            LOGGER.warning(
+                "Batch of %d experiment items was rejected as too large, retrying it as two halves",
+                len(batch),
+            )
+            half = len(batch) // 2
+            self._bulk_upload_batch_with_retry(batch[:half], upload)
+            self._bulk_upload_batch_with_retry(batch[half:], upload)
+        else:
+            LOGGER.debug(
+                "Successfully sent experiment items bulk batch of size %d", len(batch)
+            )
 
     def batch_upload_items(
         self,
-        items: List[bulk_item.ExperimentItemBulkRecord],
+        items: Iterable[bulk_item.ExperimentItemBulkRecord],
         project_name: Optional[str] = None,
         num_threads: int = constants.EXPERIMENT_ITEMS_BULK_NUM_THREADS,
+        validate_before_upload: bool = True,
     ) -> None:
         """
         Upload experiment items together with their traces, spans and feedback scores.
@@ -185,9 +343,32 @@ class Experiment:
         Unlike :meth:`insert`, which only links already-existing traces to dataset
         items, this method creates the traces and spans as part of the same request.
 
-        Items are validated up front, split into batches that respect the backend's
-        1000-item and 4MB-per-request limits, and sent with automatic retry on rate
-        limiting (HTTP 429).
+        Items are split into batches that respect the backend's 1000-item and
+        4MB-per-request limits, and sent with automatic retry on rate limiting
+        (HTTP 429).
+
+        Any iterable is accepted, including a generator, and a single-pass source is
+        consumed lazily: no item is retained once its batch has been sent, and the
+        batches in flight are bounded, so peak memory follows the batch size rather
+        than the upload. Passing a list instead holds the whole upload resident before
+        the first request goes out, which for large records is the dominant cost --
+        286 MiB of records cost 8 MiB from a generator and 306 MiB from a list.
+
+        By default every item is validated before the first batch is sent. That needs a
+        second pass over the items, so it applies only to a re-iterable source: from a
+        list nothing is sent until every item has passed, and a bad one raises with
+        nothing delivered. A generator cannot be walked twice, so each item is validated
+        as it is reached instead -- which is what ``validate_before_upload=False`` asks
+        for explicitly -- and a later invalid item is found with earlier batches already
+        delivered.
+
+        A batch is built from the byte count of the records it will send, but a
+        deployment may cap a request below the SDK's own cap, so one can still be
+        rejected as too large. A rejected batch is halved and retried, down to a
+        single item, which raises rather than being split further. The halves are
+        sent in order, so a batch that fails this way can leave some of its own
+        items delivered; a half re-sends the bytes already serialised, so it
+        carries the same ids and duplicates nothing.
 
         If a batch fails the exception propagates and the experiment is left
         partially populated, but what "remaining" means depends on the worker
@@ -210,17 +391,30 @@ class Experiment:
                 ``trace.project_name`` must match it.
             num_threads: Number of batches to upload concurrently. Defaults to
                 ``8``; pass ``1`` to upload sequentially, which is the only way
-                to guarantee batches arrive in order. Capped at the number of
-                batches and at
-                ``constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS``.
+                to guarantee batches arrive in order. Capped at
+                ``constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS``, and at the
+                number of batches where that is known before the upload starts
+                -- from a single-pass source it is not, so the pool is left at
+                ``num_threads``.
+            validate_before_upload: Whether every item is checked before the
+                upload starts, rather than as it goes. Every item is validated
+                either way, so this decides when a bad one is reported, not
+                whether it is. ``True`` (the default) walks the list once first,
+                so a bad item -- failing validation, or too large to fit a
+                request on its own -- raises before any request is sent and all
+                failures are reported together, at the cost of converting each
+                item twice. ``False`` uploads in a single pass and checks each
+                item as it is sent, so a bad one raises when it is reached, with
+                the batches before it already delivered and no rollback.
 
         Returns:
             None
 
         Raises:
             opik.exceptions.ValidationError: If any item fails validation, if a
-                single item is too large to fit in one request, or if
-                ``num_threads`` is less than 1.
+                single item is too large to fit in one request, if
+                ``num_threads`` is less than 1, or if ``validate_before_upload``
+                is not a bool.
         """
         if num_threads < 1:
             raise exceptions.ValidationError(
@@ -228,7 +422,26 @@ class Experiment:
                 failure_reasons=[f"num_threads must be at least 1, got {num_threads}"],
             )
 
-        if not items:
+        # Read as a bare truth value, a non-bool picks a mode instead of being rejected
+        # -- "false" asks for the up-front pass it reads as a request to skip.
+        if not isinstance(validate_before_upload, bool):
+            raise exceptions.ValidationError(
+                prefix="batch_upload_items",
+                failure_reasons=[
+                    "validate_before_upload must be a bool, got "
+                    f"{type(validate_before_upload).__name__}"
+                ],
+            )
+
+        # Re-iterable sources keep the existing contract. A single-pass one cannot be
+        # checked up front -- the eager pass would consume it and leave nothing to send --
+        # so each item is validated as it is reached instead. Bound as the narrowed
+        # sequence rather than a bool, so `len` and the eager pass are reached only where
+        # the type says they are available.
+        reiterable_items = (
+            items if isinstance(items, collections.abc.Sequence) else None
+        )
+        if reiterable_items is not None and not reiterable_items:
             return
 
         resolved_project_name = (
@@ -240,62 +453,228 @@ class Experiment:
         if resolved_project_name is not None and not resolved_project_name.strip():
             resolved_project_name = None
 
-        bulk_converters.validate_records(items, project_name=resolved_project_name)
-
-        rest_items = [bulk_converters.to_rest_record(item) for item in items]
-
-        _raise_on_oversized_items(rest_items)
-
-        batches = sequence_splitter.split_into_batches(
-            rest_items,
-            max_payload_size_MB=constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB,
-            max_length=constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE,
+        sizes_MB = (
+            self._validate_and_size(reiterable_items, resolved_project_name)
+            if validate_before_upload and reiterable_items is not None
+            else None
         )
 
-        LOGGER.debug(
-            "Uploading %d experiment items in %d batch(es) using %d thread(s)",
-            len(rest_items),
-            len(batches),
-            num_threads,
-        )
+        upload = self._open_bulk_upload(resolved_project_name)
 
         if num_threads == 1:
-            for batch in batches:
-                self._bulk_upload_batch_with_retry(
-                    batch, project_name=resolved_project_name
-                )
+            for batch in self._stream_rest_batches(
+                items, resolved_project_name, sizes_MB
+            ):
+                self._bulk_upload_batch_with_retry(batch, upload)
             return
 
-        # Deliberately not a `with` block: ThreadPoolExecutor.__exit__ always
-        # calls shutdown(wait=True), which would re-join batches we just chose
-        # not to wait for and park the caller behind a batch stuck in the
-        # rate-limit retry loop.
-        # More workers than batches is pure waste, and an unbounded caller-supplied
-        # value would spawn a thread per batch.
-        worker_count = min(
-            num_threads, len(batches), constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS
+        # Deliberately not a `with` block: ThreadPoolExecutor.__exit__ always calls
+        # shutdown(wait=True), which would re-join batches we just chose not to wait for
+        # and park the caller behind a batch stuck in the rate-limit retry loop.
+        # More workers than batches is pure waste, and an unbounded caller-supplied value
+        # would spawn a thread per batch. The sizes make the count exact; without them
+        # the bound has to be an OVER-estimate, because an under-estimate silently caps
+        # concurrency -- `ceil(len(items) / 1000)` is 1 for a payload-bound upload of
+        # 1,000 large items that actually produces hundreds of batches, which would run
+        # the whole thing on one thread. One batch per item is the ceiling.
+        if sizes_MB is not None:
+            batch_count = _count_batches(sizes_MB)
+        elif reiterable_items is not None:
+            batch_count = len(reiterable_items)
+        else:
+            # Unknown until the source is drained, so it bounds nothing; the pool is left
+            # to num_threads. More workers than batches is waste, not breakage.
+            batch_count = num_threads
+        worker_count = max(
+            1,
+            min(num_threads, batch_count, constants.EXPERIMENT_ITEMS_BULK_MAX_THREADS),
+        )
+        # Only says a number where one was actually counted. For a single-pass source
+        # `batch_count` is the worker bound standing in for a count nobody has, so
+        # printing it as "at most N" would report a ceiling the upload does not have.
+        if sizes_MB is not None:
+            counted = str(batch_count)
+        elif reiterable_items is not None:
+            counted = f"at most {batch_count}"
+        else:
+            counted = "an unknown number of"
+        LOGGER.debug(
+            "Uploading %s experiment items in %s batch(es) using %d thread(s)",
+            len(reiterable_items) if reiterable_items is not None else "streamed",
+            counted,
+            worker_count,
         )
         pool = futures.ThreadPoolExecutor(
             max_workers=worker_count, thread_name_prefix="opik_experiment_items_bulk"
         )
-        submitted = [
-            pool.submit(
-                self._bulk_upload_batch_with_retry,
-                batch,
-                project_name=resolved_project_name,
-            )
-            for batch in batches
-        ]
+        # Bound the batches alive at once. Without it the producer would run the whole
+        # upload into the pool's queue, which is the materialisation this streaming path
+        # exists to avoid.
+        slots = threading.Semaphore(worker_count * 2)
+        first_error: List[BaseException] = []
+
+        def _released(future: "futures.Future") -> None:
+            # Record before releasing: a producer blocked in `acquire` wakes on the
+            # release, and would pass the `first_error` check and submit one more batch
+            # if the failure were not already visible.
+            error = future.exception()
+            if error is not None and not first_error:
+                first_error.append(error)
+            slots.release()
+
+        submitted = []
         try:
+            for batch in self._stream_rest_batches(
+                items, resolved_project_name, sizes_MB
+            ):
+                # Stop producing once a batch has failed, so a failed upload does not
+                # keep sending. The eager path gets this from cancel_futures below.
+                if first_error:
+                    break
+                slots.acquire()
+                future = pool.submit(self._bulk_upload_batch_with_retry, batch, upload)
+                future.add_done_callback(_released)
+                submitted.append(future)
             for future in futures.as_completed(submitted):
                 future.result()
         except BaseException:
-            # Fail fast: drop batches that have not started and return without
-            # joining the ones already in flight.
+            # Fail fast: drop batches that have not started and return without joining
+            # the ones already in flight.
             pool.shutdown(wait=False, cancel_futures=True)
             raise
         else:
             pool.shutdown(wait=True)
+
+    def _validate_and_size(
+        self,
+        items: Sequence[bulk_item.ExperimentItemBulkRecord],
+        project_name: Optional[str],
+    ) -> List[float]:
+        """Check every item before anything is sent, and keep the sizes for batching.
+
+        The order matches the eager path: validate the whole list first, then convert and
+        size, so a record that fails validation cannot crash the conversion before the
+        later failures have been collected. Both loops report every failure together,
+        which is the property streaming alone cannot offer.
+
+        Converted records are measured and dropped rather than kept. Retaining them is
+        the second full list this streaming path exists to avoid, and it grows with the
+        upload, so the conversion is paid again while sending, where it overlaps the
+        requests instead of delaying the first one.
+        """
+        bulk_converters.validate_records(items, project_name=project_name)
+
+        max_size_MB = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
+        sizes_MB: List[float] = []
+        failure_reasons: List[str] = []
+
+        for index, item in enumerate(items):
+            try:
+                size_MB = bulk_converters.payload_size_MB(
+                    bulk_converters.to_rest_record(item)
+                )
+            except bulk_converters.UnmeasurableRecordError as error:
+                # Reported as itself. Calling it oversized would be a wrong explanation
+                # that reads like a right one, and sends the caller off reducing a
+                # record whose size was never the problem.
+                sizes_MB.append(float("inf"))
+                failure_reasons.append(
+                    bulk_converters.unmeasurable_failure_reason(
+                        index, error, max_size_MB
+                    )
+                )
+                continue
+            sizes_MB.append(size_MB)
+            if size_MB >= max_size_MB:
+                failure_reasons.append(
+                    f"items[{index}] is {size_MB:.1f}MB, which is at or above the "
+                    f"{max_size_MB}MB per-request limit"
+                )
+
+        if failure_reasons:
+            raise exceptions.ValidationError(
+                prefix="batch_upload_items", failure_reasons=failure_reasons
+            )
+
+        return sizes_MB
+
+    def _stream_rest_batches(
+        self,
+        items: Iterable[bulk_item.ExperimentItemBulkRecord],
+        project_name: Optional[str],
+        sizes_MB: Optional[List[float]] = None,
+    ) -> Iterator[List[bytes]]:
+        """Convert, serialise and batch in one pass, yielding each batch as it fills.
+
+        The eager path makes four sequential passes over the whole upload -- validate,
+        convert, size every item to reject oversized ones, then size every item again to
+        batch them -- and only then sends. The two sizing passes are the same
+        computation, and all four complete before the first request leaves, so no send
+        thread overlaps any of them.
+
+        ``sizes_MB`` is what :meth:`_validate_and_size` already measured. When it is
+        absent nothing has been checked yet, so each item is validated and sized here and
+        a bad one raises when it is reached, with earlier batches already delivered.
+
+        Batch boundaries are identical to ``split_into_batches`` either way, for input
+        that has no oversized item -- which is the only input either path accepts.
+
+        Each record is serialised once, here, and what a batch carries is those bytes.
+        The length of a fragment is the size it is budgeted at, so the number that closes
+        a batch is the number of bytes that batch will send rather than a prediction of
+        it -- and a record mutated from another thread after it was sized can no longer
+        be sent in a form the size does not describe. The sizes from the eager pass are
+        the same measurement, so they are used only to say that validation has already
+        run.
+
+        ``items`` must not be mutated while this runs. Records are converted here a
+        second time rather than carried over from the sizing pass, because retaining
+        them is the memory this path exists not to spend.
+        """
+        max_size_MB = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
+        max_length = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE
+
+        batch: List[bytes] = []
+        batch_size_MB = 0.0
+
+        for index, item in enumerate(items):
+            if sizes_MB is None:
+                bulk_converters.validate_record(item, index, project_name)
+            rest_item = bulk_converters.to_rest_record(item)
+            try:
+                payload = bulk_converters.serialize_record(rest_item)
+            except bulk_converters.UnmeasurableRecordError as error:
+                # Refused rather than degraded, and refused here because this is where
+                # the item's index is still known. The eager pass reaches the same
+                # verdict for a re-iterable source, before anything is sent.
+                raise exceptions.ValidationError(
+                    prefix="batch_upload_items",
+                    failure_reasons=[
+                        bulk_converters.unmeasurable_failure_reason(
+                            index, error, max_size_MB
+                        )
+                    ],
+                ) from error
+            size_MB = bulk_converters.size_MB(payload)
+
+            if sizes_MB is None and size_MB >= max_size_MB:
+                raise exceptions.ValidationError(
+                    prefix="batch_upload_items",
+                    failure_reasons=[
+                        f"items[{index}] is {size_MB:.1f}MB, which is at or above "
+                        f"the {max_size_MB}MB per-request limit"
+                    ],
+                )
+
+            if len(batch) == max_length or batch_size_MB + size_MB > max_size_MB:
+                yield batch
+                batch, batch_size_MB = [payload], size_MB
+            else:
+                batch.append(payload)
+                batch_size_MB += size_MB
+
+        if batch:
+            yield batch
 
     def get_items(
         self,

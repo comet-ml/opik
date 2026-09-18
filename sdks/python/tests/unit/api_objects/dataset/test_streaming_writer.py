@@ -249,19 +249,19 @@ def test_pool__compression_enabled__body_is_one_gzip_stream_of_the_batch(make_po
     "n_chunks",
     [
         pytest.param(
-            streaming_writer.BoundedSendPool._COMPRESS_BLOCK_CHUNKS - 1,
+            streaming_writer._COMPRESS_BLOCK_CHUNKS - 1,
             id="one-short-block",
         ),
         pytest.param(
-            streaming_writer.BoundedSendPool._COMPRESS_BLOCK_CHUNKS,
+            streaming_writer._COMPRESS_BLOCK_CHUNKS,
             id="exactly-one-block",
         ),
         pytest.param(
-            streaming_writer.BoundedSendPool._COMPRESS_BLOCK_CHUNKS + 1,
+            streaming_writer._COMPRESS_BLOCK_CHUNKS + 1,
             id="block-plus-a-tail",
         ),
         pytest.param(
-            streaming_writer.BoundedSendPool._COMPRESS_BLOCK_CHUNKS * 3 + 7,
+            streaming_writer._COMPRESS_BLOCK_CHUNKS * 3 + 7,
             id="several-blocks",
         ),
     ],

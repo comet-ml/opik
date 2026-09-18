@@ -127,6 +127,40 @@ def dumps(value: Any) -> bytes:
     return json_helpers.dumps(value, default=encode_flexible, sort_keys=False)
 
 
+# Compress a slice at a time, not a chunk at a time. `compress()` releases the GIL but
+# the loop around it does not, and a batch arrives as one piece per row plus its
+# separators -- roughly two thousand at the item cap. Fed individually that is a GIL
+# hand-off per piece, and throughput drops as workers are added instead of rising; a
+# slice amortises it. The body is already capped, so a slice never exceeds one batch.
+_COMPRESS_BLOCK_CHUNKS = 256
+
+
+def gzip_chunks(chunks: List[bytes], level: int, *, release: bool = False) -> bytes:
+    """One gzip stream over the pieces of a request body.
+
+    Call this from the thread that will send the body, never from the one that built it:
+    zlib releases the GIL, so compression is the part of an upload that actually
+    parallelises across workers, and doing it on the producer funnels all of it through
+    one thread.
+
+    `release` empties `chunks` as it goes, so compressing never holds all of the batch
+    raw and all of it compressed at once. A caller that may need the pieces afterwards --
+    the experiment path re-sends a rejected batch as halves -- leaves it off and keeps
+    them.
+    """
+    compressor = zlib.compressobj(level, zlib.DEFLATED, _GZIP_WBITS)
+    parts: List[bytes] = []
+    for start in range(0, len(chunks), _COMPRESS_BLOCK_CHUNKS):
+        end = min(start + _COMPRESS_BLOCK_CHUNKS, len(chunks))
+        parts.append(compressor.compress(b"".join(chunks[start:end])))
+        if release:
+            chunks[start:end] = [b""] * (end - start)
+    parts.append(compressor.flush(zlib.Z_FINISH))
+    body = b"".join(parts)
+    parts.clear()
+    return body
+
+
 class StreamingBatchWriter:
     """Accumulate serialised items and emit complete request bodies.
 
@@ -247,13 +281,6 @@ class BoundedSendPool:
     rollback, so bodies already accepted stay persisted.
     """
 
-    # Compress a slice at a time, not a chunk at a time. `compress()` releases the GIL
-    # but the loop around it does not, and a batch arrives as one piece per row plus its
-    # separators -- roughly two thousand at the item cap. Fed individually that is a GIL
-    # hand-off per piece, and throughput drops as workers are added instead of rising; a
-    # slice amortises it. The body is already capped, so a slice never exceeds one batch.
-    _COMPRESS_BLOCK_CHUNKS = 256
-
     def __init__(
         self,
         *,
@@ -283,17 +310,9 @@ class BoundedSendPool:
             # than progressive. It is freed before the send, like the compressed path.
             body = b"".join(chunks)
         else:
-            compressor = zlib.compressobj(self._gzip_level, zlib.DEFLATED, _GZIP_WBITS)
-            parts: List[bytes] = []
-            for start in range(0, len(chunks), self._COMPRESS_BLOCK_CHUNKS):
-                end = min(start + self._COMPRESS_BLOCK_CHUNKS, len(chunks))
-                parts.append(compressor.compress(b"".join(chunks[start:end])))
-                # Released a slice at a time, so compressing never holds all of the batch
-                # raw and all of it compressed at once.
-                chunks[start:end] = [b""] * (end - start)
-            parts.append(compressor.flush(zlib.Z_FINISH))
-            body = b"".join(parts)
-            parts.clear()
+            # Released a slice at a time, so compressing never holds all of the batch raw
+            # and all of it compressed at once. Nothing here re-sends these pieces.
+            body = gzip_chunks(chunks, self._gzip_level, release=True)
         # Emptied before the send, never after: the executor holds this list for the whole
         # call, so a send parked in a read timeout, a retry or a 429 wait would otherwise
         # pin a second copy of the body.
