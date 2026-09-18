@@ -192,6 +192,9 @@ public class JsonEachRowBulkInsert {
     private <T> ByteArrayOutputStream serialize(Collection<T> items, Function<T, ObjectNode> rowMapper)
             throws IOException {
 
+        // Outside the try-with-resources, unlike the other ByteArrayOutputStream uses in this codebase:
+        // they copy out with toByteArray() before the block ends, while this one is handed to the client
+        // as writeTo and read on its thread after this method returns, so it has to outlive the block.
         var payload = new ByteArrayOutputStream();
         try (var writer = new BufferedWriter(new OutputStreamWriter(payload, StandardCharsets.UTF_8))) {
             JsonGenerator generator = JsonUtils.getMapper().getFactory().createGenerator(writer);
