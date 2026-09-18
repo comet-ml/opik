@@ -1,7 +1,7 @@
 import getpass
 import logging
 import os
-from typing import Any, Callable, Dict, Final, List, Optional
+from typing import Any, Callable, Dict, Final, Optional
 
 import httpx
 import opik.config
@@ -12,10 +12,7 @@ from opik.configurator.interactive_helpers import (
     ask_user_for_approval,
     is_interactive,
 )
-from opik.configurator import consent
-from opik.configurator import mcp
 from opik.configurator import opik_rest_helpers
-from opik.configurator import skills
 from opik.exceptions import ConfigurationError
 import opik.url_helpers as url_helpers
 from opik.api_key import opik_api_key
@@ -65,9 +62,6 @@ class OpikConfigurator:
         self.install_skills = install_skills
         self.assistant_setup = assistant_setup
         self._announce: Announce = announce if announce is not None else LOGGER.info
-        # Set when the consent prompt named the detected hosts, so the installer
-        # can skip re-confirming the very same list.
-        self._mcp_prompt_named_detected_hosts = False
 
         # Handle URL
         #
@@ -107,110 +101,36 @@ class OpikConfigurator:
         self._setup_assistants()
 
     def _setup_assistants(self) -> None:
-        """Register the MCP server and install the skill pack.
+        """Hand the AI-client step to the caller's renderer, if there is one.
 
-        Delegated when the caller supplied a renderer — that is how the CLI gets
-        its selectors and formatted output. ``opik.configure()`` has no renderer
-        and keeps the plain-text prompts, since a library must not take over the
-        caller's terminal.
+        Only the CLI supplies one. ``opik.configure()`` does not do this step at
+        all: registering an MCP server and installing the skill pack write into
+        files owned by Cursor, Claude Code and friends, and a library call has no
+        business editing another tool's configuration on the strength of a
+        prompt the caller never asked to be shown. It had grown its own
+        plain-text prompts for both, which meant `opik.configure()` could write
+        to every detected client from a question that named none of them.
+
+        Anyone wanting the step from Python can call the CLI, which is where the
+        consent, the client picker and the reporting all live.
         """
-        if self.assistant_setup is not None:
-            self.assistant_setup(
-                {
-                    "api_key": self.api_key,
-                    "workspace": self.workspace,
-                    "base_url": self.base_url,
-                    "api_url": self.api_url,
-                    "use_local": self.use_local,
-                    "self_hosted_comet": self.self_hosted_comet,
-                    "check_tls_certificate": self.current_config.check_tls_certificate,
-                },
-                self.install_mcp,
-                self.install_skills,
-                self.automatic_approvals,
-            )
+        if self.assistant_setup is None:
             return
 
-        self._maybe_setup_mcp_server()
-        self._maybe_setup_skills()
-
-    def _maybe_setup_skills(self) -> None:
-        """Offer the Opik skill pack, which is a separate decision from the server.
-
-        Asked after MCP rather than folded into the same question: the MCP step
-        writes credentials into a config file the user already trusts with them,
-        while this writes instruction files the assistant then acts on with its
-        own permissions. Same list of assistants, materially different consent.
-        """
-        host_keys = self._skills_host_keys()
-        if host_keys is None:
-            return
-
-        result = skills.setup_skills(host_keys)
-        if result.succeeded:
-            LOGGER.info(
-                "Installed the Opik skill pack (%s) in %s.",
-                ", ".join(result.skills),
-                result.shared_dir,
-            )
-        else:
-            LOGGER.warning("Could not install the Opik skill pack: %s.", result.error)
-
-    def _skills_host_keys(self) -> Optional[List[str]]:
-        """Hosts to install the skill pack for, or ``None`` to skip."""
-        detected = skills.detected_host_keys()
-        verdict = consent.resolve(
-            self.install_skills,
-            assume_yes=self.automatic_approvals,
-            interactive=is_interactive(),
-            anything_detected=len(detected) > 0,
-        )
-        granted = consent.granted(
-            verdict, lambda: ask_user_for_approval(consent.SKILLS_PROMPT)
-        )
-        return detected if granted else None
-
-    def _maybe_setup_mcp_server(self) -> None:
-        if not self._should_setup_mcp_server():
-            return
-
-        mcp.setup_mcp_server(
-            api_key=self.api_key,
-            workspace=self.workspace,
-            base_url=self.base_url,
-            api_url=self.api_url,
-            use_local=self.use_local,
-            self_hosted_comet=self.self_hosted_comet,
-            check_tls_certificate=self.current_config.check_tls_certificate,
-            force_local_server=False,
-            # The prompt below already named the detected hosts, so re-confirming
-            # them inside the installer would ask the same question twice.
-            assume_confirmed=self._mcp_prompt_named_detected_hosts,
-        )
-
-    def _should_setup_mcp_server(self) -> bool:
-        """Decide whether to offer registering the Opik MCP server.
-
-        The rules and the wording live in ``configurator.consent``; this only wires
-        them to the configurator's state and does the asking.
-        """
-        detected = mcp.detected_host_keys()
-        verdict = consent.resolve(
+        self.assistant_setup(
+            {
+                "api_key": self.api_key,
+                "workspace": self.workspace,
+                "base_url": self.base_url,
+                "api_url": self.api_url,
+                "use_local": self.use_local,
+                "self_hosted_comet": self.self_hosted_comet,
+                "check_tls_certificate": self.current_config.check_tls_certificate,
+            },
             self.install_mcp,
-            assume_yes=self.automatic_approvals,
-            interactive=is_interactive(),
-            anything_detected=len(detected) > 0,
+            self.install_skills,
+            self.automatic_approvals,
         )
-        return consent.granted(verdict, self._ask_about_mcp)
-
-    def _ask_about_mcp(self) -> bool:
-        """Ask, recording that the prompt already named the detected hosts.
-
-        Default yes, matching the CLI's own prompt: the two ask the same question
-        and answering Enter to one of them should not mean the opposite.
-        """
-        self._mcp_prompt_named_detected_hosts = True
-        return ask_user_for_approval(consent.MCP_PROMPT)
 
     def _configure_cloud(self) -> None:
         """

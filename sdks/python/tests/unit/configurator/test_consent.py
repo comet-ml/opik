@@ -95,17 +95,20 @@ class TestGranted:
 
 
 class TestPrompts:
-    def test_mcp_prompt__does_not_name_the_clients(self):
-        """The installer's picker lists them straight after."""
-        prompt = consent.MCP_PROMPT
+    """Only the skill pack's one-liner is left here.
 
-        assert "Claude Code" not in prompt
-        assert "(Y/n)" in prompt, "recommended, so Enter accepts"
+    The plain-text MCP and skills prompts went with the library path:
+    `opik.configure()` no longer offers either, so the CLI is the only thing
+    left that words these questions and it renders its own.
+    """
 
-    def test_skills_prompt__is_recommended_and_defaults_to_yes(self):
-        assert "Recommended" in consent.SKILLS_PROMPT
-        assert "(Y/n)" in consent.SKILLS_PROMPT
+    def test_skill_pack_pitch__says_what_the_pack_is_for(self):
+        assert "instrument" in consent.SKILL_PACK_PITCH
 
-    def test_skills_prompt__does_not_re_list_the_assistants(self):
-        """The server step's results table just named them."""
-        assert "Claude Code" not in consent.SKILLS_PROMPT
+    def test_skill_pack_pitch__does_not_name_the_assistants(self):
+        """The picker lists them; the pitch is about the pack."""
+        assert "Claude Code" not in consent.SKILL_PACK_PITCH
+
+    def test_the_library_prompts_are_gone(self):
+        for name in ("MCP_PROMPT", "SKILLS_PROMPT", "mcp_prompt"):
+            assert not hasattr(consent, name), name

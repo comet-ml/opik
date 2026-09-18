@@ -57,6 +57,11 @@ class Choice:
     key: str
     label: str
     hint: str = ""
+    #: A row that stands for something other than itself — "All", "none of these
+    #: is my client". Select-all skips them: ticking a row labelled "my client is
+    #: not listed" is not a meaningful part of "all of them", and doing it made
+    #: the `a` key resolve to that row and install nothing.
+    synthetic: bool = False
 
 
 def is_supported() -> bool:
@@ -95,6 +100,7 @@ def multiselect(
         return None
 
     selected: Set[str] = set(preselected or ())
+    _real = [choice for choice in choices if not choice.synthetic]
     cursor = 0
 
     with rich.live.Live(
@@ -118,10 +124,10 @@ def multiselect(
                 choice_key = choices[cursor].key
                 selected.symmetric_difference_update({choice_key})
             elif key == TOGGLE_ALL:
-                if len(selected) == len(choices):
+                if len(selected) == len(_real):
                     selected.clear()
                 else:
-                    selected = {choice.key for choice in choices}
+                    selected = {choice.key for choice in _real}
 
             live.update(_render(title, choices, selected, cursor), refresh=True)
 

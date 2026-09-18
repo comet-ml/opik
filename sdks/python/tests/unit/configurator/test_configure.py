@@ -2462,254 +2462,55 @@ class TestConfigure:
         mock_update_session_config.assert_any_call("project_name", "new_project")
 
 
-class TestShouldSetupMcpServer:
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__install_mcp_false__returns_false(
-        self, mock_is_interactive
-    ):
-        configurator = OpikConfigurator(install_mcp=False)
-        assert configurator._should_setup_mcp_server() is False
+class TestTheLibraryPathDoesNotTouchAiClients:
+    """`opik.configure()` does not offer the MCP server or the skill pack.
 
-    @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_should_setup_mcp_server__non_interactive_no_flag__returns_false(
-        self, mock_is_interactive
-    ):
-        configurator = OpikConfigurator(install_mcp=None)
-        assert configurator._should_setup_mcp_server() is False
-
-    @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_should_setup_mcp_server__non_interactive_explicit_flag__returns_true(
-        self, mock_is_interactive
-    ):
-        """The flag is the request, and it is all an agent has to make one with.
-
-        A coding agent told to set Opik up has no tty but a live instruction; a CI
-        job has no tty and no instruction. The flag is what separates them.
-        """
-        configurator = OpikConfigurator(install_mcp=True)
-        assert configurator._should_setup_mcp_server() is True
-
-    @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_should_setup_mcp_server__non_interactive_flag_with_yes__returns_true(
-        self, mock_is_interactive
-    ):
-        """`-y` does not veto an explicit flag; it just is not one by itself."""
-        configurator = OpikConfigurator(install_mcp=True, automatic_approvals=True)
-        assert configurator._should_setup_mcp_server() is True
+    It used to, with plain-text prompts of its own — and because the prompt no
+    longer named the detected clients while still forwarding
+    `assume_confirmed`, a bare Enter wrote into every one of them from a
+    question that named none. Registering a server and installing instruction
+    files edit files owned by Cursor, Claude Code and friends; a library call
+    has no business doing that. The step lives in the CLI, which is where the
+    consent, the picker and the reporting are.
+    """
 
     @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__install_mcp_true__returns_true(
-        self, mock_is_interactive
+    def test_no_renderer__does_nothing_and_asks_nothing(
+        self, mock_is_interactive, monkeypatch
     ):
-        configurator = OpikConfigurator(install_mcp=True)
-        assert configurator._should_setup_mcp_server() is True
+        asked = Mock(side_effect=AssertionError("must not prompt"))
+        monkeypatch.setattr("opik.configurator.configure.ask_user_for_approval", asked)
 
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__automatic_approvals__returns_false_without_prompt(
-        self, mock_is_interactive
-    ):
-        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=True)
-        assert configurator._should_setup_mcp_server() is False
+        OpikConfigurator()._setup_assistants()
 
-    @patch("opik.configurator.configure.mcp.detected_host_keys", return_value=[])
-    @patch(
-        "opik.configurator.configure.ask_user_for_approval",
-        return_value=True,
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__no_host_detected__does_not_ask(
-        self, mock_is_interactive, mock_prompt, mock_detected
-    ):
-        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
-        assert configurator._should_setup_mcp_server() is False
-        mock_prompt.assert_not_called()
+        asked.assert_not_called()
 
-    @patch(
-        "opik.configurator.configure.mcp.detected_host_keys",
-        return_value=["Cursor"],
-    )
-    @patch(
-        "opik.configurator.configure.ask_user_for_approval",
-        return_value=True,
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__prompt_is_its_own_block(
-        self, mock_is_interactive, mock_prompt, mock_detected
-    ):
-        """The clients are not named: the installer's picker lists them next."""
-        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
-
-        assert configurator._should_setup_mcp_server() is True
-
-        prompt = mock_prompt.call_args.args[0]
-        assert "Cursor" not in prompt
-        # Framed as its own block, not appended to the configuration log.
-        assert prompt.startswith("\n")
-        assert "AI clients" in prompt
-        assert configurator._mcp_prompt_named_detected_hosts is True
-
-    @patch(
-        "opik.configurator.configure.mcp.detected_host_keys",
-        return_value=["Cursor"],
-    )
-    @patch(
-        "opik.configurator.configure.ask_user_for_approval",
-        return_value=False,
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__interactive_prompt_no__returns_false(
-        self, mock_is_interactive, mock_prompt, mock_detected
-    ):
-        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
-        assert configurator._should_setup_mcp_server() is False
-
-
-class TestSkillsHostKeys:
-    """Mirrors TestShouldSetupMcpServer: skills are a separate consent decision."""
-
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_skills_host_keys__install_skills_false__returns_none(
-        self, mock_is_interactive
-    ):
-        configurator = OpikConfigurator(install_skills=False)
-        assert configurator._skills_host_keys() is None
-
-    @patch(
-        "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_skills_host_keys__non_interactive_explicit_flag__installs(
-        self, mock_is_interactive, mock_detected
-    ):
-        """Same rule as the server step: the flag carries the request."""
-        configurator = OpikConfigurator(install_skills=True)
-        assert configurator._skills_host_keys() == ["codex"]
-
-    @patch(
-        "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_skills_host_keys__flag_with_yes__installs(
-        self, mock_is_interactive, mock_detected
-    ):
-        configurator = OpikConfigurator(install_skills=True, automatic_approvals=True)
-        assert configurator._skills_host_keys() == ["codex"]
-
-    @patch("opik.configurator.configure.skills.detected_host_keys", return_value=[])
-    @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_skills_host_keys__flag_but_nothing_detected__returns_empty(
-        self, mock_is_interactive, mock_detected
-    ):
-        """An explicit request is honoured even with nothing to install into.
-
-        It used to skip silently, which left someone who passed
-        `install_skills=True` with no clue why nothing happened. The empty list
-        reaches `setup_skills`, which names the locations it knows and is the part
-        that actually knows them.
-        """
-        configurator = OpikConfigurator(install_skills=True)
-        assert configurator._skills_host_keys() == []
-
-    @patch(
-        "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_skills_host_keys__non_interactive_no_flag__returns_none(
-        self, mock_is_interactive, mock_detected
-    ):
-        configurator = OpikConfigurator(install_skills=None)
-        assert configurator._skills_host_keys() is None
-
-    @patch(
-        "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_skills_host_keys__automatic_approvals__does_not_ask(
-        self, mock_is_interactive, mock_detected
-    ):
-        configurator = OpikConfigurator(install_skills=None, automatic_approvals=True)
-        assert configurator._skills_host_keys() is None
-
-    @patch("opik.configurator.configure.skills.detected_host_keys", return_value=[])
-    @patch(
-        "opik.configurator.configure.ask_user_for_approval",
-        return_value=True,
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_skills_host_keys__nothing_detected__does_not_ask(
-        self, mock_is_interactive, mock_prompt, mock_detected
-    ):
-        configurator = OpikConfigurator(install_skills=None)
-        assert configurator._skills_host_keys() is None
-        mock_prompt.assert_not_called()
-
-    @patch(
-        "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
-    )
-    @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_skills_host_keys__prompt_yes__installs(
-        self, mock_is_interactive, mock_prompt, mock_detected
-    ):
-        configurator = OpikConfigurator(install_skills=None)
-        assert configurator._skills_host_keys() == ["codex"]
-
-        prompt = mock_prompt.call_args.args[0]
-        # Recommended, so the default answer is yes — hence the (Y/n) helper.
-        assert "Recommended" in prompt
-        assert "(Y/n)" in prompt
-        # The server step just named the assistants; do not relist them.
-        assert "Codex" not in prompt
-
-    @patch(
-        "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
-    )
-    @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_library_path__pack_is_a_follow_up_not_a_choice_up_front(
-        self, mock_is_interactive, mock_prompt, mock_keys
-    ):
-        """The pack is offered after the server step, with its output in view."""
-        configurator = OpikConfigurator(install_skills=None)
-
-        assert configurator._skills_host_keys() == ["codex"]
-
-        # Shaped like the MCP question: headline first, recommendation on it.
-        assert (
-            mock_prompt.call_args.args[0]
-            .lstrip()
-            .startswith("Download the Opik skill pack")
+    def test_renderer_supplied__is_handed_the_whole_step(self):
+        """The CLI injects one; everything about the step happens in there."""
+        seen = []
+        configurator = OpikConfigurator(
+            api_key="k",
+            workspace="ws",
+            install_mcp=True,
+            install_skills=False,
+            automatic_approvals=True,
+            assistant_setup=lambda *args: seen.append(args),
         )
-        assert "(Recommended)" in mock_prompt.call_args.args[0]
 
-    @patch(
-        "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
-    )
-    @patch("opik.configurator.configure.ask_user_for_approval", return_value=False)
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_skills_host_keys__prompt_no__returns_none(
-        self, mock_is_interactive, mock_prompt, mock_detected
-    ):
-        configurator = OpikConfigurator(install_skills=None)
-        assert configurator._skills_host_keys() is None
+        configurator._setup_assistants()
 
-    @patch("opik.configurator.configure.skills.setup_skills")
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_maybe_setup_skills__declined__does_not_install(
-        self, mock_is_interactive, mock_setup
-    ):
-        configurator = OpikConfigurator(install_skills=False)
-        configurator._maybe_setup_skills()
-        mock_setup.assert_not_called()
+        assert len(seen) == 1
+        params, install_mcp, install_skills, automatic = seen[0]
+        assert (install_mcp, install_skills, automatic) == (True, False, True)
+        assert params["api_key"] == "k" and params["workspace"] == "ws"
 
-    @patch("opik.configurator.configure.skills.setup_skills")
-    @patch(
-        "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=False)
-    def test_maybe_setup_skills__flag_without_terminal__installs_for_detected(
-        self, mock_is_interactive, mock_detected, mock_setup
-    ):
-        configurator = OpikConfigurator(install_skills=True)
-        configurator._maybe_setup_skills()
-        mock_setup.assert_called_once_with(["codex"])
+    def test_the_assistant_helpers_are_gone(self):
+        """Nothing is left behind for a caller to reach into."""
+        for name in (
+            "_maybe_setup_mcp_server",
+            "_should_setup_mcp_server",
+            "_ask_about_mcp",
+            "_maybe_setup_skills",
+            "_skills_host_keys",
+        ):
+            assert not hasattr(OpikConfigurator, name), name

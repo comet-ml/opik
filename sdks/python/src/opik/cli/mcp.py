@@ -254,6 +254,10 @@ def configure(
         # across both commands.
         clients_detected=",".join(sorted(target.key for target in detected)),
         clients_registered=",".join(sorted(outcome.registered_clients)),
+        # `mcp_decision` is always a request here — running the command is the
+        # permission — so this is the only thing that can say a run still wrote
+        # nothing because the user chose no client in the picker.
+        picker_skipped=outcome.mcp_declined,
         interactive=interactive_helpers.is_interactive(),
         # Resolved again, not reused: this command can run `opik configure` on the
         # way through, which is what turns an unconfigured run into an attributed

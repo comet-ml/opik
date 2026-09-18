@@ -117,53 +117,13 @@ def granted(verdict: Verdict, ask: Callable[[], bool]) -> bool:
     return verdict.decision is Decision.PROCEED
 
 
-MCP_PROMPT: str = (
-    "\n"
-    "  ─── AI clients ───────────────────────────────────────────\n"
-    "\n"
-    "  Set up Opik MCP for your AI client? (Recommended)\n"
-    "\n"
-    "  Enables your AI assistant to inspect traces, scan your projects\n"
-    "  for issues, debug experiments, and run Opik commands directly\n"
-    "  from chat.\n"
-    "\n"
-    "  Add Opik MCP to the detected AI clients? (Y/n) "
-)
-"""The consent prompt, framed so it does not read as one more log line.
-
-Plain text with blank lines and an indent rather than anything richer: this runs
-from ``opik.configure()`` too, which must not take over the caller's stdout with
-a rendered panel.
-
-The clients are not named here. The installer's own picker lists them right
-after, and saying them twice pushed the question itself off the screen — the
-same reason the CLI's block stopped naming them."""
-
-
 SKILL_PACK_PITCH: str = (
     "It teaches your AI client how to instrument code with Opik, wire up "
     "integrations, run test suites and agent logs diagnostics."
 )
 """The case for the pack, as one line — used by the CLI, which wraps it itself.
 
-Says the same thing as the body of :data:`SKILLS_PROMPT` below, which is hand-
-wrapped for plain-text output. Keep the two in step; "AI client" is the term the
-rest of the CLI uses for these tools."""
-
-
-SKILLS_PROMPT: str = (
-    "\n"
-    "  Download the Opik skill pack for your AI client? (Recommended)\n"
-    "\n"
-    "  It teaches your AI client how to instrument code with Opik, wire\n"
-    "  up integrations, run test suites and agent logs diagnostics.\n"
-    "\n"
-    "  Install it? (Y/n) "
-)
-"""Asked after the server step, so the user answers with its output in front of
-them, and recommended — hence the default yes. The clients are not named again
-because the server step just listed them.
-
-Shaped like :data:`MCP_PROMPT`: headline with the recommendation, the case for
-it, then the question. The two are halves of one step and reading differently
-made them look like different programs."""
+The only prompt text left here. Its plain-text siblings went with the library
+path: `opik.configure()` no longer offers the MCP server or the skill pack, so
+there is nothing outside the CLI left to word. "AI client" is the term the rest
+of the CLI uses for these tools."""

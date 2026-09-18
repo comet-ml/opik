@@ -352,7 +352,7 @@ class RichInstallView(mcp_view.InstallView):
         # its own "All of the above" all along; this gives the picker the parity.
         chosen = selector.multiselect(
             title=title,
-            choices=[selector.Choice(key=_ALL, label="All")]
+            choices=[selector.Choice(key=_ALL, label="All", synthetic=True)]
             + [
                 selector.Choice(key=c.key, label=c.label, hint=c.hint)
                 for c in candidates
@@ -362,6 +362,7 @@ class RichInstallView(mcp_view.InstallView):
                     key=mcp_view.MANUAL_SETUP,
                     label=mcp_view.MANUAL_SETUP_LABEL,
                     hint="show manual setup",
+                    synthetic=True,
                 )
             ],
             preselected=preselected,
@@ -371,10 +372,12 @@ class RichInstallView(mcp_view.InstallView):
         # answer to it is a link rather than nothing.
         if chosen is None:
             return None
-        if mcp_view.MANUAL_SETUP in chosen:
-            return [mcp_view.MANUAL_SETUP]
+        # `All` first: the two are mutually exclusive by construction — select-all
+        # skips synthetic rows — but a list holding both can only have meant all.
         if _ALL in chosen:
             return [c.key for c in candidates]
+        if mcp_view.MANUAL_SETUP in chosen:
+            return [mcp_view.MANUAL_SETUP]
         return [key for key in chosen if key != _ALL]
 
     def note(self, message: str) -> None:
