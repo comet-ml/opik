@@ -110,6 +110,12 @@ def test_extract_turns_windows_from_conversation__unanswered_turn_from_traces_ke
         traces, input_transform, output_transform
     ).as_json_list()
 
+    u1 = {"role": "user", "content": "How do I reset my password?"}
+    a1 = {"role": "assistant", "content": "Go to settings."}
+    u2 = {"role": "user", "content": "And when does it take effect?"}
+    u3 = {"role": "user", "content": "Thanks, that worked."}
+    a3 = {"role": "assistant", "content": "Glad to help."}
+
     assert [m["role"] for m in conversation] == [
         "user",
         "assistant",
@@ -118,12 +124,28 @@ def test_extract_turns_windows_from_conversation__unanswered_turn_from_traces_ke
         "assistant",
     ]
 
+    # Each window is asserted against its own expected message list: window count plus
+    # the final window alone would still pass if an unanswered turn were dropped from an
+    # *intermediate* window, which is what the judges actually score against.
+    expected_windows = [
+        [u1, a1],
+        [u1, a1, u2],
+        [u1, a1, u2, u3, a3],
+    ]
     turns_windows = conversation_helpers.extract_turns_windows_from_conversation(
         conversation=conversation, window_size=5
     )
+    assert turns_windows == expected_windows
 
-    assert len(turns_windows) == 3
-    assert turns_windows[-1] == conversation
+    # With a window of two turns the unanswered turn is the second window's only content
+    # beyond the first pair, and the head of the third window.
+    assert conversation_helpers.extract_turns_windows_from_conversation(
+        conversation=conversation, window_size=2
+    ) == [
+        [u1, a1],
+        [u1, a1, u2],
+        [u2, u3, a3],
+    ]
 
 
 def test_extract_turns_windows_from_conversation__empty_conversation__raises_error():
