@@ -2511,7 +2511,7 @@ class TestShouldSetupMcpServer:
         configurator = OpikConfigurator(install_mcp=None, automatic_approvals=True)
         assert configurator._should_setup_mcp_server() is False
 
-    @patch("opik.configurator.configure.mcp.detected_host_names", return_value=[])
+    @patch("opik.configurator.configure.mcp.detected_host_keys", return_value=[])
     @patch(
         "opik.configurator.configure.ask_user_for_approval",
         return_value=True,
@@ -2525,7 +2525,7 @@ class TestShouldSetupMcpServer:
         mock_prompt.assert_not_called()
 
     @patch(
-        "opik.configurator.configure.mcp.detected_host_names",
+        "opik.configurator.configure.mcp.detected_host_keys",
         return_value=["Cursor"],
     )
     @patch(
@@ -2549,7 +2549,7 @@ class TestShouldSetupMcpServer:
         assert configurator._mcp_prompt_named_detected_hosts is True
 
     @patch(
-        "opik.configurator.configure.mcp.detected_host_names",
+        "opik.configurator.configure.mcp.detected_host_keys",
         return_value=["Cursor"],
     )
     @patch(

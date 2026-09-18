@@ -76,7 +76,7 @@ def ran(monkeypatch):
                 skills_installer, "detected_host_keys", return_value=["cursor"]
             ),
             mock.patch.object(
-                mcp_installer, "detected_host_names", return_value=["Cursor"]
+                mcp_installer, "detected_host_keys", return_value=["Cursor"]
             ),
             mock.patch.object(
                 configure_cli.opik_configure, "OpikConfigurator", fake_configurator

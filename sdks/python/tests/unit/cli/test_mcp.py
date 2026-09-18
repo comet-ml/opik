@@ -481,7 +481,10 @@ class TestResultEventCarriesTheFunnelProperties:
             patch.object(
                 mcp_cli.mcp_targets,
                 "detected_targets",
-                return_value=[SimpleNamespace(display_name=name) for name in detected],
+                return_value=[
+                    SimpleNamespace(display_name=name, key=name.lower())
+                    for name in detected
+                ],
             ),
             patch.object(mcp_cli.assistants, "setup", return_value=outcome),
             patch.object(mcp_cli.account_identity, "event_properties", return_value={}),

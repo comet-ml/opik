@@ -187,7 +187,7 @@ class OpikConfigurator:
         The rules and the wording live in ``configurator.consent``; this only wires
         them to the configurator's state and does the asking.
         """
-        detected = mcp.detected_host_names()
+        detected = mcp.detected_host_keys()
         verdict = consent.resolve(
             self.install_mcp,
             assume_yes=self.automatic_approvals,

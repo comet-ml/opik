@@ -18,7 +18,7 @@ and keeps its plain-text prompts.
 """
 
 import click
-from typing import Any, List, Mapping, NamedTuple, Optional
+from typing import Any, List, Mapping, NamedTuple, Optional, Tuple
 
 from opik.cli import install_view
 from opik.configurator import consent
@@ -48,9 +48,14 @@ class Outcome(NamedTuple):
 
     clients: int
     skills: bool
+    #: Which clients were registered, not only how many — the count cannot say
+    #: which AI clients people actually pick.
+    registered_clients: Tuple[str, ...] = ()
     failed_clients: int = 0
     verified: Optional[bool] = None
     detected: int = 0
+    #: Which clients were on offer, filled in by the caller that detected them.
+    detected_keys: Tuple[str, ...] = ()
     mcp_decision: Optional[str] = None
     skills_decision: Optional[str] = None
     #: The user reached the client picker and chose nothing — a refusal, not a
@@ -138,6 +143,7 @@ def setup(
         # Nothing landed, but a run where every write failed is not the same as one
         # where nothing was attempted, so the failure count rides along either way.
         return NOTHING_DONE._replace(
+            registered_clients=install.registered,
             failed_clients=len(install.failed),
             verified=install.verified,
             skills_decision=skills_reason,
@@ -151,6 +157,7 @@ def setup(
     return Outcome(
         clients=len(configured_hosts),
         skills=installed_skills,
+        registered_clients=install.registered,
         failed_clients=len(install.failed),
         verified=install.verified,
         skills_decision=skills_reason,

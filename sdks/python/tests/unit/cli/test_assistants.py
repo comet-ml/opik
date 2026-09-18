@@ -125,7 +125,11 @@ class TestTheHalvesAreIndependent:
         mcp_spy.assert_called_once()
         skills_spy.assert_not_called()
         assert outcome == assistants.Outcome(
-            clients=1, skills=False, verified=True, skills_decision="declined"
+            clients=1,
+            skills=False,
+            registered_clients=("cursor",),
+            verified=True,
+            skills_decision="declined",
         )
 
     def test_both_declined__nothing_runs(self, mcp_spy, skills_spy, rich_view):

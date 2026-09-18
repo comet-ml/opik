@@ -29,7 +29,7 @@ def _setup_assistants(
     holds a policy of its own — it wires the flags to it and does the asking.
     """
     interactive = interactive_helpers.is_interactive()
-    detected = mcp_installer.detected_host_names()
+    detected = mcp_installer.detected_host_keys()
     situation = dict(
         assume_yes=automatic_approvals,
         interactive=interactive,
@@ -54,6 +54,7 @@ def _setup_assistants(
         # straight off the verdict — nobody said no, the question never arose.
         return assistants.NOTHING_DONE._replace(
             detected=len(detected),
+            detected_keys=tuple(detected),
             mcp_decision=mcp_decision,
             skills_decision=skills_verdict.reason.value,
         )
@@ -74,7 +75,11 @@ def _setup_assistants(
     if outcome.mcp_declined:
         mcp_decision = consent.Reason.DECLINED.value
     # `skills_decision` is left as `setup` recorded it: it did the asking.
-    return outcome._replace(detected=len(detected), mcp_decision=mcp_decision)
+    return outcome._replace(
+        detected=len(detected),
+        detected_keys=tuple(detected),
+        mcp_decision=mcp_decision,
+    )
 
 
 def _ask_about_mcp() -> bool:
@@ -480,6 +485,11 @@ def configure(
         mcp_decision=outcome.mcp_decision,
         skills_decision=outcome.skills_decision,
         verification_succeeded=outcome.verified,
+        # Which clients, not only how many. Sorted and joined so one string is a
+        # stable breakdown value, and `splitByChar` gets back to per-client
+        # counts — the two together say what was on offer and what was taken.
+        clients_detected=",".join(sorted(outcome.detected_keys)),
+        clients_registered=",".join(sorted(outcome.registered_clients)),
         # Carried onto the result too: the entry event has it, and a funnel whose
         # steps filter on different things is not measuring one population.
         interactive=interactive,

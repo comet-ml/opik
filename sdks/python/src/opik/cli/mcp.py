@@ -250,6 +250,10 @@ def configure(
         mcp_decision=consent.Reason.REQUESTED.value,
         skills_decision=outcome.skills_decision,
         verification_succeeded=outcome.verified,
+        # Same shape as `opik configure`, so one query counts client popularity
+        # across both commands.
+        clients_detected=",".join(sorted(target.key for target in detected)),
+        clients_registered=",".join(sorted(outcome.registered_clients)),
         interactive=interactive_helpers.is_interactive(),
         # Resolved again, not reused: this command can run `opik configure` on the
         # way through, which is what turns an unconfigured run into an attributed

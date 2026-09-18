@@ -87,7 +87,7 @@ class TestAssistantConfirmation:
         with (
             mock.patch.object(
                 configure_cli.mcp_installer,
-                "detected_host_names",
+                "detected_host_keys",
                 return_value=list(detected),
             ),
             mock.patch.object(
@@ -256,7 +256,7 @@ class TestCodingAgentFlow:
         with (
             mock.patch.object(
                 configure_cli.mcp_installer,
-                "detected_host_names",
+                "detected_host_keys",
                 return_value=["Cursor"],
             ),
             mock.patch.object(
@@ -489,7 +489,7 @@ class TestTheDecisionIsReported:
         with (
             mock.patch.object(
                 configure_cli.mcp_installer,
-                "detected_host_names",
+                "detected_host_keys",
                 return_value=["Cursor"] * detected,
             ),
             mock.patch.object(
@@ -691,7 +691,7 @@ class TestTheMcpQuestionIsRecommended:
         with (
             mock.patch.object(
                 configure_cli.mcp_installer,
-                "detected_host_names",
+                "detected_host_keys",
                 return_value=["Cursor"],
             ),
             mock.patch.object(configure_cli.click, "confirm", return_value=False),
@@ -864,3 +864,64 @@ class TestTheJourneyIsReported:
         ]
 
         assert stages == ["deployment", "credentials", "assistants", "done"]
+
+
+class TestWhichClientsAreReported:
+    """Counts cannot say which AI clients people pick.
+
+    `detected_clients` and `clients_written` are numbers, so the question "what
+    is popular" had no answer. The keys ride along as sorted, comma-joined
+    strings: one stable breakdown value, and `splitByChar` gets back to
+    per-client counts.
+    """
+
+    @staticmethod
+    def _result_event(outcome):
+        runner = CliRunner()
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(
+                configure_cli, "run_interactive_configure", return_value=outcome
+            ),
+            mock.patch.object(
+                configure_cli.account_identity, "event_properties", return_value={}
+            ),
+            mock.patch.object(configure_cli.analytics, "track_event") as track,
+        ):
+            assert runner.invoke(cli, ["configure", "--use-local"]).exit_code == 0
+        return track.call_args_list[-1].kwargs
+
+    def test_reports_what_was_offered_and_what_was_taken(self):
+        event = self._result_event(
+            assistants.Outcome(
+                clients=2,
+                skills=True,
+                detected_keys=("cursor", "claude-code", "codex"),
+                registered_clients=("cursor", "claude-code"),
+            )
+        )
+
+        assert event["clients_detected"] == "claude-code,codex,cursor"
+        assert event["clients_registered"] == "claude-code,cursor"
+
+    def test_sorted__so_the_same_set_is_one_breakdown_value(self):
+        """Otherwise picker order splits one combination across several rows."""
+        first = self._result_event(
+            assistants.Outcome(
+                clients=2, skills=True, registered_clients=("cursor", "codex")
+            )
+        )
+        second = self._result_event(
+            assistants.Outcome(
+                clients=2, skills=True, registered_clients=("codex", "cursor")
+            )
+        )
+
+        assert first["clients_registered"] == second["clients_registered"]
+
+    def test_nothing_registered__is_empty_not_absent(self):
+        event = self._result_event(assistants.Outcome(clients=0, skills=False))
+
+        assert event["clients_registered"] == ""
