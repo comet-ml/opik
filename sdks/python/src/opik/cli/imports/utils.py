@@ -512,7 +512,7 @@ def build_import_metadata(
     source: Dict[str, Any],
     fields: List[str],
     existing_metadata: Optional[Any] = None,
-) -> Optional[Any]:
+) -> Optional[Dict[str, Any]]:
     """Return a metadata dict that includes import-preserved fields under _import_* keys.
 
     Only fields with non-None values are added. If there is nothing to add and
@@ -521,18 +521,19 @@ def build_import_metadata(
 
     Metadata is an arbitrary JSON value on the wire, not necessarily an object:
     a client writing through the REST API can store an array or a scalar there.
-    Those have nowhere to carry the _import_* keys, so they are returned
-    untouched rather than failing the item — keeping the exported metadata
-    matters more than annotating it.
+    Those are carried under ``_import_metadata`` so the result is always an
+    object, because everything downstream needs one — the _import_* keys need
+    somewhere to live, and the SDK merges a span's usage into its metadata by
+    unpacking it, which raises on anything that is not a mapping.
     """
+    if existing_metadata is not None and not isinstance(existing_metadata, dict):
+        existing_metadata = {"_import_metadata": existing_metadata}
     import_fields = {
         f"_import_{field}": source[field]
         for field in fields
         if source.get(field) is not None
     }
     if not import_fields:
-        return existing_metadata
-    if existing_metadata is not None and not isinstance(existing_metadata, dict):
         return existing_metadata
     merged: Dict[str, Any] = dict(existing_metadata) if existing_metadata else {}
     merged.update(import_fields)
