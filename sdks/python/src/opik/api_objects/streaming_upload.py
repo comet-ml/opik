@@ -73,7 +73,14 @@ def _ordered_set_members(value: Any) -> list:
     try:
         return sorted(value)
     except TypeError:
+        pass
+    try:
         return sorted(value, key=lambda member: (type(member).__name__, repr(member)))
+    except Exception as exception:
+        # A member's own `__repr__` can raise anything; report it as unserialisable.
+        raise TypeError(
+            f"Set member cannot be ordered for serialization: {exception}"
+        ) from exception
 
 
 def encode_flexible(value: Any) -> Any:

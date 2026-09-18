@@ -228,6 +228,23 @@ def test_insert__value_not_json_serializable__raises_explicitly():
         dataset.insert([{"input": NotSerializable()}])
 
 
+def test_insert__deduplication__set_member_with_a_raising_repr__raises_explicitly():
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    class BadRepr:
+        def __repr__(self) -> str:
+            raise RuntimeError("repr exploded")
+
+    from opik.api_objects.dataset import streaming_writer
+
+    # Mixed types force the repr-keyed ordering, so the repr failure must surface as
+    # the serialization error rather than escape the dedup pass.
+    with pytest.raises(streaming_writer.ItemNotSerializableError):
+        dataset.insert([{"input": {1, BadRepr()}}], deduplication=True)
+    assert capture.request_count == 0
+
+
 # --------------------------------------------------------------------------- #
 # compatibility: a Dataset built from a rest client alone still uploads
 # --------------------------------------------------------------------------- #
