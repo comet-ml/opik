@@ -22,10 +22,9 @@ from opik.configurator.skills import roots as skills_roots
 
 console = rich.console.Console()
 
-#: Keys of the synthetic rows in the host picker. Not host keys, and cannot
+#: Key of the synthetic "All" row in the host picker. Not a host key, and cannot
 #: collide with one: `mcp_targets.HOST_KEYS` are plain names like `claude-code`.
 _ALL = "__all__"
-_SKIP = "__skip__"
 
 
 def _collapse_home(message: str) -> str:
@@ -317,20 +316,18 @@ class RichInstallView(mcp_view.InstallView):
             + [
                 selector.Choice(key=c.key, label=c.label, hint=c.hint)
                 for c in candidates
-            ]
-            + [selector.Choice(key=_SKIP, label="Skip")],
+            ],
             preselected=preselected,
         )
+        # Escape is how this is declined — there is no Skip row. It was one more
+        # thing to read past in a list whose whole job is to be scanned, and the
+        # footer already names Escape. The numbered-menu fallback keeps its own
+        # Skip, because there is no Escape at an `input()` prompt.
         if chosen is None:
             return None
-        # Skip wins over anything else ticked: it is the row that means "no", and
-        # a selection containing both is a user changing their mind, not asking
-        # for a partial install. The numbered-menu fallback reads it the same way.
-        if _SKIP in chosen:
-            return []
         if _ALL in chosen:
             return [c.key for c in candidates]
-        return [key for key in chosen if key not in (_ALL, _SKIP)]
+        return [key for key in chosen if key != _ALL]
 
     def note(self, message: str) -> None:
         console.print(padding.Padding(text.Text(message, style="dim"), (0, 0, 0, 2)))

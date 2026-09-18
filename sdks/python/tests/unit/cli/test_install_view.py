@@ -347,27 +347,17 @@ class TestTheAllRow:
         )
         return chosen, seen["choices"]
 
-    def test_all_is_the_first_row_and_skip_the_last(self, monkeypatch):
+    def test_all_is_the_first_row(self, monkeypatch):
         _, choices = self._choose(monkeypatch, [])
 
         assert choices[0].label == "All"
-        assert choices[-1].label == "Skip"
-        assert [c.label for c in choices[1:-1]] == ["Claude Code", "Codex", "Cursor"]
+        assert [c.label for c in choices[1:]] == ["Claude Code", "Codex", "Cursor"]
 
-    def test_choosing_skip__declines(self, monkeypatch):
-        """Saying no is a row, not only the Escape key."""
-        from opik.cli import install_view as rich_view
+    def test_no_skip_row(self, monkeypatch):
+        """Escape declines; a Skip row was one more thing to read past."""
+        _, choices = self._choose(monkeypatch, [])
 
-        chosen, _ = self._choose(monkeypatch, [rich_view._SKIP])
-
-        assert chosen == []
-
-    def test_skip_beats_anything_else_ticked(self, monkeypatch):
-        from opik.cli import install_view as rich_view
-
-        chosen, _ = self._choose(monkeypatch, ["codex", rich_view._SKIP])
-
-        assert chosen == []
+        assert "Skip" not in [c.label for c in choices]
 
     def test_choosing_all__expands_to_every_candidate(self, monkeypatch):
         from opik.cli import install_view as rich_view
