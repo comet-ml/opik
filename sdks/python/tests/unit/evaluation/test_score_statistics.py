@@ -65,7 +65,9 @@ def logger(monkeypatch: pytest.MonkeyPatch) -> mock.Mock:
     return spy
 
 
-def test_partial_failures_keep_the_survivor_mean_and_report_the_count():
+def test_partial_failures_keep_the_survivor_mean_and_report_the_count(
+    logger: mock.Mock,
+):
     statistics_by_name = score_statistics.calculate_aggregated_statistics(
         _five_ok_five_failed()
     )
@@ -74,6 +76,11 @@ def test_partial_failures_keep_the_survivor_mean_and_report_the_count():
     assert stats.mean == pytest.approx(1.0)
     assert stats.values == [1.0] * 5
     assert stats.failed_count == 5
+
+    assert logger.warning.call_count == 1
+    message = logger.warning.call_args[0][0]
+    assert "Excluded 5 'hallucination'" in message
+    assert "5 remaining" in message
 
 
 def test_the_reported_counts_add_up_to_the_trials_the_metric_ran_on():
@@ -196,3 +203,46 @@ def test_failed_count_defaults_to_zero_so_existing_construction_still_works():
 
     assert positional.failed_count == 0
     assert keyword == positional
+
+
+def test_a_metric_name_carrying_controls_cannot_forge_a_second_log_line(
+    logger: mock.Mock,
+):
+    newline, escape = chr(10), chr(27)
+    hostile = (
+        "evil"
+        + newline
+        + "OPIK: every score passed"
+        + newline
+        + "second line"
+        + escape
+        + "[31mred"
+    )
+    results = [
+        _result(f"item-{i}", 1, [_score(hostile, 0.0, scoring_failed=True)])
+        for i in range(3)
+    ]
+
+    score_statistics.calculate_aggregated_statistics(results)
+
+    assert logger.warning.call_count == 1
+    message = logger.warning.call_args[0][0]
+    assert newline not in message
+    assert escape not in message
+    assert "evil" in message
+    # the controls survive only in escaped form, so the record stays one line
+    assert chr(92) + "n" in message
+    assert "x1b" in message
+
+
+def test_an_oversized_metric_name_is_capped_in_the_log(logger: mock.Mock):
+    long_name = "m" * 500
+    results = [_result("item-0", 1, [_score(long_name, 0.0, scoring_failed=True)])]
+
+    score_statistics.calculate_aggregated_statistics(results)
+
+    message = logger.warning.call_args[0][0]
+    assert "... (truncated)." in message
+    assert "m" * score_statistics.MAX_LOGGED_METRIC_NAME_LENGTH not in message
+    assert len(message) < 400
+    assert chr(10) not in message

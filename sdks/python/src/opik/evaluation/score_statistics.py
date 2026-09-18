@@ -9,6 +9,10 @@ from opik.evaluation import test_result
 
 LOGGER = logging.getLogger(__name__)
 
+# A metric name is user-supplied, so the one written into a log line is capped.
+# TruncateFormatter caps a whole message the same way.
+MAX_LOGGED_METRIC_NAME_LENGTH = 200
+
 
 @dataclasses.dataclass
 class ScoreStatistics:
@@ -70,9 +74,10 @@ def calculate_aggregated_statistics(
     for score_name in sorted(failed_by_name):
         scored_count = len(scores_by_name.get(score_name, []))
         LOGGER.warning(
-            f"Excluded {failed_by_name[score_name]} '{score_name}' score(s) from the "
-            f"aggregated statistics because the metric reported the scoring as "
-            f"failed; the statistics cover the {scored_count} remaining score(s)."
+            f"Excluded {failed_by_name[score_name]} {_metric_name_for_log(score_name)} "
+            f"score(s) from the aggregated statistics because the metric reported the "
+            f"scoring as failed; the statistics cover the {scored_count} remaining "
+            f"score(s)."
         )
 
     # Calculate aggregated statistics for each score name
@@ -96,3 +101,17 @@ def calculate_aggregated_statistics(
 def _is_valid_score_value(value: float) -> bool:
     """Check if a score value is valid for statistical calculations."""
     return isinstance(value, (int, float)) and math.isfinite(value)
+
+
+def _metric_name_for_log(name: str) -> str:
+    """Represent a metric name so it cannot forge log records.
+
+    Score names come from user code, and this one is written into a log line.
+    ``repr`` escapes newlines and control characters, and the result is capped,
+    which is the same sanitize-and-cap decision #8233 made for the names the
+    backend reports on a rule's log.
+    """
+    text = repr(name)
+    if len(text) > MAX_LOGGED_METRIC_NAME_LENGTH:
+        text = text[:MAX_LOGGED_METRIC_NAME_LENGTH] + "... (truncated)."
+    return text
