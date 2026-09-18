@@ -435,6 +435,7 @@ areas:
     routes: ["/projects/$projectId/playground"]
     spec_dir: playground
     specs:
+      - playground/playground-claude-sampling-any-provider.spec.ts
       - playground/playground-providers.spec.ts
       - playground/playground-smoke.spec.ts
       - prompts/prompt-playground-new-prompt.spec.ts
@@ -450,7 +451,30 @@ areas:
       load-prompt-version:       { covered: true,  tier: t2-cuj }
       verify-trace-from-run:     { covered: true,  tier: t2-cuj }
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
-      configure-model-settings:  { covered: false, note: "PromptModelSettings / providerConfigs" }
+      # Two halves, neither of which can observe the other's surface: the Anthropic panel
+      # (playground-model-parameters.spec.ts, landed on main in #8312 after this branch
+      # forked) and the Custom LLM gateway (playground-claude-sampling-any-provider.spec.ts,
+      # added here). The note below is ALREADY the union of both, so this side can be taken
+      # whole at merge without erasing main's half.
+      #
+      # MERGE NOTE: main and this branch both insert into this area, so expect a conflict in
+      # two places. Resolve BOTH by union, never by picking a side:
+      #   - `specs:` is a plain union — keep every entry main has PLUS this branch's
+      #     playground-claude-sampling-any-provider.spec.ts, sorted. Take main's side of the
+      #     list wholesale rather than the enumeration below, which will have rotted: at the
+      #     time of writing main contributed playground-metric-selection.spec.ts (#8349),
+      #     playground-model-parameters.spec.ts and playground-virtualized-grid.spec.ts
+      #     (#8312/#8314), and more may have landed since. They are deliberately absent from
+      #     the list below: none of those files exists on this branch, and listing a spec that
+      #     is not here would point the coverage builder at a missing file.
+      #   - this `note:` is already unioned; take it as-is.
+      #
+      # The Custom LLM half grew a second describe block in a later pass, once #8326's HEAD
+      # was actually deployed: the three-way model classification (takes both-exclusively /
+      # takes neither / takes them independently) and the reload-hydration case. Two of the
+      # gaps the note used to list are closed by it and have been removed from the list
+      # rather than left reading as open.
+      configure-model-settings:  { covered: true,  tier: t2-cuj, note: "PromptModelSettings / providerConfigs — two halves, neither able to see the other's surface. Anthropic panel (playground-model-parameters.spec.ts): the sampling pair is a single choice with exactly one MOUNTED slider, and the displayed Top P and Thinking effort are asserted against the outbound POST /v1/private/chat/completions body. Custom LLM gateway (playground-claude-sampling-any-provider.spec.ts): a Claude and a non-Claude model on ONE custom gateway, asserting the exclusive sampling choice follows the MODEL rather than the provider routing it — claude-opus-4-6 gets the Temperature/Top P choice with one mounted control while mistral-large-2411 keeps two independent sliders — and that the chosen half is what the outbound body carries, top_p with no temperature and temperature with no top_p. The same spec's second describe covers the rest of the model-level classification and its persistence: claude-sonnet-5 (a recognised Claude with NO supportsSamplingParams row) mounts no Sampling toggle and no slider of either half and its request carries neither temperature nor top_p, while claude-sonnet-4-6 and mistral-large-2411 on that same gateway keep the exclusive choice and the independent pair respectively — and a deliberate Top P choice survives a page reload, restoreMissingConfigKeys putting back no default temperature, with the post-reload request still carrying top_p and no temperature. Still uncovered: the OpenAI / Gemini / Vertex / OpenRouter panels, max output tokens, throttling, max concurrent requests, and whether a prompt loaded from the LIBRARY re-hydrates its settings (the reload case above is the playground's own persisted config, not a saved prompt version)" }
 
     visual:
       playground-default: { covered: false, state: default }
