@@ -22,7 +22,7 @@ Task span metrics are a powerful type of evaluation metric in Opik that can anal
 
 ## What are Task Span Metrics?
 
-Task span metrics are evaluation metrics that include a `task_span` parameter in their `score` method. The Opik evaluation engine automatically detects that. These metrics are scored when an evaluation runs the task that produces the span; re-scoring an existing experiment with `evaluate_experiment()` runs no task, so a metric that requires `task_span` there is reported as a score argument that cannot be satisfied.
+Task span metrics are evaluation metrics that include a `task_span` parameter in their `score` method. The Opik evaluation engine automatically detects that. These metrics are scored when an evaluation runs the task that produces the span; re-scoring an existing experiment with `evaluate_experiment()` runs no task, so a metric that requires `task_span` there raises `ScoreMethodMissingArguments` and aborts the run, while a scorer whose `task_span` parameter has a default still runs.
 
 When a metric has a `task_span` parameter, it receives a [`SpanModel`](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) object containing the complete execution context of your task.
 

@@ -2,7 +2,10 @@ import pytest
 from typing import Any, Dict, Optional
 
 from opik.evaluation.metrics import score_result
-from opik.evaluation.scorers.scorer_function import validate_scorer_function
+from opik.evaluation.scorers.scorer_function import (
+    requires_task_span_argument,
+    validate_scorer_function,
+)
 from opik.message_processing.emulation import models
 
 
@@ -203,3 +206,24 @@ def test_wrap_scorer_functions__non_string_name_attribute__falls_back_to_class_n
     [metric] = wrap_scorer_functions([OddlyNamed()], project_name=None)
 
     assert metric.name == "OddlyNamed"
+
+
+def test_requires_task_span_argument_variadic_names_are_not_required():
+    """Test that '*task_span' and '**task_span' do not make the span required
+
+    A variadic parameter binds no argument named 'task_span', so re-scoring
+    without a span must not be reported as missing one.
+    """
+
+    def star_task_span(*task_span: Any): ...
+
+    def catch_all_task_span(**task_span: Any): ...
+
+    def required_task_span(task_span: Any): ...
+
+    def optional_task_span(task_span: Optional[models.SpanModel] = None): ...
+
+    assert requires_task_span_argument(star_task_span) is False
+    assert requires_task_span_argument(catch_all_task_span) is False
+    assert requires_task_span_argument(required_task_span) is True
+    assert requires_task_span_argument(optional_task_span) is False
