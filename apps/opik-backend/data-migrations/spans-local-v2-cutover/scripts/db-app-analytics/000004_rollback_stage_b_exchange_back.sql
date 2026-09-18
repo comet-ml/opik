@@ -16,8 +16,9 @@
 -- Non-destructive.
 --
 -- STAGE B IS THE EXPECTED ROLLBACK ON SPANS, not the exotic one — more so than on traces. The wrap is deferred by
--- default there, and on spans the runbook defers it further still (OPIK-7799 shipped the flag but no readiness probe),
--- so the post-EXCHANGE resting state is where this window rests and stage B is what reverses it. Provision
+-- default there, and on spans this runbook defers it further still as a scope decision (the flag and its
+-- clickhouse-spans-topology readiness check have both shipped, OPIK-7799 and OPIK-8376), so the post-EXCHANGE resting
+-- state is where this window rests and stage B is what reverses it. Provision
 -- its grants with the forward set rather than treating them as an optional extra (README, "Required privileges").
 --
 -- rollback.sh runs the reverse-replay (000004_rollback_reverse_replay.sql) right after this so deletes since

@@ -282,11 +282,12 @@ fi
 # exists (default false) and every span mutation routes through SpanDAO#selectSpansMutationTable. The wrap is therefore
 # reachable — set the flag true fleet-wide, then pass --confirm-daos-retargeted.
 #
-# WHAT OPIK-7799 DID NOT SHIP IS THE READINESS PROBE. There is no ClickHouseSpansTopologyHealthCheck; the traces one
-# asserts the trace flag only. So a spans flag/topology mismatch has no symptom until the first span delete fails,
-# where on traces it would have made the pod unready first. It is filed as OPIK-8376 and is already a prerequisite of
-# OPIK-8382 (production execution on spans), so the EXCHANGE-only default here matches the epic's own sequence rather
-# than working around it. The runbook's "the readiness gap that OPIK-7799 left open" carries the decision.
+# THE READINESS PROBE OPIK-7799 LEFT OUT HAS SINCE SHIPPED (OPIK-8376): ClickHouseSpansTopologyHealthCheck is
+# registered as the critical `clickhouse-spans-topology` readiness check and asserts the flag against the live engine,
+# so an instance on the wrong side of the cutover now fails readiness at startup rather than surfacing as a failed span
+# delete. The EXCHANGE-only default here is therefore a scope decision, not a missing-safeguard one: the post-EXCHANGE
+# estate is complete on its own and the wrap is a separate change with its own window (OPIK-8382 owns the production
+# execution). The runbook's "wrap readiness is covered, and the wrap still waits" carries it.
 #
 # This driver deliberately does NOT check the flag's value: it cannot read backend config at all, and a guard that
 # inspected ClickHouse instead would be asserting the topology rather than what the backends believe about it — which
@@ -296,11 +297,12 @@ if [[ ( "$WITH_WRAP" == "1" || "$WRAP_ONLY" == "1" ) && "$CONFIRM_DAOS_RETARGETE
     echo "       databaseAnalyticsDataModel.spansDistributedWrapEnabled=true is live on every backend instance so the" >&2
     echo "       span delete/mutation DAOs target 'spans_local' before 'spans' becomes Distributed." >&2
     echo "       The flag exists (OPIK-7799) and defaults to false. Wrapping while any instance still reads false" >&2
-    echo "       breaks that instance's span deletes with 'Code: 36 DELETE query is not supported', and NOTHING" >&2
-    echo "       REPORTS IT: no ClickHouseSpansTopologyHealthCheck shipped, so the mismatch surfaces only when a user's" >&2
-    echo "       delete fails. Stop after the EXCHANGE — a complete, supported resting state — unless the runbook's" >&2
-    echo "       'the readiness gap that OPIK-7799 left open' has been answered for this estate — normally by" >&2
-    echo "       landing OPIK-8376, the spans topology readiness check, which OPIK-8382 already depends on." >&2
+    echo "       breaks that instance's span deletes with 'Code: 36 DELETE query is not supported'. Since OPIK-8376 such" >&2
+    echo "       an instance also fails the critical 'clickhouse-spans-topology' readiness check, so a half-completed" >&2
+    echo "       roll stalls the deploy rather than surfacing as a user's failed delete — but the flag still has to be" >&2
+    echo "       true fleet-wide BEFORE the wrap DDL, which is what this flag asserts. Stop after the EXCHANGE — a" >&2
+    echo "       complete, supported resting state — unless a wrap is deliberately in scope for this window; see the" >&2
+    echo "       runbook's 'wrap readiness is covered, and the wrap still waits'." >&2
     exit 2
 fi
 # The EXCHANGE runs a final deletion replay first (see below), to mask deletes bridged since the last delta_replay so

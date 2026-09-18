@@ -27,9 +27,9 @@ during the cross-node `ON CLUSTER` skew — stay in the parked backup until step
 >
 > **It is still not part of this window, for two reasons.** The wrap is sharding-readiness, not the cutover: the
 > post-`EXCHANGE` estate is complete and supported on its own. And **no `ClickHouseSpansTopologyHealthCheck` shipped
-> with OPIK-7799** — `clickhouse-traces-topology` asserts the trace flag only — so a spans flag/topology mismatch has
-> **no symptom until the first span delete fails**. Read
-> ["the readiness gap"](#the-readiness-gap-that-opik-7799-left-open) before planning a wrap.
+> with OPIK-7799, and OPIK-8376 has since added it** — `clickhouse-spans-topology` now asserts the spans flag against
+> the live engine, so a mismatch fails readiness rather than waiting for a span delete. The wrap is still out of scope
+> for this window; read ["wrap readiness"](#wrap-readiness-is-covered-and-the-wrap-still-waits) before planning one.
 
 This runbook is the human-facing artifact; its SQL is validated end-to-end by
 [`SpansLocalV2CutoverTest`](../../src/test/java/com/comet/opik/infrastructure/SpansLocalV2CutoverTest.java). Treat
@@ -483,10 +483,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
     window: OPIK-8263 exists because that half was left to be done later last time.
 16. **Decide, and record, that the `Distributed` wrap is not part of this window.** It is now reachable — OPIK-7799
     shipped `spansDistributedWrapEnabled` (default `false`) and the `SpanDAO` routing — so this is a choice rather
-    than a constraint. Stopping at the `EXCHANGE` is the supported resting state, and it is the recommended one while
-    the readiness gap below is open. If a wrap IS planned, it needs its own window, its own grants (stage C's and the
-    wrap's), and an answer to
-    ["the readiness gap"](#the-readiness-gap-that-opik-7799-left-open).
+    than a constraint. Stopping at the `EXCHANGE` is the supported resting state and the recommended one for this
+    window. If a wrap IS planned, it needs its own window, its own grants (stage C's and the wrap's), and the rollout
+    ordering in ["wrap readiness"](#wrap-readiness-is-covered-and-the-wrap-still-waits).
 17. **Know that the span delete cascade prunes on `spanColumnsNonNullable`, the flag this cutover already flips.**
     OPIK-8364 has landed: `SpanDAO#deleteBatch` groups ids by weekly partition and emits `IN PARTITION` when that flag
     is `true`, and falls back to the unbounded delete when it is `false`. The flag therefore carries two meanings at
@@ -594,9 +593,9 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 
    > **On spans, stop here by default.** `--with-wrap --confirm-maintenance --confirm-daos-retargeted` now works —
    > OPIK-7799 shipped `spansDistributedWrapEnabled` and the `SpanDAO` routing behind it — but the flag defaults to
-   > `false`, the post-`EXCHANGE` estate is complete and supported on its own, and the wrap carries a readiness gap
-   > OPIK-7799 did not close (below). Treat the wrap as a separate, later change with its own window, not as the tail
-   > of this one.
+   > `false` and the post-`EXCHANGE` estate is complete and supported on its own. Since OPIK-8376 the rollout is also
+   > observable — `clickhouse-spans-topology` fails readiness on a mismatch — so this is a scope decision, not a safety
+   > one. Treat the wrap as a separate, later change with its own window, not as the tail of this one.
 
 > **The passage below describes the traces readiness behaviour, which spans does NOT yet have.** It is retained
 > because it is what a spans probe would do, and because the traces analogue (OPIK-7773) is the model to copy. Worth
@@ -623,9 +622,10 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > `databaseAnalyticsDataModel.spansDistributedWrapEnabled`. Set it **`true` in lockstep with applying the wrap** so those
 > deletes run against `spans_local`; reads and inserts stay on the Distributed `spans`. The flag is **startup-bound**
 > (read once at boot; no hot-reload), so making it "live across the fleet" means a **completed rolling restart of every
-> backend instance** — and, on spans, one you **cannot observe per instance**: OPIK-7799 shipped the flag and the
-> routing but **no** `clickhouse-spans-topology` readiness check, so nothing reports which side of the cutover an
-> instance believes it is on. See ["the readiness gap"](#the-readiness-gap-that-opik-7799-left-open). A mismatch is
+> backend instance** — and since OPIK-8376 that roll is **observable per instance**: `clickhouse-spans-topology` is a
+> critical readiness check asserting the flag against the live engine, so an instance on the wrong side of the cutover
+> fails readiness at startup instead of serving traffic. See ["wrap
+> readiness"](#wrap-readiness-is-covered-and-the-wrap-still-waits). A mismatch is
 > still **fail-loud at the point of use**: a stale-`false` instance issues `DELETE` against the `Distributed` `spans`
 > (code 36/48), a stale-`true` instance against an absent `spans_local` — both 500 the delete path. What is missing is
 > the earlier signal, not the eventual one. While it is `false` (the deploy
@@ -639,41 +639,27 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > the EXCHANGE. Defer the
 > wrap until the retarget flag is wired into the deploy. The wrap is the sharding-readiness layer, not the cutover.
 >
-#### The readiness gap that OPIK-7799 left open
+#### Wrap readiness is covered, and the wrap still waits
 
-OPIK-7799 shipped the two things that make the wrap *possible* — `spansDistributedWrapEnabled` and the `SpanDAO`
-routing behind it — and left one thing out: **there is no `ClickHouseSpansTopologyHealthCheck`.**
-`clickhouse-traces-topology` asserts the trace flag only, as `config.yml`'s own comment on the spans flag says.
+Both halves the wrap needs have now shipped. OPIK-7799 landed `spansDistributedWrapEnabled` and the `SpanDAO` routing
+behind it; **OPIK-8376 landed `ClickHouseSpansTopologyHealthCheck`**, registered in `config.yml` as the
+`clickhouse-spans-topology` readiness check (`critical: true`, `type: ready`) and asserted against the live database.
+Set the flag wrong in either direction and the backend **fails readiness at startup**, naming the flag and the observed
+engine, instead of serving traffic whose span deletes are guaranteed to fail. That is the same protection
+`clickhouse-traces-topology` gives traces, and an earlier revision of this section was written while it was still
+missing.
 
-**It is filed as OPIK-8376**, the spans counterpart of OPIK-7773 — and it is already **a prerequisite of OPIK-8382,
-the production execution on spans**. So deferring the wrap here is not a workaround for a missing piece; it is the
-sequence the epic already plans. OPIK-8377 is the CI half of the same problem.
+**What that changes: the wrap's one risky interval is now observable.** A half-completed rollout stalls the deploy and
+shows up before a user is affected, rather than surfacing as the first failing trace-delete cascade or retention sweep.
+The mismatch window between the config push and the DDL is still unavoidable — see the "in lockstep" note below for
+which of the two orderings to take — but it is no longer *invisible*, which was the whole of the earlier objection.
 
-**What that costs.** On traces, a flag/topology mismatch makes the pod unready, so a half-completed rollout stalls the
-deploy and is visible before any user is affected. On spans there is no such probe, so the same mismatch is **invisible
-until the first span delete fails** — a trace delete cascade or a retention sweep returning 500. The failure is loud
-when it arrives; the problem is that it arrives from a user's action rather than from a readiness check, and only on
-the instances that are wrong.
-
-**This runbook's position: do not wrap until that is resolved.** The recommendation is not "the wrap is unsafe" — it is
-that the wrap's one risky interval (the unavoidable mismatch window between the config rollout and the DDL) is the
-exact interval the missing probe would have covered, and the cutover gains nothing by taking it. The post-`EXCHANGE`
-estate is complete; the wrap is sharding-readiness and can land whenever its own prerequisites are met.
-
-**Three ways to close it, in preference order.** OPIK-7799's hand-off asked this runbook to make the call; whoever
-plans the wrap owns the execution:
-
-1. **Land OPIK-8376** — the `ClickHouseSpansTopologyHealthCheck`, mirroring `ClickHouseTracesTopologyHealthCheck`
-   (OPIK-7773, PR #7948). This is the recommendation: it makes the spans wrap as safe as the traces one, it is already
-   scoped and sequenced ahead of OPIK-8382, and its hard prerequisite (OPIK-7799) is now met. Its acceptance criteria
-   include documenting the rollout-ordering behaviour alongside this runbook — which is what the passage above is.
-2. **Wrap inside a maintenance window** where span deletes are paused, so the mismatch interval cannot be observed by a
-   user. Cheaper, and adequate if the wrap is a one-off.
-3. **Accept the exposure** with a deliberate, recorded decision and a monitoring plan for span-delete 500s across the
-   rollout. Only reasonable on an estate with little delete traffic.
-
-Whichever is chosen, `exchange_and_wrap.sh` does not change: it already gates on `--confirm-daos-retargeted`, which the
-operator can now truthfully assert. The gate is the flag's state, not the probe's existence.
+**This runbook still stops at the `EXCHANGE`, now by plan rather than by constraint.** The post-`EXCHANGE` estate is
+complete and supported on its own; the wrap is sharding-readiness, a separate change with its own window and its own
+rollback. Nothing here blocks it, and `--with-wrap` / `--wrap-only` are written, tested and reachable for whoever takes
+it — `exchange_and_wrap.sh` gates them on `--confirm-daos-retargeted` and `--confirm-maintenance`, which an operator can
+now assert truthfully and verify afterwards through the readiness check. OPIK-8377 remains the CI half of the same
+problem, and OPIK-8382 owns the production execution.
 
 > **The cutover's own mutations already handle a wrapped estate, so this gap is about the PRODUCT's deletes, not the
 > tooling's.** `reconcile.sh` detects a `Distributed` `spans` and routes its sweep's delete at `spans_local` — the same
@@ -2777,7 +2763,7 @@ these is working the wrong problem.
       `--with-wrap` would now succeed. Confirm the decision is to stop at the `EXCHANGE`: nobody has planned a wrap
       maintenance window, `spansDistributedWrapEnabled` stays `false`, stage B's grants are provisioned (the only
       rollback this window can need), and stage C's and the wrap's are **not**. If the decision goes the other way,
-      ["the readiness gap"](#the-readiness-gap-that-opik-7799-left-open) is a blocker to close first, not a caveat.
+      ["wrap readiness"](#wrap-readiness-is-covered-and-the-wrap-still-waits) carries the rollout ordering it needs.
 - [ ] **The spans migration user's grants are the minimum the drivers need, and its REVOCATION is scheduled** — date,
       owner, and what it takes away, decided before the window rather than after. OPIK-8263 exists because that half was
       left until afterwards on traces; do not repeat it. Do not reuse or widen the traces account.
@@ -2871,8 +2857,10 @@ these is working the wrong problem.
       `exchange_and_wrap.sh --with-wrap` would now succeed once it is flipped fleet-wide. Confirm it stays `false` and
       that stopping after the `EXCHANGE` is the intended resting state, not a fallback. A lightweight `DELETE` against
       a `Distributed` `spans` is unsupported (code 36), so any instance still reading `false` when the wrap lands
-      breaks the span-delete cascade — and with no spans readiness probe, nothing reports it until a delete fails. To
-      reopen this box, answer ["the readiness gap"](#the-readiness-gap-that-opik-7799-left-open) first.
+      breaks the span-delete cascade — though since OPIK-8376 such an instance fails the `clickhouse-spans-topology`
+      readiness check rather than silently serving, so a half-completed roll stalls the deploy instead of surfacing as
+      failed user deletes. Wrapping is still out of scope for this window; see ["wrap
+      readiness"](#wrap-readiness-is-covered-and-the-wrap-still-waits).
 - [ ] **No async-insert buffer change on any path (OPIK-8239).** The three `ANALYTICS_DB_ASYNC_INSERT_*` knobs stay as
       the deployment has them; nothing in this procedure raises one for the window. Confirm explicitly rather than by
       absence — the traces cutover's dependence on that widening degraded the whole service and was removed, and a
@@ -2895,8 +2883,8 @@ these is working the wrong problem.
       are not rehearsed end to end** while the wrap is deferred — confirm instead that their topology guards refuse
       cleanly on an unwrapped estate, which is the state this window leaves behind.
 - [ ] **`--with-wrap` / `--wrap-only` refuse without `--confirm-maintenance` AND without `--confirm-daos-retargeted`** —
-      verified, and the second refusal READ: it names the readiness gap, which is the reason to stop rather than to
-      go and set the flag.
+      verified, and the second refusal READ: it states that the flag must be true fleet-wide before the wrap DDL, and
+      that `clickhouse-spans-topology` is what reports an instance still on the wrong side.
 - [ ] **Go/No-Go decision recorded** with the prod-test evidence attached — and for this cutover that means numbers, not
       ticks: the headroom margin, the chosen insert-block strategy with its measured peak memory, the four audit
       figures, the measured tail, and the revocation date for the migration user.

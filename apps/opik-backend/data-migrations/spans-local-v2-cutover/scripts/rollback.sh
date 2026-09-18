@@ -11,8 +11,9 @@
 # STAGE B IS THE EXPECTED ROLLBACK ON SPANS, and stages C / --unwrap-only apply only to a WRAPPED estate, which this
 # cutover deliberately does not create. OPIK-7799 shipped the prerequisite the wrap needs
 # (databaseAnalyticsDataModel.spansDistributedWrapEnabled, default false, plus SpanDAO's routing), so the wrap is
-# reachable — but the runbook defers it: no ClickHouseSpansTopologyHealthCheck shipped with it, so a flag/topology
-# mismatch has no symptom until a span delete fails. See the runbook's "the readiness gap that OPIK-7799 left open".
+# reachable, and OPIK-8376 has since added the clickhouse-spans-topology readiness check that makes a flag/topology
+# mismatch fail readiness instead of a span delete. The runbook defers the wrap anyway, as a scope decision: see its
+# "wrap readiness is covered, and the wrap still waits".
 # While that holds, the post-EXCHANGE state is where a spans cutover rests and stage B is what reverses it: provision
 # its grants with the FORWARD set rather than as an optional extra. C and --unwrap-only ship complete, so the wrap and
 # its reversal were reviewed together rather than the reversal being authored later against an already-wrapped estate,

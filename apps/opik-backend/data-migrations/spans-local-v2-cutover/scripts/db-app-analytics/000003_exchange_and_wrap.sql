@@ -166,11 +166,11 @@ RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans_local_v2 TO ${ANALYTICS_DB_DATA
 -- spansDistributedWrapEnabled (default false) and SpanDAO#selectSpansMutationTable — so --confirm-daos-retargeted is
 -- an assertion an operator CAN now make, once the flag is true fleet-wide, and this block is runnable.
 --
--- The runbook defers it anyway, for a reason about the rollout rather than this DDL: OPIK-7799 shipped no
--- ClickHouseSpansTopologyHealthCheck, so nothing reports which side of the cutover an instance believes it is on and a
--- flag/topology mismatch stays silent until a span delete fails. That probe is OPIK-8376. See the README's "the
--- readiness gap that OPIK-7799 left open". The EXCHANGE above is the data cutover and leaves `spans` a MergeTree where
--- deletes still work; the wrap is a separate, gated step this window does not take.
+-- The runbook defers it anyway, now as a scope decision rather than a safety one: OPIK-8376 shipped the
+-- ClickHouseSpansTopologyHealthCheck OPIK-7799 left out, so the critical clickhouse-spans-topology readiness check
+-- reports an instance on the wrong side of the cutover instead of letting it surface as a failed span delete. See the
+-- README's "wrap readiness is covered, and the wrap still waits". The EXCHANGE above is the data cutover and leaves
+-- `spans` a MergeTree where deletes still work; the wrap is a separate, gated step this window does not take.
 --
 -- GAPLESS per node: build the Distributed wrapper under a temp name FIRST (its 'spans_local' target need not exist
 -- yet — Distributed resolves it lazily), then a SINGLE atomic multi-target RENAME rotates the data to `spans_local`

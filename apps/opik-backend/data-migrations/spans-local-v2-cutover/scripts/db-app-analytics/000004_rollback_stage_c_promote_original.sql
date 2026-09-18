@@ -23,8 +23,9 @@
 --
 -- THIS STAGE APPLIES ONLY TO A WRAPPED ESTATE, WHICH THE DEFAULT WINDOW DOES NOT CREATE, and that is worth stating
 -- rather than leaving implicit. OPIK-7799 landed spansDistributedWrapEnabled and SpanDAO's routing, so the wrap it
--- reverses is reachable; the runbook nonetheless defers it while the readiness gap OPIK-7799 left open stands (see the
--- README section of that name, and OPIK-8376). So an estate reaches this stage only after a deliberate --with-wrap or
+-- reverses is reachable, and OPIK-8376 has since added the clickhouse-spans-topology readiness check that makes a
+-- flag/topology mismatch fail readiness; the runbook nonetheless defers the wrap as a scope decision (see its "wrap
+-- readiness is covered, and the wrap still waits"). So an estate reaches this stage only after a deliberate --with-wrap or
 -- --wrap-only run. The file ships complete so the wrap and its reversal are reviewed together rather than the reversal
 -- being authored later, under pressure, against an estate already wrapped; rollback.sh's topology guard refuses this
 -- stage cleanly on an unwrapped estate.

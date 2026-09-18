@@ -101,10 +101,10 @@ flag is live, `NULL` while it is not. Step 7 runs the second. A read-back throug
 after the swap: while `spans` is the Nullable original, `SpanDAO#readEpochSentinel` returns `null` whichever way the
 flag is set.
 
-**`spansDistributedWrapEnabled` now exists (OPIK-7799), and this rehearsal still stops before the wrap.** That
-matches what a real spans cutover is planned to do: the runbook defers the wrap while the readiness gap OPIK-7799 left
-open is unresolved. `exchange_and_wrap.sh` refuses `--wrap-only` without `--confirm-daos-retargeted`, and its refusal
-is worth reading once — it is the gate a production operator meets.
+**`spansDistributedWrapEnabled` exists (OPIK-7799) and its readiness check does too (OPIK-8376), and this rehearsal
+still stops before the wrap.** That matches what a real spans cutover is planned to do: the runbook defers the wrap as a
+scope decision, not for want of a safeguard. `exchange_and_wrap.sh` refuses `--wrap-only` without
+`--confirm-daos-retargeted`, and its refusal is worth reading once — it is the gate a production operator meets.
 
 ## End-to-end rehearsal
 
