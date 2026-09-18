@@ -648,7 +648,7 @@ const useActionButtonActions = ({
         onAddExperimentRegistry: (experiments, map) => {
           runExperiments.splice(0, runExperiments.length, ...experiments);
           logProcessorHandlers.onAddExperimentRegistry?.(experiments, map);
-          announcer.registryReady(experiments.length);
+          announcer.experimentsRegistered(experiments.length);
         },
       },
     });
@@ -733,7 +733,7 @@ const useActionButtonActions = ({
               ...experiments,
             );
             logProcessorHandlers.onAddExperimentRegistry?.(experiments, map);
-            announcer.registryReady(experiments.length);
+            announcer.experimentsRegistered(experiments.length);
           },
         },
       });

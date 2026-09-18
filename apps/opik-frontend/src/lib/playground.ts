@@ -261,7 +261,7 @@ export const createCompletionAnnouncer = (
   };
 
   return {
-    registryReady: (count: number) => {
+    experimentsRegistered: (count: number) => {
       registered = count;
       fire();
     },

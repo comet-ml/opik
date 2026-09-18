@@ -173,7 +173,7 @@ describe("createCompletionAnnouncer", () => {
     const announce = vi.fn();
     const announcer = createCompletionAnnouncer(2, announce);
 
-    announcer.registryReady(2);
+    announcer.experimentsRegistered(2);
     expect(announce).not.toHaveBeenCalled();
 
     announcer.loggingFinished();
@@ -187,7 +187,7 @@ describe("createCompletionAnnouncer", () => {
     announcer.loggingFinished();
     expect(announce).not.toHaveBeenCalled();
 
-    announcer.registryReady(2);
+    announcer.experimentsRegistered(2);
     expect(announce).toHaveBeenCalledTimes(1);
   });
 
@@ -195,11 +195,11 @@ describe("createCompletionAnnouncer", () => {
     const announce = vi.fn();
     const announcer = createCompletionAnnouncer(2, announce);
 
-    announcer.registryReady(1);
+    announcer.experimentsRegistered(1);
     announcer.loggingFinished();
     expect(announce).not.toHaveBeenCalled();
 
-    announcer.registryReady(2);
+    announcer.experimentsRegistered(2);
     expect(announce).toHaveBeenCalledTimes(1);
   });
 
@@ -207,9 +207,9 @@ describe("createCompletionAnnouncer", () => {
     const announce = vi.fn();
     const announcer = createCompletionAnnouncer(1, announce);
 
-    announcer.registryReady(1);
+    announcer.experimentsRegistered(1);
     announcer.loggingFinished();
-    announcer.registryReady(1);
+    announcer.experimentsRegistered(1);
     announcer.loggingFinished();
 
     expect(announce).toHaveBeenCalledTimes(1);
@@ -220,7 +220,7 @@ describe("createCompletionAnnouncer", () => {
     const announcer = createCompletionAnnouncer(2, announce);
 
     announcer.loggingFinished();
-    announcer.registryReady(1);
+    announcer.experimentsRegistered(1);
 
     expect(announce).not.toHaveBeenCalled();
   });
@@ -236,7 +236,7 @@ describe("createCompletionAnnouncer", () => {
     });
 
     live.delete("prompt-1");
-    announcer.registryReady(1);
+    announcer.experimentsRegistered(1);
     announcer.loggingFinished();
 
     expect(announce).not.toHaveBeenCalled();
