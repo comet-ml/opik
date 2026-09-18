@@ -551,8 +551,34 @@ export class PlaygroundPage {
   //   - closeModelParameters — NOT identical. This branch's version presses Escape
   //     under `toPass` because the gear trigger's Radix tooltip eats the first one;
   //     main's presses it once and flakes when the tooltip is up. KEEP THIS ONE.
-  //   - selectModelFromProvider, waitForRunIdle — new here, no counterpart on main.
-  //     Keep, no conflict expected.
+  //   - selectModelFromProvider, waitForRunIdle, reload, selectedModelLabel — new here,
+  //     no counterpart on main. Keep, no conflict expected.
+
+  /**
+   * Reload the page and wait for the Playground to come back.
+   *
+   * The variant's prompt and its model config are persisted client-side and re-hydrated
+   * through `restoreMissingConfigKeys`, so a reload is the only way to observe what that
+   * hydration does to a stored config — which is a behaviour in its own right, not an
+   * incidental page refresh.
+   */
+  async reload(): Promise<void> {
+    return test.step('reload the Playground', async () => {
+      await this.page.reload();
+      await this.waitForReady();
+    });
+  }
+
+  /**
+   * A variant's model-picker trigger, for asserting WHICH model is selected.
+   *
+   * The trigger renders the model's own label, and for a Custom LLM gateway that label is
+   * the bare model name. Used after a reload to confirm the restored config belongs to the
+   * model under test rather than to a picker that fell back to a default.
+   */
+  selectedModelLabel(index: number): Locator {
+    return this.modelPicker(index);
+  }
 
   /** Open a variant's model-parameters popover and wait for it to render. */
   async openModelParameters(index: number): Promise<void> {
