@@ -31,11 +31,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit coverage for the JSONEachRow body this insert streams, with no ClickHouse in the loop.
+ * Unit coverage for the JSONEachRow body this insert renders, with no ClickHouse in the loop.
  *
  * <p>What is worth testing here is the framing, because JSONEachRow is newline-delimited and a
  * missing separator or an unflushed buffer would merge two rows into one malformed document — a
- * failure that shows up as a server-side parse error far from its cause. The row content itself is
+ * failure that shows up as a server-side parse error far from its cause. That hazard is live in this
+ * implementation rather than hypothetical: rows go through the generator's buffer while the row
+ * separator is written straight to the {@code BufferedWriter}, so the two have to be ordered against
+ * each other, and only the byte-level assertions below can see when they are not. The row content itself is
  * the caller's business, and the type-level questions (quoted decimals, NaN, omitted defaults) can
  * only be answered by a real server, so they live in the integration tests instead.
  */
@@ -247,7 +250,7 @@ class JsonEachRowBulkInsertTest {
     }
 
     @Test
-    @DisplayName("a client failure surfaces its cause, not the ExecutionException wrapper")
+    @DisplayName("a client failure surfaces its cause, not the CompletionException wrapper")
     void unwrapsTheClientFailure() {
         var client = mock(Client.class);
         when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
@@ -255,7 +258,8 @@ class JsonEachRowBulkInsertTest {
                 .thenReturn(CompletableFuture.failedFuture(new SocketException("connection reset")));
 
         // RetryUtils.handleConnectionError matches on the throwable's own class, so a SocketException
-        // still wrapped in ExecutionException would silently bypass the retry the R2DBC path gets.
+        // still wrapped in the future's CompletionException would silently bypass the retry the R2DBC
+        // path gets. Mono.fromFuture unwraps that wrapper; this pins the behaviour we depend on.
         assertThatThrownBy(() -> new JsonEachRowBulkInsert(client)
                 .insert("feedback_scores", "log-comment", List.of("a"), ROW_MAPPER)
                 .block())
