@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 import httpx
 import pytest
@@ -300,5 +301,7 @@ def test_read_and_parse_full_stream__dropped_records_are_reported(caplog):
         for record in caplog.records
         if record.levelno >= logging.WARNING
     ]
-    summarised = [m for m in warnings if "dropped" in m and "2" in m]
-    assert summarised, warnings
+    reported = re.findall(
+        r"finished with (\d+) record\(s\) dropped", "\n".join(warnings)
+    )
+    assert reported == ["2"], warnings
