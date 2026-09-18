@@ -233,6 +233,7 @@ class BoundedSendPool:
         self._gzip_level = gzip_level
         self._fail_fast = fail_fast
         self._first_error: Optional[BaseException] = None
+        self._aborted = False
         # Two bodies per worker, so one is always ready as the network drains the last.
         self._max_pending = num_threads * 2
         self._max_pending_bytes = self._max_pending * max_batch_bytes()
@@ -345,11 +346,15 @@ class BoundedSendPool:
         a retry backoff it is already sleeping through -- ends.
         """
         self._stop.set()
+        self._aborted = True
         if self._pool is None:
             return
         self._pool.shutdown(wait=False, cancel_futures=True)
         # A future cancelled by `shutdown` never counts as done to `futures.wait`.
         started = [future for future in self._pending if not future.cancelled()]
+        # Nothing left here is collectable, and a second abort must not wait again.
+        self._pending.clear()
+        self._pending_bytes = 0
         _, still_running = futures.wait(started, timeout=ABORT_WAIT_SECONDS)
         if still_running:
             LOGGER.warning(
@@ -361,7 +366,12 @@ class BoundedSendPool:
             )
 
     def close(self) -> None:
-        if self._pool is None:
+        """Wait for the queued bodies and re-raise the first failure.
+
+        A no-op once `abort` has run: the cancelled futures it leaves behind are never
+        reported done, so waiting on them here would block forever.
+        """
+        if self._pool is None or self._aborted:
             return
         try:
             if self._first_error is not None:

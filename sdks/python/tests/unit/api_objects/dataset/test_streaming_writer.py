@@ -374,6 +374,34 @@ def test_pool__abort__stops_and_waits_only_a_bounded_time_for_started_sends(
     assert len(started) == 2, "No queued body may start after abort"
 
 
+def test_pool__close_after_abort__returns_instead_of_waiting_on_cancelled_work(
+    make_pool, monkeypatch
+):
+    """`abort` leaves futures that `shutdown` cancelled without notifying their waiters."""
+    monkeypatch.setattr(streaming_upload, "ABORT_WAIT_SECONDS", 0.2)
+    release = threading.Event()
+    started = threading.Semaphore(0)
+
+    def send(body: bytes, _payload=None) -> None:
+        started.release()
+        release.wait(10)
+
+    pool = make_pool(send=send, num_threads=2, gzip_level=None, fail_fast=True)
+    try:
+        for index in range(4):
+            _submit(pool, [f"body-{index}".encode()])
+        assert started.acquire(timeout=5)
+        assert started.acquire(timeout=5)
+        pool.abort()
+
+        started_at = time.monotonic()
+        pool.close()
+        assert time.monotonic() - started_at < 2, "close must not wait on aborted work"
+        pool.close()  # and stays safe to repeat
+    finally:
+        release.set()
+
+
 def _executor_threads(pool) -> int:
     """How many threads the executor has actually started.
 
