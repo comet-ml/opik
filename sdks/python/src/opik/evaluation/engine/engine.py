@@ -107,6 +107,9 @@ class EvaluationEngine:
             # duplicate the wrapper trace's own data into this span's
             # input. See `_build_trace_tool_context`.
             "trace_data",
+            # Which pass the caller is in, not scoring input. The reason a metric
+            # was not scored is already on its failed score result.
+            "can_bind_task_span",
         ],
     )
     def _compute_test_result_for_test_case(
@@ -117,6 +120,7 @@ class EvaluationEngine:
         evaluator_model: Optional[str],
         trial_id: int = 0,
         trace_data: Optional[trace.TraceData] = None,
+        can_bind_task_span: bool = True,
     ) -> test_result.TestResult:
         item_evaluator = metrics_evaluator.build_metrics_evaluator(
             item=test_case_.dataset_item,
@@ -124,6 +128,7 @@ class EvaluationEngine:
             scoring_key_mapping=scoring_key_mapping,
             evaluator_model=evaluator_model,
             error_tolerance=self._error_tolerance,
+            can_bind_task_span=can_bind_task_span,
         )
         # `trace_data` is the in-memory `TraceData` from the surrounding
         # `_compute_test_result_for_llm_task` call. When present, the
@@ -650,17 +655,19 @@ class EvaluationEngine:
             scoring_key_mapping if scoring_key_mapping is not None else {}
         )
 
-        regular_metrics, _ = metrics_evaluator.split_into_regular_and_task_span_metrics(
-            scoring_metrics
-        )
-
+        # Re-scoring runs no task, so there is no span to bind. The metrics that
+        # ask for one are still passed on: argument validation then reports them,
+        # or aborts the run, exactly as it does for any other score argument the
+        # data does not provide. Splitting them out here would leave the
+        # experiment looking under-evaluated instead (OPIK-6925).
         evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
                 self._compute_test_result_for_test_case,
                 test_case_=test_case_,
-                regular_metrics=regular_metrics,
+                regular_metrics=scoring_metrics,
                 scoring_key_mapping=resolved_scoring_key_mapping,
                 evaluator_model=None,
+                can_bind_task_span=False,
             )
             for test_case_ in test_cases
         ]

@@ -184,8 +184,13 @@ def build_metrics_evaluator(
     scoring_key_mapping: ScoringKeyMappingType,
     evaluator_model: Optional[str],
     error_tolerance: ErrorTolerance,
+    can_bind_task_span: bool = True,
 ) -> "MetricsEvaluator":
-    """Build a MetricsEvaluator with suite-level + item-level metrics."""
+    """Build a MetricsEvaluator with suite-level + item-level metrics.
+
+    ``can_bind_task_span`` must be False when the caller has no task span to hand
+    over, so that metrics requiring one are still validated and reported.
+    """
     all_metrics: List[base_metric.BaseMetric] = list(regular_metrics)
     skipped_evaluator_scores: List[score_result.ScoreResult] = []
     if item is not None:
@@ -205,6 +210,7 @@ def build_metrics_evaluator(
         scoring_key_mapping=scoring_key_mapping,
         skipped_evaluator_scores=skipped_evaluator_scores,
         error_tolerance=error_tolerance,
+        can_bind_task_span=can_bind_task_span,
     )
 
 
@@ -369,6 +375,7 @@ class MetricsEvaluator:
         scoring_key_mapping: ScoringKeyMappingType,
         skipped_evaluator_scores: List[score_result.ScoreResult],
         error_tolerance: ErrorTolerance,
+        can_bind_task_span: bool = True,
     ):
         self._scoring_key_mapping = scoring_key_mapping
         self._regular_metrics: List[base_metric.BaseMetric] = []
@@ -376,7 +383,7 @@ class MetricsEvaluator:
         self._skipped_evaluator_scores = skipped_evaluator_scores
         self._error_tolerance = error_tolerance
 
-        self._analyze_metrics(scoring_metrics)
+        self._analyze_metrics(scoring_metrics, can_bind_task_span)
 
     @property
     def has_task_span_metrics(self) -> bool:
@@ -401,11 +408,20 @@ class MetricsEvaluator:
     def _analyze_metrics(
         self,
         scoring_metrics: List[base_metric.BaseMetric],
+        can_bind_task_span: bool,
     ) -> None:
         """Separate metrics into regular and task-span categories."""
         self._regular_metrics, self._task_span_metrics = (
             split_into_regular_and_task_span_metrics(scoring_metrics)
         )
+
+        if not can_bind_task_span:
+            # Nothing will be bound to `task_span` in this evaluation, so holding
+            # those metrics out would drop them without a trace. They stay in the
+            # pass that runs, where the failed argument check is reported like any
+            # other missing score argument (OPIK-6925). They are still listed as
+            # task-span metrics, because that is what they ask for.
+            self._regular_metrics = list(scoring_metrics)
 
         if self.has_task_span_metrics:
             LOGGER.debug(

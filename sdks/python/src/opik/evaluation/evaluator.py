@@ -856,6 +856,9 @@ def evaluate_experiment(
             - dataset_item — a dictionary containing the dataset item content,
             - task_outputs — a dictionary containing the LLM task output.
             - task_span - the data collected during the LLM task execution [optional].
+              Re-scoring an existing experiment runs no task, so no span is bound:
+              a metric or scorer that requires `task_span` is reported as a score
+              argument that cannot be satisfied.
 
         scoring_threads: amount of thread workers to run scoring metrics.
 
