@@ -17,6 +17,7 @@ import {
   ExperimentsCompare,
 } from "@/types/datasets";
 import { isExperimentTerminal } from "@/lib/experiments";
+import { createCompletionAnnouncer } from "@/lib/playground";
 import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
 import { LogExperiment } from "@/types/playground";
 import useRunExperimentExecution from "@/api/playground/useRunExperimentExecution";
@@ -52,29 +53,6 @@ import usePromptDatasetItemCombination, {
   DatasetItemPromptCombination,
 } from "@/v2/pages/PlaygroundPage/usePromptDatasetItemCombination";
 import useRunCompletionToast from "@/v2/pages/PlaygroundPage/useRunCompletionToast";
-
-const createCompletionAnnouncer = (expected: number, announce: () => void) => {
-  let registered = 0;
-  let hasFinishedLogging = false;
-  let hasAnnounced = false;
-
-  const fire = () => {
-    if (!hasFinishedLogging || registered < expected || hasAnnounced) return;
-    hasAnnounced = true;
-    announce();
-  };
-
-  return {
-    registryReady: (count: number) => {
-      registered = count;
-      fire();
-    },
-    loggingFinished: () => {
-      hasFinishedLogging = true;
-      fire();
-    },
-  };
-};
 
 const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
 const MAX_POLL_DURATION_MS = 5 * 60 * 1000; // 5 minutes
@@ -733,11 +711,13 @@ const useActionButtonActions = ({
       if (!prompt) return;
 
       setPromptRunning(promptId, true);
+      scopedAnnounceRef.current.add(promptId);
 
       const singleRunExperiments: LogExperiment[] = [];
-      const announcer = createCompletionAnnouncer(1, () =>
-        announceRunComplete(singleRunExperiments),
-      );
+      const announcer = createCompletionAnnouncer(1, () => {
+        if (!scopedAnnounceRef.current.delete(promptId)) return;
+        announceRunComplete(singleRunExperiments);
+      });
 
       const logProcessor = buildLogProcessor({
         datasetName,

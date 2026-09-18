@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  createCompletionAnnouncer,
   getDefaultConfigByProvider,
   restoreMissingConfigKeys,
 } from "@/lib/playground";
@@ -164,5 +165,80 @@ describe("restoreMissingConfigKeys", () => {
     } as unknown as PlaygroundPromptType;
 
     expect(restoreMissingConfigKeys(noProvider)).toBe(noProvider);
+  });
+});
+
+describe("createCompletionAnnouncer", () => {
+  it("waits for logging to finish when the registry lands first", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.registryReady(2);
+    expect(announce).not.toHaveBeenCalled();
+
+    announcer.loggingFinished();
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the registry when logging finishes first", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.loggingFinished();
+    expect(announce).not.toHaveBeenCalled();
+
+    announcer.registryReady(2);
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds until every expected experiment is registered", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.registryReady(1);
+    announcer.loggingFinished();
+    expect(announce).not.toHaveBeenCalled();
+
+    announcer.registryReady(2);
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces once however many times the signals repeat", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(1, announce);
+
+    announcer.registryReady(1);
+    announcer.loggingFinished();
+    announcer.registryReady(1);
+    announcer.loggingFinished();
+
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays silent when a run is interrupted before its experiments exist", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.loggingFinished();
+    announcer.registryReady(1);
+
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  it("stays silent for a run stopped before its experiments landed", () => {
+    // Mirrors how the single-prompt run gates itself: Stop drops the prompt from
+    // the live set, and a drain arriving afterwards must not report success.
+    const live = new Set(["prompt-1"]);
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(1, () => {
+      if (!live.delete("prompt-1")) return;
+      announce();
+    });
+
+    live.delete("prompt-1");
+    announcer.registryReady(1);
+    announcer.loggingFinished();
+
+    expect(announce).not.toHaveBeenCalled();
   });
 });
