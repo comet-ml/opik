@@ -1,6 +1,10 @@
+import datetime
+
 import pytest
 
+from opik.api_objects.conversation import conversation_factory
 from opik.evaluation.metrics.conversation import helpers as conversation_helpers
+from opik.rest_api import TracePublic
 from opik.evaluation.metrics.conversation import (
     conversation_turns_factory as conversation_turns,
 )
@@ -64,6 +68,61 @@ def test_extract_turns_windows_from_conversation__unanswered_turn_reaches_the_wi
     )
 
     assert len(turns_windows) == 2
+    assert turns_windows[-1] == conversation
+
+
+def test_extract_turns_windows_from_conversation__unanswered_turn_from_traces_kept():
+    """The gap the judges must survive comes from the trace loader, not only hand-built lists.
+
+    ``create_conversation_from_traces`` adds an assistant message only when
+    ``output_transform`` returns something, so one trace with an unusable output
+    leaves two user messages next to each other.
+    """
+    start = datetime.datetime.now()
+    traces = [
+        TracePublic(
+            id="019b0000-0000-7000-8000-000000000001",
+            input={"x": "How do I reset my password?"},
+            output={"output": "Go to settings."},
+            start_time=start,
+        ),
+        TracePublic(
+            id="019b0000-0000-7000-8000-000000000002",
+            input={"x": "And when does it take effect?"},
+            output={"result": "not the expected shape"},
+            start_time=start + datetime.timedelta(seconds=1),
+        ),
+        TracePublic(
+            id="019b0000-0000-7000-8000-000000000003",
+            input={"x": "Thanks, that worked."},
+            output={"output": "Glad to help."},
+            start_time=start + datetime.timedelta(seconds=2),
+        ),
+    ]
+
+    def input_transform(input_):
+        return input_.get("x")
+
+    def output_transform(output_):
+        return output_.get("output")
+
+    conversation = conversation_factory.create_conversation_from_traces(
+        traces, input_transform, output_transform
+    ).as_json_list()
+
+    assert [m["role"] for m in conversation] == [
+        "user",
+        "assistant",
+        "user",
+        "user",
+        "assistant",
+    ]
+
+    turns_windows = conversation_helpers.extract_turns_windows_from_conversation(
+        conversation=conversation, window_size=5
+    )
+
+    assert len(turns_windows) == 3
     assert turns_windows[-1] == conversation
 
 

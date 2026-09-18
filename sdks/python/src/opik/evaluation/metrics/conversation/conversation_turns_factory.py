@@ -29,10 +29,8 @@ def build_conversation_turns(
     user_input = None
     for message_dict in conversation:
         if message_dict["role"] == "user":
-            # A user message that went unanswered is still a turn - the tail branch
-            # below relies on that. It has to stay true mid-conversation too, otherwise
-            # the next user message overwrites the pending one and that message never
-            # reaches the judges, which score the windows built from these turns.
+            # An unanswered user message stays a turn of its own, as it already is
+            # in the tail branch below; overwriting it here would drop a message.
             if user_input is not None:
                 turns.append(types.ConversationTurn(input=user_input, output=None))
             user_input = message_dict
