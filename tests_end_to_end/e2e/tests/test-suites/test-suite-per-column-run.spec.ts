@@ -75,6 +75,22 @@ test.describe(
 
         const playground = new PlaygroundPage(page, project.id);
 
+        /**
+         * List the suite's experiments, registering each id for teardown the
+         * first time it appears. The ids do not exist until the run creates
+         * them, so a fixture cannot know them up front.
+         */
+        const seen = new Set<string>();
+        const listSuiteExperiments = async () => {
+          const found = await backendClient.listExperimentsForDataset(testSuite.id);
+          for (const experiment of found) {
+            if (seen.has(experiment.id)) continue;
+            seen.add(experiment.id);
+            registerExperimentCleanup(experiment.id, experiment.name);
+          }
+          return found;
+        };
+
         await test.step('Open the Playground on the seeded suite with two variants', async () => {
           // Before goto: the recorder is an init script, and the toast this
           // test reads is dismissed by Radix five seconds after it appears.
@@ -105,6 +121,17 @@ test.describe(
           await expect
             .poll(() => executed.length, { timeout: 180_000, intervals: [500, 1000, 2000] })
             .toBeGreaterThanOrEqual(1);
+        });
+
+        // Before the assertions, not after. The execute request has already
+        // created the experiment by the time it returns, and everything below
+        // can fail — registering only in the final step (as this spec used to)
+        // left exactly the rows a failing run created unswept. Observed for
+        // real: when the toast step below timed out, the experiment survived
+        // the test and only `global-teardown.ts`'s prefix sweep caught it,
+        // which would not have reached a server-named one.
+        await test.step('Register whatever the run created, before asserting on it', async () => {
+          await listSuiteExperiments();
         });
 
         await test.step('One request, one prompt entry, carrying B\'s suffix on B\'s prompt', async () => {
@@ -139,24 +166,18 @@ test.describe(
         });
 
         await test.step('The suite holds exactly that one experiment, under that name', async () => {
-          const seen = new Set<string>();
+          // The full set for this suite, not a `find()` of the expected name: a
+          // run that also wrote a second, auto-named experiment would satisfy a
+          // lookup-by-name and is exactly the regression worth failing on. The
+          // suite is fixture-seeded, so nothing else writes to it. Each id is
+          // registered for teardown from inside the poll, so an extra the run
+          // should not have written is swept even — especially — when it is the
+          // thing that fails this assertion.
           await expect
-            .poll(
-              async () => {
-                const found = await backendClient.listExperimentsForDataset(testSuite.id);
-                for (const experiment of found) {
-                  if (seen.has(experiment.id)) continue;
-                  seen.add(experiment.id);
-                  // Registered from inside the poll: the run creates the id,
-                  // and an extra experiment the run should not have written is
-                  // exactly what fails the assertion below — it has to be swept
-                  // even, especially, when that happens.
-                  registerExperimentCleanup(experiment.id, experiment.name);
-                }
-                return found.map((e) => e.name);
-              },
-              { timeout: 60_000, intervals: [500, 1000, 2000, 5000] },
-            )
+            .poll(async () => (await listSuiteExperiments()).map((e) => e.name), {
+              timeout: 60_000,
+              intervals: [500, 1000, 2000, 5000],
+            })
             .toEqual([nameB]);
         });
       },

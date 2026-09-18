@@ -118,6 +118,11 @@ test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playgro
 
       const playground = new PlaygroundPage(page, project.id);
       const posted = collectExperimentPosts(page);
+      const listExperiments = listerRegistering(
+        backendClient,
+        dataset.id,
+        registerExperimentCleanup,
+      );
 
       await test.step('Open the Playground on the seeded dataset with two variants', async () => {
         // Before goto: the recorder is an init script, and the toast this test
@@ -161,6 +166,16 @@ test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playgro
             intervals: [500, 1000, 2000],
           })
           .toHaveLength(1);
+      });
+
+      // Before the assertions, not after. Everything below can fail, and the
+      // run has already written its experiments by the time the toast fires —
+      // so registering only in the final step (as this spec used to) left
+      // exactly the rows a failing run created unswept. `global-teardown.ts`'s
+      // prefix sweep rescues the ones carrying the run prefix, but not a
+      // server-named one, which is the very extra this test hunts for.
+      await test.step('Register whatever the run created, before asserting on it', async () => {
+        await listExperiments();
       });
 
       await test.step('Exactly one experiment was posted, carrying B\'s suffix and B\'s prompt', async () => {
@@ -208,12 +223,6 @@ test.describe('Playground — per-column run', { tag: ['@t2-cuj', '@area:playgro
       });
 
       await test.step('The dataset carries that one experiment and nothing else', async () => {
-        const listExperiments = listerRegistering(
-          backendClient,
-          dataset.id,
-          registerExperimentCleanup,
-        );
-
         // The full set for this dataset, not a `find()` of the expected name: a
         // run that also wrote a second, auto-named experiment would satisfy a
         // lookup-by-name and is exactly the regression worth failing on. The

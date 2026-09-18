@@ -1,21 +1,51 @@
 import { test, expect } from '@e2e/fixtures';
+import type { BackendClient } from '@e2e/core/backend';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 
 /**
  * OPIK-3268 — a run the user stopped must not claim it finished.
  *
- * `stopAll` and `stopSingle` clear the announcer's claim (`scopedAnnounceRef`)
- * so a late completion cannot raise the "Run complete" toast, and the name
- * field — which only advances when that toast fires — stays on what the user
- * typed. The pure state machine behind the claim is unit-tested; the wiring
- * that clears it is not exercised anywhere. A false "Run complete" plus a
- * silently advanced counter is wrongness a user then acts on: they believe
- * experiments exist under a name that was never used, and their next run lands
- * under `_02` for no reason.
+ * `stopAll` and `stopSingle` both revoke the announcer's claim so a late
+ * completion cannot raise the "Run complete" toast, and the name field — which
+ * only advances when that toast fires — stays on what the user typed. A false
+ * "Run complete" plus a silently advanced counter is wrongness a user then acts
+ * on: they believe experiments exist under a name that was never used, and
+ * their next run lands under `_02` for no reason.
  *
- * Both halves of the wiring get their own test because they are separate call
- * sites — the header's Stop all and a variant card's own Stop — and a
- * regression in one says nothing about the other.
+ * Both halves get their own test because they are separate call sites AND
+ * separate mechanisms, so a regression in one says nothing about the other:
+ *
+ * - **Stop all**, against a whole-page run, clears `announcePendingRef` (the
+ *   flag `runAllViaFrontend`'s `createCompletionAnnouncer` callback checks) and
+ *   sets `isToStopRef`, which is what makes the unscoped poll return early.
+ *   `stopAll` also clears `scopedAnnounceRef`, but that set is empty on an
+ *   unscoped run and plays no part in this test.
+ * - **A variant's own Stop**, against a per-column run, deletes that prompt's
+ *   id from `scopedAnnounceRef` — the set `runSingleViaFrontend` added it to,
+ *   and the one the scoped poll's `delete()` gates the announce on.
+ *
+ * The pure state machine behind the claim is unit-tested; neither piece of
+ * wiring that revokes it is exercised anywhere else.
+ *
+ * ## Why these assertions are load-bearing, and the one way they could stop being
+ *
+ * `createCompletionAnnouncer` only calls its callback once
+ * `registered >= expected`, where `registered` comes from
+ * `experimentsQueue.drain()` — so if a stop happened before the run had
+ * registered one experiment PER VARIANT, the announcer would short-circuit on
+ * the count and never reach the revoked claim at all. These tests would then
+ * pass without exercising the wiring they name.
+ *
+ * That is not what happens, and it was checked rather than assumed: listing the
+ * dataset's experiments immediately after each stop shows 2 after Stop all
+ * (`_a` and `_b`) and 1 more after the single-column stop. The count condition
+ * is satisfied, `fire()` proceeds, and the revoked claim is the only thing left
+ * between the run and the toast — which is what makes the silence below
+ * evidence about `stopAll`/`stopSingle` rather than about arithmetic.
+ *
+ * If a future change makes experiment creation lazier — deferred until a
+ * completion actually returns, say — that stops being true silently. The guard
+ * against it is the experiment count itself, asserted below.
  *
  * ## Why the provider is blackholed rather than refusing
  *
@@ -51,6 +81,40 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
   const HANGING_MODEL = 'unresponsive-model';
   const FINISHING_MODEL = 'unreachable-model';
 
+  /**
+   * A sweeper that registers every experiment currently recorded against the
+   * dataset, skipping the ones it has already seen.
+   *
+   * A stopped run still leaves behind the experiments it created before the
+   * first completion was attempted, and those are not swept by anything else
+   * here — the ids only exist once the run has made them, so a fixture cannot
+   * know them up front. Deliberately asserts nothing about how many there are:
+   * that a stop leaves them is a product behaviour these tests observed, not one
+   * they are claiming, and pinning a count would freeze a decision the team has
+   * not made.
+   *
+   * Shared by both tests rather than written out twice, so the two cannot drift
+   * into sweeping different things. Returns the names it found, so a caller can
+   * assert the run got far enough to register experiments at all — see the
+   * load-bearing note in the describe docblock.
+   */
+  const sweeperFor = (
+    backendClient: BackendClient,
+    datasetId: string,
+    registerExperimentCleanup: (id: string, name: string) => void,
+  ) => {
+    const seen = new Set<string>();
+    return async (): Promise<string[]> => {
+      const found = await backendClient.listExperimentsForDataset(datasetId);
+      for (const experiment of found) {
+        if (seen.has(experiment.id)) continue;
+        seen.add(experiment.id);
+        registerExperimentCleanup(experiment.id, experiment.name);
+      }
+      return found.map((e) => e.name);
+    };
+  };
+
   test(
     'Stopping every column announces nothing and leaves the typed name alone',
     { tag: ['@cap:playground.run-against-dataset'] },
@@ -68,24 +132,11 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
       const runName = `${testNamespace}-stopall`;
       const playground = new PlaygroundPage(page, project.id);
 
-      /**
-       * Register every experiment now recorded against the dataset.
-       *
-       * A stopped run still leaves behind the experiments it created before the
-       * first completion was attempted, and those are not swept by anything
-       * else here. Deliberately asserts nothing about how many there are: that
-       * a stop leaves them is a product behaviour this test observed, not one
-       * it is claiming, and pinning a count would freeze a decision the team
-       * has not made.
-       */
-      const seen = new Set<string>();
-      const registerCreatedExperiments = async (): Promise<void> => {
-        for (const experiment of await backendClient.listExperimentsForDataset(dataset.id)) {
-          if (seen.has(experiment.id)) continue;
-          seen.add(experiment.id);
-          registerExperimentCleanup(experiment.id, experiment.name);
-        }
-      };
+      const registerCreatedExperiments = sweeperFor(
+        backendClient,
+        dataset.id,
+        registerExperimentCleanup,
+      );
 
       await test.step('Seed one provider that hangs and one that fails fast', async () => {
         await providerKeys.createUnresponsive({
@@ -131,7 +182,15 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         await playground.waitForRunSettled(60_000);
       });
 
-      await test.step('Sweep whatever the stopped run had already created', registerCreatedExperiments);
+      await test.step('The stopped run had registered both variants, so the silence below means something', async () => {
+        // Not a claim about how many experiments a stop SHOULD leave — that is a
+        // product decision the team has not made, and this does not pin it. It
+        // is the precondition that makes the next step load-bearing: the
+        // announcer only consults the revoked claim once one experiment per
+        // variant is registered, so with fewer than two it would stay silent
+        // for a reason that has nothing to do with `stopAll`.
+        expect((await registerCreatedExperiments()).length).toBeGreaterThanOrEqual(2);
+      });
 
       await test.step('Nothing announced completion, and the name is untouched', async () => {
         const remaining = ANNOUNCE_WINDOW_MS - (Date.now() - stoppedAt);
@@ -180,14 +239,11 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
       const runName = `${testNamespace}-stopone`;
       const playground = new PlaygroundPage(page, project.id);
 
-      const seen = new Set<string>();
-      const registerCreatedExperiments = async (): Promise<void> => {
-        for (const experiment of await backendClient.listExperimentsForDataset(dataset.id)) {
-          if (seen.has(experiment.id)) continue;
-          seen.add(experiment.id);
-          registerExperimentCleanup(experiment.id, experiment.name);
-        }
-      };
+      const registerCreatedExperiments = sweeperFor(
+        backendClient,
+        dataset.id,
+        registerExperimentCleanup,
+      );
 
       await test.step('Seed one provider that hangs and one that fails fast', async () => {
         await providerKeys.createUnresponsive({
@@ -228,7 +284,13 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         await playground.waitForRunSettled(60_000);
       });
 
-      await test.step('Sweep whatever the stopped run had already created', registerCreatedExperiments);
+      await test.step('The stopped column had registered its experiment, so the silence below means something', async () => {
+        // Same precondition as the Stop-all test, at this path's own threshold:
+        // `runSingleViaFrontend` builds its announcer with `expected` of 1, so
+        // one registered experiment is what puts `scopedAnnounceRef` on the
+        // critical path rather than the count.
+        expect((await registerCreatedExperiments()).length).toBeGreaterThanOrEqual(1);
+      });
 
       await test.step('Nothing announced completion, and the name is untouched', async () => {
         const remaining = ANNOUNCE_WINDOW_MS - (Date.now() - stoppedAt);

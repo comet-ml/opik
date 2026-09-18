@@ -30,6 +30,15 @@ export interface UnreachableProviderSeed {
 }
 
 /**
+ * Seed for `createUnresponsive`. Structurally identical to
+ * {@link UnreachableProviderSeed} and named separately on purpose: the two
+ * fixtures produce OPPOSITE failure shapes — refused vs hung — and a caller
+ * reading `createUnresponsive(seed: UnreachableProviderSeed)` in the editor or
+ * in generated docs is told the wrong one.
+ */
+export type UnresponsiveProviderSeed = UnreachableProviderSeed;
+
+/**
  * Base URL for a provider that can never answer.
  *
  * The discard port on the backend's own loopback: nothing listens there, so the
@@ -91,7 +100,7 @@ export interface ProviderKeysFixture {
    * Returns the fully-qualified model id, for the same reason
    * `createUnreachable` does.
    */
-  createUnresponsive(seed: UnreachableProviderSeed): Promise<string>;
+  createUnresponsive(seed: UnresponsiveProviderSeed): Promise<string>;
   /**
    * Makes the mock gateway answer `status` for every chat request naming `modelName`,
    * and clears it at teardown.

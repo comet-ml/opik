@@ -234,8 +234,15 @@ export class PlaygroundPage {
 
   /**
    * Start recording every toast the page raises, from before the first one can
-   * appear. Must be called BEFORE `goto()` — it installs an init script, so it
-   * also survives a reload.
+   * appear. Must be called BEFORE `goto()` — it installs an init script, which
+   * runs on every document, so the recorder is in place for any navigation.
+   *
+   * It does NOT accumulate across navigations. The init script re-runs in each
+   * fresh document and assigns a new array, so a `page.reload()` drops every
+   * toast raised before it — `recordedToasts()` then describes the current
+   * document only. None of the specs using this reload mid-run; a spec that
+   * needs history to survive one has to hold the array test-side (an exposed
+   * binding the init script appends through) instead of on `window`.
    *
    * `completionToast()` above reads a LIVE locator, which only works when the
    * run is slow enough that the toast is still on screen when the assertion
