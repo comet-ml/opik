@@ -78,7 +78,10 @@ def _wait_for_experiment_items(
 def _assert_each_dataset_item_once(
     items: List[experiment_item.ExperimentItemContent], expected_ids: List[str]
 ) -> None:
-    """Every expected dataset item is linked exactly once -- no loss, no duplicate."""
+    """Each expected `dataset_item_id` is on exactly one stored item.
+
+    Catches a lost item and a duplicated one alike.
+    """
     counts = collections.Counter(item.dataset_item_id for item in items)
     duplicated = {key: count for key, count in counts.items() if count > 1}
     assert not duplicated, f"Experiment items stored more than once: {duplicated}"
@@ -287,8 +290,8 @@ def test_batch_upload_items__every_record_shape__stores_exactly_what_was_sent(
         validate_before_upload=validate_before_upload,
     )
 
-    # Checked on the list as read, before keying it by dataset item would collapse a
-    # duplicate into one entry.
+    # Checked on the list as read: the dict below is keyed by `dataset_item_id`, so
+    # building it first would collapse a duplicate into one entry.
     stored_items = _wait_for_experiment_items(experiment, len(records))
     _assert_each_dataset_item_once(stored_items, list(ids_by_index.values()))
     stored = {item.dataset_item_id: item for item in stored_items}
