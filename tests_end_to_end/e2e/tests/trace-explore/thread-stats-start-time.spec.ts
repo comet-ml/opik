@@ -1,7 +1,5 @@
-import { test, expect } from '@e2e/fixtures';
-import { bucketTotal, bucketsByDay, expectBucketsByDay } from '@e2e/fixtures';
-import type { KpiCardStat } from '@e2e/core/backend';
-import { toMetricSeries } from '@e2e/core/backend';
+import { test, expect, bucketTotal, bucketsByDay, expectBucketsByDay } from '@e2e/fixtures';
+import { toMetricSeries, type KpiCardStat } from '@e2e/core/backend';
 import { LogsPage } from '@e2e/pom/logs.page';
 
 /**

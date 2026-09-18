@@ -253,6 +253,7 @@ areas:
     specs:
       - trace-explore/mcp-hint.spec.ts
       - trace-explore/span-cached-token-cost.spec.ts
+      - trace-explore/span-cost-chart.spec.ts
       - trace-explore/span-cost-resolution.spec.ts
       - trace-explore/span-kpi-cards.spec.ts
       - trace-explore/spans-view-pagination.spec.ts
@@ -338,6 +339,7 @@ areas:
       - trace-explore/thread-evaluation.spec.ts
       - trace-explore/thread-id-prefilter.spec.ts
       - trace-explore/thread-logging-smoke.spec.ts
+      - trace-explore/thread-stats-start-time.spec.ts
     capabilities:
       list-threads:            { covered: true,  tier: t1-smoke }
       thread-message-count:    { covered: true,  tier: t1-smoke }

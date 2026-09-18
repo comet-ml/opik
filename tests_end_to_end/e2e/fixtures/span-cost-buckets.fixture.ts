@@ -7,6 +7,7 @@ import {
   DAYS_BACK_EARLY,
   DAYS_BACK_LATE,
   costedSpan,
+  deleteSeededTraces,
   utcDayOf,
   utcNoonDaysBack,
 } from './cost-buckets';
@@ -170,14 +171,8 @@ export const test = baseTest.extend<SpanCostBucketsFixtures>({
       await use(ref);
     } finally {
       if (!shouldLeaveArtifacts(testInfo) && traceIds.length > 0) {
-        try {
-          // Explicit: deleting the project does not delete its traces, and the
-          // run-prefix sweep in global-teardown does not know about them. The
-          // spans go with their traces.
-          await backendClient.deleteTraces(traceIds);
-        } catch (err) {
-          console.warn('[spanCostBuckets fixture] trace delete warning:', err);
-        }
+        // The spans go with their traces.
+        await deleteSeededTraces(backendClient, traceIds, 'spanCostBuckets');
       }
     }
   },
