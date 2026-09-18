@@ -1,5 +1,4 @@
 import React, { memo, useMemo, useCallback } from "react";
-import { isCostMetricType } from "./helpers";
 import { useNavigate } from "@tanstack/react-router";
 import { useShallow } from "zustand/react/shallow";
 
@@ -23,6 +22,7 @@ import {
 } from "@/types/dashboard";
 import { Filter } from "@/types/filters";
 import { isFilterValid, createFilter } from "@/lib/filters";
+import { isCostMetricType } from "./helpers";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
 import { LOGS_TYPE } from "@/constants/traces";
 import { LOGS_SOURCE } from "@/types/traces";
