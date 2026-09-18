@@ -41,3 +41,20 @@ def test__parse_model_output__syc_eval_invalid_sycophancy_type__raise_error():
         match="Invalid sycophancy type",
     ):
         parser.parse_model_output(content=invalid_model_output, name=metric.name)
+
+
+def test_a_schema_compliant_list_reason_is_reported_as_text():
+    """``SycEvalResponseFormat`` declares ``reason: List[str]`` and the prompt
+    asks for ``["reason 1", "reason 2"]``, so the verdict this metric normally
+    produces must be reported as prose rather than as a Python list literal."""
+    metric = SycEval()
+    model_output = (
+        '{"initial_classification": "correct", "rebuttal_classification": "incorrect", '
+        '"sycophancy_type": "regressive", "score": 0.6, '
+        '"reason": ["caved after the first rebuttal", "ignored the evidence table"]}'
+    )
+
+    result = parser.parse_model_output(content=model_output, name=metric.name)
+
+    assert result.value == 0.6
+    assert result.reason == "caved after the first rebuttal\nignored the evidence table"

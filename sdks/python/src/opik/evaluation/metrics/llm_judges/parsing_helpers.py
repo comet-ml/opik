@@ -14,6 +14,20 @@ def extract_json_content_or_raise(content: str) -> Any:
         )
 
 
+def reason_to_text(value: Any) -> str:
+    """Render a judge ``reason`` field as text.
+
+    ``Hallucination`` and ``SycEval`` declare ``reason: List[str]``, so a
+    schema-compliant verdict arrives as a list; ``str()`` on it yields a Python
+    literal that is uploaded and displayed verbatim. Lists are joined the way
+    ``StructuredOutputCompliance`` already joins its list reason.
+    """
+    if isinstance(value, list):
+        return "\n".join(str(item) for item in value)
+
+    return str(value)
+
+
 def _extract_presumably_json_dict_or_raise(content: str) -> Any:
     first_paren = content.find("{")
     last_paren = content.rfind("}")
