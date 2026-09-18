@@ -300,6 +300,7 @@ def run_interactive_configure(
             install_mcp=install_mcp,
             install_skills=install_skills,
             assistant_setup=record,
+            announce=install_view.render_hint,
         ).configure()
         progress.stage = Progress.DONE
         return recorded
@@ -318,6 +319,7 @@ def run_interactive_configure(
             install_mcp=install_mcp,
             install_skills=install_skills,
             assistant_setup=record,
+            announce=install_view.render_hint,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.SELF_HOSTED:
         configurator = opik_configure.OpikConfigurator(
@@ -328,6 +330,7 @@ def run_interactive_configure(
             install_mcp=install_mcp,
             install_skills=install_skills,
             assistant_setup=record,
+            announce=install_view.render_hint,
         )
     elif deployment_type_choice == interactive_helpers.DeploymentType.LOCAL:
         configurator = opik_configure.OpikConfigurator(
@@ -338,6 +341,7 @@ def run_interactive_configure(
             install_mcp=install_mcp,
             install_skills=install_skills,
             assistant_setup=record,
+            announce=install_view.render_hint,
         )
     else:
         raise click.ClickException("Unknown deployment type was selected. Exiting.")

@@ -398,3 +398,71 @@ class TestTheAllRow:
         chosen, _ = self._choose(monkeypatch, None)
 
         assert chosen is None
+
+
+class TestLinks:
+    """URLs are coloured and clickable, without breaking plainer terminals.
+
+    One call has to cover all three: an OSC 8 hyperlink where the terminal
+    advertises support, the colour alone where it does not, and the bare URL in
+    a pipe or a CI log — where an escape sequence would corrupt the output.
+    """
+
+    URL = "https://www.comet.com/docs/opik/mcp-server"
+
+    @pytest.fixture
+    def view(self):
+        from opik.cli import install_view as rich_view
+
+        return rich_view
+
+    @staticmethod
+    def _rendered(view, monkeypatch, **console_kwargs):
+        import rich.console
+
+        recorder = rich.console.Console(width=120, **console_kwargs)
+        monkeypatch.setattr(view, "console", recorder)
+        with recorder.capture() as capture:
+            view.RichInstallView().problem(f"See {TestLinks.URL} for instructions.")
+        return capture.get()
+
+    def test_terminal__emits_an_osc8_hyperlink(self, view, monkeypatch):
+        out = self._rendered(view, monkeypatch, force_terminal=True)
+
+        assert "\x1b]8;" in out and self.URL in out
+
+    def test_terminal__the_url_is_its_own_colour(self, view, monkeypatch):
+        """Cyan against the yellow the rest of the message carries."""
+        out = self._rendered(view, monkeypatch, force_terminal=True)
+
+        assert "36m" in out, "cyan"
+        assert "33m" in out, "the surrounding text keeps its yellow"
+
+    def test_no_color_terminal__still_readable(self, view, monkeypatch):
+        out = self._rendered(view, monkeypatch, force_terminal=True, no_color=True)
+
+        assert self.URL in out
+
+    def test_not_a_terminal__no_escapes_at_all(self, view, monkeypatch):
+        """A pipe or a CI log must get the bare URL, still copy-pasteable."""
+        out = self._rendered(view, monkeypatch, force_terminal=False)
+
+        assert "\x1b" not in out
+        assert self.URL in out
+
+    def test_message_without_a_url__is_untouched(self, view, monkeypatch):
+        import rich.console
+
+        recorder = rich.console.Console(width=120, force_terminal=False)
+        monkeypatch.setattr(view, "console", recorder)
+        with recorder.capture() as capture:
+            view.RichInstallView().problem("Nothing to click here.")
+
+        assert capture.get().strip() == "Nothing to click here."
+
+    def test_trailing_punctuation__stays_out_of_the_link(self, view, monkeypatch):
+        """`See <url>.` must not make the full stop part of the address."""
+        linked = view._linkify(f"See {self.URL}.")
+
+        spans = [s for s in linked.spans if "link" in str(s.style)]
+        assert spans and linked.plain[spans[0].start : spans[0].end] == self.URL

@@ -8,6 +8,7 @@ logger-based default.
 
 import contextlib
 import pathlib
+import re
 import textwrap
 from typing import Iterator, List, Optional, Tuple
 
@@ -36,6 +37,45 @@ def _collapse_home(message: str) -> str:
     """
     home = str(pathlib.Path.home())
     return message.replace(home, "~") if home else message
+
+
+#: Bare URLs, stopping before the punctuation that usually follows one in prose.
+_URL = re.compile(r"https?://[^\s)\]}>,;\"']+")
+
+#: Punctuation that ends a sentence rather than an address.
+_SENTENCE_END = ".,;:!?"
+
+
+def _linkify(message: str, base: str = "") -> text.Text:
+    """Colour the URLs in a message and make them clickable.
+
+    One call covers every terminal. ``rich`` emits the OSC 8 hyperlink only where
+    the terminal advertises support, keeps the colour where it does not, and
+    drops every escape when stdout is not a terminal at all — so a pipe or a CI
+    log still gets the bare URL, unchanged and still copy-pasteable.
+
+    The style is applied over a range rather than by splitting the string, so the
+    surrounding text keeps ``base`` and the message stays one paragraph.
+    """
+    rendered = text.Text(message, style=base)
+    for match in _URL.finditer(message):
+        # Trailing sentence punctuation is not part of the address. It cannot be
+        # excluded by the pattern, because a URL is full of dots — so the match
+        # runs long and the tail is trimmed back here.
+        end = match.end()
+        while end > match.start() and message[end - 1] in _SENTENCE_END:
+            end -= 1
+        rendered.stylize(
+            f"bold cyan underline link {message[match.start() : end]}",
+            match.start(),
+            end,
+        )
+    return rendered
+
+
+def render_hint(message: str) -> None:
+    """A line pointing somewhere — typically where to get something."""
+    console.print(_linkify(message, base="dim"))
 
 
 def _join(names: List[str]) -> str:
@@ -290,7 +330,7 @@ class RichInstallView(mcp_view.InstallView):
 
     def problem(self, message: str) -> None:
         console.print()
-        console.print(text.Text(_collapse_home(message), style="yellow"))
+        console.print(_linkify(_collapse_home(message), base="yellow"))
         console.print()
 
     def choose_hosts(

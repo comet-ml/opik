@@ -26,6 +26,11 @@ from opik.api_key import opik_api_key
 #: was passed. Injected by the CLI so the configurator itself never renders.
 AssistantSetup = Callable[[Dict[str, Any], Optional[bool], Optional[bool], bool], None]
 
+#: Shows a line pointing the user somewhere — where to find their API key, say.
+#: Injected by the CLI so it can colour the URL and make it clickable; the
+#: default keeps ``opik.configure()`` on the logger, where a library belongs.
+Announce = Callable[[str], None]
+
 LOGGER = logging.getLogger(__name__)
 
 OPIK_BASE_URL_CLOUD: Final[str] = "https://www.comet.com/"
@@ -46,6 +51,7 @@ class OpikConfigurator:
         install_mcp: Optional[bool] = None,
         install_skills: Optional[bool] = None,
         assistant_setup: Optional[AssistantSetup] = None,
+        announce: Optional[Announce] = None,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -58,6 +64,7 @@ class OpikConfigurator:
         self.install_mcp = install_mcp
         self.install_skills = install_skills
         self.assistant_setup = assistant_setup
+        self._announce: Announce = announce if announce is not None else LOGGER.info
         # Set when the consent prompt named the detected hosts, so the installer
         # can skip re-confirming the very same list.
         self._mcp_prompt_named_detected_hosts = False
@@ -382,18 +389,13 @@ class OpikConfigurator:
             url_helpers.get_base_url(self.base_url), "/api/my/settings/"
         )
 
-        url_was_not_passed = self.base_url == OPIK_BASE_URL_CLOUD
         if not self.self_hosted_comet:
-            if url_was_not_passed:
-                LOGGER.info(
-                    "Your Opik API key is available in your account settings, can be found at %s for Opik cloud",
-                    settings_url,
-                )
-            else:
-                LOGGER.info(
-                    "Your Opik API key is available in your account settings, can be found at %s",
-                    settings_url,
-                )
+            # Interpolated rather than left to the logger's `%s`: the renderer the
+            # CLI injects takes a finished line, and the URL has to be in it for
+            # the link styling to find it.
+            self._announce(
+                f"Your Opik API key is in your account settings: {settings_url}"
+            )
 
         if not is_interactive():
             raise ConfigurationError(
