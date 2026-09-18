@@ -94,20 +94,6 @@ class TestGranted:
         assert consent.granted(verdict, lambda: answer) is answer
 
 
-class TestReadableList:
-    @pytest.mark.parametrize(
-        "names, expected",
-        [
-            ([], ""),
-            (["A"], "A"),
-            (["A", "B"], "A and B"),
-            (["A", "B", "C"], "A, B and C"),
-        ],
-    )
-    def test_reads_as_a_sentence(self, names, expected):
-        assert consent.readable_list(names) == expected
-
-
 class TestPrompts:
     def test_mcp_prompt__does_not_name_the_clients(self):
         """The installer's picker lists them straight after."""

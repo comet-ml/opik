@@ -41,12 +41,13 @@ def _setup_assistants(
 
     wants_mcp = consent.granted(mcp_verdict, _ask_about_mcp)
 
-    # Declining the server no longer declines the pack. They were coupled because
-    # the MCP question read as the umbrella for the whole step, but the pack needs
-    # no server — it is instruction files for clients that are already there — so
-    # one Enter was dropping a second thing the user never said no to.
     mcp_decision = consent.decision_reason(mcp_verdict, wants_mcp)
 
+    # Only when the pack was skipped for a reason of its own. Declining the
+    # server no longer declines the pack: they were coupled because the MCP
+    # question read as the umbrella for the whole step, but the pack needs no
+    # server — it is instruction files for clients that are already there — so
+    # one Enter was dropping a second thing the user never said no to.
     if not wants_mcp and skills_verdict.decision is consent.Decision.SKIP:
         _announce_skip(mcp_verdict, skills_verdict)
         # The pack was never asked about on this path, so its decision comes
@@ -86,8 +87,8 @@ def _ask_about_mcp() -> bool:
     differ in how many times they ask or in what they tell you first.
 
     Always returns True: it is not the decision any more, it is the case for it.
-    Saying no is the picker's Skip row, or Escape — and that comes back as
-    `InstallReport.declined`, which is what the funnel reads.
+    Saying no is Escape at the picker, which comes back as
+    `InstallReport.declined` — what the funnel reads.
     """
     install_view.render_mcp_intro()
     return True

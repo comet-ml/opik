@@ -12,7 +12,7 @@ Rendering and prompting belong to the caller; this only says what to do and why.
 """
 
 import enum
-from typing import Callable, List, NamedTuple, Optional
+from typing import Callable, NamedTuple, Optional
 
 
 class Decision(enum.Enum):
@@ -115,15 +115,6 @@ def granted(verdict: Verdict, ask: Callable[[], bool]) -> bool:
     if verdict.decision is Decision.ASK:
         return ask()
     return verdict.decision is Decision.PROCEED
-
-
-def readable_list(names: List[str]) -> str:
-    """``a``, ``a and b``, ``a, b and c`` — a list a person would read aloud."""
-    if len(names) <= 1:
-        # Empty joins to "", which reads correctly in a sentence that a caller
-        # only builds when something was found.
-        return "".join(names)
-    return f"{', '.join(names[:-1])} and {names[-1]}"
 
 
 MCP_PROMPT: str = (
