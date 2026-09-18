@@ -48,6 +48,10 @@ class InstallReport(NamedTuple):
     failed: Tuple[str, ...] = ()
     verified: Optional[bool] = None
     declined: bool = False
+    #: The user picked "my AI client is not listed" rather than "not now". Both
+    #: decline the server, but only this one says the detected clients are the
+    #: wrong ones — which is a claim about more than the server.
+    manual: bool = False
 
 
 NOTHING_INSTALLED = InstallReport(registered=())
@@ -201,7 +205,9 @@ def setup_mcp_server(
         # picker is the question now, so choosing nothing in it — or cancelling —
         # is the user saying no, and the funnel has to be able to tell that from
         # a run that never got as far as asking.
-        return InstallReport(registered=(), declined=True)
+        return InstallReport(
+            registered=(), declined=True, manual=confirmation.manual_requested
+        )
 
     if isinstance(server_spec, mcp_spec.StdioServerSpec):
         # Before the prefetch, not after: an old tool install captures `uvx

@@ -15,6 +15,7 @@ back to the numbered menu rather than failing.
 """
 
 import dataclasses
+import functools
 import os
 import select
 import sys
@@ -38,6 +39,12 @@ ESCAPE_WINDOW = 0.12
 
 #: Enough for any cursor-key sequence in one read.
 _READ_CHUNK = 8
+
+#: Byte strings that are the beginning of a key rather than a key. A read can
+#: stop after either of them, and neither half means anything alone: `\x1b` is
+#: indistinguishable from a bare Escape until the window above expires, and
+#: `\x1b[` used to be discarded along with the arrow it was the start of.
+_PARTIAL_ESCAPES = (b"\x1b", b"\x1b[")
 
 CURSOR = "❯"
 CHECKED = "◉"
@@ -100,7 +107,7 @@ def multiselect(
         return None
 
     selected: Set[str] = set(preselected or ())
-    _real = [choice for choice in choices if not choice.synthetic]
+    real_keys = _real_keys(choices)
     cursor = 0
 
     with rich.live.Live(
@@ -124,10 +131,17 @@ def multiselect(
                 choice_key = choices[cursor].key
                 selected.symmetric_difference_update({choice_key})
             elif key == TOGGLE_ALL:
-                if len(selected) == len(_real):
+                # Which rows are ticked, not how many. Counting made a mixed
+                # selection — the `All` row plus two of three clients — look
+                # identical to a full one, so `a` emptied the list instead of
+                # filling it and Enter then fell back to whatever the cursor
+                # happened to sit on. Assigning rather than adding keeps the
+                # answer to `a` exactly the real rows: a synthetic row that
+                # stands for the whole list has no business also being in it.
+                if real_keys.issubset(selected):
                     selected.clear()
                 else:
-                    selected = {choice.key for choice in _real}
+                    selected = set(real_keys)
 
             live.update(_render(title, choices, selected, cursor), refresh=True)
 
@@ -214,11 +228,20 @@ def _render_one(
     )
 
 
+def _real_keys(choices: Sequence[Choice]) -> Set[str]:
+    """The rows that stand for themselves — what "all" and `a` are about."""
+    return {choice.key for choice in choices if not choice.synthetic}
+
+
 def _footer(choices: Sequence[Choice], selected: Set[str], cursor: int) -> str:
     """Spell out what Enter will take, so it is never guessed at."""
+    real_keys = _real_keys(choices)
     if len(selected) == 0:
         target = choices[cursor].label
-    elif len(selected) == len(choices):
+    elif real_keys.issubset(selected):
+        # The test `a` uses. Counting against every row instead meant a list
+        # carrying an `All` row could never reach this branch, so selecting
+        # everything still read as "3 selected".
         target = "all"
     else:
         target = f"{len(selected)} selected"
@@ -255,8 +278,18 @@ def _render(
     )
 
 
+@functools.lru_cache(maxsize=1)
 def _key_reader() -> Optional[Callable[[], str]]:
-    """The platform key reader, or ``None`` where neither is available."""
+    """The platform key reader, or ``None`` where neither is available.
+
+    Cached, so every prompt in a run shares one reader and with it one buffer.
+    A terminal hands over bursts rather than keystrokes, so a pty harness that
+    answers several questions at once — ``1\n`` for the deployment, ``y\n`` for
+    what follows — can leave the later answers sitting in the read the first
+    picker made. Built per prompt, that buffer died with the picker while its
+    bytes were already off the tty queue, and the next question waited for input
+    nothing would send again. One reader hands them to whoever asks next.
+    """
     try:
         import termios  # noqa: F401
         import tty  # noqa: F401
@@ -319,10 +352,22 @@ def _read_key_posix() -> Callable[[], str]:
                 # we must handle.
                 tty.setcbreak(descriptor)
                 pending.extend(os.read(descriptor, _READ_CHUNK))
-                if bytes(pending) == b"\x1b" and _has_pending_input(descriptor):
-                    # A bare Escape so far, but the continuation may still be in
-                    # flight.
-                    pending.extend(os.read(descriptor, _READ_CHUNK))
+                # An escape sequence the read stopped in the middle of: the
+                # continuation may still be in flight. A loop rather than a
+                # single question, because the split can land after either
+                # byte — stopping after `\x1b[` used to drop the arrow it began,
+                # since neither that prefix nor the `A`/`B` arriving alone
+                # afterwards resolves to a key.
+                while bytes(pending) in _PARTIAL_ESCAPES and _has_pending_input(
+                    descriptor
+                ):
+                    more = os.read(descriptor, _READ_CHUNK)
+                    if not more:
+                        # End of input. `select` calls a spent descriptor
+                        # readable forever, so without this the loop is the
+                        # one that never ends.
+                        break
+                    pending.extend(more)
             except KeyboardInterrupt:
                 return CANCEL
             finally:

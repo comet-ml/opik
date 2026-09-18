@@ -339,9 +339,9 @@ class RichInstallView(mcp_view.InstallView):
         candidates: List[mcp_view.HostChoice],
         preselected: List[str],
     ) -> Optional[List[str]]:
-        # A one-item list is not worth arrow keys; and a terminal that cannot host
-        # a picker still gets the inherited numbered menu rather than an error.
-        if len(candidates) == 1 or not selector.is_supported():
+        # A terminal that cannot host a picker still gets the inherited numbered
+        # menu rather than an error.
+        if not selector.is_supported():
             return mcp_view.numbered_menu(title, candidates)
 
         # "All" first, and the cursor starts on it. Nothing is pre-ticked — this
@@ -350,9 +350,19 @@ class RichInstallView(mcp_view.InstallView):
         # Enter registered whichever single client happened to be first. Now the
         # row it lands on says All. The numbered-menu fallback above has carried
         # its own "All of the above" all along; this gives the picker the parity.
+        # One candidate skips the `All` row, having nothing to stand in for, but
+        # still gets the picker. A one-item list was not thought worth arrow keys
+        # until the manual row moved in here: skipping the picker skipped that
+        # too, so the user whose one detected client is not theirs could say no
+        # and get "Skipped" where the manual config belonged.
+        all_row = (
+            [selector.Choice(key=_ALL, label="All", synthetic=True)]
+            if len(candidates) > 1
+            else []
+        )
         chosen = selector.multiselect(
             title=title,
-            choices=[selector.Choice(key=_ALL, label="All", synthetic=True)]
+            choices=all_row
             + [
                 selector.Choice(key=c.key, label=c.label, hint=c.hint)
                 for c in candidates

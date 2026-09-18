@@ -289,23 +289,52 @@ class TestChooseHosts:
 
         assert chosen == ["claude-code", "cursor", "codex"]
 
-    def test_rich_view__single_candidate__skips_the_picker(self, monkeypatch):
+    def test_rich_view__single_candidate__still_offers_the_manual_row(
+        self, monkeypatch
+    ):
+        """One client used to skip the picker, and the manual row lives in it.
+
+        So the user this most concerns — one client detected, and it is not
+        theirs — met a yes/no where "my AI client is not listed" belonged, and
+        a no printed "Skipped" instead of the config they needed.
+        """
         from opik.cli import install_view as rich_view
         from opik.cli import selector
 
         monkeypatch.setattr(selector, "is_supported", lambda: True)
+        offered = {}
         monkeypatch.setattr(
             selector,
             "multiselect",
-            mock.Mock(side_effect=AssertionError("no picker for one item")),
+            lambda **kwargs: offered.update(kwargs) or [mcp_view.MANUAL_SETUP],
         )
-        monkeypatch.setattr("builtins.input", lambda prompt: "y")
 
         chosen = rich_view.RichInstallView().choose_hosts(
             "pick", [mcp_view.HostChoice("cursor", "Cursor")], ["cursor"]
         )
 
-        assert chosen == ["cursor"]
+        assert chosen == [mcp_view.MANUAL_SETUP]
+        labels = [choice.label for choice in offered["choices"]]
+        assert labels == ["Cursor", mcp_view.MANUAL_SETUP_LABEL]
+
+    def test_rich_view__single_candidate__offers_no_all_row(self, monkeypatch):
+        """Nothing for it to stand in for, and it would outnumber the clients."""
+        from opik.cli import install_view as rich_view
+        from opik.cli import selector
+
+        monkeypatch.setattr(selector, "is_supported", lambda: True)
+        offered = {}
+        monkeypatch.setattr(
+            selector,
+            "multiselect",
+            lambda **kwargs: offered.update(kwargs) or ["cursor"],
+        )
+
+        rich_view.RichInstallView().choose_hosts(
+            "pick", [mcp_view.HostChoice("cursor", "Cursor")], []
+        )
+
+        assert "All" not in [choice.label for choice in offered["choices"]]
 
     def test_rich_view__cancelled_picker__propagates_none(self, monkeypatch):
         from opik.cli import install_view as rich_view

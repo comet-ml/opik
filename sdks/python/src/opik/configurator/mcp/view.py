@@ -22,8 +22,6 @@ import logging
 import pathlib
 from typing import Iterator, List, Optional
 
-from opik.configurator import interactive_helpers
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -199,19 +197,46 @@ class LoggingInstallView(InstallView):
         return numbered_menu(title, candidates)
 
 
+def _single_candidate_menu(candidate: HostChoice) -> List[str]:
+    """One detected client: a yes/no that also has the manual door in it.
+
+    Still answers to Y, N and a bare Enter, because that is what this prompt has
+    always accepted and what anything piping input into it sends. The numbers
+    are the addition. Without them "my AI client is not listed" existed only
+    once two clients were detected, so the user this most concerns — one client
+    found, and it is not theirs — was the one who could not reach it.
+    """
+    prompt = "\n".join(
+        [
+            f"Detected {candidate.label}. Install the Opik MCP server for it?",
+            "  1 - Yes",
+            f"  2 - {MANUAL_SETUP_LABEL}",
+            "  3 - Skip",
+            "\nY/n, or a number\n> ",
+        ]
+    )
+
+    while True:
+        answer = input(prompt).strip().upper()
+        if answer in ("Y", "YES", "1", ""):
+            return [candidate.key]
+        if answer in ("N", "NO", "3"):
+            return []
+        if answer == "2":
+            return [MANUAL_SETUP]
+        LOGGER.error("Wrong choice. Please try again.\n")
+
+
 def numbered_menu(title: str, candidates: List[HostChoice]) -> Optional[List[str]]:
     """The portable fallback: type a number.
 
     A module-level function rather than a base-class method so the rich view can
     fall back to it without inheriting a logging view it otherwise overrides
-    entirely. A single candidate is a yes/no rather than a one-item menu.
+    entirely. A single candidate keeps its own shape; see
+    :func:`_single_candidate_menu`.
     """
     if len(candidates) == 1:
-        confirmed = interactive_helpers.ask_user_for_approval(
-            f"Detected {candidates[0].label}. Install the Opik MCP server "
-            f"for it? (Y/n) "
-        )
-        return [candidates[0].key] if confirmed else []
+        return _single_candidate_menu(candidates[0])
 
     host_count = len(candidates)
     all_choice = host_count + 1

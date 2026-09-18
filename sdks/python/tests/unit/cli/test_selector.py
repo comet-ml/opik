@@ -18,6 +18,17 @@ def _choices():
     ]
 
 
+def _choices_with_synthetic_rows():
+    """The shape `choose_hosts` builds: an `All` row, the clients, a manual row."""
+    return [
+        selector.Choice("__all__", "All", synthetic=True),
+        selector.Choice("claude-code", "Claude Code"),
+        selector.Choice("cursor", "Cursor"),
+        selector.Choice("codex", "Codex"),
+        selector.Choice("__manual__", "My AI client is not listed", synthetic=True),
+    ]
+
+
 def _driver(*keys):
     """A scripted key reader, so the interaction is testable without a tty."""
     sequence = iter(keys)
@@ -153,6 +164,33 @@ class TestMultiselect:
 
         assert result == ["claude-code", "cursor", "codex"]
 
+    def test_toggle_all__leaves_the_synthetic_rows_out(self):
+        result = selector.multiselect(
+            "pick",
+            _choices_with_synthetic_rows(),
+            [],
+            read_key=_driver(selector.TOGGLE_ALL, selector.ACCEPT),
+        )
+
+        assert result == ["claude-code", "cursor", "codex"]
+
+    def test_toggle_all_with_a_synthetic_row_ticked__still_takes_every_client(self):
+        """The reported bug: `a` counted ticks, and a mixed set could match.
+
+        `All` plus two of three clients is three ticks against three real rows,
+        which read as "everything is selected already" — so `a` emptied the list
+        instead of filling it, and Enter on an empty list falls back to whatever
+        the cursor sat on. One client, from the keypress that asks for all.
+        """
+        result = selector.multiselect(
+            "pick",
+            _choices_with_synthetic_rows(),
+            ["__all__", "claude-code", "cursor"],
+            read_key=_driver(selector.TOGGLE_ALL, selector.ACCEPT),
+        )
+
+        assert result == ["claude-code", "cursor", "codex"]
+
     def test_cancel__returns_none_not_an_empty_list(self):
         """`None` means "I backed out" — now the only way to pick nothing.
 
@@ -237,7 +275,7 @@ class TestIsSupported:
     def test_is_supported__tty_with_reader__is_true(self, monkeypatch):
         monkeypatch.setattr(selector.sys.stdin, "isatty", lambda: True)
         monkeypatch.setattr(selector.sys.stdout, "isatty", lambda: True)
-        monkeypatch.setattr(selector, "_key_reader", lambda: (lambda: ""))
+        monkeypatch.setattr(selector, "_key_reader", lambda: lambda: "")
 
         assert selector.is_supported() is True
 
@@ -279,6 +317,18 @@ class TestFooter:
     def test_everything_selected__says_all(self):
         selected = {"claude-code", "cursor", "codex"}
         assert "(all)" in selector._footer(_choices(), selected, 0)
+
+    def test_every_client_ticked_beside_synthetic_rows__still_says_all(self):
+        """Counting every row instead meant a list with an `All` row never could.
+
+        Five rows, three of them real: selecting everything `a` selects left the
+        footer reading "3 selected", which is the one state it exists to name.
+        """
+        footer = selector._footer(
+            _choices_with_synthetic_rows(), {"claude-code", "cursor", "codex"}, 0
+        )
+
+        assert "(all)" in footer
 
 
 @pytest.mark.skipif(
@@ -405,6 +455,26 @@ class TestReadKeyPosixUsesTheDescriptor:
     def test_plain_character__needs_only_one_read(self, monkeypatch):
         assert self._run(monkeypatch, [b" "]) == selector.TOGGLE
 
+    def test_split_after_the_bracket__still_completes_the_arrow(self, monkeypatch):
+        """The other place a burst can be cut in half.
+
+        `\x1b` alone was waited on, but `\x1b[` was tokenised on the spot — to
+        nothing — and the `B` that followed arrived alone and meant nothing
+        either, so the arrow key did nothing at all.
+        """
+        result = self._run(monkeypatch, [b"\x1b[", b"B"], pending=True)
+
+        assert result == selector.DOWN
+
+    def test_partial_escape_at_end_of_input__stops_reading(self, monkeypatch):
+        """`select` calls a spent descriptor readable, forever.
+
+        So "there is more pending" stays true after the input is gone, and an
+        empty read is the only thing that can end the wait for a continuation
+        that is never coming.
+        """
+        assert self._run(monkeypatch, [b"\x1b[", b""], pending=True) == ""
+
 
 class TestABurstYieldsEveryToken:
     """A terminal hands over a burst, not a keystroke.
@@ -455,6 +525,50 @@ class TestABurstYieldsEveryToken:
         choices = [selector.Choice(key=str(i), label=f"opt{i}") for i in (1, 2, 3)]
 
         assert selector.choose_one("Pick", choices, read_key=read) == "2"
+
+
+class TestOneReaderPerRun:
+    """Every prompt shares a reader, so a burst outlives the prompt it landed in.
+
+    A terminal hands over whatever has been typed, not one keystroke: a pty
+    harness answering the flow in one go — `1\n` for the deployment, then the
+    next answer — puts the later bytes in the read the first picker makes. Built
+    per prompt, that buffer died with the picker while its bytes were already
+    off the tty queue, and the next question waited for input nothing would send
+    again.
+    """
+
+    def test_the_reader_is_built_once(self):
+        selector._key_reader.cache_clear()
+        try:
+            assert selector._key_reader() is selector._key_reader()
+        finally:
+            selector._key_reader.cache_clear()
+
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="POSIX reader; the msvcrt path holds no buffer to carry over.",
+    )
+    def test_what_one_prompt_did_not_use__answers_the_next(self, monkeypatch):
+        monkeypatch.setattr(selector.sys, "stdin", mock.Mock(fileno=lambda: 99))
+        monkeypatch.setattr(selector, "_has_pending_input", lambda d, **k: False)
+        monkeypatch.setattr("termios.tcgetattr", lambda fd: [])
+        monkeypatch.setattr("termios.tcsetattr", lambda *a, **k: None)
+        monkeypatch.setattr("tty.setcbreak", lambda fd, *a: None)
+        # Both answers arrive in one read, and there is no second one to fall
+        # back on: a reader that dropped the leftovers would block here.
+        pulls = iter([b"1\r2\r"])
+        monkeypatch.setattr(selector.os, "read", lambda fd, n: next(pulls))
+        choices = [selector.Choice(key=str(i), label=f"opt{i}") for i in (1, 2, 3)]
+
+        selector._key_reader.cache_clear()
+        try:
+            first = selector.choose_one("Deployment", choices)
+            second = selector.choose_one("Something else", choices)
+        finally:
+            selector._key_reader.cache_clear()
+
+        assert [first, second] == ["1", "2"]
 
 
 class TestTakeToken:

@@ -513,3 +513,35 @@ class TestResultEventCarriesTheFunnelProperties:
 
         assert event["detected_clients"] == 0
         assert event["clients_written"] == 0
+
+    def test_running_the_command_is_the_consent__so_it_is_always_a_request(self):
+        """Which is what makes this command the control group.
+
+        There is no permission question here — typing it is the permission — so
+        `mcp_decision` cannot vary, and a zero can never be read as a refusal.
+        """
+        event = self._result_event(
+            assistants.Outcome(clients=0, skills=False, mcp_declined=True)
+        )
+
+        assert event["mcp_decision"] == "requested"
+
+    def test_picker_skipped__is_how_a_zero_says_the_user_chose_no_client(self):
+        """The only refusal this command can record, so it has to be recorded.
+
+        `mcp_decision` is pinned to `requested` above, which leaves nothing else
+        to tell a run that wrote nothing because the user picked nothing from
+        one where every write failed.
+        """
+        event = self._result_event(
+            assistants.Outcome(clients=0, skills=False, mcp_declined=True)
+        )
+
+        assert event["picker_skipped"] is True
+
+    def test_clients_registered__is_not_a_skipped_picker(self):
+        event = self._result_event(
+            assistants.Outcome(clients=1, skills=True, registered_clients=("cursor",))
+        )
+
+        assert event["picker_skipped"] is False

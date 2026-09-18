@@ -159,6 +159,25 @@ class TestPackTargets:
 
         assert skills_spy.call_args.args[0] == ["vscode"]
 
+    def test_client_not_listed__the_pack_follows_no_client(
+        self, mcp_spy, skills_spy, rich_view
+    ):
+        """ "None of these is mine" is not an invitation to write to all of them.
+
+        The fallback above is right for "not now" — the clients are still the
+        user's, the server step was just declined. It is wrong for the user who
+        has just said the detected list is not about them: it put the pack in
+        every one of the clients they disowned. Naming none installs the shared
+        copy and links nowhere.
+        """
+        mcp_spy.return_value = mcp_install.InstallReport(
+            registered=(), declined=True, manual=True
+        )
+
+        assistants.setup(_params(), install_mcp=True, skills=PROCEED)
+
+        assert skills_spy.call_args.args[0] == []
+
 
 class TestAsking:
     def test_verdict_ask__prompts(self, mcp_spy, skills_spy, rich_view, confirm):

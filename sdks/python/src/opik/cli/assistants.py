@@ -112,11 +112,21 @@ def setup(
     configured_hosts = list(install.registered)
 
     # Where the pack goes: the clients we just registered, or — when the server
-    # step was declined or skipped — whatever is on this machine. An empty list is
-    # passed through rather than special-cased, because `setup_skills` already
-    # names the clients it could not place the pack in, and it is the part that
-    # knows which locations are supported.
-    skills_targets = configured_hosts or skills_installer.detected_host_keys()
+    # step was declined or skipped — whatever is on this machine.
+    #
+    # Except when the user picked "my AI client is not listed", where falling
+    # back to every detected client would put the pack in the very ones they
+    # just disowned. Naming none installs the shared copy and links nowhere,
+    # which is the half an unlisted client can be pointed at by hand.
+    #
+    # Which clients each list can actually hold the pack is `setup_skills`'
+    # business either way: it names the ones it could not place it in.
+    if configured_hosts:
+        skills_targets = configured_hosts
+    elif install.manual:
+        skills_targets = []
+    else:
+        skills_targets = skills_installer.detected_host_keys()
 
     installed_skills = False
 

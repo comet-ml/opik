@@ -950,3 +950,61 @@ class TestWhichClientsAreReported:
         event = self._result_event(assistants.Outcome(clients=0, skills=False))
 
         assert event["clients_registered"] == ""
+
+
+class TestPickerSkippedSeparatesTheTwoRefusals:
+    """There are two ways to end up writing to nothing, and they are not the same.
+
+    Saying no to "Set up Opik MCP?" never reaches the client picker. Saying yes
+    and then choosing nothing in it is a second, later refusal — and collapsing
+    them into `mcp_decision` hid the step between them, which is the one the
+    funnel exists to measure.
+    """
+
+    @staticmethod
+    def _result_event(outcome):
+        runner = CliRunner()
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(
+                configure_cli, "run_interactive_configure", return_value=outcome
+            ),
+            mock.patch.object(
+                configure_cli.account_identity, "event_properties", return_value={}
+            ),
+            mock.patch.object(configure_cli.analytics, "track_event") as track,
+        ):
+            assert runner.invoke(cli, ["configure", "--use-local"]).exit_code == 0
+        return track.call_args_list[-1].kwargs
+
+    def test_accepted_then_chose_no_client__stays_a_request(self):
+        event = self._result_event(
+            assistants.Outcome(
+                clients=0, skills=False, mcp_decision="requested", mcp_declined=True
+            )
+        )
+
+        assert event["mcp_decision"] == "requested"
+        assert event["picker_skipped"] is True
+
+    def test_refused_the_question__never_reached_the_picker(self):
+        event = self._result_event(
+            assistants.Outcome(clients=0, skills=False, mcp_decision="declined")
+        )
+
+        assert event["mcp_decision"] == "declined"
+        assert event["picker_skipped"] is False
+
+    def test_clients_registered__is_neither_kind_of_refusal(self):
+        event = self._result_event(
+            assistants.Outcome(
+                clients=1,
+                skills=True,
+                mcp_decision="requested",
+                registered_clients=("codex",),
+            )
+        )
+
+        assert event["picker_skipped"] is False

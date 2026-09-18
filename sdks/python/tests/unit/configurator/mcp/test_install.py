@@ -1167,6 +1167,19 @@ class TestClientNotListed:
         assert report.registered == ()
         assert report.declined is True
 
+    def test_not_listed__is_reported_apart_from_a_plain_decline(self, monkeypatch):
+        """Both register nothing, but only one says the detected list is wrong.
+
+        Which matters past the server: the skill pack follows the registered
+        clients and otherwise falls back to every detected one, so without this
+        "none of these is mine" put the pack in all of them.
+        """
+        not_listed, _ = self._run(monkeypatch, [mcp_view.MANUAL_SETUP])
+        skipped, _ = self._run(monkeypatch, [])
+
+        assert not_listed.manual is True
+        assert skipped.manual is False
+
     def test_plain_skip__stays_quiet(self, monkeypatch):
         """Nothing to paste when the user simply said no."""
         _, view = self._run(monkeypatch, [])
