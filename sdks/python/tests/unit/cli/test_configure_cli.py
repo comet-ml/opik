@@ -788,3 +788,79 @@ class TestTheDeploymentQuestionTakesBothInputs:
             result = configure_cli._ask_for_deployment_type()
 
         assert result is configure_cli.interactive_helpers.DeploymentType.CLOUD
+
+
+class TestTheJourneyIsReported:
+    """Where the run got to, not only how it ended.
+
+    The click command is the only frame that can report — `analytics` drops any
+    event raised inside a frame that already reported one — so the flow cannot
+    emit as it goes. `Progress` carries the milestones up instead, and survives
+    the exception, which is what lets a failure say which question it died at.
+    """
+
+    @staticmethod
+    def _events(*, raises=None, use_local=True):
+        runner = CliRunner()
+        outcome = assistants.Outcome(clients=1, skills=True)
+
+        def fake_run(*a, progress=None, **k):
+            if progress is not None:
+                progress.stage = configure_cli.Progress.CREDENTIALS
+                progress.deployment = "cloud"
+            if raises is not None:
+                raise raises
+            if progress is not None:
+                progress.stage = configure_cli.Progress.DONE
+            return outcome
+
+        with (
+            mock.patch.object(
+                configure_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            mock.patch.object(
+                configure_cli, "run_interactive_configure", side_effect=fake_run
+            ),
+            mock.patch.object(
+                configure_cli.account_identity, "event_properties", return_value={}
+            ),
+            mock.patch.object(configure_cli.analytics, "track_event") as track,
+        ):
+            runner.invoke(cli, ["configure", "--use-local"])
+        return track.call_args_list
+
+    def test_result__carries_the_deployment_and_the_final_stage(self):
+        event = self._events()[-1].kwargs
+
+        assert event["deployment"] == "cloud"
+        assert event["stage"] == "done"
+
+    def test_failure__says_which_stage_it_died_at(self):
+        calls = self._events(raises=ConnectionError("boom"))
+
+        assert calls[-1].args == ("configuration", "configure", "failed")
+        assert calls[-1].kwargs["stage"] == "credentials"
+        assert calls[-1].kwargs["deployment"] == "cloud"
+
+    def test_use_local__records_the_deployment_without_asking(self):
+        """`--use_local` answers the question, so it is never put to the user."""
+        progress = configure_cli.Progress()
+        with (
+            mock.patch.object(configure_cli.opik_configure, "OpikConfigurator"),
+            mock.patch.object(configure_cli, "_deployment_type") as asked,
+        ):
+            configure_cli.run_interactive_configure(use_local=True, progress=progress)
+
+        assert not asked.called
+        assert progress.deployment == "local"
+        assert progress.stage == configure_cli.Progress.DONE
+
+    def test_stages_are_ordered_for_a_funnel(self):
+        stages = [
+            configure_cli.Progress.DEPLOYMENT,
+            configure_cli.Progress.CREDENTIALS,
+            configure_cli.Progress.ASSISTANTS,
+            configure_cli.Progress.DONE,
+        ]
+
+        assert stages == ["deployment", "credentials", "assistants", "done"]

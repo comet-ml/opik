@@ -231,11 +231,33 @@ def _deployment_type() -> interactive_helpers.DeploymentType:
     )
 
 
+class Progress:
+    """Milestones carried back to the click command, which reports them.
+
+    The command is the only frame that *can*: ``analytics`` drops any event
+    raised inside a frame that has already reported one, so the flow cannot emit
+    as it goes — a nested ``track_event`` never reaches the worker. Mutated in
+    place rather than returned, because the value of it is on the path where
+    there is no return: an exception leaves the last stage reached behind.
+    """
+
+    #: How far the run got. Ordered, so the funnel reads as a sequence.
+    DEPLOYMENT = "deployment"
+    CREDENTIALS = "credentials"
+    ASSISTANTS = "assistants"
+    DONE = "done"
+
+    def __init__(self) -> None:
+        self.stage = self.DEPLOYMENT
+        self.deployment: Optional[str] = None
+
+
 def run_interactive_configure(
     use_local: bool = False,
     automatic_approvals: bool = False,
     install_mcp: Optional[bool] = None,
     install_skills: Optional[bool] = None,
+    progress: Optional[Progress] = None,
 ) -> assistants.Outcome:
     """Programmatic entry to the interactive ``opik configure`` flow.
 
@@ -247,12 +269,21 @@ def run_interactive_configure(
     discards its return value, hence the recorder rather than a plain return.
     """
     recorded = assistants.NOTHING_DONE
+    # A throwaway when the caller did not supply one, so the milestones are
+    # recorded the same way whether or not anybody is reading them.
+    progress = progress if progress is not None else Progress()
 
     def record(*args: Any) -> None:
         nonlocal recorded
+        # Reached only once the credentials are written, so this is also what
+        # says the run got past them.
+        progress.stage = Progress.ASSISTANTS
         recorded = _setup_assistants(*args)
 
     if use_local:
+        # `--use_local` answers the deployment question, so it is never asked.
+        progress.deployment = interactive_helpers.DeploymentType.LOCAL.name.lower()
+        progress.stage = Progress.CREDENTIALS
         # The configurator class rather than the `configure()` helper: the skills
         # flag and the renderer are CLI-internal wiring, not part of the public
         # library signature.
@@ -264,9 +295,12 @@ def run_interactive_configure(
             install_skills=install_skills,
             assistant_setup=record,
         ).configure()
+        progress.stage = Progress.DONE
         return recorded
 
     deployment_type_choice = _deployment_type()
+    progress.deployment = deployment_type_choice.name.lower()
+    progress.stage = Progress.CREDENTIALS
 
     if deployment_type_choice == interactive_helpers.DeploymentType.CLOUD:
         configurator = opik_configure.OpikConfigurator(
@@ -303,6 +337,7 @@ def run_interactive_configure(
         raise click.ClickException("Unknown deployment type was selected. Exiting.")
 
     configurator.configure()
+    progress.stage = Progress.DONE
 
     return recorded
 
@@ -397,12 +432,14 @@ def configure(
     # Demanding `-y` to say "yes, the defaults" was a step that existed only to be
     # discovered — and the error teaching it was the step an agent was most likely
     # to stop at.
+    progress = Progress()
     try:
         outcome = run_interactive_configure(
             use_local=use_local,
             automatic_approvals=automatic_approvals,
             install_mcp=install_mcp,
             install_skills=install_skills,
+            progress=progress,
         )
     except BaseException as exception:
         # One in five runs used to end here and report nothing at all, so the
@@ -416,6 +453,11 @@ def configure(
             interactive=interactive,
             automatic_approvals=automatic_approvals,
             error_type=type(exception).__name__,
+            # Which question it died at. `error_type` alone says a run ended, not
+            # whether the user walked away from the deployment picker, the API
+            # key, or the AI client step — three very different problems.
+            stage=progress.stage,
+            deployment=progress.deployment,
             **account_identity.event_properties(),
         )
         raise
@@ -440,6 +482,11 @@ def configure(
         # Carried onto the result too: the entry event has it, and a funnel whose
         # steps filter on different things is not measuring one population.
         interactive=interactive,
+        # The first thing the interactive flow asks, and it was invisible: the
+        # funnel could not tell a cloud run from a local one except by guessing
+        # from an identity property resolved afterwards.
+        deployment=progress.deployment,
+        stage=progress.stage,
         # Resolved again rather than reused from the entry event: this is the run
         # that just wrote ~/.opik.config, so it is the first point at which a
         # first-ever configure has an account to name at all.
