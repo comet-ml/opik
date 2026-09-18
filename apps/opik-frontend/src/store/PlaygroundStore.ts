@@ -5,6 +5,7 @@ import mapValues from "lodash/mapValues";
 
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
 import { restoreMissingConfigKeys } from "@/lib/playground";
+import { buildExperimentName } from "@/lib/experiments";
 import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
 import { DATASET_TYPE } from "@/types/datasets";
@@ -114,7 +115,8 @@ export type PlaygroundStore = {
   progressTotal: number;
   progressCompleted: number;
   progressPhase: "running" | "evaluating" | null;
-  experimentNamePrefix: string | null;
+  experimentName: string | null;
+  lastSuggestedExperimentName: string | null;
   datasetType: DATASET_TYPE | null;
   experimentByPromptId: Record<string, string>;
   scoresByDatasetId: Record<string, string[] | null>;
@@ -150,7 +152,8 @@ export type PlaygroundStore = {
   setPromptRunning: (promptId: string, running: boolean) => void;
   setAllRunning: (running: boolean) => void;
   clearRunningMap: () => void;
-  setExperimentNamePrefix: (prefix: string | null) => void;
+  setExperimentName: (name: string | null) => void;
+  setSuggestedExperimentName: (name: string) => void;
   setDatasetFilters: (filters: Filters) => void;
   setDatasetPage: (page: number) => void;
   setDatasetSize: (size: number) => void;
@@ -184,7 +187,8 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       progressTotal: 0,
       progressCompleted: 0,
       progressPhase: null,
-      experimentNamePrefix: null,
+      experimentName: null,
+      lastSuggestedExperimentName: null,
       datasetType: null,
       experimentByPromptId: {},
       scoresByDatasetId: {},
@@ -372,8 +376,19 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       clearRunningMap: () => {
         set((state) => ({ ...state, isRunningMap: {} }));
       },
-      setExperimentNamePrefix: (prefix) => {
-        set((state) => ({ ...state, experimentNamePrefix: prefix }));
+      setExperimentName: (name) => {
+        set((state) => ({
+          ...state,
+          experimentName: name,
+          lastSuggestedExperimentName: null,
+        }));
+      },
+      setSuggestedExperimentName: (name) => {
+        set((state) => ({
+          ...state,
+          experimentName: name,
+          lastSuggestedExperimentName: name,
+        }));
       },
       setDatasetFilters: (filters) => {
         set((state) => {
@@ -647,11 +662,17 @@ export const useSetAllRunning = () =>
 export const useClearRunningMap = () =>
   usePlaygroundStore((state) => state.clearRunningMap);
 
-export const useExperimentNamePrefix = () =>
-  usePlaygroundStore((state) => state.experimentNamePrefix);
+export const useExperimentName = () =>
+  usePlaygroundStore((state) => state.experimentName);
 
-export const useSetExperimentNamePrefix = () =>
-  usePlaygroundStore((state) => state.setExperimentNamePrefix);
+export const useSetExperimentName = () =>
+  usePlaygroundStore((state) => state.setExperimentName);
+
+export const useLastSuggestedExperimentName = () =>
+  usePlaygroundStore((state) => state.lastSuggestedExperimentName);
+
+export const useSetSuggestedExperimentName = () =>
+  usePlaygroundStore((state) => state.setSuggestedExperimentName);
 
 export const useDatasetFilters = () =>
   usePlaygroundStore((state) => state.datasetFilters);
@@ -718,5 +739,12 @@ export const useScoresByDatasetId = () =>
 
 export const useSetScoresForDataset = () =>
   usePlaygroundStore((state) => state.setScoresForDataset);
+
+export const getExperimentNameForPrompt = (promptId: string) => {
+  const { experimentName, promptIds } = usePlaygroundStore.getState();
+  if (!experimentName) return undefined;
+
+  return buildExperimentName(experimentName, promptIds.indexOf(promptId));
+};
 
 export default usePlaygroundStore;

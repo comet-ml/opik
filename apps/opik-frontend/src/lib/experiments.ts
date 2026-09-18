@@ -6,6 +6,28 @@ import {
   TestSuiteExperiment,
 } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
+import { getAlphabetLetter } from "@/lib/utils";
+
+const RUN_SUFFIX_RE = /_(\d+)$/;
+
+export const buildExperimentName = (name: string, promptIndex: number) =>
+  `${name.trim()}_${getAlphabetLetter(promptIndex).toLowerCase()}`;
+
+export const suggestNextExperimentName = (
+  name: string,
+  lastSuggested: string | null,
+) => {
+  const trimmed = name.trim();
+  const match =
+    lastSuggested && trimmed === lastSuggested.trim()
+      ? trimmed.match(RUN_SUFFIX_RE)
+      : null;
+
+  if (!match) return `${trimmed}_02`;
+
+  const next = String(Number(match[1]) + 1).padStart(match[1].length, "0");
+  return trimmed.replace(RUN_SUFFIX_RE, `_${next}`);
+};
 
 /**
  * Human-readable label for a prompt version linked to an experiment: the
