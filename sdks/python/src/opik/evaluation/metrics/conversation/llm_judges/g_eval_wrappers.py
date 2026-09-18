@@ -119,8 +119,8 @@ class GEvalConversationMetric(ConversationThreadMetric):
             ScoreResult: Normalised output from the wrapped judge. If no assistant
             message carries text, the result is marked as failed with ``value=0.0``.
         """
-        last_assistant = _latest_assistant_text(conversation)
-        if not last_assistant:
+        last_assistant_text = _latest_assistant_text(conversation)
+        if not last_assistant_text:
             return score_result.ScoreResult(
                 name=self.name,
                 value=0.0,
@@ -129,7 +129,7 @@ class GEvalConversationMetric(ConversationThreadMetric):
             )
 
         try:
-            raw_result = self._judge.score(output=last_assistant)
+            raw_result = self._judge.score(output=last_assistant_text)
         except exceptions.MetricComputationError as error:
             reason = str(error)
         except Exception as error:

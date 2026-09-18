@@ -156,3 +156,4 @@ def test_geval_conversation_metric_non_string_content_marks_failed_without_raisi
 
     assert result.scoring_failed is True
     assert result.value == 0.0
+    assert result.reason == "Conversation contains no assistant messages to evaluate."
