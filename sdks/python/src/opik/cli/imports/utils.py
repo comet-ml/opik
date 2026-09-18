@@ -508,6 +508,26 @@ _EXPERIMENT_IMPORT_FIELDS = [
 _TRACE_SOURCE_ID_FIELD = "id"
 
 
+def as_metadata_object(metadata: Optional[Any]) -> Optional[Dict[str, Any]]:
+    """Resolve exported metadata to an object, nesting it when it is not one.
+
+    Metadata is an arbitrary JSON value on the wire, not necessarily an object:
+    a client writing through the REST API can store an array or a scalar there.
+    Everything downstream needs a mapping — the _import_* keys need somewhere to
+    live, and the SDK merges a span's usage into its metadata by unpacking it,
+    which raises on anything else — so those values are carried under
+    ``_import_metadata``.
+
+    Resolving unconditionally is deliberate: doing it only where a mapping is
+    strictly required would make an exported value's shape depend on whether its
+    span happens to carry usage, and would leave the raw value one new caller
+    away from the same failure.
+    """
+    if metadata is None or isinstance(metadata, dict):
+        return metadata
+    return {"_import_metadata": metadata}
+
+
 def build_import_metadata(
     source: Dict[str, Any],
     fields: List[str],
@@ -517,17 +537,10 @@ def build_import_metadata(
 
     Only fields with non-None values are added. If there is nothing to add and
     existing_metadata is None, returns None so callers that had no metadata
-    continue to send no metadata.
-
-    Metadata is an arbitrary JSON value on the wire, not necessarily an object:
-    a client writing through the REST API can store an array or a scalar there.
-    Those are carried under ``_import_metadata`` so the result is always an
-    object, because everything downstream needs one — the _import_* keys need
-    somewhere to live, and the SDK merges a span's usage into its metadata by
-    unpacking it, which raises on anything that is not a mapping.
+    continue to send no metadata. Non-object metadata is resolved by
+    :func:`as_metadata_object`.
     """
-    if existing_metadata is not None and not isinstance(existing_metadata, dict):
-        existing_metadata = {"_import_metadata": existing_metadata}
+    existing_metadata = as_metadata_object(existing_metadata)
     import_fields = {
         f"_import_{field}": source[field]
         for field in fields
