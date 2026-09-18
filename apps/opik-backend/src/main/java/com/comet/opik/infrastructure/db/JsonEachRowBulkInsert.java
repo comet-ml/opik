@@ -212,6 +212,9 @@ public class JsonEachRowBulkInsert {
                 writer.newLine();
             }
             generator.close();
+            // Explicit because FLUSH_PASSED_TO_STREAM is off: nothing above this line pushes the
+            // writer into payload, so without it the buffer's completeness rests on close() alone.
+            writer.flush();
         }
         return payload;
     }
