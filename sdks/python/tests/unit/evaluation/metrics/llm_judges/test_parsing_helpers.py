@@ -66,5 +66,5 @@ class TestReasonToText:
     def test_non_string_items_in_list__stringified(self):
         assert parsing_helpers.reason_to_text([1, None]) == "1\nNone"
 
-    def test_empty_list__empty_text(self):
-        assert parsing_helpers.reason_to_text([]) == ""
+    def test_empty_list__uses_the_same_label_as_structured_output_compliance(self):
+        assert parsing_helpers.reason_to_text([]) == "No reason provided"

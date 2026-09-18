@@ -50,3 +50,11 @@ def test_a_non_string_reason_is_still_rendered_as_text():
     )
 
     assert result.reason == "one prose reason"
+
+
+def test_an_empty_reason_list_is_not_uploaded_blank():
+    result = parser.parse_model_output(
+        content='{"score": 0.4, "reason": []}', name="m"
+    )
+
+    assert result.reason == "No reason provided"

@@ -19,10 +19,13 @@ def reason_to_text(value: Any) -> str:
 
     ``Hallucination`` and ``SycEval`` declare ``reason: List[str]``, so a
     schema-compliant verdict arrives as a list; ``str()`` on it yields a Python
-    literal that is uploaded and displayed verbatim. Lists are joined the way
-    ``StructuredOutputCompliance`` already joins its list reason.
+    literal that is uploaded and displayed verbatim. Lists are joined, and an
+    empty list is labelled, the way ``StructuredOutputCompliance`` already does
+    both for the same shape.
     """
     if isinstance(value, list):
+        if not value:
+            return "No reason provided"
         return "\n".join(str(item) for item in value)
 
     return str(value)
