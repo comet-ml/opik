@@ -1,5 +1,7 @@
+import asyncio
 import contextlib
 import dataclasses
+import inspect
 import datetime
 import decimal
 import enum
@@ -9,10 +11,12 @@ import threading
 import uuid
 import zlib
 
+import httpx
 import pydantic
 import pytest
 
-from opik import config
+from opik import httpx_client
+from opik.api_objects import constants
 from opik.api_objects.dataset import streaming_writer
 from opik.rest_api.types.dataset_item_write import DatasetItemWrite
 from opik.rest_api.core.jsonable_encoder import jsonable_encoder
@@ -42,17 +46,41 @@ def tiny_batch_bytes(monkeypatch):
     `BoundedSendPool` reads it once in `__init__`, so this must be applied before the
     pool is built. Same branches, ~500x less memory.
     """
-    monkeypatch.setattr(config, "MAX_BATCH_SIZE_MB", 0.01)
-    return int(config.MAX_BATCH_SIZE_MB * 1024 * 1024)
+    monkeypatch.setattr(constants, "DATASET_ITEMS_MAX_BATCH_SIZE_MB", 0.01)
+    return int(constants.DATASET_ITEMS_MAX_BATCH_SIZE_MB * 1024 * 1024)
 
 
 @pytest.fixture
 def make_pool():
-    """A closed-on-teardown pool. A failed assertion must not leak parked workers."""
+    """A closed-on-teardown pool. A failed assertion must not leak parked workers.
+
+    `send` is given as an ordinary function and wrapped into the coroutine the pool
+    wants, so a test still writes `send=sent.append`. The default `inline_send` refuses:
+    most tests here ask for more than one body and more than one worker, and a pool that
+    quietly sent inline would satisfy their assertions anyway -- a test on the inline
+    path passes its own.
+    """
     pools = []
 
     def build(**kwargs) -> streaming_writer.BoundedSendPool:
-        pool = streaming_writer.BoundedSendPool(**kwargs)
+        send = kwargs.pop("send")
+
+        if inspect.iscoroutinefunction(send):
+            # A test that has to hold a send without stalling the loop writes its own
+            # coroutine: a blocking wait inside the wrapper below would freeze the single
+            # loop thread and stop every other send it is measuring.
+            async_send = send
+        else:
+
+            async def async_send(body: bytes, client) -> None:
+                send(body)
+
+        # Inline sends go to the same collector by default, so a test asking "was this
+        # body sent" holds however the pool chose to send it. Which path was taken is a
+        # separate question, pinned by the lazy-start tests below.
+        kwargs.setdefault("inline_send", send)
+        kwargs.setdefault("transport", httpx.Client())
+        pool = streaming_writer.BoundedSendPool(send=async_send, **kwargs)
         pools.append(pool)
         return pool
 
@@ -320,64 +348,176 @@ def test_pool__worker_error__is_reraised_to_the_producer(make_pool):
         pool.close()
 
 
-def _executor_threads(pool) -> int:
-    """How many threads the executor has actually started.
-
-    `ThreadPoolExecutor._threads` is a stdlib internal, and the only observer of the
-    property under test: nothing downstream distinguishes three workers from sixty-four,
-    which is why starting them eagerly went unnoticed before.
-    """
-    return len(pool._pool._threads)
-
-
-def test_pool__workers_follow_the_upload_not_the_ceiling(make_pool):
-    """`num_threads` is a ceiling. A three-body upload must not start sixty-four threads."""
+def test_pool__single_worker__sends_inline_and_starts_nothing(make_pool):
+    """One worker is what a backend too old for parallel insert needs, and asyncio would
+    buy it nothing: no loop, no thread, no second client, no compression pool."""
     sent = []
-    pool = make_pool(send=sent.append, num_threads=64, gzip_level=None)
 
-    assert _executor_threads(pool) == 0, "No worker before there is a body to send"
+    async def never(body: bytes, client) -> None:
+        raise AssertionError("a single worker must not reach the async path")
 
-    for index in range(3):
-        _submit(pool, [f"body-{index}".encode()])
+    pool = make_pool(
+        send=never, num_threads=1, gzip_level=None, inline_send=sent.append
+    )
+    _submit(pool, [b"body"])
     pool.close()
 
-    # Asserted together on purpose: a pool that started no threads because it sent
-    # nothing would satisfy the worker count on its own.
-    assert sorted(sent) == [b"body-0", b"body-1", b"body-2"], (
-        "Every body must still have been sent, exactly once"
-    )
-    assert _executor_threads(pool) <= 3, "Started a thread with no body for it"
+    assert sent == [b"body"]
+    assert pool._running is None, "a single worker started an event loop"
 
 
-def test_pool__sustained_load__grows_to_the_ceiling_and_no_further(make_pool):
-    """Growing lazily must not cost concurrency when the upload actually needs it."""
-    release = threading.Event()
-    started = threading.Semaphore(0)
+def test_pool__one_body__sends_inline_and_starts_nothing(make_pool):
+    """An upload that fits in one request must not cost a loop, a thread, a client or a
+    compression pool either, whatever the worker count. `insert` defaults to eight, so
+    this is the path a caller adding a handful of items at a time actually takes."""
     sent = []
 
-    def blocked_send(body: bytes) -> None:
-        sent.append(body)
+    async def never(body: bytes, client) -> None:
+        raise AssertionError("a one-request upload must not reach the async path")
+
+    pool = make_pool(
+        send=never, num_threads=8, gzip_level=None, inline_send=sent.append
+    )
+    _submit(pool, [b"body"])
+    pool.close()
+
+    assert sent == [b"body"]
+    assert pool._running is None, (
+        "a one-request upload started an event loop, a thread and a second client"
+    )
+
+
+def test_pool__close_after_a_failure__still_tears_everything_down(make_pool):
+    """A failure must not cost the teardown: each insert opens a loop, a thread, a client
+    and a compression pool, so a caller inserting in a loop leaks a set of them per
+    failure."""
+
+    async def failing(body: bytes, client) -> None:
+        raise ValueError("rejected")
+
+    pool = make_pool(send=failing, num_threads=2, gzip_level=None)
+    _submit(pool, [b"first"])
+    _submit(pool, [b"second"])
+
+    with pytest.raises(ValueError):
+        pool.close()
+
+    running = pool._running
+    assert running is not None, "the pool never started, so this proves nothing"
+    assert running.loop.is_closed(), "the event loop was left running"
+    assert not running.thread.is_alive(), "the loop's thread was left behind"
+    assert running.client.is_closed, "the async client was never closed"
+    assert running.compressors._shutdown, "the compression pool was left running"
+
+
+def test_pool__transport_cannot_serve_async__uploads_sequentially_not_around_it(
+    make_pool, monkeypatch
+):
+    """A transport an async client cannot use may be the only thing enforcing a proxy,
+    an allow-list or mTLS. The pool must fall back to the sync client rather than build a
+    default async transport and send around it -- a bypass that would *succeed*, which is
+    the one failure mode nobody notices.
+    """
+    refused = []
+
+    def refuse(client, max_connections):
+        refused.append(max_connections)
+        raise httpx_client.AsyncTransportUnavailable("sync-only transport")
+
+    monkeypatch.setattr(httpx_client, "async_twin", refuse)
+
+    inline = []
+    concurrent = []
+
+    async def never(body: bytes, client) -> None:
+        concurrent.append(body)
+
+    pool = make_pool(
+        send=never, num_threads=4, gzip_level=None, inline_send=inline.append
+    )
+    _submit(pool, [b"one"])
+    _submit(pool, [b"two"])
+    _submit(pool, [b"three"])
+    pool.close()
+
+    assert refused, "The pool must at least try to build the async client"
+    assert concurrent == [], "Nothing may be sent around the caller's transport"
+    assert inline == [b"one", b"two", b"three"], (
+        "Every body, the held one included, must go over the sync client in order"
+    )
+
+
+def test_pool__compression_runs_off_the_event_loop(make_pool):
+    """gzip is CPU work. On the loop thread it would serialise every send sharing that
+    loop, which is the one thing this pool exists to avoid -- so it belongs in the
+    compression pool, and this pins which thread actually does it."""
+    loop_thread = []
+    compress_threads = []
+
+    async def record(body: bytes, client) -> None:
+        loop_thread.append(threading.current_thread().name)
+
+    pool = make_pool(send=record, num_threads=2, gzip_level=6)
+    original = streaming_writer.BoundedSendPool._compress
+
+    def spy(self, chunks):
+        compress_threads.append(threading.current_thread().name)
+        return original(self, chunks)
+
+    pool._compress = spy.__get__(pool)
+    _submit(pool, [b'{"items":[', b"]}"])
+    _submit(pool, [b'{"items":[', b"]}"])
+    pool.close()
+
+    assert compress_threads, "nothing was compressed"
+    assert all(name.startswith("opik-dataset-compress") for name in compress_threads), (
+        f"compression ran outside its pool: {compress_threads}"
+    )
+    assert not set(compress_threads) & set(loop_thread), (
+        "compression ran on the thread the sends share"
+    )
+
+
+def test_pool__sustained_load__holds_the_bound_and_no_further(make_pool):
+    """`num_threads * 2` sends may be in flight, and that many bodies outstanding.
+
+    `num_threads` is not a thread count any more -- every send runs on one event loop --
+    so the bound is the only part of it a caller can observe, and the part memory
+    depends on.
+    """
+    release = threading.Event()
+    started = threading.Semaphore(0)
+    accepted = threading.Semaphore(0)
+
+    async def blocked_send(body: bytes, client) -> None:
         started.release()
-        release.wait(5)
+        while not release.is_set():
+            await asyncio.sleep(0.01)
 
     pool = make_pool(send=blocked_send, num_threads=8, gzip_level=None)
+
+    def produce() -> None:
+        for index in range(24):
+            _submit(pool, [f"body-{index}".encode()])
+            accepted.release()
+
+    producer = threading.Thread(target=produce, daemon=True)
+    producer.start()
     try:
-        for expected in range(1, 9):
-            _submit(pool, [b"body"])
-            # Wait for the body to be picked up, so the next submit sees no idle worker.
-            assert started.acquire(timeout=5), "the body was never picked up"
-            assert _executor_threads(pool) == expected, (
-                "A body with every worker busy should have grown the pool"
-            )
+        for _ in range(16):
+            assert started.acquire(timeout=5), "a send never started"
+        assert not started.acquire(timeout=0.5), (
+            "more than num_threads * 2 sends were in flight at once"
+        )
 
-        _submit(pool, [b"body"])
-        assert _executor_threads(pool) == 8, "num_threads is a ceiling and must hold"
-
-        release.set()
-        pool.close()
-        assert len(sent) == 9, "Every body must still have been sent"
+        for _ in range(16):
+            assert accepted.acquire(timeout=5), "the producer blocked before the bound"
+        assert not accepted.acquire(timeout=0.5), (
+            "the producer ran past num_threads * 2 outstanding bodies"
+        )
     finally:
         release.set()
+        producer.join(5)
 
 
 def test_pool__saturated__submit_blocks_until_a_body_lands(make_pool):

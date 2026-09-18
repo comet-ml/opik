@@ -45,7 +45,7 @@ def test_get_test_suites__insert_duplicates_existing_item__duplicate_not_submitt
     # The capture goes where the Dataset looks for its transport, so the suite the factory
     # builds resolves it the way it would in production -- no reaching into the object
     # afterwards.
-    mock_rest_client._client_wrapper.httpx_client.httpx_client = capture
+    mock_rest_client._client_wrapper.httpx_client.httpx_client = capture.client
     mock_rest_client._client_wrapper.get_base_url.return_value = capture.base_url
 
     suites = rest_operations.get_test_suites(

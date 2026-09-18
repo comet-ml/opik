@@ -846,13 +846,54 @@ class Dataset(DatasetExportOperations):
             retry_decorator.opik_rest_retry(send)
         )
 
+    async def _send_prepared_body_async(
+        self, body: bytes, async_client: httpx.AsyncClient
+    ) -> None:
+        """Send one already-serialised request body over the upload pool's client.
+
+        The same request as `_send_prepared_body`, under the same retry and rate-limit
+        policy; only the client differs, and a sync client cannot be awaited.
+        """
+        _, base_url = self._upload_transport()
+        headers = httpx_client.wrapper_headers(self._rest_client)
+
+        async def send() -> None:
+            response = await httpx_client.send_prepared_json_async(
+                async_client,
+                base_url,
+                "v1/private/datasets/items",
+                body,
+                headers=headers,
+            )
+            if response.status_code >= 300:
+                raise ApiError(
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    body=response.text,
+                )
+
+        # Tenacity dispatches to its async form for a coroutine function, so the sync and
+        # async paths retry on the same configuration. The attempt state is not shared:
+        # each decoration builds its own Retrying, so these counts are per send.
+        await rest_helpers.ensure_rest_api_call_respecting_rate_limit_async(
+            retry_decorator.opik_rest_retry(send)
+        )
+
     def _open_send_pool(
         self, num_threads: int, gzip_level: Optional[int]
     ) -> streaming_writer.BoundedSendPool:
-        """Upload sink for one insert. Split out so the worker count is observable."""
-        return streaming_writer.BoundedSendPool(
-            send=self._send_prepared_body,
+        """Upload sink for one insert. Split out so the worker count is observable.
+
+        Both senders go in: the pool sends concurrently over an async client it builds
+        from the sync one, and inline through the sync one when there is a single worker
+        or when the whole upload turns out to be one body.
+        """
+        sync_client, _ = self._upload_transport()
+        return streaming_writer.build_send_pool(
+            send=self._send_prepared_body_async,
+            inline_send=self._send_prepared_body,
             num_threads=num_threads,
+            transport=sync_client,
             gzip_level=gzip_level,
         )
 
@@ -940,6 +981,9 @@ class Dataset(DatasetExportOperations):
         if num_threads > 1 and not self._parallel_insert_supported:
             num_threads = 1
 
+        # Clamped rather than rejected, so a caller who asked for more still uploads.
+        num_threads = min(num_threads, constants.DATASET_ITEMS_WRITE_MAX_THREADS)
+
         if deduplication:
             # Lazy-sync against the backend the first time we insert into a dataset that
             # was fetched from it, so content-hash dedup still works without paying an
@@ -973,27 +1017,36 @@ class Dataset(DatasetExportOperations):
                     else None
                 ),
             )
-            writer = streaming_writer.build_batch_writer(
-                dataset_name=self._name,
-                project_name=self._project_name,
-                batch_group_id=batch_group_id,
-                flush_callback=pool.submit,
-            )
-
+            # The writer is built inside the try too: from its first send the pool owns a
+            # loop, a thread, a client and a compression pool, and this `except` closes them.
             try:
+                writer = streaming_writer.build_batch_writer(
+                    dataset_name=self._name,
+                    project_name=self._project_name,
+                    batch_group_id=batch_group_id,
+                    flush_callback=pool.submit,
+                )
+
                 for item in self._deduplicating(items, deduplication):
                     writer.add(self._item_payload(item))
                 writer.flush()
             except BaseException:
-                # Still close and join the pool, but let the producer's exception stand:
-                # a body that failed earlier would otherwise replace the error that
-                # explains why the upload stopped here.
+                # Every item this pass consumed was hashed into `_hashes` as it was
+                # yielded, but the ones still in the writer's buffer -- and the body
+                # `abort` is about to drop -- were never sent. Left cached they would
+                # deduplicate away a later insert of items the backend never received,
+                # so the cache stops describing the backend and has to be rebuilt from
+                # it before the next deduplicated insert.
+                self._hashes_synced = False
+                # Abort rather than close: a body still held back must not be sent while
+                # this unwinds. The pool is still joined, and the producer's exception
+                # stands -- a body that failed earlier would otherwise replace the error
+                # that explains why the upload stopped here.
                 try:
-                    pool.close()
+                    pool.abort()
                 except KeyboardInterrupt:
                     # The user, not a failed body: CPython delivers it to this thread,
-                    # which is sitting in `close` joining workers, so swallowing it would
-                    # drop the signal mid-join.
+                    # so swallowing it would drop the signal mid-teardown.
                     raise
                 except (Exception, SystemExit):
                     # `SystemExit` named explicitly because it is not an `Exception`. Out
@@ -1041,20 +1094,28 @@ class Dataset(DatasetExportOperations):
                 without any duplicate checking, which is significantly faster
                 on large datasets. The next insert that does deduplicate has to
                 re-read the dataset's items to account for what was skipped.
-            num_threads: Number of worker threads used to upload the item
-                batches. Must be a positive integer, defaults to ``8``; pass
-                ``1`` to upload sequentially, or a higher number to push a
-                large upload harder, up to ``32`` -- beyond that it is clamped
-                rather than rejected, as on the read path. It also sizes how
-                much the upload holds: request bodies are queued uncompressed,
-                up to ``2 * num_threads`` of them at ``MAX_BATCH_SIZE_MB``
-                each -- about 80 MB at the default ``8``, and about 320 MB at
-                ``32``. Raise it for throughput, lower it where memory is
-                tight. All batches land in a single dataset version. If a batch
-                fails the call raises, and the batches that already succeeded
-                stay persisted; above ``1`` the bodies already queued are
-                drained and awaited first, so they land too and the exception
-                surfaces after them. Older Opik
+            num_threads: Sizes how many request bodies may be in flight at
+                once, which is ``num_threads * 2`` -- so the same value puts
+                twice as many requests on the backend as releases before
+                0.2.x. The requests themselves run as coroutines on one
+                background event loop rather than a thread each; only
+                compression still uses a small pool of threads, because it is
+                CPU work that would otherwise block that loop. Must be a
+                positive integer, defaults to ``8``; pass ``1`` to upload
+                sequentially, or a higher number to push a large upload
+                harder, up to ``32`` -- beyond that it is clamped rather than
+                rejected, as on the read path. It also sizes how much the
+                upload holds: bodies are queued uncompressed, up to
+                ``2 * num_threads`` of them at ``MAX_BATCH_SIZE_MB`` each --
+                about 80 MB at the default ``8``, and about 320 MB at ``32``
+                -- and the upload client's connection pool. Raise it for
+                throughput, lower it where memory is tight. An upload that
+                fits in a single request sends it inline and starts no loop,
+                whatever this is set to. All batches land in a single dataset
+                version. If a batch fails the call raises, and the batches
+                that already succeeded stay persisted; above ``1`` the bodies
+                already queued are drained and awaited first, so they land too
+                and the exception surfaces after them. Older Opik
                 backends do not support parallel upload and fall back to a
                 sequential one.
 

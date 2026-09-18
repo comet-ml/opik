@@ -7,19 +7,20 @@ still say `capture.items[0]["data"]` -- while checking what actually goes on the
 """
 
 import gzip
+import inspect
 import json
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-
-class _Response:
-    def __init__(self, status_code: int, body: str = "") -> None:
-        self.status_code = status_code
-        self.headers: Dict[str, str] = {}
-        self.text = body
+import httpx
 
 
 class UploadCapture:
-    """Stands in for the SDK's httpx client and records every prepared body."""
+    """Stands in for the SDK's httpx client and records every prepared body.
+
+    A real client over `httpx.MockTransport` rather than a stub with a `request` method:
+    the upload sends over an async twin of the client it is given, and only a transport
+    that serves both paths sees what either of them sent.
+    """
 
     base_url = "http://testserver/api/"
 
@@ -28,32 +29,45 @@ class UploadCapture:
         status_code: int = 204,
         responses: Optional[List[int]] = None,
         response_headers: Optional[Dict[str, str]] = None,
-        on_request: Optional[Callable[[], None]] = None,
+        on_request: Optional[Callable[[], Optional[Awaitable[None]]]] = None,
     ) -> None:
         self.bodies: List[bytes] = []
         self.urls: List[str] = []
-        self.request_headers: List[Dict[str, str]] = []
+        self.request_headers: List[httpx.Headers] = []
         self._status_code = status_code
         # Consumed in order when given, so a test can script a 429 followed by a success.
         self._responses = list(responses) if responses is not None else None
         self._response_headers = response_headers or {}
         # Runs inside the request, so a test can observe or hold uploads in flight.
         self._on_request = on_request
+        self.client = httpx.Client(
+            transport=httpx.MockTransport(self.handle), base_url=self.base_url
+        )
 
-    def request(self, method: str, url: str, **kwargs: Any) -> _Response:
-        if self._on_request is not None:
-            self._on_request()
-        self.urls.append(url)
-        self.bodies.append(kwargs["content"])
-        self.request_headers.append(dict(kwargs.get("headers") or {}))
+    def handle(self, request: httpx.Request) -> Any:
+        held = self._on_request() if self._on_request is not None else None
+        if inspect.isawaitable(held):
+            return self._held(request, held)
+        return self._respond(request)
+
+    async def _held(
+        self, request: httpx.Request, held: Awaitable[None]
+    ) -> httpx.Response:
+        # A hook that awaits holds its own upload without stalling the loop the other
+        # uploads share, which is the only way concurrent sends can be observed at all.
+        await held
+        return self._respond(request)
+
+    def _respond(self, request: httpx.Request) -> httpx.Response:
+        self.urls.append(str(request.url))
+        self.bodies.append(request.content)
+        self.request_headers.append(request.headers)
 
         status = self._status_code
         if self._responses:
             status = self._responses.pop(0)
 
-        response = _Response(status, body="{}")
-        response.headers = dict(self._response_headers)
-        return response
+        return httpx.Response(status, headers=self._response_headers, content=b"{}")
 
     @property
     def request_count(self) -> int:
@@ -85,7 +99,7 @@ def rest_client_with_transport(capture: "UploadCapture", **attrs: Any) -> Any:
     from unittest.mock import Mock
 
     rest_client = Mock(**attrs)
-    rest_client._client_wrapper.httpx_client.httpx_client = capture
+    rest_client._client_wrapper.httpx_client.httpx_client = capture.client
     rest_client._client_wrapper.get_base_url.return_value = capture.base_url
     return rest_client
 
@@ -99,7 +113,7 @@ def make_dataset(
         "description": "Test description",
         "project_name": "Test project",
         "rest_client": rest_client,
-        "rest_httpx_client": capture,
+        "rest_httpx_client": capture.client,
         "url_override": capture.base_url,
     }
     params.update(kwargs)

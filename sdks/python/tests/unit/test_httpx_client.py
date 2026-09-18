@@ -1,7 +1,9 @@
+import asyncio
 import gzip
 import json
 from unittest import mock
 
+import httpx
 import pytest
 import respx
 
@@ -121,6 +123,144 @@ def test_get_httpx_client__no_hooks():
         None, None, check_tls_certificate=False, compress_json_requests=True
     )
     assert client is not None
+
+
+@pytest.fixture
+def isolated_hooks():
+    """Hooks are global and nothing else restores them; a leaked one would reach every
+    later test's client."""
+    registered = opik.hooks.httpx_client_hook._httpx_client_hooks
+    opik.hooks.httpx_client_hook._httpx_client_hooks = []
+    try:
+        yield
+    finally:
+        opik.hooks.httpx_client_hook._httpx_client_hooks = registered
+
+
+def test_async_twin__hook_supplying_a_sync_transport__refuses_rather_than_bypassing(
+    isolated_hooks,
+):
+    """A transport is often the only thing enforcing a proxy, an allow-list or mTLS.
+
+    `{"transport": httpx.HTTPTransport(retries=5)}` is a documented httpx recipe and
+    cannot be used by an async client. Falling back to httpx's default async transport
+    would upload *successfully* while sending around whatever the hook was enforcing,
+    which is the worst of the three outcomes; the caller answers this by uploading over
+    the sync client instead.
+    """
+    opik.hooks.add_httpx_client_hook(
+        opik.hooks.HttpxClientHook(
+            client_modifier=None,
+            client_init_arguments={"transport": httpx.HTTPTransport(retries=5)},
+        )
+    )
+    client = httpx_client.get(
+        None, None, check_tls_certificate=False, compress_json_requests=True
+    )
+
+    with pytest.raises(httpx_client.AsyncTransportUnavailable):
+        httpx_client.async_twin(client, max_connections=8)
+
+
+def test_async_twin__hook_supplying_a_sync_mount__refuses_rather_than_bypassing(
+    isolated_hooks,
+):
+    """A mount is per-host policy, so dropping one bypasses it for exactly that host."""
+    opik.hooks.add_httpx_client_hook(
+        opik.hooks.HttpxClientHook(
+            client_modifier=None,
+            client_init_arguments={"mounts": {"https://vault": httpx.HTTPTransport()}},
+        )
+    )
+    client = httpx_client.get(
+        None, None, check_tls_certificate=False, compress_json_requests=True
+    )
+
+    with pytest.raises(httpx_client.AsyncTransportUnavailable, match="https://vault"):
+        httpx_client.async_twin(client, max_connections=8)
+
+
+def test_async_twin__hook_supplying_an_async_transport__borrows_it(isolated_hooks):
+    """Lent, not given. A hook holds one dict of arguments, so this is the same object
+    the caller's long-lived sync client sends through -- closing the upload's client must
+    not close it, or every later request in the process sends through a dead pool."""
+
+    class Tracked(httpx.AsyncHTTPTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closed = False
+
+        async def aclose(self) -> None:
+            self.closed = True
+            await super().aclose()
+
+    shared = Tracked()
+    opik.hooks.add_httpx_client_hook(
+        opik.hooks.HttpxClientHook(
+            client_modifier=None, client_init_arguments={"transport": shared}
+        )
+    )
+    client = httpx_client.get(
+        None, None, check_tls_certificate=False, compress_json_requests=True
+    )
+    twin = httpx_client.async_twin(client, max_connections=8)
+
+    asyncio.run(twin.aclose())
+
+    assert not shared.closed, (
+        "The upload's client closed a transport it only borrowed from the caller"
+    )
+
+
+def test_usable_async_settings__null_event_hooks__normalised_not_iterated():
+    """`{"request": None}` is a plausible thing for a hook to write.
+
+    Asserted against the filter directly rather than through `async_twin`, because
+    `httpx.Client` rejects it first -- such a hook breaks every Opik client, not just the
+    upload, so this is the belt rather than the braces. It stays because the filter is
+    where a hook's arguments are trusted, and iterating `None` there would fail an upload
+    that had otherwise been configured correctly.
+    """
+    usable = httpx_client._usable_async_settings(
+        {"event_hooks": {"request": None, "response": []}}
+    )
+
+    assert usable["event_hooks"] == {"request": [], "response": []}
+
+
+def test_async_twin__hook_supplying_headers__keeps_the_identity(isolated_hooks):
+    """Hook arguments are merged *over* the twin's own, so a hook registered with
+    `{"headers": ...}` would replace the copied set and drop Authorization and
+    Comet-Workspace: uploads 403 while every other request in the process works."""
+    opik.hooks.add_httpx_client_hook(
+        opik.hooks.HttpxClientHook(
+            client_modifier=None,
+            client_init_arguments={"headers": {"X-Tenant": "acme"}},
+        )
+    )
+
+    client = httpx_client.get(
+        "the-workspace",
+        "the-api-key",
+        check_tls_certificate=False,
+        compress_json_requests=True,
+    )
+    twin = httpx_client.async_twin(client, max_connections=8)
+
+    assert twin.headers.get("authorization") == "the-api-key"
+    assert twin.headers.get("comet-workspace") == "the-workspace"
+    # The hook's own header still rides along; it is already on the sync client.
+    assert twin.headers.get("x-tenant") == "acme"
+
+
+def test_async_twin__verify_comes_from_the_sync_client(isolated_hooks):
+    """Recorded by `get()` rather than reverse-engineered: an install that turned
+    verification off must not have it turned back on for dataset uploads alone."""
+    client = httpx_client.get(
+        None, None, check_tls_certificate=False, compress_json_requests=True
+    )
+
+    assert client.verify_setting is False
 
 
 class TestOpikHttpxClientDeprecationHeader:

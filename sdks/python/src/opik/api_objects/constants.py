@@ -16,6 +16,17 @@ EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB = 3.5
 # caller passing an arbitrarily large num_threads.
 EXPERIMENT_ITEMS_BULK_MAX_THREADS = 32
 DATASET_ITEMS_MAX_BATCH_SIZE = 1000
+# Caps the serialised bytes in one request, measured before the body is compressed.
+# Twice the platform-wide batch size because the backend runs an existing-id scan per
+# batch whose cost grows faster than the batch count, so fewer, larger requests cost it
+# markedly less read CPU than the same rows split finer.
+#
+# Deliberately not `config.MAX_BATCH_SIZE_MB`, which stays 5 for every other bulk path:
+# only the dataset insert has that scan to amortise. What the extra 5 MB buys it costs
+# twice over: double the resident bytes per body in flight, worst with compression off
+# where a body is held uncompressed, and a request likelier to meet the 1 MB default body
+# limit of a reverse proxy in front of a self-hosted install, which answers 413.
+DATASET_ITEMS_MAX_BATCH_SIZE_MB = 10
 
 ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE = 1000
 DELETE_TRACE_BATCH_SIZE = 1000
@@ -42,9 +53,10 @@ DATASET_ITEMS_READ_MAX_CHUNK_SIZE = DATASET_STREAM_BATCH_SIZE
 # connections, so a caller passing an arbitrarily large num_threads would
 # otherwise queue pages behind the pool instead of speeding anything up.
 DATASET_ITEMS_READ_MAX_THREADS = 32
-# Ceiling on dataset write threads, the counterpart to the read one above. One
-# knob sizes both the compressor pool and the upload's byte budget (two batches
-# per worker), so an unbounded value authorises an unbounded resident bound.
+# Ceiling on dataset write threads, the counterpart to the read one above. One knob
+# sizes the compression pool, the upload's byte budget (two batches per worker) and the
+# upload client's connection pool, so an unbounded value buys memory and sockets rather
+# than speed.
 DATASET_ITEMS_WRITE_MAX_THREADS = 32
 
 # Parallel dataset insert requires a backend that serializes concurrent dataset

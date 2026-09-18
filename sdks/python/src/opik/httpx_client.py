@@ -1,6 +1,17 @@
 import gzip
+import inspect
 import logging
-from typing import Optional, Dict, Any, Union, Iterable, AsyncIterable, Mapping
+from typing import (
+    Optional,
+    Dict,
+    Any,
+    Set,
+    Tuple,
+    Union,
+    Iterable,
+    AsyncIterable,
+    Mapping,
+)
 import httpx
 import os
 import urllib.parse
@@ -50,7 +61,7 @@ def get(
         else check_tls_certificate
     )
     # we need this to enable proxy server to analyze the request/response session during debugging
-    proxy = os.environ.get("_OPIK_HTTP_PROXY")
+    proxy = _debug_proxy()
 
     timeout = httpx.Timeout(
         connect=CONNECT_TIMEOUT_SECONDS,
@@ -99,6 +110,218 @@ def _prepare_headers(
         result["Authorization"] = api_key
 
     return result
+
+
+def _debug_proxy() -> Optional[str]:
+    """The debugging proxy every Opik client sends through, if one is configured.
+
+    One reader, because the upload client is built separately from the sync one: two
+    lookups of the same variable are two places for them to drift apart, and a proxy that
+    saw every request except dataset uploads would be a confusing thing to debug with.
+    """
+    return os.environ.get("_OPIK_HTTP_PROXY")
+
+
+def async_twin(client: httpx.Client, max_connections: int) -> httpx.AsyncClient:
+    """An `httpx.AsyncClient` configured like an already-built sync client.
+
+    `get()` bakes auth and workspace onto the client it builds, and they are readable
+    from nowhere else, so an async client built from scratch uploads unauthenticated and
+    the backend answers 403. Headers are copied opaquely, never inspected.
+
+    `max_connections` is the caller's in-flight bound: httpx's own default of 100 would
+    otherwise sit below a bound the pool is allowed to exceed, and the surplus requests
+    would wait out the pool timeout and fail rather than queue.
+    """
+    # Put back after the hooks have had their say, never merged under them: a hook
+    # registered with `{"headers": ...}` would otherwise replace the copied set wholesale
+    # and drop Authorization and Comet-Workspace, so uploads would 403 while every other
+    # request in the process worked. `get()` has the same second pass for the same reason,
+    # and the hook's own headers are already in `client.headers` by the time we read them.
+    identity: Dict[str, Any] = {
+        "headers": client.headers,
+        "base_url": client.base_url,
+        "auth": client.auth,
+        "cookies": client.cookies,
+    }
+
+    settings: Dict[str, Any] = {
+        **identity,
+        "timeout": client.timeout,
+        "follow_redirects": client.follow_redirects,
+        "trust_env": client.trust_env,
+        # Keepalive sized to the bound as well: capped at httpx's default of 20, every
+        # connection past the twentieth would be reopened for each body it carries.
+        "limits": httpx.Limits(
+            max_connections=max_connections,
+            max_keepalive_connections=max_connections,
+            keepalive_expiry=KEEPALIVE_EXPIRY_SECONDS,
+        ),
+        # Resolved the same way `get()` resolves it, and from the environment rather than
+        # off the client, which keeps no proxy attribute to read back. Without it the
+        # debug proxy stops seeing dataset uploads.
+        "proxy": _debug_proxy(),
+    }
+
+    # A hook's arguments are merged over ours and are written for a sync client, so they
+    # are filtered before they reach the constructor rather than after, where a sync
+    # transport surfaces as an AttributeError at request time.
+    settings = _usable_async_settings(
+        hooks.httpx_client_hook.build_init_arguments(settings)
+    )
+    settings.update(identity)
+
+    if "transport" not in settings:
+        transport = getattr(client, "_transport", None)
+        if _serves_async(transport):
+            # Serves async requests already, so it can carry the upload -- lent, not given.
+            settings["transport"] = _BorrowedAsyncTransport(transport)
+        elif "verify" not in settings:
+            settings["verify"] = _verify_setting(client, transport)
+
+    return httpx.AsyncClient(**settings)
+
+
+def _serves_async(transport: Any) -> bool:
+    return hasattr(transport, "handle_async_request")
+
+
+class _BorrowedAsyncTransport(httpx.AsyncBaseTransport):
+    """The sync client's transport, lent to the upload's client without its lifetime.
+
+    `AsyncClient.aclose()` closes the transport it was handed, and this one belongs to the
+    caller's long-lived sync client. Closing it there would leave every later request --
+    upload or not -- sending through a dead connection pool, and a second `insert` would
+    fail on a client that looks fine.
+    """
+
+    def __init__(self, borrowed: httpx.AsyncBaseTransport) -> None:
+        self._borrowed = borrowed
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        return await self._borrowed.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        """Nothing to close: the pool this sends through is not ours to end."""
+
+
+class AsyncTransportUnavailable(Exception):
+    """A hook's transport cannot be carried to an async client.
+
+    Raised rather than dropped. A transport or a mount is often the only thing enforcing
+    a proxy, a destination allow-list or mTLS, and an upload that quietly fell back to
+    httpx's default async transport would send around that policy -- succeeding, which is
+    the worst outcome of the three. The caller answers this by uploading over the sync
+    client instead, which honours the hook.
+    """
+
+
+# A hook is registered once, so an unusable setting would otherwise be reported on every
+# upload for the life of the process.
+_WARNED_ASYNC_SETTINGS: Set[str] = set()
+
+
+def _warn_once(key: str, message: str, *args: Any) -> None:
+    if key not in _WARNED_ASYNC_SETTINGS:
+        _WARNED_ASYNC_SETTINGS.add(key)
+        LOGGER.warning(message, *args)
+
+
+def _usable_async_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Drop what an `httpx.AsyncClient` cannot be built from, saying what went and why.
+
+    A registered hook supplying `{"transport": httpx.HTTPTransport(retries=5)}` is a
+    documented httpx recipe and a reasonable thing to have; it is simply not something an
+    async client can use. Such a transport raises `AsyncTransportUnavailable` rather than
+    being dropped, because it may be carrying policy -- see that exception. An async-capable
+    one is borrowed, so closing this client does not close the caller's.
+
+    `event_hooks` is different, and is filtered rather than refused: a sync hook is an
+    observer, so losing it costs logging rather than enforcement.
+
+    Only the three settings that carry a sync-only *object* are filtered. Names are not,
+    deliberately: `httpx.Client` and `httpx.AsyncClient` take the same arguments, and
+    `get()` has already built a sync client from this very dict, so an unknown name cannot
+    reach here -- while deciding one by reflection over `AsyncClient.__init__` would strip
+    every setting, auth headers included, whenever anything has wrapped that method.
+    """
+    usable: Dict[str, Any] = {}
+
+    for name, value in settings.items():
+        if name == "transport":
+            if not _serves_async(value):
+                raise AsyncTransportUnavailable(
+                    f"the httpx 'transport' supplied by an Opik httpx client hook "
+                    f"({type(value).__name__}) serves sync requests only"
+                )
+            # Lent, not given: a hook holds one dict of arguments, so this is the same
+            # object the caller's long-lived sync client sends through, and
+            # `AsyncClient.aclose()` would close it out from under every later request.
+            value = _BorrowedAsyncTransport(value)
+
+        if name == "mounts" and isinstance(value, Mapping):
+            unusable = [
+                pattern
+                for pattern, mounted in value.items()
+                if mounted is not None and not _serves_async(mounted)
+            ]
+            if unusable:
+                raise AsyncTransportUnavailable(
+                    "the httpx 'mounts' supplied by an Opik httpx client hook serve sync "
+                    f"requests only: {', '.join(sorted(unusable))}"
+                )
+            # Borrowed for the same reason as the transport above.
+            value = {
+                pattern: None if mounted is None else _BorrowedAsyncTransport(mounted)
+                for pattern, mounted in value.items()
+            }
+
+        if name == "event_hooks" and isinstance(value, Mapping):
+            # `or ()` because a hook may supply `{"request": None}`, and iterating that
+            # would fail the upload before it began.
+            value = {
+                event: [
+                    fn for fn in (callables or ()) if inspect.iscoroutinefunction(fn)
+                ]
+                for event, callables in value.items()
+            }
+            if value != settings[name]:
+                _warn_once(
+                    name,
+                    "Ignoring the non-async httpx 'event_hooks' supplied by an Opik httpx "
+                    "client hook for the dataset upload client: an async client awaits "
+                    "its hooks, so a plain function cannot run there.",
+                )
+
+        usable[name] = value
+
+    return usable
+
+
+def _verify_setting(client: httpx.Client, transport: Any) -> Union[bool, Any]:
+    """The TLS verification the sync client was built with.
+
+    `verify` cannot be read back off a built httpx client, so `get()` records what it
+    resolved; anything else -- a REST client built directly, sending through a plain
+    `httpx.Client` -- falls back to the SSL context its transport holds.
+    """
+    recorded = getattr(client, "verify_setting", None)
+    if recorded is not None:
+        return recorded
+
+    ssl_context = getattr(getattr(transport, "_pool", None), "_ssl_context", None)
+    if ssl_context is not None:
+        return ssl_context
+
+    # Loud, because the default this falls back to is "verify against the system store":
+    # exactly the wrong answer for an install with a private CA or verification turned off,
+    # and one that would fail dataset uploads alone while every other request worked.
+    LOGGER.warning(
+        "Could not determine the TLS verification setting for the dataset upload client; "
+        "falling back to the httpx default. A custom CA bundle or "
+        "OPIK_CHECK_TLS_CERTIFICATE=false may not apply to dataset uploads."
+    )
+    return True
 
 
 def compresses_json_requests(client: httpx.Client, default: bool = True) -> bool:
@@ -150,6 +373,25 @@ def send_prepared_json(
     off the bytes rather than from a setting, so the header cannot disagree with what it
     describes however the producer was configured.
     """
+    url, request_headers = _prepared_json_request(base_url, path, body, headers)
+    return client.request("PUT", url, content=body, headers=request_headers)
+
+
+async def send_prepared_json_async(
+    client: httpx.AsyncClient,
+    base_url: str,
+    path: str,
+    body: bytes,
+    headers: Optional[Dict[str, str]] = None,
+) -> httpx.Response:
+    """Async twin of `send_prepared_json`, for uploads sent over the asyncio pool."""
+    url, request_headers = _prepared_json_request(base_url, path, body, headers)
+    return await client.request("PUT", url, content=body, headers=request_headers)
+
+
+def _prepared_json_request(
+    base_url: str, path: str, body: bytes, headers: Optional[Dict[str, str]]
+) -> Tuple[str, Dict[str, str]]:
     url = urllib.parse.urljoin(
         base_url if base_url.endswith("/") else base_url + "/", path
     )
@@ -160,8 +402,7 @@ def send_prepared_json(
     }
     if body.startswith(_GZIP_MAGIC):
         request_headers["Content-Encoding"] = "gzip"
-
-    return client.request("PUT", url, content=body, headers=request_headers)
+    return url, request_headers
 
 
 class OpikHttpxClient(httpx.Client):
@@ -174,6 +415,10 @@ class OpikHttpxClient(httpx.Client):
         super().__init__(**kwargs)
         self.compress_json_requests = compress_json_requests
         self.compression_level = compression_level
+        # httpx keeps no readable `verify`, and the dataset upload needs the same one for
+        # a client of its own. Recorded after the hooks have had the kwargs, so an
+        # override reaches the upload too.
+        self.verify_setting = kwargs.get("verify", True)
         self.warnings: Dict[str, bool] = {}
 
     def build_request(
