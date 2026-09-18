@@ -79,6 +79,7 @@ class TestAssistantConfirmation:
         install_mcp=None,
         install_skills=None,
         auto=False,
+        answer=True,
         declined=False,
         interactive=True,
         detected=("Claude Code", "Cursor"),
@@ -96,7 +97,7 @@ class TestAssistantConfirmation:
                 return_value=interactive,
             ),
             mock.patch.object(
-                configure_cli.click, "confirm", return_value=True
+                configure_cli.click, "confirm", return_value=answer
             ) as confirm,
             mock.patch.object(
                 configure_cli.assistants,
@@ -116,13 +117,20 @@ class TestAssistantConfirmation:
             )
         return confirm, setup_calls, outcome
 
-    def test_no_flags__reaches_the_installer_without_a_second_question(self):
-        """The picker is the question; a yes/no in front of it asked twice."""
-        confirm, setup_calls, _ = self._run()
+    def test_no_flags__asks_permission_then_reaches_the_installer(self):
+        """Registering into another tool's config is asked for, not inferred."""
+        confirm, setup_calls, _ = self._run(answer=True)
 
-        assert not confirm.called
+        assert confirm.called
         assert len(setup_calls) == 1
         assert setup_calls[0]["install_mcp"] is True
+
+    def test_no_flags__permission_refused__does_not_register(self):
+        confirm, setup_calls, outcome = self._run(answer=False)
+
+        assert confirm.called
+        assert setup_calls[0]["install_mcp"] is False
+        assert outcome.mcp_decision == "declined"
 
     def test_no_flags__picker_is_not_pre_confirmed(self):
         """`assume_confirmed` would skip the picker, leaving nothing to answer."""
@@ -484,7 +492,12 @@ class TestTheDecisionIsReported:
 
     @staticmethod
     def _reason(
-        install_mcp=None, auto=False, declined=False, interactive=True, detected=1
+        install_mcp=None,
+        auto=False,
+        answer=True,
+        declined=False,
+        interactive=True,
+        detected=1,
     ):
         with (
             mock.patch.object(
@@ -497,6 +510,7 @@ class TestTheDecisionIsReported:
                 "is_interactive",
                 return_value=interactive,
             ),
+            mock.patch.object(configure_cli.click, "confirm", return_value=answer),
             mock.patch.object(
                 configure_cli.assistants,
                 "setup",
@@ -516,14 +530,14 @@ class TestTheDecisionIsReported:
         assert outcome.detected == 0
 
     def test_declined__says_declined(self):
-        """Declining now happens in the picker, which is the only question."""
-        outcome = self._reason(declined=True)
+        """Refusing the permission question, before the picker is reached."""
+        outcome = self._reason(answer=False)
 
         assert outcome.mcp_decision == "declined"
         assert outcome.detected == 1
 
     def test_accepted__says_requested(self):
-        outcome = self._reason(declined=False)
+        outcome = self._reason(answer=True, declined=False)
 
         assert outcome.mcp_decision == "requested"
 
@@ -702,12 +716,15 @@ class TestTheMcpQuestionIsRecommended:
         assert "Set up Opik MCP for your AI client?" in out
         assert "(Recommended)" in out
 
-    def test_the_intro_asks_nothing_itself(self):
-        """It is the case for the step; the picker after it is the question."""
-        with mock.patch.object(configure_cli.click, "confirm") as confirm:
+    def test_permission_is_asked_with_a_real_label_and_defaults_to_yes(self):
+        """The empty label it replaced made Enter a silent refusal."""
+        with mock.patch.object(
+            configure_cli.click, "confirm", return_value=True
+        ) as confirm:
             assert configure_cli._ask_about_mcp() is True
 
-        assert not confirm.called
+        assert confirm.call_args.args[0].strip(), "not an empty label"
+        assert confirm.call_args.kwargs["default"] is True
 
 
 class TestTheDeploymentQuestionTakesBothInputs:

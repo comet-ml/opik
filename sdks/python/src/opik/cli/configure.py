@@ -83,20 +83,24 @@ def _setup_assistants(
 
 
 def _ask_about_mcp() -> bool:
-    """Introduce the MCP step. The picker that follows is the question.
+    """Ask before touching any assistant's configuration.
 
-    `opik configure` used to ask twice: a yes/no here, then the installer's
-    client picker — two questions for one decision, and `opik mcp configure`
-    asked only the second of them. The block is shared with that command now and
-    the picker is the single question in both, so the two commands no longer
-    differ in how many times they ask or in what they tell you first.
+    `opik configure` writes ``~/.opik.config``, which is Opik's own file.
+    Registering the MCP server writes into files owned by Cursor, Claude Code and
+    friends, and that is a different kind of permission — so it is asked for
+    outright rather than inferred from the client picker, which only asks
+    *which*. Escaping out of a picker is not a legible "no, just configure Opik".
 
-    Always returns True: it is not the decision any more, it is the case for it.
-    Saying no is Escape at the picker, which comes back as
-    `InstallReport.declined` — what the funnel reads.
+    The picker still follows, because "whether" and "which" are two questions and
+    only the first of them is about permission. `opik mcp configure` asks only
+    the second: running that command is itself the answer to this one.
+
+    Defaults to yes — it is recommended, and the block above says what it is. A
+    real label, because the empty one this replaced turned Enter into a silent
+    refusal of a question that never looked like one.
     """
     install_view.render_mcp_intro()
-    return True
+    return click.confirm("  Set up Opik MCP?", default=True)
 
 
 #: Skips worth mentioning, and how to say them. A skip the user asked for
