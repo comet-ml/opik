@@ -2,6 +2,7 @@
 
 import concurrent.futures as concurrent_futures
 import datetime
+import gzip
 import json
 import threading
 import time
@@ -21,6 +22,10 @@ from opik.api_objects.experiment import (
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
 
+# Captured before the autouse fixture below replaces it, so a test that wants the real
+# retry can put it back.
+_REAL_REST_RETRY = experiment_module.retry_decorator.opik_rest_retry
+
 START_TIME = datetime.datetime(2026, 8, 4, 12, 0, 0)
 _BASE_URL = "http://opik-bulk-upload-tests.local"
 # The shape the backend's @MaxRequestSize constraint actually returns.
@@ -29,10 +34,101 @@ _TOO_LARGE_BODY = {
 }
 
 
+def read_body(request: Any) -> Any:
+    """The JSON a request carries, gunzipped when it is gzipped.
+
+    The upload prepares and compresses its own bodies now, so every assertion about what
+    was sent has to go through this rather than reading the content directly.
+    """
+    body = request.read()
+    if body[:2] == b"\x1f\x8b":
+        body = gzip.decompress(body)
+    return json.loads(body)
+
+
+class _WireItem(dict):
+    """A decoded wire item that also answers attribute access.
+
+    The upload used to hand the generated client typed records, and the assertions here
+    were written against those. What goes out now is JSON, so this reads a decoded item
+    either way -- ``item["trace"]["id"]`` or ``item.trace.id`` -- and keeps those
+    assertions about the thing that is actually sent.
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return _wire(self[name])
+        except KeyError:
+            raise AttributeError(name) from None
+
+
+def _wire(value: Any) -> Any:
+    if isinstance(value, dict):
+        return _WireItem(value)
+    if isinstance(value, list):
+        return [_wire(member) for member in value]
+    return value
+
+
+class _RecordingTransport:
+    """Stands in for the httpx client the upload prepares bodies for.
+
+    It decodes each body and calls the same mock the generated client used to be, with
+    the arguments that client took, so a mock-based assertion still describes one
+    request -- but now by way of the bytes that were really put on the wire.
+    """
+
+    def __init__(self, mock_rest_client: Mock) -> None:
+        self._mock = mock_rest_client
+        self.bodies: List[bytes] = []
+        self.requests: List[Tuple[str, str, Optional[dict]]] = []
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        content: bytes = b"",
+        headers: Optional[dict] = None,
+    ) -> httpx.Response:
+        body = gzip.decompress(content) if content[:2] == b"\x1f\x8b" else content
+        self.bodies.append(body)
+        self.requests.append((method, url, headers))
+        envelope = json.loads(body)
+        self._mock.experiments.experiment_items_bulk(
+            experiment_id=envelope["experiment_id"],
+            experiment_name=envelope["experiment_name"],
+            dataset_name=envelope["dataset_name"],
+            project_name=envelope["project_name"],
+            items=[_WireItem(item) for item in envelope["items"]],
+        )
+        return httpx.Response(204)
+
+
+@pytest.fixture(autouse=True)
+def no_inner_retry(monkeypatch: Any) -> None:
+    """Run the send without the tenacity retry wrapped around it.
+
+    In production that retry has always been there -- ``rest_client_configurator``
+    patches it onto every generated client method -- but a mocked
+    ``experiment_items_bulk`` replaced the wrapped method, so these tests were written
+    against the bare call. Preparing the body moved the retry into this module's own
+    code, where a mock can no longer skip it, and a retryable error injected below would
+    otherwise be retried with real backoff sleeps. The nesting itself is asserted
+    directly in ``TestBulkUploadItemsRestRetry``.
+    """
+    monkeypatch.setattr(
+        experiment_module.retry_decorator, "opik_rest_retry", lambda call: call
+    )
+
+
 def _create_experiment(
     project_name: Optional[str] = None,
 ) -> Tuple[experiment_module.Experiment, Mock]:
     mock_rest_client = Mock()
+    transport = _RecordingTransport(mock_rest_client)
+    mock_rest_client._client_wrapper.httpx_client.httpx_client = transport
+    mock_rest_client._client_wrapper.get_base_url.return_value = _BASE_URL
+    mock_rest_client.transport = transport
     experiment = experiment_module.Experiment(
         id="experiment-id",
         name="experiment-name",
@@ -184,12 +280,16 @@ class TestBulkUploadItemsBatching:
         assert _sent_dataset_item_ids(mock_rest_client) == [
             f"item-{i}" for i in range(10)
         ]
-        # Assert the actual ceiling rather than a hand-computed batch size.
-        for call in mock_rest_client.experiments.experiment_items_bulk.call_args_list:
-            batch_size_MB = sum(
-                bulk_converters.payload_size_MB(item) for item in call.kwargs["items"]
+        # Assert the actual ceiling rather than a hand-computed batch size, and assert it
+        # on the body that was sent: the cap bounds the records in a batch, so the small
+        # fixed envelope around them is allowed on top of it.
+        envelope_bytes = 512
+        for body in mock_rest_client.transport.bodies:
+            assert (
+                len(body)
+                <= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB * 1024 * 1024
+                + envelope_bytes
             )
-            assert batch_size_MB <= constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE_MB
 
 
 class TestBulkUploadItemsSerialization:
@@ -223,7 +323,7 @@ class TestBulkUploadItemsSerialization:
         experiment.batch_upload_items(records)
 
         assert len(route.calls) == 1
-        return json.loads(route.calls[0].request.read())["items"]
+        return read_body(route.calls[0].request)["items"]
 
     def test_batch_upload_items__trace_only__evaluate_task_result_is_omitted(
         self, respx_mock: Any
@@ -350,9 +450,7 @@ class TestBulkUploadItemsSerialization:
             )
 
         assert len(route.calls) == 2
-        first, second = (
-            json.loads(call.request.read())["items"][0] for call in route.calls
-        )
+        first, second = (read_body(call.request)["items"][0] for call in route.calls)
         assert first["trace"]["id"] == second["trace"]["id"]
         assert first["spans"][0]["id"] == second["spans"][0]["id"]
 
@@ -865,30 +963,28 @@ class TestBulkUploadItemsValidation:
         assert "at or above the" in str(exc_info.value)
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
-    def test_batch_upload_items__unmeasurable_item__is_not_reported_as_oversized(self):
-        """A record that cannot be measured must not be blamed on the size limit.
+    def test_batch_upload_items__unserializable_item__is_not_reported_as_oversized(
+        self,
+    ):
+        """A record that cannot be serialised must not be blamed on the size limit.
 
-        Sizing runs the caller's own ``__str__`` and it can raise. There is no size to
-        report when it does, and reporting the limit instead is a wrong explanation
-        that reads like a right one: it sends the caller off shrinking a record whose
-        size was never the problem.
+        There is no size to report for a record that cannot be encoded, and reporting
+        the limit instead is a wrong explanation that reads like a right one: it sends
+        the caller off shrinking a record whose size was never the problem.
         """
         experiment, mock_rest_client = _create_experiment()
 
-        class Hostile:
-            def __str__(self) -> str:
-                raise RuntimeError("no string for you")
+        class Opaque:
+            pass
 
-            __repr__ = __str__
-
-        record = _record(evaluate_task_result={"h": Hostile()})
+        record = _record(evaluate_task_result={"o": Opaque()})
 
         with pytest.raises(exceptions.ValidationError) as exc_info:
             experiment.batch_upload_items([record])
 
         message = str(exc_info.value)
-        assert "could not be measured" in message
-        assert "RuntimeError" in message
+        assert "could not be serialized" in message
+        assert "TypeError" in message
         assert "at or above" not in message
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 0
 
@@ -1172,3 +1268,285 @@ class TestBulkUploadItemsTooLargeSplit:
             )
 
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 1
+
+
+class TestBulkUploadItemsWireParity:
+    """The body this path builds against the body the generated client built.
+
+    This is the gate on the change: the upload no longer hands typed records to the
+    generated client, so nothing but a comparison of the two bodies can say that what
+    goes out is still the same request. Both are driven through the same transport and
+    compared as parsed JSON, so key order -- which the two encoders genuinely differ on
+    and which JSON does not define -- cannot fail it, while a missing key, an extra key,
+    a changed value or an omitted-versus-null difference all do.
+    """
+
+    @staticmethod
+    def _records() -> List[bulk_item.ExperimentItemBulkRecord]:
+        """Records covering every field the conversion can set.
+
+        Ids are supplied rather than minted, because the two bodies are built from two
+        separate conversions and a generated id would differ between them for reasons
+        that have nothing to do with the wire form.
+        """
+        return [
+            _record(
+                dataset_item_id="item-trace",
+                trace=bulk_item.ExperimentItemBulkTrace(
+                    id="trace-id",
+                    name="eval_task",
+                    project_name="a-project",
+                    start_time=START_TIME,
+                    end_time=START_TIME + datetime.timedelta(seconds=1),
+                    input={"question": "q", "nested": {"a": [1, 2.5, None, True]}},
+                    output={"answer": "réponse 🙂"},
+                    metadata={"model": "gpt-4o", "temperature": 0.0, "n": 3},
+                    tags=["experiment", "parity"],
+                    error_info={
+                        "exception_type": "ValueError",
+                        "message": "boom",
+                        "traceback": "tb",
+                    },
+                    thread_id="thread-id",
+                ),
+                spans=[
+                    bulk_item.ExperimentItemBulkSpan(
+                        id="span-id",
+                        name="llm",
+                        type="llm",
+                        start_time=START_TIME,
+                        end_time=START_TIME + datetime.timedelta(seconds=1),
+                        input={"messages": [{"role": "user", "content": "m"}]},
+                        output={"choices": [{"content": "o"}]},
+                        metadata={"k": "v"},
+                        model="gpt-4o",
+                        provider="openai",
+                        tags=["span-tag"],
+                        usage={"prompt_tokens": 100},
+                        total_estimated_cost=0.0012,
+                        parent_span_id="parent-span-id",
+                    ),
+                    bulk_item.ExperimentItemBulkSpan(
+                        id="span-id-2", start_time=START_TIME
+                    ),
+                ],
+                feedback_scores=[
+                    {"name": "relevance", "value": 1.0},
+                    # An integer value, which the wire model coerces to a float -- so the
+                    # parity here is over the coercion as well as over the fields.
+                    {
+                        "name": "accuracy",
+                        "value": 1,
+                        "reason": "why",
+                        "category_name": "c",
+                    },
+                ],
+            ),
+            _record(
+                dataset_item_id="item-eval",
+                evaluate_task_result={"answer": "a", "score": 0.5},
+            ),
+            # The minimal record: everything optional left unset.
+            _record(dataset_item_id="item-minimal", evaluate_task_result={}),
+        ]
+
+    @staticmethod
+    def _rest_client() -> rest_api_client.OpikApi:
+        return rest_api_client.OpikApi(
+            base_url=_BASE_URL, api_key="api-key", workspace_name="workspace"
+        )
+
+    @pytest.mark.parametrize("project_name", [None, "a-project"])
+    def test_batch_upload_items__prepared_body__matches_the_generated_client(
+        self, respx_mock: Any, project_name: Optional[str]
+    ) -> None:
+        records = self._records()
+        route = respx_mock.put(url__regex=r".*/experiments/items/bulk").respond(204)
+
+        rest_client = self._rest_client()
+        experiment = experiment_module.Experiment(
+            id="experiment-id",
+            name="experiment-name",
+            dataset_name="dataset-name",
+            rest_client=rest_client,
+            streamer=Mock(),
+            experiments_client=Mock(),
+        )
+        experiment.batch_upload_items(records, project_name=project_name, num_threads=1)
+        assert len(route.calls) == 1
+        prepared = read_body(route.calls[0].request)
+
+        route.reset()
+        rest_client.experiments.experiment_items_bulk(
+            experiment_id="experiment-id",
+            experiment_name="experiment-name",
+            dataset_name="dataset-name",
+            project_name=project_name,
+            items=[bulk_converters.to_rest_record(record) for record in records],
+        )
+        assert len(route.calls) == 1
+        generated = read_body(route.calls[0].request)
+
+        assert prepared == generated
+        # Spelled out as well as compared, because the envelope is the half a per-item
+        # comparison would not have caught, and null is not the same as absent here.
+        assert set(prepared) == {
+            "experiment_id",
+            "experiment_name",
+            "dataset_name",
+            "project_name",
+            "items",
+        }
+        assert prepared["project_name"] == project_name
+
+    def test_batch_upload_items__prepared_body__is_sent_as_a_gzipped_put(
+        self, respx_mock: Any
+    ) -> None:
+        """The route and framing, which a parsed-JSON comparison says nothing about."""
+        route = respx_mock.put(url__regex=r".*/experiments/items/bulk").respond(204)
+        rest_client = self._rest_client()
+        experiment = experiment_module.Experiment(
+            id="experiment-id",
+            name="experiment-name",
+            dataset_name="dataset-name",
+            rest_client=rest_client,
+            streamer=Mock(),
+            experiments_client=Mock(),
+        )
+
+        experiment.batch_upload_items(self._records(), num_threads=1)
+
+        request = route.calls[0].request
+        assert request.method == "PUT"
+        assert request.url.path.endswith("/v1/private/experiments/items/bulk")
+        assert request.headers["content-encoding"] == "gzip"
+        assert request.content[:2] == b"\x1f\x8b"
+        # Auth and workspace live on the generated client's wrapper for a REST client
+        # built directly; without them this would upload unauthenticated.
+        assert request.headers["authorization"] == "api-key"
+        assert request.headers["comet-workspace"] == "workspace"
+
+
+class TestBulkUploadItemsCompressionThread:
+    """Where compression runs, which decides whether the change is worth making.
+
+    zlib releases the GIL, so gzip is the one part of this upload that parallelises
+    across workers. Running it on the thread that builds the bodies would funnel all of
+    it through one thread and leave the path slower than what it replaced -- and the
+    switch to a prepared body is exactly what makes that mistake easy, because the
+    automatic compression in ``OpikHttpxClient.build_request`` no longer applies.
+    """
+
+    def test_batch_upload_items__compression__never_runs_on_the_producer_thread(
+        self, monkeypatch: Any
+    ) -> None:
+        experiment, mock_rest_client = _create_experiment()
+        real_gzip_chunks = experiment_module.streaming_writer.gzip_chunks
+        compressing_threads: List[str] = []
+
+        def recording_gzip_chunks(
+            chunks: List[bytes], level: int, **kwargs: Any
+        ) -> bytes:
+            compressing_threads.append(threading.current_thread().name)
+            return real_gzip_chunks(chunks, level, **kwargs)
+
+        monkeypatch.setattr(
+            experiment_module.streaming_writer, "gzip_chunks", recording_gzip_chunks
+        )
+
+        producer_thread = threading.current_thread().name
+        records = [
+            _record(dataset_item_id=f"item-{i}")
+            for i in range(constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE * 3)
+        ]
+        experiment.batch_upload_items(records, num_threads=3)
+
+        assert len(compressing_threads) == 3
+        assert producer_thread not in compressing_threads
+        assert all(
+            name.startswith("opik_experiment_items_bulk")
+            for name in compressing_threads
+        )
+
+    def test_batch_upload_items__sequential__compresses_on_the_only_thread_there_is(
+        self, monkeypatch: Any
+    ) -> None:
+        """``num_threads=1`` has no worker to hand the body to, and that is the point.
+
+        Pinned so the parallel guarantee above is read as what it is -- a property of
+        the pool -- rather than as a rule that a sequential upload is silently breaking.
+        """
+        experiment, mock_rest_client = _create_experiment()
+        real_gzip_chunks = experiment_module.streaming_writer.gzip_chunks
+        compressing_threads: List[str] = []
+
+        def recording_gzip_chunks(
+            chunks: List[bytes], level: int, **kwargs: Any
+        ) -> bytes:
+            compressing_threads.append(threading.current_thread().name)
+            return real_gzip_chunks(chunks, level, **kwargs)
+
+        monkeypatch.setattr(
+            experiment_module.streaming_writer, "gzip_chunks", recording_gzip_chunks
+        )
+
+        experiment.batch_upload_items([_record()], num_threads=1)
+
+        assert compressing_threads == [threading.current_thread().name]
+
+    def test_batch_upload_items__compression_disabled__sends_the_body_uncompressed(
+        self, monkeypatch: Any
+    ) -> None:
+        """A client built with compression off must not be handed a gzipped body."""
+        experiment, mock_rest_client = _create_experiment()
+        monkeypatch.setenv("OPIK_ENABLE_JSON_REQUEST_COMPRESSION", "false")
+
+        experiment.batch_upload_items([_record()], num_threads=1)
+
+        assert mock_rest_client.transport.bodies[0][:2] != b"\x1f\x8b"
+
+
+class TestBulkUploadItemsRestRetry:
+    """The retry nesting the generated client used to supply.
+
+    ``rest_client_configurator`` wraps every generated client method in
+    ``opik_rest_retry``, so a body sent through the raw sender has to carry it too or
+    this would be the one path that gives up on a transient 5xx. Nested as the dataset
+    path nests it: retries inside, the rate-limit wait outside.
+    """
+
+    def test_batch_upload_items__send__nests_the_rest_retry_inside_the_rate_limit_wait(
+        self, monkeypatch: Any
+    ) -> None:
+        experiment, mock_rest_client = _create_experiment()
+        order: List[str] = []
+        real_rate_limit = (
+            experiment_module.rest_helpers.ensure_rest_api_call_respecting_rate_limit
+        )
+
+        def spy_retry(call: Any) -> Any:
+            order.append("retry-wrapped")
+            wrapped = _REAL_REST_RETRY(call)
+
+            def run() -> Any:
+                order.append("retry-ran")
+                return wrapped()
+
+            return run
+
+        def spy_rate_limit(call: Any, operation_name: Any = None) -> Any:
+            order.append("rate-limit-entered")
+            return real_rate_limit(call, operation_name)
+
+        monkeypatch.setattr(
+            experiment_module.retry_decorator, "opik_rest_retry", spy_retry
+        )
+        monkeypatch.setattr(
+            experiment_module.rest_helpers,
+            "ensure_rest_api_call_respecting_rate_limit",
+            spy_rate_limit,
+        )
+
+        experiment.batch_upload_items([_record()], num_threads=1)
+
+        assert order == ["retry-wrapped", "rate-limit-entered", "retry-ran"]

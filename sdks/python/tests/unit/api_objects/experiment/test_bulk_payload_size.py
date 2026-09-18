@@ -1,4 +1,8 @@
-"""Sizing a converted bulk record, in both encoder modes.
+"""Serialising and sizing a converted bulk record, in both encoder modes.
+
+The size is the length of the bytes that will be sent, so these tests are about the
+request body as much as about the number: the reference value throughout is the
+generated client's own wire form, re-encoded.
 
 ``json_helpers`` picks orjson at import time where a wheel exists, so a test that just
 called the sizer would assert one thing on a laptop and another on a platform without
@@ -18,10 +22,10 @@ from typing import Any
 
 import pytest
 
-from opik import json_helpers, jsonable_encoder
+from opik import json_helpers
 from opik.api_objects.experiment import bulk_converters, bulk_item
-from opik.message_processing.batching import sequence_splitter
 from opik.rest_api.core import datetime_utils
+from opik.rest_api.core.jsonable_encoder import jsonable_encoder
 
 try:
     import orjson
@@ -65,16 +69,26 @@ def _rest_record(**kwargs: Any):
 
 
 def _compact_bytes(rest_record: Any) -> int:
-    """The record's JSON length, computed without going through the sizer.
+    """The generated client's wire form, re-encoded the way orjson writes it.
 
-    Compact separators and real UTF-8 are what both encoders write, so this is the
-    number a correct measurement has to produce -- independent of the code under test,
-    which is what makes it usable as an expected value rather than a restatement.
+    ``jsonable_encoder`` here is the generated client's own, which is what built the
+    request body before this changed -- so this is the expected value rather than a
+    restatement of the code under test. Compact separators and real UTF-8 are what
+    orjson writes.
     """
     encoded = json.dumps(
-        jsonable_encoder.encode(rest_record), separators=(",", ":"), ensure_ascii=False
+        jsonable_encoder(rest_record), separators=(",", ":"), ensure_ascii=False
     )
     return len(encoded.encode("utf-8"))
+
+
+def _stdlib_bytes(rest_record: Any) -> int:
+    """The same wire form, re-encoded the way the standard library writes it.
+
+    ``json.dumps`` defaults -- ``", "`` and ``": "`` separators, non-ASCII escaped --
+    which is what ``json_helpers`` produces where there is no orjson wheel.
+    """
+    return len(json.dumps(jsonable_encoder(rest_record)).encode("utf-8"))
 
 
 def _full_record():
@@ -106,29 +120,29 @@ def _full_record():
     )
 
 
-def test_payload_size_MB__accelerated__matches_the_structural_estimate(accelerated):
-    """The estimate this replaces is what every batch boundary was tuned against.
+def test_payload_size_MB__accelerated__matches_the_generated_request_body(accelerated):
+    """The number is the length of the body, and the body is what the client sent before.
 
-    orjson writes compact JSON, which is the shape the structural estimator adds up, so
-    on this path the two agree to the byte and batching does not move at all.
+    orjson writes compact JSON with real UTF-8, so measuring the bytes this path produces
+    has to agree exactly with re-encoding the generated client's own wire form the same
+    way. That is the parity check in its smallest form: same keys, same values, same
+    omissions, therefore same length.
     """
     record = _full_record()
 
     assert bulk_converters.payload_size_MB(record) == pytest.approx(
-        sequence_splitter.get_payload_size_MB(record), rel=1e-9
+        _compact_bytes(record) / bulk_converters._BYTES_PER_MB, rel=1e-12
     )
 
 
-def test_payload_size_MB__accelerated__matches_the_structural_estimate_for_multibyte(
+def test_payload_size_MB__accelerated__matches_the_generated_body_for_multibyte(
     accelerated,
 ):
     """The same agreement where the two could most plausibly drift apart.
 
-    orjson writes non-ASCII as itself and the estimator counts the UTF-8 bytes, so a
-    record of emoji and accents measures the same either way. Whether either matches
-    the request body byte for byte is a separate question, and the same answer for
-    both: httpx below 0.28 escapes non-ASCII on its way out, so both under-read such a
-    record, exactly as they did before this changed which one runs.
+    orjson writes non-ASCII as itself, so a record of emoji and accents measures its
+    UTF-8 length. The standard library would escape each one instead, which is the case
+    below rather than a disagreement about what the record contains.
     """
     record = _rest_record(
         trace=bulk_item.ExperimentItemBulkTrace(
@@ -139,31 +153,34 @@ def test_payload_size_MB__accelerated__matches_the_structural_estimate_for_multi
         )
     )
 
-    assert bulk_converters.payload_size_MB(
-        record
-    ) == sequence_splitter.get_payload_size_MB(record)
+    assert bulk_converters.payload_size_MB(record) == pytest.approx(
+        _compact_bytes(record) / bulk_converters._BYTES_PER_MB, rel=1e-12
+    )
 
 
-def test_payload_size_MB__stdlib__falls_back_to_the_estimator(stdlib):
-    """Without orjson this must not measure by encoding at all.
+def test_payload_size_MB__stdlib__measures_the_body_it_will_send(stdlib):
+    """Without orjson the body is the standard library's, so the size is too.
 
-    ``json.dumps`` escapes non-ASCII where httpx does not, so it reads a multibyte record
-    well over its wire size -- enough to split batches that would have fit. The estimator
-    counts the characters themselves and does not have that problem.
+    The two encoders write the same JSON in different bytes -- ``json.dumps`` separates
+    with ``", "`` and escapes non-ASCII -- and this path sends whichever one answered.
+    Measuring the other one's output would be a prediction again, and wrong in the
+    direction that matters: it would under-read the body actually being sent and build
+    batches the server then rejects.
     """
     record = _full_record()
 
-    assert bulk_converters.payload_size_MB(
-        record
-    ) == sequence_splitter.get_payload_size_MB(record)
+    assert bulk_converters.payload_size_MB(record) == pytest.approx(
+        _stdlib_bytes(record) / bulk_converters._BYTES_PER_MB, rel=1e-12
+    )
 
 
-def test_payload_size_MB__stdlib__multibyte_is_not_inflated(stdlib):
-    """The case that makes the fallback mandatory rather than merely tidy.
+def test_payload_size_MB__stdlib__multibyte_is_measured_as_it_is_escaped(stdlib):
+    """The case that makes measuring, rather than estimating, the right answer.
 
-    ``json.dumps`` renders a non-ASCII character as a six-byte ``\\uXXXX`` escape, so
-    measuring by encoding would report a record of emoji and accents far over its wire
-    size. Falling back keeps the estimate on the characters themselves.
+    ``json.dumps`` renders a non-ASCII character as a six-byte ``\\uXXXX`` escape, so a
+    record of emoji and accents really does go out far larger than its characters
+    suggest. The number says so, which is what keeps a batch of them inside the
+    per-request cap.
     """
     record = _rest_record(
         trace=bulk_item.ExperimentItemBulkTrace(
@@ -174,9 +191,13 @@ def test_payload_size_MB__stdlib__multibyte_is_not_inflated(stdlib):
         )
     )
 
-    assert bulk_converters.payload_size_MB(
-        record
-    ) == sequence_splitter.get_payload_size_MB(record)
+    assert bulk_converters.payload_size_MB(record) == pytest.approx(
+        _stdlib_bytes(record) / bulk_converters._BYTES_PER_MB, rel=1e-12
+    )
+    assert (
+        bulk_converters.payload_size_MB(record)
+        > _compact_bytes(record) / bulk_converters._BYTES_PER_MB
+    )
 
 
 @pytest.mark.parametrize("mode", MODES)
@@ -227,32 +248,31 @@ def test_payload_size_MB__grows_with_the_record(mode, request):
         ),
     ],
 )
-def test_payload_size_MB__values_a_json_encoder_refuses__sized_as_their_json_form(
+def test_payload_size_MB__values_a_json_encoder_refuses__sent_as_their_json_form(
     mode, value, json_form, request
 ):
-    """The upload accepts these, so measuring one must not be what rejects it.
+    """The upload accepted these, so serialising one must not be what rejects it.
 
-    Asserting only that the number is positive would pass for any fallback that
-    returned something, so what is pinned is the exact byte count of the form the
-    value is actually sent as -- the second column, which is what the encoder these
-    records go through renders each one to.
+    What is pinned is the exact form each value goes out as -- the second column, which
+    is what the generated client rendered it to -- asserted on the bytes rather than on
+    the size alone, so a shape that merely happened to be the same length cannot pass.
     """
     request.getfixturevalue(mode)
 
-    expected_bytes = _compact_bytes(_rest_record(evaluate_task_result=json_form))
+    sent = json.loads(
+        bulk_converters.serialize_record(_rest_record(evaluate_task_result=value))
+    )
 
-    assert bulk_converters.payload_size_MB(
-        _rest_record(evaluate_task_result=value)
-    ) == pytest.approx(expected_bytes / bulk_converters._BYTES_PER_MB, rel=1e-12)
+    assert sent["evaluate_task_result"] == json_form
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_payload_size_MB__unencodable_value__falls_back_to_the_estimate(mode, request):
+def test_payload_size_MB__unencodable_value__is_refused(mode, request):
     """A cycle is the one shape neither encoder can walk at all.
 
-    The structural estimate reaches one too, by recursing until Python stops it, so what
-    is pinned here is that the fallback is taken -- not the number it returns, which is
-    not stable for a cyclic value and was not before this change either.
+    There is nothing to fall back to now that the measurement is the body: a record that
+    cannot be serialised cannot be sent either, so it is refused rather than given a
+    number that would read as an oversized record.
     """
     request.getfixturevalue(mode)
 
@@ -260,30 +280,34 @@ def test_payload_size_MB__unencodable_value__falls_back_to_the_estimate(mode, re
     cyclic["self"] = cyclic
     record = _rest_record(evaluate_task_result={"cyclic": cyclic})
 
-    # Named rather than bare ``Exception``, which would let an unrelated failure stand
-    # in for the refusal this test exists to provoke. Both encoders end here: orjson
-    # gives up on the recursion and ``json_helpers`` re-encodes with the standard
-    # library, which reports the cycle it found.
-    with pytest.raises(ValueError, match="Circular reference"):
-        json_helpers.dumps(record, default=bulk_converters._json_shell, sort_keys=False)
-
-    assert bulk_converters.payload_size_MB(record) > 0
+    with pytest.raises(bulk_converters.UnmeasurableRecordError):
+        bulk_converters.payload_size_MB(record)
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_payload_size_MB__arbitrary_object__sized_rather_than_raising(mode, request):
+def test_payload_size_MB__arbitrary_object__is_refused_rather_than_degraded(
+    mode, request
+):
+    """The one deliberate change of contract, pinned so it cannot happen by accident.
+
+    The generated client's last resort was ``vars(obj)``, which uploaded an object as a
+    dict of its attributes -- a silent, lossy success. The shared encoder refuses it
+    instead and names the type, so the caller finds out here rather than in the stored
+    data. Mirrors ``ItemNotSerializableError`` on the dataset path.
+    """
     request.getfixturevalue(mode)
 
     class Opaque:
-        def __repr__(self) -> str:
-            return "<opaque>"
+        def __init__(self) -> None:
+            self.field = "value"
 
-    assert (
+    with pytest.raises(bulk_converters.UnmeasurableRecordError) as raised:
         bulk_converters.payload_size_MB(
             _rest_record(evaluate_task_result={"o": Opaque()})
         )
-        > 0
-    )
+
+    assert isinstance(raised.value.cause, TypeError)
+    assert "Opaque" in str(raised.value.cause)
 
 
 @pytest.mark.parametrize("mode", MODES)
@@ -316,45 +340,21 @@ def test_payload_size_MB__integer_beyond_orjson_range__sized_by_the_fallback(
     )
 
     assert bulk_converters.payload_size_MB(record) > 0
+    assert json.loads(bulk_converters.serialize_record(record))["trace"]["output"] == {
+        "big": 2**70
+    }
 
 
 @pytest.mark.parametrize("mode", MODES)
-def test_payload_size_MB__sizing_defect_after_encoding__propagates(
-    mode, request, monkeypatch
-):
-    """A bug of ours must not arrive dressed as an unmeasurable record.
-
-    The guard covers the encode, because that runs the caller's ``__str__``. Sizing the
-    encoded result runs no caller code, so anything raising there is the SDK's own
-    defect -- and absorbing it would report the caller's data as the problem while the
-    real cause disappeared.
-    """
-    request.getfixturevalue(mode)
-
-    def broken(_encoded):
-        raise AttributeError("sizing is broken")
-
-    monkeypatch.setattr(sequence_splitter, "get_encoded_payload_size_MB", broken)
-    record = _rest_record(evaluate_task_result={"a": "b"})
-
-    # Forces the estimator rather than the encoder-measured path, which does not
-    # reach the estimate at all for a record orjson can encode.
-    monkeypatch.setattr(json_helpers, "ACCELERATED", False)
-
-    with pytest.raises(AttributeError, match="sizing is broken"):
-        bulk_converters.payload_size_MB(record)
-
-
-@pytest.mark.parametrize("mode", MODES)
-def test_payload_size_MB__value_whose_str_raises__reports_the_cause(
+def test_payload_size_MB__value_whose_str_raises__is_refused_without_calling_it(
     mode, request, caplog, monkeypatch
 ):
-    """The one value the fallback cannot absorb, because the fallback is what breaks.
+    """Refusing must not itself run the caller's code.
 
-    ``jsonable_encoder.encode`` ends in ``str(obj)``, outside its own ``try``, so an
-    object that refuses to render a string escapes it. Both the encoder and the
-    structural estimate go through it, so retrying the estimate raises the same
-    exception again and there is no size to return.
+    The old fallback ended in ``str(obj)``, so a value that refused to render one turned
+    a refusal into that object's own exception. The shared encoder names the type
+    instead, which reaches no caller code at all, so the failure is the same whatever the
+    value does when asked to render.
     """
     request.getfixturevalue(mode)
 
@@ -374,7 +374,6 @@ def test_payload_size_MB__value_whose_str_raises__reports_the_cause(
         with pytest.raises(bulk_converters.UnmeasurableRecordError) as raised:
             bulk_converters.payload_size_MB(record)
 
-    # The type travels on the exception, so the caller can say what happened rather
-    # than inventing a size; the traceback that names the value is in the log.
-    assert isinstance(raised.value.cause, RuntimeError)
-    assert "no string for you" in caplog.text
+    assert isinstance(raised.value.cause, TypeError)
+    assert "Hostile" in str(raised.value.cause)
+    assert "Could not serialize an experiment item" in caplog.text

@@ -1,16 +1,17 @@
-import datetime
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 import pydantic
 
-from opik import exceptions, id_helpers, json_helpers, jsonable_encoder
-from opik.message_processing.batching import sequence_splitter
+from opik import exceptions, id_helpers
 from opik.rest_api import types as rest_api_types
-from opik.rest_api.core import datetime_utils
 from opik.types import FeedbackScoreDict
 from . import bulk_item
 from .. import constants
+
+# The dataset path's encoder, reused rather than reimplemented: one hook deciding what
+# the flexible types the generated client accepted are rendered as, for both uploads.
+from ..dataset import streaming_writer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -200,117 +201,138 @@ def validate_records(
         )
 
 
-def _json_shell(value: Any) -> Any:
-    """One value the encoder cannot represent, as a shell it can walk into itself.
+def _wire_value(value: Any) -> Any:
+    """One field of a generated wire model, as the request body carries it.
 
-    The interior is handed back unconverted on purpose: the encoder comes back here for
-    each member, so a record costs one C-level walk rather than a Python one per node.
-    Fully converting here instead would rebuild in Python exactly what this replaces.
-
-    The two shapes it does convert mirror ``jsonable_encoder.encode`` -- a pydantic model
-    as its fields plus its extras, a datetime through the SDK's own serializer -- so the
-    bytes counted match what that encoder produced. Anything else is rare enough to pay
-    for the full conversion, which ends in ``str(obj)`` and so can raise for an object
-    that refuses to render one; :func:`_estimated_size_MB` is where that is turned
-    into a reportable failure.
+    Only the generated models are rewritten. A caller's own ``input``, ``metadata`` or
+    ``evaluate_task_result`` is handed on by reference for the JSON encoder to walk in
+    C, which is the Python walk this whole path exists to remove -- so nothing here
+    recurses into one. A list is rebuilt because ``spans`` and ``feedback_scores`` are
+    lists of models; that costs one ``isinstance`` per element of a caller's list and
+    still never descends into it.
     """
-    if isinstance(value, datetime.datetime):
-        return datetime_utils.serialize_datetime(value)
     if isinstance(value, pydantic.BaseModel):
-        extra = value.__pydantic_extra__
-        return (
-            {**value.__dict__, **extra} if isinstance(extra, dict) else value.__dict__
-        )
-    return jsonable_encoder.encode(value)
+        return _wire_fields(value)
+    if isinstance(value, list):
+        return [
+            _wire_fields(member) if isinstance(member, pydantic.BaseModel) else member
+            for member in value
+        ]
+    return value
+
+
+def _wire_fields(model: pydantic.BaseModel) -> Dict[str, Any]:
+    """One generated wire model as the dict the generated client would have sent.
+
+    ``UniversalBaseModel.dict`` unions an ``exclude_unset`` dump with an
+    ``exclude_none`` one, so a field reaches the wire when it was set -- even to None --
+    or when it has a non-None default. Every field on these bulk write views defaults to
+    None, so that reduces to the fields that were set, which is exactly what
+    :func:`to_rest_record` decides.
+
+    Omitted-versus-null is the point rather than a detail: the backend maps
+    ``evaluate_task_result`` to a Jackson ``JsonNode``, where an explicit null
+    deserializes to ``NullNode`` and trips the "either evaluate_task_result or trace"
+    validator. Serialising the model itself would emit every unset field as null and
+    fail every record that carries a trace.
+
+    The models are built before this runs, so pydantic has already applied the
+    coercions the wire form depends on -- an integer feedback score is a float by the
+    time it is read here, as it was on the wire before.
+    """
+    # pydantic v2 keeps the set names on `__pydantic_fields_set__` and extras off
+    # `__dict__`; v1 has `__fields_set__` and puts extras on `__dict__`.
+    fields_set = getattr(model, "__pydantic_fields_set__", None)
+    if fields_set is None:
+        fields_set = model.__fields_set__
+    values: Mapping[str, Any] = model.__dict__
+    extra = getattr(model, "__pydantic_extra__", None)
+    if extra:
+        # Declared fields in declaration order, then extras -- the order the generated
+        # dump produces.
+        values = {**values, **extra}
+    return {
+        name: _wire_value(value) for name, value in values.items() if name in fields_set
+    }
 
 
 class UnmeasurableRecordError(Exception):
-    """No encoder and no estimator could measure this record.
+    """This record could not be serialised, so it can be neither measured nor sent.
 
     Raised rather than returned as a number, because there is no number that tells the
-    truth here. Infinity is what the estimator returns for a value it cannot measure,
-    and every caller reads a number that large as "over the per-request limit" -- a
+    truth here: every caller reads a size that large as "over the per-request limit" -- a
     plausible, wrong account of an exception thrown inside the encoder, which sends
     whoever hit it looking at the size of their data.
+
+    Refusing is deliberate. The encoder behind it renders every shape the generated
+    client accepted, and for anything else the generated client's last resort was
+    ``vars(obj)`` -- uploading an object as a dict of its attributes rather than saying
+    it could not be sent. Mirrors ``ItemNotSerializableError`` on the dataset path.
     """
 
     def __init__(self, cause: BaseException) -> None:
-        super().__init__(f"could not measure the record: {type(cause).__name__}")
+        super().__init__(f"could not serialize the record: {type(cause).__name__}")
         self.cause = cause
 
 
 def unmeasurable_failure_reason(
     index: int, error: UnmeasurableRecordError, max_size_MB: float
 ) -> str:
-    """The one wording for an unmeasurable record, shared by both upload paths.
+    """The one wording for a record that cannot be serialised, shared by both paths.
 
     Both paths reject such a record and both have to say why. Two copies of the
     sentence is two things to keep true of each other, and the whole point of the
     sentence is that it does not mislead.
     """
     return (
-        f"items[{index}] could not be measured: the encoder raised "
+        f"items[{index}] could not be serialized: the encoder raised "
         f"{type(error.cause).__name__}. This is not the {max_size_MB}MB limit; see "
         f"the logged traceback for the value responsible"
     )
 
 
-def _estimated_size_MB(rest_record: Any) -> float:
-    """The structural estimate, with its one escape route closed.
+def serialize_record(rest_record: Any) -> bytes:
+    """One converted record's request-body bytes.
 
-    ``jsonable_encoder.encode`` ends in ``str(obj)`` placed outside its own ``try``, so
-    an object whose ``__str__`` raises escapes it -- and the estimator runs that same
-    encoder, so it is not a refuge from a value the encoder refused.
+    The single pass over a record: these are the bytes spliced into the request, and
+    their length is the size the batching loop budgets in. Measuring what is produced
+    rather than predicting what something else would produce is what removes the second
+    walk -- the generated client used to encode the record again on its way out.
 
-    The ``try`` holds one call, and it is the only one here that runs code belonging to
-    whoever called us. Its breadth is a property of that call rather than of this
-    handler: ``__str__`` may raise anything, a custom exception class included, so
-    there is no set of types to name. Sizing the encoded result is below it on purpose
-    -- nothing there executes caller code, so a failure there is our defect and
-    propagates instead of being reported as an unmeasurable record.
+    ``json_helpers`` answers with orjson where a wheel exists and the standard library
+    otherwise, including for the values orjson refuses outright (integers beyond 64
+    bits). ``encode_flexible`` is the dataset path's hook, unchanged and shared: the
+    flexible types the generated client accepted are rendered as it rendered them, and
+    anything else raises rather than being degraded into ``vars(obj)``.
+
+    The ``try`` is broad because the one thing under it that is not ours is the caller's
+    own data: an encoder hook reaches ``__str__`` on a value that may raise anything.
     """
     try:
-        encoded_for_json = jsonable_encoder.encode(rest_record)
+        return streaming_writer.dumps(_wire_fields(rest_record))
     except Exception as error:
         LOGGER.warning(
-            "Could not size an experiment item; the upload will reject it.",
+            "Could not serialize an experiment item; the upload will reject it.",
             exc_info=True,
         )
         raise UnmeasurableRecordError(error) from error
 
-    return sequence_splitter.get_encoded_payload_size_MB(encoded_for_json)
+
+def size_MB(payload: bytes) -> float:
+    """What a serialised record weighs, for a caller that already holds its bytes."""
+    return len(payload) / _BYTES_PER_MB
 
 
 def payload_size_MB(rest_record: Any) -> float:
-    """Estimate one converted record's JSON size, in megabytes.
+    """One converted record's JSON size, in megabytes.
 
-    Serialising the record and measuring the result is several times cheaper than the
-    structural estimate in ``sequence_splitter``, which walks the record twice in Python
-    -- once to convert it, once to add up what the conversion would encode to. Here the
-    walk is orjson's, in C. It matters because this runs on the producer thread, which is
-    what bounds a large upload.
-
-    Without orjson this stays on the estimator. The standard library is not
-    interchangeable for measuring: ``json.dumps`` escapes non-ASCII where httpx does not,
-    so it reads a multibyte record ~1.7x over its real size and would split batches that
-    would have fit.
-
-    Nothing measured here reaches the wire: the bytes are counted and dropped, and the
-    request body is built by the generated client as before. A record the encoder refuses
-    outright falls back to the structural estimate, so nothing that could be sized before
-    stops being sizeable. A record neither of them can walk raises
-    :class:`UnmeasurableRecordError`, which the caller reports as itself rather than as a
-    size.
+    The length of the bytes that will be sent, not an estimate of them, so a batch built
+    from these numbers is the size it measures -- which is what the oversize retry
+    exists to cover for and now rarely has to. A record that cannot be serialised raises
+    :class:`UnmeasurableRecordError`, which the caller reports as itself rather than as
+    a size, because it cannot be sent either.
     """
-    if not json_helpers.ACCELERATED:
-        return _estimated_size_MB(rest_record)
-
-    try:
-        encoded = json_helpers.dumps(rest_record, default=_json_shell, sort_keys=False)
-    except Exception:
-        return _estimated_size_MB(rest_record)
-
-    return len(encoded) / _BYTES_PER_MB
+    return size_MB(serialize_record(rest_record))
 
 
 def _to_rest_trace(
