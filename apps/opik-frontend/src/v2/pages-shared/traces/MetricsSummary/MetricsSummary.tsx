@@ -121,6 +121,18 @@ const AVG_DURATION_METRIC_MAP: Record<KpiEntityType, METRIC_NAME_TYPE> = {
   threads: METRIC_NAME_TYPE.THREAD_AVERAGE_DURATION,
 };
 
+const COST_METRIC_MAP: Record<KpiEntityType, METRIC_NAME_TYPE> = {
+  traces: METRIC_NAME_TYPE.COST,
+  spans: METRIC_NAME_TYPE.SPAN_COST,
+  threads: METRIC_NAME_TYPE.THREAD_COST,
+};
+
+const COST_LINE_NAME_MAP: Record<KpiEntityType, string> = {
+  traces: "cost",
+  spans: "span_cost",
+  threads: "thread_cost",
+};
+
 const getChartConfig = (
   kpiType: KpiMetricType,
   entityType: KpiEntityType,
@@ -148,11 +160,11 @@ const getChartConfig = (
       };
     case "total_cost":
       return {
-        metricName: METRIC_NAME_TYPE.COST,
+        metricName: COST_METRIC_MAP[entityType],
         chartType: CHART_TYPE.bar,
         customYTickFormatter: costYTickFormatter,
         renderValue: renderCostTooltipValue,
-        colorMap: { cost: CHART_BLUE },
+        colorMap: { [COST_LINE_NAME_MAP[entityType]]: CHART_BLUE },
       };
   }
 };

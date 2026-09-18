@@ -896,6 +896,71 @@ class KpiCardsResourceTest {
     }
 
     @Test
+    @DisplayName("OPIK-8335: threads fall in the period their traces ran, not the one their row was written in")
+    void threadPeriodsFollowTraceStartTimeNotThreadRowCreation() {
+        mockTargetWorkspace();
+        var projectName = RandomStringUtils.secure().nextAlphabetic(10);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        Instant intervalStart = Instant.now();
+        Instant ranAt = intervalStart.minus(30, ChronoUnit.SECONDS);
+        int threadCount = 3;
+
+        createThreadsWithTraceIdsMintedAt(projectName, ranAt, intervalStart.plus(1, ChronoUnit.SECONDS),
+                threadCount);
+
+        Instant intervalEnd = intervalStart.plus(1, ChronoUnit.MINUTES);
+
+        KpiCardResponse response = projectResourceClient.getKpiCards(projectId, KpiCardRequest.builder()
+                .entityType(EntityType.THREADS)
+                .intervalStart(intervalStart)
+                .intervalEnd(intervalEnd)
+                .build(), API_KEY, WORKSPACE_NAME);
+
+        assertFilteredMetrics(response, EntityType.THREADS, 0, threadCount, 0, 0);
+    }
+
+    private void createThreadsWithTraceIdsMintedAt(String projectName, Instant ranAt, Instant idsMintedAt,
+            int count) {
+        List<String> threadIds = new ArrayList<>();
+        List<Trace> traces = new ArrayList<>();
+        List<Span> spans = new ArrayList<>();
+
+        for (int i = 0; i < count; i++) {
+            String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+            threadIds.add(threadId);
+
+            Instant mintedAt = idsMintedAt.plus(i, ChronoUnit.MILLIS);
+
+            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(idGenerator.generateId(mintedAt))
+                    .projectName(projectName)
+                    .startTime(ranAt)
+                    .endTime(ranAt.plus(FILTER_DURATION_MS, ChronoUnit.MILLIS))
+                    .errorInfo(null)
+                    .threadId(threadId)
+                    .build();
+            traces.add(trace);
+
+            spans.add(factory.manufacturePojo(Span.class).toBuilder()
+                    .id(idGenerator.generateId(mintedAt.plus(1, ChronoUnit.MILLIS)))
+                    .traceId(trace.id())
+                    .projectName(projectName)
+                    .startTime(ranAt)
+                    .endTime(ranAt.plus(50, ChronoUnit.MILLIS))
+                    .totalEstimatedCost(BigDecimal.valueOf(FILTER_COST))
+                    .errorInfo(null)
+                    .build());
+        }
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+        Mono.delay(Duration.ofMillis(100)).block();
+        traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
+    }
+
+    @Test
     @DisplayName("thread KPI metrics support first/last message filters (conditional projection)")
     void threadFiltersByMessageContent() {
         mockTargetWorkspace();
