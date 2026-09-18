@@ -158,10 +158,20 @@ SETTLE_POLL_SECONDS=15
 SETTLE_STUCK_AGE_SECONDS=1800
 SETTLE_STUCK_NUM_TRIES=3
 
-# The scope 000003's shared settle-* blocks are rendered with. Pre-swap that is both tables for the queue (either could
-# leave a replica short of a part the swap then exposes) and the shadow alone for mutations (the only table this step
-# has mutated). reconcile.sh renders the same blocks with its own post-swap scope.
-SETTLE_QUEUE_TABLES="'spans', 'spans_local_v2'"
+# The scope 000003's shared settle-* blocks are rendered with. Pre-swap the queue covers both span tables (either could
+# leave a replica short of a part the swap then exposes) PLUS the deletion bridge, and the mutation side covers the
+# shadow alone (the only table this step has mutated).
+#
+# THE BRIDGE IS IN SCOPE FOR THE FINAL DELETION REPLAY, which this driver runs immediately before the swap. That
+# statement's two subqueries read `deletion_events_local` (the bridge match) and `spans` (the resurrection guard), and
+# 000002's header rests its correctness on both being "replicated and identical on every node" — which is exactly what a
+# GET_PART backlog on the bridge suspends. A replica short of a bridge part evaluates a smaller delete set and masks
+# fewer keys; `lightweight_deletes_sync = 2` does not cover that, because it waits for each replica to finish ITS OWN
+# mutation rather than for all of them to have masked the same keys. The mutation does not re-run, verify.sh has already
+# passed by then, and the swap then puts that under the live name — so the divergence is permanent and unreported.
+# reconcile.sh renders these same blocks with its own post-swap scope, which has always carried the bridge for the same
+# reason (see the runbook's replication-settle tables); this is that argument applied to the other side of the swap.
+SETTLE_QUEUE_TABLES="'spans', 'spans_local_v2', 'deletion_events_local'"
 SETTLE_MUTATION_TABLES="'spans_local_v2'"
 
 # Print this driver's own header — the options documented above — so --help can never drift from them. Stops at the
