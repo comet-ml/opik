@@ -20,6 +20,7 @@ from opik.api_objects import opik_client
 from opik.evaluation import rest_operations, test_case
 from opik.evaluation.engine import engine
 from opik.evaluation.metrics import base_metric, score_result
+from opik.evaluation.scorers import scorer_function
 from opik.evaluation.types import ErrorTolerance
 
 
@@ -235,8 +236,13 @@ def test_evaluate_experiment__optional_span_scoring_function__still_scores(
             verbose=0,
         )
 
-    scored = {score.name for tr in result.test_results for score in tr.score_results}
-    assert scored == {"span_is_optional"}
+    scored = {
+        score.name: score for tr in result.test_results for score in tr.score_results
+    }
+    # The name alone would also match a failed score or a wrong branch value.
+    assert set(scored) == {"span_is_optional"}
+    assert scored["span_is_optional"].value == 1.0
+    assert scored["span_is_optional"].scoring_failed is False
 
 
 def test_score_test_cases__regular_metrics_only__scores_and_logs(fake_backend):
@@ -254,3 +260,43 @@ def test_score_test_cases__regular_metrics_only__scores_and_logs(fake_backend):
     assert scores["always_passes"].scoring_failed is False
     logged = [call.kwargs["score_results"][0].name for call in log_spy.call_args_list]
     assert logged == ["always_passes"]
+
+
+def catch_all_span(**task_span: Any) -> score_result.ScoreResult:
+    return score_result.ScoreResult(name="catch_all_span", value=1.0)
+
+
+def test_requires_task_span_argument__variadic_names_are_not_required() -> None:
+    """Review point on #8404: ``*task_span`` / ``**task_span`` bind no argument
+    named ``task_span``, so a span-less run must not be reported as missing one."""
+
+    def star(*task_span: Any) -> None: ...
+
+    def required(task_span: Any) -> None: ...
+
+    def optional(task_span: Any = None) -> None: ...
+
+    assert scorer_function.requires_task_span_argument(star) is False
+    assert scorer_function.requires_task_span_argument(catch_all_span) is False
+    assert scorer_function.requires_task_span_argument(required) is True
+    assert scorer_function.requires_task_span_argument(optional) is False
+
+
+def test_evaluate_experiment__catch_all_span_name__still_scores(fake_backend) -> None:
+    with contextlib.ExitStack() as stack:
+        for patch in _rescoring_lookup_patches():
+            stack.enter_context(patch)
+
+        result = evaluation.evaluate_experiment(
+            experiment_name="exp-name",
+            scoring_metrics=[],
+            scoring_functions=[catch_all_span],
+            verbose=0,
+        )
+
+    scored = {
+        score.name: score for tr in result.test_results for score in tr.score_results
+    }
+    assert set(scored) == {"catch_all_span"}
+    assert scored["catch_all_span"].value == 1.0
+    assert scored["catch_all_span"].scoring_failed is False
