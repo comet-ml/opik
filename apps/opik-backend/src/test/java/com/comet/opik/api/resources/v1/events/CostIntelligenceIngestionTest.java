@@ -166,6 +166,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row.get().contextManagement()).isEqualTo("clear_thinking_20251015");
                 // speed: selects the rate table, so it must survive ingestion
                 assertThat(row.get().speed()).isEqualTo("fast");
+                // session_mode: how the harness invoked the call
+                assertThat(row.get().sessionMode()).isEqualTo("background");
                 assertThat(row.get().aiuNano()).isNull();
             });
 
@@ -427,6 +429,8 @@ class CostIntelligenceIngestionTest {
                 assertThat(row).isPresent();
                 assertThat(row.get().model()).isEqualTo("github_copilot:claude-sonnet-5");
                 assertThat(row.get().aiuNano()).isEqualTo(5_919_822_000L);
+                // this provider doesn't stamp session_mode, so it must read the '' default.
+                assertThat(row.get().sessionMode()).isEmpty();
 
                 // alloc x the tier's per-token rate: the read tier splits across its two blocks by
                 // chars, the write and output blocks absorb their tiers, input lands on a residual row.
@@ -708,7 +712,8 @@ class CostIntelligenceIngestionTest {
                                 "max_tokens": 64000,
                                 "context_management": "clear_thinking_20251015",
                                 "speed": "fast"
-                              }
+                              },
+                              "session_mode": "background"
                             },
                             "blocks": [
                               {"category":"memory","side":"input","cache_status":"read","parent_category":"context","chars":120,"tool_name":"","tool_server":"","tool_use_id":"","resource":"CLAUDE.md","kind":"text","subcategory":"auto_memory","sha256":"a1b2c3"},
@@ -906,7 +911,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano
+                    effort, thinking_type, max_tokens, context_management, speed, session_mode, aiu_nano
                 FROM cipx_spends FINAL
                 WHERE workspace_id = :workspace_id AND span_id = :span_id
                 """;
@@ -930,6 +935,7 @@ class CostIntelligenceIngestionTest {
                             row.get("max_tokens", Long.class),
                             row.get("context_management", String.class),
                             row.get("speed", String.class),
+                            row.get("session_mode", String.class),
                             row.get("aiu_nano", Long.class)))));
         }).blockOptional();
     }
@@ -1059,7 +1065,8 @@ class CostIntelligenceIngestionTest {
 
     private record CipxSpendRow(String projectId, Long startMs, String model, Long uInput, Long uCacheRead,
             Long uCacheCreation, Long uCacheCreation5m, Long uCacheCreation1h, Long uOutput, String effort,
-            String thinkingType, Long maxTokens, String contextManagement, String speed, Long aiuNano) {
+            String thinkingType, Long maxTokens, String contextManagement, String speed, String sessionMode,
+            Long aiuNano) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
