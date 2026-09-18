@@ -18,7 +18,7 @@ import dataclasses
 import os
 import select
 import sys
-from typing import Callable, Iterable, List, Optional, Sequence, Set
+from typing import Callable, Iterable, List, Optional, Sequence, Set, Tuple
 
 import rich.console
 import rich.live
@@ -263,7 +263,7 @@ def _key_reader() -> Optional[Callable[[], str]]:
     except ImportError:
         pass
     else:
-        return _read_key_posix
+        return _read_key_posix()
 
     try:
         import msvcrt  # noqa: F401
@@ -288,47 +288,69 @@ def _has_pending_input(descriptor: int, timeout: float = ESCAPE_WINDOW) -> bool:
     return bool(ready)
 
 
-def _read_key_posix() -> str:
-    """Read one keypress, telling a bare Escape from a cursor-key sequence.
+def _read_key_posix() -> Callable[[], str]:
+    """A reader that returns one key token per call, buffering the rest.
 
-    Reads the descriptor directly rather than through ``sys.stdin``. The buffered
-    text stream pulls an arrow key's whole ``\x1b[B`` burst into its userspace
-    buffer and hands back only the ``\x1b`` — after which ``select()`` on the
-    descriptor sees nothing pending, because the rest is already buffered above
-    the kernel. That combination read every arrow key as a cancellation. Going
-    unbuffered keeps the descriptor the single source of truth.
+    A terminal hands over a burst, not a keystroke. An arrow key arrives as three
+    bytes, and a pty driver writing "1\n" — `pexpect.sendline`, `printf '1\n'` —
+    delivers ``b"1\r\n"`` in a single ``os.read``. Interpreting only the first
+    byte and dropping the remainder meant the Enter that follows a typed digit
+    was consumed from the tty queue and thrown away, so the picker then waited
+    for a keypress that had already arrived. Space-then-Enter lost the same way.
+
+    Hence the buffer: read once, hand back one token, keep what is left for the
+    next call. Reading the descriptor directly rather than through ``sys.stdin``
+    stays as it was — the buffered text stream pulls an arrow key's whole burst
+    into userspace, after which ``select()`` on the descriptor sees nothing
+    pending and every arrow reads as a cancellation.
     """
     import termios
     import tty
 
-    descriptor = sys.stdin.fileno()
-    saved = termios.tcgetattr(descriptor)
-    try:
-        # cbreak, not raw: it leaves signal generation alone so Ctrl-C still
-        # raises KeyboardInterrupt rather than arriving as a byte we must handle.
-        tty.setcbreak(descriptor)
-        data = os.read(descriptor, _READ_CHUNK)
-        if data == b"\x1b" and _has_pending_input(descriptor):
-            # A bare Escape so far, but the continuation may still be in flight.
-            data += os.read(descriptor, _READ_CHUNK)
-        return _interpret(data)
-    except KeyboardInterrupt:
-        return CANCEL
-    finally:
-        termios.tcsetattr(descriptor, termios.TCSADRAIN, saved)
+    pending = bytearray()
+
+    def read_key() -> str:
+        if not pending:
+            descriptor = sys.stdin.fileno()
+            saved = termios.tcgetattr(descriptor)
+            try:
+                # cbreak, not raw: it leaves signal generation alone so Ctrl-C
+                # still raises KeyboardInterrupt rather than arriving as a byte
+                # we must handle.
+                tty.setcbreak(descriptor)
+                pending.extend(os.read(descriptor, _READ_CHUNK))
+                if bytes(pending) == b"\x1b" and _has_pending_input(descriptor):
+                    # A bare Escape so far, but the continuation may still be in
+                    # flight.
+                    pending.extend(os.read(descriptor, _READ_CHUNK))
+            except KeyboardInterrupt:
+                return CANCEL
+            finally:
+                termios.tcsetattr(descriptor, termios.TCSADRAIN, saved)
+
+        token, consumed = _take_token(bytes(pending))
+        del pending[:consumed]
+        return token
+
+    return read_key
 
 
-def _interpret(data: bytes) -> str:
-    """Turn one read of terminal bytes into a key token."""
+def _take_token(data: bytes) -> Tuple[str, int]:
+    """The first key token in a buffer, and how many bytes it used."""
     if not data:
-        return CANCEL
+        return CANCEL, 0
     if data.startswith(b"\x1b["):
         # A cursor key. Anything we do not map is ignored rather than treated as
         # a cancellation — an unknown sequence must not close the picker.
-        return _ARROWS.get(data[2:3].decode("latin1"), "")
+        return _ARROWS.get(data[2:3].decode("latin1"), ""), min(3, len(data))
     if data == b"\x1b":
-        return CANCEL
-    return _normalise(data[:1].decode("latin1"))
+        return CANCEL, 1
+    return _normalise(data[:1].decode("latin1")), 1
+
+
+def _interpret(data: bytes) -> str:
+    """The token a buffer starts with, ignoring whatever follows it."""
+    return _take_token(data)[0]
 
 
 def _read_key_windows() -> str:
