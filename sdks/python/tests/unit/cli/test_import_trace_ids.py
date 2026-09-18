@@ -9,8 +9,8 @@ timestamp, which the server rejects once it falls outside the ingestion window
   old data stays inside the window;
 - traces are created in the order the source project listed them, so the
   destination trace list and thread view keep that order;
-- the exported id survives as ``_import_id`` metadata where the trace's metadata
-  is a JSON object, and spans/parent spans are remapped onto the new ids.
+- the exported id survives as ``_import_id`` metadata, and spans/parent spans
+  are remapped onto the new ids.
 
 The experiment importer recreates traces through its own path, so the id and
 ordering contract is pinned there too.
@@ -30,7 +30,10 @@ import pytest
 from opik import id_helpers
 from opik.cli.imports.experiment import _import_traces_for_project
 from opik.cli.imports.project import import_traces_from_directory
-from opik.cli.imports.utils import sort_trace_files_chronologically
+from opik.cli.imports.utils import (
+    build_import_metadata,
+    sort_trace_files_chronologically,
+)
 
 _PROJECT = "dest-project"
 
@@ -215,24 +218,51 @@ class TestImportedTraceIdContract:
         assert trace["id"] != source_id
 
     @pytest.mark.parametrize("metadata", [[{"tagged": True}], "a bare string"])
-    def test_import__non_object_metadata__imported_untouched(
+    def test_import__non_object_trace_metadata__nested_under_import_metadata(
         self, tmp_path: Path, run_import: Any, metadata: Any
     ) -> None:
-        """Metadata is arbitrary JSON, and only an object can carry _import_id.
-
-        A trace written through the REST API can hold an array or a scalar
-        there. Those import unchanged instead of failing.
-        """
+        """A trace written through the REST API can hold an array or a scalar."""
+        source_id = str(id_helpers.generate_id())
         _write_trace_file(
             tmp_path,
-            str(id_helpers.generate_id()),
+            source_id,
             datetime.now(timezone.utc) - _AGED,
             metadata=metadata,
         )
 
         (trace,) = run_import(tmp_path).traces
 
-        assert trace["metadata"] == metadata
+        assert trace["metadata"]["_import_metadata"] == metadata
+        assert trace["metadata"]["_import_id"] == source_id
+
+    def test_import__span_with_usage_and_non_object_metadata__metadata_is_a_mapping(
+        self, tmp_path: Path, run_import: Any
+    ) -> None:
+        """The SDK merges a span's usage into its metadata by unpacking it.
+
+        Handing it anything but a mapping raises before the span is queued, so
+        the importer has to resolve the shape rather than pass it through.
+        """
+        start = datetime.now(timezone.utc) - _AGED
+        _write_trace_file(
+            tmp_path,
+            str(id_helpers.generate_id()),
+            start,
+            spans=[
+                {
+                    "id": "src-span",
+                    "name": "llm",
+                    "start_time": start.isoformat(),
+                    "usage": {"prompt_tokens": 1},
+                    "metadata": ["not an object"],
+                }
+            ],
+        )
+
+        (span,) = run_import(tmp_path).spans
+
+        assert isinstance(span["metadata"], dict)
+        assert span["metadata"]["_import_metadata"] == ["not an object"]
 
     def test_import__files_yielded_out_of_order__new_ids_follow_source_order(
         self, tmp_path: Path, run_import: Any
@@ -327,3 +357,26 @@ class TestTraceFileOrdering:
         ]
 
         assert sort_trace_files_chronologically(list(reversed(files))) == files
+
+
+class TestImportMetadata:
+    """``build_import_metadata`` is what guarantees the shape everything else needs."""
+
+    @pytest.mark.parametrize("metadata", [[{"a": 1}], "bare", 42, []])
+    def test_build_import_metadata__non_object__nested_under_import_metadata(
+        self, metadata: Any
+    ) -> None:
+        result = build_import_metadata({"id": "src"}, ["id"], metadata)
+
+        assert result == {"_import_metadata": metadata, "_import_id": "src"}
+
+    def test_build_import_metadata__nothing_to_add__non_object_still_nested(
+        self,
+    ) -> None:
+        """The export need not carry the fields, so this branch is reachable."""
+        assert build_import_metadata({}, ["id"], ["x"]) == {"_import_metadata": ["x"]}
+
+    def test_build_import_metadata__no_metadata_and_nothing_to_add__stays_none(
+        self,
+    ) -> None:
+        assert build_import_metadata({}, ["id"], None) is None

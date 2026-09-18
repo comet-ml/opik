@@ -21,7 +21,10 @@ from opik.cli.imports.project import import_traces_from_directory
 from opik.cli.imports.dataset import import_datasets_from_directory
 from opik.cli.imports.prompt import import_prompts_from_directory
 from ..conftest import random_chars
+from ..testlib import generate_project_name
 from . import verifiers
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 # Tags seeded on the created entities so the export/import flow can be asserted
 # to preserve them (regression guard for OPIK-7292, where tags were dropped for
@@ -1409,7 +1412,7 @@ class TestCLIImportExport:
         are created in source order so the destination lists them the same way
         (the trace list and the thread view are both ordered by id by default).
         """
-        source_project_name = f"cli-test-trace-ids-{random_chars()}"
+        source_project_name = f"{PROJECT_NAME}-trace-ids"
         destination_project_name = f"{source_project_name}-imported"
         trace_names = [f"ordered-trace-{index}" for index in range(5)]
 
@@ -1481,7 +1484,7 @@ class TestCLIImportExport:
         still pins that ids are minted at import time and start_time survives, so
         it guards the regression either way.
         """
-        source_project_name = f"cli-test-aged-{random_chars()}"
+        source_project_name = f"{PROJECT_NAME}-aged"
         destination_project_name = f"{source_project_name}-imported"
         trace_names = [f"aged-trace-{index}" for index in range(3)]
 

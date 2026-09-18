@@ -1023,7 +1023,12 @@ def _import_traces_for_project(
                     ),
                     input=span_info.get("input", {}),
                     output=span_info.get("output", {}),
-                    metadata=span_info.get("metadata"),
+                    # No fields to preserve here, unlike the traces importer —
+                    # this resolves the metadata to an object, which the SDK
+                    # needs to merge usage into it.
+                    metadata=build_import_metadata(
+                        span_info, [], span_info.get("metadata")
+                    ),
                     tags=span_info.get("tags"),
                     usage=usage_data,
                     feedback_scores=span_feedback_scores,
