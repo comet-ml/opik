@@ -792,6 +792,10 @@ areas:
     routes: ["/projects/$projectId/alerts", "/alerts/new", "/alerts/$alertId"]
     spec_dir: alerts
     specs:
+      # API-level: the alerts form's zod schema requires a threshold and a
+      # window before it submits, so the refused payloads are unreachable
+      # through the browser. The form round-trip is in alerts-crud.
+      - alerts/alert-threshold-config-validation.spec.ts
       - alerts/alerts-crud.spec.ts
     capabilities:
       list-alerts:         { covered: true,  tier: t1-smoke }

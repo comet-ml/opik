@@ -179,13 +179,21 @@ test.describe('Alerts — threshold config validation', { tag: ['@t2-cuj', '@are
         ).toBe(201);
       });
 
-      await test.step('The legacy key is stored verbatim, not rewritten to window', async () => {
+      // `AlertTriggerConfig.withNormalizedWindow` backfills `window` from the
+      // legacy key as configs are read out of persistence, so the legacy
+      // spelling never reaches a consumer — the alerts editor reads only
+      // `window` and drops a config it cannot read, which would delete the
+      // condition on the next save.
+      await test.step('The legacy key is kept and the window is read back from it', async () => {
         const stored = await backendClient.getAlert(legacyId);
         expect(stored, 'the accepted alert must be readable').not.toBeNull();
-        // The whole map, so a silent migration to `window` — which would make
-        // the alert fire on a window nobody chose — fails here.
+        // The whole map, and both keys pinned to the value that was written:
+        // dropping `window_seconds` would rewrite history for rows the job
+        // still reads, and a `window` that does not equal it would make the
+        // alert fire on a window nobody chose.
         expect(thresholdConfigOf(stored!, ALERT_EVENT_TYPE.traceCost).configValue).toEqual({
           threshold: '100',
+          window: '3600',
           window_seconds: '3600',
         });
       });
