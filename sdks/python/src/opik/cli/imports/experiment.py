@@ -35,6 +35,7 @@ from .utils import (
     debug_print,
     sort_spans_topologically,
     sort_trace_files_chronologically,
+    as_metadata_object,
     build_import_metadata,
     _EXPERIMENT_IMPORT_FIELDS,
     _TRACE_SOURCE_ID_FIELD,
@@ -1023,12 +1024,7 @@ def _import_traces_for_project(
                     ),
                     input=span_info.get("input", {}),
                     output=span_info.get("output", {}),
-                    # No fields to preserve here, unlike the traces importer —
-                    # this resolves the metadata to an object, which the SDK
-                    # needs to merge usage into it.
-                    metadata=build_import_metadata(
-                        span_info, [], span_info.get("metadata")
-                    ),
+                    metadata=as_metadata_object(span_info.get("metadata")),
                     tags=span_info.get("tags"),
                     usage=usage_data,
                     feedback_scores=span_feedback_scores,

@@ -31,6 +31,7 @@ from opik import id_helpers
 from opik.cli.imports.experiment import _import_traces_for_project
 from opik.cli.imports.project import import_traces_from_directory
 from opik.cli.imports.utils import (
+    as_metadata_object,
     build_import_metadata,
     sort_trace_files_chronologically,
 )
@@ -235,34 +236,37 @@ class TestImportedTraceIdContract:
         assert trace["metadata"]["_import_metadata"] == metadata
         assert trace["metadata"]["_import_id"] == source_id
 
-    def test_import__span_with_usage_and_non_object_metadata__metadata_is_a_mapping(
-        self, tmp_path: Path, run_import: Any
+    @pytest.mark.parametrize(
+        "usage",
+        [{"prompt_tokens": 1}, None],
+        ids=["with-usage", "without-usage"],
+    )
+    def test_import__span_with_non_object_metadata__metadata_resolved_to_a_mapping(
+        self, tmp_path: Path, run_import: Any, usage: Optional[Dict[str, Any]]
     ) -> None:
         """The SDK merges a span's usage into its metadata by unpacking it.
 
         Handing it anything but a mapping raises before the span is queued, so
-        the importer has to resolve the shape rather than pass it through.
+        the importer resolves the shape rather than passing it through — and
+        does so whether or not this particular span carries usage, since a
+        value's shape should not depend on an unrelated field.
         """
         start = datetime.now(timezone.utc) - _AGED
+        span_info = {
+            "id": "src-span",
+            "name": "llm",
+            "start_time": start.isoformat(),
+            "metadata": ["not an object"],
+        }
+        if usage is not None:
+            span_info["usage"] = usage
         _write_trace_file(
-            tmp_path,
-            str(id_helpers.generate_id()),
-            start,
-            spans=[
-                {
-                    "id": "src-span",
-                    "name": "llm",
-                    "start_time": start.isoformat(),
-                    "usage": {"prompt_tokens": 1},
-                    "metadata": ["not an object"],
-                }
-            ],
+            tmp_path, str(id_helpers.generate_id()), start, spans=[span_info]
         )
 
         (span,) = run_import(tmp_path).spans
 
-        assert isinstance(span["metadata"], dict)
-        assert span["metadata"]["_import_metadata"] == ["not an object"]
+        assert span["metadata"] == {"_import_metadata": ["not an object"]}
 
     def test_import__files_yielded_out_of_order__new_ids_follow_source_order(
         self, tmp_path: Path, run_import: Any
@@ -360,7 +364,19 @@ class TestTraceFileOrdering:
 
 
 class TestImportMetadata:
-    """``build_import_metadata`` is what guarantees the shape everything else needs."""
+    """These helpers are what guarantee the shape everything else needs."""
+
+    @pytest.mark.parametrize("metadata", [[{"a": 1}], "bare", 42, []])
+    def test_as_metadata_object__non_object__nested_under_import_metadata(
+        self, metadata: Any
+    ) -> None:
+        assert as_metadata_object(metadata) == {"_import_metadata": metadata}
+
+    @pytest.mark.parametrize("metadata", [{"a": 1}, {}, None])
+    def test_as_metadata_object__object_or_none__returned_as_is(
+        self, metadata: Any
+    ) -> None:
+        assert as_metadata_object(metadata) is metadata
 
     @pytest.mark.parametrize("metadata", [[{"a": 1}], "bare", 42, []])
     def test_build_import_metadata__non_object__nested_under_import_metadata(
