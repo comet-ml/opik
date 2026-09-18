@@ -948,28 +948,35 @@ export const LLM_PROMPT_TEMPLATES: Record<
   [EVALUATORS_RULE_SCOPE.span]: LLM_PROMPT_SPAN_TEMPLATES,
 };
 
+// Trace-scope and span-scope code rules are seeded with the same starting point;
+// the constants below differ only in their form type. Shared so an edit to the
+// template cannot land in one scope and not the other.
+const DEFAULT_PYTHON_CODE_METRIC =
+  "from typing import Any, Optional\n" +
+  "from opik.evaluation.metrics import base_metric, score_result\n" +
+  "\n" +
+  "class MyCustomMetric(base_metric.BaseMetric):\n" +
+  '    def __init__(self, name: str = "my_custom_metric"):\n' +
+  "        self.name = name\n" +
+  "\n" +
+  "    def score(self, input: str, output: str, metadata: Optional[str] = None, **ignored_kwargs: Any):\n" +
+  "        # Add you logic here\n" +
+  "\n" +
+  "        return score_result.ScoreResult(\n" +
+  "            value=0,\n" +
+  "            name=self.name,\n" +
+  '            reason="Optional reason for the score"\n' +
+  "        )";
+
+const DEFAULT_PYTHON_CODE_ARGUMENTS = {
+  input: "input",
+  output: "output",
+  metadata: "metadata",
+};
+
 export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
-  metric:
-    "from typing import Any, Optional\n" +
-    "from opik.evaluation.metrics import base_metric, score_result\n" +
-    "\n" +
-    "class MyCustomMetric(base_metric.BaseMetric):\n" +
-    '    def __init__(self, name: str = "my_custom_metric"):\n' +
-    "        self.name = name\n" +
-    "\n" +
-    "    def score(self, input: str, output: str, metadata: Optional[str] = None, **ignored_kwargs: Any):\n" +
-    "        # Add you logic here\n" +
-    "\n" +
-    "        return score_result.ScoreResult(\n" +
-    "            value=0,\n" +
-    "            name=self.name,\n" +
-    '            reason="Optional reason for the score"\n' +
-    "        )",
-  arguments: {
-    input: "input",
-    output: "output",
-    metadata: "metadata",
-  },
+  metric: DEFAULT_PYTHON_CODE_METRIC,
+  arguments: DEFAULT_PYTHON_CODE_ARGUMENTS,
 };
 
 export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
@@ -1003,25 +1010,6 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
 };
 
 export const DEFAULT_PYTHON_CODE_SPAN_DATA: PythonCodeDetailsSpanForm = {
-  metric:
-    "from typing import Any, Optional\n" +
-    "from opik.evaluation.metrics import base_metric, score_result\n" +
-    "\n" +
-    "class MyCustomMetric(base_metric.BaseMetric):\n" +
-    '    def __init__(self, name: str = "my_custom_metric"):\n' +
-    "        self.name = name\n" +
-    "\n" +
-    "    def score(self, input: str, output: str, metadata: Optional[str] = None, **ignored_kwargs: Any):\n" +
-    "        # Add you logic here\n" +
-    "\n" +
-    "        return score_result.ScoreResult(\n" +
-    "            value=0,\n" +
-    "            name=self.name,\n" +
-    '            reason="Optional reason for the score"\n' +
-    "        )",
-  arguments: {
-    input: "input",
-    output: "output",
-    metadata: "metadata",
-  },
+  metric: DEFAULT_PYTHON_CODE_METRIC,
+  arguments: DEFAULT_PYTHON_CODE_ARGUMENTS,
 };

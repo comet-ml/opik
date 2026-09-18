@@ -297,15 +297,31 @@ def user_facing_stacktrace(skip_frames: int = 1) -> str:
     # and bounded so a long chain cannot push the frames out on its own.
     causes = []
     seen = set()
-    current = exc
-    while current is not None and id(current) not in seen and len(causes) < MAX_CAUSE_CHAIN:
+    queue = [exc]
+    while queue:
+        current = queue.pop(0)
+        if current is None or id(current) in seen:
+            continue
         seen.add(id(current))
         causes.append("".join(traceback.format_exception_only(type(current), current)).rstrip())
+        # A group renders as "(N sub-exceptions)" on its own, which names nothing
+        # actionable, so its members are reported alongside it.
+        for member in getattr(current, "exceptions", ()) or ():
+            queue.append(member)
         # `raise X from None` sets __suppress_context__, and reporting the context
-        # anyway would expose what the author explicitly hid.
-        current = current.__cause__ or (
-            None if current.__suppress_context__ else current.__context__
-        )
+        # anyway would expose what the author explicitly hid. Compared against None
+        # rather than tested for truth: an exception may define __bool__/__len__ as
+        # falsy, and an explicit cause must not be dropped because of it.
+        if current.__cause__ is not None:
+            queue.append(current.__cause__)
+        elif not current.__suppress_context__:
+            queue.append(current.__context__)
+    # Truncated from the middle: the first entry is what was raised and the last is
+    # the root, and dropping the tail would lose the root -- the one this exists to
+    # surface -- on any chain deeper than the budget.
+    if len(causes) > MAX_CAUSE_CHAIN:
+        kept = MAX_CAUSE_CHAIN - 1
+        causes = causes[:kept] + [f"... {len(causes) - MAX_CAUSE_CHAIN} more", causes[-1]]
     cause = "\ncaused by: ".join(causes)
     frames = "".join(traceback.format_tb(tb)).rstrip()
     return f"{cause}\n{frames}" if frames else cause
@@ -429,14 +445,45 @@ def validate_user_code(code: str) -> dict:
     }
 
 
+def _score_funcdef_with_inheritance(tree: ast.AST, cls: ast.ClassDef):
+    """``score()`` from this class, or the nearest ancestor defined in the file.
+
+    The selected class need not declare ``score()`` itself -- ``class AMetric(ZBase)``
+    with the body on ``ZBase`` is the shape runtime instantiates and calls through.
+    Only in-file ancestors can be followed; an imported base leaves the signature
+    unknown, which the caller treats as "fill nothing".
+    """
+    defined = {node.name: node for node in _top_level_classdefs(tree)}
+    seen = set()
+    queue = [cls]
+    while queue:
+        current = queue.pop(0)
+        if current.name in seen:
+            continue
+        seen.add(current.name)
+        score = _score_funcdef(current)
+        if score is not None:
+            return score
+        for base in _class_base_names(current):
+            if base in defined:
+                queue.append(defined[base])
+    return None
+
+
 def required_score_params(code: str) -> List[str]:
     """``score()`` parameters with no default that can be passed by keyword.
 
     Static because this runs before any user code does, and outside the sandbox:
     the metric object is never constructed here. Returns nothing whenever the class
-    cannot be resolved the way :func:`get_metric_class` resolves it at runtime --
-    guessing from another class that merely declares ``score()`` would inject a
-    keyword the real metric rejects, turning a working rule into a 400.
+    this reads cannot be shown to be the one :func:`get_metric_class` will
+    instantiate -- filling from a different class injects a keyword the real metric
+    rejects, which is worse than not filling at all.
+
+    That covers two ways of being unsure. No class resolves statically, so there is
+    nothing to read; or one resolves but another class sorts ahead of it and could
+    be a metric through an imported base, in which case runtime picks that one and
+    this cannot see its signature. Runtime selection is name-sorted over runtime subclasses,
+    so any earlier-sorting class that might be a metric makes the choice ambiguous.
 
     The receiver is dropped by position rather than by the name ``self``, which is
     only a convention: filling it would make the call pass two values for the same
@@ -453,7 +500,12 @@ def required_score_params(code: str) -> List[str]:
     metric_class = _find_basemetric_classdef(tree)
     if metric_class is None:
         return []
-    score = _score_funcdef(metric_class)
+    # A class that sorts earlier and declares score() may subclass an imported base,
+    # which is invisible here but makes it the one runtime instantiates.
+    for node in _top_level_classdefs(tree):
+        if node.name < metric_class.name and _score_funcdef(node) is not None:
+            return []
+    score = _score_funcdef_with_inheritance(tree, metric_class)
     if score is None:
         return []
     # posonlyargs precede args; the receiver is the first of the two combined.

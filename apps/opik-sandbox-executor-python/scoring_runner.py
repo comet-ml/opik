@@ -154,15 +154,31 @@ def user_facing_stacktrace(skip_frames: int = 1) -> str:
     # and bounded so a long chain cannot push the frames out on its own.
     causes = []
     seen = set()
-    current = exc
-    while current is not None and id(current) not in seen and len(causes) < MAX_CAUSE_CHAIN:
+    queue = [exc]
+    while queue:
+        current = queue.pop(0)
+        if current is None or id(current) in seen:
+            continue
         seen.add(id(current))
         causes.append("".join(traceback.format_exception_only(type(current), current)).rstrip())
+        # A group renders as "(N sub-exceptions)" on its own, which names nothing
+        # actionable, so its members are reported alongside it.
+        for member in getattr(current, "exceptions", ()) or ():
+            queue.append(member)
         # `raise X from None` sets __suppress_context__, and reporting the context
-        # anyway would expose what the author explicitly hid.
-        current = current.__cause__ or (
-            None if current.__suppress_context__ else current.__context__
-        )
+        # anyway would expose what the author explicitly hid. Compared against None
+        # rather than tested for truth: an exception may define __bool__/__len__ as
+        # falsy, and an explicit cause must not be dropped because of it.
+        if current.__cause__ is not None:
+            queue.append(current.__cause__)
+        elif not current.__suppress_context__:
+            queue.append(current.__context__)
+    # Truncated from the middle: the first entry is what was raised and the last is
+    # the root, and dropping the tail would lose the root -- the one this exists to
+    # surface -- on any chain deeper than the budget.
+    if len(causes) > MAX_CAUSE_CHAIN:
+        kept = MAX_CAUSE_CHAIN - 1
+        causes = causes[:kept] + [f"... {len(causes) - MAX_CAUSE_CHAIN} more", causes[-1]]
     cause = "\ncaused by: ".join(causes)
     frames = "".join(traceback.format_tb(tb)).rstrip()
     return f"{cause}\n{frames}" if frames else cause

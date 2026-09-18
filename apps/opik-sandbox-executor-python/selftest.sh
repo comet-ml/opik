@@ -25,14 +25,26 @@ class T(BaseMetric):
 
 OUT=$(python "$RUNNER" "$STRICT_CODE" '{"output": "ok", "metadata": "x"}' || true)
 printf '%s' "$OUT" | grep -q "unexpected keyword argument 'metadata'"
-printf '%s' "$OUT" | grep -qv scoring_runner || { echo "runner frame leaked into user error" >&2; exit 1; }
+if printf '%s' "$OUT" | grep -q scoring_runner; then
+  echo "runner frame leaked into user error" >&2
+  exit 1
+fi
 
-# The other branch through the same helper: a failure raised by exec(code) has the
-# user's frame where the score path has the runner's, so the two need opposite
-# outcomes from one skip count. Over-skipping here would drop the user's location.
+# A compile-time failure has no frames at all, so its location comes from the
+# exception rather than from the walk. This pins that the location survives -- not
+# the skip count, which cannot affect an empty frame list.
 BROKEN_CODE="class T("
 
 OUT=$(python "$RUNNER" "$BROKEN_CODE" '{"output": "ok"}' || true)
 printf '%s' "$OUT" | grep -q "invalid Python code"
 printf '%s' "$OUT" | grep -q "SyntaxError"
 printf '%s' "$OUT" | grep -q '<string>'
+
+# A failure raised while exec() runs the module body does have a user frame, which
+# is what pins the skip count on this branch: over-skipping drops it.
+RAISING_CODE="raise ValueError('boom')"
+
+OUT=$(python "$RUNNER" "$RAISING_CODE" '{"output": "ok"}' || true)
+printf '%s' "$OUT" | grep -q "invalid Python code"
+printf '%s' "$OUT" | grep -q "ValueError: boom"
+printf '%s' "$OUT" | grep -q 'line 1, in <module>'

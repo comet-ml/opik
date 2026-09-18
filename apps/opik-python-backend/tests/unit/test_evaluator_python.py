@@ -793,7 +793,9 @@ class AlphaMetric(base_metric.BaseMetric):
     def __init__(self, name: str = "alpha_metric"):
         super().__init__(name=name, track=False)
 
-    def score(self, output: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
+    # Strict on purpose: with **kwargs it would swallow a wrongly-injected keyword
+    # and the test could not fail on the thing it names.
+    def score(self, output: str) -> score_result.ScoreResult:
         return score_result.ScoreResult(value=1.0, name=self.name)
 
 
@@ -860,8 +862,12 @@ def test_multiple_metric_classes_do_not_inject_a_foreign_parameter(process_clien
         "code": TWO_METRIC_CLASSES
     })
 
-    assert response.status_code == 200
+    assert response.status_code == 200, (
+        "a keyword read off the wrong class would reach AlphaMetric's strict "
+        "signature and 400 here"
+    )
     scores = response.json["scores"]
+    assert len(scores) == 1
     assert scores[0]["name"] == "alpha_metric", "runtime picks the name-sorted first class"
     assert scores[0]["value"] == 1.0
 
@@ -873,15 +879,20 @@ def test_trace_thread_payload_is_not_filled(process_client):
     response = process_client.post(EVALUATORS_URL, json={
         "data": {"output": "abc"},
         "type": PayloadType.TRACE_THREAD.value,
-        "code": REQUIRED_METADATA_METRIC
+        "code": THREAD_KEYS_METRIC
     })
 
-    # score(data) is called positionally, so `metadata` is never supplied and the
-    # call fails. A fill-in leaking into this path would turn it into a score.
-    assert response.status_code == 400
-    error = str(response.json["error"])
-    assert "can't be evaluated" in error
-    assert "metadata" in error
+    # The metric reports the keys it was handed. Asserting on those rather than on a
+    # failure is what makes the guard observable: `score(data)` takes the dict as one
+    # positional argument, so a filled-in key changes the payload's contents but not
+    # whether the call binds -- a test asserting only failure passes either way.
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["reason"] == "output", (
+        "the conversation must arrive exactly as posted; `conversation` here means "
+        "the fill-in ran on a path that passes data positionally"
+    )
 
 
 # `spans` is injected by the scorer only when the rule declares it, so its absence
@@ -938,3 +949,86 @@ class Chained(base_metric.BaseMetric):
     error = str(response.json["error"])
     assert "outer" in error, "the raised exception is always reported"
     assert ("inner root" in error) is root_expected
+
+
+THREAD_KEYS_METRIC = """
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class ThreadKeys(base_metric.BaseMetric):
+    def __init__(self, name: str = "thread_keys_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, conversation):
+        return score_result.ScoreResult(
+            value=1.0, name=self.name, reason=",".join(sorted(conversation))
+        )
+"""
+
+IMPORTED_BASE_SORTS_FIRST = """
+from opik.evaluation.metrics import base_metric, score_result
+
+MyBase = base_metric.BaseMetric
+
+
+class AMetric(MyBase):
+    def __init__(self, name: str = "a_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str):
+        return score_result.ScoreResult(value=1.0, name=self.name)
+
+
+class ZMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "z_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str, bar: str):
+        return score_result.ScoreResult(value=0.0, name=self.name)
+"""
+
+INHERITED_SCORE_FROM_SIBLING = """
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class ZBase(base_metric.BaseMetric):
+    def score(self, output: str, reference):
+        return score_result.ScoreResult(
+            value=1.0, name="inherited_metric", reason=f"reference={reference!r}"
+        )
+
+
+class AMetric(ZBase):
+    def __init__(self, name: str = "inherited_metric"):
+        super().__init__(name=name, track=False)
+"""
+
+
+# The static read and the runtime pick can select different classes: an
+# alphabetically-earlier metric whose base is imported is invisible to the parser but
+# is the one runtime instantiates. Reading the later class's signature would inject a
+# keyword the instantiated one rejects.
+def test_class_selection_ambiguity_fills_nothing(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": IMPORTED_BASE_SORTS_FIRST
+    })
+
+    assert response.status_code == 200, "no keyword from ZMetric may reach AMetric"
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["name"] == "a_metric", "runtime instantiates the name-sorted first"
+
+
+# The selected class need not declare score() itself; an in-file ancestor may. Reading
+# no signature there would leave the original defect in place for that shape.
+def test_score_inherited_from_in_file_base_is_filled(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": INHERITED_SCORE_FROM_SIBLING
+    })
+
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["reason"] == "reference=None"
