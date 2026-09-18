@@ -82,6 +82,12 @@ def aggregate(
                     if delta.content:
                         text_chunks.append(delta.content)
                 elif delta.content:
+                    # Text that arrived before this list keeps its place in order.
+                    if text_chunks:
+                        content_chunks.append(
+                            {"type": "text", "text": "".join(text_chunks)}
+                        )
+                        text_chunks = []
                     for content_chunk in delta.content:
                         content_chunks.append(
                             content_chunk.model_dump(mode="json", exclude_none=True)

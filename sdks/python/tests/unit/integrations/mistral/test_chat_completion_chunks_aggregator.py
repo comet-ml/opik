@@ -1,3 +1,4 @@
+import pytest
 from mistralai.models import (
     CompletionChunk,
     CompletionEvent,
@@ -37,8 +38,51 @@ def test_aggregate__text_deltas__joined_into_one_string():
     assert result.choices[0]["finish_reason"] == "stop"
 
 
-def test_aggregate__reasoning_model_chunk_lists__kept_as_content_chunks():
-    # The shape magistral models stream: thinking chunks, then the answer text.
+def test_aggregate__chunk_list_deltas__kept_as_content_chunks():
+    # Every 1.x SDK accepts a list of text chunks, which is enough to hit the
+    # join that used to raise.
+    result = chat_completion_chunks_aggregator.aggregate(
+        [
+            _event([{"type": "text", "text": "Par"}]),
+            _event([{"type": "text", "text": "is."}]),
+            _event(None, "stop"),
+        ]
+    )
+
+    assert result is not None, "a chunk-list delta must not make aggregation fail"
+    assert result.choices[0]["message"]["content"] == [
+        {"type": "text", "text": "Par"},
+        {"type": "text", "text": "is."},
+    ]
+    assert result.choices[0]["message"]["role"] == "assistant"
+    assert result.choices[0]["finish_reason"] == "stop"
+
+
+def test_aggregate__text_before_and_after_a_chunk_list__arrival_order_kept():
+    result = chat_completion_chunks_aggregator.aggregate(
+        [
+            _event("Par"),
+            _event([{"type": "text", "text": "is."}]),
+            _event(" later"),
+            _event(None, "stop"),
+        ]
+    )
+
+    assert result is not None
+    assert result.choices[0]["message"]["content"] == [
+        {"type": "text", "text": "Par"},
+        {"type": "text", "text": "is."},
+        {"type": "text", "text": " later"},
+    ]
+
+
+def test_aggregate__reasoning_model_thinking_chunks__kept_structured():
+    # The thinking chunk only exists in newer SDKs; older ones cannot build it.
+    try:
+        from mistralai.models import ThinkChunk  # noqa: F401
+    except ImportError:
+        pytest.skip("this mistralai SDK has no thinking chunk")
+
     result = chat_completion_chunks_aggregator.aggregate(
         [
             _event(
@@ -54,10 +98,8 @@ def test_aggregate__reasoning_model_chunk_lists__kept_as_content_chunks():
         ]
     )
 
-    assert result is not None, "a chunk-list delta must not make aggregation fail"
+    assert result is not None
     content = result.choices[0]["message"]["content"]
     assert content[0]["type"] == "thinking"
     assert content[0]["thinking"][0]["text"] == REASONING
     assert content[1] == {"type": "text", "text": ANSWER}
-    assert result.choices[0]["message"]["role"] == "assistant"
-    assert result.choices[0]["finish_reason"] == "stop"
