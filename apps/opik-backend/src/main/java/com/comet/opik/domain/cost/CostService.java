@@ -57,7 +57,10 @@ public class CostService {
             Map.entry("nebius", "nebius"),
             Map.entry("snowflake", "snowflake"),
             Map.entry("deepinfra", "deepinfra"),
-            Map.entry("cerebras", "cerebras"));
+            Map.entry("cerebras", "cerebras"),
+            Map.entry("azure_ai", "azure_ai"),
+            Map.entry("vercel_ai_gateway", "vercel_ai_gateway"),
+            Map.entry("openrouter", "openrouter"));
 
     // Online evaluation (and OTel ingestion) resolve models to LlmProvider serialized values whose names
     // differ from the canonical price-table vocabulary. Normalize those to the single canonical provider
