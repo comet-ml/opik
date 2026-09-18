@@ -36,10 +36,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * copies into it, at which point the mismatch surfaces as an operator-facing failure (or, worse, as a column silently
  * dropped from the copy). The parity legs here turn that into a merge-blocking CI failure instead.
  *
- * <p><b>The backfill legs are pending, and say so.</b> The third traces leg — the cutover backfill's explicit column
- * list — has no spans equivalent yet: the backfill ships with OPIK-8366. Rather than quietly comparing against nothing,
- * {@code CutoverSchemaParity.SPANS} declares the pending ticket and {@link #backfillLegsRemainPendingUntilCutoverToolingLands}
- * pins that declaration against the filesystem, so the skip cannot outlive the reason for it.
+ * <p><b>Three-way, like the traces gate.</b> The third leg — the cutover backfill's explicit column list — compares
+ * against the shipped spans backfill, so a preserved column added to both tables but not to that list fails here rather
+ * than being silently dropped at the cutover.
  *
  * <p><b>Two differences traces does not have.</b> The spans cutover also changes the sorting key (OPIK-7750 drops
  * {@code parent_span_id}) and renames an index ({@code idx_spans_id} becomes the
@@ -123,26 +122,28 @@ class SpansSchemaParityPreCutoverTest {
     }
 
     /**
-     * The one leg this gate does not yet have, recorded as a failing-when-resolved assertion rather than as a silent
-     * skip. A guard that quietly compares against nothing is worse than one that is absent, because it reads as
-     * coverage.
+     * The third leg, and the one no table-to-table comparison can catch: a preserved column added correctly to both
+     * tables but never added to the cutover backfill's column list is copied as its default, so the cutover silently
+     * loses the data.
      */
     @Test
     @Order(3)
-    void backfillLegsRemainPendingUntilCutoverToolingLands() {
-        assertThat(PARITY.getBackfillSql())
-                .as("""
-                        %s ships the spans cutover backfill. Until it lands there is no column list to compare against, \
-                        so CutoverSchemaParity.SPANS skips its two backfill legs — and says so here rather than \
-                        passing silently. When this fails because the file now exists, clear SPANS' \
-                        backfillPendingTicket and delete this test: the legs then assert on their own, exactly as the \
-                        traces family's do.\
-                        """,
-                        PARITY.getBackfillPendingTicket())
-                .doesNotExist();
-        assertThat(PARITY.backfillIsPending())
-                .as("the pending marker and the filesystem must agree")
-                .isTrue();
+    void columnMissingFromBackfillListIsCaught() throws Exception {
+        execute("ALTER TABLE %s.%s ADD COLUMN drift_unbackfilled String".formatted(DATABASE_NAME, SPANS));
+        execute("ALTER TABLE %s.%s ADD COLUMN drift_unbackfilled String".formatted(DATABASE_NAME, SHADOW));
+
+        assertThat(PARITY.backfillColumnList())
+                .as("the injected column is deliberately absent from the shipped backfill list")
+                .doesNotContain("drift_unbackfilled");
+
+        assertThatThrownBy(() -> PARITY.assertPreCutoverParity(connection, DATABASE_NAME))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("backfill")
+                .hasMessageContaining("drift_unbackfilled");
+
+        execute("ALTER TABLE %s.%s DROP COLUMN drift_unbackfilled".formatted(DATABASE_NAME, SPANS));
+        execute("ALTER TABLE %s.%s DROP COLUMN drift_unbackfilled".formatted(DATABASE_NAME, SHADOW));
+        PARITY.assertPreCutoverParity(connection, DATABASE_NAME);
     }
 
     /**

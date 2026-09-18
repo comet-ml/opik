@@ -234,7 +234,7 @@ enum CutoverSchemaParity {
                             moves to idx_spans_parent_span_id_bf""")
                     .build(),
             Path.of("data-migrations/spans-local-v2-cutover/scripts/db-app-analytics/000001_backfill_spans_local_v2.sql"),
-            "OPIK-8366");
+            null);
 
     private static final String COLUMN_NAME_PATTERN = "[a-z_][a-z0-9_]*";
 
