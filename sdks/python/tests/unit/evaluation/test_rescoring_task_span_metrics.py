@@ -228,6 +228,13 @@ def test_evaluate_experiment__optional_span_scoring_function__still_scores(
         for patch in _rescoring_lookup_patches():
             stack.enter_context(patch)
 
+        log_spy = stack.enter_context(
+            mock.patch.object(
+                rest_operations,
+                "log_test_result_feedback_scores",
+                wraps=rest_operations.log_test_result_feedback_scores,
+            )
+        )
         result = evaluation.evaluate_experiment(
             experiment_name="exp-name",
             scoring_metrics=[],
@@ -242,6 +249,9 @@ def test_evaluate_experiment__optional_span_scoring_function__still_scores(
     assert set(scored) == {"span_is_optional"}
     assert scored["span_is_optional"].value == 1.0
     assert scored["span_is_optional"].scoring_failed is False
+    # Returning a result is not enough: re-scoring has to persist it.
+    logged = [call.kwargs["score_results"][0].name for call in log_spy.call_args_list]
+    assert logged == ["span_is_optional"]
 
 
 def test_score_test_cases__regular_metrics_only__scores_and_logs(fake_backend):
