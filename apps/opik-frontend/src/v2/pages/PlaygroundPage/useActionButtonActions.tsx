@@ -53,6 +53,29 @@ import usePromptDatasetItemCombination, {
 } from "@/v2/pages/PlaygroundPage/usePromptDatasetItemCombination";
 import useRunCompletionToast from "@/v2/pages/PlaygroundPage/useRunCompletionToast";
 
+const createCompletionAnnouncer = (expected: number, announce: () => void) => {
+  let registered = 0;
+  let hasFinishedLogging = false;
+  let hasAnnounced = false;
+
+  const fire = () => {
+    if (!hasFinishedLogging || registered < expected || hasAnnounced) return;
+    hasAnnounced = true;
+    announce();
+  };
+
+  return {
+    registryReady: (count: number) => {
+      registered = count;
+      fire();
+    },
+    loggingFinished: () => {
+      hasFinishedLogging = true;
+      fire();
+    },
+  };
+};
+
 const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
 const MAX_POLL_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -631,14 +654,11 @@ const useActionButtonActions = ({
     setAllRunning(true);
 
     const runExperiments: LogExperiment[] = [];
-    let isRegistryReady = false;
-    let isLoggingFinished = false;
-    const announceWhenReady = () => {
-      if (!isRegistryReady || !isLoggingFinished) return;
+    const announcer = createCompletionAnnouncer(promptIds.length, () => {
       if (!announcePendingRef.current) return;
       announcePendingRef.current = false;
       announceRunComplete(runExperiments);
-    };
+    });
 
     const logProcessor = buildLogProcessor({
       datasetName,
@@ -649,9 +669,8 @@ const useActionButtonActions = ({
         projectName,
         onAddExperimentRegistry: (experiments, map) => {
           runExperiments.splice(0, runExperiments.length, ...experiments);
-          isRegistryReady = true;
           logProcessorHandlers.onAddExperimentRegistry?.(experiments, map);
-          announceWhenReady();
+          announcer.registryReady(experiments.length);
         },
       },
     });
@@ -681,8 +700,7 @@ const useActionButtonActions = ({
         clearRunningMap();
         isToStopRef.current = false;
         abortControllersRef.current.clear();
-        isLoggingFinished = true;
-        announceWhenReady();
+        announcer.loggingFinished();
       },
     );
   }, [
@@ -699,6 +717,7 @@ const useActionButtonActions = ({
     datasetName,
     canLogTraceSpanThread,
     canCreateExperiments,
+    promptIds.length,
   ]);
 
   const runAll = useCallback(async () => {
@@ -716,6 +735,10 @@ const useActionButtonActions = ({
       setPromptRunning(promptId, true);
 
       const singleRunExperiments: LogExperiment[] = [];
+      const announcer = createCompletionAnnouncer(1, () =>
+        announceRunComplete(singleRunExperiments),
+      );
+
       const logProcessor = buildLogProcessor({
         datasetName,
         canLogTraceSpanThread,
@@ -730,14 +753,20 @@ const useActionButtonActions = ({
               ...experiments,
             );
             logProcessorHandlers.onAddExperimentRegistry?.(experiments, map);
+            announcer.registryReady(experiments.length);
           },
         },
       });
 
+      const experimentName = getExperimentNameForPrompt(promptId);
       const combinations: DatasetItemPromptCombination[] =
         datasetItems.length > 0
-          ? datasetItems.map((di) => ({ datasetItem: di, prompt }))
-          : [{ prompt }];
+          ? datasetItems.map((di) => ({
+              datasetItem: di,
+              prompt,
+              experimentName,
+            }))
+          : [{ prompt, experimentName }];
 
       try {
         await new Promise<void>((resolve) => {
@@ -753,7 +782,7 @@ const useActionButtonActions = ({
       } finally {
         logProcessor.finishLogging();
         setPromptRunning(promptId, false);
-        announceRunComplete(singleRunExperiments);
+        announcer.loggingFinished();
       }
     },
     [

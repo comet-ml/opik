@@ -4,9 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";
 import { LogExperiment } from "@/types/playground";
-import {
-  useExperimentName,
-  useLastSuggestedExperimentName,
+import usePlaygroundStore, {
   useSetSuggestedExperimentName,
 } from "@/store/PlaygroundStore";
 import {
@@ -20,8 +18,6 @@ const useRunCompletionToast = (datasetId?: string | null) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
-  const experimentName = useExperimentName();
-  const lastSuggestedExperimentName = useLastSuggestedExperimentName();
   const setSuggestedExperimentName = useSetSuggestedExperimentName();
 
   return useCallback(
@@ -68,6 +64,9 @@ const useRunCompletionToast = (datasetId?: string | null) => {
             : undefined,
       });
 
+      const { experimentName, lastSuggestedExperimentName } =
+        usePlaygroundStore.getState();
+
       if (experimentName) {
         setSuggestedExperimentName(
           suggestNextExperimentName(
@@ -82,8 +81,6 @@ const useRunCompletionToast = (datasetId?: string | null) => {
       workspaceName,
       activeProjectId,
       toast,
-      experimentName,
-      lastSuggestedExperimentName,
       setSuggestedExperimentName,
     ],
   );

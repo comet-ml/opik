@@ -1,4 +1,3 @@
-import { useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 
@@ -14,8 +13,8 @@ export const useNavigateToExperiment = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
 
-  const navigateToExperiment = useCallback(
-    ({
+  return {
+    navigate: ({
       experimentIds,
       datasetId,
       newExperiment,
@@ -49,8 +48,5 @@ export const useNavigateToExperiment = () => {
         });
       }
     },
-    [navigate, workspaceName, activeProjectId],
-  );
-
-  return { navigate: navigateToExperiment };
+  };
 };
