@@ -24,12 +24,14 @@ on:
         paths:
           - 'sdks/python/**'
           - '.github/workflows/sdk-e2e-library-tests.yaml'
+          - '.github/actions/install_opik_and_run_e2e_lib_integration_tests/**'
     push:
         branches:
           - 'main'
         paths:
           - 'sdks/python/**'
           - '.github/workflows/sdk-e2e-library-tests.yaml'
+          - '.github/actions/install_opik_and_run_e2e_lib_integration_tests/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
