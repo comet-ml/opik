@@ -9,6 +9,7 @@ from typing import Iterator, Callable, Optional
 _patch_lock = threading.Lock()
 _patch_depth = 0
 _original_init: Optional[Callable] = None
+_installed_init: Optional[Callable] = None
 
 
 def _keepalive_expiry_zero(original: Callable) -> Callable:
@@ -17,15 +18,7 @@ def _keepalive_expiry_zero(original: Callable) -> Callable:
         kwargs["keepalive_expiry"] = 0
         return original(*args, **kwargs)
 
-    wrapped._opik_keepalive_patch = True  # type: ignore
     return wrapped
-
-
-def _is_installed() -> bool:
-    return (
-        getattr(httpcore.AsyncHTTPConnection.__init__, "_opik_keepalive_patch", False)
-        is True
-    )
 
 
 @contextlib.contextmanager
@@ -56,17 +49,19 @@ def async_http_connections_expire_immediately() -> Iterator[None]:
     when there is already existing async connection pool with opened connections, but it is
     out of scope for now.
     """
-    global _patch_depth, _original_init
+    global _patch_depth, _original_init, _installed_init
 
     with _patch_lock:
+        current = httpcore.AsyncHTTPConnection.__init__
         if _patch_depth == 0:
-            _original_init = httpcore.AsyncHTTPConnection.__init__
-        # The counter is only a count of our own runs, so it is checked against what
-        # is actually installed: if something restored the attribute while a run was
+            _original_init = current
+        # The counter only counts our own runs, so it is checked against what is
+        # actually installed: if something replaced the attribute while a run was
         # active, the runs still in progress would otherwise go unprotected.
-        if not _is_installed() and _original_init is not None:
-            patched_init = _keepalive_expiry_zero(_original_init)
-            httpcore.AsyncHTTPConnection.__init__ = patched_init
+        if current is not _installed_init:
+            to_wrap = _original_init if _original_init is not None else current
+            _installed_init = _keepalive_expiry_zero(to_wrap)
+            httpcore.AsyncHTTPConnection.__init__ = _installed_init
         _patch_depth += 1
 
     try:
@@ -75,5 +70,10 @@ def async_http_connections_expire_immediately() -> Iterator[None]:
         with _patch_lock:
             _patch_depth -= 1
             if _patch_depth == 0:
-                httpcore.AsyncHTTPConnection.__init__ = _original_init
+                # Only put back what we took, so a patch installed by someone else
+                # during our runs is not silently discarded.
+                if _original_init is not None:
+                    if httpcore.AsyncHTTPConnection.__init__ is _installed_init:
+                        httpcore.AsyncHTTPConnection.__init__ = _original_init
                 _original_init = None
+                _installed_init = None
