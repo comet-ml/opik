@@ -4,12 +4,14 @@ import json
 import os
 import subprocess
 import tempfile
+import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator, List
 import pytest
 
 import opik
-from opik import synchronization
+from opik import id_helpers, synchronization
 from opik.api_objects.experiment.experiment_item import ExperimentItemReferences
 from opik.cli.exports.dataset import export_dataset_by_name
 from opik.cli.exports.experiment import export_experiment_by_name
@@ -29,6 +31,53 @@ _DATASET_TAGS = ["cli-test", "dataset-tag"]
 _PROMPT_TAGS = ["cli-test", "prompt-tag"]
 _CHAT_PROMPT_TAGS = ["cli-test", "chat-prompt-tag"]
 _EXPERIMENT_TAGS = ["cli-test", "experiment-tag"]
+
+
+def _uuid7_timestamp(value: str) -> int:
+    """Milliseconds since the epoch, from the leading 48 bits of a UUIDv7."""
+    return uuid.UUID(value).int >> 80
+
+
+def _await_trace_count(
+    opik_client: opik.Opik,
+    project_name: str,
+    expected: int,
+    message: str = "",
+) -> None:
+    assert synchronization.until(
+        lambda: len(opik_client.search_traces(project_name=project_name)) == expected,
+        allow_errors=True,
+    ), f"Expected {expected} traces in {project_name}. {message}".strip()
+
+
+def _seed_and_export_traces(
+    opik_client: opik.Opik,
+    test_data_dir: Path,
+    project_name: str,
+    trace_names: List[str],
+) -> Path:
+    """Create the named traces in order, export the project, return its export dir."""
+    for index, trace_name in enumerate(trace_names):
+        opik_client.trace(
+            name=trace_name,
+            input={"index": index},
+            project_name=project_name,
+        )
+    opik_client.flush()
+    _await_trace_count(opik_client, project_name, len(trace_names))
+
+    export_project_traces(
+        project_name=project_name,
+        workspace="default",
+        output_path=str(test_data_dir),
+        max_results=None,
+        filter_string=None,
+        force=False,
+        debug=False,
+        format="json",
+        api_key=None,
+    )
+    return _find_project_dir(test_data_dir, project_name)
 
 
 def _find_project_dir(base_dir: Path, project_name: str) -> Path:
@@ -1345,3 +1394,148 @@ class TestCLIImportExport:
             assert imported_span_data.total_estimated_cost == original_cost, (
                 f"Cost mismatch: expected {original_cost}, got {imported_span_data.total_estimated_cost}"
             )
+
+    def test_export_import_traces_regenerates_ids_and_preserves_source_order(
+        self,
+        opik_client: opik.Opik,
+        test_data_dir: Path,
+    ) -> None:
+        """Imported traces get new, import-time ids that keep the source ordering.
+
+        Reusing the exported id would collide with the original and would carry
+        the original UUIDv7 timestamp, which the server rejects once it falls
+        outside the ingestion window. The importer mints a new id per trace
+        instead; the exported id survives as ``_import_id`` metadata, and traces
+        are created in source order so the destination lists them the same way
+        (the trace list and the thread view are both ordered by id by default).
+        """
+        source_project_name = f"cli-test-trace-ids-{random_chars()}"
+        destination_project_name = f"{source_project_name}-imported"
+        trace_names = [f"ordered-trace-{index}" for index in range(5)]
+
+        project_dir = _seed_and_export_traces(
+            opik_client, test_data_dir, source_project_name, trace_names
+        )
+
+        # Export names each file after the trace id, and those ids are UUIDv7, so
+        # sorting them yields the order the source project was created in.
+        source_ids = sorted(
+            path.name[len("trace_") : -len(".json")]
+            for path in project_dir.glob("trace_*.json")
+        )
+        assert len(source_ids) == len(trace_names), (
+            f"Expected {len(trace_names)} exported trace files, found {len(source_ids)}"
+        )
+
+        stats = import_traces_from_directory(
+            client=opik_client,
+            project_dir=project_dir,
+            project_name=destination_project_name,
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+            recreate_experiments_flag=False,
+        )
+        assert stats.get("traces_errors", 0) == 0, f"Import reported errors: {stats}"
+        opik_client.flush()
+
+        _await_trace_count(opik_client, destination_project_name, len(trace_names))
+
+        imported_traces = sorted(
+            opik_client.search_traces(project_name=destination_project_name),
+            key=lambda trace: trace.id,
+        )
+        imported_ids = [trace.id for trace in imported_traces]
+
+        assert set(imported_ids).isdisjoint(source_ids), (
+            "Imported traces must not reuse the exported ids"
+        )
+        newest_source_id = source_ids[-1]
+        assert all(
+            _uuid7_timestamp(imported_id) >= _uuid7_timestamp(newest_source_id)
+            for imported_id in imported_ids
+        ), "Imported ids must carry the import time, not the exported trace's"
+        assert [trace.name for trace in imported_traces] == trace_names, (
+            "Ordering by id must still yield the source order"
+        )
+        assert [
+            trace.metadata["_import_id"] for trace in imported_traces
+        ] == source_ids, "Each imported trace must record the id it came from"
+
+    def test_import_traces_older_than_the_ingestion_window(
+        self,
+        opik_client: opik.Opik,
+        test_data_dir: Path,
+    ) -> None:
+        """An export of old traces imports cleanly (issue #8386).
+
+        The server rejects an ingested id whose embedded UUIDv7 timestamp falls
+        outside its ingestion window, so an importer deriving the new id from the
+        exported start_time could not replay anything older than that window.
+        This ages a real export well past any window before importing it, which
+        the round-trip test above cannot do: the traces it exports are new, so
+        even a derived id would land inside the window.
+
+        The e2e job runs the server with UUID_VALIDATION_ENABLED=true, so this
+        exercises the rejection itself. Against a server with validation off it
+        still pins that ids are minted at import time and start_time survives, so
+        it guards the regression either way.
+        """
+        source_project_name = f"cli-test-aged-{random_chars()}"
+        destination_project_name = f"{source_project_name}-imported"
+        trace_names = [f"aged-trace-{index}" for index in range(3)]
+
+        project_dir = _seed_and_export_traces(
+            opik_client, test_data_dir, source_project_name, trace_names
+        )
+
+        # Rewrite the export in place so it looks like one taken long ago: the
+        # id carries the old timestamp, which is what the server rejects, and
+        # start_time carries it too, which is what the importer used to derive
+        # the new id from.
+        aged_base = datetime.now(timezone.utc) - timedelta(days=30)
+        for offset, trace_file in enumerate(sorted(project_dir.glob("trace_*.json"))):
+            trace_data = json.loads(trace_file.read_text())
+            aged_start = aged_base + timedelta(minutes=offset)
+            aged_id = str(id_helpers.generate_id(timestamp=aged_start))
+            trace_data["trace"]["id"] = aged_id
+            trace_data["trace"]["start_time"] = aged_start.isoformat()
+            trace_data["trace"]["end_time"] = (
+                aged_start + timedelta(seconds=1)
+            ).isoformat()
+            trace_file.write_text(json.dumps(trace_data))
+            trace_file.rename(trace_file.with_name(f"trace_{aged_id}.json"))
+
+        import_started_at = datetime.now(timezone.utc)
+        stats = import_traces_from_directory(
+            client=opik_client,
+            project_dir=project_dir,
+            project_name=destination_project_name,
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+            recreate_experiments_flag=False,
+        )
+        assert stats.get("traces_errors", 0) == 0, f"Import reported errors: {stats}"
+        opik_client.flush()
+
+        _await_trace_count(
+            opik_client,
+            destination_project_name,
+            len(trace_names),
+            "The backend rejects ids outside its ingestion window, so an id "
+            "derived from the aged start_time never lands.",
+        )
+
+        imported_traces = opik_client.search_traces(
+            project_name=destination_project_name
+        )
+        import_started_ms = int(import_started_at.timestamp() * 1000)
+        aged_cutoff_ms = int((aged_base + timedelta(days=1)).timestamp() * 1000)
+        for trace in imported_traces:
+            assert _uuid7_timestamp(trace.id) >= import_started_ms, (
+                "Imported ids must carry the import time, not the exported one"
+            )
+            assert _uuid7_timestamp(trace.id) > aged_cutoff_ms
+            # The business timestamp is untouched by the id regeneration.
+            assert trace.start_time < aged_base + timedelta(days=1)

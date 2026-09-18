@@ -123,6 +123,9 @@ jobs:
             # Avoid Buildx Bake concurrent image export collisions in CI.
             COMPOSE_BAKE: false
             TOGGLE_RUNNERS_ENABLED: "true"
+            # Match how the server runs in production: ids whose embedded UUIDv7
+            # timestamp is outside the ingestion window are rejected, not accepted.
+            UUID_VALIDATION_ENABLED: "true"
             OPIK_BACKEND_PULL_POLICY: never
             PYTHON_BACKEND_PULL_POLICY: never
             OPIK_GUARDRAILS_BACKEND_PULL_POLICY: never
