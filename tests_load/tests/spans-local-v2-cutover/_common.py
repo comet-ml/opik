@@ -3,6 +3,10 @@
 Only what differs per suite lives here — the project name, and the path bootstrap the sibling package needs (these are
 run as plain scripts, so only their own directory is on `sys.path`). Everything else is re-exported unchanged, so the
 suite scripts import from `_common` and never name the shared package.
+
+Spans differ from traces in one way that shapes every script in this suite: **a span has no standalone delete
+endpoint**. Every span delete is the cascade of a TRACE delete (`SpanService.deleteByTraceIds`), so the delete
+generator deletes traces and the seeder has to produce spans that belong to real, deletable traces.
 """
 
 import sys
@@ -41,4 +45,4 @@ __all__ = [
     "utcnow",
 ]
 
-DEFAULT_PROJECT = "cutover-load-test"
+DEFAULT_PROJECT = "spans-cutover-load-test"
