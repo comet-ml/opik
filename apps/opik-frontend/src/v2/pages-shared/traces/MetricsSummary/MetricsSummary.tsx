@@ -121,16 +121,16 @@ const AVG_DURATION_METRIC_MAP: Record<KpiEntityType, METRIC_NAME_TYPE> = {
   threads: METRIC_NAME_TYPE.THREAD_AVERAGE_DURATION,
 };
 
-const COST_METRIC_MAP: Record<KpiEntityType, METRIC_NAME_TYPE> = {
-  traces: METRIC_NAME_TYPE.COST,
-  spans: METRIC_NAME_TYPE.SPAN_COST,
-  threads: METRIC_NAME_TYPE.THREAD_COST,
-};
-
-const COST_LINE_NAME_MAP: Record<KpiEntityType, string> = {
-  traces: "cost",
-  spans: "span_cost",
-  threads: "thread_cost",
+const COST_METRIC_CONFIG: Record<
+  KpiEntityType,
+  { metricName: METRIC_NAME_TYPE; lineName: string }
+> = {
+  traces: { metricName: METRIC_NAME_TYPE.COST, lineName: "cost" },
+  spans: { metricName: METRIC_NAME_TYPE.SPAN_COST, lineName: "span_cost" },
+  threads: {
+    metricName: METRIC_NAME_TYPE.THREAD_COST,
+    lineName: "thread_cost",
+  },
 };
 
 const getChartConfig = (
@@ -158,14 +158,16 @@ const getChartConfig = (
         renderValue: renderDurationTooltipValue,
         colorMap: { [AVG_DURATION_LINE_NAME_MAP[entityType]]: CHART_TEAL },
       };
-    case "total_cost":
+    case "total_cost": {
+      const { metricName, lineName } = COST_METRIC_CONFIG[entityType];
       return {
-        metricName: COST_METRIC_MAP[entityType],
+        metricName,
         chartType: CHART_TYPE.bar,
         customYTickFormatter: costYTickFormatter,
         renderValue: renderCostTooltipValue,
-        colorMap: { [COST_LINE_NAME_MAP[entityType]]: CHART_BLUE },
+        colorMap: { [lineName]: CHART_BLUE },
       };
+    }
   }
 };
 
