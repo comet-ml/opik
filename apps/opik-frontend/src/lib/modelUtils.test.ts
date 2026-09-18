@@ -112,8 +112,9 @@ describe("supportsSamplingParams", () => {
 
   // The backend trims before classifying, so a pasted id with stray whitespace must not be read as
   // a different model on the two sides — the panel would offer a control the request then drops.
-  // Anthropic names models claude-<family>-<version>. A name fitting no family it ships is someone's
-  // own deployment name and says nothing about which Claude is behind it, so it keeps its params.
+  // Anthropic names models claude-<family>-<version>. A name that matches no family Anthropic ships
+  // is someone's own deployment name, and says nothing about which Claude is behind it, so it keeps
+  // the params set on it.
   it.each([
     "claude-prod",
     "claude-internal-v3",

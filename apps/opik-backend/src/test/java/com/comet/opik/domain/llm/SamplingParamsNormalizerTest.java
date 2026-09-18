@@ -181,11 +181,23 @@ class SamplingParamsNormalizerTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"disabled", "DISABLED", "  "})
-    void leavesSamplingParamsWhenThinkingIsNotEnabled(String type) {
+    void leavesTemperatureWhenThinkingIsNotEnabled(String type) {
         var normalized = SamplingParamsNormalizer.normalizeRequest(
                 thinkingRequest("custom-llm/gw/claude-sonnet-4-6", 0.7, null, type));
 
         assertThat(normalized.temperature()).isEqualTo(0.7);
+        assertThat(normalized.topP()).isNull();
+    }
+
+    /** Asserted from the Top P side too, since the thinking gate drops both and only one is live. */
+    @ParameterizedTest
+    @ValueSource(strings = {"disabled", "DISABLED", "  "})
+    void leavesTopPWhenThinkingIsNotEnabled(String type) {
+        var normalized = SamplingParamsNormalizer.normalizeRequest(
+                thinkingRequest("custom-llm/gw/claude-sonnet-4-6", null, 0.9, type));
+
+        assertThat(normalized.topP()).isEqualTo(0.9);
+        assertThat(normalized.temperature()).isNull();
     }
 
     private static ChatCompletionRequest thinkingRequest(String model, Double temperature, Double topP,
