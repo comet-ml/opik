@@ -87,6 +87,23 @@ def resolve(
     return Verdict(Decision.ASK, Reason.ASKING)
 
 
+def decision_reason(verdict: Verdict, granted_: bool) -> str:
+    """What this step decided and why, as one value for analytics.
+
+    The verdict alone cannot answer it: ``ASK`` says a question was put to the
+    user, not what came back, so an accept and a decline shared a reason and
+    then shared a row in the funnel. Folding the answer in is what separates
+    them — and separates both from the runs where nobody was asked at all.
+
+    Reused by both halves rather than written twice: the MCP server and the
+    skill pack ask the same shape of question, so they have to report the same
+    vocabulary or the two cannot be compared.
+    """
+    if verdict.decision is Decision.ASK:
+        return (Reason.REQUESTED if granted_ else Reason.DECLINED).value
+    return verdict.reason.value
+
+
 def granted(verdict: Verdict, ask: Callable[[], bool]) -> bool:
     """Turn a verdict into a yes or no, asking only when that is the verdict.
 
@@ -109,29 +126,32 @@ def readable_list(names: List[str]) -> str:
     return f"{', '.join(names[:-1])} and {names[-1]}"
 
 
-def mcp_prompt(detected: List[str]) -> str:
-    """The consent prompt, framed so it does not read as one more log line.
+MCP_PROMPT: str = (
+    "\n"
+    "  ─── AI clients ───────────────────────────────────────────\n"
+    "\n"
+    "  Set up Opik MCP for your AI client? (Recommended)\n"
+    "\n"
+    "  Enables your AI assistant to inspect traces, scan your projects\n"
+    "  for issues, debug experiments, and run Opik commands directly\n"
+    "  from chat.\n"
+    "\n"
+    "  Add Opik MCP to the detected AI clients? (Y/n) "
+)
+"""The consent prompt, framed so it does not read as one more log line.
 
-    Plain text with blank lines and an indent rather than anything richer: this
-    runs from ``opik.configure()`` too, which must not take over the caller's
-    stdout with a rendered panel.
-    """
-    return (
-        "\n"
-        "  ─── AI clients ───────────────────────────────────────────\n"
-        "\n"
-        f"  Found {readable_list(detected)}.\n"
-        "\n"
-        "  The Opik MCP server lets them read traces, log scores and run\n"
-        "  experiments from chat.\n"
-        "\n"
-        "  Register it with them? (y/N) "
-    )
+Plain text with blank lines and an indent rather than anything richer: this runs
+from ``opik.configure()`` too, which must not take over the caller's stdout with
+a rendered panel.
+
+The clients are not named here. The installer's own picker lists them right
+after, and saying them twice pushed the question itself off the screen — the
+same reason the CLI's block stopped naming them."""
 
 
 SKILL_PACK_PITCH: str = (
     "It teaches your AI client how to instrument code with Opik, wire up "
-    "integrations, and run test suites."
+    "integrations, run test suites and agent logs diagnostics."
 )
 """The case for the pack, as one line — used by the CLI, which wraps it itself.
 
@@ -141,10 +161,18 @@ rest of the CLI uses for these tools."""
 
 
 SKILLS_PROMPT: str = (
-    "\n  Recommended: also install the Opik skill pack?\n"
+    "\n"
+    "  Download the Opik skill pack for your AI client? (Recommended)\n"
+    "\n"
     "  It teaches your AI client how to instrument code with Opik, wire\n"
-    "  up integrations, and run test suites. (Y/n) "
+    "  up integrations, run test suites and agent logs diagnostics.\n"
+    "\n"
+    "  Install it? (Y/n) "
 )
 """Asked after the server step, so the user answers with its output in front of
 them, and recommended — hence the default yes. The clients are not named again
-because the server step just listed them."""
+because the server step just listed them.
+
+Shaped like :data:`MCP_PROMPT`: headline with the recommendation, the case for
+it, then the question. The two are halves of one step and reading differently
+made them look like different programs."""

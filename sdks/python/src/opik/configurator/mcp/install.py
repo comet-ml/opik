@@ -14,7 +14,7 @@ import logging
 import shutil
 import subprocess
 import sys
-from typing import Final, List, Optional, Tuple
+from typing import Final, List, NamedTuple, Optional, Tuple
 
 import opik.config as opik_config
 from opik.configurator import interactive_helpers
@@ -32,6 +32,27 @@ UV_INSTALL_DOCS_URL = "https://docs.astral.sh/uv/"
 MCP_DOCS_URL = "https://www.comet.com/docs/opik/mcp-server"
 
 
+class InstallReport(NamedTuple):
+    """What the install did, for a caller that has to report it.
+
+    ``registered`` alone was the old return value, and it could not tell a run
+    that wrote nothing because the user picked nothing from one that wrote
+    nothing because every write failed — the two are the same empty list. The
+    counts here are what the configure funnel keys on.
+
+    ``verified`` is ``None`` when verification never ran, which is the case
+    whenever nothing was registered: absent, not failed.
+    """
+
+    registered: Tuple[str, ...]
+    failed: Tuple[str, ...] = ()
+    verified: Optional[bool] = None
+    declined: bool = False
+
+
+NOTHING_INSTALLED = InstallReport(registered=())
+
+
 def setup_mcp_server(
     api_key: Optional[str],
     workspace: Optional[str],
@@ -46,7 +67,7 @@ def setup_mcp_server(
     assume_confirmed: bool = False,
     view: Optional[mcp_view.InstallView] = None,
     announce_next_steps: bool = True,
-) -> List[str]:
+) -> InstallReport:
     """Register the Opik MCP server with the user's AI client(s).
 
     The decision of *whether* to run this lives in the callers; by the time this
@@ -68,8 +89,9 @@ def setup_mcp_server(
     that ``opik.configure()`` stays library-safe. The CLI passes a ``rich`` view.
 
 
-    Returns the host keys actually registered, so a caller can act on the same set
-    without asking the user a second time.
+    Returns an :class:`InstallReport`: the host keys actually registered, so a
+    caller can act on the same set without asking the user a second time, plus
+    the ones that failed and whether the connection verified.
     """
     display = view if view is not None else mcp_view.default_view()
 
@@ -87,7 +109,7 @@ def setup_mcp_server(
             "named. Pass `--ai-client <client>` to set it up unattended, or run "
             "`opik mcp configure` from a shell."
         )
-        return []
+        return NOTHING_INSTALLED
 
     ambiguity = _workspace_ambiguity(
         api_key=api_key,
@@ -98,7 +120,7 @@ def setup_mcp_server(
     )
     if ambiguity is not None:
         display.problem(ambiguity)
-        return []
+        return NOTHING_INSTALLED
 
     # Prefer the Opik-hosted MCP server when the deployment runs one; otherwise
     # fall back to the local `uvx opik-mcp` server. The probe — not the
@@ -130,7 +152,7 @@ def setup_mcp_server(
     )
     if server_spec is None:
         display.problem(unavailable_reason or "")
-        return []
+        return NOTHING_INSTALLED
 
     candidates = _candidate_targets(host_keys)
     if len(candidates) == 0:
@@ -141,7 +163,7 @@ def setup_mcp_server(
             )
         else:
             _report_no_host_detected(server_spec, display)
-        return []
+        return NOTHING_INSTALLED
 
     # Shown before anything is written, and before the confirmation below, so the
     # user is consenting to a change they can see rather than a yes/no in the dark.
@@ -172,7 +194,11 @@ def setup_mcp_server(
         display.skipped(
             "Skipped MCP server setup. Run `opik mcp configure` anytime to set it up."
         )
-        return []
+        # The one empty result that is a decision rather than a dead end: the
+        # picker is the question now, so choosing nothing in it — or cancelling —
+        # is the user saying no, and the funnel has to be able to tell that from
+        # a run that never got as far as asking.
+        return InstallReport(registered=(), declined=True)
 
     if isinstance(server_spec, mcp_spec.StdioServerSpec):
         # Before the prefetch, not after: an old tool install captures `uvx
@@ -197,6 +223,7 @@ def setup_mcp_server(
 
     # One verification per run: it exercises the credentials, which are identical
     # for every host, so running it once and reporting once is enough.
+    verified: Optional[bool] = None
     if any(result.succeeded for result in results):
         with display.step("Checking the connection"):
             verification = _verify(
@@ -206,6 +233,7 @@ def setup_mcp_server(
                 api_url=api_url,
                 check_tls_certificate=check_tls_certificate,
             )
+        verified = verification.succeeded
         display.verification(verification.succeeded, verification.detail)
         if verification.succeeded and announce_next_steps:
             display.done(
@@ -213,11 +241,19 @@ def setup_mcp_server(
                 [result.target_display_name for result in results if result.succeeded],
             )
 
-    return [
-        target.key
-        for target, result in zip(selected_targets, results)
-        if result.succeeded
-    ]
+    return InstallReport(
+        registered=tuple(
+            target.key
+            for target, result in zip(selected_targets, results)
+            if result.succeeded
+        ),
+        failed=tuple(
+            target.key
+            for target, result in zip(selected_targets, results)
+            if not result.succeeded
+        ),
+        verified=verified,
+    )
 
 
 def _offer_to_remove_tool_install(display: mcp_view.InstallView) -> None:
@@ -327,8 +363,9 @@ def _workspace_ambiguity(
         "Your Opik configuration does not name a workspace, but this account has "
         f"{len(workspaces)}: {', '.join(sorted(workspaces))}. The MCP server would "
         "fall back to your default workspace and silently read from the wrong "
-        "place. Run `opik configure` and choose a workspace, then re-run "
-        "`opik mcp configure`."
+        "place. Name the one you want and re-run:\n\n"
+        "    OPIK_WORKSPACE=<workspace> opik mcp configure\n\n"
+        "or set `workspace` in ~/.opik.config."
     )
 
 

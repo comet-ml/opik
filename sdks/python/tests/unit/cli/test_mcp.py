@@ -1,11 +1,13 @@
 """Tests for the ``opik mcp configure`` command."""
 
 import pathlib
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
 from click.testing import CliRunner
 
+from opik.cli import assistants
 from opik.cli import cli
 from opik.cli import mcp as mcp_cli
 from opik.configurator import consent
@@ -456,3 +458,55 @@ class TestDelegatesToTheSharedStep:
             )
 
         assert setup_spy.call_args.kwargs["force_local_server"] is True
+
+
+class TestResultEventCarriesTheFunnelProperties:
+    """`opik mcp configure` is the control group for the configure funnel.
+
+    Running this command *is* the consent for the server, so a zero here is a
+    failure rather than a refusal — which is only a useful comparison if both
+    commands report the same properties.
+    """
+
+    @staticmethod
+    def _result_event(outcome, detected=("Cursor", "Codex")):
+        runner = CliRunner()
+        with (
+            patch.object(
+                mcp_cli.opik_config, "OpikConfig", return_value=_config(api_key="key")
+            ),
+            patch.object(
+                mcp_cli.interactive_helpers, "is_interactive", return_value=True
+            ),
+            patch.object(
+                mcp_cli.mcp_targets,
+                "detected_targets",
+                return_value=[SimpleNamespace(display_name=name) for name in detected],
+            ),
+            patch.object(mcp_cli.assistants, "setup", return_value=outcome),
+            patch.object(mcp_cli.account_identity, "event_properties", return_value={}),
+            patch.object(mcp_cli.analytics, "track_event") as track,
+        ):
+            assert runner.invoke(cli, ["mcp", "configure"]).exit_code == 0
+        return track.call_args_list[-1].kwargs
+
+    def test_reports_detected_clients(self):
+        event = self._result_event(assistants.Outcome(clients=1, skills=True))
+
+        assert event["detected_clients"] == 2
+
+    def test_reports_failures_and_verification(self):
+        event = self._result_event(
+            assistants.Outcome(clients=1, skills=True, failed_clients=1, verified=False)
+        )
+
+        assert event["clients_failed"] == 1
+        assert event["verification_succeeded"] is False
+
+    def test_nothing_detected__is_zero_not_absent(self):
+        event = self._result_event(
+            assistants.Outcome(clients=0, skills=False), detected=()
+        )
+
+        assert event["detected_clients"] == 0
+        assert event["clients_written"] == 0

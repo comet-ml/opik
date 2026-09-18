@@ -718,7 +718,9 @@ class TestWorkspaceAmbiguity:
 
         assert message is not None
         assert "acme" in message and "beta" in message
-        assert "opik configure" in message
+        # Names how to set the workspace, not "run `opik configure`": this fires
+        # from inside `opik configure` too, where that instruction is a loop.
+        assert "OPIK_WORKSPACE" in message
 
     def test_workspace_ambiguity__named_workspace__is_fine(self, monkeypatch):
         list_spy = mock.Mock()
@@ -986,7 +988,7 @@ class TestTerminalRequired:
             view=view,
         )
 
-        assert result == []
+        assert result == install.NOTHING_INSTALLED
         install_spy.assert_not_called()
         assert view.skips, "the user is told why nothing happened"
 
@@ -1014,7 +1016,7 @@ class TestTerminalRequired:
             view=RecordingView(),
         )
 
-        assert result == ["cursor"]
+        assert result.registered == ("cursor",)
         install_spy.assert_called_once()
 
     def test_confirm_targets__terminal__still_asks(self, monkeypatch):

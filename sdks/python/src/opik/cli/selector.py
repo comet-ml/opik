@@ -130,6 +130,84 @@ def multiselect(
     return [choice.key for choice in choices if choice.key in selected]
 
 
+def choose_one(
+    title: str,
+    choices: Sequence[Choice],
+    read_key: Optional[Callable[[], str]] = None,
+) -> Optional[str]:
+    """Pick exactly one, with the arrow keys *or* by typing its number.
+
+    Both, deliberately. A number was the only way to answer this question before
+    there was a picker, so scripts driving a pty and people with the muscle
+    memory both still send ``1`` and Enter — a digit moves the cursor to that
+    row and Enter takes the row, which makes that sequence mean what it always
+    meant. Callers that cannot host a picker at all keep the plain ``input()``
+    prompt; see :func:`is_supported`.
+
+    Returns the chosen key, or ``None`` if the user cancelled.
+    """
+    if len(choices) == 0:
+        return None
+
+    reader = read_key or _key_reader()
+    if reader is None:
+        return None
+
+    cursor = 0
+    with rich.live.Live(
+        _render_one(title, choices, cursor),
+        console=console,
+        auto_refresh=False,
+        transient=False,
+    ) as live:
+        while True:
+            key = reader()
+
+            if key == CANCEL:
+                return None
+            if key == ACCEPT:
+                break
+            if key == UP:
+                cursor = (cursor - 1) % len(choices)
+            elif key == DOWN:
+                cursor = (cursor + 1) % len(choices)
+            elif key.isdigit() and 1 <= int(key) <= len(choices):
+                cursor = int(key) - 1
+
+            live.update(_render_one(title, choices, cursor), refresh=True)
+
+    return choices[cursor].key
+
+
+def _render_one(
+    title: str, choices: Sequence[Choice], cursor: int
+) -> console_module.Group:
+    """The single-select list: a number per row, so both ways in are visible."""
+    grid = table.Table.grid(padding=(0, 2))
+    grid.add_column(no_wrap=True)  # cursor
+    grid.add_column(no_wrap=True)  # number
+    grid.add_column(no_wrap=True)  # label
+    grid.add_column(overflow="fold")  # hint
+
+    for index, choice in enumerate(choices):
+        is_current = index == cursor
+        grid.add_row(
+            text.Text(CURSOR if is_current else " ", style="cyan"),
+            text.Text(str(index + 1), style="cyan" if is_current else "dim"),
+            text.Text(choice.label, style="bold" if is_current else ""),
+            text.Text(choice.hint, style="dim"),
+        )
+    return console_module.Group(
+        text.Text(title, style="bold"),
+        grid,
+        text.Text(
+            f"  ↑↓ move · 1-{len(choices)} pick · enter confirm "
+            f"({choices[cursor].label})",
+            style="dim",
+        ),
+    )
+
+
 def _footer(choices: Sequence[Choice], selected: Set[str], cursor: int) -> str:
     """Spell out what Enter will take, so it is never guessed at."""
     if len(selected) == 0:
@@ -283,4 +361,9 @@ def _normalise(char: str) -> str:
         return UP
     if char == "j":
         return DOWN
+    # Digits pass through as themselves, for :func:`choose_one`'s number
+    # shortcuts. `multiselect` ignores them, as it ignores any other key it has
+    # no meaning for.
+    if char.isdigit():
+        return char
     return ""

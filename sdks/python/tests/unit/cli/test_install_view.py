@@ -30,7 +30,7 @@ class TestRichInstallView:
 
         return rich_view
 
-    def test_plan__shows_deployment_transport_and_every_path(self, view):
+    def test_plan__shows_deployment_and_transport(self, view):
         with view.console.capture() as capture:
             view.RichInstallView().plan(
                 "Opik Cloud · workspace acme-ai", "Local server via uvx", _targets()
@@ -39,9 +39,19 @@ class TestRichInstallView:
         out = capture.get()
         assert "Opik MCP server setup" in out
         assert "acme-ai" in out
-        assert "Will update" in out
-        assert "~/.cursor/mcp.json" in out
-        assert "Claude Code" in out
+        assert "Local server via uvx" in out
+
+    def test_plan__does_not_relist_the_clients_and_their_paths(self, view):
+        """The prompt listed them, the picker listed them; the results table
+        below reports what was actually written."""
+        with view.console.capture() as capture:
+            view.RichInstallView().plan(
+                "Opik Cloud · workspace acme-ai", "Local server via uvx", _targets()
+            )
+
+        out = capture.get()
+        assert "Will update" not in out
+        assert "~/.cursor/mcp.json" not in out
 
     def test_results__success_uses_the_short_form(self, view):
         """The path was already shown in the plan; repeating it just wraps."""
@@ -300,3 +310,86 @@ class TestChooseHosts:
             rich_view.RichInstallView().choose_hosts("pick", self._candidates(), [])
             is None
         )
+
+
+class TestTheAllRow:
+    """The picker offers "All" as its first row.
+
+    Nothing is pre-ticked — this writes into other tools' config files — and
+    `multiselect` takes the highlighted row when the selection is empty, so
+    Enter used to register whichever client happened to be listed first. The
+    row Enter lands on now says All. The numbered-menu fallback has carried its
+    own "All of the above" all along; this is the picker's parity.
+    """
+
+    @staticmethod
+    def _candidates():
+        return [
+            mcp_view.HostChoice("claude-code", "Claude Code"),
+            mcp_view.HostChoice("codex", "Codex"),
+            mcp_view.HostChoice("cursor", "Cursor"),
+        ]
+
+    def _choose(self, monkeypatch, returns):
+        from opik.cli import install_view as rich_view
+        from opik.cli import selector
+
+        seen = {}
+
+        def fake(**kwargs):
+            seen["choices"] = kwargs["choices"]
+            return returns
+
+        monkeypatch.setattr(selector, "is_supported", lambda: True)
+        monkeypatch.setattr(selector, "multiselect", fake)
+        chosen = rich_view.RichInstallView().choose_hosts(
+            "pick", self._candidates(), []
+        )
+        return chosen, seen["choices"]
+
+    def test_all_is_the_first_row_and_skip_the_last(self, monkeypatch):
+        _, choices = self._choose(monkeypatch, [])
+
+        assert choices[0].label == "All"
+        assert choices[-1].label == "Skip"
+        assert [c.label for c in choices[1:-1]] == ["Claude Code", "Codex", "Cursor"]
+
+    def test_choosing_skip__declines(self, monkeypatch):
+        """Saying no is a row, not only the Escape key."""
+        from opik.cli import install_view as rich_view
+
+        chosen, _ = self._choose(monkeypatch, [rich_view._SKIP])
+
+        assert chosen == []
+
+    def test_skip_beats_anything_else_ticked(self, monkeypatch):
+        from opik.cli import install_view as rich_view
+
+        chosen, _ = self._choose(monkeypatch, ["codex", rich_view._SKIP])
+
+        assert chosen == []
+
+    def test_choosing_all__expands_to_every_candidate(self, monkeypatch):
+        from opik.cli import install_view as rich_view
+
+        chosen, _ = self._choose(monkeypatch, [rich_view._ALL])
+
+        assert chosen == ["claude-code", "codex", "cursor"]
+
+    def test_choosing_some__returns_only_those(self, monkeypatch):
+        chosen, _ = self._choose(monkeypatch, ["codex", "cursor"])
+
+        assert chosen == ["codex", "cursor"]
+
+    def test_the_sentinel_never_leaks_out(self, monkeypatch):
+        """It is not a host key; passing it downstream would install nothing."""
+        from opik.cli import install_view as rich_view
+
+        chosen, _ = self._choose(monkeypatch, ["codex", rich_view._ALL])
+
+        assert rich_view._ALL not in chosen
+
+    def test_cancelled__still_propagates_none(self, monkeypatch):
+        chosen, _ = self._choose(monkeypatch, None)
+
+        assert chosen is None

@@ -109,11 +109,12 @@ class TestReadableList:
 
 
 class TestPrompts:
-    def test_mcp_prompt__names_what_was_found(self):
-        prompt = consent.mcp_prompt(["Claude Code", "Cursor"])
+    def test_mcp_prompt__does_not_name_the_clients(self):
+        """The installer's picker lists them straight after."""
+        prompt = consent.MCP_PROMPT
 
-        assert "Claude Code and Cursor" in prompt
-        assert "(y/N)" in prompt, "defaults to no"
+        assert "Claude Code" not in prompt
+        assert "(Y/n)" in prompt, "recommended, so Enter accepts"
 
     def test_skills_prompt__is_recommended_and_defaults_to_yes(self):
         assert "Recommended" in consent.SKILLS_PROMPT

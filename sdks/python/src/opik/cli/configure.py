@@ -2,7 +2,7 @@
 
 import os
 import urllib.parse
-from typing import Any, List, Mapping, Optional
+from typing import Any, Mapping, Optional
 
 import click
 
@@ -39,59 +39,58 @@ def _setup_assistants(
     mcp_verdict = consent.resolve(install_mcp, **situation)
     skills_verdict = consent.resolve(install_skills, **situation)
 
-    wants_mcp = consent.granted(mcp_verdict, lambda: _ask_about_mcp(detected))
+    wants_mcp = consent.granted(mcp_verdict, _ask_about_mcp)
 
-    # "Set Opik up for your AI client?" is the umbrella question for this whole
-    # step, not just the server half — so answering no to it declines the pack
-    # too. Only a flag naming the pack outranks that, and a flag never leaves the
-    # verdict at ASK.
-    if not wants_mcp and mcp_verdict.decision is consent.Decision.ASK:
-        if skills_verdict.decision is consent.Decision.ASK:
-            skills_verdict = consent.Verdict(
-                consent.Decision.SKIP, consent.Reason.DECLINED
-            )
+    # Declining the server no longer declines the pack. They were coupled because
+    # the MCP question read as the umbrella for the whole step, but the pack needs
+    # no server — it is instruction files for clients that are already there — so
+    # one Enter was dropping a second thing the user never said no to.
+    mcp_decision = consent.decision_reason(mcp_verdict, wants_mcp)
 
     if not wants_mcp and skills_verdict.decision is consent.Decision.SKIP:
         _announce_skip(mcp_verdict, skills_verdict)
-        return assistants.NOTHING_DONE
+        # The pack was never asked about on this path, so its decision comes
+        # straight off the verdict — nobody said no, the question never arose.
+        return assistants.NOTHING_DONE._replace(
+            detected=len(detected),
+            mcp_decision=mcp_decision,
+            skills_decision=skills_verdict.reason.value,
+        )
 
-    return assistants.setup(
+    outcome = assistants.setup(
         setup_params,
         install_mcp=wants_mcp,
         skills=skills_verdict,
-        # A named flag covers whatever is detected, so the installer's own client
-        # picker would be a question the user already answered. Having been asked
-        # is different: the prompt named the clients but not which of them, so the
-        # picker is where that gets chosen.
+        # A named flag covers whatever is detected, so it needs no picker. A yes to
+        # the prompt above does not: the picker is where a subset can be chosen,
+        # and its first row is "All", which is where the cursor starts — so the
+        # second step costs a keystroke rather than a decision, and Enter no
+        # longer silently takes whichever client happened to be listed first.
         assume_confirmed=mcp_verdict.reason is consent.Reason.REQUESTED,
     )
+    # The server's decision is only final once the picker has been through:
+    # reaching it counts as a request, choosing nothing in it is the refusal.
+    if outcome.mcp_declined:
+        mcp_decision = consent.Reason.DECLINED.value
+    # `skills_decision` is left as `setup` recorded it: it did the asking.
+    return outcome._replace(detected=len(detected), mcp_decision=mcp_decision)
 
 
-def _ask_about_mcp(detected: List[str]) -> bool:
-    """Ask before touching any assistant's configuration.
+def _ask_about_mcp() -> bool:
+    """Introduce the MCP step. The picker that follows is the question.
 
-    `opik configure` is about writing ``~/.opik.config``; registering an MCP
-    server edits files owned by other tools, which is a different kind of
-    permission and should not be assumed just because the user configured Opik.
-    Dropping straight into the client picker made the wider question unaskable —
-    there was no way to answer "no, just configure Opik".
+    `opik configure` used to ask twice: a yes/no here, then the installer's
+    client picker — two questions for one decision, and `opik mcp configure`
+    asked only the second of them. The block is shared with that command now and
+    the picker is the single question in both, so the two commands no longer
+    differ in how many times they ask or in what they tell you first.
 
-    Not asked on `opik mcp configure`: running that command *is* the answer.
-    Defaults to no, matching `-y`'s refusal to reach into another tool's config.
+    Always returns True: it is not the decision any more, it is the case for it.
+    Saying no is the picker's Skip row, or Escape — and that comes back as
+    `InstallReport.declined`, which is what the funnel reads.
     """
-    console = install_view.console
-    console.print()
-    console.print("  Set Opik up for your AI client?", style="bold")
-    # One sentence per print: the client list varies in length, and folding it into
-    # a line with a hardcoded wrap pushed the rest past the terminal width and
-    # lost the indent on the continuation.
-    console.print(f"  Found {consent.readable_list(detected)}.", style="dim")
-    console.print(
-        "  The Opik MCP server lets it read traces, log scores and run\n"
-        "  experiments from chat.",
-        style="dim",
-    )
-    return click.confirm("", default=False)
+    install_view.render_mcp_intro()
+    return True
 
 
 #: Skips worth mentioning, and how to say them. A skip the user asked for
@@ -105,6 +104,10 @@ _SKIP_NOTES = {
     consent.Reason.ASSUME_YES: (
         "Skipped AI client setup: -y answers Opik's own questions, and does not "
         "write to another tool's configuration."
+    ),
+    consent.Reason.NOTHING_DETECTED: (
+        "Skipped AI client setup: none of the supported AI clients were found on "
+        "this machine."
     ),
 }
 
@@ -126,11 +129,55 @@ def _announce_skip(
     if note is None:
         return
 
-    console = install_view.console
-    console.print(f"  {note}", style="yellow")
-    console.print(
-        "  To include it:  opik configure --install-mcp --install-skills",
-        style="dim",
+    install_view.render_note(
+        note, "To include it:  opik configure --install-mcp --install-skills"
+    )
+
+
+#: One line of context per deployment. The names and the numbers stay in
+#: ``DeploymentType``, which the library prompt renders from too, so the two
+#: cannot drift apart.
+_DEPLOYMENT_BLURBS = {
+    interactive_helpers.DeploymentType.CLOUD: "Managed by Comet, free to start",
+    interactive_helpers.DeploymentType.SELF_HOSTED: "Your organisation's own Comet platform",
+    interactive_helpers.DeploymentType.LOCAL: "An Opik you run yourself",
+}
+
+
+def _ask_for_deployment_type() -> interactive_helpers.DeploymentType:
+    """The deployment question, rendered by the CLI rather than the configurator.
+
+    Presentation only. The answer is still read by
+    ``interactive_helpers.ask_user_for_deployment_type``, so the accepted input
+    is what it has always been — ``1``, ``2``, ``3``, or Enter for the default —
+    and a script piping those in does not care that the question got a headline.
+    ``configurator`` keeps its plain-text version because ``opik.configure()`` is
+    a library call and must not take over the caller's terminal.
+
+    ``rich`` drops the styling by itself when stdout is not a terminal, so a
+    redirected or styling-less terminal gets the same words without escapes.
+    """
+    question = "Where should Opik log your traces?"
+    rows = [
+        (str(deployment.value[0]), deployment.value[1], _DEPLOYMENT_BLURBS[deployment])
+        for deployment in interactive_helpers.DeploymentType
+    ]
+
+    if install_view.can_pick():
+        chosen = install_view.choose_one_numbered(question, rows)
+        if chosen is None:
+            # Escape or Ctrl-C. Aborting is what Ctrl-C did at the `input()`
+            # prompt this replaces; falling through would re-ask the question
+            # the user just backed out of.
+            raise click.Abort()
+        return interactive_helpers.DeploymentType.find_by_value(int(chosen))
+
+    # No picker here — a pipe, a CI log, a terminal without raw-mode key reading.
+    # The numbered prompt is the original question, unchanged, so the answers are
+    # the same ones and nothing driving this from a script notices a difference.
+    install_view.render_numbered_choices(question, rows)
+    return interactive_helpers.ask_user_for_deployment_type(
+        prompt="  Enter 1, 2 or 3 [1]: "
     )
 
 
@@ -160,7 +207,7 @@ def _deployment_type() -> interactive_helpers.DeploymentType:
     than reporting an abort.
     """
     if interactive_helpers.is_interactive():
-        return interactive_helpers.ask_user_for_deployment_type()
+        return _ask_for_deployment_type()
 
     url = os.environ.get("OPIK_URL_OVERRIDE", "").strip()
     if url:
@@ -326,10 +373,16 @@ def configure(
     # Click is the caller at this frame, so the event survives — and because the
     # outermost reporter suppresses nested ones, this is also the only place the
     # flow can report from.
+    interactive = interactive_helpers.is_interactive()
+    # `-y` and "no terminal" both mean "do not ask me", and both suppress the AI
+    # client step outright — so the funnel needs to see it. It was invisible.
+    automatic_approvals = yes or not interactive
+
     analytics.track_event(
         "configuration",
         "configure",
-        interactive=interactive_helpers.is_interactive(),
+        interactive=interactive,
+        automatic_approvals=automatic_approvals,
         # The tri-states as passed, so "asked and said yes" is separable from
         # "never asked" — the flag is also how an agent drives this.
         install_mcp=str(install_mcp),
@@ -344,12 +397,28 @@ def configure(
     # Demanding `-y` to say "yes, the defaults" was a step that existed only to be
     # discovered — and the error teaching it was the step an agent was most likely
     # to stop at.
-    outcome = run_interactive_configure(
-        use_local=use_local,
-        automatic_approvals=yes or not interactive_helpers.is_interactive(),
-        install_mcp=install_mcp,
-        install_skills=install_skills,
-    )
+    try:
+        outcome = run_interactive_configure(
+            use_local=use_local,
+            automatic_approvals=automatic_approvals,
+            install_mcp=install_mcp,
+            install_skills=install_skills,
+        )
+    except BaseException as exception:
+        # One in five runs used to end here and report nothing at all, so the
+        # entry event had no sibling and the drop was indistinguishable from a
+        # user who simply never finished. Only the exception's type is reported:
+        # its message can carry a URL, a workspace or a key.
+        analytics.track_event(
+            "configuration",
+            "configure",
+            "failed",
+            interactive=interactive,
+            automatic_approvals=automatic_approvals,
+            error_type=type(exception).__name__,
+            **account_identity.event_properties(),
+        )
+        raise
 
     # Sibling of the entry event above, reported from this same frame. Entry says
     # what was asked for, this says what was actually written — the gap between
@@ -359,7 +428,18 @@ def configure(
         "configure",
         "result",
         clients_written=outcome.clients,
+        clients_failed=outcome.failed_clients,
         skills_installed=outcome.skills,
+        # What makes a zero readable: how many clients there were to write to,
+        # what the user decided about each half, and whether what we wrote
+        # actually works. Without them every zero looks like a refusal.
+        detected_clients=outcome.detected,
+        mcp_decision=outcome.mcp_decision,
+        skills_decision=outcome.skills_decision,
+        verification_succeeded=outcome.verified,
+        # Carried onto the result too: the entry event has it, and a funnel whose
+        # steps filter on different things is not measuring one population.
+        interactive=interactive,
         # Resolved again rather than reused from the entry event: this is the run
         # that just wrote ~/.opik.config, so it is the first point at which a
         # first-ever configure has an account to name at all.

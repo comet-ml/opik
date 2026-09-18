@@ -10,7 +10,6 @@ from opik.api_objects.opik_client import get_current_client_raw
 from opik import config
 from opik.configurator.interactive_helpers import (
     ask_user_for_approval,
-    ask_user_for_approval_default_no,
     is_interactive,
 )
 from opik.configurator import consent
@@ -195,12 +194,16 @@ class OpikConfigurator:
             interactive=is_interactive(),
             anything_detected=len(detected) > 0,
         )
-        return consent.granted(verdict, lambda: self._ask_about_mcp(detected))
+        return consent.granted(verdict, self._ask_about_mcp)
 
-    def _ask_about_mcp(self, detected: List[str]) -> bool:
-        """Ask, recording that the prompt already named the detected hosts."""
+    def _ask_about_mcp(self) -> bool:
+        """Ask, recording that the prompt already named the detected hosts.
+
+        Default yes, matching the CLI's own prompt: the two ask the same question
+        and answering Enter to one of them should not mean the opposite.
+        """
         self._mcp_prompt_named_detected_hosts = True
-        return ask_user_for_approval_default_no(consent.mcp_prompt(detected))
+        return ask_user_for_approval(consent.MCP_PROMPT)
 
     def _configure_cloud(self) -> None:
         """

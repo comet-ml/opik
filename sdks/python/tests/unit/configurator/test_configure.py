@@ -2513,7 +2513,7 @@ class TestShouldSetupMcpServer:
 
     @patch("opik.configurator.configure.mcp.detected_host_names", return_value=[])
     @patch(
-        "opik.configurator.configure.ask_user_for_approval_default_no",
+        "opik.configurator.configure.ask_user_for_approval",
         return_value=True,
     )
     @patch("opik.configurator.configure.is_interactive", return_value=True)
@@ -2525,20 +2525,24 @@ class TestShouldSetupMcpServer:
         mock_prompt.assert_not_called()
 
     @patch(
-        "opik.configurator.configure.mcp.detected_host_names", return_value=["Cursor"]
+        "opik.configurator.configure.mcp.detected_host_names",
+        return_value=["Cursor"],
     )
     @patch(
-        "opik.configurator.configure.ask_user_for_approval_default_no",
+        "opik.configurator.configure.ask_user_for_approval",
         return_value=True,
     )
     @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__single_host__prompt_names_it(
+    def test_should_setup_mcp_server__prompt_is_its_own_block(
         self, mock_is_interactive, mock_prompt, mock_detected
     ):
+        """The clients are not named: the installer's picker lists them next."""
         configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
+
         assert configurator._should_setup_mcp_server() is True
+
         prompt = mock_prompt.call_args.args[0]
-        assert "Found Cursor." in prompt
+        assert "Cursor" not in prompt
         # Framed as its own block, not appended to the configuration log.
         assert prompt.startswith("\n")
         assert "AI clients" in prompt
@@ -2546,27 +2550,10 @@ class TestShouldSetupMcpServer:
 
     @patch(
         "opik.configurator.configure.mcp.detected_host_names",
-        return_value=["Cursor", "Codex"],
+        return_value=["Cursor"],
     )
     @patch(
-        "opik.configurator.configure.ask_user_for_approval_default_no",
-        return_value=True,
-    )
-    @patch("opik.configurator.configure.is_interactive", return_value=True)
-    def test_should_setup_mcp_server__several_hosts__prompt_names_all(
-        self, mock_is_interactive, mock_prompt, mock_detected
-    ):
-        configurator = OpikConfigurator(install_mcp=None, automatic_approvals=False)
-        assert configurator._should_setup_mcp_server() is True
-        question = mock_prompt.call_args.args[0]
-        assert "Cursor" in question
-        assert "Codex" in question
-
-    @patch(
-        "opik.configurator.configure.mcp.detected_host_names", return_value=["Cursor"]
-    )
-    @patch(
-        "opik.configurator.configure.ask_user_for_approval_default_no",
+        "opik.configurator.configure.ask_user_for_approval",
         return_value=False,
     )
     @patch("opik.configurator.configure.is_interactive", return_value=True)
@@ -2645,7 +2632,7 @@ class TestSkillsHostKeys:
 
     @patch("opik.configurator.configure.skills.detected_host_keys", return_value=[])
     @patch(
-        "opik.configurator.configure.ask_user_for_approval_default_no",
+        "opik.configurator.configure.ask_user_for_approval",
         return_value=True,
     )
     @patch("opik.configurator.configure.is_interactive", return_value=True)
@@ -2687,7 +2674,13 @@ class TestSkillsHostKeys:
 
         assert configurator._skills_host_keys() == ["codex"]
 
-        assert mock_prompt.call_args.args[0].lstrip().startswith("Recommended")
+        # Shaped like the MCP question: headline first, recommendation on it.
+        assert (
+            mock_prompt.call_args.args[0]
+            .lstrip()
+            .startswith("Download the Opik skill pack")
+        )
+        assert "(Recommended)" in mock_prompt.call_args.args[0]
 
     @patch(
         "opik.configurator.configure.skills.detected_host_keys", return_value=["codex"]

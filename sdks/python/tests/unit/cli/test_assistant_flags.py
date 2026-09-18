@@ -15,6 +15,7 @@ from opik.cli import assistants as cli_assistants
 from opik.cli import configure as configure_cli
 from opik.configurator import mcp as mcp_installer
 from opik.configurator import skills as skills_installer
+from opik.configurator.mcp import install as mcp_install
 from opik.configurator.skills import install as skills_install
 
 MCP = "setup_mcp_server"
@@ -50,7 +51,7 @@ def ran(monkeypatch):
 
     def fake_mcp(**kwargs):
         calls.append(MCP)
-        return ["cursor"]
+        return mcp_install.InstallReport(registered=("cursor",), verified=True)
 
     def fake_skills(host_keys, *args, **kwargs):
         calls.append(SKILLS)
