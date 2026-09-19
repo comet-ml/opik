@@ -22,6 +22,7 @@ on:
           # - mistral  # disabled: Mistral API rejects the test traffic with 429
           - groq
           - cerebras
+          - together
           - aisuite
           - haystack
           # - guardrails  # disabled: guardrails-ai is on PyPI quarantine
