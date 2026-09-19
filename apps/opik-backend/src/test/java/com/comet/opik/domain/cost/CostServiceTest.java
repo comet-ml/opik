@@ -1174,6 +1174,10 @@ class CostServiceTest {
         return Stream.of(
                 // novita/deepseek/deepseek-r1-distill-llama-70b: input 8e-7, output 8e-7
                 // 1000 * 8e-7 + 200 * 8e-7 = 0.0008 + 0.00016 = 0.00096
+                // Note: LiteLLM strips its own routing prefix from response.model, so models with
+                // an internal '/' (e.g. deepseek/deepseek-r1-…) are stored as a double-stripped key
+                // that does not match the price-file row. Multi-segment Novita models are therefore
+                // unreachable from the LiteLLM decorator path; this case tests the price row directly.
                 Arguments.of("novita - text-generation without cache",
                         "novita/deepseek/deepseek-r1-distill-llama-70b", "novita",
                         Map.of("prompt_tokens", 1000, "completion_tokens", 200),
@@ -1182,6 +1186,14 @@ class CostServiceTest {
                 // 1000 * 1.5000999999999998e-07 + 200 * 5.9997e-07 = 0.00027000399999999998
                 Arguments.of("databricks - text-generation without cache",
                         "databricks/databricks-gpt-oss-120b", "databricks",
+                        Map.of("prompt_tokens", 1000, "completion_tokens", 200),
+                        "0.00027000399999999998"),
+                // Shape the LiteLLM SDK integration actually reports: LiteLLM strips its routing
+                // prefix from response.model, so the span carries the bare model id while the
+                // provider comes from the requested model. Databricks model ids are single-segment,
+                // so this lookup succeeds end-to-end through the integration.
+                Arguments.of("databricks - as reported by the LiteLLM integration",
+                        "databricks-gpt-oss-120b", "databricks",
                         Map.of("prompt_tokens", 1000, "completion_tokens", 200),
                         "0.00027000399999999998"));
     }
