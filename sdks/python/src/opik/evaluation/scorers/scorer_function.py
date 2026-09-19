@@ -53,3 +53,23 @@ def validate_scorer_function(scorer_function: ScorerFunction) -> None:
 
 def has_task_span_in_parameters(scorer_function: ScorerFunction) -> bool:
     return "task_span" in inspect.signature(scorer_function).parameters
+
+
+def requires_task_span_argument(scorer_function: ScorerFunction) -> bool:
+    """True only when the scorer cannot be called without the span.
+
+    A defaulted ``task_span`` is documented as optional, so that scorer still
+    runs when the caller has no span to bind. The kind allowlist mirrors the
+    required-argument check in ``arguments_helpers``: ``*task_span`` and
+    ``**task_span`` bind no argument named ``task_span``, so a variadic
+    parameter of that name never makes the span required.
+    """
+    parameter = inspect.signature(scorer_function).parameters.get("task_span")
+    if parameter is None:
+        return False
+
+    return parameter.default is inspect.Parameter.empty and parameter.kind in (
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        inspect.Parameter.KEYWORD_ONLY,
+    )
