@@ -6,7 +6,12 @@ from werkzeug.exceptions import HTTPException
 
 from opik_backend.executor import CodeExecutorBase
 from opik_backend.http_utils import build_error_response
+from opik_backend.payload_types import PayloadType
+from opik_backend.process_worker import required_score_params
 from opik_backend.score_validation import has_usable_score
+
+# Built-ins the scorer injects rather than resolving from a trace/span path.
+RESERVED_BUILT_INS = frozenset({"spans"})
 
 # Environment variable to control execution strategy
 EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "process")
@@ -50,6 +55,12 @@ def execute_evaluator_python():
     code: str = payload.get("code")
     if code is None:
         abort(400, "Field 'code' is missing in the request")
+    if not isinstance(code, str):
+        # Checked here rather than left to the executor: the two strategies disagree
+        # on a non-string. ProcessExecutor reaches exec() and comes back 400, while
+        # DockerExecutor sizes the payload before its try block and raises
+        # AttributeError, which surfaces as a 500 the Java caller then retries.
+        abort(400, "Field 'code' must be a string")
 
     data: Dict[Any, Any] = payload.get("data")
     if data is None:
@@ -57,6 +68,24 @@ def execute_evaluator_python():
 
     # Extract type information for conversation thread metrics
     payload_type = payload.get("type")
+
+    # An online-scoring rule maps each score() parameter to a trace/span field, and
+    # a field the entity never logged resolves to nothing and arrives with its key
+    # absent -- which misses an argument the signature requires and scores nothing.
+    # Passing None says the entity had no value there, which is the outcome the rule
+    # wants. Deliberately applied here and not in the shared scoring code: the
+    # optimization studio runs the same code with a mapped *dataset column* absent
+    # and requires the opposite -- score(**data) must raise, so the item is reported
+    # as an explained 0.0 rather than a silent score (OPIK_7172). Same shape, two
+    # contracts, and only the caller separates them.
+    #
+    # `spans` is excluded because it is not path-resolved: the scorer injects it only
+    # when the rule declares it, so its absence always means the rule never asked for
+    # it -- a configuration error that should keep failing by name, not be filled.
+    if isinstance(data, dict) and payload_type != PayloadType.TRACE_THREAD.value:
+        for name in required_score_params(code):
+            if name not in RESERVED_BUILT_INS:
+                data.setdefault(name, None)
 
     # Get the executor from app context and run the code
     response = get_executor().run_scoring(code, data, payload_type)

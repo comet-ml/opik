@@ -13,3 +13,38 @@ class T(BaseMetric):
         return ScoreResult(name='selftest', value=1.0)"
 
 python "$RUNNER" "$CODE" '{"output": "ok"}' | grep -q '"value": 1.0'
+
+# A failure must name its cause, and must not leak the runner's own frames. This
+# one raises while binding the call, so it has no user frame and the shortest
+# possible traceback -- the case a fixed-length slice used to discard entirely.
+STRICT_CODE="from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+class T(BaseMetric):
+    def score(self, output):
+        return ScoreResult(name='selftest', value=1.0)"
+
+OUT=$(python "$RUNNER" "$STRICT_CODE" '{"output": "ok", "metadata": "x"}' || true)
+printf '%s' "$OUT" | grep -q "unexpected keyword argument 'metadata'"
+if printf '%s' "$OUT" | grep -q scoring_runner; then
+  echo "runner frame leaked into user error" >&2
+  exit 1
+fi
+
+# A compile-time failure has no frames at all, so its location comes from the
+# exception rather than from the walk. This pins that the location survives -- not
+# the skip count, which cannot affect an empty frame list.
+BROKEN_CODE="class T("
+
+OUT=$(python "$RUNNER" "$BROKEN_CODE" '{"output": "ok"}' || true)
+printf '%s' "$OUT" | grep -q "invalid Python code"
+printf '%s' "$OUT" | grep -q "SyntaxError"
+printf '%s' "$OUT" | grep -q '<string>'
+
+# A failure raised while exec() runs the module body does have a user frame, which
+# is what pins the skip count on this branch: over-skipping drops it.
+RAISING_CODE="raise ValueError('boom')"
+
+OUT=$(python "$RUNNER" "$RAISING_CODE" '{"output": "ok"}' || true)
+printf '%s' "$OUT" | grep -q "invalid Python code"
+printf '%s' "$OUT" | grep -q "ValueError: boom"
+printf '%s' "$OUT" | grep -q 'line 1, in <module>'

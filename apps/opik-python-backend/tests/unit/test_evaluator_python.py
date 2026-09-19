@@ -562,3 +562,473 @@ def test_conversation_thread_metric_with_trace_thread_type(client, app):
     assert score['value'] == 1.0  # 2 messages is within 2-10 range
     assert score['reason'] == "Conversation has 2 messages"
     assert score['scoring_failed'] is False
+
+
+@pytest.fixture
+def process_client():
+    """Endpoint client pinned to the in-repo ProcessExecutor.
+
+    The Docker executor runs the *published* sandbox image, so it cannot exercise
+    an unreleased change to that image's scoring_runner. Pinning keeps these
+    assertions about this repo's own code; the sandbox runner's equivalent cases
+    are gated by its selftest.sh at image build time.
+    """
+    executor = ProcessExecutor()
+    if hasattr(executor, 'start_services'):
+        executor.start_services()
+    try:
+        from opik_backend import create_app
+        app = create_app(should_init_executor=False)
+        app.executor = executor
+        yield app.test_client()
+    finally:
+        if hasattr(executor, 'cleanup'):
+            executor.cleanup()
+
+
+REQUIRED_METADATA_METRIC = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class RequiresMetadata(base_metric.BaseMetric):
+    def __init__(
+        self,
+        name: str = "requires_metadata_metric",
+    ):
+        super().__init__(
+            name=name,
+            track=False,
+        )
+
+    def score(
+        self, output: str, metadata, **ignored_kwargs: Any
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            value=1.0, name=self.name, reason=f"metadata={metadata!r}"
+        )
+"""
+
+OPTIONAL_THRESHOLD_METRIC = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class OptionalThreshold(base_metric.BaseMetric):
+    def __init__(
+        self,
+        name: str = "optional_threshold_metric",
+    ):
+        super().__init__(
+            name=name,
+            track=False,
+        )
+
+    def score(
+        self, output: str, threshold: float = 0.5, **ignored_kwargs: Any
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            value=threshold, name=self.name, reason=f"threshold={threshold!r}"
+        )
+"""
+
+KEYWORD_ONLY_METADATA_METRIC = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class KeywordOnlyMetadata(base_metric.BaseMetric):
+    def __init__(
+        self,
+        name: str = "keyword_only_metadata_metric",
+    ):
+        super().__init__(
+            name=name,
+            track=False,
+        )
+
+    def score(self, output: str, *, metadata) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            value=1.0, name=self.name, reason=f"metadata={metadata!r}"
+        )
+"""
+
+
+# A rule maps each score() parameter to a trace/span field, but a field the entity
+# never logged resolves to nothing and reaches the evaluator with that key absent.
+# Spreading that as score(**data) used to miss an argument the signature required,
+# failing the whole rule -- which is what the shipped default template did on any
+# trace logged without metadata.
+@pytest.mark.parametrize("code, expected_name, expected_value, expected_reason", [
+    (REQUIRED_METADATA_METRIC, "requires_metadata_metric", 1.0, "metadata=None"),
+    (KEYWORD_ONLY_METADATA_METRIC, "keyword_only_metadata_metric", 1.0, "metadata=None"),
+])
+def test_missing_required_argument_is_bound_to_none(
+        process_client, code, expected_name, expected_value, expected_reason):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": code
+    })
+
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["name"] == expected_name
+    assert scores[0]["value"] == expected_value
+    assert scores[0]["reason"] == expected_reason
+    assert scores[0]["scoring_failed"] is False
+
+
+# The counterpart the fill-in must not break: None is a value, so binding it over a
+# parameter that has a default would silently replace the default rather than let it
+# apply.
+def test_missing_optional_argument_keeps_its_default(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": OPTIONAL_THRESHOLD_METRIC
+    })
+
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["name"] == "optional_threshold_metric"
+    assert scores[0]["value"] == 0.5, "the metric's own default must survive"
+    assert scores[0]["reason"] == "threshold=0.5"
+    assert scores[0]["scoring_failed"] is False
+
+
+# A resolvable mapping must reach the metric untouched -- the contrast that shows the
+# fill-in only covers absence.
+def test_present_argument_is_passed_through(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc", "metadata": '{"env":"test"}'},
+        "code": REQUIRED_METADATA_METRIC
+    })
+
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["name"] == "requires_metadata_metric"
+    assert scores[0]["value"] == 1.0
+    assert scores[0]["reason"] == "metadata='{\"env\":\"test\"}'"
+    assert scores[0]["scoring_failed"] is False
+
+
+# Binding absent arguments must not paper over a genuinely wrong call: an argument the
+# signature has no place for is still a reported failure, and the reported cause must
+# name it rather than coming back empty.
+def test_unexpected_argument_still_fails_and_names_the_cause(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc", "metadata": "x"},
+        "code": """
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class NoKwargs(base_metric.BaseMetric):
+    def __init__(self, name: str = "no_kwargs_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str) -> score_result.ScoreResult:
+        return score_result.ScoreResult(value=1.0, name=self.name)
+"""
+    })
+
+    assert response.status_code == 400
+    error = str(response.json["error"])
+    assert "The provided 'code' and 'data' fields can't be evaluated" in error
+    assert "unexpected keyword argument 'metadata'" in error, (
+        "the cause must be named -- a fixed-length traceback slice used to drop it"
+    )
+
+
+# `code` is untyped JSON. Left to the executors they disagree on a non-string:
+# ProcessExecutor reaches exec() and answers 400, while DockerExecutor sizes the
+# payload before its try block, raises AttributeError, and surfaces as a 500 that
+# the Java caller then retries. Runs on the shared fixture, so both strategies are
+# covered -- the check is ahead of dispatch, so neither executor is reached.
+@pytest.mark.parametrize("code", [42, ["x"], {"a": 1}])
+def test_non_string_code_is_rejected_as_bad_request(client, code):
+    response = client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": code
+    })
+
+    assert response.status_code == 400, "must not surface as a 500 on either strategy"
+    # Pin the cause, not just the status: an unrelated 400 would otherwise pass.
+    assert "Field 'code' must be a string" in str(response.json["error"])
+
+
+# A base reached through an assignment rather than a class statement: not statically
+# resolvable, but `issubclass` finds it at runtime -- so this actually runs, and the
+# resolver's fallback is what decides the outcome rather than an import error.
+STATICALLY_UNRESOLVABLE_METRIC = """
+from opik.evaluation.metrics import base_metric, score_result
+
+MyBase = base_metric.BaseMetric
+
+
+class Helper:
+    def score(self, unrelated_param):
+        return None
+
+
+class RealMetric(MyBase):
+    def __init__(self, name: str = "real_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str, metadata):
+        return score_result.ScoreResult(value=1.0, name=self.name)
+"""
+
+TWO_METRIC_CLASSES = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class AlphaMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "alpha_metric"):
+        super().__init__(name=name, track=False)
+
+    # Strict on purpose: with **kwargs it would swallow a wrongly-injected keyword
+    # and the test could not fail on the thing it names.
+    def score(self, output: str) -> score_result.ScoreResult:
+        return score_result.ScoreResult(value=1.0, name=self.name)
+
+
+class BetaMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "beta_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str, beta_only: str, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        return score_result.ScoreResult(value=0.0, name=self.name)
+"""
+
+RENAMED_RECEIVER_METRIC = """
+from typing import Any
+
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class RenamedReceiver(base_metric.BaseMetric):
+    def __init__(self, name: str = "renamed_receiver_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(this, output: str, metadata, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        return score_result.ScoreResult(
+            value=1.0, name=this.name, reason=f"metadata={metadata!r}"
+        )
+"""
+
+
+# `self` is a convention, not a rule. Filling the receiver would make the call pass
+# two values for the same parameter and 400 every trace.
+def test_receiver_is_not_filled_when_it_is_not_named_self(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": RENAMED_RECEIVER_METRIC
+    })
+
+    assert response.status_code == 200
+    assert response.json["scores"][0]["reason"] == "metadata=None"
+
+
+# The signature read must pick the class the executor will instantiate, or it injects
+# a keyword the real metric rejects. When no class statically resolves to BaseMetric
+# it must fill nothing rather than guess from another class that declares score().
+def test_unresolvable_metric_class_fills_nothing(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": STATICALLY_UNRESOLVABLE_METRIC
+    })
+
+    # Filling nothing leaves RealMetric.score missing `metadata`, so the failure names
+    # it. Guessing from Helper would instead inject `unrelated_param` and the failure
+    # would name that -- so the two behaviours are told apart, not merely both 400.
+    assert response.status_code == 400
+    error = str(response.json["error"])
+    assert "metadata" in error, "the real metric's own missing argument must be reported"
+    assert "unrelated_param" not in error, "no parameter from the unrelated class"
+
+
+# With several metric classes, the statically-read signature must agree with the
+# class runtime actually instantiates, or the fill injects a parameter it rejects.
+def test_multiple_metric_classes_do_not_inject_a_foreign_parameter(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": TWO_METRIC_CLASSES
+    })
+
+    assert response.status_code == 200, (
+        "a keyword read off the wrong class would reach AlphaMetric's strict "
+        "signature and 400 here"
+    )
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["name"] == "alpha_metric", "runtime picks the name-sorted first class"
+    assert scores[0]["value"] == 1.0
+
+
+# The trace-thread contract: data goes to score() positionally as one conversation
+# argument, so the fill-in must not run. Without this the `payload_type` half of the
+# guard is executed by no test and could be deleted with the suite still green.
+def test_trace_thread_payload_is_not_filled(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "type": PayloadType.TRACE_THREAD.value,
+        "code": THREAD_KEYS_METRIC
+    })
+
+    # The metric reports the keys it was handed. Asserting on those rather than on a
+    # failure is what makes the guard observable: `score(data)` takes the dict as one
+    # positional argument, so a filled-in key changes the payload's contents but not
+    # whether the call binds -- a test asserting only failure passes either way.
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["reason"] == "output", (
+        "the conversation must arrive exactly as posted; `conversation` here means "
+        "the fill-in ran on a path that passes data positionally"
+    )
+
+
+# `spans` is injected by the scorer only when the rule declares it, so its absence
+# always means the rule never asked for it -- a configuration error that must keep
+# failing by name rather than being filled with None.
+def test_reserved_spans_builtin_is_not_filled(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": """
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class NeedsSpans(base_metric.BaseMetric):
+    def __init__(self, name: str = "needs_spans_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str, spans):
+        return score_result.ScoreResult(value=1.0, name=self.name)
+"""
+    })
+
+    assert response.status_code == 400
+    assert "spans" in str(response.json["error"])
+
+
+# The reported cause walks __cause__/__context__ so a wrapped error still names its
+# root. `raise ... from None` opts out of that, and honouring it is the difference
+# between reporting context and exposing what the author deliberately hid.
+@pytest.mark.parametrize("raise_stmt, root_expected", [
+    ("raise RuntimeError('outer') from err", True),    # explicit chain
+    ("raise RuntimeError('outer')", True),             # implicit context
+    ("raise RuntimeError('outer') from None", False),  # suppressed
+])
+def test_cause_chain_honours_suppressed_context(process_client, raise_stmt, root_expected):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": f"""
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class Chained(base_metric.BaseMetric):
+    def __init__(self, name: str = "chained_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str):
+        try:
+            raise ValueError('inner root')
+        except ValueError as err:
+            {raise_stmt}
+"""
+    })
+
+    assert response.status_code == 400
+    error = str(response.json["error"])
+    assert "outer" in error, "the raised exception is always reported"
+    assert ("inner root" in error) is root_expected
+
+
+THREAD_KEYS_METRIC = """
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class ThreadKeys(base_metric.BaseMetric):
+    def __init__(self, name: str = "thread_keys_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, conversation):
+        return score_result.ScoreResult(
+            value=1.0, name=self.name, reason=",".join(sorted(conversation))
+        )
+"""
+
+IMPORTED_BASE_SORTS_FIRST = """
+from opik.evaluation.metrics import base_metric, score_result
+
+MyBase = base_metric.BaseMetric
+
+
+class AMetric(MyBase):
+    def __init__(self, name: str = "a_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str):
+        return score_result.ScoreResult(value=1.0, name=self.name)
+
+
+class ZMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = "z_metric"):
+        super().__init__(name=name, track=False)
+
+    def score(self, output: str, bar: str):
+        return score_result.ScoreResult(value=0.0, name=self.name)
+"""
+
+INHERITED_SCORE_FROM_SIBLING = """
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class ZBase(base_metric.BaseMetric):
+    def score(self, output: str, reference):
+        return score_result.ScoreResult(
+            value=1.0, name="inherited_metric", reason=f"reference={reference!r}"
+        )
+
+
+class AMetric(ZBase):
+    def __init__(self, name: str = "inherited_metric"):
+        super().__init__(name=name, track=False)
+"""
+
+
+# The static read and the runtime pick can select different classes: an
+# alphabetically-earlier metric whose base is imported is invisible to the parser but
+# is the one runtime instantiates. Reading the later class's signature would inject a
+# keyword the instantiated one rejects.
+def test_class_selection_ambiguity_fills_nothing(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": IMPORTED_BASE_SORTS_FIRST
+    })
+
+    assert response.status_code == 200, "no keyword from ZMetric may reach AMetric"
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["name"] == "a_metric", "runtime instantiates the name-sorted first"
+
+
+# The selected class need not declare score() itself; an in-file ancestor may. Reading
+# no signature there would leave the original defect in place for that shape.
+def test_score_inherited_from_in_file_base_is_filled(process_client):
+    response = process_client.post(EVALUATORS_URL, json={
+        "data": {"output": "abc"},
+        "code": INHERITED_SCORE_FROM_SIBLING
+    })
+
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    assert scores[0]["reason"] == "reference=None"
