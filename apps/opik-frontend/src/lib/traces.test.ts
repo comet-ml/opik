@@ -1,5 +1,50 @@
 import { describe, expect, it } from "vitest";
-import { prettifyMessage } from "./traces";
+import { parseNumericFeedbackScore, prettifyMessage } from "./traces";
+
+describe("parseNumericFeedbackScore", () => {
+  const wideRange = { min: -1e12, max: 1e12 };
+
+  it("returns undefined for empty or non-finite input", () => {
+    expect(parseNumericFeedbackScore("", { min: 0, max: 1 })).toBeUndefined();
+    expect(
+      parseNumericFeedbackScore("   ", { min: 0, max: 1 }),
+    ).toBeUndefined();
+    expect(
+      parseNumericFeedbackScore("abc", { min: 0, max: 1 }),
+    ).toBeUndefined();
+  });
+
+  it("accepts in-range values including zero", () => {
+    expect(parseNumericFeedbackScore("0", { min: 0, max: 1 })).toBe(0);
+    expect(parseNumericFeedbackScore("0.5", { min: 0, max: 1 })).toBe(0.5);
+    expect(parseNumericFeedbackScore("1", { min: 0, max: 1 })).toBe(1);
+  });
+
+  it("rejects values outside the definition min/max", () => {
+    expect(
+      parseNumericFeedbackScore("-0.1", { min: 0, max: 1 }),
+    ).toBeUndefined();
+    expect(
+      parseNumericFeedbackScore("1.1", { min: 0, max: 1 }),
+    ).toBeUndefined();
+  });
+
+  it("rejects values that Number() would round past DecimalMax", () => {
+    expect(
+      parseNumericFeedbackScore("999999999.999999999", wideRange),
+    ).toBeUndefined();
+    expect(parseNumericFeedbackScore("1000000000", wideRange)).toBeUndefined();
+    expect(parseNumericFeedbackScore("1e9", wideRange)).toBeUndefined();
+    expect(
+      parseNumericFeedbackScore("-999999999.999999999", wideRange),
+    ).toBeUndefined();
+  });
+
+  it("accepts values within backend DecimalMax that stay representable", () => {
+    expect(parseNumericFeedbackScore("999999999", wideRange)).toBe(999999999);
+    expect(parseNumericFeedbackScore("-999999999", wideRange)).toBe(-999999999);
+  });
+});
 
 /**
  * `prettifyMessage` takes a message object, string, or undefined, and transforms it
