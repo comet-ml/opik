@@ -90,8 +90,11 @@ class PromptInjection(BaseMetric):
         track: Whether to automatically track metric results. Defaults to ``True``.
         project_name: Optional tracking project. Defaults to ``None``.
         patterns: Iterable of regex strings considered strong indicators of
-            injection attempts.
+            injection attempts. ``None`` uses the built-in patterns; an empty
+            iterable disables this tier.
         keywords: Iterable of substrings that suggest suspicious behaviour.
+            ``None`` uses the built-in keywords; an empty iterable disables
+            this tier.
 
     Example:
         >>> from opik.evaluation.metrics import PromptInjection

@@ -63,6 +63,9 @@ class Tone(BaseMetric):
         forbidden_phrases: Optional sequence of phrases that immediately fail the
             check.
 
+        For each of the three above, ``None`` uses the built-in list and an
+        empty iterable disables it.
+
     Example:
         >>> from opik.evaluation.metrics import Tone
         >>> metric = Tone(max_exclamations=2)

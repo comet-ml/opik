@@ -986,6 +986,14 @@ def test_tone_empty_lexicons_disable_the_defaults():
     assert emptied.value == 1.0
 
 
+def test_tone_empty_positive_lexicon_disables_the_defaults():
+    text = "I am happy to help."
+
+    assert Tone(track=False).score(output=text).metadata["sentiment_score"] > 0
+    emptied = Tone(track=False, positive_lexicon=[]).score(output=text)
+    assert emptied.metadata["sentiment_score"] == 0
+
+
 def test_tone_empty_forbidden_phrases_disable_the_defaults():
     text = "Shut up, this is not my problem."
 
