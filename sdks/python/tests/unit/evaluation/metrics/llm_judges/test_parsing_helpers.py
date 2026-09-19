@@ -48,3 +48,23 @@ class TestExtractJsonContentOrRaise:
     def test_malformed_braces_only__raises(self):
         with pytest.raises(exceptions.JSONParsingError):
             parsing_helpers.extract_json_content_or_raise("{not: valid json}")
+
+
+class TestReasonToText:
+    def test_list_of_reasons__joined_with_newlines(self):
+        assert (
+            parsing_helpers.reason_to_text(["first reason", "second reason"])
+            == "first reason\nsecond reason"
+        )
+
+    def test_single_item_list__is_plain_text_without_list_syntax(self):
+        assert parsing_helpers.reason_to_text(["only reason"]) == "only reason"
+
+    def test_string_reason__returned_unchanged(self):
+        assert parsing_helpers.reason_to_text("a prose reason") == "a prose reason"
+
+    def test_non_string_items_in_list__stringified(self):
+        assert parsing_helpers.reason_to_text([1, None]) == "1\nNone"
+
+    def test_empty_list__uses_the_same_label_as_structured_output_compliance(self):
+        assert parsing_helpers.reason_to_text([]) == "No reason provided"
