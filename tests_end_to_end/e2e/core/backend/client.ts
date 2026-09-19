@@ -867,9 +867,15 @@ function toMetricSeries(json: unknown): MetricSeries[] {
 
 export function makeBackendClient(apiKey: string | null = null, workspaceName: string | null = null) {
   const env = loadEnvConfig();
+  // One workspace decision for every call this client makes — the explicit
+  // argument when given, the environment default otherwise. The typed SDK
+  // client and the raw helpers must resolve it identically: a raw helper
+  // that kept reading `env.workspace` would silently read and write the
+  // wrong workspace whenever a caller configured a different one.
+  const workspace = workspaceName ?? env.workspace;
   const opik = new Opik({
     apiKey: apiKey ?? env.apiKey ?? undefined,
-    workspaceName: workspaceName ?? env.workspace,
+    workspaceName: workspace,
     apiUrl: env.apiBaseUrl,
   });
 
@@ -912,7 +918,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     const headers: Record<string, string> = {
       Accept: 'application/json',
       'Content-Type': 'application/json',
-      'Comet-Workspace': env.workspace,
+      'Comet-Workspace': workspace,
     };
     const key = apiKey ?? env.apiKey;
     if (key) headers['Authorization'] = key;
@@ -989,7 +995,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
 
   /** Authorization + workspace headers, for calls that bypass `rawFetch`. */
   const workspaceHeaders = (): Record<string, string> => {
-    const headers: Record<string, string> = { 'Comet-Workspace': env.workspace };
+    const headers: Record<string, string> = { 'Comet-Workspace': workspace };
     const key = apiKey ?? env.apiKey;
     if (key) headers['Authorization'] = key;
     return headers;
@@ -2132,7 +2138,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
 
       const headers: Record<string, string> = {
         Accept: 'application/json',
-        'Comet-Workspace': env.workspace,
+        'Comet-Workspace': workspace,
       };
       const key = apiKey ?? env.apiKey;
       if (key) headers['Authorization'] = key;
@@ -2668,7 +2674,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       const headers: Record<string, string> = {
         Accept: 'application/octet-stream',
         'Content-Type': 'application/json',
-        'Comet-Workspace': env.workspace,
+        'Comet-Workspace': workspace,
       };
       const key = apiKey ?? env.apiKey;
       if (key) headers['Authorization'] = key;
