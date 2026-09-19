@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  createCompletionAnnouncer,
   getDefaultConfigByProvider,
   restoreMissingConfigKeys,
 } from "@/lib/playground";
@@ -91,6 +92,22 @@ describe("restoreMissingConfigKeys", () => {
     expect((restored.configs as LLMAnthropicConfigsType).topP).toBe(0.9);
   });
 
+  it("leaves a Claude on another provider unselected rather than picking temperature", () => {
+    // The exclusive rule follows the model, not the route: filling in OpenRouter's own temperature
+    // and topP defaults would turn a deliberate "send neither" back into temperature-at-default.
+    const restored = restoreMissingConfigKeys(
+      prompt(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6,
+        { maxTokens: 0 },
+      ),
+    );
+
+    expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
+    expect(restored.configs).not.toHaveProperty("temperature");
+    expect(restored.configs).not.toHaveProperty("topP");
+  });
+
   it("returns the same prompt when nothing is missing", () => {
     const complete = prompt(
       PROVIDER_TYPE.OPEN_AI,
@@ -164,5 +181,80 @@ describe("restoreMissingConfigKeys", () => {
     } as unknown as PlaygroundPromptType;
 
     expect(restoreMissingConfigKeys(noProvider)).toBe(noProvider);
+  });
+});
+
+describe("createCompletionAnnouncer", () => {
+  it("waits for logging to finish when the registry lands first", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.experimentsRegistered(2);
+    expect(announce).not.toHaveBeenCalled();
+
+    announcer.loggingFinished();
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the registry when logging finishes first", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.loggingFinished();
+    expect(announce).not.toHaveBeenCalled();
+
+    announcer.experimentsRegistered(2);
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds until every expected experiment is registered", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.experimentsRegistered(1);
+    announcer.loggingFinished();
+    expect(announce).not.toHaveBeenCalled();
+
+    announcer.experimentsRegistered(2);
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces once however many times the signals repeat", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(1, announce);
+
+    announcer.experimentsRegistered(1);
+    announcer.loggingFinished();
+    announcer.experimentsRegistered(1);
+    announcer.loggingFinished();
+
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays silent when a run is interrupted before its experiments exist", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.loggingFinished();
+    announcer.experimentsRegistered(1);
+
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  it("stays silent for a run stopped before its experiments landed", () => {
+    // Mirrors how the single-prompt run gates itself: Stop drops the prompt from
+    // the live set, and a drain arriving afterwards must not report success.
+    const live = new Set(["prompt-1"]);
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(1, () => {
+      if (!live.delete("prompt-1")) return;
+      announce();
+    });
+
+    live.delete("prompt-1");
+    announcer.experimentsRegistered(1);
+    announcer.loggingFinished();
+
+    expect(announce).not.toHaveBeenCalled();
   });
 });

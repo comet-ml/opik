@@ -157,6 +157,30 @@ export interface ExperimentRefDetail {
   datasetId: string | null;
 }
 
+export interface ExecutePromptSeed {
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+  /**
+   * The per-variant experiment name (OPIK-3268). Omitted rather than sent as
+   * null when absent, so a caller testing the auto-name fallback exercises the
+   * same payload shape the Playground sends.
+   */
+  experimentName?: string;
+}
+
+/**
+ * The `202` body of `/v1/private/experiments/execute`, plus the raw status so a
+ * caller can assert a rejection without the call throwing first — the blank-name
+ * `422` is part of this endpoint's contract, not a transport failure.
+ */
+export interface ExecuteExperimentsResult {
+  status: number;
+  message: string;
+  /** Ordered by `promptIndex`, so `[i]` is the experiment for `prompts[i]`. */
+  experiments: Array<{ experimentId: string; promptIndex: number }>;
+  totalItems: number | null;
+}
+
 export interface TestSuiteRef {
   id: string;
   name: string;
@@ -252,6 +276,24 @@ export interface SpanBatchSeed {
   usage?: Record<string, number>;
   /** Set to make the span count toward the error rate. */
   errorInfo?: { exceptionType: string; message: string; traceback: string };
+}
+
+/**
+ * One trace of a `POST /v1/private/traces/batch` write.
+ *
+ * `input`/`output` are the JSON sections the compare grid renders per
+ * experiment, and the ones the server truncates for display — so a seed that
+ * wants an untruncated value asserted has to put it here (or on the dataset
+ * item) rather than relying on the trace name.
+ */
+export interface TraceBatchSeed {
+  /** Caller-minted so the seed knows the exact id set it wrote. Must be a UUIDv7. */
+  id: string;
+  name: string;
+  input?: TraceJsonSection;
+  output?: TraceJsonSection;
+  startTime?: Date;
+  endTime?: Date;
 }
 
 /**
@@ -407,6 +449,19 @@ export interface AutomationRuleDetail {
    * this is read back rather than assumed from the create payload.
    */
   type: string;
+  /**
+   * The rule's filters, exactly as the GET answers them — not narrowed to
+   * `BackendFilter`.
+   *
+   * A mapped type here would quietly normalise the read: the server strips the
+   * frontend's transient `id` and adds `key: ""` where the field was absent, and
+   * a spec asserting that an unedited save preserved a filter has to be able to
+   * see both of those as themselves rather than as an object that happens to
+   * mapped-compare equal. `null` means the field came back absent, which is a
+   * different answer from `[]` — an unfiltered rule and a rule whose filters
+   * were cleared are exactly what such a spec is telling apart.
+   */
+  filters: Array<Record<string, unknown>> | null;
 }
 
 /** Fields every user-defined-metric-python rule carries, whatever it scores. */
@@ -419,6 +474,15 @@ interface PythonRuleCommon {
   metric: string;
   triggerScope?: 'production' | 'experiment' | 'both';
   enabled?: boolean;
+  /**
+   * Rule filters, in the same wire shape the REST layer uses everywhere else.
+   *
+   * Seedable here because the edit dialog cannot always set them: for
+   * `trigger_scope=experiment` the whole filtering-and-sampling section is not
+   * rendered at all, so a spec about what an unedited save does to a filtered
+   * experiment rule has no UI path to create one.
+   */
+  filters?: BackendFilter[];
 }
 
 /**
@@ -987,6 +1051,39 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       );
     }
     return rate;
+  };
+
+  /**
+   * A rule's `filters` as the GET answers them, with absent kept distinct from
+   * empty. A shape that is neither absent nor an array is not "no filters" —
+   * reporting it as `null` would let a spec asserting that a save preserved a
+   * filtered rule pass against a response it could not actually read.
+   */
+  const readRuleFilters = (
+    ruleId: string,
+    filters: unknown,
+  ): Array<Record<string, unknown>> | null => {
+    if (filters === undefined || filters === null) return null;
+    if (!Array.isArray(filters)) {
+      throw new Error(
+        `getAutomationRule: ${ruleId} returned a '${typeof filters}' filters field — ` +
+          `cannot be read as a filter list.`,
+      );
+    }
+    // Same reasoning one level down. A caller reads a filter by field/operator/
+    // value, so a `null` or primitive element would either throw a bare
+    // TypeError deep inside the spec's comparison or compare unequal for a
+    // reason that has nothing to do with the behaviour under test. Failing here
+    // names the rule and the index instead.
+    filters.forEach((filter, index) => {
+      if (typeof filter !== 'object' || filter === null || Array.isArray(filter)) {
+        throw new Error(
+          `getAutomationRule: ${ruleId} returned filters[${index}] as ` +
+            `'${filter === null ? 'null' : typeof filter}' — a filter must be an object.`,
+        );
+      }
+    });
+    return filters as Array<Record<string, unknown>>;
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -1817,6 +1914,56 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * One page of the same read, with the envelope kept — the exact request the
+     * comparison grid issues, and the one the browser export reissues over the
+     * whole result set.
+     *
+     * `total` is part of the answer rather than a convenience: a seed that has
+     * only half landed still returns a well-formed page, so a fixture that
+     * waited on `ids.length` alone would open the browser against a partially
+     * ingested comparison and assert on a row count that was never the seed's.
+     * `filters`/`search`/`sorting` travel verbatim, so a caller can confirm a
+     * scoped result set server-side before asking the UI to export it, and
+     * `rows` carries each item's `data` so a caller can see what `truncate`
+     * did to it — the difference between the grid's read and the export's.
+     */
+    async compareItemsPage(args: {
+      datasetId: string;
+      experimentIds: string[];
+      page?: number;
+      size?: number;
+      search?: string;
+      filters?: BackendFilter[];
+      sorting?: BackendSort[];
+      truncate?: boolean;
+    }): Promise<{ total: number; ids: string[]; rows: DatasetItemRef[] }> {
+      const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
+        experimentIds: JSON.stringify(args.experimentIds),
+        page: args.page ?? 1,
+        size: args.size ?? 100,
+        truncate: args.truncate ?? true,
+        ...(args.search ? { search: args.search } : {}),
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
+      });
+      if (typeof page.total !== 'number') {
+        throw new Error(
+          `compareItemsPage: dataset ${args.datasetId} answered without a total — ` +
+            'cannot tell a fully ingested comparison from a partial one.',
+        );
+      }
+      const content = page.content ?? [];
+      return {
+        total: page.total,
+        ids: content.map((item) => String(item.id)),
+        rows: content.map((item) => ({
+          id: String(item.id),
+          data: (item.data ?? {}) as Record<string, unknown>,
+        })),
+      };
+    },
+
+    /**
      * `POST /v1/private/workspaces/metrics/spans` — the aggregation a dashboard
      * Time series widget plots when it is scoped to "All projects in the
      * workspace". Raw fetch because the pinned SDK has no binding for it, and
@@ -2198,6 +2345,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         }));
     },
 
+    /**
+     * Every experiment recorded against one dataset, scoped by the server.
+     *
+     * The narrowing is the point. `listExperimentsWithPrefix('')` turns the
+     * server-side name filter off and then filters client-side, so it can only
+     * ever see the first 500 rows the workspace happens to return — fine for a
+     * real prefix, but a closed-set assertion built on it ("this dataset holds
+     * exactly these two experiments") silently becomes a truncation test on a
+     * shared environment that already holds more. A dataset seeded by a fixture
+     * holds a handful, so scoping the query keeps the set genuinely closed.
+     */
+    async listExperimentsForDataset(datasetId: string): Promise<ExperimentRefDetail[]> {
+      const page = await opik.api.experiments.findExperiments({ datasetId, size: 500 });
+      return (page.content ?? []).map((e) => ({
+        id: String(e.id),
+        name: e.name as string,
+        datasetId: e.datasetId ? String(e.datasetId) : null,
+      }));
+    },
+
     async deleteExperiment(id: string): Promise<void> {
       try {
         await opik.api.experiments.deleteExperimentsById({ ids: [id] });
@@ -2205,6 +2372,105 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * One experiment by id, as the server stored it.
+     *
+     * `findExperimentByName` cannot answer "what name did this experiment end
+     * up with", which is the question a naming test asks: it looks the row up
+     * BY the name, so an experiment that was stored under a different name than
+     * the one requested simply reads as absent, and the failure says "not
+     * found" instead of naming the two strings that disagree.
+     */
+    async getExperiment(id: string): Promise<ExperimentRefDetail> {
+      const experiment = await opik.api.experiments.getExperimentById(id);
+      const name = experiment.name;
+      // Asserted, not defaulted: the generated client types `name` as optional,
+      // and a `?? ''` here would turn "the server dropped the name" — the exact
+      // regression this exists to catch — into a comparison against an empty
+      // string that reads like an ordinary mismatch.
+      if (typeof name !== 'string') {
+        throw new Error(`getExperiment: experiment ${id} carried no name`);
+      }
+      return {
+        id: String(experiment.id),
+        name,
+        datasetId: experiment.datasetId ? String(experiment.datasetId) : null,
+      };
+    },
+
+    /**
+     * `POST /v1/private/experiments/execute` — the write path a test-suite run
+     * takes, and the one that carries a per-variant `experiment_name`
+     * (OPIK-3268). The pinned SDK has no binding for it, so this goes through
+     * `rawFetch` like the other contract-level calls above.
+     *
+     * Returns rather than throws on a non-2xx: the endpoint's rejection of a
+     * blank name is behaviour under test.
+     */
+    async executeExperiments(args: {
+      datasetName: string;
+      datasetId: string;
+      projectName: string;
+      prompts: ExecutePromptSeed[];
+    }): Promise<ExecuteExperimentsResult> {
+      const { status, message, json } = await rawFetch('POST', '/v1/private/experiments/execute', {
+        body: {
+          dataset_name: args.datasetName,
+          dataset_id: args.datasetId,
+          project_name: args.projectName,
+          prompts: args.prompts.map((prompt) => ({
+            model: prompt.model,
+            messages: prompt.messages,
+            ...(prompt.experimentName === undefined
+              ? {}
+              : { experiment_name: prompt.experimentName }),
+          })),
+        },
+      });
+
+      const body = json as {
+        experiments?: Array<{ experiment_id?: string; prompt_index?: number }>;
+        total_items?: number;
+        errors?: string[];
+      } | null;
+
+      // The validation failures answer `{"errors": [...]}` rather than the
+      // `message` field `rawFetch` prefers, so fold them in — otherwise a
+      // caller asserting on the rejection text gets the raw JSON blob.
+      const errors = body?.errors;
+      const detail = Array.isArray(errors) && errors.length > 0 ? errors.join('; ') : message;
+
+      return {
+        status,
+        message: detail,
+        experiments: (body?.experiments ?? [])
+          .map((entry) => {
+            // Validated rather than coerced. `String(undefined)` is the string
+            // `"undefined"` and `Number(undefined)` is `NaN`, and both survive
+            // as far as the caller: the first registers a teardown id that
+            // deletes nothing, the second sorts arbitrarily and silently
+            // scrambles the prompt-to-experiment mapping this whole call
+            // exists to establish. Fail where the bad field is.
+            if (typeof entry.experiment_id !== 'string' || entry.experiment_id === '') {
+              throw new Error(
+                `executeExperiments: response entry carried no experiment_id: ${JSON.stringify(entry)}`,
+              );
+            }
+            if (!Number.isInteger(entry.prompt_index)) {
+              throw new Error(
+                `executeExperiments: response entry carried a non-integer prompt_index: ${JSON.stringify(entry)}`,
+              );
+            }
+            return {
+              experimentId: entry.experiment_id,
+              promptIndex: entry.prompt_index as number,
+            };
+          })
+          .sort((a, b) => a.promptIndex - b.promptIndex),
+        totalItems: typeof body?.total_items === 'number' ? body.total_items : null,
+      };
     },
 
     async findTestSuiteByName(name: string, projectName?: string): Promise<TestSuiteRef | null> {
@@ -2726,6 +2992,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             sampling_rate: args.samplingRate,
             enabled: args.enabled ?? true,
             ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
+            // `filters` is nullable on the write model, and a rule seeded with
+            // `[]` is a different starting state from one seeded with the field
+            // absent — so the caller's distinction is passed through rather than
+            // collapsed. Keyed on `undefined`, not on length: testing `?.length`
+            // would send an explicit `[]` as an omission and make the two
+            // starting states the one thing this comment says they are not.
+            ...(args.filters !== undefined ? { filters: args.filters } : {}),
             code: isThreadScope
               ? { metric: args.metric }
               : { metric: args.metric, arguments: args.arguments },
@@ -3163,6 +3436,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         sampling_rate?: number;
         trigger_scope?: string;
         type?: string;
+        filters?: unknown;
       };
       // Same reasoning as `requireSamplingRate`: defaulting an absent rate or
       // scope would present as the server's default, which is exactly the value
@@ -3183,6 +3457,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         samplingRate: rule.sampling_rate,
         triggerScope: rule.trigger_scope,
         type: rule.type,
+        filters: readRuleFilters(ruleId, rule.filters),
       };
     },
 
@@ -3423,6 +3698,51 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.metadata ? { metadata: args.metadata } : {}),
       });
       return args.id;
+    },
+
+    /**
+     * `POST /v1/private/traces/batch` — many traces in one request.
+     *
+     * The trace equivalent of `createSpansBatch`, and for the same reason: a
+     * comparison wide enough to be worth exporting is hundreds of traces, and
+     * writing them one at a time through `createTraceWithSource` is both slow
+     * and the quickest route to the workspace ingestion rate limit — which
+     * surfaces as a seed that half landed, the worst possible input to a spec
+     * whose subject is "the export covers the whole result set".
+     *
+     * `source` is fixed at `sdk`: these are experiment evaluation traces, which
+     * is what the SDK's own `evaluate()` writes, and the compare grid reads
+     * them through the experiment item rather than through a source filter.
+     */
+    async createTracesBatch(args: {
+      projectName: string;
+      traces: TraceBatchSeed[];
+    }): Promise<void> {
+      // The endpoint's own cap. Chunking here would hide from the caller that
+      // the seed is no longer one atomic write.
+      if (args.traces.length < 1 || args.traces.length > 1000) {
+        throw new Error(
+          `createTracesBatch: the endpoint accepts 1..1000 traces, got ${args.traces.length}`,
+        );
+      }
+      const now = new Date();
+      await postSeedWrite(
+        '/v1/private/traces/batch',
+        `createTracesBatch of ${args.traces.length} into '${args.projectName}'`,
+        {
+          traces: args.traces.map((trace) => ({
+            id: trace.id,
+            project_name: args.projectName,
+            name: trace.name,
+            start_time: (trace.startTime ?? now).toISOString(),
+            end_time: (trace.endTime ?? now).toISOString(),
+            source: 'sdk' as const,
+            ...(trace.input === undefined ? {} : { input: trace.input }),
+            ...(trace.output === undefined ? {} : { output: trace.output }),
+          })),
+        },
+        204,
+      );
     },
 
     /**

@@ -32,7 +32,7 @@ import {
   useClearRunningMap,
   useResetDatasetFilters,
   useSetDatasetVariables,
-  useSetExperimentNamePrefix,
+  useSetExperimentName,
   useDatasetFilters,
   useDatasetPage,
   useDatasetSize,
@@ -100,7 +100,7 @@ const PlaygroundPage = () => {
   const clearRunningMap = useClearRunningMap();
   const resetDatasetFilters = useResetDatasetFilters();
   const setDatasetVariables = useSetDatasetVariables();
-  const setExperimentNamePrefix = useSetExperimentNamePrefix();
+  const setExperimentName = useSetExperimentName();
   const lastActiveProjectId = useLastActiveProjectId();
   const setLastActiveProjectId = useSetLastActiveProjectId();
 
@@ -112,7 +112,7 @@ const PlaygroundPage = () => {
     clearRunningMap();
     resetDatasetFilters();
     setDatasetVariables([]);
-    setExperimentNamePrefix(null);
+    setExperimentName(null);
   }, [
     setPromptMap,
     setDatasetId,
@@ -121,7 +121,7 @@ const PlaygroundPage = () => {
     clearRunningMap,
     resetDatasetFilters,
     setDatasetVariables,
-    setExperimentNamePrefix,
+    setExperimentName,
   ]);
 
   useEffect(() => {
