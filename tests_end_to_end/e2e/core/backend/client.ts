@@ -557,8 +557,14 @@ export interface AnnotationQueueDetail {
 /** One threshold on a named feedback score, inside an automation condition group. */
 export interface QueueScoreConditionRef {
   scoreName: string;
-  /** The wire operator: `<`, `>` or `=`. */
-  operator: string;
+  /**
+   * The wire operator, narrowed to what `ScoreConditionOperator` deserializes.
+   * Anything else is refused by the backend as it reads the payload, so a spec
+   * that sent one would fail on a Jackson message rather than on the claim it
+   * was making — and the read side below has to widen back out of `string`
+   * anyway, so the union is what both ends agree on.
+   */
+  operator: '<' | '>' | '=';
   value: number;
 }
 
@@ -3822,11 +3828,23 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         maxItemsInQueue:
           typeof automation.max_items_in_queue === 'number' ? automation.max_items_in_queue : null,
         groups: (automation.conditions?.groups ?? []).map((group) =>
-          (group.conditions ?? []).map((condition) => ({
-            scoreName: String(condition.score_name ?? ''),
-            operator: String(condition.operator ?? ''),
-            value: Number(condition.value),
-          })),
+          (group.conditions ?? []).map((condition) => {
+            // Checked rather than cast: an operator the enum does not define
+            // means the server answered something no caller can act on, and a
+            // blind cast would present it to `toEqual` as a plain mismatch
+            // instead of naming what came back.
+            const operator = String(condition.operator ?? '');
+            if (operator !== '<' && operator !== '>' && operator !== '=') {
+              throw new Error(
+                `getAnnotationQueueAutomation('${id}'): unknown score condition operator '${operator}'.`,
+              );
+            }
+            return {
+              scoreName: String(condition.score_name ?? ''),
+              operator,
+              value: Number(condition.value),
+            };
+          }),
         ),
       };
     },

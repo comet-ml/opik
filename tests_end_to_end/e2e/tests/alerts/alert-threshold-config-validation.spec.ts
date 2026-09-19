@@ -122,7 +122,7 @@ test.describe('Alerts — threshold trigger config validation', {
   tag: ['@t2-cuj', '@area:alerts'],
 }, () => {
   test(
-    'A threshold config missing or malforming window/threshold is rejected, and nothing is stored',
+    'A threshold config with a missing or malformed window/threshold is rejected, and nothing is stored',
     { tag: ['@cap:alerts.create-alert'] },
     async ({ project, backendClient, uiAlertCleanup, testNamespace }) => {
       const controlName = `${testNamespace}-alert-control`;

@@ -145,28 +145,66 @@ test.describe('Trace Explore — trace panel section toggles', {
         await expectTogglesBothWays(panel, 'Error', false);
       });
 
-      const spanPanel = await test.step("Select the failing span with the trace's error left open", async () => {
-        // Left EXPANDED on purpose, and this is the only reason this step does
-        // more than click a span. The Error section is the controlled one, so
-        // with the trace's copy collapsed the assertion below cannot tell a
-        // span that starts closed from one that inherited the state of the node
-        // selected before it — and inheriting it is precisely the drift this
-        // spec exists to catch.
+      const spanPanel = await test.step("Select the failing span with every section left off its default", async () => {
+        // Every section is moved AWAY from the state it opens in, and that is
+        // the only reason this step does more than click a span. Both loops
+        // above finish by restoring each section to where it started, so a span
+        // selected straight after them would be asserted against exactly the
+        // states the trace is already showing — and the assertion below could
+        // not tell a reset from an inheritance.
+        //
+        // So Error is opened (it defaults closed) and the uncontrolled three
+        // are closed (they default open). Now the two halves of the split
+        // disagree, and the next step can name which is which.
         await panel.toggleSection('Error');
-        await expect(
-          panel.sectionHeader('Error'),
-          "the trace's Error must be open before the span is selected, or the next assertion proves nothing",
-        ).toHaveAttribute('aria-expanded', 'true');
+        for (const title of UNCONTROLLED_SECTIONS) {
+          await panel.toggleSection(title);
+        }
+        await expectSectionStates(panel, {
+          Input: 'false',
+          Output: 'false',
+          Metadata: 'false',
+          Error: 'true',
+        });
         await panel.selectSpan(`${testNamespace}-failing-span`);
         return panel;
       });
 
-      await test.step("The span opens in its own shape, not the trace's", async () => {
+      await test.step('The controlled Error section resets for the span; the uncontrolled three do not', async () => {
+        // This is the split, asserted at the one moment it is observable.
+        //
+        // `CodeBlock` is *optionally* controlled — `isOpen = open ?? useState(defaultOpen)`.
+        // The panel passes `open` for Error only, so Error is reset from the
+        // selected node and comes back collapsed. Input/Output/Metadata read
+        // their own `useState`, which survives because the component stays
+        // mounted across a node change, so they arrive still carrying what the
+        // user left them at on the trace.
+        //
+        // Both halves are deliberate and this asserts them as written, not as
+        // one might wish: collapsing Input to get it out of the way while
+        // walking a span tree is meant to stick, and the error traceback is
+        // meant not to. An Input that came back expanded here would mean the
+        // uncontrolled sections had started resetting per node; an Error that
+        // came back expanded would mean the control had been dropped and the
+        // next node inherits a spent MCP hint — the drift this spec exists for.
+        await expectSectionStates(spanPanel, {
+          Input: 'false',
+          Output: 'false',
+          Metadata: 'false',
+          Error: 'false',
+        });
+      });
+
+      // Back to their defaults, so the toggle loops below start from the state
+      // their `startsExpanded` argument claims.
+      await test.step("Reopen the span's uncontrolled sections", async () => {
+        for (const title of UNCONTROLLED_SECTIONS) {
+          await spanPanel.toggleSection(title);
+        }
         await expectSectionStates(spanPanel, {
           Input: 'true',
           Output: 'true',
           Metadata: 'true',
-          Error: 'false',
         });
       });
 
