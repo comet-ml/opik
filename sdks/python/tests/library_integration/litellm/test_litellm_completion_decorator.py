@@ -65,12 +65,12 @@ def test_litellm_completion_decorator_accepts_object_output(
 
 def test_extract_provider_from_model_fallback_returns_raw_string() -> None:
     """Unknown providers return the raw litellm provider name instead of None."""
-    import litellm
-
     from opik.integrations.litellm.litellm_completion_decorator import (
         _extract_provider_from_model,
     )
 
     # novita is not in LITELLM_PROVIDER_MAPPING -> should return "novita", not None
-    result = _extract_provider_from_model("novita/deepseek/deepseek-r1-distill-llama-70b")
+    result = _extract_provider_from_model(
+        "novita/deepseek/deepseek-r1-distill-llama-70b"
+    )
     assert result == "novita"
