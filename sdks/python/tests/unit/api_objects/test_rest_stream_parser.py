@@ -1,4 +1,6 @@
 import json
+import logging
+import re
 
 import httpx
 import pytest
@@ -161,3 +163,145 @@ def test_read_and_parse_full_stream__non_size_correlated_error__propagates(
             max_results=None,
             max_endpoint_batch_size=400,
         )
+
+
+# --- pagination must not be driven by the post-filter count ---------------
+
+
+def _span_record(span_id: str) -> dict:
+    return {**SPANS_STREAM_JSON[0], "id": span_id}
+
+
+def _record_without_start_time(span_id: str) -> dict:
+    # What backend/SDK version skew looks like from here: a record the
+    # generated model rejects because a required field is absent.
+    record = _span_record(span_id)
+    del record["start_time"]
+    return record
+
+
+def _ndjson(*records) -> list:
+    return [json.dumps(record).encode("utf-8") + b"\r\n" for record in records]
+
+
+class _PagedSource:
+    """Serves pre-baked pages and records the cursor each request used."""
+
+    def __init__(self, pages):
+        self._pages = list(pages)
+        self.requested = []
+
+    def __call__(self, current_batch_size, last_retrieved_id):
+        self.requested.append((current_batch_size, last_retrieved_id))
+        if not self._pages:
+            raise AssertionError("read_source called more times than pages given")
+        return self._pages.pop(0)
+
+
+def _read(source, max_endpoint_batch_size=2):
+    return rest_stream_parser.read_and_parse_full_stream(
+        read_source=source,
+        parsed_item_class=rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=max_endpoint_batch_size,
+    )
+
+
+def test_read_and_parse_full_stream__dropped_record_does_not_end_the_stream():
+    # The backend served a full 2-record page both times; one record on each
+    # page is unparseable, so only 1 item survives per page. A short page is
+    # what ends the read -- a dropped record must not look like one.
+    source = _PagedSource(
+        pages=[
+            _ndjson(_record_without_start_time("bad-1"), _span_record("span-a")),
+            _ndjson(_span_record("span-b"), _record_without_start_time("bad-2")),
+            _ndjson(_span_record("span-c")),
+        ]
+    )
+
+    spans = _read(source)
+
+    assert [span.id for span in spans] == ["span-a", "span-b", "span-c"]
+    assert source.requested == [(2, None), (2, "span-a"), (2, "span-b")]
+
+
+def test_read_and_parse_full_stream__undecodable_line_does_not_end_the_stream():
+    source = _PagedSource(
+        pages=[
+            [b"{not json}\r\n", *_ndjson(_span_record("span-a"))],
+            _ndjson(_span_record("span-b")),
+        ]
+    )
+
+    spans = _read(source)
+
+    assert [span.id for span in spans] == ["span-a", "span-b"]
+    assert source.requested == [(2, None), (2, "span-a")]
+
+
+def test_read_and_parse_full_stream__clean_pages_still_stop_at_a_short_page():
+    source = _PagedSource(
+        pages=[
+            _ndjson(_span_record("span-a"), _span_record("span-b")),
+            _ndjson(_span_record("span-c"), _span_record("span-d")),
+            _ndjson(_span_record("span-e")),
+        ]
+    )
+
+    spans = _read(source)
+
+    assert [span.id for span in spans] == [
+        "span-a",
+        "span-b",
+        "span-c",
+        "span-d",
+        "span-e",
+    ]
+    assert source.requested == [(2, None), (2, "span-b"), (2, "span-d")]
+
+
+def test_read_and_parse_full_stream__fully_dropped_page_stops_without_looping():
+    # A page whose records all fail to parse advances neither the cursor nor
+    # the result, so the next request would ask for exactly the same page.
+    # The read must stop there rather than spin.
+    source = _PagedSource(
+        pages=[
+            _ndjson(_span_record("span-a"), _span_record("span-b")),
+            _ndjson(
+                _record_without_start_time("bad-1"),
+                _record_without_start_time("bad-2"),
+            ),
+        ]
+    )
+
+    spans = _read(source)
+
+    assert [span.id for span in spans] == ["span-a", "span-b"]
+    assert len(source.requested) == 2
+
+
+def test_read_and_parse_full_stream__dropped_records_are_reported(caplog):
+    source = _PagedSource(
+        pages=[
+            _ndjson(
+                _record_without_start_time("bad-1"),
+                _record_without_start_time("bad-2"),
+                _span_record("span-a"),
+            ),
+            _ndjson(_span_record("span-b")),
+        ]
+    )
+
+    with caplog.at_level(logging.WARNING, logger="opik.api_objects.rest_stream_parser"):
+        spans = _read(source, max_endpoint_batch_size=3)
+
+    assert [span.id for span in spans] == ["span-a", "span-b"]
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno >= logging.WARNING
+    ]
+    reported = re.findall(
+        r"finished with (\d+) record\(s\) dropped", "\n".join(warnings)
+    )
+    assert reported == ["2"], warnings

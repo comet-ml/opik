@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Callable, Iterable, Type, List, Optional, Tuple, TypeVar
+from typing import Callable, Dict, Iterable, Type, List, Optional, Tuple, TypeVar
 
 import httpx
 
@@ -45,6 +45,7 @@ def read_and_parse_full_stream(
     # held at the shrunk value for the rest of the read (a backend that
     # couldn't serve N items is unlikely to serve N again later).
     batch_size = max_endpoint_batch_size
+    dropped_records_total = 0
     while True:
         if max_results is None:
             current_batch_size = batch_size
@@ -57,10 +58,13 @@ def read_and_parse_full_stream(
             break
 
         last_retrieved_id = result[-1].id if len(result) > 0 else None  # type: ignore
+        dropped_records: Dict[str, int] = {"count": 0}
         try:
             results_stream = read_source(current_batch_size, last_retrieved_id)
             parsed_items = read_and_parse_stream(
-                stream=results_stream, item_class=parsed_item_class
+                stream=results_stream,
+                item_class=parsed_item_class,
+                dropped_records_out=dropped_records,
             )
         except _SIZE_CORRELATED_ERRORS as exc:
             if batch_size <= MIN_ENDPOINT_BATCH_SIZE:
@@ -76,9 +80,37 @@ def read_and_parse_full_stream(
             continue
 
         result.extend(parsed_items)
+        dropped_records_total += dropped_records["count"]
 
-        if current_batch_size > len(parsed_items):
+        # Records the backend sent but that failed to parse were still part of
+        # this page, so they count towards it being full. Leaving them out makes
+        # a single unreadable record look like the end of the stream and abandons
+        # every remaining page.
+        records_received = len(parsed_items) + dropped_records["count"]
+
+        if records_received >= current_batch_size and not parsed_items:
+            # A page of nothing but unreadable records advances neither the
+            # result nor the cursor, so the next request would ask for exactly
+            # the same page. Stop rather than loop.
+            LOGGER.warning(
+                "Stream read stopped early: all %d record(s) of the current "
+                "page could not be parsed as %s, so pagination could not "
+                "advance.",
+                dropped_records["count"],
+                parsed_item_class.__name__,
+            )
             break
+
+        if current_batch_size > records_received:
+            break
+
+    if dropped_records_total:
+        LOGGER.warning(
+            "Stream read of %s finished with %d record(s) dropped because they "
+            "could not be parsed; the result is incomplete.",
+            parsed_item_class.__name__,
+            dropped_records_total,
+        )
 
     return result
 
@@ -87,8 +119,17 @@ def read_and_parse_stream(
     stream: Iterable[bytes],
     item_class: Type[T],
     nb_samples: Optional[int] = None,
+    dropped_records_out: Optional[Dict[str, int]] = None,
 ) -> List[T]:
+    """Parse an NDJSON stream into ``item_class`` instances.
+
+    Records that cannot be decoded or validated are logged and skipped. When
+    ``dropped_records_out`` is given, its ``"count"`` key is set to how many
+    were skipped, which is what a paginating caller needs to tell a short page
+    (end of data) apart from a full page with unreadable records.
+    """
     result: List[T] = []
+    dropped_records = 0
 
     # last record in chunk may be incomplete, we will use this buffer to concatenate strings
     buffer = b""
@@ -100,10 +141,13 @@ def read_and_parse_stream(
         # last record in chunk may be incomplete
         for line in lines[:-1]:
             item = _parse_stream_line(line=line, item_class=item_class)
-            if item is not None:
+            if item is None:
+                dropped_records += 1
+            else:
                 result.append(item)
 
                 if nb_samples is not None and len(result) == nb_samples:
+                    _report_dropped_records(dropped_records_out, dropped_records)
                     return result
 
         # Keep the last potentially incomplete line in buffer
@@ -112,10 +156,21 @@ def read_and_parse_stream(
     # Process any remaining data in the buffer after the stream ends
     if buffer:
         item = _parse_stream_line(line=buffer, item_class=item_class)
-        if item is not None:
+        if item is None:
+            dropped_records += 1
+        else:
             result.append(item)
 
+    _report_dropped_records(dropped_records_out, dropped_records)
     return result
+
+
+def _report_dropped_records(
+    dropped_records_out: Optional[Dict[str, int]],
+    dropped_records: int,
+) -> None:
+    if dropped_records_out is not None:
+        dropped_records_out["count"] = dropped_records
 
 
 def _parse_stream_line(
