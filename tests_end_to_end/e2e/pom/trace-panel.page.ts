@@ -1,4 +1,5 @@
 import { test, type Page, type Locator } from '@playwright/test';
+import { sidePanelTitleGroup } from './side-panel-title-group';
 
 export class TracePanelPage {
   constructor(
@@ -34,6 +35,78 @@ export class TracePanelPage {
   /** Heading-area locator for the trace name shown in the panel toolbar. */
   traceNameInHeader(name: string): Locator {
     return this.root.getByText(name, { exact: true }).first();
+  }
+
+  // --- Header copy actions (OPIK-8342) ---
+  //
+  // The panel header's copy-ID / copy-link pair. Every locator here is scoped
+  // to the header's title group, because the inner inspect toolbar renders a
+  // copy-ID button of its own for the entity the span tree has selected — see
+  // `sidePanelTitleGroup` for why that scoping is not optional.
+
+  /** The header's title group: close control, entity icon, title, copy actions. */
+  get header(): Locator {
+    return sidePanelTitleGroup(this.page, this.root);
+  }
+
+  /** The header's "Copy trace ID" button. */
+  get headerCopyIdButton(): Locator {
+    return this.header.getByRole('button', { name: 'Copy trace ID', exact: true });
+  }
+
+  /** The header's "Copy trace link" button. */
+  get headerCopyLinkButton(): Locator {
+    return this.header.getByRole('button', { name: 'Copy trace link', exact: true });
+  }
+
+  /**
+   * A header copy button in its post-click state. The component swaps both the
+   * icon and the accessible name to "Copied" for 3s, so the label IS the state:
+   * while it holds, the same button no longer answers to its idle name.
+   */
+  get headerCopiedButton(): Locator {
+    return this.header.getByRole('button', { name: 'Copied', exact: true });
+  }
+
+  /**
+   * The inspect toolbar's "Copy span ID" button — panel-wide rather than
+   * header-scoped, since it only ever exists in the toolbar, and its being
+   * unique is itself worth asserting.
+   */
+  get copySpanIdButton(): Locator {
+    return this.root.getByRole('button', { name: 'Copy span ID', exact: true });
+  }
+
+  /**
+   * Every link-copying action currently on screen, whatever entity it names.
+   *
+   * A URL is page-scoped, so the design allows exactly one: the header's. The
+   * count is the assertion — two link actions on one page were the ambiguity
+   * OPIK-8342's review round removed.
+   */
+  get copyLinkButtons(): Locator {
+    return this.root.getByRole('button', { name: /^Copy \w+ link$/ });
+  }
+
+  /** Click the header's "Copy trace ID". Read the value with `readClipboard`. */
+  async copyTraceIdFromHeader(): Promise<void> {
+    return test.step('Copy the trace ID from the panel header', async () => {
+      await this.headerCopyIdButton.click();
+    });
+  }
+
+  /** Click the header's "Copy trace link". Read the value with `readClipboard`. */
+  async copyTraceLinkFromHeader(): Promise<void> {
+    return test.step('Copy the trace link from the panel header', async () => {
+      await this.headerCopyLinkButton.click();
+    });
+  }
+
+  /** Click the inspect toolbar's "Copy span ID". */
+  async copySpanId(): Promise<void> {
+    return test.step('Copy the span ID from the inspect toolbar', async () => {
+      await this.copySpanIdButton.click();
+    });
   }
 
   /** Text matching `Spans (n)` shown above the spans tree. */

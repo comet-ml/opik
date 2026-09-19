@@ -1,4 +1,5 @@
-import { test, type Page, type Locator } from '@playwright/test';
+import { expect, test, type Page, type Locator } from '@playwright/test';
+import { sidePanelTitleGroup } from './side-panel-title-group';
 
 /**
  * The thread detail side-panel: a chat-style view of a conversation. Each turn
@@ -64,6 +65,107 @@ export class ThreadPanelPage {
   /** Locator for the turn's output text within the turn block. */
   turnOutput(traceId: string, output: string): Locator {
     return this.turn(traceId).getByText(output, { exact: true });
+  }
+
+  // --- Header actions (OPIK-8342) ---
+
+  /** The header's title group: close control, thread icon, title, copy actions. */
+  get header(): Locator {
+    return sidePanelTitleGroup(this.page, this.root);
+  }
+
+  /**
+   * The header title. Always the literal word "Thread" — a thread has no name
+   * of its own, which is exactly why its id lives in the title's tooltip.
+   */
+  get title(): Locator {
+    return this.header.getByText('Thread', { exact: true });
+  }
+
+  /** The header's "Copy thread ID" button. */
+  get copyIdButton(): Locator {
+    return this.header.getByRole('button', { name: 'Copy thread ID', exact: true });
+  }
+
+  /** The header's "Copy thread link" button. */
+  get copyLinkButton(): Locator {
+    return this.header.getByRole('button', { name: 'Copy thread link', exact: true });
+  }
+
+  /**
+   * A header copy button in its post-click state. The component swaps the icon
+   * and the accessible name to "Copied" for 3s, so the label IS the state.
+   */
+  get copiedButton(): Locator {
+    return this.header.getByRole('button', { name: 'Copied', exact: true });
+  }
+
+  /** Click "Copy thread ID". Read the value back with `readClipboard`. */
+  async copyThreadId(): Promise<void> {
+    return test.step('Copy the thread ID from the panel header', async () => {
+      await this.copyIdButton.click();
+    });
+  }
+
+  /** Click "Copy thread link". Read the value back with `readClipboard`. */
+  async copyThreadLink(): Promise<void> {
+    return test.step('Copy the thread link from the panel header', async () => {
+      await this.copyLinkButton.click();
+    });
+  }
+
+  /**
+   * Hover the header title and return the tooltip text it reveals.
+   *
+   * Radix portals tooltip content to the document body, so it is read off the
+   * page rather than the panel — and it only ever exists while the pointer is
+   * over the trigger, which is what made it unreachable under happy-dom.
+   *
+   * Every header control is tooltipped, and the one the pointer just left stays
+   * mounted through its exit animation. So this waits for the count to settle at
+   * one before reading, rather than taking `.first()` and risking the tooltip of
+   * the copy button the previous step clicked.
+   */
+  async readTitleTooltip(): Promise<string> {
+    return test.step('Hover the thread title and read its tooltip', async () => {
+      await this.title.hover();
+      const tooltip = this.page.getByRole('tooltip');
+      await expect
+        .poll(() => tooltip.count(), {
+          message: 'exactly one tooltip must be on screen — the title\'s',
+          timeout: 10_000,
+        })
+        .toBe(1);
+      return (await tooltip.textContent())?.trim() ?? '';
+    });
+  }
+
+  /**
+   * The overflow "Actions menu" trigger. Panel-scoped rather than
+   * title-group-scoped: it sits in the top bar's right-hand action group, a
+   * sibling of the title group, and it is the panel's only one.
+   */
+  get actionsMenuButton(): Locator {
+    return this.root.getByRole('button', { name: 'Actions menu', exact: true });
+  }
+
+  /**
+   * Open the overflow menu and return its items, in render order.
+   *
+   * The menu is portalled, so it is looked up on the page. Returning the whole
+   * list rather than a per-item locator is deliberate: what OPIK-8342 changed
+   * is the menu's MEMBERSHIP, and only an exhaustive read can catch an item
+   * quietly coming back.
+   */
+  async openActionsMenuItems(): Promise<string[]> {
+    return test.step('Open the thread actions menu and read its items', async () => {
+      await this.actionsMenuButton.click();
+      const menu = this.page.getByRole('menu');
+      await menu.waitFor({ state: 'visible' });
+      const items = menu.getByRole('menuitem');
+      await items.first().waitFor({ state: 'visible' });
+      return (await items.allTextContents()).map((t) => t.trim());
+    });
   }
 
   /**
