@@ -14,11 +14,23 @@ try:  # pragma: no cover - optional dependency
 except ImportError:  # pragma: no cover - optional dependency
     _textstat_lib = None
 
+try:  # pragma: no cover - optional dependency (textstat's hyphenation backend)
+    import pyphen as _pyphen_lib
+except ImportError:  # pragma: no cover - optional dependency
+    _pyphen_lib = None
+
 # `textstat.set_lang` mutates module-wide state, and the evaluation engine scores
 # metrics from a thread pool. Serialise the locale change together with the calls
 # that depend on it so concurrent metrics with different languages cannot
 # interleave and score with each other's locale.
 _TEXTSTAT_LOCK = threading.Lock()
+
+
+def _is_unknown_locale(language: str) -> bool:
+    """Return ``True`` when textstat's hyphenation backend has no ``language`` dictionary."""
+    if _pyphen_lib is None:  # pragma: no cover - cannot verify, assume the locale
+        return True
+    return _pyphen_lib.language_fallback(language) is None
 
 
 class Readability(BaseMetric):
@@ -104,7 +116,11 @@ class Readability(BaseMetric):
                 fk_grade = float(self._textstat.flesch_kincaid_grade(cleaned))
             except KeyError as exc:
                 # `set_lang` does not validate; textstat only fails on the first
-                # locale-dependent call, with a bare `KeyError: None`. Name the cause.
+                # locale-dependent call, with a bare `KeyError: None` from pyphen's
+                # dictionary lookup. Name the cause, but only when the locale really
+                # is unknown so unrelated KeyErrors keep their own traceback.
+                if not _is_unknown_locale(self._language):
+                    raise
                 raise MetricComputationError(
                     f"Unsupported language {self._language!r} for textstat "
                     "(Readability metric)."
