@@ -1,19 +1,19 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Info } from "lucide-react";
 import find from "lodash/find";
 import get from "lodash/get";
 
 import { Label } from "@/ui/label";
-import { Input } from "@/ui/input";
 import {
   FormControl,
   FormDescription,
   FormField,
   FormItem,
-  FormLabel,
   FormMessage,
 } from "@/ui/form";
+import { Tag } from "@/ui/tag";
+import { Description } from "@/ui/description";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import { RULE_UNSUPPORTED_PARAMS } from "@/v2/pages-shared/llm/PromptModelSettings/modelConfigParams";
@@ -39,12 +39,14 @@ import {
 } from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
-import { cn } from "@/lib/utils";
 import {
   RESERVED_SPAN_LLM_JUDGE_VARIABLES,
   RESERVED_TRACE_LLM_JUDGE_VARIABLES,
 } from "@/constants/llm";
-import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
+import {
+  EvaluationRuleFormType,
+  THREAD_CONTEXT_VARIABLE,
+} from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
@@ -77,57 +79,31 @@ type LLMJudgeRuleDetailsProps = {
   datasetColumnNames?: string[];
 };
 
-// Positive decimal only (also rejects the sign/exponent/comma that type=number would accept).
-const POSITIVE_DECIMAL_REGEX = /^\d*\.?\d*$/;
-
-type MaxCostInputProps = {
-  value: number | null | undefined;
-  hasError: boolean;
-  onChange: (value: number | null) => void;
-};
-
-// Decimal budget field. The committed form value is a number, but a controlled type=number bound to
-// that number erases an in-progress trailing decimal point ("1." commits as 1 and re-renders "1"),
-// making fractional entry impossible. So keep the raw text as the source of truth for what's displayed
-// and commit the parsed number separately, re-syncing only when the value changes from outside typing.
-const MaxCostInput: React.FC<MaxCostInputProps> = ({
-  value,
-  hasError,
-  onChange,
-}) => {
-  const [text, setText] = useState(value == null ? "" : String(value));
-
-  useEffect(() => {
-    const parsed = text === "" ? null : Number(text);
-    const reflectsCurrentText =
-      value === parsed || (value == null && parsed == null);
-    if (!reflectsCurrentText) {
-      setText(value == null ? "" : String(value));
-    }
-    // Re-sync display only on external value changes (form reset / editing an existing rule), not on
-    // the value we just committed from our own typing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  return (
-    <Input
-      type="text"
-      inputMode="decimal"
-      placeholder="No limit"
-      value={text}
-      className={cn("max-w-40", { "border-destructive": hasError })}
-      onChange={(event) => {
-        const raw = event.target.value;
-        if (raw !== "" && !POSITIVE_DECIMAL_REGEX.test(raw)) {
-          return;
-        }
-        setText(raw);
-        const parsed = raw === "" ? null : Number(raw);
-        onChange(parsed === null || Number.isNaN(parsed) ? null : parsed);
-      }}
-    />
-  );
-};
+/**
+ * Thread rules have no variable mapping: the single {{context}} placeholder is
+ * filled by the backend. Explain that where the mapping section would be, so
+ * the first time a user learns about {{context}} is not a submit-time error.
+ */
+const ThreadContextInput: React.FC = () => (
+  <div className="pt-4" data-testid="llm-judge-thread-context-input">
+    <div className="comet-body-s-accented mb-1 text-muted-slate">
+      Conversation input
+    </div>
+    <div className="flex items-start gap-3 rounded-md border border-border p-3">
+      <Tag variant="green" size="md" className="mt-0.5 shrink-0">
+        {THREAD_CONTEXT_VARIABLE}
+      </Tag>
+      <Description>
+        Your prompt must include {THREAD_CONTEXT_VARIABLE} once. Opik replaces
+        it with the whole thread as a list of user and assistant turns, oldest
+        first; assistant turns can include the spans that produced them. Very
+        long threads are passed as a compact per-trace summary the judge can
+        inspect with tools. No mapping is needed and no other variables are
+        available.
+      </Description>
+    </div>
+  </div>
+);
 
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   workspaceName,
@@ -143,6 +119,8 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
 
   const templates = LLM_PROMPT_TEMPLATES[scope];
+  // Span scope ships a single (custom) template — a one-option picker is noise.
+  const hasTemplateChoice = templates.length > 1;
 
   // Determine the type for autocomplete based on scope
   const autocompleteType = isSpanScope
@@ -301,39 +279,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           );
         }}
       />
-      {/* Budget applies only to agentic (multi-turn) evaluations — trace and thread. Span scoring is
-          a single LLM call with no loop to wrap up, so the field is hidden there. */}
-      {!isSpanScope && (
-        <FormField
-          control={form.control}
-          name="llmJudgeDetails.maxCostUsd"
-          render={({ field, formState }) => {
-            const validationErrors = get(formState.errors, [
-              "llmJudgeDetails",
-              "maxCostUsd",
-            ]);
-
-            return (
-              <FormItem>
-                <FormLabel>Max cost per evaluation (USD)</FormLabel>
-                <FormControl>
-                  <MaxCostInput
-                    value={field.value}
-                    hasError={Boolean(validationErrors?.message)}
-                    onChange={field.onChange}
-                  />
-                </FormControl>
-                <FormDescription className="comet-body-xs text-muted-slate">
-                  Once an evaluation&apos;s spend reaches this amount the judge
-                  wraps up and returns its scores so far. Leave empty for no
-                  limit.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            );
-          }}
-        />
-      )}
       <FormField
         control={form.control}
         name="llmJudgeDetails.template"
@@ -346,45 +291,54 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                 {...EXPLAINERS_MAP[EXPLAINER_ID.whats_that_prompt_select]}
               />
             </Label>
-            <FormControl>
-              <SelectBox
-                value={field.value}
-                onChange={(newTemplate: string) => {
-                  const { variables, messages, schema, template } =
-                    form.getValues("llmJudgeDetails");
-                  if (newTemplate !== template) {
-                    cache.current[template] = {
-                      ...cache.current[template],
-                      messages: messages,
-                      variables: variables,
-                      schema: schema,
-                    };
+            {hasTemplateChoice && (
+              <>
+                <FormControl>
+                  <SelectBox
+                    value={field.value}
+                    onChange={(newTemplate: string) => {
+                      const { variables, messages, schema, template } =
+                        form.getValues("llmJudgeDetails");
+                      if (newTemplate !== template) {
+                        cache.current[template] = {
+                          ...cache.current[template],
+                          messages: messages,
+                          variables: variables,
+                          schema: schema,
+                        };
 
-                    const templateData =
-                      cache.current[newTemplate] ??
-                      find(templates, (t) => t.value === newTemplate);
+                        const templateData =
+                          cache.current[newTemplate] ??
+                          find(templates, (t) => t.value === newTemplate);
 
-                    form.setValue(
-                      "llmJudgeDetails.messages",
-                      templateData.messages,
-                    );
-                    form.setValue(
-                      "llmJudgeDetails.variables",
-                      templateData.variables ?? {},
-                    );
-                    form.setValue(
-                      "llmJudgeDetails.schema",
-                      templateData.schema,
-                    );
-                    form.setValue(
-                      "llmJudgeDetails.template",
-                      newTemplate as LLM_JUDGE,
-                    );
-                  }
-                }}
-                options={templates}
-              />
-            </FormControl>
+                        form.setValue(
+                          "llmJudgeDetails.messages",
+                          templateData.messages,
+                        );
+                        form.setValue(
+                          "llmJudgeDetails.variables",
+                          templateData.variables ?? {},
+                        );
+                        form.setValue(
+                          "llmJudgeDetails.schema",
+                          templateData.schema,
+                        );
+                        form.setValue(
+                          "llmJudgeDetails.template",
+                          newTemplate as LLM_JUDGE,
+                        );
+                      }
+                    }}
+                    options={templates}
+                  />
+                </FormControl>
+                <FormDescription className="comet-body-xs text-muted-slate">
+                  Picking a template replaces the prompt and score definition
+                  below. Edits you make to each template are kept while this
+                  dialog is open.
+                </FormDescription>
+              </>
+            )}
             <FormMessage />
           </FormItem>
         )}
@@ -424,7 +378,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
             );
           }}
         />
-        {!isThreadScope && (
+        {isThreadScope ? (
+          <ThreadContextInput />
+        ) : (
           <FormField
             control={form.control}
             name="llmJudgeDetails.variables"
@@ -462,12 +418,12 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
       </div>
       <div className="flex flex-col gap-2">
         <div className="flex items-center">
-          <Label htmlFor="name">Score definition</Label>
+          <Label>Score definition</Label>
           <TooltipWrapper
-            content={`The score definition is used to define which
-feedback scores are returned by this rule.
-To return more than one score, simply add
-multiple scores to this section.`}
+            content={`Each entry becomes a feedback score returned by this rule,
+under the name you give it. The judge is asked for
+these scores automatically — you do not need to
+describe the output format in the prompt.`}
           >
             <Info className="ml-1 size-4 text-light-slate" />
           </TooltipWrapper>
