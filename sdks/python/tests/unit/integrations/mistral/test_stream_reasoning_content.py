@@ -70,17 +70,16 @@ def _assert_span_output(fake_backend):
 def test_mistral_chat_stream__chunk_list_deltas__span_output_kept_in_order(
     fake_backend,
 ):
-    client = Mistral(
-        api_key="fake-api-key",
-        client=httpx.Client(transport=httpx.MockTransport(_handler)),
-    )
-    wrapped_client = track_mistral(client)
-
-    events = list(
-        wrapped_client.chat.stream(
-            model=MODEL, messages=[{"role": "user", "content": "Capital of France?"}]
+    with httpx.Client(transport=httpx.MockTransport(_handler)) as http_client:
+        wrapped_client = track_mistral(
+            Mistral(api_key="fake-api-key", client=http_client)
         )
-    )
+        events = list(
+            wrapped_client.chat.stream(
+                model=MODEL,
+                messages=[{"role": "user", "content": "Capital of France?"}],
+            )
+        )
     assert len(events) == 4
 
     opik.flush_tracker()
@@ -91,16 +90,16 @@ def test_mistral_chat_stream__chunk_list_deltas__span_output_kept_in_order(
 async def test_mistral_chat_stream_async__chunk_list_deltas__span_output_kept_in_order(
     fake_backend,
 ):
-    client = Mistral(
-        api_key="fake-api-key",
-        async_client=httpx.AsyncClient(transport=httpx.MockTransport(_handler)),
-    )
-    wrapped_client = track_mistral(client)
-
-    stream = await wrapped_client.chat.stream_async(
-        model=MODEL, messages=[{"role": "user", "content": "Capital of France?"}]
-    )
-    events = [event async for event in stream]
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(_handler)
+    ) as http_client:
+        wrapped_client = track_mistral(
+            Mistral(api_key="fake-api-key", async_client=http_client)
+        )
+        stream = await wrapped_client.chat.stream_async(
+            model=MODEL, messages=[{"role": "user", "content": "Capital of France?"}]
+        )
+        events = [event async for event in stream]
     assert len(events) == 4
 
     opik.flush_tracker()
