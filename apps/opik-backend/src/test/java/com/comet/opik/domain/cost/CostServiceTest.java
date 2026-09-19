@@ -1150,6 +1150,7 @@ class CostServiceTest {
                                 "original_usage.completion_tokens", 200,
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
+    }
 
     /**
      * Covers registering {@code novita} and {@code databricks} as canonical providers so their
