@@ -1,3 +1,4 @@
+import math
 import re
 
 import pytest
@@ -409,6 +410,40 @@ def test_kl_divergence_avg_direction():
     metric = KLDivergence(direction="avg", smoothing=1e-6, track=False)
     result = metric.score(output="cat cat", reference="cat dog")
     assert result.value >= 0.0
+
+
+@pytest.mark.parametrize(
+    "direction,output,reference,missing_token",
+    [
+        ("pq", "cat dog", "cat", "dog"),
+        ("qp", "cat", "cat dog", "dog"),
+        ("avg", "cat dog", "cat bird", "dog"),
+    ],
+)
+def test_kl_divergence__zero_smoothing_and_missing_token__raises_metric_error(
+    direction, output, reference, missing_token
+):
+    metric = KLDivergence(direction=direction, smoothing=0.0, track=False)
+
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score(output=output, reference=reference)
+
+    assert (
+        str(exc_info.value)
+        == f"Token '{missing_token}' is absent from the other text, so the KL "
+        "divergence is infinite with smoothing=0.0. Pass a positive smoothing "
+        "value (KL divergence metric)."
+    )
+
+
+def test_kl_divergence__zero_smoothing_and_shared_support__computes_exact_value():
+    metric = KLDivergence(direction="pq", smoothing=0.0, track=False)
+
+    result = metric.score(output="cat cat dog", reference="cat dog dog")
+
+    # p = {cat: 2/3, dog: 1/3}, q = {cat: 1/3, dog: 2/3}
+    expected = (2 / 3) * math.log(2) + (1 / 3) * math.log(0.5)
+    assert result.value == pytest.approx(expected)
 
 
 def test_meteor_metric_with_custom_fn():
