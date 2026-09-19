@@ -1,7 +1,7 @@
 import { test, expect } from '@e2e/fixtures';
 import { LogsPage } from '@e2e/pom/logs.page';
 import { TracePanelPage } from '@e2e/pom/trace-panel.page';
-import { readClipboard } from '@e2e/core/clipboard';
+import { expectClipboard, readClipboardMatching } from '@e2e/core/clipboard';
 
 /**
  * The trace panel's header copy actions (OPIK-8342, shipped in 2.2.68).
@@ -89,10 +89,13 @@ test.describe('Trace panel copy actions — CUJ', { tag: ['@t2-cuj', '@area:trac
       // icon with it and fails for a reason that has nothing to do with the copy.
       await expect(panel.headerCopiedButton, 'the icon swaps to a check').toBeVisible();
 
-      expect(
-        await readClipboard(page),
+      // Polled, not read once: the component does not await the write, so the
+      // check icon is not evidence the value has landed.
+      await expectClipboard(
+        page,
+        tracedAgent.id,
         'the clipboard must carry the trace id verbatim',
-      ).toBe(tracedAgent.id);
+      );
     });
 
     await test.step('The confirmation returns to its idle state', async () => {
@@ -108,8 +111,13 @@ test.describe('Trace panel copy actions — CUJ', { tag: ['@t2-cuj', '@area:trac
 
     const copiedLink = await test.step('"Copy trace link" puts a URL on the clipboard', async () => {
       await panel.copyTraceLinkFromHeader();
-      const link = await readClipboard(page);
-      expect(link, 'the copied link is an absolute app URL').toMatch(/^https?:\/\//);
+      // The pattern is also what tells the new value apart from the trace id the
+      // previous step left on the clipboard, so this waits for the right write.
+      const link = await readClipboardMatching(
+        page,
+        /^https?:\/\//,
+        'the copied link is an absolute app URL',
+      );
       expect(
         new URL(link).searchParams.get('trace'),
         'and it carries the trace it was copied from',
@@ -158,10 +166,11 @@ test.describe('Trace panel copy actions — CUJ', { tag: ['@t2-cuj', '@area:trac
         'the inspect toolbar offers exactly one copy-span-ID action',
       ).toHaveCount(1);
       await panel.copySpanId();
-      expect(
-        await readClipboard(page),
+      await expectClipboard(
+        page,
+        childSpan.id,
         'the clipboard must carry the seeded span id, not the trace id',
-      ).toBe(childSpan.id);
+      );
     });
 
     await test.step('A span offers no link of its own — one link action per page', async () => {

@@ -1,7 +1,7 @@
 import { test, expect } from '@e2e/fixtures';
 import { LogsPage } from '@e2e/pom/logs.page';
 import { ThreadPanelPage } from '@e2e/pom/thread-panel.page';
-import { readClipboard } from '@e2e/core/clipboard';
+import { expectClipboard, readClipboardMatching } from '@e2e/core/clipboard';
 
 /**
  * The thread panel's header actions and overflow menu (OPIK-8342, in 2.2.68).
@@ -59,10 +59,13 @@ test.describe('Thread panel actions — CUJ', { tag: ['@t2-cuj', '@area:threads'
       // icon with it and fails for a reason that has nothing to do with the copy.
       await expect(panel.copiedButton, 'the icon confirms the copy').toBeVisible();
 
-      expect(
-        await readClipboard(page),
+      // Polled, not read once: the component does not await the write, so the
+      // check icon is not evidence the value has landed.
+      await expectClipboard(
+        page,
+        conversation.threadId,
         'the clipboard must carry the thread id verbatim',
-      ).toBe(conversation.threadId);
+      );
     });
 
     await test.step('Hovering the title reveals the full thread id', async () => {
@@ -74,8 +77,13 @@ test.describe('Thread panel actions — CUJ', { tag: ['@t2-cuj', '@area:threads'
 
     const copiedLink = await test.step('"Copy thread link" puts a URL on the clipboard', async () => {
       await panel.copyThreadLink();
-      const link = await readClipboard(page);
-      expect(link, 'the copied link is an absolute app URL').toMatch(/^https?:\/\//);
+      // The pattern is also what tells the new value apart from the thread id
+      // the earlier step left on the clipboard, so this waits for the right write.
+      const link = await readClipboardMatching(
+        page,
+        /^https?:\/\//,
+        'the copied link is an absolute app URL',
+      );
       expect(
         new URL(link).searchParams.get('thread'),
         'and it carries the thread it was copied from',

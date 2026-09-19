@@ -1,4 +1,4 @@
-import { test, type Page, type Locator } from '@playwright/test';
+import { expect, test, type Page, type Locator } from '@playwright/test';
 import { sidePanelTitleGroup } from './side-panel-title-group';
 
 /**
@@ -120,13 +120,23 @@ export class ThreadPanelPage {
    * Radix portals tooltip content to the document body, so it is read off the
    * page rather than the panel — and it only ever exists while the pointer is
    * over the trigger, which is what made it unreachable under happy-dom.
+   *
+   * Every header control is tooltipped, and the one the pointer just left stays
+   * mounted through its exit animation. So this waits for the count to settle at
+   * one before reading, rather than taking `.first()` and risking the tooltip of
+   * the copy button the previous step clicked.
    */
   async readTitleTooltip(): Promise<string> {
     return test.step('Hover the thread title and read its tooltip', async () => {
       await this.title.hover();
       const tooltip = this.page.getByRole('tooltip');
-      await tooltip.first().waitFor({ state: 'visible' });
-      return (await tooltip.first().textContent())?.trim() ?? '';
+      await expect
+        .poll(() => tooltip.count(), {
+          message: 'exactly one tooltip must be on screen — the title\'s',
+          timeout: 10_000,
+        })
+        .toBe(1);
+      return (await tooltip.textContent())?.trim() ?? '';
     });
   }
 
