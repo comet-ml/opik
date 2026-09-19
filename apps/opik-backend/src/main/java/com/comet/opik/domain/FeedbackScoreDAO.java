@@ -5,6 +5,8 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
@@ -32,6 +34,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
+import static com.comet.opik.domain.FeedbackScoreJsonRowMapper.getValueOrDefault;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -280,6 +283,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull OpikConfiguration configuration;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @Override
     @WithSpan
@@ -294,13 +299,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         return scoreBatchOf(entityType, List.of(item), author);
     }
 
-    private String getValueOrDefault(String value) {
-        return Optional.ofNullable(value)
-                .map(String::trim)
-                .filter(StringUtils::isNotEmpty)
-                .orElse("");
-    }
-
     @Override
     @WithSpan
     public Mono<Long> scoreBatchOf(@NonNull EntityType entityType,
@@ -313,6 +311,19 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     private Mono<Long> insertFeedbackScores(@NonNull EntityType entityType,
             @NonNull List<? extends FeedbackScoreItem> scores, @Nullable String author) {
+
+        // Ahead of the branch, so both writers reject the same input. Callers reaching here through the
+        // API are bean-validated (value is @NotNull) and the online scoring paths drop valueless scores
+        // before batching. A null at this point means a new caller did neither: fail naming the score
+        // instead of the NPE the writer would raise from inside the batch, taking every other score in
+        // it down with this one.
+        scores.forEach(score -> Preconditions.checkArgument(score.value() != null,
+                "Feedback score '%s' cannot be stored without a value", score.name()));
+
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(entityType, scores, author);
+        }
+
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
             var logComment = getLogComment("bulk_insert_feedback_score", workspaceId, userName, scores.size());
@@ -331,6 +342,28 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         }));
     }
 
+    /**
+     * The {@link #BULK_INSERT_FEEDBACK_SCORE} rows streamed as JSONEachRow through the v2 client rather
+     * than bound as 8 named parameters per row — 10 for the authored table.
+     *
+     * <p>Batch size here is not capped the way the other bulk paths are: a feedback score batch is 1000
+     * items at most on its own endpoints, but {@code ExperimentItemBulkIngestionService} accumulates up
+     * to 100 scores per record over up to 1000 records into a single call, so this insert can be an
+     * order of magnitude wider than the {@code experiment_items} one it runs beside.
+     *
+     * <p>The table is chosen by {@code author != null}, exactly as {@code <if(author)>} does on the R2DBC
+     * template — {@code feedback_scores} has no {@code author}/{@code source_queue_id} columns, so those
+     * two fields are emitted only for the authored table.
+     */
+    private Mono<Long> insertJsonEachRow(EntityType entityType, List<? extends FeedbackScoreItem> scores,
+            @Nullable String author) {
+        return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
+                author != null ? "authored_feedback_scores" : "feedback_scores",
+                getLogComment("bulk_insert_feedback_score", workspaceId, userName, scores.size()),
+                scores,
+                score -> FeedbackScoreJsonRowMapper.toJsonRow(score, entityType, author, userName, workspaceId)));
+    }
+
     @Override
     public Mono<Long> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItemThread> scores, @Nullable String author) {
         return scoreBatchOf(EntityType.THREAD, scores, author);
@@ -341,13 +374,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         for (var i = 0; i < scores.size(); i++) {
 
             var feedbackScoreBatchItem = scores.get(i);
-
-            // Callers reaching here through the API are bean-validated (value is @NotNull) and the online
-            // scoring paths drop valueless scores before batching. A null at this point means a new caller
-            // did neither: fail naming the score instead of raising the NPE that .toString() used to throw
-            // from inside the bind, where it took the whole batch — and every other score in it — down.
-            Preconditions.checkArgument(feedbackScoreBatchItem.value() != null,
-                    "Feedback score '%s' cannot be stored without a value", feedbackScoreBatchItem.name());
 
             statement.bind("entity_type" + i, entityType.getType())
                     .bind("entity_id" + i, feedbackScoreBatchItem.id())
