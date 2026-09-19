@@ -125,13 +125,13 @@ test.describe('Alerts — threshold config validation', { tag: ['@t2-cuj', '@are
 
       await test.step('A cost threshold with no window is refused, naming the window', async () => {
         const result = await post('no-window', ALERT_EVENT_TYPE.traceCost, { threshold: '100' });
-        expect(result.status).toBe(400);
+        expect(result.status, `answered: ${result.message}`).toBe(400);
         expect(result.message).toBe(missingKeyMessage('window', ALERT_EVENT_TYPE.traceCost));
       });
 
       await test.step('A cost threshold with no threshold is refused, naming the threshold', async () => {
         const result = await post('no-threshold', ALERT_EVENT_TYPE.traceCost, { window: '3600' });
-        expect(result.status).toBe(400);
+        expect(result.status, `answered: ${result.message}`).toBe(400);
         expect(result.message).toBe(missingKeyMessage('threshold', ALERT_EVENT_TYPE.traceCost));
       });
 
@@ -143,7 +143,7 @@ test.describe('Alerts — threshold config validation', { tag: ['@t2-cuj', '@are
           threshold: '  ',
           window: '3600',
         });
-        expect(result.status).toBe(400);
+        expect(result.status, `answered: ${result.message}`).toBe(400);
         expect(result.message).toBe(missingKeyMessage('threshold', ALERT_EVENT_TYPE.traceCost));
       });
 
@@ -156,7 +156,7 @@ test.describe('Alerts — threshold config validation', { tag: ['@t2-cuj', '@are
           const result = await post(`no-window-${eventType.replace(':', '-')}`, eventType, {
             threshold: '100',
           });
-          expect(result.status).toBe(400);
+          expect(result.status, `${eventType} answered: ${result.message}`).toBe(400);
           expect(result.message).toBe(missingKeyMessage('window', eventType));
         });
       }
@@ -250,7 +250,7 @@ test.describe('Alerts — threshold config validation', { tag: ['@t2-cuj', '@are
           alertId,
           body(attemptedName, { threshold: '999' }),
         );
-        expect(result.status).toBe(400);
+        expect(result.status, `answered: ${result.message}`).toBe(400);
         expect(result.message).toBe(missingKeyMessage('window', ALERT_EVENT_TYPE.traceCost));
       });
 
