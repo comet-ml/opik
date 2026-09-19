@@ -19,12 +19,30 @@ from opik.evaluation.metrics.llm_judges.g_eval_presets import (
 )
 
 
+def _latest_assistant_text(conversation: conversation_types.Conversation) -> str:
+    """The most recent assistant message that carries text, or ``""`` when there is none.
+
+    ``create_conversation_from_traces`` skips an assistant message only when the output
+    transform returns ``None``, so a turn whose text is empty -- an agent call that only
+    issued tool calls, or an empty completion -- does reach conversation-level metrics.
+    It must not hide the answer before it.
+    """
+    for turn in reversed(conversation):
+        if turn.get("role") != "assistant":
+            continue
+        content = turn.get("content")
+        if isinstance(content, str) and content.strip():
+            return content
+
+    return ""
+
+
 class GEvalConversationMetric(ConversationThreadMetric):
     """
     Wrap a GEval-style judge so it can evaluate an entire conversation transcript.
 
-    The wrapper extracts the latest assistant turn from the conversation and sends
-    it to the provided judge. Results are normalised into a ``ScoreResult`` so they
+    The wrapper extracts the latest assistant turn that carries text and sends it to
+    the provided judge. Results are normalised into a ``ScoreResult`` so they
     can plug into the wider Opik evaluation pipeline. Any errors raised by the
     underlying judge are captured and reported as a failed score computation.
 
@@ -99,17 +117,10 @@ class GEvalConversationMetric(ConversationThreadMetric):
 
         Returns:
             ScoreResult: Normalised output from the wrapped judge. If no assistant
-            message is present, the result is marked as failed with ``value=0.0``.
+            message carries text, the result is marked as failed with ``value=0.0``.
         """
-        last_assistant = next(
-            (
-                turn.get("content", "")
-                for turn in reversed(conversation)
-                if turn.get("role") == "assistant"
-            ),
-            "",
-        )
-        if not last_assistant.strip():
+        last_assistant_text = _latest_assistant_text(conversation)
+        if not last_assistant_text:
             return score_result.ScoreResult(
                 name=self.name,
                 value=0.0,
@@ -118,7 +129,7 @@ class GEvalConversationMetric(ConversationThreadMetric):
             )
 
         try:
-            raw_result = self._judge.score(output=last_assistant)
+            raw_result = self._judge.score(output=last_assistant_text)
         except exceptions.MetricComputationError as error:
             reason = str(error)
         except Exception as error:
