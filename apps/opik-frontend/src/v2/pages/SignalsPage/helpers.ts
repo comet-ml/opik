@@ -1,5 +1,9 @@
 import { AGENT_INSIGHTS_ISSUE_SEVERITY } from "@/types/signals";
 
+// Mirrors the backend sweep's threshold: at this many traces in the window a project gets its
+// automatic first diagnostic.
+export const AUTO_FIRST_RUN_MIN_TRACES = 100;
+
 export const SEVERITY_LABEL_MAP: Record<AGENT_INSIGHTS_ISSUE_SEVERITY, string> =
   {
     [AGENT_INSIGHTS_ISSUE_SEVERITY.critical]: "Critical",
