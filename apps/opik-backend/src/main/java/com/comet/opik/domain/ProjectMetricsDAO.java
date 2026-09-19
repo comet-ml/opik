@@ -309,7 +309,20 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             """;
 
     private static final String THREAD_FILTERED_PREFIX = """
-            WITH trace_threads_final AS (
+            WITH traces_final AS (
+                SELECT
+                    *
+                FROM traces FINAL
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id \\<> ''
+                <if(uuid_from_time)> AND id >= :uuid_from_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1)))<endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1)))<endif>
+            ), trace_threads_final AS (
                 SELECT
                     workspace_id,
                     project_id,
@@ -324,15 +337,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM trace_threads FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
-            ), traces_final AS (
-                SELECT
-                    *
-                FROM traces FINAL
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND thread_id IN (SELECT thread_id FROM trace_threads_final)
+                AND thread_id IN (SELECT thread_id FROM traces_final)
             ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
@@ -402,7 +407,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
-                    UUIDv7ToDateTime(toUUID(tt.thread_model_id)) as trace_time,
+                    t.start_time as thread_start_time,
                     t.end_time as end_time,
                     t.duration as duration,
                     t.first_message as first_message,
@@ -420,11 +425,11 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         t.thread_id as id,
                         t.workspace_id as workspace_id,
                         t.project_id as project_id,
-                        min(t.start_time) as start_time,
-                        max(t.end_time) as end_time,
-                        if(max(t.end_time) IS NOT NULL AND notEquals(max(t.end_time), toDateTime64('1970-01-01 00:00:00.000', 9)) AND min(t.start_time) IS NOT NULL
-                               AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
-                           (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
+                        minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as start_time,
+                        maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as end_time,
+                        if(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL AND notEquals(maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)) AND minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))) IS NOT NULL
+                               AND notEquals(minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), toDateTime64('1970-01-01 00:00:00.000', 9)),
+                           (dateDiff('microsecond', minIf(t.start_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9))), maxIf(t.end_time, notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)))) / 1000.0),
                            NULL) AS duration,
                         <if(truncate)> replaceRegexpAll(argMin(t.input, t.start_time), '<truncate>', '"[image]"') as first_message <else> argMin(t.input, t.start_time) as first_message<endif>,
                         <if(truncate)> replaceRegexpAll(argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))), '<truncate>', '"[image]"') as last_message <else> argMax(t.output, nullIf(t.end_time, toDateTime64('1970-01-01 00:00:00.000', 9))) as last_message<endif>,
@@ -439,6 +444,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 ) AS t
                 JOIN trace_threads_final AS tt ON t.id = tt.thread_id
                 WHERE workspace_id = :workspace_id
+                <if(uuid_from_time)> AND t.start_time >= UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')<endif>
+                <if(uuid_to_time)> AND t.start_time \\<= UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')<endif>
                 <if(thread_feedback_scores_filters)>
                 AND thread_model_id IN (
                     SELECT
@@ -903,14 +910,14 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_THREAD_FEEDBACK_SCORES = """
             %s, thread_feedback_scores AS (
-                SELECT t.trace_time,
+                SELECT t.thread_start_time,
                         fs.name,
                         fs.value
                 FROM feedback_scores_final fs
                 JOIN (
                     SELECT
                         thread_model_id,
-                        trace_time
+                        thread_start_time
                     FROM threads_filtered
                 ) t ON t.thread_model_id = fs.entity_id
             )
@@ -929,7 +936,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_THREAD_FEEDBACK_SCORES_WITH_BREAKDOWN = """
             %s, thread_feedback_scores AS (
-                SELECT t.trace_time,
+                SELECT t.thread_start_time,
                         <group_expression> AS group_name,
                         fs.name,
                         fs.value
@@ -937,7 +944,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 JOIN (
                     SELECT
                         thread_model_id,
-                        trace_time,
+                        thread_start_time,
                         tags,
                         project_id
                     FROM threads_filtered
@@ -1168,7 +1175,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private static final String GET_THREAD_COST = """
             %s, thread_costs AS (
                 SELECT tf.id AS thread_id,
-                       tf.trace_time AS trace_time,
+                       tf.thread_start_time AS thread_start_time,
                        s.total_estimated_cost AS value
                 FROM threads_filtered tf
                 JOIN traces_final tr ON tr.thread_id = tf.id
@@ -1788,6 +1795,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             MetricType.SPAN_TOKEN_USAGE);
 
     private String getTimeField(MetricType metricType) {
+        if (THREAD_METRICS.contains(metricType)) {
+            return "thread_start_time";
+        }
         return SPAN_TIME_METRICS.contains(metricType) ? "span_time" : "trace_time";
     }
 

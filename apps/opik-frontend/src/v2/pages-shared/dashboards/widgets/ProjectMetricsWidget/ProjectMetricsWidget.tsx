@@ -22,6 +22,7 @@ import {
 } from "@/types/dashboard";
 import { Filter } from "@/types/filters";
 import { isFilterValid, createFilter } from "@/lib/filters";
+import { isCostMetricType } from "./helpers";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
 import { LOGS_TYPE } from "@/constants/traces";
 import { LOGS_SOURCE } from "@/types/traces";
@@ -114,7 +115,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;
-  const isCostMetric = metricName === METRIC_NAME_TYPE.COST;
+  const isCostMetric = isCostMetricType(metricName);
   const isDurationMetric =
     metricName === METRIC_NAME_TYPE.TRACE_DURATION ||
     metricName === METRIC_NAME_TYPE.THREAD_DURATION ||
