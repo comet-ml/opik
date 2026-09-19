@@ -88,12 +88,18 @@ class Tone(BaseMetric):
         self._max_upper_ratio = max_upper_ratio
         self._max_exclamations = max_exclamations
         self._positive = set(
-            word.lower() for word in (positive_lexicon or _POSITIVE_LEXICON)
+            word.lower()
+            for word in (
+                _POSITIVE_LEXICON if positive_lexicon is None else positive_lexicon
+            )
         )
         self._negative = set(
-            word.lower() for word in (negative_lexicon or _NEGATIVE_LEXICON)
+            word.lower()
+            for word in (
+                _NEGATIVE_LEXICON if negative_lexicon is None else negative_lexicon
+            )
         )
-        phrases = forbidden_phrases or _FORBIDDEN_PHRASES
+        phrases = _FORBIDDEN_PHRASES if forbidden_phrases is None else forbidden_phrases
         self._forbidden = [phrase.lower() for phrase in phrases]
 
     def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:

@@ -111,9 +111,13 @@ class PromptInjection(BaseMetric):
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         self._patterns = [
-            re.compile(pat, re.IGNORECASE) for pat in (patterns or _INJECTION_PATTERNS)
+            re.compile(pat, re.IGNORECASE)
+            for pat in (_INJECTION_PATTERNS if patterns is None else patterns)
         ]
-        self._keywords = [kw.lower() for kw in (keywords or _SUSPICIOUS_KEYWORDS)]
+        self._keywords = [
+            kw.lower()
+            for kw in (_SUSPICIOUS_KEYWORDS if keywords is None else keywords)
+        ]
 
     def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:
         processed = preprocessing.normalize_text(output)
