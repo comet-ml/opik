@@ -85,6 +85,7 @@ const PromptModelConfigs = ({
       return (
         <OpenRouterModelConfigs
           configs={configs as LLMOpenRouterConfigsType}
+          model={model}
           unsupportedParams={unsupportedParams}
           onChange={onChange}
         />
@@ -117,6 +118,7 @@ const PromptModelConfigs = ({
       return (
         <CustomModelConfigs
           configs={configs as LLMCustomConfigsType}
+          model={model}
           unsupportedParams={unsupportedParams}
           onChange={onChange}
         />

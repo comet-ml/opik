@@ -1,4 +1,4 @@
-export { test, expect } from './project-scoped-dashboard.fixture';
+export { test, expect } from './export-comparison.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -160,4 +160,10 @@ export type {
   ProjectScopedDashboardRef,
   ProjectScopedDashboardFixtures,
 } from './project-scoped-dashboard.fixture';
+export type {
+  ExportComparisonItem,
+  ExportComparisonExperiment,
+  ExportComparisonRef,
+  ExportComparisonFixtures,
+} from './export-comparison.fixture';
 export type { ProjectRef } from '../core/backend';

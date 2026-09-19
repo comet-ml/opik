@@ -1,12 +1,12 @@
 import gzip
 import logging
-from typing import Optional, Dict, Any, Union, Iterable, AsyncIterable, Mapping
+from typing import Optional, Dict, Any, Tuple, Union, Iterable, AsyncIterable, Mapping
 import httpx
 import os
 import urllib.parse
 import json as jsonlib
 
-from . import hooks, package_version
+from . import exceptions, hooks, package_version
 import platform
 
 LOGGER = logging.getLogger(__name__)
@@ -132,6 +132,43 @@ def wrapper_headers(rest_client: Any) -> Dict[str, str]:
     if not isinstance(headers, dict):
         return {}
     return {key: value for key, value in headers.items() if isinstance(value, str)}
+
+
+def upload_transport(
+    rest_client: Any,
+    *,
+    client: Optional[httpx.Client] = None,
+    base_url: Optional[str] = None,
+) -> Tuple[httpx.Client, str]:
+    """The HTTP client and base URL a prepared request body is sent through.
+
+    The generated client exposes neither: both come off its wrapper, where
+    `httpx_client.httpx_client` is the very `OpikHttpxClient` the owning `Opik` holds --
+    the same object, carrying the same auth, workspace headers and compression setting --
+    so a `Dataset` or an `Experiment` built from a REST client alone resolves a transport
+    like any other. Resolved here rather than at each upload path, so both reach it the
+    same way and there is one traversal to replace if the generated client ever grows a
+    public accessor.
+
+    `client` and `base_url` win where they were supplied, for a caller that was handed an
+    explicit transport.
+    """
+    wrapper = getattr(rest_client, "_client_wrapper", None)
+    resolved_client: Optional[httpx.Client] = client
+    if resolved_client is None:
+        resolved_client = getattr(
+            getattr(wrapper, "httpx_client", None), "httpx_client", None
+        )
+    resolved_base_url: Optional[str] = base_url
+    if resolved_base_url is None:
+        get_base_url = getattr(wrapper, "get_base_url", None)
+        resolved_base_url = get_base_url() if callable(get_base_url) else None
+
+    if resolved_client is None or resolved_base_url is None:
+        raise exceptions.OpikException(
+            "The REST client exposes no HTTP transport to upload through"
+        )
+    return resolved_client, resolved_base_url
 
 
 def send_prepared_json(
