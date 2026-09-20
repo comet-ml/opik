@@ -6,7 +6,11 @@ from ollama._types import ChatResponse, Message
 
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
-from opik.integrations.ollama import chat_chunks_aggregator, track_ollama
+from opik.integrations.ollama import (
+    chat_chunks_aggregator,
+    stream_wrappers,
+    track_ollama,
+)
 
 from ...testlib import (
     ANY_BUT_NONE,
@@ -281,3 +285,140 @@ def test_aggregate__thinking_deltas__kept_alongside_content():
 
 def test_aggregate__empty_items__returns_none():
     assert chat_chunks_aggregator.aggregate([]) is None
+
+
+class _LegacyMessage:
+    """Stand-in for ollama < 0.5.0, whose Message has no `thinking` field."""
+
+    def __init__(self, content):
+        self.role = "assistant"
+        self.content = content
+        self.tool_calls = None
+
+
+class _LegacyChunk:
+    """A chunk whose message predates the `thinking` field."""
+
+    def __init__(self, content, done=False):
+        self.message = _LegacyMessage(content)
+        self.done = done
+
+    def model_dump(self):
+        return {
+            "model": MODEL,
+            "done": self.done,
+            "message": {"role": "assistant", "content": self.message.content},
+        }
+
+
+def test_aggregate__message_without_thinking_field__still_aggregates():
+    """`thinking` arrived in ollama 0.5.0; our declared floor is 0.4.0.
+
+    Reading it unconditionally raises AttributeError, which the broad handler in
+    `aggregate` swallows -- so on 0.4.x every streamed call would silently log
+    no output at all.
+    """
+    aggregated = chat_chunks_aggregator.aggregate(
+        [
+            _LegacyChunk("Blue."),
+            _LegacyChunk(" Scattering.", done=True),
+        ]
+    )
+
+    assert aggregated is not None
+    assert aggregated.message.content == "Blue. Scattering."
+
+
+def test_wrap_sync_stream__consumer_abandons_stream__not_recorded_as_success():
+    """A truncated stream must not be finalized as a completed generation."""
+    finalized = []
+
+    def callback(
+        output,
+        error_info,
+        capture_output,
+        generators_span_to_end,
+        generators_trace_to_end,
+    ):
+        finalized.append((output, error_info))
+
+    wrapped = stream_wrappers.wrap_sync_stream(
+        stream=iter(["a", "b", "c"]),
+        span_to_end="SPAN",
+        trace_to_end=None,
+        generations_aggregator=list,
+        finally_callback=callback,
+    )
+
+    for item in wrapped:
+        break  # consumer abandons after the first chunk
+    wrapped.close()
+
+    assert len(finalized) == 1
+    output, error_info = finalized[0]
+    assert output is None, "partial stream must not be reported as output"
+    assert error_info is not None
+    assert error_info["exception_type"] == "GeneratorExit"
+
+
+def test_wrap_async_stream__cancelled__not_recorded_as_success():
+    """asyncio.CancelledError is BaseException, so `except Exception` misses it."""
+    finalized = []
+
+    def callback(
+        output,
+        error_info,
+        capture_output,
+        generators_span_to_end,
+        generators_trace_to_end,
+    ):
+        finalized.append((output, error_info))
+
+    async def source():
+        yield "a"
+        raise asyncio.CancelledError()
+
+    async def drive():
+        wrapped = stream_wrappers.wrap_async_stream(
+            stream=source(),
+            span_to_end="SPAN",
+            trace_to_end=None,
+            generations_aggregator=list,
+            finally_callback=callback,
+        )
+        with pytest.raises(asyncio.CancelledError):
+            async for _ in wrapped:
+                pass
+
+    asyncio.run(drive())
+
+    assert len(finalized) == 1
+    output, error_info = finalized[0]
+    assert output is None
+    assert error_info is not None
+    assert error_info["exception_type"] == "CancelledError"
+
+
+def test_wrap_sync_stream__completed_normally__records_aggregate():
+    """The guard must not break the happy path."""
+    finalized = []
+
+    def callback(
+        output,
+        error_info,
+        capture_output,
+        generators_span_to_end,
+        generators_trace_to_end,
+    ):
+        finalized.append((output, error_info))
+
+    wrapped = stream_wrappers.wrap_sync_stream(
+        stream=iter(["a", "b"]),
+        span_to_end="SPAN",
+        trace_to_end=None,
+        generations_aggregator=list,
+        finally_callback=callback,
+    )
+    assert list(wrapped) == ["a", "b"]
+
+    assert finalized == [(["a", "b"], None)]

@@ -33,9 +33,13 @@ def aggregate(items: List[ChatResponse]) -> Optional[ChatResponse]:
             if message.content:
                 content.append(message.content)
             # Ollama streams a reasoning model's chain of thought in its own
-            # field, exactly as it streams content.
-            if message.thinking:
-                thinking.append(message.thinking)
+            # field, exactly as it streams content. `thinking` was added in
+            # ollama 0.5.0; on 0.4.x the attribute is absent, so read it
+            # defensively rather than raising into the broad handler below --
+            # that would discard the whole aggregate and log an empty output.
+            chunk_thinking = getattr(message, "thinking", None)
+            if chunk_thinking:
+                thinking.append(chunk_thinking)
             if message.tool_calls:
                 tool_calls.extend(message.tool_calls)
 
