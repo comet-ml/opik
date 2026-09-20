@@ -312,7 +312,9 @@ export class PlaygroundPage {
 
   /** Recorded toasts that announce a finished run. */
   async recordedRunCompletionToasts(): Promise<string[]> {
-    return (await this.recordedToasts()).filter((text) => RUN_COMPLETE_TEXT.test(text));
+    return test.step('read the recorded run-completion toasts', async () => {
+      return (await this.recordedToasts()).filter((text) => RUN_COMPLETE_TEXT.test(text));
+    });
   }
 
   /** The "Creates: {name}_a  +N more" preview; absent while no name is set. */

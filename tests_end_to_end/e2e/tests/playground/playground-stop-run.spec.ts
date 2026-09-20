@@ -1,4 +1,5 @@
 import { test, expect } from '@e2e/fixtures';
+import type { Page } from '@playwright/test';
 import type { BackendClient } from '@e2e/core/backend';
 import { PlaygroundPage } from '@e2e/pom/playground.page';
 
@@ -36,16 +37,25 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
  * the count and never reach the revoked claim at all. These tests would then
  * pass without exercising the wiring they name.
  *
- * That is not what happens, and it was checked rather than assumed: listing the
- * dataset's experiments immediately after each stop shows 2 after Stop all
- * (`_a` and `_b`) and 1 more after the single-column stop. The count condition
- * is satisfied, `fire()` proceeds, and the revoked claim is the only thing left
- * between the run and the toast — which is what makes the silence below
- * evidence about `stopAll`/`stopSingle` rather than about arithmetic.
+ * What keeps the count satisfied is subtle enough to be worth writing down,
+ * because getting it wrong makes these tests pass while asserting nothing.
+ * `createLogPlaygroundProcessor` creates a prompt's experiment lazily, on the
+ * FIRST run it is handed — so against a provider that never answers, nothing is
+ * ever registered on its own. The experiments exist only because the stop
+ * ABORTS the in-flight completion, and an aborted completion still RESOLVES
+ * (`useCompletionProxyStreaming` returns a run with a null error for
+ * `AbortError` rather than throwing), so it is logged like any other and its
+ * experiment is created.
  *
- * If a future change makes experiment creation lazier — deferred until a
- * completion actually returns, say — that stops being true silently. The guard
- * against it is the experiment count itself, asserted below.
+ * That in turn is why each test waits for the completion requests to be ON THE
+ * WIRE before clicking Stop. `processCombination` registers its abort
+ * controller immediately before issuing the request, so a Stop that lands
+ * earlier finds nothing to abort: the request is never cancelled, never
+ * resolves, never logs, and no experiment is ever created. The announcer then
+ * short-circuits on `registered < expected` and never consults the revoked
+ * claim at all — the tests would go green having verified nothing. Waiting for
+ * the request is what closes that hole, and the experiment count asserted below
+ * is the guard that would catch it reopening.
  *
  * ## Why the provider is blackholed rather than refusing
  *
@@ -80,6 +90,45 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
 
   const HANGING_MODEL = 'unresponsive-model';
   const FINISHING_MODEL = 'unreachable-model';
+
+  /**
+   * Count the completion requests the page puts on the wire, from before the
+   * run starts.
+   *
+   * This is the only observable that says a combination has got far enough for
+   * Stop to have something to abort: `processCombination` registers its abort
+   * controller and then immediately issues this request, so a request seen here
+   * is a controller already in `abortControllersRef`. The page's own "running"
+   * state is NOT that signal — it flips before the first combination has
+   * hydrated its dataset item, which is exactly the window in which a Stop
+   * aborts nothing (see the describe docblock).
+   */
+  const collectCompletionRequests = (page: Page): string[] => {
+    const issued: string[] = [];
+    page.on('request', (request) => {
+      if (request.method() !== 'POST') return;
+      if (!/\/v1\/private\/chat\/completions$/.test(new URL(request.url()).pathname)) return;
+      issued.push(request.url());
+    });
+    return issued;
+  };
+
+  /**
+   * Hold until `expected` completions are in flight.
+   *
+   * Combinations are built dataset-item-major (`item1×A, item1×B, item2×A, …`)
+   * and dispatched in that order, so the first two requests of a two-variant
+   * run are one per variant — which is what `runAllViaFrontend`'s announcer
+   * counts, and therefore what the Stop-all test needs in flight before it can
+   * revoke anything meaningful.
+   */
+  const waitForCompletionsInFlight = async (issued: string[], expected: number): Promise<void> => {
+    await test.step(`wait for ${expected} completion request(s) to be in flight`, async () => {
+      await expect
+        .poll(() => issued.length, { timeout: 60_000, intervals: [100, 250, 500] })
+        .toBeGreaterThanOrEqual(expected);
+    });
+  };
 
   /**
    * A sweeper that registers every experiment currently recorded against the
@@ -137,6 +186,7 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         dataset.id,
         registerExperimentCleanup,
       );
+      const completionRequests = collectCompletionRequests(page);
 
       await test.step('Seed one provider that hangs and one that fails fast', async () => {
         await providerKeys.createUnresponsive({
@@ -169,7 +219,10 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         await playground.clickReRun();
         // "Stop all" replacing Run in the header is the page's own statement
         // that a run is in flight — clicking it before that would be a click on
-        // a button that is not there yet.
+        // a button that is not there yet. It is NOT enough on its own: the
+        // header swaps as soon as the run is dispatched, before any combination
+        // has issued its request, and a Stop in that window aborts nothing.
+        await waitForCompletionsInFlight(completionRequests, 2);
         await playground.clickStopAll();
         return Date.now();
       });
@@ -189,7 +242,18 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         // announcer only consults the revoked claim once one experiment per
         // variant is registered, so with fewer than two it would stay silent
         // for a reason that has nothing to do with `stopAll`.
-        expect((await registerCreatedExperiments()).length).toBeGreaterThanOrEqual(2);
+        //
+        // Polled rather than read once: the aborted completions resolve, log
+        // and create their experiments asynchronously, so the page settling is
+        // not the same instant as the writes landing. The poll registers every
+        // id it sees for teardown as it goes, so a run that wrote more than it
+        // should still gets swept.
+        await expect
+          .poll(async () => (await registerCreatedExperiments()).length, {
+            timeout: 30_000,
+            intervals: [500, 1000, 2000],
+          })
+          .toBeGreaterThanOrEqual(2);
       });
 
       await test.step('Nothing announced completion, and the name is untouched', async () => {
@@ -244,6 +308,7 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         dataset.id,
         registerExperimentCleanup,
       );
+      const completionRequests = collectCompletionRequests(page);
 
       await test.step('Seed one provider that hangs and one that fails fast', async () => {
         await providerKeys.createUnresponsive({
@@ -275,7 +340,11 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
       const stoppedAt = await test.step("Run variant B's column, then stop that column", async () => {
         await playground.clickVariantRun(1);
         // The card's Run swapping to Stop is that variant's own statement that
-        // it is running, which is also what scopes the claim being cleared.
+        // it is running, which is also what scopes the claim being cleared —
+        // but, as in the Stop-all test, it swaps before the first request goes
+        // out, and a Stop that lands then has no controller to abort. Only B is
+        // running, so any completion request in flight is B's.
+        await waitForCompletionsInFlight(completionRequests, 1);
         await playground.clickVariantStop(1);
         return Date.now();
       });
@@ -288,8 +357,14 @@ test.describe('Playground — stopping a run', { tag: ['@t2-cuj', '@area:playgro
         // Same precondition as the Stop-all test, at this path's own threshold:
         // `runSingleViaFrontend` builds its announcer with `expected` of 1, so
         // one registered experiment is what puts `scopedAnnounceRef` on the
-        // critical path rather than the count.
-        expect((await registerCreatedExperiments()).length).toBeGreaterThanOrEqual(1);
+        // critical path rather than the count. Polled for the same reason as
+        // the Stop-all test's: the aborted completion logs asynchronously.
+        await expect
+          .poll(async () => (await registerCreatedExperiments()).length, {
+            timeout: 30_000,
+            intervals: [500, 1000, 2000],
+          })
+          .toBeGreaterThanOrEqual(1);
       });
 
       await test.step('Nothing announced completion, and the name is untouched', async () => {

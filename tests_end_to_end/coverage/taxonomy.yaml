@@ -626,13 +626,28 @@ areas:
       # rather than left implicit, since "covers naming" alone would not say
       # which side of the UI boundary each half sits on.
       #
-      # UNVERIFIED, pending a run against a real deployment: the note's
-      # per-column claim covers the execute REQUEST only, which is what passes.
-      # That spec's remaining steps — the completion toast and the {name}_02
-      # advance — currently fail locally, as does the Run-all half of
-      # test-suite-experiment-name.spec.ts, because a suite experiment whose
-      # every LLM call fails never leaves status `running` and so never reads as
-      # terminal to the frontend. Deliberately NOT recorded as covered here.
+      # KNOWN RED, and the cause is a PRODUCT defect, not a spec one — verified
+      # 2026-09-20 against a local OSS deployment built from this branch, and
+      # reproduced on an already-merged spec, so it is not something this PR
+      # introduced. The note's per-column claim covers the execute REQUEST only,
+      # which is what passes. What fails is the completion toast and the
+      # {name}_02 advance, in test-suite-per-column-run.spec.ts and equally in
+      # test-suite-experiment-name.spec.ts's Playground test on main.
+      #
+      # Root cause, from the backend's own log: when every LLM call of a suite
+      # run fails, ExperimentItemProcessingSubscriber still counts each item as
+      # PROCESSED, so the batch drains down the test-suite branch and logs
+      # "Batch '<id>' complete, waiting for assertions to finish" — and the
+      # assertions never do, because no assertion ever ran. Nothing then calls
+      # TestSuiteAssertionCounterService.finishExperiment, the experiment is
+      # left at status `running`, isExperimentTerminal() stays false, and the
+      # Playground's poll never announces. Dataset mode does not share this: its
+      # announcement is frontend-side, which is why playground-per-column-run
+      # passes against the same provider.
+      #
+      # Deliberately NOT recorded as covered here, and the specs are deliberately
+      # NOT weakened to go green — a suite run that silently never finishes is
+      # the defect a user hits, and these are the tests that say so.
       run-suite-playground:  { covered: true,  tier: t1-smoke, note: "t2 additionally covers OPIK-3268 naming — at /experiments/execute: each prompt variant's experiment_name reaches its own experiment, an omitted one falls back to a distinct generated name, and a whitespace-only one is rejected 422; and through the Playground in suite mode: the single name typed in the output-actions strip is composed into {name}_a and carried on that variant's entry of the one execute request, lands on the suite's one experiment, and the field then advances to {name}_02; t2 also covers the PER-COLUMN run in suite mode (test-suite-per-column-run.spec.ts) — clicking one variant's own Run sends exactly ONE /experiments/execute request carrying exactly ONE prompt entry, and that entry carries the suffix of the variant that was clicked (_b for the second variant, even though it is the request's only entry) on that variant's own rendered prompt, which is the binding runSingleViaBackend can get wrong and the Run-all shape above cannot see" }
       pass-rate-display:     { covered: true,  tier: t1-smoke }
       global-assertions:     { covered: true,  tier: t1-smoke }
