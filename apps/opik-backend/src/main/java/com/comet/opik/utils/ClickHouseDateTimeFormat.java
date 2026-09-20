@@ -32,11 +32,20 @@ public class ClickHouseDateTimeFormat {
             .ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS")
             .withZone(ZoneOffset.UTC);
 
+    /** Precision 3 — matches millisecond {@code DateTime64(3, 'UTC')} columns. */
+    public static final DateTimeFormatter MILLIS = DateTimeFormatter
+            .ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+            .withZone(ZoneOffset.UTC);
+
     public static String formatNanos(@NonNull Instant instant) {
         return NANOS.format(instant);
     }
 
     public static String formatMicros(@NonNull Instant instant) {
         return MICROS.format(instant);
+    }
+
+    public static String formatMillis(@NonNull Instant instant) {
+        return MILLIS.format(instant);
     }
 }

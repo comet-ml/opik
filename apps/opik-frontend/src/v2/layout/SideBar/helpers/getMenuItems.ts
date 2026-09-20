@@ -16,6 +16,8 @@ import {
   UserPen,
   Brain,
   GitBranch,
+  Gauge,
+  Network,
 } from "lucide-react";
 import OllieOwl from "@/icons/ollie-owl.svg?react";
 import {
@@ -126,6 +128,22 @@ const getMenuItems = ({
               },
             ]
           : []),
+        {
+          id: "system_monitoring",
+          path: projectPath("/system-monitoring"),
+          type: MENU_ITEM_TYPE.router,
+          icon: Gauge,
+          label: "System monitoring",
+          disabled: !projectPrefix,
+        },
+        {
+          id: "request_monitoring",
+          path: projectPath("/request-monitoring"),
+          type: MENU_ITEM_TYPE.router,
+          icon: Network,
+          label: "HTTP & MCP requests",
+          disabled: !projectPrefix,
+        },
       ],
     },
     {
