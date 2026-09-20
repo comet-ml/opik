@@ -23,7 +23,7 @@ const PROVIDER_REFUSAL = '{"code":404,"message":"HTTP 404 Not Found"}';
 const firstLine = (message: string) => message.split('\n')[0]!.trim();
 
 test.describe('Online Evaluation — LLM-judge provider failure', { tag: ['@t2-cuj', '@area:online-evaluation'] }, () => {
-  test('A judge whose provider refuses reports the refusal on the automation logs page and writes no score', { tag: ['@cap:online-evaluation.automation-logs'] }, async ({
+  test('A judge whose provider refuses reports the refusal on the automation logs page and writes no score', { tag: ['@cap:online-evaluation.automation-logs', '@cap:online-evaluation.llm-judge-scores'] }, async ({
     page,
     project,
     sdkClient,
