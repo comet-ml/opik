@@ -349,3 +349,106 @@ def test_cerebras_chat_completions_create__stream__span_finalized_by_its_own_cli
         span.provider for trace in fake_backend.trace_trees for span in trace.spans
     )
     assert providers == ["provider-one", "provider-two"]
+
+
+def _mock_async_stream(chunks):
+    """Stand in for cerebras.AsyncStream without going near the network."""
+    stream = cerebras.AsyncStream.__new__(cerebras.AsyncStream)
+    stream._items = chunks
+    return stream
+
+
+def test_cerebras_chat_completions_create__stream__finalized_span_carries_output_and_usage(
+    fake_backend, monkeypatch
+):
+    """A consumed sync stream must finalize one span with the aggregated result.
+
+    The other stream test pins which client finalizes the span; this one pins
+    what actually lands on it.
+    """
+    original_class_iter = cerebras.Stream.__iter__
+    original_module_iter = stream_patchers.original_stream_iter_method
+    stream_patchers.original_stream_iter_method = lambda self: iter(self._items)
+
+    try:
+        client = track_cerebras(cerebras.Cerebras(api_key="fake-api-key"))
+        chunks = [
+            _chunk(role="assistant"),
+            _chunk(content="Blue."),
+            _chunk(content=" Scattering."),
+            _chunk(finish_reason="stop"),
+        ]
+        monkeypatch.setattr(
+            client.chat.completions,
+            "_post",
+            lambda *args, **kwargs: _mock_stream(list(chunks)),
+        )
+
+        stream = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": "Why is the sky blue?"}],
+            stream=True,
+        )
+        assert [c for c in stream] == chunks
+
+        opik.flush_tracker()
+    finally:
+        stream_patchers.original_stream_iter_method = original_module_iter
+        cerebras.Stream.__iter__ = original_class_iter
+
+    assert len(fake_backend.trace_trees) == 1
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.provider == "cerebras"
+    assert span.model == MODEL
+    assert span.error_info is None
+    message = span.output["choices"][0]["message"]
+    assert message["content"] == "Blue. Scattering."
+    assert message["role"] == "assistant"
+
+
+def test_cerebras_chat_completions_create__async_stream__finalized_span_carries_output(
+    fake_backend, monkeypatch
+):
+    """Same wiring through AsyncCerebras, which patches __aiter__ rather than __iter__."""
+    original_class_aiter = cerebras.AsyncStream.__aiter__
+    original_module_aiter = stream_patchers.original_async_stream_aiter_method
+
+    async def _aiter(self):
+        for item in self._items:
+            yield item
+
+    stream_patchers.original_async_stream_aiter_method = _aiter
+
+    try:
+        client = track_cerebras(cerebras.AsyncCerebras(api_key="fake-api-key"))
+        chunks = [
+            _chunk(role="assistant"),
+            _chunk(content="Blue."),
+            _chunk(finish_reason="stop"),
+        ]
+
+        async def _mock_post(*args, **kwargs):
+            return _mock_async_stream(list(chunks))
+
+        monkeypatch.setattr(client.chat.completions, "_post", _mock_post)
+
+        async def drive():
+            stream = await client.chat.completions.create(
+                model=MODEL,
+                messages=[{"role": "user", "content": "Why is the sky blue?"}],
+                stream=True,
+            )
+            return [chunk async for chunk in stream]
+
+        assert asyncio.run(drive()) == chunks
+
+        opik.flush_tracker()
+    finally:
+        stream_patchers.original_async_stream_aiter_method = original_module_aiter
+        cerebras.AsyncStream.__aiter__ = original_class_aiter
+
+    assert len(fake_backend.trace_trees) == 1
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.provider == "cerebras"
+    assert span.model == MODEL
+    assert span.output["choices"][0]["message"]["content"] == "Blue."
