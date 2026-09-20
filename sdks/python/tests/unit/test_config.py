@@ -131,3 +131,29 @@ def test_save_to_file_does_not_persist_environment(mock_expanduser, mock_open_fi
     parsed_config.read_string(written_content)
 
     assert "environment" not in parsed_config["opik"]
+
+
+def test_blank_config_path_env_falls_back_to_default(monkeypatch):
+    # A blank OPIK_CONFIG_PATH (e.g. `set OPIK_CONFIG_PATH=` on Windows) is
+    # treated as unset instead of resolving to the current directory.
+    monkeypatch.setenv("OPIK_CONFIG_PATH", "")
+
+    config = OpikConfig()
+
+    assert config.config_file_fullpath == Path("~/.opik.config").expanduser()
+
+
+def test_unset_config_path_env_uses_default(monkeypatch):
+    monkeypatch.delenv("OPIK_CONFIG_PATH", raising=False)
+
+    config = OpikConfig()
+
+    assert config.config_file_fullpath == Path("~/.opik.config").expanduser()
+
+
+def test_explicit_config_path_env_is_respected(monkeypatch):
+    monkeypatch.setenv("OPIK_CONFIG_PATH", "/custom/path/opik.config")
+
+    config = OpikConfig()
+
+    assert config.config_file_fullpath == Path("/custom/path/opik.config")

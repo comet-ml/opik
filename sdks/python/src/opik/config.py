@@ -48,7 +48,8 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
         self,
         settings_cls: Type[BaseSettings],
     ):
-        config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
+        # A blank OPIK_CONFIG_PATH (e.g. `set OPIK_CONFIG_PATH=` on Windows) is treated as unset
+        config_file_path = os.getenv("OPIK_CONFIG_PATH") or CONFIG_FILE_PATH_DEFAULT
         expanded_path = pathlib.Path(config_file_path).expanduser()
         if config_file_path != CONFIG_FILE_PATH_DEFAULT and not expanded_path.exists():
             LOGGER.warning(
@@ -389,7 +390,8 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     @property
     def config_file_fullpath(self) -> pathlib.Path:
-        config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
+        # A blank OPIK_CONFIG_PATH (e.g. `set OPIK_CONFIG_PATH=` on Windows) is treated as unset
+        config_file_path = os.getenv("OPIK_CONFIG_PATH") or CONFIG_FILE_PATH_DEFAULT
         return pathlib.Path(config_file_path).expanduser()
 
     @property
