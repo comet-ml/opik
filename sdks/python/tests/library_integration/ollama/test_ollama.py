@@ -422,3 +422,80 @@ def test_wrap_sync_stream__completed_normally__records_aggregate():
     assert list(wrapped) == ["a", "b"]
 
     assert finalized == [(["a", "b"], None)]
+
+
+def test_wrap_async_stream__completed_normally__records_aggregate():
+    """The async completion guard needs its own test.
+
+    Dropping `completed = True` from the async wrapper makes every finished
+    async stream report `output=None`, and the sync test above does not catch
+    it -- the two wrappers track completion independently.
+    """
+    finalized = []
+
+    def callback(
+        output,
+        error_info,
+        capture_output,
+        generators_span_to_end,
+        generators_trace_to_end,
+    ):
+        finalized.append((output, error_info))
+
+    async def source():
+        yield "a"
+        yield "b"
+
+    async def drive():
+        wrapped = stream_wrappers.wrap_async_stream(
+            stream=source(),
+            span_to_end="SPAN",
+            trace_to_end=None,
+            generations_aggregator=list,
+            finally_callback=callback,
+        )
+        return [item async for item in wrapped]
+
+    assert asyncio.run(drive()) == ["a", "b"]
+    assert finalized == [(["a", "b"], None)]
+
+
+def test_ollama_async_chat__stream__aggregated_into_one_span(fake_backend, monkeypatch):
+    """End-to-end async streaming through track_ollama(AsyncClient())."""
+    client = ollama.AsyncClient()
+    wrapped = track_ollama(client)
+
+    chunks = [
+        _chunk(content="Blue, "),
+        _chunk(content="due to "),
+        _chunk(content="Rayleigh scattering."),
+        _chunk(content="", done=True),
+    ]
+
+    async def _request(*args, **kwargs):
+        async def _gen():
+            for chunk in chunks:
+                yield chunk
+
+        return _gen()
+
+    monkeypatch.setattr(client, "_request", _request)
+
+    async def drive():
+        stream = await wrapped.chat(
+            model=MODEL,
+            messages=[{"role": "user", "content": "Why is the sky blue?"}],
+            stream=True,
+        )
+        return [chunk async for chunk in stream]
+
+    received = asyncio.run(drive())
+    opik.flush_tracker()
+
+    assert len(received) == 4
+
+    assert len(fake_backend.trace_trees) == 1
+    span = fake_backend.trace_trees[0].spans[0]
+    assert span.error_info is None
+    assert span.output["message"]["content"] == "Blue, due to Rayleigh scattering."
+    assert span.usage["prompt_tokens"] == 10
