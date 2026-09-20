@@ -410,6 +410,9 @@ navigation:
               - page: Manually logging experiments
                 path: ./docs-v2/evaluation/advanced/log_experiments_with_rest_api.mdx
                 slug: log_experiments_with_rest_api
+              - page: Exporting experiment results
+                path: ./docs-v2/evaluation/advanced/export_experiment_results.mdx
+                slug: export_experiment_results
           - section: Metrics
             slug: /metrics
             contents:

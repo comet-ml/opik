@@ -21,7 +21,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -32,12 +34,15 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
+import static com.comet.opik.api.AlertTriggerConfig.LEGACY_WINDOW_SECONDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -239,7 +244,123 @@ class MetricsAlertJobTest {
                 any(), anyString(), anyString(), any(), anyList(), anyList(), anyList());
     }
 
+    /**
+     * Window resolution across the shapes actually found in persistence: the current key, the legacy one
+     * from before it was renamed, both at once, and configs stored with no usable window at all. Blank
+     * counts as absent so a stored empty string falls back rather than reaching Long.parseLong.
+     */
+    static Stream<Arguments> windowResolutionCases() {
+        return Stream.of(
+                arguments("current key wins over the legacy one",
+                        Map.of(WINDOW_CONFIG_KEY, "300", LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"), 300L),
+                arguments("legacy key is used when it is the only one",
+                        Map.of(LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"), 900L),
+                arguments("blank current key falls back to the legacy one",
+                        Map.of(WINDOW_CONFIG_KEY, "", LEGACY_WINDOW_SECONDS_CONFIG_KEY, "900"), 900L),
+                arguments("no window at all falls back to the default",
+                        Map.<String, String>of(), 86400L),
+                arguments("blank with no legacy value falls back to the default",
+                        Map.of(WINDOW_CONFIG_KEY, "   "), 86400L));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("windowResolutionCases")
+    void resolvesTheEvaluationWindow(String name, Map<String, String> windowConfig, long expectedSeconds) {
+        var configValue = new java.util.HashMap<String, String>(Map.of(
+                NAME_CONFIG_KEY, FEEDBACK_NAME,
+                OPERATOR_CONFIG_KEY, "<",
+                THRESHOLD_CONFIG_KEY, "0.5"));
+        configValue.putAll(windowConfig);
+        Alert alert = alertWithFeedbackConfig(Map.copyOf(configValue));
+
+        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
+                anyList(), anyList(), anyList());
+        assertThat(windowSecondsPassedToDao()).isEqualTo(expectedSeconds);
+    }
+
+    @Test
+    void usesTheConfiguredDefaultWindowWhenOneIsSet() {
+        WebhookConfig.MetricsConfig metrics = new WebhookConfig.MetricsConfig();
+        metrics.setFixedDelay(Duration.seconds(60));
+        metrics.setDefaultAlertWindow(Duration.seconds(1800));
+        when(webhookConfig.getMetrics()).thenReturn(metrics);
+
+        Alert alert = alertWithFeedbackConfig(Map.of(
+                NAME_CONFIG_KEY, FEEDBACK_NAME,
+                OPERATOR_CONFIG_KEY, "<",
+                THRESHOLD_CONFIG_KEY, "0.5"));
+
+        stubFeedbackScores(AlertEventType.TRACE_FEEDBACK_SCORE, "0.1", "0.1");
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        verify(alertWebhookSender, timeout(ASYNC_TIMEOUT_MS)).createAndSendWebhook(
+                any(), eq(WORKSPACE_ID), anyString(), eq(AlertEventType.TRACE_FEEDBACK_SCORE),
+                anyList(), anyList(), anyList());
+        assertThat(windowSecondsPassedToDao()).isEqualTo(1800L);
+    }
+
+    @Test
+    void skipsAlertWithNoWorkspaceIdWithoutTakingTheLock() {
+        // Reactor's Context rejects a null value, so this used to surface as an NPE out of contextWrite.
+        Alert alert = alertWithFeedbackConfig(Map.of(
+                NAME_CONFIG_KEY, FEEDBACK_NAME,
+                OPERATOR_CONFIG_KEY, "<",
+                THRESHOLD_CONFIG_KEY, "0.5",
+                WINDOW_CONFIG_KEY, "300"))
+                .toBuilder()
+                .workspaceId(null)
+                .build();
+
+        when(alertService.findAllByWorkspaceAndEventTypes(null,
+                MetricsAlertJob.SUPPORTED_EVENT_TYPES)).thenReturn(List.of(alert));
+
+        job.doJob(null);
+
+        verify(alertWebhookSender, after(NO_CALL_WINDOW_MS).never()).createAndSendWebhook(
+                any(), anyString(), anyString(), any(), anyList(), anyList(), anyList());
+        verify(lockService, never()).lockUsingToken(any(), any(java.time.Duration.class));
+    }
+
     // --- helpers ---------------------------------------------------------
+    private long windowSecondsPassedToDao() {
+        ArgumentCaptor<Instant> start = ArgumentCaptor.forClass(Instant.class);
+        ArgumentCaptor<Instant> end = ArgumentCaptor.forClass(Instant.class);
+        verify(projectMetricsDAO, timeout(ASYNC_TIMEOUT_MS).atLeastOnce()).getAverageFeedbackScore(
+                anyList(), start.capture(), end.capture(), any(EntityType.class), anyString());
+        return java.time.Duration.between(start.getValue(), end.getValue()).toSeconds();
+    }
+
+    private static Alert alertWithFeedbackConfig(Map<String, String> configValue) {
+        AlertTrigger trigger = AlertTrigger.builder()
+                .id(UUID.randomUUID())
+                .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
+                .triggerConfigs(List.of(AlertTriggerConfig.builder()
+                        .id(UUID.randomUUID())
+                        .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                        .configValue(configValue)
+                        .build()))
+                .build();
+
+        return Alert.builder()
+                .id(UUID.randomUUID())
+                .name("test-alert")
+                .enabled(true)
+                .webhook(Webhook.builder().url("http://example/hook").build())
+                .triggers(List.of(trigger))
+                .projectId(PROJECT_ID)
+                .workspaceId(WORKSPACE_ID)
+                .build();
+    }
 
     private void stubFeedbackScores(AlertEventType eventType, String v1, String v2) {
         EntityType entityType = entityTypeFor(eventType);

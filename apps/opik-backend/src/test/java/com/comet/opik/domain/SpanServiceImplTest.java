@@ -120,7 +120,7 @@ class SpanServiceImplTest {
             var projectId = idGenerator.generateId();
             var workspaceId = UUID.randomUUID().toString();
             mockSpanDeleteFlow(traceIds, spanIds, projectId);
-            when(spanDAO.deleteByIds(spanIds, projectId)).thenReturn(Mono.just((long) spanIds.size()));
+            when(spanDAO.deleteByIds(spanIds, projectId)).thenReturn(Mono.just(0L));
 
             // spanService is built with capture disabled (default config)
             spanService = newSpanService(DatabaseAnalyticsDataModelConfig.builder().build());
@@ -143,7 +143,7 @@ class SpanServiceImplTest {
             var projectId = idGenerator.generateId();
             var workspaceId = UUID.randomUUID().toString();
             mockSpanDeleteFlow(traceIds, spanIds, projectId);
-            when(spanDAO.deleteByIds(spanIds, projectId)).thenReturn(Mono.just((long) spanIds.size()));
+            when(spanDAO.deleteByIds(spanIds, projectId)).thenReturn(Mono.just(0L));
             when(deletionEventDAO.insert(deletionEvents(projectId, spanIds, workspaceId), DEFAULT_USER))
                     .thenReturn(Mono.error(new RuntimeException("Error inserting deletion events")));
 

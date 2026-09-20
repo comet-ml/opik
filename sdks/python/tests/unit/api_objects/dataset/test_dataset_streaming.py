@@ -12,6 +12,7 @@ import tenacity
 
 import opik.config as config
 from opik import exceptions
+from opik.api_objects import streaming_upload
 from opik.api_objects.dataset import converters, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
 from opik.rest_api.core.jsonable_encoder import jsonable_encoder
@@ -324,13 +325,13 @@ def test_insert__streaming__uses_the_dataset_upload_compression_level(monkeypatc
     monkeypatch.setenv("OPIK_DATASET_UPLOAD_COMPRESSION_LEVEL", "2")
 
     levels = []
-    original = streaming_writer.BoundedSendPool
+    original = streaming_upload.BoundedSendPool
 
     def spy(*args, **kwargs):
         levels.append(kwargs["gzip_level"])
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(streaming_writer, "BoundedSendPool", spy)
+    monkeypatch.setattr(streaming_upload, "BoundedSendPool", spy)
     capture = UploadCapture()
     dataset = make_dataset(Dataset, Mock(), capture)
 
