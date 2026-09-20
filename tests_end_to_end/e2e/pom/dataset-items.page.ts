@@ -72,9 +72,20 @@ export class DatasetItemsPage {
    * grid.
    *
    * The id is `<itemId>_data_<field>`, not `<itemId>_data.<field>`: the FE
-   * builds the column id as `data.<field>` (`COLUMN_DATA_ID`), and TanStack
-   * Table rewrites the dot to an underscore when it derives the cell id the
-   * table stamps. So neither half of this is the field name the SDK sent.
+   * builds the column id as `data.<field>` (`COLUMN_DATA_ID`) and hands it to
+   * TanStack as an `accessorKey` with no explicit `id` (`convertColumnDataToColumn`
+   * in `lib/table.ts`), so TanStack derives the column id by replacing EVERY dot
+   * with an underscore. So neither half of this is the field name the SDK sent.
+   *
+   * That replacement is applied here to the whole `data.<field>` string rather
+   * than only to the separator, because a dataset field name may itself contain
+   * a dot — item content is arbitrary JSON. Addressing `a.b` as `_data_a.b`
+   * would match nothing, since the table stamps `_data_a_b`.
+   *
+   * Note that the FE's normalisation is lossy: fields `a.b` and `a_b` both
+   * become `data_a_b`, so an item carrying both cannot be addressed cell by
+   * cell through this helper at all. Disambiguating that is a front-end
+   * decision about the cell-id scheme, not something a page object can fix.
    *
    * The whole id is escaped before it goes into the CSS attribute selector.
    * Unlike `itemRowById`, whose argument is always a server-issued uuid, a
@@ -83,7 +94,8 @@ export class DatasetItemsPage {
    * a different cell, or none.
    */
   itemCell(itemId: string, field: string): Locator {
-    const cellId = `${itemId}_data_${field}`.replace(/["\\]/g, '\\$&');
+    const columnId = `data.${field}`.replace(/\./g, '_');
+    const cellId = `${itemId}_${columnId}`.replace(/["\\]/g, '\\$&');
     return this.itemRowById(itemId).locator(`[data-cell-id="${cellId}"]`);
   }
 
