@@ -4,6 +4,7 @@ import com.clickhouse.client.api.ServerException;
 import com.clickhouse.client.api.metadata.NoSuchColumnException;
 import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.error.ErrorMessage;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Throwables;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
@@ -84,14 +85,17 @@ public class FreeFormSqlQueryService {
             CH_TOO_MANY_ROWS, CH_TIMEOUT_EXCEEDED, CH_MEMORY_LIMIT_EXCEEDED, CH_TOO_MANY_ROWS_OR_BYTES);
 
     private final FreeFormSqlQueryDAO freeFormSqlQueryDAO;
+    private final EntityNameEnricher entityNameEnricher;
 
     private final LongHistogram duration;
     private final LongHistogram resultRows;
     private final LongHistogram bytesRead;
 
     @Inject
-    public FreeFormSqlQueryService(@NonNull FreeFormSqlQueryDAO freeFormSqlQueryDAO) {
+    public FreeFormSqlQueryService(@NonNull FreeFormSqlQueryDAO freeFormSqlQueryDAO,
+            @NonNull EntityNameEnricher entityNameEnricher) {
         this.freeFormSqlQueryDAO = freeFormSqlQueryDAO;
+        this.entityNameEnricher = entityNameEnricher;
 
         var meter = GlobalOpenTelemetry.get().getMeter(METRIC_NAMESPACE);
         this.duration = meter
@@ -113,13 +117,13 @@ public class FreeFormSqlQueryService {
                 .build();
     }
 
-    public CompletableFuture<AnalyticsQueryResponse> executeQuery(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull String query) {
+    public CompletableFuture<AnalyticsQueryResponse> executeQuery(@NonNull AnalyticsConsumer consumer,
+            @NonNull String workspaceId, @NonNull UUID projectId, @NonNull String query) {
         long startMillis = System.currentTimeMillis();
 
-        return freeFormSqlQueryDAO.explainAst(query)
+        return freeFormSqlQueryDAO.explainAst(consumer, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> runQuery(workspaceId, projectId, query, startMillis));
+                .thenCompose(nodeLabels -> runQuery(consumer, workspaceId, projectId, query, startMillis));
     }
 
     /**
@@ -141,16 +145,36 @@ public class FreeFormSqlQueryService {
         return nodeLabels;
     }
 
-    private CompletableFuture<AnalyticsQueryResponse> runQuery(String workspaceId, UUID projectId, String query,
-            long startMillis) {
-        return freeFormSqlQueryDAO.execute(workspaceId, projectId, query)
+    private CompletableFuture<AnalyticsQueryResponse> runQuery(AnalyticsConsumer consumer, String workspaceId,
+            UUID projectId, String query, long startMillis) {
+        return freeFormSqlQueryDAO.execute(consumer, workspaceId, projectId, query)
                 .handle((result, error) -> {
                     if (error != null) {
                         throw mapExecutionError(error, startMillis);
                     }
                     recordSuccess(result, startMillis);
-                    return AnalyticsQueryResponse.builder().results(result.rows()).build();
+                    return AnalyticsQueryResponse.builder().results(resolveNames(consumer, result, workspaceId))
+                            .build();
                 });
+    }
+
+    /**
+     * Charts render as HTML for a person, so a bare {@code dataset_id} column is not a usable label. Agent Insights
+     * returns to a model that reads ids fine, and widening its response shape is not this change's business.
+     *
+     * <p>Enrichment is presentation, never correctness: a failure here leaves the ids in place rather than losing a
+     * result ClickHouse already returned.
+     */
+    private List<JsonNode> resolveNames(AnalyticsConsumer consumer, FreeFormSqlResult result, String workspaceId) {
+        if (consumer != AnalyticsConsumer.CUSTOM_CHARTS) {
+            return result.rows();
+        }
+        try {
+            return entityNameEnricher.enrich(result.rows(), workspaceId);
+        } catch (Exception e) {
+            log.warn("Name enrichment failed for workspace '{}'; returning unresolved ids", workspaceId, e);
+            return result.rows();
+        }
     }
 
     private static boolean containsSetNode(List<String> nodeLabels) {

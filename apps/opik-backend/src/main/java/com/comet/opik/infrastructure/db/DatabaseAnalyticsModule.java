@@ -3,6 +3,7 @@ package com.comet.opik.infrastructure.db;
 import com.clickhouse.client.api.Client;
 import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.DatabaseAnalyticsReadOnlyFreeFormSqlConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.inject.Provides;
@@ -19,12 +20,14 @@ import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfiguration> {
 
     public static final String READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT = "readOnlyFreeFormSqlClickHouseClient";
+    public static final String READ_ONLY_CHARTS_CLICKHOUSE_CLIENT = "readOnlyChartsClickHouseClient";
     public static final String CLICKHOUSE_HEALTH_CHECK_TIMEOUT = "clickhouse_health_check_timeout";
 
     private transient DatabaseAnalyticsFactory databaseAnalyticsFactory;
     private transient ConnectionFactory connectionFactory;
     private transient Client clickHouseClient;
     private transient Client readOnlyFreeFormSqlClickHouseClient;
+    private transient Client readOnlyChartsClickHouseClient;
 
     @Override
     protected void configure() {
@@ -42,11 +45,22 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
         // Read-only client used for Agent Insights freeform SQL. The v2 client connects lazily, so building it is
         // cheap and never contacts ClickHouse until a query runs; the ollieEnabled toggle gates all usage.
-        readOnlyFreeFormSqlClickHouseClient = buildReadOnlyFreeFormSqlClient();
+        readOnlyFreeFormSqlClickHouseClient = buildReadOnlyClient(
+                configuration().getDatabaseAnalyticsReadOnlyFreeFormSql());
         environment().lifecycle().manage(new Managed() {
             @Override
             public void stop() {
                 readOnlyFreeFormSqlClickHouseClient.close();
+            }
+        });
+
+        // Custom Charts account. Built unconditionally for the same reason as the one above — the v2 client connects
+        // lazily, so an unused account costs nothing; customChartsEnabledWorkspaces gates every use.
+        readOnlyChartsClickHouseClient = buildReadOnlyClient(configuration().getDatabaseAnalyticsReadOnlyCharts());
+        environment().lifecycle().manage(new Managed() {
+            @Override
+            public void stop() {
+                readOnlyChartsClickHouseClient.close();
             }
         });
 
@@ -59,17 +73,16 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     // Reuse the main analytics connection params (same ClickHouse instance) and only swap in the restricted user's
     // credentials. No queryParameters: the user runs under readonly=1 and would reject per-query server settings.
-    private Client buildReadOnlyFreeFormSqlClient() {
+    private Client buildReadOnlyClient(DatabaseAnalyticsReadOnlyFreeFormSqlConfig readOnlyConfig) {
         var main = configuration().getDatabaseAnalytics();
-        var freeFormSqlConfig = configuration().getDatabaseAnalyticsReadOnlyFreeFormSql();
         var factory = new DatabaseAnalyticsFactory();
         factory.setProtocol(main.getProtocol());
         factory.setHost(main.getHost());
         factory.setPort(main.getPort());
         factory.setDatabaseName(main.getDatabaseName());
-        factory.setUsername(freeFormSqlConfig.getUsername());
-        factory.setPassword(freeFormSqlConfig.getPassword());
-        factory.setClientSocketTimeout(freeFormSqlConfig.getSocketTimeout());
+        factory.setUsername(readOnlyConfig.getUsername());
+        factory.setPassword(readOnlyConfig.getPassword());
+        factory.setClientSocketTimeout(readOnlyConfig.getSocketTimeout());
         return factory.buildClient();
     }
 
@@ -90,6 +103,13 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     @Named(READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT)
     public Client getReadOnlyFreeFormSqlClickHouseClient() {
         return readOnlyFreeFormSqlClickHouseClient;
+    }
+
+    @Provides
+    @Singleton
+    @Named(READ_ONLY_CHARTS_CLICKHOUSE_CLIENT)
+    public Client getReadOnlyChartsClickHouseClient() {
+        return readOnlyChartsClickHouseClient;
     }
 
     @Provides

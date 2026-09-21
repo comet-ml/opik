@@ -20,8 +20,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.StreamSupport;
 
 /**
- * Read-only ClickHouse access for caller-supplied free-form SQL. All queries run on the dedicated
- * {@code comet_readonly_freeform_sql_user} client; the workspace/project bounds are passed as server settings
+ * Read-only ClickHouse access for caller-supplied free-form SQL. Queries run on one of two dedicated accounts,
+ * chosen per call by {@link AnalyticsConsumer}; the workspace/project bounds are passed as server settings
  * (URL params) so the SQL text is never modified. Higher-level validation, metrics and error mapping live in
  * {@link FreeFormSqlQueryService}.
  *
@@ -34,12 +34,13 @@ public interface FreeFormSqlQueryDAO {
     /**
      * Parses {@code query} via {@code EXPLAIN AST} (without executing it) and returns the AST node labels, one per row.
      */
-    CompletableFuture<List<String>> explainAst(String query);
+    CompletableFuture<List<String>> explainAst(AnalyticsConsumer consumer, String query);
 
     /**
      * Executes {@code query} bounded to the given workspace/project and reads the single {@code result} column.
      */
-    CompletableFuture<FreeFormSqlResult> execute(String workspaceId, UUID projectId, String query);
+    CompletableFuture<FreeFormSqlResult> execute(AnalyticsConsumer consumer, String workspaceId, UUID projectId,
+            String query);
 }
 
 @Singleton
@@ -54,32 +55,39 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     private static final String SETTING_WORKSPACE_ID = "SQL_workspace_id";
     private static final String SETTING_PROJECT_ID = "SQL_project_id";
 
-    private final Client readOnlyClient;
+    private final Client agentInsightsClient;
+    private final Client chartsClient;
 
     @Inject
     FreeFormSqlQueryDAOImpl(
-            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) @NonNull Client readOnlyClient) {
-        this.readOnlyClient = readOnlyClient;
+            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) @NonNull Client agentInsightsClient,
+            @Named(DatabaseAnalyticsModule.READ_ONLY_CHARTS_CLICKHOUSE_CLIENT) @NonNull Client chartsClient) {
+        this.agentInsightsClient = agentInsightsClient;
+        this.chartsClient = chartsClient;
+    }
+
+    private Client clientFor(AnalyticsConsumer consumer) {
+        return consumer == AnalyticsConsumer.CUSTOM_CHARTS ? chartsClient : agentInsightsClient;
     }
 
     @Override
     @WithSpan
-    public CompletableFuture<List<String>> explainAst(@NonNull String query) {
-        return readOnlyClient.queryRecords(EXPLAIN_AST_PREFIX + query)
+    public CompletableFuture<List<String>> explainAst(@NonNull AnalyticsConsumer consumer, @NonNull String query) {
+        return clientFor(consumer).queryRecords(EXPLAIN_AST_PREFIX + query)
                 .thenApply(FreeFormSqlQueryDAOImpl::readNodeLabels);
     }
 
     @Override
     @WithSpan
-    public CompletableFuture<FreeFormSqlResult> execute(@NonNull String workspaceId, @NonNull UUID projectId,
-            @NonNull String query) {
+    public CompletableFuture<FreeFormSqlResult> execute(@NonNull AnalyticsConsumer consumer,
+            @NonNull String workspaceId, @NonNull UUID projectId, @NonNull String query) {
         // Only the SQL_ custom settings are sent: readonly=1 rejects any other per-query setting.
         // Execution/memory/row caps are pinned on the read-only user's server-side profile.
         var settings = new QuerySettings()
                 .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
                 .serverSetting(SETTING_PROJECT_ID, projectId.toString());
 
-        return readOnlyClient.queryRecords(query, settings)
+        return clientFor(consumer).queryRecords(query, settings)
                 .thenApply(FreeFormSqlQueryDAOImpl::readResult);
     }
 

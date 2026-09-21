@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AnalyticsQueryRequest;
 import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.domain.AnalyticsConsumer;
 import com.comet.opik.domain.FreeFormSqlQueryService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -43,6 +44,11 @@ import java.util.concurrent.CompletionException;
  *
  * <p>The caller's final query must return exactly one column named {@code result}, produced via
  * {@code toJSONString(...)}.
+ *
+ * <p>A workspace listed in {@code serviceToggles.customChartsEnabledWorkspaces} runs instead on the Custom Charts
+ * ClickHouse account, which reads the evaluation tables workspace-wide (OPIK-8329 design 8.11/8.12). The request and
+ * response shapes are identical either way. Note this routes <em>all</em> of that workspace's free-form SQL, Agent
+ * Insights included, to the wider account — intended while the allowlist is internal-only.
  */
 @Path("/v1/internal/analytics-queries")
 @Produces(MediaType.APPLICATION_JSON)
@@ -77,15 +83,18 @@ public class AnalyticsQueriesResource {
         RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Agent Insights free-form SQL");
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        AnalyticsConsumer consumer = serviceToggles.getCustomChartsEnabledWorkspaces().contains(workspaceId)
+                ? AnalyticsConsumer.CUSTOM_CHARTS
+                : AnalyticsConsumer.AGENT_INSIGHTS;
 
-        log.info("Executing Agent Insights free-form SQL for workspace '{}', project '{}'", workspaceId, projectId);
+        log.info("Executing free-form SQL for workspace '{}', project '{}' as {}", workspaceId, projectId, consumer);
 
         // The service stays async (ClickHouse v2 client); terminate here, the last responsible moment, since Dropwizard
         // is not reactive. join() wraps any failure in CompletionException — unwrap so the mapped WebApplicationException
         // (and its HTTP status) reaches the JAX-RS exception handling unchanged.
         try {
             AnalyticsQueryResponse response = freeFormSqlQueryService
-                    .executeQuery(workspaceId, projectId, request.query())
+                    .executeQuery(consumer, workspaceId, projectId, request.query())
                     .join();
             return Response.ok(response).build();
         } catch (CompletionException e) {

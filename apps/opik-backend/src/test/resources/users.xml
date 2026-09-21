@@ -69,6 +69,32 @@
                 </SQL_project_id>
             </constraints>
         </comet_llm_readonly_freeform_sql_profile>
+        <comet_readonly_charts_sql_profile>
+            <readonly>1</readonly>
+            <max_execution_time>180</max_execution_time>
+            <max_memory_usage>8589934592</max_memory_usage>
+            <max_result_rows>100000</max_result_rows>
+            <result_overflow_mode>throw</result_overflow_mode>
+            <max_rows_to_read>100000000</max_rows_to_read>
+            <read_overflow_mode>throw</read_overflow_mode>
+            <max_concurrent_queries_for_user>5</max_concurrent_queries_for_user>
+            <!--
+                Production sets SQL_workspace_id = '' / SQL_project_id = '' as defaults, but
+                ClickHouse's XML profile loader rejects an empty Field for custom settings. The
+                CHANGEABLE_IN_READONLY constraint alone is what triggers the explicit-allowlist
+                mode the probe is tested against (any other per-call setting change rejected);
+                defaults are populated at query time by the Agent Insights pipeline, not by the
+                probe.
+            -->
+            <constraints>
+                <SQL_workspace_id>
+                    <changeable_in_readonly/>
+                </SQL_workspace_id>
+                <SQL_project_id>
+                    <changeable_in_readonly/>
+                </SQL_project_id>
+            </constraints>
+        </comet_readonly_charts_sql_profile>
     </profiles>
 
     <users>
@@ -111,5 +137,57 @@
                 </opik>
             </databases>
         </comet_readonly_freeform_sql_user>
+
+        <!--
+            Custom Charts account (OPIK-8329). Same profile shape, wider reach: traces/spans stay bound to
+            workspace AND project, every other table is workspace-only - authored_feedback_scores included, which
+            is the difference that makes this a second user rather than extra grants on the one above.
+        -->
+        <comet_readonly_charts_sql_user>
+            <password>opik</password>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>comet_readonly_charts_sql_profile</profile>
+            <quota>default</quota>
+            <grants>
+                <query>GRANT SELECT ON opik.spans</query>
+                <query>GRANT SELECT ON opik.traces</query>
+                <query>GRANT SELECT ON opik.authored_feedback_scores</query>
+                <query>GRANT SELECT ON opik.feedback_scores</query>
+                <query>GRANT SELECT ON opik.experiments</query>
+                <query>GRANT SELECT ON opik.experiment_items</query>
+                <query>GRANT SELECT ON opik.dataset_items</query>
+                <query>GRANT SELECT ON opik.trace_threads</query>
+            </grants>
+            <databases>
+                <opik>
+                    <spans>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id')</filter>
+                    </spans>
+                    <traces>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id')</filter>
+                    </traces>
+                    <authored_feedback_scores>
+                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                    </authored_feedback_scores>
+                    <feedback_scores>
+                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                    </feedback_scores>
+                    <experiments>
+                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                    </experiments>
+                    <experiment_items>
+                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                    </experiment_items>
+                    <dataset_items>
+                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                    </dataset_items>
+                    <trace_threads>
+                        <filter>workspace_id = getSetting('SQL_workspace_id')</filter>
+                    </trace_threads>
+                </opik>
+            </databases>
+        </comet_readonly_charts_sql_user>
     </users>
 </clickhouse>
