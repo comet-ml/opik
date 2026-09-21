@@ -5,7 +5,9 @@ import decimal
 import enum
 import gzip
 import json
+import logging
 import threading
+import time
 import uuid
 import zlib
 
@@ -332,6 +334,74 @@ def test_pool__worker_error__is_reraised_to_the_producer(make_pool):
 
     with pytest.raises(ValueError):
         pool.close()
+
+
+def test_pool__abort__stops_and_waits_only_a_bounded_time_for_started_sends(
+    make_pool, monkeypatch, caplog
+):
+    monkeypatch.setattr(streaming_upload, "ABORT_WAIT_SECONDS", 0.2)
+    stop = threading.Event()
+    release = threading.Event()
+    started = []
+    entered = threading.Semaphore(0)
+    returned = threading.Semaphore(0)
+
+    def send(body: bytes, _payload=None) -> None:
+        started.append(body)
+        entered.release()
+        # Ignores the stop signal, as a request already on the wire does.
+        release.wait(10)
+        returned.release()
+
+    pool = make_pool(
+        send=send, num_threads=2, gzip_level=None, fail_fast=True, stop_event=stop
+    )
+    try:
+        for index in range(4):
+            _submit(pool, [f"body-{index}".encode()])
+        assert entered.acquire(timeout=5)
+        assert entered.acquire(timeout=5)
+
+        started_at = time.monotonic()
+        with caplog.at_level(logging.WARNING, logger=streaming_upload.LOGGER.name):
+            pool.abort()
+
+        assert stop.is_set()
+        assert time.monotonic() - started_at < 2
+        assert "2 upload request(s) still running" in caplog.text
+    finally:
+        release.set()
+    assert returned.acquire(timeout=5)
+    assert returned.acquire(timeout=5)
+    assert len(started) == 2, "No queued body may start after abort"
+
+
+def test_pool__close_after_abort__returns_instead_of_waiting_on_cancelled_work(
+    make_pool, monkeypatch
+):
+    """`abort` leaves futures that `shutdown` cancelled without notifying their waiters."""
+    monkeypatch.setattr(streaming_upload, "ABORT_WAIT_SECONDS", 0.2)
+    release = threading.Event()
+    started = threading.Semaphore(0)
+
+    def send(body: bytes, _payload=None) -> None:
+        started.release()
+        release.wait(10)
+
+    pool = make_pool(send=send, num_threads=2, gzip_level=None, fail_fast=True)
+    try:
+        for index in range(4):
+            _submit(pool, [f"body-{index}".encode()])
+        assert started.acquire(timeout=5)
+        assert started.acquire(timeout=5)
+        pool.abort()
+
+        started_at = time.monotonic()
+        pool.close()
+        assert time.monotonic() - started_at < 2, "close must not wait on aborted work"
+        pool.close()  # and stays safe to repeat
+    finally:
+        release.set()
 
 
 def _executor_threads(pool) -> int:

@@ -14,6 +14,7 @@ import decimal
 import enum
 import logging
 import pathlib
+import threading
 import uuid
 import zlib
 from concurrent import futures
@@ -26,6 +27,10 @@ from .. import json_helpers
 from ..rest_api.core.jsonable_encoder import jsonable_encoder
 
 LOGGER = logging.getLogger(__name__)
+
+
+# How long `abort` waits for sends already started before leaving them behind.
+ABORT_WAIT_SECONDS = 5.0
 
 
 def max_batch_bytes() -> int:
@@ -73,7 +78,14 @@ def _ordered_set_members(value: Any) -> list:
     try:
         return sorted(value)
     except TypeError:
+        pass
+    try:
         return sorted(value, key=lambda member: (type(member).__name__, repr(member)))
+    except Exception as exception:
+        # A member's own `__repr__` can raise anything; report it as unserialisable.
+        raise TypeError(
+            f"Set member cannot be ordered for serialization: {exception}"
+        ) from exception
 
 
 def encode_flexible(value: Any) -> Any:
@@ -199,8 +211,11 @@ class BoundedSendPool:
     `fail_fast` decides what a failure costs the rest of the upload. Off -- the dataset
     path -- everything already queued is drained and awaited, so those bodies land and the
     error surfaces after them. On, a failure is recorded as it happens, so the next
-    `submit` raises instead of feeding the pool further, and `close` drops whatever has
-    not started rather than joining what has.
+    `submit` raises instead of feeding the pool further, and `close` aborts the rest the
+    way `abort` does.
+
+    `stop_event` is set by `abort`; a `send` that should give up early -- between
+    rate-limit retries, say -- is handed the same event and checks it.
     """
 
     def __init__(
@@ -211,11 +226,14 @@ class BoundedSendPool:
         gzip_level: Optional[int],
         fail_fast: bool = False,
         thread_name_prefix: str = "",
+        stop_event: Optional[threading.Event] = None,
     ) -> None:
         self._send = send
+        self._stop_event = stop_event if stop_event is not None else threading.Event()
         self._gzip_level = gzip_level
         self._fail_fast = fail_fast
         self._first_error: Optional[BaseException] = None
+        self._aborted = False
         # Two bodies per worker, so one is always ready as the network drains the last.
         self._max_pending = num_threads * 2
         self._max_pending_bytes = self._max_pending * max_batch_bytes()
@@ -316,12 +334,44 @@ class BoundedSendPool:
             future.add_done_callback(self._record_failure)
 
     def abort(self) -> None:
-        """Drop the bodies that have not started and return without joining those that have."""
-        if self._pool is not None:
-            self._pool.shutdown(wait=False, cancel_futures=True)
+        """Stop the upload: signal the senders, drop what has not started, wait a bounded time.
+
+        A send that checks the stop signal gives up before its next attempt, and a
+        rate-limit wait ends as soon as the signal is set. A request already on the wire
+        cannot be interrupted -- Python can neither cancel a blocking HTTP call nor kill a
+        thread -- so it runs until it returns or times out. A worker still running after
+        `ABORT_WAIT_SECONDS` is logged and left behind rather than waited on. If its send
+        checks the signal it starts no further request, but executor threads are joined
+        at interpreter exit, so it can still delay exit until its in-flight request -- or
+        a retry backoff it is already sleeping through -- ends.
+        """
+        self._stop_event.set()
+        self._aborted = True
+        if self._pool is None:
+            return
+        self._pool.shutdown(wait=False, cancel_futures=True)
+        # A future cancelled by `shutdown` never counts as done to `futures.wait`.
+        started = [future for future in self._pending if not future.cancelled()]
+        # Nothing left here is collectable, and a second abort must not wait again.
+        self._pending.clear()
+        self._pending_bytes = 0
+        _, still_running = futures.wait(started, timeout=ABORT_WAIT_SECONDS)
+        if still_running:
+            LOGGER.warning(
+                "%d upload request(s) still running %s seconds after the upload was "
+                "aborted; they cannot be interrupted mid-request and are left to finish "
+                "in the background",
+                len(still_running),
+                ABORT_WAIT_SECONDS,
+            )
 
     def close(self) -> None:
-        if self._pool is None:
+        """Wait for the queued bodies and re-raise the first failure.
+
+        A no-op once `abort` has run: the cancelled futures it leaves behind are never
+        reported done, so waiting on them here would block forever.
+        """
+        if self._pool is None or self._aborted:
             return
         try:
             if self._first_error is not None:
@@ -331,9 +381,10 @@ class BoundedSendPool:
         except BaseException:
             # A fail-fast caller is not waiting for the rest: a body parked in the
             # rate-limit retry loop would otherwise hold the producer here.
-            self._pool.shutdown(
-                wait=not self._fail_fast, cancel_futures=self._fail_fast
-            )
+            if self._fail_fast:
+                self.abort()
+            else:
+                self._pool.shutdown(wait=True)
             raise
         else:
             self._pool.shutdown(wait=True)
