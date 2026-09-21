@@ -167,10 +167,16 @@ $RUNBOOK/scripts/verify.sh --database opik            # --drill-down lists the d
 #    delta_replay.sh then verify.sh, and read a PASS as "the copy is faithful as of the last delta", not "nothing can
 #    arrive after it". Do NOT stop the traffic to force a clean PASS.
 #
-#    Re-running only converges a MISMATCH. The other two non-zero verdicts do not resolve by re-copying:
-#      * INCONCLUSIVE   a version tie left the winner-picking arbitrary. WITH --split-parents SEEDED, EXPECT THIS —
-#                       it is the spans-only tie (one span id, two parents, one version), and the message says so
-#                       (version_ties=src:N/dst:0). Copying again does not break the tie.
+#    Re-running converges the ordinary MISMATCH (a window still catching up). What does NOT resolve by re-copying is a
+#    version tie, and it can surface under either verdict — verify.sh prints version_ties=src:N/dst:M on any differing
+#    window, so read that line, not the verdict alone:
+#      * MISMATCH with version_ties=src:N/dst:0
+#                       WITH --split-parents SEEDED, EXPECT THIS, in the weeks those rows landed in. It is the
+#                       spans-only tie (one span id, two parents, one version): the source keeps both rows, the
+#                       successor collapses them, and each side picks arbitrarily — so when the picks DIFFER the key is
+#                       counted as genuinely differing. Copying again does not break the tie.
+#      * INCONCLUSIVE   the same tie where the two arbitrary picks happened to COINCIDE, so confirm-keys found nothing
+#                       differing and the window cannot be certified either way.
 #      * UNCERTIFIABLE  the tie check did not return counts. A read or client failure, not a data one.
 #    "OK -- superseded-version artifact" is a PASS that differs, so it needs no action.
 #    Confirm the --parent-poison rows did NOT cause a mismatch: the fingerprint applies the copy's own normalization to
@@ -180,19 +186,27 @@ $RUNBOOK/scripts/verify.sh --database opik            # --drill-down lists the d
 #    BEFORE the EXCHANGE (runbook "The final cutover window"). This is the only restart the spans cutover needs.
 #    Skipping it leaves the whole read-side half of the flag unexercised — and its failure mode is SILENT (writes still
 #    succeed either way; an absent end_time just reads back as 1970-01-01 instead of null).
+#    TAKE TWO ANCHORS. They bound opposite things and a single value cannot serve both:
+#
+#      FLAG_WINDOW_FROM — captured BEFORE the rollout starts. It is the lower bound of the window the flag was live in,
+#        which the rollback's --sentinel-repair-only needs later. It has to be EARLY: a pod that comes up with the flag
+#        starts minting epoch/NaN sentinels the moment it serves, which is well before the roll finishes, and any
+#        sentinel written before this bound is outside the repair's window and is left damaged while the repair still
+#        reports success. Widening a repair window is free (rows that do not carry a sentinel are not matched), so err
+#        early here deliberately.
+#      FLIP_AT — captured AFTER recreate_backend returns. It is the lower bound of the PROBE below, and it has to be
+#        LATE: the outgoing backend keeps serving until the new container is healthy, and everything it writes in that
+#        interval is a legitimate NULL, so an earlier bound sweeps those rows in and fails a flip that actually landed.
+#
+#    Take both from ClickHouse's own clock, as backfill.sh does for backfill_start: it is the clock that stamps
+#    last_updated_at, so no host/container skew can shift either boundary. Precision 6 matches spans.last_updated_at,
+#    which migration 000025 narrowed to DateTime64(6) — and, unlike a now64(9) value, it is accepted verbatim by
+#    --sentinel-window-from, whose shape check caps the fraction at six digits.
+FLAG_WINDOW_FROM="$(clickhouse-client --query "SELECT toString(now64(6, 'UTC'))")"   # BEFORE the restart
 export ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED=true \
        ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE=true
 recreate_backend
-#    Anchor the probe AFTER recreate_backend returns, never before it. The outgoing backend keeps serving until the new
-#    container is healthy, and everything it writes in that window is a legitimate NULL — anchoring earlier sweeps those
-#    rows in and fails a flip that actually landed. Take the anchor from ClickHouse's own clock, as backfill.sh does for
-#    backfill_start: it is the clock that stamps last_updated_at, so no host/container skew can shift the boundary.
-#    Precision 9 is deliberate and matches spans.last_updated_at's own DateTime64(9, 'UTC') exactly, so the comparison
-#    below needs no coercion. Do NOT round the anchor down to microseconds to "catch boundary writes": that moves the
-#    boundary EARLIER and re-admits writes the outgoing backend made in that microsecond, which is the false-failure
-#    this anchor's placement exists to prevent. Erring later is safe here — the probe needs only that SOME post-restart
-#    sentinel rows exist and that NO post-restart row is NULL, and traffic keeps supplying both for as long as it runs.
-FLIP_AT="$(clickhouse-client --query "SELECT toString(now64(9, 'UTC'))")"
+FLIP_AT="$(clickhouse-client --query "SELECT toString(now64(6, 'UTC'))")"
 #
 #    PROVE THE FLIP LANDED, AND DO IT NOW — this is the evidence --confirm-columns-non-nullable asserts in step 8, and
 #    the rehearsal's counterpart of the runbook's Go/No-Go box. It must be the PHYSICAL stored value, and it must be
@@ -207,17 +221,30 @@ FLIP_AT="$(clickhouse-client --query "SELECT toString(now64(9, 'UTC'))")"
 #    post-restart traffic and then read them:
 clickhouse-client --query "
   SELECT countIf(end_time IS NULL)                                      AS stale_null_end_time,
-         countIf(end_time = toDateTime64('1970-01-01 00:00:00.000', 9)) AS sentinel_end_time,
+         countIf(end_time = toDateTime64('1970-01-01 00:00:00', 9, 'UTC')) AS sentinel_end_time,
          countIf(ttft IS NULL)                                          AS stale_null_ttft,
          countIf(isNaN(ttft))                                           AS sentinel_ttft
   FROM opik.spans
   WHERE name = 'live-span-in-progress'
-    AND last_updated_at >= toDateTime64('$FLIP_AT', 9, 'UTC')"
+    AND created_at >= toDateTime64('$FLIP_AT', 6, 'UTC')"
 #    PASS = both stale_null_* are 0 and both sentinel_* are non-zero. A non-zero stale_null_* means the restart did not
 #    take on every instance and the EXCHANGE must not proceed — which is exactly the state --confirm-columns-non-nullable
-#    would otherwise let you assert falsely. Rows written BEFORE $FLIP_AT legitimately hold NULL; that is why the
-#    anchor is captured before the restart rather than the query scanning the whole table.
-#    Expect sentinel_ttft to dwarf sentinel_end_time (step 3's note) — that is the production shape, not a fault.
+#    would otherwise let you assert falsely. Rows written BEFORE $FLIP_AT legitimately hold NULL; that is why the query
+#    is bounded by the anchor rather than scanning the whole table. The anchor here is FLIP_AT, taken AFTER the restart
+#    — NOT FLAG_WINDOW_FROM, which is taken before it and would sweep exactly those legitimate NULLs in.
+#    THE BOUND IS created_at, NOT last_updated_at, AND THAT IS LOAD-BEARING. SpanDAO.UPDATE re-inserts a version
+#    copying end_time/ttft VERBATIM when the patch omits them, while last_updated_at takes DEFAULT now64(6) — so a span
+#    created before the flip with a NULL ttft and patched after it carries that NULL into a row whose last_updated_at
+#    is past the anchor. Filtering on last_updated_at therefore reports stale_null_ttft > 0 on a fleet that rolled out
+#    correctly — every such row was created pre-flip, against stale_null_ttft = 0 on the created_at bound. created_at is
+#    server-stamped on the batch-ingest path and preserved by the merge/update paths, so it selects spans genuinely
+#    WRITTEN after the flip, which is what this probe is asking about. Note the end_time arm hides the problem — an
+#    in-progress span that gets ended acquires a real end_time — so the mis-bound shows up on the ttft arm alone and
+#    reads deceptively like a partial rollout.
+#    Expect sentinel_end_time and sentinel_ttft to be EQUAL here: this probe filters to 'live-span-in-progress', which
+#    is written with neither value, so both arms fire on exactly the same rows. The dwarfing step 3 describes is real
+#    but belongs to the UNFILTERED table — every ordinary live-span also lacks a ttft — which is where the rollback's
+#    sentinel repair reads it.
 
 # 8. Final delta + replay (the last write-facing step), then the EXCHANGE immediately after. The EXCHANGE is the data
 #    cutover and leaves spans a MergeTree so the backend's cascade deletes keep working; it also renames the displaced
@@ -255,6 +282,11 @@ $RUNBOOK/scripts/reconcile.sh --database opik --confirm-retention-paused \
 #     span CREATED after the swap therefore exists on the live side only, and 000005 bounds created_at identically on
 #     both sides and passes a window only when src_rows = dst_rows, so extending the window past the swap reports a
 #     mismatch for every post-swap span — a guaranteed failure that says nothing about fidelity.
+#     AND THE SAME IS TRUE OF POST-SWAP DELETES, which the bound cannot exclude: delete_traffic.py is still masking
+#     gap-window spans on the live side while the frozen backup still shows them live, so with deletes running this
+#     compare CANNOT pass. Expect src_rows >> dst_rows; confirm it is benign by checking that every absent key is in
+#     deletion_events_local with event_time >= exchange_done, or stop delete_traffic.py before running it if you want
+#     the clean PASS. reconcile.sh's four counts are the actual gate for write loss.
 $RUNBOOK/scripts/verify.sh --database opik --old-table spans_pre_cutover_backup --new-table spans \
     --window-from '<delta_start from step 8>' --window-to '<exchange_done from step 8>'
 #
@@ -371,6 +403,15 @@ $RUNBOOK/scripts/rollback.sh --database opik --unwrap-only --confirm-maintenance
 $RUNBOOK/scripts/rollback.sh --database opik --reverse-replay-only --cutover-start '<cutover_start> UTC' \
     --confirm-retention-paused
 
+# STOP THE DELETE GENERATOR FIRST — the reverse reconciliation cannot converge while it runs, and this is not a
+# defect. Its gate includes the reverse-replay postcondition, which (unlike the sweep) reads the LIVE table and the
+# BRIDGE, neither of which is frozen. --resurrect-ratio manufactures exactly what that check counts: a trace deleted
+# since cutover_start whose spans are re-created under the same ids. Each pass masks the current set and the generator
+# produces more, so the run exhausts --max-passes with a growing 'resurrected:N' and FAILS; stopping it converges on
+# the very next run. Leave live_traffic.py running — writes are not the problem, and the promote has to be exercised
+# against a table that is still being written to.
+pkill -f delete_traffic.py
+
 # The REVERSE reconciliation — the other half of what --accept-post-cutover-write-loss acknowledged discarding.
 # This is where the sentinel->NULL denormalization AND the spans-only parent_span_id denormalization are exercised:
 # the parked successor stores an absent parent as 36 NUL bytes, and the restored original wants ''. Getting that wrong
@@ -410,18 +451,26 @@ wrote into the original, which the promote made live again — including the lar
 **not** fix.
 
 ```bash
+#    --sentinel-window-from is step 7's FLAG_WINDOW_FROM, captured BEFORE that rollout — not FLIP_AT, which is after
+#    it and would leave every sentinel minted during the roll outside the window and unrepaired. Take the upper bound
+#    the same way, from ClickHouse's clock once the revert restart has landed:
+REVERT_AT="$(clickhouse-client --query "SELECT toString(now64(6, 'UTC'))")"
 $RUNBOOK/scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted \
-    --sentinel-window-from '<flag rolled out, UTC>' --sentinel-window-to '<revert landed everywhere, UTC>'
+    --sentinel-window-from "$FLAG_WINDOW_FROM" --sentinel-window-to "$REVERT_AT"
 ```
 
 Watch the **sentinel** counters (`sentinel_end_time`, `sentinel_ttft`) reach `0`: those are the repair's actual success
-criterion. **Check they started non-zero**, though — a `sentinel_end_time` that was `0` before the repair means the
-window simply contains no in-flight spans, so the epoch arm was never exercised and reaching `0` proves nothing about
-it. That arm is fed only by `--in-progress-ratio` traffic running *inside* the window: step 3's, if it is still running
-after step 7's flip, and stage B's. **Expect `sentinel_ttft` to be very much larger than `sentinel_end_time`** — the SDK sets no `ttft` on an
-ordinary span, so nearly every span written while the flag was live carries the NaN sentinel, whereas only in-flight
-spans carry the epoch `end_time`. That ratio is the production shape and the driver prints a note saying so; reading it
-as a wrong window is the mistake to avoid.
+criterion. **Then compare them against the no-window counts the driver prints beside them.** A small excess outside the
+window, clustered just before `--sentinel-window-from`, means the lower bound is LATE — sentinels the flag minted
+before the anchor was taken, which the repair correctly left alone and which therefore stay damaged. Using
+`FLAG_WINDOW_FROM` (captured before the rollout) rather than `FLIP_AT` (captured after it) is what avoids that.
+**Check they started non-zero**, though — a `sentinel_end_time` that was `0` before the repair means the window simply
+contains no in-flight spans, so the epoch arm was never exercised and reaching `0` proves nothing about it. That arm is
+fed only by `--in-progress-ratio` traffic running *inside* the window: step 3's, if it is still running after step 7's
+flip, and stage B's. **Expect `sentinel_ttft` to be very much larger than `sentinel_end_time`** — the SDK sets no
+`ttft` on an ordinary span, so nearly every span written while the flag was live carries the NaN sentinel, whereas only
+in-flight spans carry the epoch `end_time`. That ratio is the production shape and the driver prints a note saying so;
+reading it as a wrong window is the mistake to avoid.
 
 Locally `countIf(duration < 0)` reaches `0` too, but do not carry that expectation into production. It only holds
 because seeded and generated spans never end before they start, so every negative duration here is sentinel-caused. A

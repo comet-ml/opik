@@ -28,16 +28,15 @@
 -- server created_at (batch-ingest path) OR a fresh server last_updated_at (create/update merge paths), so the union is
 -- complete. ReplacingMergeTree dedups the re-copied rows against the backfilled ones (newest last_updated_at wins).
 --
--- THE DELTA IS NOT SPLIT INTO TWO PASSES, unlike the backfill, and that is a decision rather than an omission. The
--- split in 000001 works because a backfill window is a bounded created_at range, so "the honest id_at band this window
--- implies" is a finite, computable interval. The delta has no such window: it is everything written since
--- backfill_start, whose ids can be ANY age — its `last_updated_at` arm exists precisely to re-copy UPDATES TO OLD ROWS,
--- which is the arm that carries the far-future ids. So one delta statement can touch far-future, epoch and ordinary
--- partitions together, and it runs at the large
--- max_partitions_per_insert_block, with min_insert_block_size_bytes and max_insert_block_size tightened so the block's
--- row-data term stays small beside the ~34 KiB-per-partition buffers (README, "Blocker 2"). The delta is small relative
--- to the backfill, so paying the full partition-buffer cost on it is affordable; paying it on every backfill block
--- would not be.
+-- THE DELTA'S PARTITION SPREAD IS WIDER THAN ANY SINGLE BACKFILL WINDOW'S, which is why it carries the same large
+-- max_partitions_per_insert_block and tightens the block bounds further. A backfill window is a bounded created_at
+-- range; the delta has no such window — it is everything written since backfill_start, whose ids can be ANY age, and
+-- its `last_updated_at` arm exists precisely to re-copy UPDATES TO OLD ROWS, which is the arm that carries the
+-- far-future ids. So one delta statement can touch far-future, epoch and ordinary partitions together. It runs with
+-- min_insert_block_size_bytes and max_insert_block_size tightened so the block's row-data term stays small beside the
+-- ~34 KiB-per-partition buffers (README, "Partition spread, and the one setting that matters"). The delta is small
+-- relative to the backfill, so paying the full partition-buffer cost on it is affordable; paying it on every backfill
+-- block would not be.
 --
 -- Exceeding ClickHouse's default of 100 partitions per block aborts the statement
 -- (throw_on_max_partitions_per_insert_block = 1) at the worst possible moment: the final delta runs immediately before

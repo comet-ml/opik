@@ -256,7 +256,15 @@ Three places had to be built differently because of it, and all three are the sa
 one distinct row, `argMax` and `ReplacingMergeTree` each pick arbitrarily and may differ. That is exactly the case
 `version-ties` already detects — and on spans it has this **second cause** on top of the one traces had. Both sides of
 that block group by the destination key, so one detector covers both. A window with `version_ties=src:N/dst:0` is the
-signature of the spans-only cause; `verify.sh` says so in its INCONCLUSIVE message.
+signature of the spans-only cause, and `verify.sh` prints those counts on any differing window.
+
+**Which verdict it lands in depends on how the arbitrary picks fall, and the spans-only tie usually lands in
+MISMATCH.** Where the two sides happen to pick the *same* row the window reaches `confirm-keys = 0` and is reported
+**INCONCLUSIVE**; where they pick *differently* — the common case for this tie, since the two rows differ in content —
+the key is counted in `genuinely_differing_keys` and the window is reported **MISMATCH** with
+`version_ties=src:N/dst:0` beside it. A rehearsal seeding `--split-parents` should expect the MISMATCH form. Both exit
+non-zero and both need the same triage; the verdict stays MISMATCH deliberately, because the tie counts are a
+window-wide upper bound rather than a per-key attribution, so they explain differing keys without clearing them.
 
 ## What else spans has that traces did not
 
@@ -425,7 +433,7 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
    On tiered storage this whole-node floor is necessary but not sufficient — validate per-volume (hot) headroom too,
    since new parts land hot before they tier, and `backfill.sh` refuses a tiered policy without
    `--confirm-tiered-headroom`.
-9. **The pre-write audits, run and recorded** — `estimate.sh` (without `--skip-audits`) reports four numbers the
+9. **The pre-write audits, run and recorded** — `estimate.sh` (without `--skip-audits`) reports two numbers the
    Go/No-Go gates on and that nothing later in the procedure can recover: the table's total id-derived weekly partition
    count (which **sizes `--max-partitions-per-insert-block`** and is a hard upper bound, not an estimate), and the
    count of `parent_span_id` values the copy
@@ -617,7 +625,8 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > - `ALTER TABLE <distributed> DELETE` → `Code 48 NOT_IMPLEMENTED: Distributed doesn't support mutations`
 >
 > So the moment the wrap is applied, **both** the product's delete-by-id path **and** the retention
-> sweep (`DELETE_FOR_RETENTION` / `deleteForRetentionBounded`) start returning 500 against `spans`. This is prep work
+> sweep (`DELETE_FOR_RETENTION` / `deleteForRetentionBounded`) start failing against `spans` — **silently to the
+> caller**, see the mismatch-window note below. This is prep work
 > that shipped **before** the wrap (OPIK-7799): `SpanDAO` renders its mutation table through a single toggle,
 > `databaseAnalyticsDataModel.spansDistributedWrapEnabled`. Set it **`true` in lockstep with applying the wrap** so those
 > deletes run against `spans_local`; reads and inserts stay on the Distributed `spans`. The flag is **startup-bound**
@@ -625,10 +634,24 @@ new table before the EXCHANGE. The replay matches the **full key**, not `id` alo
 > backend instance** — and since OPIK-8376 that roll is **observable per instance**: `clickhouse-spans-topology` is a
 > critical readiness check asserting the flag against the live engine, so an instance on the wrong side of the cutover
 > fails readiness at startup instead of serving traffic. See ["wrap
-> readiness"](#wrap-readiness-is-covered-and-the-wrap-still-waits). A mismatch is
-> still **fail-loud at the point of use**: a stale-`false` instance issues `DELETE` against the `Distributed` `spans`
-> (code 36/48), a stale-`true` instance against an absent `spans_local` — both 500 the delete path. What is missing is
-> the earlier signal, not the eventual one. While it is `false` (the deploy
+> readiness"](#wrap-readiness-is-covered-and-the-wrap-still-waits).
+>
+> **The mismatch is NOT fail-loud at the point of use.** A stale-`false` instance issues `DELETE` against the
+> `Distributed` `spans` (code 36/48) and a stale-`true` one against an absent `spans_local` (code 60), but neither
+> reaches the caller: spans have no standalone delete, so the cascade runs in the asynchronous `TraceDeletedListener`
+> and the trace delete has already returned **204** by the time the span delete fails. Observed in the window: HTTP
+> 204, the trace deleted, its spans still live, and the failure only in the server log as
+> `TraceDeletedListener … Code: 60 … UNKNOWN_TABLE` followed by `Operator called default onErrorDropped`.
+>
+> Three consequences. It is a **partial delete**, not a failed one — the user is told it succeeded and has no reason to
+> retry. The bridge records those span ids as deleted **while they are live**, and the rollback's reverse replay is
+> deliberately guard-less, so a later stage B/C would mask them. And the ordering choice below cannot be made on which
+> error is cheaper, since both go through the same async path and neither is seen.
+>
+> **What actually protects the window is the readiness check, not the error** — which is why keeping the window to
+> seconds matters, and why the probe must be wired to `type=ready`. A deployment whose probe hits bare `/health-check`
+> (evaluating ALIVE checks only) keeps the instance in rotation throughout, and the silent partial delete is live for
+> the whole mismatch. While the flag is `false` (the deploy
 > default, and correct while `spans` is still a `MergeTree`) the deletes target `spans` directly. **General rule (splits
 > by kind of change):** row mutations (`DELETE`, `ALTER … DELETE`) and `MATERIALIZE COLUMN` / `ADD INDEX` / `MODIFY TTL`
 > target **`spans_local` only** — the `Distributed` `spans` rejects them (code 36/48), so a slip fails loudly; but
@@ -671,9 +694,9 @@ problem, and OPIK-8382 owns the production execution.
 > **"In lockstep" cannot mean simultaneous — plan for a short mismatch window.** The toggle is a
 > config push plus a rolling restart; the wrap is a DDL statement. They cannot land at the same instant, so
 > one of two windows is unavoidable:
-> - **toggle first** (recommended): from the moment the last backend comes up with `true` until the wrap
->   completes, every span delete targets a `spans_local` that does not exist yet →
->   `Code: 60 UNKNOWN_TABLE`. Reads and writes are unaffected.
+> - **toggle first** (recommended): from the moment the FIRST backend comes up with `true` until the wrap completes,
+>   every span delete on that instance targets a `spans_local` that does not exist yet → `Code: 60 UNKNOWN_TABLE`,
+>   logged server-side and **not returned to the caller** (see above). Reads and writes are unaffected.
 > - **wrap first**: from the swap until the rolling restart finishes, deletes hit the `Distributed` `spans`
 >   → `Code: 36`. Same blast radius, but it also exposes the cross-node `ON CLUSTER` skew to reads.
 >
@@ -780,6 +803,14 @@ problem, and OPIK-8382 owns the production execution.
    > past the swap reports a mismatch for every post-swap span. Under production write rates that is a guaranteed
    > failure within seconds of the swap, and it would say nothing about fidelity. Use the same `exchange_done` that
    > bounded step 5's sweep, so this compare covers exactly what was swept and nothing that could not have been.
+   >
+   > **The mirror case is post-swap DELETES, and the bound does nothing about it.** A gap-window span deleted by a
+   > user after the swap is masked on the live side and still live in the frozen backup, so the same row-count
+   > equality fails — on a healthy cutover. `000005` knows nothing of the deletion bridge and `verify.sh` has no
+   > `--swap-done` to key an exclusion on, so a clean PASS here needs user deletes quiesced from the swap through the
+   > compare. Otherwise expect `src_rows` well above `dst_rows` — and read step 5's `missing_keys`, which applies
+   > exactly the exclusion this compare lacks, rather than writing a query to tell the two apart. See ["When the
+   > cutover is done"](#when-the-cutover-is-done).
    This compares the spans **created** in that range — `000005` bounds on `created_at`, which the weekly mode's
    partitioning and its superseded-version logic require — so a span created earlier and merely *updated* in the gap is
    not in it. That set is not left uncovered: it is exactly what step 5 reports as `stale_keys` and
@@ -1581,7 +1612,7 @@ at all and the read-only drivers cannot surface a mutation-privilege gap by cons
 > - the same `readonly = 2` requirement for a read-only assessor, because every driver sets `log_comment`.
 >
 > Two spans-specific additions to the provisioning plan. **`estimate.sh` is heavier than its traces counterpart**: its
-> four audits read the whole `id` column, so a read-only assessor with a `max_rows_to_read` ceiling cannot run them —
+> two audits read the whole `id` column, so a read-only assessor with a `max_rows_to_read` ceiling cannot run them —
 > give the assessor `readonly = 2` with no row ceiling, or run the audits as the migration user. And **the wrap's grants
 > are not needed in this window**: the wrap is deferred, so withhold them and withhold stage C's with them — the
 > narrower the account, the less a slip can do. But **do NOT withhold stage B's**, because the post-`EXCHANGE` state is
@@ -1746,11 +1777,21 @@ cutover as complete only when all of these hold.
       **`exchange_and_wrap.sh` ends with a CUTOVER INCOMPLETE banner naming this command**; the banner is the reason this
       box is first.
 - [ ] **Fidelity over the reconciled range** — `verify.sh --window-from '<delta_start>' --window-to '<exchange_done>'`
-      PASSED on the `spans_pre_cutover_backup` / `spans` pair. **Bound it at the swap, not at `now`**: the backup holds
+      on the `spans_pre_cutover_backup` / `spans` pair. **Bound it at the swap, not at `now`**: the backup holds
       nothing created after the `EXCHANGE`, and the compare requires equal row counts on both sides, so a later bound
       fails on live traffic rather than on fidelity. The four counts already cover presence, version and payload, so
-      this is the payload-level *picture* rather than a second gate; run it because a `PASSED` line stating the exact
-      window is what an incident review will ask for.
+      this is the payload-level *picture* rather than a second gate; run it because a line stating the exact window is
+      what an incident review will ask for.
+      **A clean PASS here requires user DELETES to have been quiesced from the swap through this compare, and
+      otherwise it cannot pass.** `000005` has no notion of the deletion bridge, so a gap-window span deleted after the
+      swap is masked on the live side and still live in the frozen backup — a row-count difference the compare reports
+      as a mismatch on a perfectly healthy cutover, with `src_rows` well above `dst_rows`.
+      **Do not reach for a hand-written query to tell the two apart: step 5 already ran it.** `missing_keys` is that
+      count — `000006`'s `verify-forward` takes the parked keys in the gap window, excludes the ones bridged-deleted at
+      or after `--swap-done`, and reports those still absent from live. It is the same question with a wider window
+      (`created_at` OR `last_updated_at`) and a live side bounded to the parked key set, where an ad-hoc equivalent
+      would scan the live table under `FINAL`. So if deletes were flowing, tick this box on `missing_keys = 0` from
+      step 5 and record that the compare was run for the payload picture rather than as a gate.
 - [ ] **Fidelity over sealed history** — the bounded weekly compare passed (see "Verifying the migration" for the bound
       and for which mismatches inside it are benign).
 - [ ] **`spanColumnsNonNullable = true` confirmed live on every instance by a POSITIVE read-back** — an absent
@@ -2630,6 +2671,12 @@ and a wrong verdict from a fidelity gate is the failure this whole procedure exi
 - `--window-from` / `--window-to`: that they are refused in combination with any of `--from-week` / `--to-week` /
   `--weeks-stride`, that an empty or inverted range is refused rather than passed vacuously — including two bounds that
   name the same instant at different precisions — and that the `PASSED` line states the window it covered.
+- **the `version-ties` counts reaching the operator on any differing window, in BOTH branches.** A tie leaves each
+  side's winner arbitrary, and the two directions land in different verdicts: picks that coincide reach
+  `confirm-keys = 0` and report INCONCLUSIVE, picks that differ count as genuinely differing and report MISMATCH. The
+  spans-only tie — one span id, two `parent_span_id` values, one `last_updated_at` — usually takes the second, so a
+  rehearsal seeding `--split-parents` should expect `MISMATCH … version_ties=src:N/dst:0` and not INCONCLUSIVE.
+  Confirm the counts print either way: without them a tie is indistinguishable from a broken copy.
 
 `reconcile.sh` adds several of the same kind, and they decide whether the estate is reconciled rather than merely
 rejecting an argument:
@@ -2649,6 +2696,27 @@ rejecting an argument:
   closed, and the `RECONCILED` line carrying its `SCOPE:` qualifier when the scope was asserted rather than proven.
   Worth exercising by hand even on a single-shard estate — the consequence of getting it wrong is `finalize.sh`
   dropping every shard's backup on a one-shard assertion.
+- **the reverse direction's convergence, which is bounded by the traffic and not by the driver.** Its gate includes the
+  reverse-replay postcondition, and that reads the LIVE table and the bridge — neither frozen, unlike the sweep's
+  parked source. So a trace deleted and re-created under the same span ids after `cutover_start` produces a fresh
+  `resurrected:N` after each pass masks the last, and the run exhausts `--max-passes` with nothing wrong. Quiesce trace
+  deletes before the reverse reconciliation and it converges in one pass; rehearse both, because the failure text has
+  to name ongoing deletes rather than send the operator hunting a defect.
+
+`rollback.sh` adds three, all of which decide something rather than reject an argument:
+
+- **every read pins `--format`.** Engines, column types and gate counts are parsed as scalars, so a client-side default
+  format would feed box-drawing into a topology decision taken in front of a promote — a wrong verdict, not an error.
+  Every driver pins it, so configure a pretty format in `~/.clickhouse-client/config.xml` once and leave it there for
+  the whole rehearsal: any driver that reads a scalar is then under test, not just this one;
+- **the sentinel window is normalised before it is compared.** Two bounds naming the same instant at different
+  precisions compare as strictly ordered, which names an EMPTY range: the repair touches nothing, its postcondition
+  reads 0 and the run exits 0 — indistinguishable from a completed repair. Same hazard as `verify.sh`'s window bounds
+  above, with a worse outcome, so confirm it is refused;
+- **a late lower bound is reported, not silently tolerated.** A backend mints sentinels the moment it serves, so an
+  anchor taken after a rolling restart excludes the ones minted during the roll; the repair correctly leaves them
+  alone and the postcondition is clean. The in-window counts are printed beside the unbounded ones for exactly this —
+  confirm a shortfall is called out, and that an adequate window stays silent.
 
 And `finalize.sh` adds two: refusing each branch without ITS OWN confirmation flag — `--confirm-gap-reconciled` for
 the post-cutover drop, `--confirm-post-cutover-decision` for the post-rollback recycle — with the right diagnosis for

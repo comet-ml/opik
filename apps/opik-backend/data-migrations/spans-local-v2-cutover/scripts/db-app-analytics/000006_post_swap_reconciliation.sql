@@ -26,7 +26,7 @@
 --                                  000004_rollback_reverse_replay.sql unchanged, which already masks every key bridged
 --                                  since cutover_start.
 --
--- ALL SIX placeholders the driver substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the
+-- ALL SEVEN placeholders the driver substitutes, so a new one is never missed here (an unsubstituted ${...} reaches the
 -- server as a literal and the statement fails):
 --   ${ANALYTICS_DB_DATABASE_NAME}          the analytics database
 --   ${LIVE_TABLE}                          the live table the sweep writes into: `spans`, or `spans_local` on a
@@ -41,6 +41,8 @@
 --   ${SWAP_DONE}                           what NOT to RESURRECT: bridged deletes at or after this instant are excluded
 --                                          from the sweep (see the anchor note below)
 --   ${MAX_PARTITIONS_PER_INSERT_BLOCK}     partitions one block may span — a correctness gate, exactly as in 000001/000002
+--   ${MAX_INSERT_BLOCK_SIZE}               rows per part-forming block. Follows the byte bound below as a second,
+--                                          coarser cap on the same statements, as it does for the delta
 --   ${MIN_INSERT_BLOCK_SIZE_BYTES}         bytes per part-forming block. Carried here and not in the traces equivalent
 --                                          for the reason 000001's header gives: at spans' partition count the
 --                                          per-partition buffers are hundreds of MiB, so the row-data term has to be

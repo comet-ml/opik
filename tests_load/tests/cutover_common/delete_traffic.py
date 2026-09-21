@@ -137,6 +137,27 @@ def _resurrect_one(client, project, trace_id, spans, mode):
     return len(spans)
 
 
+def _delete_batch(client, ids):
+    """Issue the delete, surviving a transient backend outage.
+
+    The rehearsal guides REQUIRE a backend restart mid-run (the spanColumnsNonNullable rollout, and the wrap's
+    spansDistributedWrapEnabled rollout) while also requiring this generator to keep running across it. An unguarded
+    call cannot do both: the restart returns 502 from nginx and the raised ApiError kills the loop, silently ending
+    delete coverage for the rest of the rehearsal — across the final delta, the swap and the reconciliation, which is
+    exactly the window the deletion bridge and both replays exist for. The write generator survives the same outage
+    because the SDK batches its writes, so the failure is asymmetric and easy to miss.
+
+    Guarded like the two read helpers above, and for the same reason: a transient failure should cost a tick, not the
+    run. Returns True when the delete was accepted.
+    """
+    try:
+        client.rest_client.traces.delete_traces(ids=ids)
+        return True
+    except Exception as exc:  # noqa: BLE001 — a restart/5xx must not end the run
+        LOGGER.warning("delete_traces failed for %d id(s) (continuing): %s", len(ids), exc)
+        return False
+
+
 def _run(project, tps, duration, batch, resurrect_ratio, mode, unit):
     signal.signal(signal.SIGINT, _handle_sigint)
     client = make_opik_client()
@@ -161,7 +182,12 @@ def _run(project, tps, duration, batch, resurrect_ratio, mode, unit):
         due_ids = {tid for tid, _ in due}
         pending_resurrect[:] = [(r, t, s) for r, t, s in pending_resurrect if t not in due_ids]
         for trace_id, spans in due:
-            resurrected += _resurrect_one(client, project, trace_id, spans, mode)
+            # Guarded for the same reason as the delete itself: a resurrection landing mid-restart must not end the
+            # run, and losing one costs a sample of the guard rather than the coverage of it.
+            try:
+                resurrected += _resurrect_one(client, project, trace_id, spans, mode)
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.warning("resurrection of trace %s failed (continuing): %s", trace_id, exc)
 
     LOGGER.info("delete traffic: project='%s' tps=%.2f batch=%d duration=%ss resurrect-ratio=%.3f resurrects=%s "
                 "(Ctrl-C to stop)", project, tps, batch, duration or "∞", resurrect_ratio, unit)
@@ -197,12 +223,16 @@ def _run(project, tps, duration, batch, resurrect_ratio, mode, unit):
                 spans = _span_ids_of(client, project, trace_id) if mode == _RESURRECT_SPANS else []
                 if mode == _RESURRECT_TRACE or spans:
                     to_resurrect.append((trace_id, spans))
-        client.rest_client.traces.delete_traces(ids=ids)
-        deleted += len(ids)
-        # Queue them for re-creation once the delete's mutation has settled. Their traces stay in `seen`, so a later
-        # refill never queues them for deletion again.
-        for trace_id, spans in to_resurrect:
-            pending_resurrect.append((time.time() + RESURRECT_SETTLE_SECONDS, trace_id, spans))
+        # A failed delete removed nothing, so it must not be counted and its ids must not be queued for resurrection —
+        # re-creating a span that was never deleted would plant a false positive for the replay's guard to trip over.
+        # The ids stay in `seen` either way: retrying them would skew the rate and this is a traffic generator, not a
+        # drain (see the module docstring).
+        if _delete_batch(client, ids):
+            deleted += len(ids)
+            # Queue them for re-creation once the delete's mutation has settled. Their traces stay in `seen`, so a
+            # later refill never queues them for deletion again.
+            for trace_id, spans in to_resurrect:
+                pending_resurrect.append((time.time() + RESURRECT_SETTLE_SECONDS, trace_id, spans))
         flush_resurrections()
         if deleted % 50 == 0:
             LOGGER.info("deleted %d traces (resurrected %d %s)", deleted, resurrected, unit)

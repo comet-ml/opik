@@ -280,8 +280,24 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
         echo "       rolled out and when its revert finished landing everywhere; widening is safe, guessing is not." >&2
         exit 2
     fi
-    if [[ ! "$SENTINEL_WINDOW_FROM" < "$SENTINEL_WINDOW_TO" ]]; then
-        echo "ERROR: --sentinel-window-from must be strictly before --sentinel-window-to (the window is half-open)." >&2
+    # Compare on a fraction padded to DateTime64(6)'s six digits, not on the bounds as given — the same
+    # normalisation verify.sh applies to --window-from/--window-to, for the same reason. Lexical order is
+    # chronological for these strings in every case but one: where one fraction is a prefix of the other, the SAME
+    # instant at two precisions ('10:00:00' and '10:00:00.000000') compares as strictly ordered, so the EMPTY window it
+    # names passes this check. Here that is worse than a vacuous compare: an empty window repairs nothing, the
+    # postcondition reads 0 and the run exits 0, which is indistinguishable from a completed repair — the exact
+    # confusion the runbook warns about ("'Nothing to repair' is not interchangeable with a completed repair"). The
+    # shape check above permits a variable-length fraction and the two bounds come from different places (one pasted
+    # from a driver's RECORD line, one read off a deploy log), so the mismatch is reachable.
+    _sw_cmp=()
+    for _sw in "$SENTINEL_WINDOW_FROM" "$SENTINEL_WINDOW_TO"; do
+        _sw_frac="000000"
+        [[ "$_sw" != *.* ]] || _sw_frac="${_sw#*.}000000"
+        _sw_cmp+=("${_sw%%.*}.${_sw_frac:0:6}")
+    done
+    if [[ ! "${_sw_cmp[0]}" < "${_sw_cmp[1]}" ]]; then
+        echo "ERROR: --sentinel-window-from must be strictly before --sentinel-window-to (the window is half-open, so" >&2
+        echo "       an empty range repairs nothing while its postcondition reads 0 and the run exits 0)." >&2
         exit 2
     fi
     if [[ "$CONFIRM_FLAG_REVERTED" != "1" ]]; then
@@ -351,8 +367,14 @@ CH_ARGS=()
 CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" \
           --distributed_ddl_task_timeout="$RECEIVE_TIMEOUT")
 
+# --format TabSeparated is explicit, not redundant, and for the same reason exchange_and_wrap.sh and reconcile.sh say
+# so: clickhouse-client takes a default format from the user's own client config, and a pretty/bordered default would
+# put headers and box-drawing into every scalar read below. Those are parsed as engines, column types, shard counts and
+# row counts by the topology guards — so the failure would not be an error, it would be a wrong verdict about which
+# stage this estate is in, in front of a promote.
 ch() {
-    clickhouse-client "${CH_ARGS[@]}" --log_comment 'spans_local_v2_rollback' --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --log_comment 'spans_local_v2_rollback' \
+        --format TabSeparated --query "$1"
 }
 
 # Single scalar (or empty string if the object does not exist). Used by the topology guards below.
@@ -570,7 +592,8 @@ verify_replay_postcondition() {
     sql="$(cat "$file")"
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
     sql="${sql//'${CUTOVER_START}'/$CUTOVER_START}"
-    resurrected="$(clickhouse-client "${CH_ARGS[@]}" --query "$sql")"
+    # --format TabSeparated for the same reason ch() pins it: this scalar IS the gate's verdict.
+    resurrected="$(clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$sql")"
     if [[ "$resurrected" == "0" ]]; then
         echo "Reverse-replay postcondition OK: no id bridged since cutover_start is live on the restored 'spans'."
         return 0
@@ -604,7 +627,8 @@ sentinel_counts() {
     sql="${sql//'${ANALYTICS_DB_DATABASE_NAME}'/$DATABASE}"
     sql="${sql//'${SENTINEL_WINDOW_FROM}'/$from}"
     sql="${sql//'${SENTINEL_WINDOW_TO}'/$to}"
-    clickhouse-client "${CH_ARGS[@]}" --query "$sql"
+    # --format TabSeparated: these four counts are read positionally by the caller.
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$sql"
 }
 
 PROMOTE_DONE=""   # set by record_promote_done after a stage B/C promote; the reverse sweep's "do not resurrect" bound.
@@ -810,6 +834,17 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
         echo "NOTE: the no-window comparison returned no usable number, so it is not evidence either way -- neither that the" >&2
         echo "      window is right nor that it is wrong. The gate remains the IN-WINDOW count, and the selected rows still" >&2
         echo "      have to be reconciled by identity before a clean read is trusted." >&2
+    fi
+    # A SMALL excess outside the window is its own signal, and the opposite one to the zero-inside case below: it means
+    # the bounds are too NARROW, and in practice that the lower one is late. A backend starts minting sentinels the
+    # moment it serves, which on a rolling restart is well before the roll completes — so an anchor taken after the
+    # rollout leaves every sentinel from the roll outside the window, correctly untouched by the repair and still
+    # damaged afterwards. Widening --sentinel-window-from is free, so prefer an anchor captured BEFORE the rollout.
+    if [[ "$all_end_time" =~ ^[0-9]+$ ]] && (( before_end_time > 0 && all_end_time > before_end_time )); then
+        echo "NOTE: $(( all_end_time - before_end_time )) row(s) carry an epoch end_time OUTSIDE the window. If they sit just" >&2
+        echo "      BEFORE --sentinel-window-from they are the flag's too, minted while the rollout was still landing," >&2
+        echo "      and this run will leave them damaged. Widening the lower bound is free — prefer an anchor captured" >&2
+        echo "      BEFORE the flag rollout started. Rows genuinely predating the flag are correctly left alone." >&2
     fi
     if (( before_end_time == 0 && before_ttft == 0 )); then
         if [[ "$all_end_time" =~ ^[0-9]+$ ]] && [[ "$all_end_time" != "0" || "$all_ttft" != "0" ]]; then
