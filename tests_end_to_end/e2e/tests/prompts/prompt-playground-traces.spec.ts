@@ -116,6 +116,7 @@ test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@area:play
 
       await test.step('Verify Messages tab renders the run as conversation turns', async () => {
         await expect(sidebar.messagesTab()).toBeVisible();
+        await sidebar.expectMessagesTabSelectedByDefault();
         await sidebar.clickMessagesTab();
         await expect(sidebar.messageRole('User')).toBeVisible();
         await expect(sidebar.messageRole('Assistant')).toBeVisible();

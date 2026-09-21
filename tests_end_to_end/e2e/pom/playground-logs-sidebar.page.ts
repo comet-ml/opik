@@ -78,6 +78,16 @@ export class PlaygroundLogsSidebarPage {
   }
 
   /**
+   * Asserts the panel opened on Messages rather than falling back to Details, which is the
+   * half of the behaviour a click would mask.
+   */
+  async expectMessagesTabSelectedByDefault(): Promise<void> {
+    return test.step('expect Messages to be the default tab', async () => {
+      await expect(this.messagesTab()).toHaveAttribute('aria-selected', 'true');
+    });
+  }
+
+  /**
    * The active tab's panel. Only the selected tab is mounted, so scoping to this
    * keeps assertions off the raw JSON the Details tab renders.
    */
@@ -88,6 +98,11 @@ export class PlaygroundLogsSidebarPage {
   /** The header of a rendered conversation turn, by role. */
   messageRole(role: 'System' | 'User' | 'Assistant'): Locator {
     return this.activeTabPanel().getByRole('heading', { name: role, exact: true });
+  }
+
+  /** The body of a rendered conversation turn, by role. */
+  messageBody(role: 'System' | 'User' | 'Assistant'): Locator {
+    return this.activeTabPanel().getByRole('region', { name: role, exact: true });
   }
 
   /** The collapsed error block, present only when the entity carries error_info. */

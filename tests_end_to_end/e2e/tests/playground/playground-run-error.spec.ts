@@ -12,6 +12,13 @@ import { PlaygroundLogsSidebarPage } from '@e2e/pom/playground-logs-sidebar.page
  * before a request is written, so the failure needs no mock gateway and no provider key, and
  * arrives on the same channel a real unreachable provider would use.
  */
+/**
+ * The channel the playground assigns when the completions proxy itself reports the failure,
+ * which is what an unreachable provider produces: the connection never carries a provider
+ * response to relay.
+ */
+const UNREACHABLE_EXCEPTION_TYPE = 'OpikError';
+
 test.describe('Playground — failed run', { tag: ['@t2-cuj', '@area:playground', '@cap:playground.verify-trace-from-run', '@cap:playground.run-error-info'] }, () => {
   test.use({ viewport: { width: 1600, height: 900 } });
 
@@ -61,16 +68,25 @@ test.describe('Playground — failed run', { tag: ['@t2-cuj', '@area:playground'
       await sidebar.openFirstTrace();
     });
 
-    await test.step('Verify the trace is marked as errored', async () => {
+    const failureText = await test.step('Verify the trace is marked as errored', async () => {
       await expect(sidebar.errorCallout()).toBeVisible();
       await sidebar.expandErrorCallout();
-      await expect(sidebar.errorCalloutBody()).toContainText('exception_type');
+      // The channel label is ours, so it is assertable; the message is the backend's copy
+      // and is only ever compared against itself.
+      await expect(sidebar.errorCalloutBody()).toContainText(`exception_type: ${UNREACHABLE_EXCEPTION_TYPE}`);
+
+      const body = (await sidebar.errorCalloutBody().innerText()).trim();
+      const message = body.match(/message:\s*'([^']+)'/)?.[1];
+      expect(message, 'Expected the error block to carry a message').toBeTruthy();
+      return message as string;
     });
 
-    await test.step('Verify the failure text is still rendered as the run output', async () => {
+    await test.step('Verify the same failure text is rendered as the run output', async () => {
       await expect(sidebar.messagesTab()).toBeVisible();
+      await sidebar.expectMessagesTabSelectedByDefault();
       await sidebar.clickMessagesTab();
       await expect(sidebar.messageRole('Assistant')).toBeVisible();
+      await expect(sidebar.messageBody('Assistant')).toContainText(failureText);
     });
   });
 });
