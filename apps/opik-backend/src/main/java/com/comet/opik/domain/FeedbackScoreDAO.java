@@ -356,11 +356,17 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
      */
     private Mono<Long> insertJsonEachRow(EntityType entityType, List<? extends FeedbackScoreItem> scores,
             @Nullable String author) {
+
+        // Batch-invariant, so normalized once rather than per row. Kept null when absent: it is null
+        // that selects the unauthored table below and drops the two columns with it.
+        var normalizedAuthor = author == null ? null : StringUtils.trimToEmpty(author);
+
         return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
-                author != null ? "authored_feedback_scores" : "feedback_scores",
+                normalizedAuthor != null ? "authored_feedback_scores" : "feedback_scores",
                 getLogComment("bulk_insert_feedback_score", workspaceId, userName, scores.size()),
                 scores,
-                score -> FeedbackScoreJsonRowMapper.toJsonRow(score, entityType, author, userName, workspaceId)));
+                score -> FeedbackScoreJsonRowMapper.toJsonRow(score, entityType, normalizedAuthor, userName,
+                        workspaceId)));
     }
 
     @Override
@@ -370,6 +376,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     private void bindParameters(EntityType entityType, List<? extends FeedbackScoreItem> scores,
             Statement statement, String author) {
+
+        // Batch-invariant, so normalized once rather than per row. Kept null when absent: author being
+        // null is what selects the unauthored table and drops these two columns, so it must not be
+        // flattened to "" here.
+        var normalizedAuthor = author == null ? null : StringUtils.trimToEmpty(author);
+
         for (var i = 0; i < scores.size(); i++) {
 
             var feedbackScoreBatchItem = scores.get(i);
@@ -383,8 +395,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("reason" + i, StringUtils.trimToEmpty(feedbackScoreBatchItem.reason()))
                     .bind("category_name" + i, StringUtils.trimToEmpty(feedbackScoreBatchItem.categoryName()));
 
-            if (author != null) {
-                statement.bind("author" + i, StringUtils.trimToEmpty(author));
+            if (normalizedAuthor != null) {
+                statement.bind("author" + i, normalizedAuthor);
                 statement.bind("source_queue_id" + i,
                         Optional.ofNullable(feedbackScoreBatchItem.sourceQueueId()).map(UUID::toString).orElse(""));
             }

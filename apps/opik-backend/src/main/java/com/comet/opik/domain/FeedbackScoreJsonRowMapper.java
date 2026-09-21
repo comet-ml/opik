@@ -29,10 +29,14 @@ class FeedbackScoreJsonRowMapper {
      *
      * <p>Which table it is destined for is the caller's choice, but the two are not independent:
      * {@code feedback_scores} has no {@code author}/{@code source_queue_id} columns, so those two fields
-     * are emitted only when {@code author} is set, matching {@code <if(author)>} on the R2DBC template.
+     * are emitted only when the author is set, matching {@code <if(author)>} on the R2DBC template.
+     *
+     * @param normalizedAuthor already trimmed by the caller, since it is invariant across the batch
+     *                         while this runs per row. {@code null} — not {@code ""} — means the
+     *                         unauthored table, and drops both columns.
      */
     static ObjectNode toJsonRow(@NonNull FeedbackScoreItem score, @NonNull EntityType entityType,
-            @Nullable String author, @NonNull String userName, @NonNull String workspaceId) {
+            @Nullable String normalizedAuthor, @NonNull String userName, @NonNull String workspaceId) {
 
         var node = JsonUtils.createObjectNode();
 
@@ -48,8 +52,8 @@ class FeedbackScoreJsonRowMapper {
         node.put("reason", StringUtils.trimToEmpty(score.reason()));
         node.put("source", score.source().getValue());
 
-        if (author != null) {
-            node.put("author", StringUtils.trimToEmpty(author));
+        if (normalizedAuthor != null) {
+            node.put("author", normalizedAuthor);
             // FixedString(36) with no DEFAULT: "" for an absent queue id, which the column zero-pads —
             // the same cell the R2DBC bind writes.
             node.put("source_queue_id",
