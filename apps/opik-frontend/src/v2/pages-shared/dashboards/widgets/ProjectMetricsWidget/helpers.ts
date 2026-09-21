@@ -13,9 +13,11 @@ const METRIC_LABELS: Record<string, string> = {
   [METRIC_NAME_TYPE.FAILED_GUARDRAILS]: "Failed guardrails",
   [METRIC_NAME_TYPE.THREAD_COUNT]: "Number of threads",
   [METRIC_NAME_TYPE.THREAD_DURATION]: "Thread duration",
+  [METRIC_NAME_TYPE.THREAD_COST]: "Thread estimated cost",
   [METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES]: "Thread metrics",
   [METRIC_NAME_TYPE.SPAN_COUNT]: "Number of spans",
   [METRIC_NAME_TYPE.SPAN_DURATION]: "Span duration",
+  [METRIC_NAME_TYPE.SPAN_COST]: "Span estimated cost",
   [METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES]: "Span metrics",
   [METRIC_NAME_TYPE.SPAN_TOKEN_USAGE]: "Span token usage",
 };
@@ -85,6 +87,13 @@ const calculateProjectMetricsTitle = (
 
   return baseTitle;
 };
+
+export const isCostMetricType = (
+  metricName: METRIC_NAME_TYPE | undefined,
+): boolean =>
+  metricName === METRIC_NAME_TYPE.COST ||
+  metricName === METRIC_NAME_TYPE.THREAD_COST ||
+  metricName === METRIC_NAME_TYPE.SPAN_COST;
 
 export const widgetHelpers = {
   getDefaultConfig: () => ({
