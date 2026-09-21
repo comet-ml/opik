@@ -608,6 +608,8 @@ openrouter:
     structuredOutput: true
   - id: "deepseek/deepseek-v4-flash-0731:batch"
     label: "deepseek/deepseek-v4-flash-0731:batch"
+  - id: "deepseek/deepseek-v4-flash-0731:free"
+    label: "deepseek/deepseek-v4-flash-0731:free"
   - id: "deepseek/deepseek-v4-flash-vision-exp"
     label: "deepseek/deepseek-v4-flash-vision-exp"
     structuredOutput: true
@@ -1747,6 +1749,8 @@ openrouter:
   - id: "qwen/qwen3.8-27b"
     label: "qwen/qwen3.8-27b"
     structuredOutput: true
+  - id: "qwen/qwen3.8-27b:free"
+    label: "qwen/qwen3.8-27b:free"
   - id: "qwen/qwen3.8-flash"
     label: "qwen/qwen3.8-flash"
     structuredOutput: true
@@ -1792,6 +1796,8 @@ openrouter:
     label: "sao10k/l3.3-euryale-70b"
   - id: "stealth/ox-alpha"
     label: "stealth/ox-alpha"
+  - id: "stealth/union-alpha"
+    label: "stealth/union-alpha"
   - id: "stepfun-ai/step3"
     label: "stepfun-ai/step3"
   - id: "stepfun/step-3.5-flash"
@@ -1857,6 +1863,8 @@ openrouter:
   - id: "tngtech/deepseek-r1t2-chimera:free"
     label: "tngtech/deepseek-r1t2-chimera:free"
     reasoning: true
+  - id: "unbiased/pareto"
+    label: "unbiased/pareto"
   - id: "undi95/remm-slerp-l2-13b"
     label: "undi95/remm-slerp-l2-13b"
   - id: "upstage/solar-pro-3"

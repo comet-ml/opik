@@ -21,14 +21,18 @@ interface McpClientConnectionDAO {
      */
     @SqlUpdate("""
             INSERT INTO mcp_client_connections (id, user_name, workspace_name, workspace_id, client_id,
-                client_name, logo_uri, resource, redirect_uri)
+                client_name, software_id, software_version, logo_uri, client_uri, resource, redirect_uri)
             VALUES (:bean.id, :bean.userName, :bean.workspaceName, :bean.workspaceId, :bean.clientId,
-                :bean.clientName, :bean.logoUri, :bean.resource, :bean.redirectUri)
+                :bean.clientName, :bean.softwareId, :bean.softwareVersion, :bean.logoUri, :bean.clientUri,
+                :bean.resource, :bean.redirectUri)
             ON DUPLICATE KEY UPDATE
                 last_connected_at = NOW(6),
                 workspace_name = VALUES(workspace_name),
                 client_name = VALUES(client_name),
+                software_id = VALUES(software_id),
+                software_version = VALUES(software_version),
                 logo_uri = VALUES(logo_uri),
+                client_uri = VALUES(client_uri),
                 resource = VALUES(resource),
                 redirect_uri = VALUES(redirect_uri)
             """)
@@ -77,6 +81,11 @@ interface McpClientConnectionDAO {
     /**
      * Backs a workspace's connected-clients view, most recently used first.
      * <p>
+     * Rows written before the display sanitisers existed (migration 000098, ahead of them) can still hold a
+     * {@code javascript:} logo or a name with a line break, and a row whose host never comes back is never
+     * refreshed by the upsert — so the read filters them here rather than leaving that to whoever renders the
+     * list, the same way {@code DbOAuthClientStrategy} does for the client rows.
+     * <p>
      * {@code active} is derived from the tokens rather than stored, because most disconnections are never
      * reported: a client removed on the user's machine simply stops coming back, and only the ageing out of
      * its tokens reveals it. An explicit revocation deletes the row outright; this covers the silent case.
@@ -94,6 +103,12 @@ interface McpClientConnectionDAO {
             WHERE c.workspace_id = :workspaceId AND c.user_name = :userName
             ORDER BY c.last_connected_at DESC
             """)
-    List<McpClientConnection> findByUser(@Bind("workspaceId") String workspaceId,
+    List<McpClientConnection> findByUserUnfiltered(@Bind("workspaceId") String workspaceId,
             @Bind("userName") String userName);
+
+    default List<McpClientConnection> findByUser(String workspaceId, String userName) {
+        return findByUserUnfiltered(workspaceId, userName).stream()
+                .map(McpOAuthClientUtils::sanitizeDisplayFields)
+                .toList();
+    }
 }

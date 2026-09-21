@@ -668,6 +668,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-flash-0731:batch",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_0731_FREE,
+      label: "deepseek/deepseek-v4-flash-0731:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_VISION_EXP,
       label: "deepseek/deepseek-v4-flash-vision-exp",
     },
@@ -2553,6 +2557,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.8-27b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_27B_FREE,
+      label: "qwen/qwen3.8-27b:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_FLASH,
       label: "qwen/qwen3.8-flash",
     },
@@ -2631,6 +2639,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.STEALTH_OX_ALPHA,
       label: "stealth/ox-alpha",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.STEALTH_UNION_ALPHA,
+      label: "stealth/union-alpha",
     },
     {
       value: PROVIDER_MODEL_TYPE.STEPFUN_AI_STEP3,
@@ -2751,6 +2763,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TNGTECH_DEEPSEEK_R1T2_CHIMERA_FREE,
       label: "tngtech/deepseek-r1t2-chimera:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO,
+      label: "unbiased/pareto",
     },
     {
       value: PROVIDER_MODEL_TYPE.UNDI95_REMM_SLERP_L2_13B,
