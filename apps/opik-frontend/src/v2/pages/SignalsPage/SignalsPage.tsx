@@ -198,24 +198,27 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   const awaitsAutoFirstRun = Boolean(
     job?.auto_first_run_enrolled && !job?.auto_first_run_at,
   );
+  // Hoisted so the poll below can invalidate this query alone: the key is [TRACES_KEY, params], and a
+  // bare TRACES_KEY would refetch every traces query on the page.
+  const eligibilityTracesParams = useMemo(
+    () => ({
+      projectId,
+      page: 1,
+      size: 1,
+      filters: [
+        {
+          id: "diagnostics-eligibility-traces",
+          field: "created_at",
+          type: COLUMN_TYPE.time,
+          operator: ">" as const,
+          value: eligibilityCutoff,
+        },
+      ],
+    }),
+    [projectId, eligibilityCutoff],
+  );
   const { data: windowTracesData, isLoading: isTraceCountPending } =
-    useTracesList(
-      {
-        projectId,
-        page: 1,
-        size: 1,
-        filters: [
-          {
-            id: "diagnostics-eligibility-traces",
-            field: "created_at",
-            type: COLUMN_TYPE.time,
-            operator: ">",
-            value: eligibilityCutoff,
-          },
-        ],
-      },
-      { enabled: awaitsAutoFirstRun },
-    );
+    useTracesList(eligibilityTracesParams, { enabled: awaitsAutoFirstRun });
   const windowTraceCount = windowTracesData?.total ?? 0;
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -238,11 +241,13 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   useEffect(() => {
     if (!awaitsAutoFirstRun) return;
     const id = window.setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: [TRACES_KEY] });
+      queryClient.invalidateQueries({
+        queryKey: [TRACES_KEY, eligibilityTracesParams],
+      });
       queryClient.invalidateQueries({ queryKey: [AGENT_INSIGHTS_JOB_KEY] });
     }, ELIGIBILITY_POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [awaitsAutoFirstRun, queryClient]);
+  }, [awaitsAutoFirstRun, eligibilityTracesParams, queryClient]);
 
   useEffect(() => {
     if (!isRunning) return;
