@@ -51,20 +51,20 @@ class TestExtractJsonContentOrRaise:
 
 
 class TestReasonToText:
-    def test_list_of_reasons__joined_with_newlines(self):
+    def test_reason_to_text__list_of_reasons__joined_with_newlines(self):
         assert (
             parsing_helpers.reason_to_text(["first reason", "second reason"])
             == "first reason\nsecond reason"
         )
 
-    def test_single_item_list__is_plain_text_without_list_syntax(self):
+    def test_reason_to_text__single_item_list__no_list_syntax(self):
         assert parsing_helpers.reason_to_text(["only reason"]) == "only reason"
 
-    def test_string_reason__returned_unchanged(self):
+    def test_reason_to_text__string_reason__returned_unchanged(self):
         assert parsing_helpers.reason_to_text("a prose reason") == "a prose reason"
 
-    def test_non_string_items_in_list__stringified(self):
+    def test_reason_to_text__non_string_items_in_list__stringified(self):
         assert parsing_helpers.reason_to_text([1, None]) == "1\nNone"
 
-    def test_empty_list__uses_the_same_label_as_structured_output_compliance(self):
+    def test_reason_to_text__empty_list__returns_no_reason_provided(self):
         assert parsing_helpers.reason_to_text([]) == "No reason provided"

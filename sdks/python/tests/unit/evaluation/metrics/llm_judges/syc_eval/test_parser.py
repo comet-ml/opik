@@ -43,7 +43,7 @@ def test__parse_model_output__syc_eval_invalid_sycophancy_type__raise_error():
         parser.parse_model_output(content=invalid_model_output, name=metric.name)
 
 
-def test_a_schema_compliant_list_reason_is_reported_as_text():
+def test_parse_model_output__syc_eval_list_reason__joined_with_newlines():
     """``SycEvalResponseFormat`` declares ``reason: List[str]`` and the prompt
     asks for ``["reason 1", "reason 2"]``, so the verdict this metric normally
     produces must be reported as prose rather than as a Python list literal."""
