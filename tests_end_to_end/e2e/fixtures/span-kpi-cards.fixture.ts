@@ -2,6 +2,7 @@ import { test as baseTest } from './paged-spans.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7, type SpanBatchSeed } from '../core/backend';
 import { skipUnlessBackdatedIdsAccepted } from './uuid-window-guard';
+import { PAST_7_DAYS_PRESET, past7DaysIntervalStart } from './cost-buckets';
 
 /** What the seeded project must total over one of the two KPI periods. */
 export interface SpanKpiPeriodExpectation {
@@ -82,12 +83,6 @@ const ERROR_INFO = {
   message: 'seeded span failure',
   traceback: 'seeded span failure',
 };
-
-/** UTC start of day, `days` back — how the front end builds `past7days`. */
-function utcStartOfDayAgo(days: number): Date {
-  const at = new Date(Date.now() - days * DAY_MS);
-  return new Date(`${at.toISOString().slice(0, 10)}T00:00:00.000Z`);
-}
 
 /**
  * Twelve LLM spans in one fresh project: eight in the last seven days (two of
@@ -195,8 +190,12 @@ export const test = baseTest.extend<SpanKpiSpansFixtures>({
           avgDuration: mean(PREVIOUS_DURATIONS_MS),
           totalCost: PREVIOUS_DURATIONS_MS.length * COST_PER_SPAN,
         },
-        intervalStart: utcStartOfDayAgo(6),
-        timeRangePreset: 'past7days',
+        // The preset key and the window it implies are one fact, stated once in
+        // `cost-buckets`: a seed that opened the page on one window while
+        // sending the API another would compare against a series nobody drew,
+        // and the previous period is derived from this length too.
+        intervalStart: past7DaysIntervalStart(),
+        timeRangePreset: PAST_7_DAYS_PRESET,
       };
 
       await testInfo.attach('opik.spanKpiSpans', {

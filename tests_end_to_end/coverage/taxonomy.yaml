@@ -336,6 +336,7 @@ areas:
     spec_dir: trace-explore
     specs:
       - trace-explore/thread-duration-format.spec.ts
+      - trace-explore/thread-duration-sentinel.spec.ts
       - trace-explore/thread-evaluation.spec.ts
       - trace-explore/thread-id-prefilter.spec.ts
       - trace-explore/thread-logging-smoke.spec.ts
