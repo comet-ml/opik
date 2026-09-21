@@ -111,9 +111,9 @@ class AnnotationQueueRoutingIntegrationTest {
     @MethodSource("scopes")
     @DisplayName("An admitted event lands one decodable entry carrying the whole batch")
     void admittedEventLandsOneEntryOnTheStream(EntityType entityType, AnnotationScope scope,
-            boolean namesProject) {
+            boolean hasProjectId) {
 
-        UUID projectId = namesProject ? idGenerator.generateId() : null;
+        UUID projectId = hasProjectId ? idGenerator.generateId() : null;
         var entityIds = Set.of(idGenerator.generateId(), idGenerator.generateId(), idGenerator.generateId());
         var scoreNames = Set.of(randomString(), randomString());
         String workspaceId = randomString();

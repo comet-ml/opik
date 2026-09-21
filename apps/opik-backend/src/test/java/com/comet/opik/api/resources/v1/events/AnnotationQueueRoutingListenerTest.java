@@ -106,8 +106,8 @@ class AnnotationQueueRoutingListenerTest {
 
         @ParameterizedTest
         @MethodSource("published")
-        void publishesWhateverTheGuardAdmits(EntityType entityType, AnnotationScope scope, boolean namesProject) {
-            UUID projectId = namesProject ? ID_GENERATOR.generateId() : null;
+        void publishesWhateverTheGuardAdmits(EntityType entityType, AnnotationScope scope, boolean hasProjectId) {
+            UUID projectId = hasProjectId ? ID_GENERATOR.generateId() : null;
             Set<UUID> entityIds = Set.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
             Set<String> scoreNames = Set.of(randomString(), randomString());
             when(automationService.hasEnabledAutomation(workspaceId, projectId, scope)).thenReturn(true);

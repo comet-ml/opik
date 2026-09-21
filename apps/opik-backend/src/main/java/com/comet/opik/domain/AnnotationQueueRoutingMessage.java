@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.events.RedisSubscriberMessage;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.annotation.Nullable;
 import lombok.Builder;
 import lombok.NonNull;
 
@@ -41,7 +42,7 @@ public record AnnotationQueueRoutingMessage(
          * consumer still reads it per entity through {@link #expectedScoreNames(UUID)}, which is the shape
          * it needs once it folds several messages for the same entity together.
          */
-        Set<String> scoreNames) implements RedisSubscriberMessage {
+        @Nullable Set<String> scoreNames) implements RedisSubscriberMessage {
 
     /**
      * Copies both collections, so a message cannot be observed differently on two deliveries. Redelivery
