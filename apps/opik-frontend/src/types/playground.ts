@@ -79,6 +79,12 @@ export type ChatCompletionResponse =
   | ChatCompletionSuccessMessageType
   | ChatCompletionProviderErrorMessageType;
 
+export interface LogErrorInfo {
+  exception_type: string;
+  message: string;
+  traceback: string;
+}
+
 export interface LogTrace {
   id: string;
   projectName: string;
@@ -87,6 +93,7 @@ export interface LogTrace {
   endTime: string;
   input: { messages: ProviderMessageType[] };
   output: { output: string | null };
+  errorInfo?: LogErrorInfo;
   metadata?: Record<string, unknown>;
   source?: string;
 }
@@ -104,6 +111,7 @@ export interface LogSpan {
   output:
     | { choices: ChatCompletionMessageChoiceType[] }
     | { output: string | null };
+  errorInfo?: LogErrorInfo;
   usage?: UsageType | null;
   model?: string;
   provider?: string;
