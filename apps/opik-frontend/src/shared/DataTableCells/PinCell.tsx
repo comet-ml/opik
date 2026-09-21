@@ -1,6 +1,6 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
-import { Star } from "lucide-react";
+import { Pin, PinOff } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -25,14 +25,19 @@ const PinCell = <TData,>(context: CellContext<TData, unknown>) => {
           aria-label={label}
           aria-pressed={isPinned}
           className={cn(
-            "shrink-0 rounded",
-            isPinned
-              ? "text-chart-yellow"
-              : "text-light-slate opacity-0 group-hover/row:opacity-100",
+            "group/pin rounded text-light-slate",
+            isPinned ? "inline-flex" : "hidden group-hover/row:inline-flex",
           )}
           onClick={() => context.row.pin(isPinned ? false : "top")}
         >
-          <Star className={cn(isPinned && "fill-current")} />
+          {isPinned ? (
+            <>
+              <Pin className="group-hover/pin:hidden" />
+              <PinOff className="hidden group-hover/pin:block" />
+            </>
+          ) : (
+            <Pin />
+          )}
         </Button>
       </TooltipWrapper>
     </CellWrapper>
