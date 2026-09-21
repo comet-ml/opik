@@ -662,7 +662,11 @@ class SpansMigrationPreconditionLintTest {
 
             assertThat(LINT.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
-                    .contains("can never return");
+                    .contains("can never return")
+                    // Which changeset and which value, not just the verdict: two of the three changesets here are
+                    // correct, so a diagnostic naming the wrong one would otherwise read as a pass.
+                    .contains("000200_typo")
+                    .contains("expectedResult:2");
         }
 
         /**
