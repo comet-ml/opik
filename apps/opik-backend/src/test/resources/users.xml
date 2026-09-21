@@ -164,10 +164,10 @@
             <databases>
                 <opik>
                     <spans>
-                        <filter>workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id')</filter>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
                     </spans>
                     <traces>
-                        <filter>workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id')</filter>
+                        <filter>workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id'))</filter>
                     </traces>
                     <authored_feedback_scores>
                         <filter>workspace_id = getSetting('SQL_workspace_id')</filter>

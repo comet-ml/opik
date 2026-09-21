@@ -72,13 +72,20 @@ if [ -n "$charts_workspaces" ]; then
         "CREATE USER IF NOT EXISTS ${ext_user} IDENTIFIED BY '${ext_pass}'"
         "CREATE SETTINGS PROFILE IF NOT EXISTS comet_readonly_freeform_extended_sql_profile SETTINGS readonly = 1, max_execution_time = 180, max_memory_usage = 8589934592, max_result_rows = 100000, result_overflow_mode = 'throw', max_rows_to_read = 100000000, read_overflow_mode = 'throw', max_concurrent_queries_for_user = 5, use_skip_indexes_if_final = 1, SQL_workspace_id = '' CHANGEABLE_IN_READONLY, SQL_project_id = '' CHANGEABLE_IN_READONLY TO ${ext_user}"
     )
-    # traces and spans keep the workspace+project policy; everything else is workspace-only. dataset_items has no
-    # project_id column at all, and project_id is empty on ~77% of experiments / ~69% of experiment_items in
-    # production, so a project-bound policy on those would silently hide most rows rather than fail.
+    # traces and spans keep a project bound, but a conditional one: '*' means every project in the workspace, so
+    # the caller chooses the scope per request. getSetting() is a query-time constant, so ClickHouse folds the
+    # comparison before index analysis and the (workspace_id, project_id, ...) prefix still prunes - measured at
+    # 51.44k rows read against 51.42k for a plain equality. The sentinel is '*' rather than '' because the profile
+    # defaults the setting to '': an empty value then matches neither branch and returns nothing, so a dropped
+    # setting fails closed instead of silently widening to the whole workspace.
+    #
+    # Everything else is workspace-only unconditionally. dataset_items has no project_id column at all, and
+    # project_id is empty on ~77% of experiments / ~69% of experiment_items in production, so a project bound on
+    # those would silently hide most rows rather than fail.
     for tbl in spans traces; do
         statements+=(
             "GRANT SELECT ON ${ch_db}.${tbl} TO ${ext_user}"
-            "CREATE ROW POLICY IF NOT EXISTS ${tbl}_freeform_extended_sql_workspace_project_isolation ON ${ch_db}.${tbl} FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id') AS RESTRICTIVE TO ${ext_user}"
+            "CREATE ROW POLICY IF NOT EXISTS ${tbl}_freeform_extended_sql_workspace_project_isolation ON ${ch_db}.${tbl} FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ext_user}"
         )
     done
     for tbl in authored_feedback_scores feedback_scores experiments experiment_items dataset_items trace_threads; do

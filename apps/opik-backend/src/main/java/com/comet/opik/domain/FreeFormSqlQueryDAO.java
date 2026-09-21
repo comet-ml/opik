@@ -15,7 +15,6 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.StreamSupport;
 
@@ -37,9 +36,17 @@ public interface FreeFormSqlQueryDAO {
     CompletableFuture<List<String>> explainAst(AnalyticsConsumer consumer, String query);
 
     /**
-     * Executes {@code query} bounded to the given workspace/project and reads the single {@code result} column.
+     * The {@code SQL_project_id} value meaning "every project in the workspace". The row policies match it
+     * explicitly, so an unset or empty setting matches no branch and returns nothing — a dropped setting fails
+     * closed rather than silently widening the query to the workspace.
      */
-    CompletableFuture<FreeFormSqlResult> execute(AnalyticsConsumer consumer, String workspaceId, UUID projectId,
+    String PROJECT_SCOPE_ALL = "*";
+
+    /**
+     * Executes {@code query} bounded to the given workspace and project scope, reading the single {@code result}
+     * column. {@code projectScope} is a project id, or {@link #PROJECT_SCOPE_ALL}.
+     */
+    CompletableFuture<FreeFormSqlResult> execute(AnalyticsConsumer consumer, String workspaceId, String projectScope,
             String query);
 }
 
@@ -80,12 +87,12 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     @Override
     @WithSpan
     public CompletableFuture<FreeFormSqlResult> execute(@NonNull AnalyticsConsumer consumer,
-            @NonNull String workspaceId, @NonNull UUID projectId, @NonNull String query) {
+            @NonNull String workspaceId, @NonNull String projectScope, @NonNull String query) {
         // Only the SQL_ custom settings are sent: readonly=1 rejects any other per-query setting.
         // Execution/memory/row caps are pinned on the read-only user's server-side profile.
         var settings = new QuerySettings()
                 .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
-                .serverSetting(SETTING_PROJECT_ID, projectId.toString());
+                .serverSetting(SETTING_PROJECT_ID, projectScope);
 
         return clientFor(consumer).queryRecords(query, settings)
                 .thenApply(FreeFormSqlQueryDAOImpl::readResult);

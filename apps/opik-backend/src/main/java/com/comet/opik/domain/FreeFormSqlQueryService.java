@@ -23,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -118,12 +117,12 @@ public class FreeFormSqlQueryService {
     }
 
     public CompletableFuture<AnalyticsQueryResponse> executeQuery(@NonNull AnalyticsConsumer consumer,
-            @NonNull String workspaceId, @NonNull UUID projectId, @NonNull String query) {
+            @NonNull String workspaceId, @NonNull String projectScope, @NonNull String query) {
         long startMillis = System.currentTimeMillis();
 
         return freeFormSqlQueryDAO.explainAst(consumer, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> runQuery(consumer, workspaceId, projectId, query, startMillis));
+                .thenCompose(nodeLabels -> runQuery(consumer, workspaceId, projectScope, query, startMillis));
     }
 
     /**
@@ -146,8 +145,8 @@ public class FreeFormSqlQueryService {
     }
 
     private CompletableFuture<AnalyticsQueryResponse> runQuery(AnalyticsConsumer consumer, String workspaceId,
-            UUID projectId, String query, long startMillis) {
-        return freeFormSqlQueryDAO.execute(consumer, workspaceId, projectId, query)
+            String projectScope, String query, long startMillis) {
+        return freeFormSqlQueryDAO.execute(consumer, workspaceId, projectScope, query)
                 .handle((result, error) -> {
                     if (error != null) {
                         throw mapExecutionError(error, startMillis);
