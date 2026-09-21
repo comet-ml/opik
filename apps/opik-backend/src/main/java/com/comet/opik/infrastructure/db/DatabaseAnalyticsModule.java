@@ -20,14 +20,14 @@ import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfiguration> {
 
     public static final String READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT = "readOnlyFreeFormSqlClickHouseClient";
-    public static final String READ_ONLY_CHARTS_CLICKHOUSE_CLIENT = "readOnlyChartsClickHouseClient";
+    public static final String READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT = "readOnlyFreeFormExtendedSqlClickHouseClient";
     public static final String CLICKHOUSE_HEALTH_CHECK_TIMEOUT = "clickhouse_health_check_timeout";
 
     private transient DatabaseAnalyticsFactory databaseAnalyticsFactory;
     private transient ConnectionFactory connectionFactory;
     private transient Client clickHouseClient;
     private transient Client readOnlyFreeFormSqlClickHouseClient;
-    private transient Client readOnlyChartsClickHouseClient;
+    private transient Client readOnlyFreeFormExtendedSqlClickHouseClient;
 
     @Override
     protected void configure() {
@@ -54,13 +54,15 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
             }
         });
 
-        // Custom Charts account. Built unconditionally for the same reason as the one above — the v2 client connects
-        // lazily, so an unused account costs nothing; customChartsEnabledWorkspaces gates every use.
-        readOnlyChartsClickHouseClient = buildReadOnlyClient(configuration().getDatabaseAnalyticsReadOnlyCharts());
+        // Extended free-form SQL account (Custom Charts is its only consumer today). Built unconditionally for the
+        // same reason as the one above — the v2 client connects lazily, so an unused account costs nothing;
+        // customChartsEnabledWorkspaces gates every use.
+        readOnlyFreeFormExtendedSqlClickHouseClient = buildReadOnlyClient(
+                configuration().getDatabaseAnalyticsReadOnlyFreeFormExtendedSql());
         environment().lifecycle().manage(new Managed() {
             @Override
             public void stop() {
-                readOnlyChartsClickHouseClient.close();
+                readOnlyFreeFormExtendedSqlClickHouseClient.close();
             }
         });
 
@@ -107,9 +109,9 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     @Provides
     @Singleton
-    @Named(READ_ONLY_CHARTS_CLICKHOUSE_CLIENT)
-    public Client getReadOnlyChartsClickHouseClient() {
-        return readOnlyChartsClickHouseClient;
+    @Named(READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT)
+    public Client getReadOnlyFreeFormExtendedSqlClickHouseClient() {
+        return readOnlyFreeFormExtendedSqlClickHouseClient;
     }
 
     @Provides

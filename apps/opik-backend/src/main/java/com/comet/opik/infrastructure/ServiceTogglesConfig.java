@@ -66,9 +66,10 @@ public class ServiceTogglesConfig {
 
     /**
      * Workspaces allowed to use Custom Charts, comma-separated. Empty (the default) disables the feature everywhere.
-     * Membership also routes the workspace's free-form SQL to the wider Custom Charts ClickHouse account, so its
-     * Agent Insights queries run under that account too — intended while the allowlist is internal-only, and the
-     * reason this is an allowlist rather than a plain boolean.
+     * Membership also routes the workspace's free-form SQL to the wider
+     * {@code databaseAnalyticsReadOnlyFreeFormExtendedSql} ClickHouse account, so its Agent Insights queries run
+     * under that account too — intended while the allowlist is internal-only, and the reason this is an allowlist
+     * rather than a plain boolean.
      *
      * <p>Held as a String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot bind
      * to a collection; {@link #getCustomChartsEnabledWorkspaces()} splits, strips and drops blanks.

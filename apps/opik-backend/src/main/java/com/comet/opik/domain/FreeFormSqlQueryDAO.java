@@ -56,18 +56,18 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     private static final String SETTING_PROJECT_ID = "SQL_project_id";
 
     private final Client agentInsightsClient;
-    private final Client chartsClient;
+    private final Client freeFormExtendedSqlClient;
 
     @Inject
     FreeFormSqlQueryDAOImpl(
             @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) @NonNull Client agentInsightsClient,
-            @Named(DatabaseAnalyticsModule.READ_ONLY_CHARTS_CLICKHOUSE_CLIENT) @NonNull Client chartsClient) {
+            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT) @NonNull Client freeFormExtendedSqlClient) {
         this.agentInsightsClient = agentInsightsClient;
-        this.chartsClient = chartsClient;
+        this.freeFormExtendedSqlClient = freeFormExtendedSqlClient;
     }
 
     private Client clientFor(AnalyticsConsumer consumer) {
-        return consumer == AnalyticsConsumer.CUSTOM_CHARTS ? chartsClient : agentInsightsClient;
+        return consumer == AnalyticsConsumer.CUSTOM_CHARTS ? freeFormExtendedSqlClient : agentInsightsClient;
     }
 
     @Override

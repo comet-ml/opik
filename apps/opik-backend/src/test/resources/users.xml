@@ -69,7 +69,7 @@
                 </SQL_project_id>
             </constraints>
         </comet_llm_readonly_freeform_sql_profile>
-        <comet_readonly_charts_sql_profile>
+        <comet_readonly_freeform_extended_sql_profile>
             <readonly>1</readonly>
             <max_execution_time>180</max_execution_time>
             <max_memory_usage>8589934592</max_memory_usage>
@@ -94,7 +94,7 @@
                     <changeable_in_readonly/>
                 </SQL_project_id>
             </constraints>
-        </comet_readonly_charts_sql_profile>
+        </comet_readonly_freeform_extended_sql_profile>
     </profiles>
 
     <users>
@@ -139,16 +139,17 @@
         </comet_readonly_freeform_sql_user>
 
         <!--
-            Custom Charts account (OPIK-8329). Same profile shape, wider reach: traces/spans stay bound to
-            workspace AND project, every other table is workspace-only - authored_feedback_scores included, which
-            is the difference that makes this a second user rather than extra grants on the one above.
+            Extended free-form SQL account (OPIK-8329), Custom Charts being its only consumer today. Same profile
+            shape, wider reach: traces/spans stay bound to workspace AND project, every other table is
+            workspace-only - authored_feedback_scores included, which is the difference that makes this a second
+            user rather than extra grants on the one above.
         -->
-        <comet_readonly_charts_sql_user>
+        <comet_readonly_freeform_extended_sql_user>
             <password>opik</password>
             <networks>
                 <ip>::/0</ip>
             </networks>
-            <profile>comet_readonly_charts_sql_profile</profile>
+            <profile>comet_readonly_freeform_extended_sql_profile</profile>
             <quota>default</quota>
             <grants>
                 <query>GRANT SELECT ON opik.spans</query>
@@ -188,6 +189,6 @@
                     </trace_threads>
                 </opik>
             </databases>
-        </comet_readonly_charts_sql_user>
+        </comet_readonly_freeform_extended_sql_user>
     </users>
 </clickhouse>

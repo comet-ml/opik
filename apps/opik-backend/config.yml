@@ -227,19 +227,20 @@ databaseAnalyticsReadOnlyFreeFormSql:
   #   above the read-only profile's max_execution_time (180s) so the server-side cap fires first.
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
-# Credentials for the Custom Charts read-only ClickHouse user. Same connection params as databaseAnalytics, same
-# profile shape as the block above; a separate account because its row policies read the evaluation tables
-# workspace-wide. Only used for workspaces in serviceToggles.customChartsEnabledWorkspaces.
-databaseAnalyticsReadOnlyCharts:
-  #  Default: comet_readonly_charts_sql_user
+# Credentials for the extended free-form SQL read-only ClickHouse user - the same free-form SQL path as the block
+# above, on an account whose row policies read the evaluation tables workspace-wide. Named for that reach rather
+# than for Custom Charts, its only consumer today. Same connection params as databaseAnalytics, same profile shape.
+# Only used for workspaces in serviceToggles.customChartsEnabledWorkspaces.
+databaseAnalyticsReadOnlyFreeFormExtendedSql:
+  #  Default: comet_readonly_freeform_extended_sql_user
   #  Description: The read-only username used to connect to the server
-  username: ${ANALYTICS_DB_READ_ONLY_CHARTS_USER:-comet_readonly_charts_sql_user}
+  username: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_readonly_freeform_extended_sql_user}
   #  Default: opik
   #  Description: The read-only user password used to connect to the server
-  password: ${ANALYTICS_DB_READ_ONLY_CHARTS_PASS:-opik}
+  password: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}
   #  Default: 200s
   #  Description: Socket read timeout, kept above the profile's max_execution_time (180s) so the server cap fires first
-  socketTimeout: ${ANALYTICS_DB_READ_ONLY_CHARTS_SOCKET_TIMEOUT:-200s}
+  socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_SOCKET_TIMEOUT:-200s}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -276,7 +277,7 @@ health:
       type: ready
     # Non-critical for the same reason as the check above: Custom Charts is opt-in per workspace, and when no
     # workspace is allowlisted the probe reports healthy without querying ClickHouse.
-    - name: clickhouse-readonly-charts
+    - name: clickhouse-readonly-freeform-extended-sql
       critical: false
       type: ready
     # Toggle-gated (databaseAnalytics.clusterHealthCheckEnabled). When the toggle is off the probe reports healthy
@@ -1640,7 +1641,8 @@ serviceToggles:
   ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
   # Default: empty (feature off everywhere)
   # Description: Comma-separated workspace ids allowed to use Custom Charts. Membership also routes the workspace's
-  #   free-form SQL to the wider Custom Charts ClickHouse account. Requires ollieEnabled, which gates the endpoint.
+  #   free-form SQL to the wider databaseAnalyticsReadOnlyFreeFormExtendedSql ClickHouse account. Requires
+  #   ollieEnabled, which gates the endpoint.
   customChartsEnabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
   # Default: false
   # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.

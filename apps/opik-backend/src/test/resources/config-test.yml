@@ -192,11 +192,11 @@ databaseAnalyticsReadOnlyFreeFormSql:
   # Plain value (no env var).
   socketTimeout: 200s
 
-# Description: credentials for the Custom Charts read-only user, provisioned the same way (users.xml). The block is
-#   required even when the feature is off: the field is @Valid @NotNull and its username is @NotBlank, so an absent
-#   block fails config validation at boot.
-databaseAnalyticsReadOnlyCharts:
-  username: comet_readonly_charts_sql_user
+# Description: credentials for the extended free-form SQL read-only user (Custom Charts is its only consumer
+#   today), provisioned the same way (users.xml). The block is required even when the feature is off: the field is
+#   @Valid @NotNull and its username is @NotBlank, so an absent block fails config validation at boot.
+databaseAnalyticsReadOnlyFreeFormExtendedSql:
+  username: comet_readonly_freeform_extended_sql_user
   password: opik
   socketTimeout: 200s
 
@@ -242,7 +242,7 @@ health:
       type: ready
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
-    - name: clickhouse-readonly-charts
+    - name: clickhouse-readonly-freeform-extended-sql
       critical: false
       type: ready
       initialState: false

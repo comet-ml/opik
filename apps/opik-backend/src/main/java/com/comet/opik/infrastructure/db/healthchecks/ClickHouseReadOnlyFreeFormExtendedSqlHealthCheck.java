@@ -11,25 +11,26 @@ import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import static com.comet.opik.infrastructure.db.DatabaseAnalyticsModule.CLICKHOUSE_HEALTH_CHECK_TIMEOUT;
-import static com.comet.opik.infrastructure.db.DatabaseAnalyticsModule.READ_ONLY_CHARTS_CLICKHOUSE_CLIENT;
+import static com.comet.opik.infrastructure.db.DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT;
 
 /**
- * Probes the Custom Charts read-only ClickHouse user via the v2 HTTP client.
+ * Probes the extended free-form SQL read-only ClickHouse user via the v2 HTTP client. Custom Charts is its only
+ * consumer today; the account is named for the reach it grants, not for that feature.
  *
  * <p>Gated on the workspace allowlist being non-empty: an install that never enables the feature has no such
  * account provisioned, and must not be held out of readiness for missing one.
  */
 @Singleton
-public class ClickHouseReadOnlyChartsHealthCheck extends AbstractClickHouseHealthCheck {
+public class ClickHouseReadOnlyFreeFormExtendedSqlHealthCheck extends AbstractClickHouseHealthCheck {
 
     private final boolean enabled;
 
     @Inject
-    public ClickHouseReadOnlyChartsHealthCheck(
-            @NonNull @Named(READ_ONLY_CHARTS_CLICKHOUSE_CLIENT) Client chartsClient,
+    public ClickHouseReadOnlyFreeFormExtendedSqlHealthCheck(
+            @NonNull @Named(READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT) Client freeFormExtendedSqlClient,
             @NonNull @Named(CLICKHOUSE_HEALTH_CHECK_TIMEOUT) Duration healthCheckTimeout,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles) {
-        super(chartsClient, healthCheckTimeout, "clickhouse-readonly-charts");
+        super(freeFormExtendedSqlClient, healthCheckTimeout, "clickhouse-readonly-freeform-extended-sql");
         this.enabled = !serviceToggles.getCustomChartsEnabledWorkspaces().isEmpty();
     }
 
