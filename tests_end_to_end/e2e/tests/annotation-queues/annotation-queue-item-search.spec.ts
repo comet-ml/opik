@@ -96,11 +96,17 @@ test.describe('Annotation queues — item membership lookup', {
         // part of the contract, but the membership is — and a response that
         // also carried the non-member would satisfy any assertion that merely
         // looked its own two ids up.
-        expect(items.map((item) => item.id).sort()).toEqual([members[0], members[1]].sort());
-        // Every row carries how the item got in. `manual` is what an explicit
-        // add writes; `automated` is what queue automation would write, and the
-        // column exists to tell the two apart.
-        expect(items.map((item) => item.source)).toEqual(['manual', 'manual']);
+        //
+        // Id and source compared as one row rather than as two parallel arrays,
+        // so each source stays tied to the item it describes. Every row carries
+        // how the item got in: `manual` is what an explicit add writes,
+        // `automated` is what queue automation would write, and the column
+        // exists to tell the two apart — which a positional check over a
+        // server-ordered list cannot actually establish.
+        const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
+        expect(items.map((item) => ({ id: item.id, source: item.source })).sort(byId)).toEqual(
+          [members[0], members[1]].map((id) => ({ id, source: 'manual' })).sort(byId),
+        );
       });
 
       await test.step('A search for an id in no queue at all answers 200 with nothing', async () => {
