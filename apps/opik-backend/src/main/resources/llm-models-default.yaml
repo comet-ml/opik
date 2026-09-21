@@ -165,6 +165,7 @@ anthropic:
     structuredOutput: true
   - id: "claude-sonnet-4-5"
     label: "Claude Sonnet 4.5"
+    structuredOutput: true
   - id: "claude-haiku-4-5-20251001"
     label: "Claude Haiku 4.5"
     structuredOutput: true
@@ -174,10 +175,26 @@ anthropic:
   - id: "claude-fable-5-1"
     label: "Claude Fable 5.1"
     structuredOutput: true
+  - id: "claude-mythos-5"
+    label: "Claude Mythos 5"
+    structuredOutput: true
+  - id: "claude-mythos-5-1"
+    label: "Claude Mythos 5.1"
+    structuredOutput: true
+  - id: "claude-mythos-preview"
+    label: "Claude Mythos Preview"
+    structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-1-20250805"
+    structuredOutput: true
   - id: "claude-opus-4-20250514"
+    structuredOutput: true
+  - id: "claude-opus-4-6-20260205"
+    structuredOutput: true
+  - id: "claude-opus-4-7-20260416"
+    structuredOutput: true
   - id: "claude-sonnet-4-20250514"
+    structuredOutput: true
   - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
@@ -1563,6 +1580,8 @@ openrouter:
     label: "poolside/laguna-xs.2:free"
   - id: "prime-intellect/intellect-3"
     label: "prime-intellect/intellect-3"
+  - id: "prism-ml/ternary-bonsai-2-27b"
+    label: "prism-ml/ternary-bonsai-2-27b"
   - id: "qwen/qwen-2.5-72b-instruct"
     label: "qwen/qwen-2.5-72b-instruct"
     structuredOutput: true
@@ -1798,6 +1817,7 @@ openrouter:
     label: "stealth/ox-alpha"
   - id: "stealth/union-alpha"
     label: "stealth/union-alpha"
+    structuredOutput: true
   - id: "stepfun-ai/step3"
     label: "stepfun-ai/step3"
   - id: "stepfun/step-3.5-flash"
@@ -1973,6 +1993,8 @@ openrouter:
     structuredOutput: true
   - id: "z-ai/glm-5.3-flash:batch"
     label: "z-ai/glm-5.3-flash:batch"
+  - id: "z-ai/glm-5.3-flashx"
+    label: "z-ai/glm-5.3-flashx"
   - id: "z-ai/glm-5.3:batch"
     label: "z-ai/glm-5.3:batch"
   - id: "z-ai/glm-5v-turbo"

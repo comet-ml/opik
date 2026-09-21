@@ -118,6 +118,11 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
   CLAUDE_SONNET_5 = "claude-sonnet-5",
+  CLAUDE_MYTHOS_5 = "claude-mythos-5",
+  CLAUDE_MYTHOS_5_1 = "claude-mythos-5-1",
+  CLAUDE_MYTHOS_PREVIEW = "claude-mythos-preview",
+  CLAUDE_OPUS_4_6_20260205 = "claude-opus-4-6-20260205",
+  CLAUDE_OPUS_4_7_20260416 = "claude-opus-4-7-20260416",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -645,6 +650,7 @@ export enum PROVIDER_MODEL_TYPE {
   POOLSIDE_LAGUNA_XS_2 = "poolside/laguna-xs.2",
   POOLSIDE_LAGUNA_XS_2_FREE = "poolside/laguna-xs.2:free",
   PRIME_INTELLECT_INTELLECT_3 = "prime-intellect/intellect-3",
+  PRISM_ML_TERNARY_BONSAI_2_27B = "prism-ml/ternary-bonsai-2-27b",
   QWEN_QWEN_2_5_72B_INSTRUCT = "qwen/qwen-2.5-72b-instruct",
   QWEN_QWEN_2_5_72B_INSTRUCT_FREE = "qwen/qwen-2.5-72b-instruct:free",
   QWEN_QWEN_2_5_7B_INSTRUCT = "qwen/qwen-2.5-7b-instruct",
@@ -815,6 +821,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_3 = "z-ai/glm-5.3",
   Z_AI_GLM_5_3_FLASH = "z-ai/glm-5.3-flash",
   Z_AI_GLM_5_3_FLASH_BATCH = "z-ai/glm-5.3-flash:batch",
+  Z_AI_GLM_5_3_FLASHX = "z-ai/glm-5.3-flashx",
   Z_AI_GLM_5_3_BATCH = "z-ai/glm-5.3:batch",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
   ANTHROPIC_CLAUDE_FABLE_LATEST = "~anthropic/claude-fable-latest",
