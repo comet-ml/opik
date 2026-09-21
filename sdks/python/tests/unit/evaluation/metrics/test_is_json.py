@@ -87,6 +87,14 @@ def test_is_json__valid_json_inputs__returns_score_one(valid_json_str: str) -> N
         '{ 123: "value" }',
         # Unsupported JavaScript literals
         "undefined",
+        # Non-standard literals that Python's json module accepts by default
+        # but RFC 8259 and JSON.parse reject
+        "NaN",
+        "Infinity",
+        "-Infinity",
+        '{"score": NaN}',
+        "[1, Infinity]",
+        '{"value": -Infinity}',
         # Malformed single tokens
         "{",
         "}",
