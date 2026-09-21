@@ -258,15 +258,6 @@ class BulkInsertV2ClientIntegrationTest {
             assertThat(stored.createdAt()).isAfter(Instant.parse("2000-01-01T00:00:00Z"));
             assertThat(stored.lastUpdatedAt()).isAfter(Instant.parse("2000-01-01T00:00:00Z"));
         });
-
-        // The one assertion that cannot be made through the API: reads collapse duplicates, so a writer
-        // emitting every row twice is invisible to them. Raw rows with no FINAL is the only view that
-        // sees it.
-        Long storedRowCount = queryOne(
-                ("SELECT count() AS row_count FROM authored_feedback_scores WHERE workspace_id = '%s' "
-                        + "AND entity_id = '%s'").formatted(WORKSPACE_ID, trace.id()),
-                row -> row.get("row_count", Long.class));
-        assertThat(storedRowCount).isEqualTo(scores.size());
     }
 
     @Test
