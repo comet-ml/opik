@@ -18,4 +18,9 @@ litellm[google] # for vertexai models
 # judges through LiteLLM, which maps `reasoning_effort="minimal"` to a
 # 128-token thinking budget that Haiku 4.5 rejects (min 1024). The native
 # adapter drops `reasoning_effort` instead.
-anthropic
+# Pinned below 1.x: anthropic 1.7.0 removed `temperature`/`top_p`/`top_k`
+# from `Messages.create()`/`parse()`, and `AnthropicChatModel` still
+# forwards them (the agentic loop pins `temperature=0` on every turn), so
+# the native path raises TypeError there. Lift the pin once the adapter
+# stops forwarding sampling params the installed SDK does not accept.
+anthropic<1
