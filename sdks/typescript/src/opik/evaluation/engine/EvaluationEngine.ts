@@ -517,6 +517,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         value: score.value,
         reason: score.reason,
         categoryName: score.categoryName,
+        metadata: score.metadata,
       }),
     );
 

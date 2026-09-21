@@ -1,19 +1,38 @@
 package com.comet.opik.utils;
 
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JsonUtilsTest {
+
+    private static final long SHORT_CIRCUIT_BUDGET_BYTES = 1_024L;
+
+    /**
+     * Jackson buffers generator output before it reaches the stream, so the abort surfaces only on the
+     * first flush past the budget: the serializer can legitimately write about (budget + buffer) bytes.
+     * Bound the short-circuit assertion by that rather than by the fixture size, with slack so a change
+     * in Jackson's buffer size cannot make the test flaky.
+     */
+    private static final int GENERATOR_BUFFER_BYTES = 8 * 1_024;
+    private static final int MAX_CHUNKS_BEFORE_ABORT = 2
+            * (int) ((SHORT_CIRCUIT_BUDGET_BYTES + GENERATOR_BUFFER_BYTES) / ChunkedValue.CHUNK_SIZE);
 
     private static JsonNode node(String json) {
         return JsonUtils.getJsonNodeFromString(json);
@@ -122,5 +141,101 @@ class JsonUtilsTest {
     @DisplayName("merge: null base with scalar overrides never yields a non-object")
     void mergeNullBaseScalarOverride() {
         assertThat(JsonUtils.merge(null, node("\"scalar\""))).isNull();
+    }
+
+    @Test
+    @DisplayName("exceedsSerializedLengthInBytes: a null value never exceeds the limit")
+    void exceedsSerializedLengthNullNeverExceeds() {
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(null, 0L)).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{\"a\":1}", "{\"a\":\"ünïcödé\"}", "[1,2,3]"})
+    @DisplayName("exceedsSerializedLengthInBytes: agrees with the exact UTF-8 byte length at the boundary")
+    void exceedsSerializedLengthAgreesWithExactLength(String json) {
+        var node = node(json);
+        // Own the expected count independently of production serialization. Deriving it from
+        // getSerializedLengthInBytes would let a UTF-8 sizing regression shift both sides together and
+        // leave the test green; these fixtures are already in Jackson's canonical, whitespace-free form,
+        // so their own UTF-8 length is the expectation.
+        long exact = json.getBytes(StandardCharsets.UTF_8).length;
+
+        assertThat(JsonUtils.getSerializedLengthInBytes(node)).isEqualTo(exact);
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(node, exact)).isFalse();
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(node, exact - 1)).isTrue();
+    }
+
+    @Test
+    @DisplayName("exceedsSerializedLengthInBytes: works for maps, not only JsonNode")
+    void exceedsSerializedLengthSupportsMaps() {
+        var map = java.util.Map.<String, Object>of("payload", "x".repeat(1_000));
+
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(map, 2_000L)).isFalse();
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(map, 100L)).isTrue();
+    }
+
+    @Test
+    @DisplayName("exceedsSerializedLengthInBytes: rejects an oversized payload without serializing it in full")
+    void exceedsSerializedLengthShortCircuits() {
+        var value = new ChunkedValue();
+
+        assertThat(JsonUtils.exceedsSerializedLengthInBytes(value, SHORT_CIRCUIT_BUDGET_BYTES)).isTrue();
+        // The behaviour under test is the early abort, so assert it directly on how much the serializer
+        // actually wrote. Bounding by ChunkedValue.CHUNKS would also accept 9,999 chunks, i.e. an abort
+        // that never really short circuits.
+        assertThat(value.chunksWritten()).isLessThanOrEqualTo(MAX_CHUNKS_BEFORE_ABORT);
+    }
+
+    @Test
+    @DisplayName("exceedsSerializedLengthInBytes: propagates serialization failures unrelated to the budget")
+    void exceedsSerializedLengthPropagatesUnrelatedFailures() {
+        // The budget check catches RuntimeException broadly to unwrap Jackson's wrapping of the abort
+        // signal. This guards against that catch swallowing an unrelated failure and reporting it as an
+        // oversized value: only BudgetExceededException may return true, everything else must propagate.
+        assertThatThrownBy(() -> JsonUtils.exceedsSerializedLengthInBytes(new ExplodingValue(), 1_024L))
+                .hasMessageContaining("serializer failed for an unrelated reason");
+    }
+
+    /**
+     * Serializes to far more than any test budget, one small chunk at a time, and records how many chunks
+     * it managed to write before being cut off.
+     */
+    @JsonSerialize(using = ChunkedValue.Serializer.class)
+    static final class ChunkedValue {
+
+        static final int CHUNKS = 10_000;
+        static final int CHUNK_SIZE = 64;
+        private static final String CHUNK = "x".repeat(CHUNK_SIZE);
+
+        private int chunksWritten;
+
+        int chunksWritten() {
+            return chunksWritten;
+        }
+
+        static final class Serializer extends JsonSerializer<ChunkedValue> {
+            @Override
+            public void serialize(ChunkedValue value, JsonGenerator gen, SerializerProvider serializers)
+                    throws IOException {
+                gen.writeStartArray();
+                for (int i = 0; i < CHUNKS; i++) {
+                    gen.writeString(CHUNK);
+                    value.chunksWritten++;
+                }
+                gen.writeEndArray();
+            }
+        }
+    }
+
+    /** Fails during serialization for a reason that has nothing to do with the size budget. */
+    @JsonSerialize(using = ExplodingValue.Serializer.class)
+    static final class ExplodingValue {
+
+        static final class Serializer extends JsonSerializer<ExplodingValue> {
+            @Override
+            public void serialize(ExplodingValue value, JsonGenerator gen, SerializerProvider serializers) {
+                throw new IllegalStateException("serializer failed for an unrelated reason");
+            }
+        }
     }
 }
