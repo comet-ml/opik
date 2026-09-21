@@ -50,12 +50,14 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
 
     // These three set the throughput ceiling together, and it is easy to under-provision by accident:
     // new messages per second per replica is roughly
-    //     consumerBatchSize / (poolingInterval x claimIntervalRatio)
+    //     (consumerBatchSize / poolingInterval) x (1 - 1 / claimIntervalRatio)
     // because the read loop is driven by a fixed interval and every claimIntervalRatio-th tick spends its
-    // turn on autoClaim, which fetches only already-pending work. At 10 / (500ms x 10) that is ~20/s per
-    // replica, against a per-message cost of roughly 20-80ms at concurrency 10 — so the clock, not the
-    // work, is the limit. Under-provisioning here is not merely slow: the backlog grows until streamMaxLen
-    // trimming starts discarding the oldest messages, which is silent. Matches the onlineScoring tuning.
+    // turn on autoClaim, which fetches only already-pending work. At the shipped 10 per tick, one tick a
+    // second and nine ticks in ten reading, that is about 9/s per replica, against a per-message cost of
+    // roughly 20-80ms at concurrency 10 — so the clock, not the work, is the limit. Under-provisioning
+    // here is not merely slow: the backlog grows until streamMaxLen trimming starts discarding the oldest
+    // messages, which is silent, and one message per score event now rather than one per debounced group
+    // means there are more of them. consumerBatchSize is the lever to raise alongside this.
     @Valid @JsonProperty
     @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
     @MaxDuration(value = 10, unit = TimeUnit.SECONDS)

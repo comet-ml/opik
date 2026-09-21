@@ -1136,13 +1136,14 @@ annotationQueueRouting:
   # Default: 10
   # Description: Messages processed per batch; the main cap on concurrent database work during score bursts
   consumerBatchSize: 10
-  # Default: 500ms
+  # Default: 1s
   # Description: How often to poll Redis for new routing work. Together with consumerBatchSize and
   #   claimIntervalRatio this sets the throughput ceiling: new messages per second per replica is about
-  #   consumerBatchSize / (poolingInterval x claimIntervalRatio), because every claimIntervalRatio-th tick
-  #   spends its turn on autoClaim rather than reading new work. Set too low and the backlog grows until
-  #   streamMaxLen trimming silently discards the oldest messages.
-  poolingInterval: 500ms
+  #   (consumerBatchSize / poolingInterval) x (1 - 1 / claimIntervalRatio), because every
+  #   claimIntervalRatio-th tick spends its turn on autoClaim rather than reading new work. At the shipped
+  #   values that is about 9/s per replica. Raise it and the backlog grows until streamMaxLen trimming
+  #   silently discards the oldest messages; consumerBatchSize is the lever to raise alongside it.
+  poolingInterval: 1s
   # Default: 500ms
   # Description: Delay before re-reading scores for entities the event named but the first read found none
   #   for — covers ClickHouse replication lag and the async-insert buffer window. Only paid when an
