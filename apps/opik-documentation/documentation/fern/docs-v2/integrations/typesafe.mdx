@@ -1,0 +1,180 @@
+---
+description: Start here to integrate Opik into your TypeSafe AI-based application
+  for end-to-end observability of System One (Jev) decisions.
+headline: TypeSafe AI
+og:description: Learn to integrate TypeSafe AI with Opik using track_typesafe to log
+  every system_one decision with its inputs, answers and token usage.
+og:site_name: Opik Documentation
+og:title: Integrate TypeSafe AI with Opik - Streamline Your Workflow
+title: Observability for TypeSafe AI (Python) with Opik
+---
+
+[TypeSafe AI](https://typesafe.ai/) provides System One models such as Jev: instead of generating text, they answer typed questions (yes/no, choice, score) about a piece of state and return calibrated probabilities that software can act on directly.
+
+This guide explains how to integrate Opik with the TypeSafe AI Python SDK (`typesafe-sdk`). By using the `track_typesafe` method provided by Opik, you can easily track and evaluate your TypeSafe AI calls within your Opik projects as Opik will automatically log the questions you asked, the model used, token usage, and the answers returned.
+
+<Info>
+  TypeSafe AI is currently in early access. This integration targets `typesafe-sdk` version 0.7.0 or newer.
+</Info>
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=typesafe&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=typesafe&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=typesafe&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
+
+First, ensure you have both `opik` and `typesafe-sdk` packages installed:
+
+```bash
+pip install opik "typesafe-sdk>=0.7.0,<1"
+```
+
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/advanced/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring TypeSafe AI
+
+In order to configure TypeSafe AI, you will need to have your TypeSafe AI API key. You can create one in the [TypeSafe AI console](https://console.typesafe.ai/).
+
+You can set it as an environment variable:
+
+```bash
+export TYPESAFE_API_KEY="YOUR_API_KEY"
+```
+
+Or set it programmatically:
+
+```python
+import os
+import getpass
+
+if "TYPESAFE_API_KEY" not in os.environ:
+    os.environ["TYPESAFE_API_KEY"] = getpass.getpass("Enter your TypeSafe AI API key: ")
+```
+
+## Logging TypeSafe AI calls
+
+In order to log TypeSafe AI calls to Opik, wrap the TypeSafe client with `track_typesafe`. All calls made with the wrapped client will be logged to Opik. If the call is made inside a function decorated with `@track`, it is logged as part of that function's trace, so you can see the decision in the context of the step that requested it:
+
+```python
+import os
+from typesafe_sdk import Choice, Noul, Score, TypeSafeClient
+from opik import track
+from opik.integrations.typesafe import track_typesafe
+
+os.environ["OPIK_PROJECT_NAME"] = "typesafe-integration-demo"
+
+client = track_typesafe(TypeSafeClient())
+
+
+@track
+def triage_ticket(ticket: str) -> dict:
+    response = client.system_one(
+        state={"document": ticket},
+        questions={
+            "category": Choice(
+                instructions="What is this ticket about?",
+                criteria={"billing": None, "technical": None, "other": None},
+            ),
+            "is_urgent": Noul(instructions="The message conveys urgency"),
+            "frustration": Score(
+                instructions="How frustrated is the customer?",
+                criteria=["calm", "annoyed", "furious"],
+            ),
+        },
+    )
+    return {
+        "category": response.choices["category"].choice,
+        "is_urgent": response.nouls["is_urgent"].noul > 0.5,
+        "frustration": response.scores["frustration"].score,
+    }
+
+
+print(triage_ticket("I was charged twice. Please fix this ASAP."))
+```
+
+The trace can now be viewed in the Opik UI, with the TypeSafe AI call nested under the `triage_ticket` step. Custom request headers are never logged, so credentials do not end up in your traces.
+
+`track_typesafe` works the same way with the async client:
+
+```python
+import asyncio
+from typesafe_sdk import AsyncTypeSafeClient, Noul
+from opik.integrations.typesafe import track_typesafe
+
+
+async def main():
+    async with track_typesafe(AsyncTypeSafeClient()) as client:
+        response = await client.system_one(
+            state="I was charged twice. Please help.",
+            questions={"billing": Noul(instructions="Is this about billing?")},
+        )
+        print(response.nouls["billing"].noul)
+
+
+asyncio.run(main())
+```
+
+## Tracking plain HTTP requests
+
+If you call the TypeSafe AI REST API directly instead of using `typesafe-sdk`, you can still log the calls to Opik. Wrap the request in a function decorated with `@track(type="llm")` and, before returning, use `opik_context.update_current_span` to record the usage, provider and model:
+
+```python
+import os
+import requests
+from opik import opik_context, track
+
+os.environ["OPIK_PROJECT_NAME"] = "typesafe-integration-demo"
+
+TYPESAFE_API_URL = "https://api.typesafe.ai/v1/systemone"
+
+
+@track(type="llm", name="system_one")
+def system_one(state: str, questions: dict, model: str = "jev-latest") -> dict:
+    response = requests.post(
+        TYPESAFE_API_URL,
+        headers={"Authorization": f"Bearer {os.environ['TYPESAFE_API_KEY']}"},
+        json={"state": state, "model": model, "questions": questions},
+        timeout=10,
+    )
+    response.raise_for_status()
+    body = response.json()
+
+    usage = body.get("usage", {})
+    opik_context.update_current_span(
+        provider="typesafe",
+        model=body.get("model", model),
+        usage={
+            "prompt_tokens": usage.get("input_tokens", 0),
+            "completion_tokens": usage.get("output_tokens", 0),
+            "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
+        },
+    )
+    return body["answers"]
+
+
+answers = system_one(
+    state="I was charged twice. Please help.",
+    questions={"billing": {"type": "noul", "instructions": "Is this about billing?"}},
+)
+print(answers["billing"]["noul"])
+```
+
+The call then appears in Opik the same way as a call made through `track_typesafe`.
+
+## Supported Methods
+
+`track_typesafe` logs calls to the following methods:
+
+- `TypeSafeClient.system_one()`
+- `AsyncTypeSafeClient.system_one()`
