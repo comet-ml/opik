@@ -87,6 +87,22 @@ export class PlaygroundLogsSidebarPage {
 
   /** The header of a rendered conversation turn, by role. */
   messageRole(role: 'System' | 'User' | 'Assistant'): Locator {
-    return this.activeTabPanel().getByText(role, { exact: true });
+    return this.activeTabPanel().getByRole('heading', { name: role, exact: true });
+  }
+
+  /** The collapsed error block, present only when the entity carries error_info. */
+  errorCallout(): Locator {
+    return this.traceDetailPanel().getByRole('button', { name: 'Error' });
+  }
+
+  async expandErrorCallout(): Promise<void> {
+    return test.step('expand the error callout', async () => {
+      await this.errorCallout().click();
+    });
+  }
+
+  /** The expanded error block, which renders error_info as a syntax-highlighted document. */
+  errorCalloutBody(): Locator {
+    return this.traceDetailPanel().locator('[class*="border-destructive"]');
   }
 }

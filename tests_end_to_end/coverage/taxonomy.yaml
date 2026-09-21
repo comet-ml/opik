@@ -458,6 +458,7 @@ areas:
       load-prompt-version:       { covered: true,  tier: t2-cuj }
       verify-trace-from-run:     { covered: true,  tier: t2-cuj }
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
+      run-error-info:            { covered: true,  tier: t2-cuj, note: "A failed playground run is recorded as failed. Seeds an unreachable custom provider (no mock gateway, no provider key — the connection is refused before a request is written), runs against it, and asserts the logged trace carries the error block AND still renders the failure text as the run's assistant turn, since output deliberately keeps what the playground showed the user." }
       trace-messages-tab:        { covered: true,  tier: t2-cuj, note: "The Messages tab on a trace the playground wrote, whose completion is stored as a bare {output: string}. Asserts the tab is present at all and that its own panel renders the run as User and Assistant turns — the prior assertion only checked the prompt text was somewhere in the panel, which the Details JSON satisfies just as well, so it stayed green while the tab was missing entirely." }
       # Scoped: the Anthropic panel only, and only the two controls whose display
       # and whose request value can disagree. On claude-sonnet-4-6 the spec
