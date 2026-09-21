@@ -1,0 +1,199 @@
+---
+description: Start here to integrate Opik into your TypeSafe AI-based application
+  for end-to-end observability of System One (Jev) decisions.
+headline: TypeSafe AI
+og:description: Learn to integrate TypeSafe AI with Opik using track_typesafe to log
+  every system_one decision with its inputs, answers and token usage.
+og:site_name: Opik Documentation
+og:title: Integrate TypeSafe AI with Opik - Streamline Your Workflow
+title: Observability for TypeSafe AI (Python) with Opik
+---
+
+[TypeSafe AI](https://typesafe.ai/) provides System One models such as Jev: instead of generating text, they answer typed questions (yes/no, choice, score) about a piece of state and return calibrated probabilities that software can act on directly.
+
+This guide explains how to integrate Opik with the TypeSafe AI Python SDK (`typesafe-sdk`). By using the `track_typesafe` method provided by Opik, you can log every `system_one` call within your Opik projects: Opik automatically records the state and questions you sent, the model used, token usage, and the answers returned.
+
+<Info>
+  TypeSafe AI is currently in early access. This integration targets `typesafe-sdk` version 0.7.0 or newer.
+</Info>
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=typesafe&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=typesafe&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=typesafe&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
+
+First, ensure you have both `opik` and `typesafe-sdk` packages installed:
+
+```bash
+pip install opik "typesafe-sdk>=0.7.0,<1"
+```
+
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/advanced/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring TypeSafe AI
+
+You'll need to set your TypeSafe AI API key. You can create one in the [TypeSafe AI console](https://console.typesafe.ai/):
+
+```bash
+export TYPESAFE_API_KEY="YOUR_API_KEY"
+```
+
+## Logging TypeSafe AI calls
+
+In order to log TypeSafe AI calls to Opik, wrap the TypeSafe client with `track_typesafe`. Every `system_one` call made with the wrapped client is logged to Opik as an `llm` span:
+
+```python
+import os
+from typesafe_sdk import Choice, Noul, Score, TypeSafeClient
+from opik.integrations.typesafe import track_typesafe
+
+os.environ["OPIK_PROJECT_NAME"] = "typesafe-integration-demo"
+
+client = track_typesafe(TypeSafeClient())
+
+response = client.system_one(
+    state={"document": "I was charged twice. Please fix this ASAP."},
+    questions={
+        "category": Choice(
+            instructions="What is this ticket about?",
+            criteria={"billing": None, "technical": None, "other": None},
+        ),
+        "is_urgent": Noul(instructions="The message conveys urgency"),
+        "frustration": Score(
+            instructions="How frustrated is the customer?",
+            criteria=["calm", "annoyed", "furious"],
+        ),
+    },
+)
+
+print(response.choices["category"].choice)
+print(response.nouls["is_urgent"].noul)
+print(response.scores["frustration"].score)
+```
+
+The span input contains the `state` and the `questions` serialized to plain JSON, the output contains the `answers` keyed by question name, and the span records the `model`, the `typesafe` provider and the reported token usage. The remaining request parameters (`model`, `extra_body`, `retry`, `timeout`) and response details (`model`, `usage`) are stored in the span metadata.
+
+`track_typesafe` works the same way with the async client:
+
+```python
+import asyncio
+from typesafe_sdk import AsyncTypeSafeClient, Noul
+from opik.integrations.typesafe import track_typesafe
+
+
+async def main():
+    async with track_typesafe(AsyncTypeSafeClient()) as client:
+        response = await client.system_one(
+            state="I was charged twice. Please help.",
+            questions={"billing": Noul(instructions="Is this about billing?")},
+        )
+        print(response.nouls["billing"].noul)
+
+
+asyncio.run(main())
+```
+
+## Advanced Usage
+
+### Using with the `@track` decorator
+
+If you have multiple steps in your pipeline, you can use the `@track` decorator to log the traces for each step. If TypeSafe AI is called within one of these steps, the call will be associated with that corresponding step:
+
+```python
+import os
+from typesafe_sdk import Choice, TypeSafeClient
+from opik import track
+from opik.integrations.typesafe import track_typesafe
+
+os.environ["OPIK_PROJECT_NAME"] = "typesafe-integration-demo"
+
+client = track_typesafe(TypeSafeClient())
+
+
+@track
+def classify_ticket(ticket: str) -> str:
+    response = client.system_one(
+        state=ticket,
+        questions={
+            "department": Choice(
+                instructions="Which team should handle this?",
+                criteria={"billing": None, "support": None, "sales": None},
+            )
+        },
+    )
+    return response.choices["department"].choice
+
+
+@track
+def route_ticket(ticket: str) -> str:
+    department = classify_ticket(ticket)
+    return f"Routed to {department}"
+
+
+route_ticket("I was charged twice. Please fix this ASAP.")
+```
+
+The trace can now be viewed in the UI with hierarchical spans showing the relationship between the steps and the TypeSafe AI decision.
+
+### Custom response models
+
+If you pass a `response_model` to `system_one`, its `answers` are logged as the span output and any extra fields declared on the model are logged as metadata:
+
+```python
+from typesafe_sdk import ChoiceAnswer, SystemOneResponse
+
+
+class TicketAnswers(SystemOneResponse):
+    category: ChoiceAnswer
+
+
+response = client.system_one(
+    state="I was charged twice.",
+    questions={"category": Choice(criteria={"billing": None, "other": None})},
+    response_model=TicketAnswers,
+)
+print(response.category.choice)
+```
+
+### Setting the provider name
+
+By default the provider recorded on each span is `typesafe`. You can override it by passing `provider` to `track_typesafe`, for example when routing calls through a proxy:
+
+```python
+from opik.integrations.typesafe import track_typesafe
+
+client = track_typesafe(TypeSafeClient(), provider="my-typesafe-proxy")
+```
+
+### What is not logged
+
+`extra_headers` and the `response_model` class are never logged, so credentials placed in custom headers do not end up in your traces.
+
+## Token usage
+
+TypeSafe AI reports `input_tokens` and `output_tokens` for every call. Opik logs them as `prompt_tokens`, `completion_tokens` and `total_tokens` on the span, alongside the original values under `original_usage.*`.
+
+<Note>
+  TypeSafe AI models (such as `jev-latest`) are not part of Opik's built-in pricing table yet, so an estimated cost is not computed for these spans.
+</Note>
+
+## Supported Methods
+
+`track_typesafe` logs calls to the following methods:
+
+- `TypeSafeClient.system_one()`
+- `AsyncTypeSafeClient.system_one()`
+
+`client.models.list()` is a metadata lookup and is not traced.
