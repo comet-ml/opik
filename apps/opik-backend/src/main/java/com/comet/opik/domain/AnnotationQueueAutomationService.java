@@ -11,6 +11,8 @@ import com.comet.opik.domain.evaluators.AutomationRuleAnnotationQueueRouterDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleAnnotationQueueRouterModel;
 import com.comet.opik.domain.evaluators.AutomationRuleDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleProjectsDAO;
+import com.comet.opik.infrastructure.cache.CacheEvict;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.utils.JsonUtils;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
@@ -62,6 +64,7 @@ public class AnnotationQueueAutomationService {
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull IdGenerator idGenerator;
 
+    @CacheEvict(name = "annotation_queue_automations", key = "'*-' + $workspaceId + '-*'", keyUsesPatternMatching = true)
     public void save(@NonNull String workspaceId, @NonNull String userName, @NonNull UUID queueId,
             @NonNull UUID projectId, @NonNull AnnotationQueue.AnnotationScope scope,
             @NonNull String queueName, @NonNull AnnotationQueueAutomation automation) {
@@ -114,6 +117,7 @@ public class AnnotationQueueAutomationService {
      * carrying the old one. The update names only that column, so a rename racing a save cannot write
      * back a stale copy of the fields it never meant to touch.
      */
+    @CacheEvict(name = "annotation_queue_automations", key = "'*-' + $workspaceId + '-*'", keyUsesPatternMatching = true)
     public void renameRule(@NonNull String workspaceId, @NonNull UUID queueId, @NonNull String queueName) {
         transactionTemplate.inTransaction(WRITE, handle -> {
             var routerDao = handle.attach(AutomationRuleAnnotationQueueRouterDAO.class);
@@ -271,7 +275,21 @@ public class AnnotationQueueAutomationService {
      *
      * <p>One method rather than two overloads so that callers, which receive the project id already
      * nullable from the event, do not each have to branch on it.
+     *
+     * <p>Cached, following {@code AutomationRuleEvaluatorService#findAll}: this is a database round trip on
+     * the busiest event in the system, and the answer is no for most workspaces most of the time. The
+     * writes below evict the whole workspace by pattern, because one rule change can flip the answer for
+     * the workspace-wide key and every project key at once.
+     *
+     * <p>Eviction is not the only thing keeping this fresh, and must not be: a rule can also be disabled by
+     * a write this class never sees, and a stale {@code false} is silent - the events it turns away are
+     * dropped at the guard, and there is no backfill to route them later. The TTL is the floor under that,
+     * which is why it is short and configurable rather than left to the cache manager's default.
      */
+    // The workspace-wide form keys on an empty project id: CacheInterceptor substitutes "" for a null
+    // argument before evaluating the expression, so the two forms cannot collide. workspaceId sits in the
+    // middle so the writes above can evict every project of a workspace with one '*-<workspaceId>-*'.
+    @Cacheable(name = "annotation_queue_automations", key = "$projectId + '-' + $workspaceId + '-' + $scope", returnType = Boolean.class)
     public boolean hasEnabledAutomation(@NonNull String workspaceId, @Nullable UUID projectId,
             @NonNull AnnotationQueue.AnnotationScope scope) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
@@ -288,6 +306,7 @@ public class AnnotationQueueAutomationService {
     public record QueueAutomation(UUID queueId, UUID projectId, Conditions conditions) {
     }
 
+    @CacheEvict(name = "annotation_queue_automations", key = "'*-' + $workspaceId + '-*'", keyUsesPatternMatching = true)
     public void deleteByQueueIds(@NonNull String workspaceId, List<UUID> queueIds) {
         if (CollectionUtils.isEmpty(queueIds)) {
             return;

@@ -1438,6 +1438,11 @@ cacheManager:
     # Default: {}
     # Description: Dynamically created caches with their respective time to live in seconds
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
+    # Default: PT1S
+    # Description: Cache TTL for the annotation queue routing guard, read once per feedback score
+    #   event. Kept short because a stale negative is silent: the events it turns away are dropped
+    #   at the guard and there is no backfill, so this is the floor under the eviction on rule writes.
+    annotation_queue_automations: ${CACHE_MANAGER_ANNOTATION_QUEUE_AUTOMATIONS_DURATION:-PT1S}
     # Default: PT1H
     # Description: Cache TTL for the per-project size estimate (ScopeMetadata) gating dynamic sorting.
     # The estimate scans all of the project's spans, so cache misses are expensive by design.
