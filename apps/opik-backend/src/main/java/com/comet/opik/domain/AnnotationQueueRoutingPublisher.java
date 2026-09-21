@@ -7,6 +7,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
@@ -39,10 +40,10 @@ public class AnnotationQueueRoutingPublisher {
     }
 
     public Mono<Void> enqueue(@NonNull String workspaceId, @NonNull String userName,
-            @NonNull AnnotationQueue.AnnotationScope scope, @NonNull Set<UUID> entityIds,
+            @NonNull AnnotationQueue.AnnotationScope scope, Set<UUID> entityIds,
             @NonNull Set<String> scoreNames) {
 
-        if (entityIds.isEmpty()) {
+        if (CollectionUtils.isEmpty(entityIds)) {
             return Mono.empty();
         }
 
@@ -65,12 +66,10 @@ public class AnnotationQueueRoutingPublisher {
             return stream
                     .add(RedisStreamUtils.buildAddArgs(AnnotationQueueRoutingConfig.PAYLOAD_FIELD, message,
                             config.getStreamMaxLen(), config.getStreamTrimLimit()))
-                    // DEBUG, not ERROR: the buffer logs this failure at ERROR with the group's size and
-                    // the fact that its members stay pending, so raising it here too only duplicates the
-                    // stack trace with less context around it.
-                    .doOnError(throwable -> log.debug(
-                            "Failed to publish annotation queue routing message, workspace '{}'",
-                            workspaceId, throwable))
+                    .doOnError(throwable -> log.error(
+                            "Failed to publish annotation queue routing message, entities '{}', scope '{}', "
+                                    + "workspace '{}'",
+                            entityIds.size(), scope, workspaceId, throwable))
                     .then();
         }).subscribeOn(Schedulers.boundedElastic());
     }

@@ -62,6 +62,7 @@ class AnnotationQueueRoutingIntegrationTest {
     private RedissonReactiveClient redissonClient;
     private AnnotationQueueRoutingConfig config;
     private AnnotationQueueAutomationService automationService;
+    private AnnotationQueueRoutingPublisher publisher;
     private AnnotationQueueRoutingListener listener;
 
     @BeforeAll
@@ -88,15 +89,16 @@ class AnnotationQueueRoutingIntegrationTest {
      */
     @BeforeEach
     void setUp() {
-        config = new AnnotationQueueRoutingConfig();
-        config.setEnabled(true);
-        config.setStreamName("test-stream-%s".formatted(randomString().toLowerCase()));
-        config.setStreamMaxLen(10_000);
-        config.setStreamTrimLimit(100);
+        config = AnnotationQueueRoutingConfig.builder()
+                .enabled(true)
+                .streamName("test-stream-%s".formatted(randomString().toLowerCase()))
+                .streamMaxLen(10_000)
+                .streamTrimLimit(100)
+                .build();
 
         automationService = mock(AnnotationQueueAutomationService.class);
-        listener = new AnnotationQueueRoutingListener(automationService,
-                new AnnotationQueueRoutingPublisher(redissonClient, config), config);
+        publisher = new AnnotationQueueRoutingPublisher(redissonClient, config);
+        listener = new AnnotationQueueRoutingListener(automationService, publisher, config);
     }
 
     static Stream<Arguments> scopes() {
@@ -192,6 +194,48 @@ class AnnotationQueueRoutingIntegrationTest {
                 idGenerator.generateId(), Set.of()));
 
         assertNothingPublished();
+    }
+
+    @Test
+    @DisplayName("An enqueue with no entities writes nothing, and neither does a null set")
+    void enqueueWithoutEntitiesWritesNothing() {
+        publisher.enqueue(randomString(), randomString(), AnnotationScope.TRACE, Set.of(), Set.of()).block();
+        publisher.enqueue(randomString(), randomString(), AnnotationScope.TRACE, null, Set.of()).block();
+
+        assertThat(readStream()).isEmpty();
+    }
+
+    /**
+     * The trim settings reach Redis through the value-taking {@code buildAddArgs} overload, which is the
+     * only thing standing between a stalled consumer and an unbounded stream. Asserted by behaviour rather
+     * than by inspecting {@code StreamAddArgs}, which is a builder with no accessors — reading its state
+     * back would test Redisson, not this.
+     *
+     * <p>Only "smaller than what was written" is asserted: {@code MAXLEN ~} trims whole macro nodes when it
+     * is cheap to, so the surviving count is deliberately not exact and pinning it would be a flake.
+     */
+    @Test
+    @DisplayName("The stream is trimmed to the configured bound instead of growing with every publish")
+    void streamIsTrimmedToTheConfiguredBound() {
+        var bounded = AnnotationQueueRoutingConfig.builder()
+                .enabled(true)
+                .streamName("test-stream-%s".formatted(randomString().toLowerCase()))
+                .streamMaxLen(1_000)
+                .streamTrimLimit(100)
+                .build();
+        var boundedPublisher = new AnnotationQueueRoutingPublisher(redissonClient, bounded);
+        int published = 5_000;
+
+        for (int i = 0; i < published; i++) {
+            boundedPublisher.enqueue(randomString(), randomString(), AnnotationScope.TRACE,
+                    Set.of(idGenerator.generateId()), Set.of()).block();
+        }
+
+        Long size = redissonClient.getStream(bounded.getStreamName(), bounded.getCodec()).size().block();
+        assertThat(size)
+                .as("stream must be bounded by the configured maxLen, not grow one-to-one with publishes")
+                .isNotNull()
+                .isLessThan((long) published);
     }
 
     private List<AnnotationQueueRoutingMessage> awaitStream(int expectedSize) {

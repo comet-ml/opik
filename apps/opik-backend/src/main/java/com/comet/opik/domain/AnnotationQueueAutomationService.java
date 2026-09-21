@@ -64,7 +64,7 @@ public class AnnotationQueueAutomationService {
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull IdGenerator idGenerator;
 
-    @CacheEvict(name = "annotation_queue_automations", key = "'*-' + $workspaceId + '-*'", keyUsesPatternMatching = true)
+    @CacheEvict(name = "annotation_queue_automations", key = "$workspaceId + '-*'", keyUsesPatternMatching = true)
     public void save(@NonNull String workspaceId, @NonNull String userName, @NonNull UUID queueId,
             @NonNull UUID projectId, @NonNull AnnotationQueue.AnnotationScope scope,
             @NonNull String queueName, @NonNull AnnotationQueueAutomation automation) {
@@ -117,7 +117,7 @@ public class AnnotationQueueAutomationService {
      * carrying the old one. The update names only that column, so a rename racing a save cannot write
      * back a stale copy of the fields it never meant to touch.
      */
-    @CacheEvict(name = "annotation_queue_automations", key = "'*-' + $workspaceId + '-*'", keyUsesPatternMatching = true)
+    @CacheEvict(name = "annotation_queue_automations", key = "$workspaceId + '-*'", keyUsesPatternMatching = true)
     public void renameRule(@NonNull String workspaceId, @NonNull UUID queueId, @NonNull String queueName) {
         transactionTemplate.inTransaction(WRITE, handle -> {
             var routerDao = handle.attach(AutomationRuleAnnotationQueueRouterDAO.class);
@@ -278,7 +278,7 @@ public class AnnotationQueueAutomationService {
      *
      * <p>Cached, following {@code AutomationRuleEvaluatorService#findAll}: this is a database round trip on
      * the busiest event in the system, and the answer is no for most workspaces most of the time. The
-     * writes below evict the whole workspace by pattern, because one rule change can flip the answer for
+     * writes below evict the whole workspace by prefix, because one rule change can flip the answer for
      * the workspace-wide key and every project key at once.
      *
      * <p>Eviction is not the only thing keeping this fresh, and must not be: a rule can also be disabled by
@@ -286,10 +286,11 @@ public class AnnotationQueueAutomationService {
      * dropped at the guard, and there is no backfill to route them later. The TTL is the floor under that,
      * which is why it is short and configurable rather than left to the cache manager's default.
      */
-    // The workspace-wide form keys on an empty project id: CacheInterceptor substitutes "" for a null
-    // argument before evaluating the expression, so the two forms cannot collide. workspaceId sits in the
-    // middle so the writes above can evict every project of a workspace with one '*-<workspaceId>-*'.
-    @Cacheable(name = "annotation_queue_automations", key = "$projectId + '-' + $workspaceId + '-' + $scope", returnType = Boolean.class)
+    // workspaceId first because it is the coarsest entity: every eviction is per workspace, so a prefix
+    // beats a glob with a leading wildcard. CacheInterceptor substitutes "" for a null argument before
+    // evaluating the expression, so the batch path's absent project becomes the literal 'all' rather than
+    // an empty segment, and the two forms cannot collide.
+    @Cacheable(name = "annotation_queue_automations", key = "$workspaceId + '-' + ($projectId == '' ? 'all' : $projectId) + '-' + $scope", returnType = Boolean.class)
     public boolean hasEnabledAutomation(@NonNull String workspaceId, @Nullable UUID projectId,
             @NonNull AnnotationQueue.AnnotationScope scope) {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
@@ -306,7 +307,7 @@ public class AnnotationQueueAutomationService {
     public record QueueAutomation(UUID queueId, UUID projectId, Conditions conditions) {
     }
 
-    @CacheEvict(name = "annotation_queue_automations", key = "'*-' + $workspaceId + '-*'", keyUsesPatternMatching = true)
+    @CacheEvict(name = "annotation_queue_automations", key = "$workspaceId + '-*'", keyUsesPatternMatching = true)
     public void deleteByQueueIds(@NonNull String workspaceId, List<UUID> queueIds) {
         if (CollectionUtils.isEmpty(queueIds)) {
             return;

@@ -7,7 +7,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.redisson.client.codec.Codec;
 
 /**
@@ -27,7 +30,12 @@ import org.redisson.client.codec.Codec;
  * no field carries a Java default, so a key missing from the yaml fails validation at boot rather than
  * silently taking a value that appears nowhere on disk.
  */
+// @NoArgsConstructor and @AllArgsConstructor are back because @Builder removes the implicit no-arg one,
+// and Jackson needs it to construct this from the yaml.
 @Data
+@Builder(toBuilder = true)
+@NoArgsConstructor
+@AllArgsConstructor
 public class AnnotationQueueRoutingConfig {
 
     public static final String PAYLOAD_FIELD = "message";
