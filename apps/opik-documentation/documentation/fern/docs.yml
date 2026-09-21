@@ -106,6 +106,10 @@ navigation:
             path: ./docs-v2/prompt_engineering/mcp-server.mdx
             slug: mcp-server
             icon: fa-regular fa-network-wired
+          - page: MCP Advanced Setup
+            path: ./docs-v2/prompt_engineering/mcp-server-advanced.mdx
+            slug: mcp-server-advanced
+            icon: fa-regular fa-sliders
           - page: Ollie Agent
             path: ./docs-v2/ollie.mdx
             slug: ollie
@@ -678,6 +682,9 @@ navigation:
           - page: MCP Server
             path: ./docs-v2/prompt_engineering/mcp-server.mdx
             slug: mcp-server
+          - page: MCP Advanced Setup
+            path: ./docs-v2/prompt_engineering/mcp-server-advanced.mdx
+            slug: mcp-server-advanced
           - page: Claude Code
             path: ./docs-v2/integrations/claude-code.mdx
             slug: claude-code
