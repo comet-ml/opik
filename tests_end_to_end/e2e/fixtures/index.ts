@@ -1,4 +1,4 @@
-export { test, expect } from './thread-cost-buckets.fixture';
+export { test, expect } from './thread-duration-sentinel.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -175,6 +175,11 @@ export type {
   ThreadCostBucketsRef,
   ThreadCostBucketsFixtures,
 } from './thread-cost-buckets.fixture';
+export type {
+  SentinelThreadRef,
+  ThreadDurationSentinelRef,
+  ThreadDurationSentinelFixtures,
+} from './thread-duration-sentinel.fixture';
 export {
   COST_PER_SPAN_USD,
   bucketTotal,
