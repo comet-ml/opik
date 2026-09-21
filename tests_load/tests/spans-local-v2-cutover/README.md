@@ -202,11 +202,15 @@ $RUNBOOK/scripts/verify.sh --database opik            # --drill-down lists the d
 #    last_updated_at, so no host/container skew can shift either boundary. Precision 6 matches spans.last_updated_at,
 #    which migration 000025 narrowed to DateTime64(6) — and, unlike a now64(9) value, it is accepted verbatim by
 #    --sentinel-window-from, whose shape check caps the fraction at six digits.
-FLAG_WINDOW_FROM="$(clickhouse-client --query "SELECT toString(now64(6, 'UTC'))")"   # BEFORE the restart
+#
+#    EVERY CAPTURE IN THIS GUIDE PINS --format TabSeparated, for the reason the drivers pin it: clickhouse-client
+#    takes its default format from ~/.clickhouse-client/config.xml, and a pretty default would wrap the value in
+#    box-drawing — here, in something pasted straight into a driver flag or a SQL literal.
+FLAG_WINDOW_FROM="$(clickhouse-client --format TabSeparated --query "SELECT toString(now64(6, 'UTC'))")"  # BEFORE
 export ANALYTICS_DB_DATA_MODEL_SPAN_DELETION_EVENTS_CAPTURE_ENABLED=true \
        ANALYTICS_DB_DATA_MODEL_SPAN_COLUMNS_NON_NULLABLE=true
 recreate_backend
-FLIP_AT="$(clickhouse-client --query "SELECT toString(now64(6, 'UTC'))")"
+FLIP_AT="$(clickhouse-client --format TabSeparated --query "SELECT toString(now64(6, 'UTC'))")"
 #
 #    PROVE THE FLIP LANDED, AND DO IT NOW — this is the evidence --confirm-columns-non-nullable asserts in step 8, and
 #    the rehearsal's counterpart of the runbook's Go/No-Go box. It must be the PHYSICAL stored value, and it must be
@@ -242,9 +246,9 @@ clickhouse-client --query "
 #    in-progress span that gets ended acquires a real end_time — so the mis-bound shows up on the ttft arm alone and
 #    reads deceptively like a partial rollout.
 #    Expect sentinel_end_time and sentinel_ttft to be EQUAL here: this probe filters to 'live-span-in-progress', which
-#    is written with neither value, so both arms fire on exactly the same rows. The dwarfing step 3 describes is real
-#    but belongs to the UNFILTERED table — every ordinary live-span also lacks a ttft — which is where the rollback's
-#    sentinel repair reads it.
+#    is written with neither value, so both arms fire on exactly the same rows. The dwarfing that step 3 describes is
+#    real, but belongs to the UNFILTERED table — every ordinary live-span also lacks a ttft — which is where the
+#    rollback's sentinel repair reads it.
 
 # 8. Final delta + replay (the last write-facing step), then the EXCHANGE immediately after. The EXCHANGE is the data
 #    cutover and leaves spans a MergeTree so the backend's cascade deletes keep working; it also renames the displaced
@@ -298,7 +302,7 @@ $RUNBOOK/scripts/verify.sh --database opik --old-table spans_pre_cutover_backup 
 #     translated back out. It could not be run before the swap, because the Nullable original answered null under
 #     either setting. Take an id the flag wrote absent — `spans` is the successor now, so those hold the sentinel
 #     PHYSICALLY, which is what makes them findable — then read the same span back through the API:
-SPAN_ID="$(clickhouse-client --query "
+SPAN_ID="$(clickhouse-client --format TabSeparated --query "
   SELECT id FROM opik.spans
   WHERE name = 'live-span-in-progress'
     AND end_time = toDateTime64('1970-01-01 00:00:00', 6, 'UTC')
@@ -454,7 +458,7 @@ wrote into the original, which the promote made live again — including the lar
 #    --sentinel-window-from is step 7's FLAG_WINDOW_FROM, captured BEFORE that rollout — not FLIP_AT, which is after
 #    it and would leave every sentinel minted during the roll outside the window and unrepaired. Take the upper bound
 #    the same way, from ClickHouse's clock once the revert restart has landed:
-REVERT_AT="$(clickhouse-client --query "SELECT toString(now64(6, 'UTC'))")"
+REVERT_AT="$(clickhouse-client --format TabSeparated --query "SELECT toString(now64(6, 'UTC'))")"
 $RUNBOOK/scripts/rollback.sh --database opik --sentinel-repair-only --confirm-flag-reverted \
     --sentinel-window-from "$FLAG_WINDOW_FROM" --sentinel-window-to "$REVERT_AT"
 ```

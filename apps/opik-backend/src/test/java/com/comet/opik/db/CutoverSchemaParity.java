@@ -238,16 +238,6 @@ enum CutoverSchemaParity {
 
     private static final String COLUMN_NAME_PATTERN = "[a-z_][a-z0-9_]*";
 
-    /**
-     * The other shipped files that restate the backfill's column list because they copy the same rows into the same
-     * shape: the delta, and both post-swap reconciliation sweeps. Named by file rather than declared per family
-     * because both families ship them under these names in the backfill's own directory — and a rename has to fail
-     * loudly rather than quietly skip a leg, which {@link #readCutoverSql} makes it do.
-     */
-    private static final List<String> COPY_STATEMENT_SIBLINGS = List.of(
-            "000002_delta_and_deletion_replay.sql",
-            "000006_post_swap_reconciliation.sql");
-
     /** A trailing {@code AS <column>} alias on a SELECT projection entry, naming that entry's destination column. */
     private static final Pattern SELECT_ALIAS = Pattern.compile("(?i)\\bAS\\s+([a-z_][a-z0-9_]*)\\s*$");
 
@@ -687,23 +677,34 @@ enum CutoverSchemaParity {
      *
      * <p>Each statement is checked twice over, for the two ways a list drifts: against the backfill's list <b>in
      * order</b>, since ClickHouse pairs {@code INSERT (...)} with {@code SELECT ...} by position; and against its own
-     * {@code SELECT} projection, since a list can agree with the backfill and still be wired to the wrong
-     * projection. Statements are discovered rather than counted, so a new copy statement is guarded the day it lands.
+     * {@code SELECT} projection, since a list can agree with the backfill and still be wired to the wrong projection.
+     *
+     * <p><b>Both the files and the statements are discovered, never listed.</b> The whole directory is scanned, so a
+     * copy statement added to a new file — or a second one added to a file that already has some — is guarded the day
+     * it lands rather than on the day someone remembers to extend a list here. Every {@code INSERT} the cutover ships
+     * today copies rows into the cutover's own shape, so "all of them" and "the copy statements" are the same set; if
+     * that ever stops being true, this fails and the divergence has to be declared rather than assumed.
      */
     void assertCopyStatementsMatchTheBackfill() throws IOException {
         var backfillColumns = backfillColumnList();
+        List<Path> shipped;
+        try (var entries = Files.list(backfillSql.getParent())) {
+            shipped = entries.filter(file -> file.getFileName().toString().endsWith(".sql")).sorted().toList();
+        }
 
-        for (var name : COPY_STATEMENT_SIBLINGS) {
-            var file = backfillSql.resolveSibling(name);
+        assertThat(shipped)
+                .as("the scan must reach the backfill itself; not finding it means it is pointed at the wrong place")
+                .contains(backfillSql);
+
+        var checked = 0;
+        for (var file : shipped) {
+            var name = file.getFileName();
             var statements = insertStatementsIn(readCutoverSql(file));
-
-            assertThat(statements)
-                    .as("%s must hold at least one INSERT; an empty parse would pass every check below", name)
-                    .isNotEmpty();
 
             for (int i = 0; i < statements.size(); i++) {
                 var statement = statements.get(i);
                 var source = "%s (INSERT #%d)".formatted(name, i + 1);
+                checked++;
 
                 assertThat(columnListIn(statement, source))
                         .as("""
@@ -717,6 +718,14 @@ enum CutoverSchemaParity {
                 assertInsertMatchesSelectIn(statement, source);
             }
         }
+
+        assertThat(checked)
+                .as("""
+                        the scan must find the backfill and at least one other copy statement — the delta and the \
+                        post-swap sweeps are the ones this leg exists for, and a parse that silently matched nothing \
+                        would pass every assertion above\
+                        """)
+                .isGreaterThan(1);
     }
 
     /**

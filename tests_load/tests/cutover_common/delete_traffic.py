@@ -41,6 +41,12 @@ _stop = False
 # the mask several beats to propagate before stopping.
 EMPTY_REFILL_LIMIT = 5
 
+# Consecutive delete failures tolerated BEFORE the first success. A restart always has successes behind it, so this
+# separates "the backend is bouncing" — which the guard in _delete_batch must survive — from "this run can never
+# delete anything", which is a credential, workspace or URL mistake and must stop rather than quietly produce no
+# deletes at all.
+FIRST_DELETE_ATTEMPTS = 5
+
 # Newest-page size to pull per refill. Larger reaches past the just-deleted (still-visible) top ids to undeleted ones
 # during mask lag, so the run keeps finding work instead of stopping early.
 REFILL_FETCH = 2000
@@ -148,7 +154,12 @@ def _delete_batch(client, ids):
     because the SDK batches its writes, so the failure is asymmetric and easy to miss.
 
     Guarded like the two read helpers above, and for the same reason: a transient failure should cost a tick, not the
-    run. Returns True when the delete was accepted.
+    run. The catch stays broad deliberately — a bouncing backend surfaces as an ApiError, a connection error or a
+    read timeout depending on how far through the restart it is, and narrowing to the one shape observed would let
+    the others end the run again. What a broad catch must not do is hide a run that can NEVER delete, so the caller
+    stops after FIRST_DELETE_ATTEMPTS failures with no success behind them.
+
+    Returns True when the delete was accepted.
     """
     try:
         client.rest_client.traces.delete_traces(ids=ids)
@@ -171,6 +182,7 @@ def _run(project, tps, duration, batch, resurrect_ratio, mode, unit):
     deleted = 0
     resurrected = 0
     empty_refills = 0
+    failed_before_first_success = 0
     started = time.time()
 
     def flush_resurrections(force=False):
@@ -233,6 +245,16 @@ def _run(project, tps, duration, batch, resurrect_ratio, mode, unit):
             # later refill never queues them for deletion again.
             for trace_id, spans in to_resurrect:
                 pending_resurrect.append((time.time() + RESURRECT_SETTLE_SECONDS, trace_id, spans))
+        elif deleted == 0:
+            # Nothing has ever been deleted, so this cannot be the restart the guard exists for. Left alone, the loop
+            # would work through the project via `seen`, stop on empty refills and report traces_deleted=0 — which
+            # reads as "nothing to delete" rather than "every delete failed", and the rehearsal would be called
+            # complete having exercised neither the deletion bridge nor either replay.
+            failed_before_first_success += 1
+            if failed_before_first_success >= FIRST_DELETE_ATTEMPTS:
+                raise SystemExit(
+                    f"no delete has succeeded in {failed_before_first_success} attempts — check OPIK_URL_OVERRIDE, "
+                    f"the API key and the workspace before re-running. The warnings above carry the backend's reason.")
         flush_resurrections()
         if deleted % 50 == 0:
             LOGGER.info("deleted %d traces (resurrected %d %s)", deleted, resurrected, unit)

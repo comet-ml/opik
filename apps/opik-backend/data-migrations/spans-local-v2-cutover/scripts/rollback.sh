@@ -842,7 +842,7 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
     # damaged afterwards. Widening --sentinel-window-from is free, so prefer an anchor captured BEFORE the rollout.
     if [[ "$all_end_time" =~ ^[0-9]+$ ]] && (( before_end_time > 0 && all_end_time > before_end_time )); then
         echo "NOTE: $(( all_end_time - before_end_time )) row(s) carry an epoch end_time OUTSIDE the window. If they sit just" >&2
-        echo "      BEFORE --sentinel-window-from they are the flag's too, minted while the rollout was still landing," >&2
+        echo "      BEFORE --sentinel-window-from they too are flag-minted, written while the rollout was landing," >&2
         echo "      and this run will leave them damaged. Widening the lower bound is free — prefer an anchor captured" >&2
         echo "      BEFORE the flag rollout started. Rows genuinely predating the flag are correctly left alone." >&2
     fi

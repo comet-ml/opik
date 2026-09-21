@@ -1219,9 +1219,9 @@ if [[ "$DIRECTION" == "reverse" && "$REVERSE_REPLAY_STATE" != "ok" ]]; then
     echo "  The SWEEP reads the frozen parked table and converges by construction, but this gate also reads the" >&2
     echo "  reverse-replay postcondition, which reads the LIVE table and the BRIDGE. Neither is frozen. So a user" >&2
     echo "  deleting a trace and then re-creating its spans under the same ids manufactures a fresh 'resurrected' key" >&2
-    echo "  after each pass masks the last, and no number of passes can catch up. Quiesce TRACE deletes and re-run;" >&2
-    echo "  the run converges immediately if that was it. Only if the count persists with deletes stopped is" >&2
-    echo "  something actually wrong." >&2
+    echo "  as fast as each pass masks the previous one, so no number of passes can catch up. Quiesce TRACE deletes" >&2
+    echo "  and re-run; the run converges immediately if that was it. Only if the count persists with deletes" >&2
+    echo "  stopped is something actually wrong." >&2
 else
     echo "This is NOT convergence stalling on write volume: the parked table is frozen, so repeated passes cannot keep" >&2
     echo "finding new work unless something else is wrong." >&2

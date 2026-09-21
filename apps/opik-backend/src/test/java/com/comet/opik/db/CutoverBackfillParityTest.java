@@ -148,7 +148,7 @@ class CutoverBackfillParityTest {
      */
     @ParameterizedTest
     @EnumSource(CutoverSchemaParity.class)
-    void everyShippedCopyStatementNamesTheBackfillsColumnsInOrder(CutoverSchemaParity family) throws IOException {
+    void everyShippedCopyStatementNamesTheBackfillColumnsInOrder(CutoverSchemaParity family) throws IOException {
         assumeThat(family.backfillIsPending())
                 .as("%s has not shipped its backfill yet, so there is no list for the others to match", family)
                 .isFalse();

@@ -2699,9 +2699,9 @@ rejecting an argument:
 - **the reverse direction's convergence, which is bounded by the traffic and not by the driver.** Its gate includes the
   reverse-replay postcondition, and that reads the LIVE table and the bridge — neither frozen, unlike the sweep's
   parked source. So a trace deleted and re-created under the same span ids after `cutover_start` produces a fresh
-  `resurrected:N` after each pass masks the last, and the run exhausts `--max-passes` with nothing wrong. Quiesce trace
-  deletes before the reverse reconciliation and it converges in one pass; rehearse both, because the failure text has
-  to name ongoing deletes rather than send the operator hunting a defect.
+  `resurrected:N` as fast as each pass masks the previous one, so the run exhausts `--max-passes` with nothing wrong.
+  Quiesce trace deletes before the reverse reconciliation and it converges in one pass; rehearse both, because the
+  failure text has to name ongoing deletes rather than send the operator hunting a defect.
 
 `rollback.sh` adds three, all of which decide something rather than reject an argument:
 
