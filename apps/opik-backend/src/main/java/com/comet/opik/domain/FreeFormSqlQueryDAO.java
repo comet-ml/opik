@@ -67,7 +67,7 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     }
 
     private Client clientFor(AnalyticsConsumer consumer) {
-        return consumer == AnalyticsConsumer.CUSTOM_CHARTS ? freeFormExtendedSqlClient : agentInsightsClient;
+        return consumer == AnalyticsConsumer.CUSTOM_DASHBOARD_CHARTS ? freeFormExtendedSqlClient : agentInsightsClient;
     }
 
     @Override

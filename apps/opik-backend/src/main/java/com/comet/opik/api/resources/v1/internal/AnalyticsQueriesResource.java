@@ -44,12 +44,6 @@ import java.util.concurrent.CompletionException;
  *
  * <p>The caller's final query must return exactly one column named {@code result}, produced via
  * {@code toJSONString(...)}.
- *
- * <p>A workspace listed in {@code serviceToggles.customChartsEnabledWorkspaces} runs instead on the
- * {@code databaseAnalyticsReadOnlyFreeFormExtendedSql} ClickHouse account, which reads the evaluation tables
- * workspace-wide (OPIK-8329 design 8.11/8.12). The request and response shapes are identical either way. Note this
- * routes <em>all</em> of that workspace's free-form SQL, Agent Insights included, to the wider account — intended
- * while the allowlist is internal-only.
  */
 @Path("/v1/internal/analytics-queries")
 @Produces(MediaType.APPLICATION_JSON)
@@ -84,9 +78,7 @@ public class AnalyticsQueriesResource {
         RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Agent Insights free-form SQL");
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        AnalyticsConsumer consumer = serviceToggles.getCustomChartsEnabledWorkspaces().contains(workspaceId)
-                ? AnalyticsConsumer.CUSTOM_CHARTS
-                : AnalyticsConsumer.AGENT_INSIGHTS;
+        AnalyticsConsumer consumer = getAnalyticsConsumerType(workspaceId);
 
         log.info("Executing free-form SQL for workspace '{}', project '{}' as {}", workspaceId, projectId, consumer);
 
@@ -102,5 +94,11 @@ public class AnalyticsQueriesResource {
             Throwables.throwIfUnchecked(e.getCause());
             throw e;
         }
+    }
+
+    private AnalyticsConsumer getAnalyticsConsumerType(String workspaceId) {
+        return serviceToggles.getCustomChartsEnabledWorkspaces().contains(workspaceId)
+                ? AnalyticsConsumer.CUSTOM_DASHBOARD_CHARTS
+                : AnalyticsConsumer.AGENT_INSIGHTS;
     }
 }

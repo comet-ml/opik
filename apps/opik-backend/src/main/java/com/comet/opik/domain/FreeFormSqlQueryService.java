@@ -166,7 +166,7 @@ public class FreeFormSqlQueryService {
      * result ClickHouse already returned.
      */
     private List<JsonNode> resolveNames(AnalyticsConsumer consumer, FreeFormSqlResult result, String workspaceId) {
-        if (consumer != AnalyticsConsumer.CUSTOM_CHARTS) {
+        if (consumer != AnalyticsConsumer.CUSTOM_DASHBOARD_CHARTS) {
             return result.rows();
         }
         try {
