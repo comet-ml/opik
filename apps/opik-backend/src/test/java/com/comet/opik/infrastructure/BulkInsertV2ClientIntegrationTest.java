@@ -262,11 +262,11 @@ class BulkInsertV2ClientIntegrationTest {
         // The one assertion that cannot be made through the API: reads collapse duplicates, so a writer
         // emitting every row twice is invisible to them. Raw rows with no FINAL is the only view that
         // sees it.
-        Long storedRows = queryOne(
+        Long storedRowCount = queryOne(
                 ("SELECT count() AS row_count FROM authored_feedback_scores WHERE workspace_id = '%s' "
                         + "AND entity_id = '%s'").formatted(WORKSPACE_ID, trace.id()),
                 row -> row.get("row_count", Long.class));
-        assertThat(storedRows).isEqualTo(scores.size());
+        assertThat(storedRowCount).isEqualTo(scores.size());
     }
 
     @Test
@@ -307,11 +307,11 @@ class BulkInsertV2ClientIntegrationTest {
 
         // Nothing leaked into the authored table, which is what a mis-selected branch looks like -- the
         // row is still written, just to the wrong place.
-        Long authored = queryOne(
+        Long authoredCount = queryOne(
                 ("SELECT count() AS row_count FROM authored_feedback_scores WHERE workspace_id = '%s' "
                         + "AND entity_id = '%s' AND name = '%s'").formatted(WORKSPACE_ID, trace.id(), name),
                 row -> row.get("row_count", Long.class));
-        assertThat(authored).isZero();
+        assertThat(authoredCount).isZero();
     }
 
     @ParameterizedTest
@@ -344,11 +344,11 @@ class BulkInsertV2ClientIntegrationTest {
                 row -> row.get("author", String.class));
         assertThat(storedAuthor).isEmpty();
 
-        Long unauthored = queryOne(
+        Long unauthoredCount = queryOne(
                 ("SELECT count() AS row_count FROM feedback_scores WHERE workspace_id = '%s' "
                         + "AND entity_id = '%s' AND name = '%s'").formatted(WORKSPACE_ID, trace.id(), name),
                 row -> row.get("row_count", Long.class));
-        assertThat(unauthored).isZero();
+        assertThat(unauthoredCount).isZero();
     }
 
     @Test
