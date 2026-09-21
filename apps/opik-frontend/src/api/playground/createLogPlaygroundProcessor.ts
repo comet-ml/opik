@@ -140,7 +140,6 @@ const getRunErrorInfo = (run: LogQueueParams): LogErrorInfo | undefined => {
   return {
     exception_type: error.exceptionType,
     message: error.message,
-    traceback: error.message,
   };
 };
 

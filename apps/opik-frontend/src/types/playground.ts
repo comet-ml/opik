@@ -82,7 +82,6 @@ export type ChatCompletionResponse =
 export interface LogErrorInfo {
   exception_type: string;
   message: string;
-  traceback: string;
 }
 
 export interface LogTrace {
