@@ -161,10 +161,22 @@ export const test = baseTest.extend<AlertFixtures>({
 
     if (registry.length === 0 || shouldLeaveArtifacts(testInfo)) return;
 
+    // One batch call in the happy path, but a rejected batch is all-or-nothing:
+    // every registered id would leak, and a leaked alert outlives the run to
+    // break the next one's empty-state assertions. So fall back to deleting
+    // each id on its own, the way the other `register*Cleanup` fixtures do, and
+    // let one failure cost only its own alert.
     try {
       await backendClient.deleteAlertsBatch(registry);
-    } catch (err) {
-      console.warn('[registerAlertCleanup] batch delete warning:', err);
+    } catch (batchErr) {
+      console.warn('[registerAlertCleanup] batch delete warning:', batchErr);
+      for (const id of registry) {
+        try {
+          await backendClient.deleteAlertsBatch([id]);
+        } catch (err) {
+          console.warn(`[registerAlertCleanup] delete warning for ${id}:`, err);
+        }
+      }
     }
   },
 
