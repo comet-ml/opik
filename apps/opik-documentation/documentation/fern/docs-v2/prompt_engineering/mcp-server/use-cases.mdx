@@ -1,6 +1,6 @@
 ---
 headline: MCP server use cases
-og:description: Prompts to paste into your coding assistant once it is connected to Opik — instrumenting a project, debugging a trace, triaging production, and building evaluations.
+og:description: Prompts to paste into your coding assistant once it is connected to Opik — instrumenting a project, debugging a trace, reviewing a project, analysing experiments, and building evaluations.
 og:site_name: Opik Documentation
 og:title: Opik MCP server use cases
 title: Use cases
@@ -8,14 +8,14 @@ title: Use cases
 
 Once your assistant is [connected](/mcp-server), these are the things worth
 asking it for. Paste any prompt as written — your assistant works out which tools
-and skills it needs.
+and skills it needs, and asks you for anything it's missing.
 
 <Tip>
 Start with **Instrument this project**. It exercises the whole loop — write code,
 run it, read the trace back — so if it works, everything is wired up correctly.
 </Tip>
 
-## Add tracing to your project
+## Set up tracing
 
 Your assistant detects the language and framework, adds the decorators or
 integration, wires up config, then runs the app and reads the trace back to prove
@@ -29,60 +29,143 @@ Add Opik tracing to this project, then run it and show me the trace you created.
 Add Opik tracing to the request handler in this file and mark it as the entry point.
 ```
 
-```text title="Check where this repo is logging"
+```text title="Fix tracing that isn't working"
+My traces aren't showing up in Opik. Work out why and fix it.
+```
+
+```text title="Find where this repo logs"
 List my Opik projects and tell me which one this repo is logging to.
 ```
 
-## Debug a failing trace
+## Debug a specific trace
 
-Your assistant reads the full span tree, the errors and the feedback scores, so
-you never paste a screenshot into chat.
+Your assistant reads the full span tree, the tool calls, the errors and the
+feedback scores, so you never paste a screenshot into chat. Give it a trace URL
+from the Opik UI, or let it find the trace itself.
 
-```text title="Explain one trace"
-Read this Opik trace and tell me why it failed: <paste the trace URL>
+```text title="Why did it fail?"
+Why did this trace fail? <paste the trace URL>
 ```
 
-```text title="Find what's slow or failing"
-Find the failing and slowest traces from the last 24 hours and tell me what they
-have in common.
+```text title="Health check"
+Is this trace healthy? Flag anything that looks wrong even if it didn't error.
 ```
+
+```text title="Inspect the tool calls"
+Analyze the tool calls in this trace and identify if there are any issues.
+```
+
+```text title="Make it faster or cheaper"
+How would you optimize this trace? Show me where the time and tokens go.
+```
+
+```text title="Fix it and prove it"
+Fix the bug you just found, re-run the same input, and show me the new trace.
+```
+
+## Find the data you care about
+
+Your assistant can search and filter your traces, spans and threads by content,
+status, duration, token usage, feedback score or time window — so it answers
+these in one pass instead of you clicking through the UI.
+
+```text title="Search by content"
+Find all the traces with inputs about refunds and summarise what users were asking.
+```
+
+```text title="Cluster what users ask"
+What are the topics my users ask about the most? Group the last week of traces
+by topic and rank them.
+```
+
+```text title="Find the outliers"
+Show me the ten slowest traces this week, and the ten that used the most tokens.
+```
+
+```text title="Conversations that went wrong"
+Find threads where the user had to repeat themselves, and show me what went wrong.
+```
+
+## Review a project
+
+Ask for a read on a whole project rather than one trace — useful on a Monday
+morning, before a release, or on a codebase you didn't write.
+
+```text title="Anything worth attention?"
+Analyze my traces and threads from the last 2 weeks. Are there items worth
+attention? Is there anything we can improve?
+```
+
+```text title="Status report"
+Prepare a status report for project X with ranked action items.
+```
+
+```text title="Find and fix"
+Check my last traces, identify the issues, and fix them if you can.
+```
+
+<Note>
+If you have [Diagnostics](/tracing/diagnostics) enabled, your assistant can also
+work its issue queue directly — *"show me the open Diagnostics issues and fix the
+one hitting the most traces"*. If it isn't enabled, ask your assistant to turn it
+on for a project and run the first scan. Everything else on this page works
+without it.
+</Note>
+
+## Analyse experiment results
+
+If you already run evaluations, your assistant can read the results and act on
+them, rather than you reading a table and relaying what it says.
+
+```text title="Read the results"
+Analyze the results of my latest experiment. What didn't work well?
+```
+
+```text title="Catch regressions"
+Are there any regressions compared with the previous experiment?
+```
+
+```text title="Ask for a fix"
+Tell me how to improve the score. Then implement it and run the evaluation again.
+```
+
+```text title="Hand it the whole loop"
+Implement the feature and run the evaluation. Fix any regressions. Iterate until
+the evaluation passes.
+```
+
+## Build an evaluation pipeline
+
+Real traces make better test cases than invented ones, because they are inputs
+your app actually received.
+
+```text title="Start a suite"
+Create an Opik test suite for my agent, then run it and show me the scores.
+```
+
+```text title="Build it from what went wrong"
+Get the traces that didn't perform well — bad feedback scores or failing — and
+create a test suite from them.
+```
+
+```text title="Cover a bug you just fixed"
+Add the trace that reproduced this bug to my test suite as a new case, then re-run
+the suite.
+```
+
+```text title="Compare two prompt versions"
+Save the prompt in this file as a new version in Opik, run the suite against both
+versions, and tell me which one wins.
+```
+
+## Review and score
 
 ```text title="Score what you found"
 Score the three worst traces 0.2 with the reason you just gave me.
 ```
 
-## Triage production
-
-[Diagnostics](/tracing/diagnostics) groups repeated failures into issues with a
-root cause and the traces that prove it. Your assistant can read those issues,
-fix the code, and close them.
-
-```text title="Work the queue"
-Show me the open Diagnostics issues in Opik, then fix the one hitting the most traces.
-```
-
-```text title="Check a single issue"
-Read this Diagnostics issue, show me two example traces, and tell me whether the
-suggested fix is right.
-```
-
-## Build and run evaluations
-
-Real traces make better test cases than invented ones, because they are inputs
-your app actually received.
-
-```text title="Turn real traces into a test suite"
-Build an Opik test suite from my recent traces, then run it and show me the scores.
-```
-
-```text title="Compare two prompts"
-Save my current prompt as a new version in Opik, run the suite against both
-versions, and tell me which one wins.
-```
-
-```text title="Close the loop on a fix"
-Re-run the test suite now that you've changed the code, and compare the scores to
-the last run.
+```text title="Leave notes for the team"
+Add a comment to each of those traces explaining what to look at.
 ```
 
 ## What a session looks like
