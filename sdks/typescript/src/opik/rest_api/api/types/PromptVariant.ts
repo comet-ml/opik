@@ -7,4 +7,5 @@ export interface PromptVariant {
     messages: OpikApi.Message[];
     configs?: Record<string, OpikApi.JsonNode>;
     promptVersions?: OpikApi.PromptVersionLink[];
+    experimentName?: string;
 }
