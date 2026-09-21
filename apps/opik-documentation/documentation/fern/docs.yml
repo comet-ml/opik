@@ -107,7 +107,7 @@ navigation:
             collapsed: true
             icon: fa-regular fa-network-wired
             contents:
-              - page: Overview
+              - page: Install
                 path: ./docs-v2/prompt_engineering/mcp-server.mdx
                 slug: mcp-server
               - page: Configuration & troubleshooting
@@ -686,7 +686,7 @@ navigation:
             skip-slug: true
             collapsed: true
             contents:
-              - page: Overview
+              - page: Install
                 path: ./docs-v2/prompt_engineering/mcp-server.mdx
                 slug: mcp-server
               - page: Configuration & troubleshooting
