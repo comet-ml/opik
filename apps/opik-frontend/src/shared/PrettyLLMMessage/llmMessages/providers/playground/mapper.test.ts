@@ -17,7 +17,7 @@ describe("mapPlaygroundMessages", () => {
     }
   });
 
-  it("should map an empty completion to an empty assistant turn", () => {
+  it("should return nothing for an empty completion", () => {
     const result = mapPlaygroundMessages(
       { output: "" },
       {
@@ -25,10 +25,7 @@ describe("mapPlaygroundMessages", () => {
       },
     );
 
-    expect(result.messages).toHaveLength(1);
-    if (result.messages[0].blocks[0].blockType === "text") {
-      expect(result.messages[0].blocks[0].props.children).toBe("");
-    }
+    expect(result.messages).toEqual([]);
   });
 
   it("should return nothing for the input field", () => {

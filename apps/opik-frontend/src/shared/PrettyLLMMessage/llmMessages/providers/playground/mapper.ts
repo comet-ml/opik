@@ -9,7 +9,7 @@ export const mapPlaygroundMessages: FormatMapper = (data, prettifyConfig) => {
   }
 
   const text = getPlaygroundOutputText(data);
-  if (text === undefined) {
+  if (!text) {
     return { messages: [] };
   }
 
