@@ -12,6 +12,7 @@ import com.comet.opik.domain.evaluators.AutomationRuleAnnotationQueueRouterModel
 import com.comet.opik.domain.evaluators.AutomationRuleDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleProjectsDAO;
 import com.comet.opik.utils.JsonUtils;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -262,25 +263,23 @@ public class AnnotationQueueAutomationService {
     /**
      * Whether anything could route for this event, as the listener's guard.
      *
-     * <p>This is the project-scoped form, used when the event names its project.
+     * <p>A null {@code projectId} is the batch score path, which cannot name a project because one batch
+     * may span several. The question then widens to whether the workspace has any router at all, which is
+     * a pre-filter only: the project scope is enforced by {@link #findEnabledByProjects} once the consumer
+     * learns each entity's project from its scores. Both forms are an index seek on an equality prefix of
+     * {@code automation_rules_workspace_action_enabled_idx}, not a scan.
+     *
+     * <p>One method rather than two overloads so that callers, which receive the project id already
+     * nullable from the event, do not each have to branch on it.
      */
-    public boolean hasEnabledAutomation(@NonNull String workspaceId, @NonNull UUID projectId,
+    public boolean hasEnabledAutomation(@NonNull String workspaceId, @Nullable UUID projectId,
             @NonNull AnnotationQueue.AnnotationScope scope) {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(AutomationRuleAnnotationQueueRouterDAO.class)
-                        .existsEnabledByProject(workspaceId, projectId, scope.getValue()));
-    }
-
-    /**
-     * The same guard for the batch score path, which cannot name a project because one batch may span
-     * several. A pre-filter only: it answers whether the workspace has any router at all, and the project
-     * scope is enforced by {@link #findEnabledByProjects} once the consumer knows the entities' projects.
-     */
-    public boolean hasEnabledAutomation(@NonNull String workspaceId,
-            @NonNull AnnotationQueue.AnnotationScope scope) {
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(AutomationRuleAnnotationQueueRouterDAO.class)
-                        .existsEnabledByWorkspace(workspaceId, scope.getValue()));
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(AutomationRuleAnnotationQueueRouterDAO.class);
+            return projectId == null
+                    ? dao.existsEnabledByWorkspace(workspaceId, scope.getValue())
+                    : dao.existsEnabledByProject(workspaceId, projectId, scope.getValue());
+        });
     }
 
     /**

@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.domain.AnnotationQueueAutomationService;
 import com.comet.opik.domain.AnnotationQueueRoutingPublisher;
@@ -8,11 +7,15 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -21,7 +24,9 @@ import reactor.core.publisher.Mono;
 
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
+import static com.comet.opik.api.AnnotationQueue.AnnotationScope;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.after;
@@ -34,6 +39,11 @@ import static org.mockito.Mockito.when;
  * Covers the guards, and above all what they let through: the listener is the feature's only volume
  * control, so a guard that stops working means every score event in the deployment reaches the stream.
  *
+ * <p>Unit rather than black box because the listener's entry point is the Guava event bus, and the router
+ * rule it reads has no REST surface on this PR — there is nothing to drive it through from outside. What
+ * can be covered end to end is, in {@link AnnotationQueueRoutingIntegrationTest}, which runs this same
+ * listener against a real publisher and a real Redis stream.
+ *
  * <p>The listener subscribes and returns, so anything past the guards happens on another thread. Every
  * assertion here is timed for that reason: one that should see work waits for it, and one that should see
  * none waits before concluding. An immediate check would pass whether the guard held or simply had not
@@ -44,9 +54,6 @@ import static org.mockito.Mockito.when;
 class AnnotationQueueRoutingListenerTest {
 
     private static final IdGenerator ID_GENERATOR = TestIdGeneratorFactory.create();
-
-    private static final String WORKSPACE_ID = "workspace-1";
-    private static final String USER_NAME = "user-1";
 
     @Mock
     private AnnotationQueueAutomationService automationService;
@@ -59,62 +66,55 @@ class AnnotationQueueRoutingListenerTest {
 
     private AnnotationQueueRoutingListener listener;
 
+    private String workspaceId;
+    private String userName;
+
     @BeforeEach
     void setUp() {
+        workspaceId = randomString();
+        userName = randomString();
         when(config.isEnabled()).thenReturn(true);
         when(publisher.enqueue(anyString(), anyString(), any(), any(), any())).thenReturn(Mono.empty());
         listener = new AnnotationQueueRoutingListener(automationService, publisher, config);
     }
 
+    private static String randomString() {
+        return RandomStringUtils.secure().nextAlphanumeric(20);
+    }
+
     private FeedbackScoresCreated event(EntityType entityType, UUID projectId, Set<UUID> entityIds,
             Set<String> scoreNames) {
-        return new FeedbackScoresCreated(entityIds, entityType, WORKSPACE_ID, USER_NAME, projectId, scoreNames);
+        return new FeedbackScoresCreated(entityIds, entityType, workspaceId, userName, projectId, scoreNames);
     }
 
     @Nested
     @DisplayName("Published")
     class Published {
 
-        @Test
-        void publishesThroughTheProjectGuardWhenTheEventNamesAProject() {
-            UUID projectId = ID_GENERATOR.generateId();
-            UUID traceId = ID_GENERATOR.generateId();
-            when(automationService.hasEnabledAutomation(WORKSPACE_ID, projectId, AnnotationQueue.AnnotationScope.TRACE))
-                    .thenReturn(true);
-
-            listener.onFeedbackScoresCreated(
-                    event(EntityType.TRACE, projectId, Set.of(traceId), Set.of("relevance")));
-
-            verify(publisher, timeout(2_000)).enqueue(WORKSPACE_ID, USER_NAME,
-                    AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId), Set.of("relevance"));
+        /**
+         * The scope mapping and the two guard flavours in one table. The null project id is the batch score
+         * path, which cannot name a project because one batch may span several — the listener passes the
+         * null straight through, and the service widens the question to the workspace.
+         */
+        static Stream<Arguments> published() {
+            return Stream.of(
+                    Arguments.of(EntityType.TRACE, AnnotationScope.TRACE, true),
+                    Arguments.of(EntityType.TRACE, AnnotationScope.TRACE, false),
+                    Arguments.of(EntityType.THREAD, AnnotationScope.THREAD, true),
+                    Arguments.of(EntityType.THREAD, AnnotationScope.THREAD, false));
         }
 
-        @Test
-        void publishesThroughTheWorkspaceGuardWhenTheEventNamesNoProject() {
-            // The trace batch path cannot name a project, because one batch may span several.
-            UUID traceId = ID_GENERATOR.generateId();
-            when(automationService.hasEnabledAutomation(WORKSPACE_ID, AnnotationQueue.AnnotationScope.TRACE))
-                    .thenReturn(true);
+        @ParameterizedTest
+        @MethodSource("published")
+        void publishesWhateverTheGuardAdmits(EntityType entityType, AnnotationScope scope, boolean namesProject) {
+            UUID projectId = namesProject ? ID_GENERATOR.generateId() : null;
+            Set<UUID> entityIds = Set.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId());
+            Set<String> scoreNames = Set.of(randomString(), randomString());
+            when(automationService.hasEnabledAutomation(workspaceId, projectId, scope)).thenReturn(true);
 
-            listener.onFeedbackScoresCreated(event(EntityType.TRACE, null, Set.of(traceId), Set.of()));
+            listener.onFeedbackScoresCreated(event(entityType, projectId, entityIds, scoreNames));
 
-            verify(publisher, timeout(2_000)).enqueue(WORKSPACE_ID, USER_NAME,
-                    AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId), Set.of());
-            verify(automationService, never()).hasEnabledAutomation(anyString(), any(UUID.class), any());
-        }
-
-        @Test
-        void publishesThreadsUnderTheThreadScope() {
-            UUID projectId = ID_GENERATOR.generateId();
-            UUID threadId = ID_GENERATOR.generateId();
-            when(automationService.hasEnabledAutomation(WORKSPACE_ID, projectId,
-                    AnnotationQueue.AnnotationScope.THREAD)).thenReturn(true);
-
-            listener.onFeedbackScoresCreated(
-                    event(EntityType.THREAD, projectId, Set.of(threadId), Set.of("moderation")));
-
-            verify(publisher, timeout(2_000)).enqueue(WORKSPACE_ID, USER_NAME,
-                    AnnotationQueue.AnnotationScope.THREAD, Set.of(threadId), Set.of("moderation"));
+            verify(publisher, timeout(2_000)).enqueue(workspaceId, userName, scope, entityIds, scoreNames);
         }
     }
 
@@ -153,26 +153,24 @@ class AnnotationQueueRoutingListenerTest {
         @Test
         void publishesNothingWhenNoAutomationIsEnabled() {
             UUID projectId = ID_GENERATOR.generateId();
-            when(automationService.hasEnabledAutomation(WORKSPACE_ID, projectId, AnnotationQueue.AnnotationScope.TRACE))
+            when(automationService.hasEnabledAutomation(workspaceId, projectId, AnnotationScope.TRACE))
                     .thenReturn(false);
 
             listener.onFeedbackScoresCreated(
                     event(EntityType.TRACE, projectId, Set.of(ID_GENERATOR.generateId()), Set.of()));
 
-            // Wait for the lookup itself, so "never recorded" is a real assertion rather than a race won.
-            verify(automationService, timeout(2_000)).hasEnabledAutomation(WORKSPACE_ID, projectId,
-                    AnnotationQueue.AnnotationScope.TRACE);
+            // Wait for the lookup itself, so "never published" is a real assertion rather than a race won.
+            verify(automationService, timeout(2_000)).hasEnabledAutomation(workspaceId, projectId,
+                    AnnotationScope.TRACE);
             verify(publisher, never()).enqueue(anyString(), anyString(), any(), any(), any());
         }
 
         /**
-         * Neither the lookup nor the buffer is reached. Timed rather than immediate: a deleted guard makes
-         * the lookup asynchronous, and an immediate assertion would simply run first and pass.
+         * Neither the lookup nor the publisher is reached. Timed rather than immediate: a deleted guard
+         * makes the lookup asynchronous, and an immediate assertion would simply run first and pass.
          */
         private void assertNothingRouted() {
-            verify(automationService, after(400).never()).hasEnabledAutomation(anyString(), any(UUID.class),
-                    any());
-            verify(automationService, never()).hasEnabledAutomation(anyString(), any());
+            verify(automationService, after(400).never()).hasEnabledAutomation(anyString(), any(), any());
             verify(publisher, never()).enqueue(anyString(), anyString(), any(), any(), any());
         }
     }
