@@ -6,8 +6,6 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.Builder;
 import lombok.NonNull;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -32,41 +30,34 @@ public record AnnotationQueueRoutingMessage(
         @NonNull AnnotationQueue.AnnotationScope scope,
         @NonNull Set<UUID> entityIds,
         /**
-         * Which scores the triggering events wrote, per entity, where the emitter said. Names only — no
-         * values, so this cannot go stale: a name that existed still exists, and the value is always read
-         * fresh. It exists so the consumer can tell a score that has not replicated yet from a score that
-         * genuinely does not satisfy a condition. Absent for an entity means no information.
+         * Which scores the triggering event wrote, where the emitter said. Names only — no values, so this
+         * cannot go stale: a name that existed still exists, and the value is always read fresh. It exists
+         * so the consumer can tell a score that has not replicated yet from a score that genuinely does
+         * not satisfy a condition. Empty means no information, which is not the same as no scores.
+         *
+         * <p>One set for the whole message rather than one per entity, because a message is one score
+         * event and the event reports the names it wrote across its whole batch without attributing them
+         * to individual entities. Storing it per entity would put N identical copies in the payload. The
+         * consumer still reads it per entity through {@link #expectedScoreNames(UUID)}, which is the shape
+         * it needs once it folds several messages for the same entity together.
          */
-        Map<UUID, Set<String>> scoreNamesByEntity) implements RedisSubscriberMessage {
+        Set<String> scoreNames) implements RedisSubscriberMessage {
 
     /**
-     * Copies the entity ids, and normalises a null score-name map to empty and copies both of its levels,
-     * so a message cannot be observed differently on two deliveries. Redelivery deserializes afresh and
-     * would not share state, but the publisher hands in collections it built and its caller can still
-     * reach - a set from {@code Collectors.toSet} and a map from {@code Collectors.toMap}, both mutable.
+     * Copies both collections, so a message cannot be observed differently on two deliveries. Redelivery
+     * deserializes afresh and would not share state, but the publisher hands in collections it built and
+     * its caller can still reach.
+     *
+     * <p>Null-tolerant on the names: this record is also rebuilt by the stream codec from JSON, where an
+     * absent value deserializes to null, and {@code Set.copyOf} would throw — failing the whole message
+     * rather than the freshness check it feeds.
      */
     public AnnotationQueueRoutingMessage {
-        // The publisher hands in the set the buffer grouped, which is reachable from its caller, so the
-        // same reasoning that copies the map below applies here. @NonNull already rejects a null.
         entityIds = Set.copyOf(entityIds);
-
-        // Null-tolerant at both levels. The publisher never produces nulls, but this record is also
-        // rebuilt by the stream codec from JSON, where an absent nested value deserializes to null - and
-        // Set.copyOf would throw, failing the message instead of the freshness check it feeds.
-        if (scoreNamesByEntity == null) {
-            scoreNamesByEntity = Map.of();
-        } else {
-            var copy = new HashMap<UUID, Set<String>>(scoreNamesByEntity.size());
-            scoreNamesByEntity.forEach((entityId, names) -> {
-                if (entityId != null) {
-                    copy.put(entityId, names == null ? Set.of() : Set.copyOf(names));
-                }
-            });
-            scoreNamesByEntity = Map.copyOf(copy);
-        }
+        scoreNames = scoreNames == null ? Set.of() : Set.copyOf(scoreNames);
     }
 
     public Set<String> expectedScoreNames(UUID entityId) {
-        return scoreNamesByEntity.getOrDefault(entityId, Set.of());
+        return entityIds.contains(entityId) ? scoreNames : Set.of();
     }
 }

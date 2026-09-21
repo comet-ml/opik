@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.domain.AnnotationQueueAutomationService;
-import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
+import com.comet.opik.domain.AnnotationQueueRoutingPublisher;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.google.common.eventbus.Subscribe;
@@ -22,15 +22,17 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
  * scores when it is created, so trace creation could never satisfy one. Eligibility changes when a score
  * lands — for an LLM judge seconds after the trace, for a human reviewer possibly days.
  *
- * <p>This class deliberately does almost nothing. It guards, then marks the entity as pending. Loading
- * configuration, reading scores, evaluating conditions and writing queue items all happen in
+ * <p>This class deliberately does almost nothing. It guards, then publishes. Loading configuration,
+ * reading scores, evaluating conditions and writing queue items all happen in
  * {@link AnnotationQueueRoutingSubscriber}, behind the stream, where the work is durable, retried and
  * concurrency-bounded. The event bus offers none of those, and this feature has no backfill or manual
  * re-run, so an event lost in flight would keep a trace out of a review queue permanently and silently.
  *
- * <p>Recording rather than publishing is what makes ten scores on one trace one evaluation instead of
- * ten: {@link AnnotationQueueRoutingBufferService} collapses by entity, and a flush job drains each entity
- * once its debounce window has elapsed.
+ * <p>Publishing straight to the stream, with no buffer in front of it. An earlier revision debounced here
+ * in Redis so that repeated scores on one entity collapsed before they were published; the stream already
+ * is that buffer, and the collapsing belongs on the read side, where the consumer folds a batch by entity
+ * before doing any of the expensive work. One event is therefore one XADD, and the event already carries a
+ * whole batch of entity ids, so a bulk score call is one message rather than one per entity.
  *
  * <p>The one read kept here is the guard, and it earns its place: without it the stream would carry every
  * score event in the deployment, the vast majority of which have no automation to satisfy.
@@ -44,15 +46,15 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 public class AnnotationQueueRoutingListener {
 
     private final @NonNull AnnotationQueueAutomationService automationService;
-    private final @NonNull AnnotationQueueRoutingBufferService bufferService;
+    private final @NonNull AnnotationQueueRoutingPublisher publisher;
     private final @NonNull AnnotationQueueRoutingConfig config;
 
     @Inject
     public AnnotationQueueRoutingListener(@NonNull AnnotationQueueAutomationService automationService,
-            @NonNull AnnotationQueueRoutingBufferService bufferService,
+            @NonNull AnnotationQueueRoutingPublisher publisher,
             @NonNull @Config("annotationQueueRouting") AnnotationQueueRoutingConfig config) {
         this.automationService = automationService;
-        this.bufferService = bufferService;
+        this.publisher = publisher;
         this.config = config;
     }
 
@@ -77,12 +79,12 @@ public class AnnotationQueueRoutingListener {
                 : automationService.hasEnabledAutomation(event.workspaceId(), scope))
                 .subscribeOn(Schedulers.boundedElastic())
                 .filter(Boolean::booleanValue)
-                .flatMap(__ -> bufferService.record(event.workspaceId(), event.userName(), scope, event.entityIds(),
+                .flatMap(__ -> publisher.enqueue(event.workspaceId(), event.userName(), scope, event.entityIds(),
                         event.getScoreNames()))
                 .subscribe(
                         __ -> {
                         },
-                        error -> log.error("Failed to record entities for annotation queue routing, workspace '{}'",
+                        error -> log.error("Failed to publish entities for annotation queue routing, workspace '{}'",
                                 event.workspaceId(), error));
     }
 

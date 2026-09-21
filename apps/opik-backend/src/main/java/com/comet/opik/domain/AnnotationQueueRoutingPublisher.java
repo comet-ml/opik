@@ -13,15 +13,16 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /**
  * Puts routing work on the stream: one XADD and nothing else.
  *
- * <p>Called by {@link AnnotationQueueRoutingBufferService#flush()} rather than from the score path, so a
- * message here already represents a group of debounced entities rather than a single score event.
+ * <p>Called straight from the event listener, so one message is one score event — which already carries a
+ * whole batch of entity ids, so a bulk score call costs one XADD rather than one per entity. Repeated
+ * scores on the same entity are folded by the consumer when it reads a batch, not here: the stream is the
+ * buffer, and collapsing on the read side keeps the write path to a single Redis command.
  */
 @Slf4j
 @Singleton
@@ -39,7 +40,7 @@ public class AnnotationQueueRoutingPublisher {
 
     public Mono<Void> enqueue(@NonNull String workspaceId, @NonNull String userName,
             @NonNull AnnotationQueue.AnnotationScope scope, @NonNull Set<UUID> entityIds,
-            @NonNull Map<UUID, Set<String>> scoreNamesByEntity) {
+            @NonNull Set<String> scoreNames) {
 
         if (!config.isEnabled() || entityIds.isEmpty()) {
             return Mono.empty();
@@ -50,7 +51,7 @@ public class AnnotationQueueRoutingPublisher {
                 .userName(userName)
                 .scope(scope)
                 .entityIds(entityIds)
-                .scoreNamesByEntity(scoreNamesByEntity)
+                .scoreNames(scoreNames)
                 .build();
 
         // DEBUG: one of these per score event on an automated workspace, so INFO would be noise.

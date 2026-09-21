@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.domain.AnnotationQueueAutomationService;
-import com.comet.opik.domain.AnnotationQueueRoutingBufferService;
+import com.comet.opik.domain.AnnotationQueueRoutingPublisher;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TestIdGeneratorFactory;
@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * Covers the guards, and above all what they let through: the listener is the feature's only volume
- * control, so a guard that stops working means every score event in the deployment reaches the buffer.
+ * control, so a guard that stops working means every score event in the deployment reaches the stream.
  *
  * <p>The listener subscribes and returns, so anything past the guards happens on another thread. Every
  * assertion here is timed for that reason: one that should see work waits for it, and one that should see
@@ -52,7 +52,7 @@ class AnnotationQueueRoutingListenerTest {
     private AnnotationQueueAutomationService automationService;
 
     @Mock
-    private AnnotationQueueRoutingBufferService bufferService;
+    private AnnotationQueueRoutingPublisher publisher;
 
     @Mock
     private AnnotationQueueRoutingConfig config;
@@ -62,8 +62,8 @@ class AnnotationQueueRoutingListenerTest {
     @BeforeEach
     void setUp() {
         when(config.isEnabled()).thenReturn(true);
-        when(bufferService.record(anyString(), anyString(), any(), any(), any())).thenReturn(Mono.empty());
-        listener = new AnnotationQueueRoutingListener(automationService, bufferService, config);
+        when(publisher.enqueue(anyString(), anyString(), any(), any(), any())).thenReturn(Mono.empty());
+        listener = new AnnotationQueueRoutingListener(automationService, publisher, config);
     }
 
     private FeedbackScoresCreated event(EntityType entityType, UUID projectId, Set<UUID> entityIds,
@@ -72,11 +72,11 @@ class AnnotationQueueRoutingListenerTest {
     }
 
     @Nested
-    @DisplayName("Recorded")
-    class Recorded {
+    @DisplayName("Published")
+    class Published {
 
         @Test
-        void recordsThroughTheProjectGuardWhenTheEventNamesAProject() {
+        void publishesThroughTheProjectGuardWhenTheEventNamesAProject() {
             UUID projectId = ID_GENERATOR.generateId();
             UUID traceId = ID_GENERATOR.generateId();
             when(automationService.hasEnabledAutomation(WORKSPACE_ID, projectId, AnnotationQueue.AnnotationScope.TRACE))
@@ -85,12 +85,12 @@ class AnnotationQueueRoutingListenerTest {
             listener.onFeedbackScoresCreated(
                     event(EntityType.TRACE, projectId, Set.of(traceId), Set.of("relevance")));
 
-            verify(bufferService, timeout(2_000)).record(WORKSPACE_ID, USER_NAME,
+            verify(publisher, timeout(2_000)).enqueue(WORKSPACE_ID, USER_NAME,
                     AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId), Set.of("relevance"));
         }
 
         @Test
-        void recordsThroughTheWorkspaceGuardWhenTheEventNamesNoProject() {
+        void publishesThroughTheWorkspaceGuardWhenTheEventNamesNoProject() {
             // The trace batch path cannot name a project, because one batch may span several.
             UUID traceId = ID_GENERATOR.generateId();
             when(automationService.hasEnabledAutomation(WORKSPACE_ID, AnnotationQueue.AnnotationScope.TRACE))
@@ -98,13 +98,13 @@ class AnnotationQueueRoutingListenerTest {
 
             listener.onFeedbackScoresCreated(event(EntityType.TRACE, null, Set.of(traceId), Set.of()));
 
-            verify(bufferService, timeout(2_000)).record(WORKSPACE_ID, USER_NAME,
+            verify(publisher, timeout(2_000)).enqueue(WORKSPACE_ID, USER_NAME,
                     AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId), Set.of());
             verify(automationService, never()).hasEnabledAutomation(anyString(), any(UUID.class), any());
         }
 
         @Test
-        void recordsThreadsUnderTheThreadScope() {
+        void publishesThreadsUnderTheThreadScope() {
             UUID projectId = ID_GENERATOR.generateId();
             UUID threadId = ID_GENERATOR.generateId();
             when(automationService.hasEnabledAutomation(WORKSPACE_ID, projectId,
@@ -113,7 +113,7 @@ class AnnotationQueueRoutingListenerTest {
             listener.onFeedbackScoresCreated(
                     event(EntityType.THREAD, projectId, Set.of(threadId), Set.of("moderation")));
 
-            verify(bufferService, timeout(2_000)).record(WORKSPACE_ID, USER_NAME,
+            verify(publisher, timeout(2_000)).enqueue(WORKSPACE_ID, USER_NAME,
                     AnnotationQueue.AnnotationScope.THREAD, Set.of(threadId), Set.of("moderation"));
         }
     }
@@ -123,7 +123,7 @@ class AnnotationQueueRoutingListenerTest {
     class Skipped {
 
         @Test
-        void recordsNothingWhenRoutingIsDisabled() {
+        void publishesNothingWhenRoutingIsDisabled() {
             // The guard below is a database round trip on the busiest event in the system, so a disabled
             // feature must not reach it either.
             when(config.isEnabled()).thenReturn(false);
@@ -135,7 +135,7 @@ class AnnotationQueueRoutingListenerTest {
         }
 
         @Test
-        void recordsNothingForSpans() {
+        void publishesNothingForSpans() {
             listener.onFeedbackScoresCreated(event(EntityType.SPAN, ID_GENERATOR.generateId(),
                     Set.of(ID_GENERATOR.generateId()), Set.of()));
 
@@ -143,7 +143,7 @@ class AnnotationQueueRoutingListenerTest {
         }
 
         @Test
-        void recordsNothingWhenTheEventCarriesNoEntities() {
+        void publishesNothingWhenTheEventCarriesNoEntities() {
             listener.onFeedbackScoresCreated(
                     event(EntityType.TRACE, ID_GENERATOR.generateId(), Set.of(), Set.of()));
 
@@ -151,7 +151,7 @@ class AnnotationQueueRoutingListenerTest {
         }
 
         @Test
-        void recordsNothingWhenNoAutomationIsEnabled() {
+        void publishesNothingWhenNoAutomationIsEnabled() {
             UUID projectId = ID_GENERATOR.generateId();
             when(automationService.hasEnabledAutomation(WORKSPACE_ID, projectId, AnnotationQueue.AnnotationScope.TRACE))
                     .thenReturn(false);
@@ -162,7 +162,7 @@ class AnnotationQueueRoutingListenerTest {
             // Wait for the lookup itself, so "never recorded" is a real assertion rather than a race won.
             verify(automationService, timeout(2_000)).hasEnabledAutomation(WORKSPACE_ID, projectId,
                     AnnotationQueue.AnnotationScope.TRACE);
-            verify(bufferService, never()).record(anyString(), anyString(), any(), any(), any());
+            verify(publisher, never()).enqueue(anyString(), anyString(), any(), any(), any());
         }
 
         /**
@@ -173,7 +173,7 @@ class AnnotationQueueRoutingListenerTest {
             verify(automationService, after(400).never()).hasEnabledAutomation(anyString(), any(UUID.class),
                     any());
             verify(automationService, never()).hasEnabledAutomation(anyString(), any());
-            verify(bufferService, never()).record(anyString(), anyString(), any(), any(), any());
+            verify(publisher, never()).enqueue(anyString(), anyString(), any(), any(), any());
         }
     }
 }

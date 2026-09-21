@@ -20,7 +20,8 @@ import java.util.concurrent.TimeUnit;
  * Stream carrying annotation queue routing work (OPIK-6303).
  *
  * <p>The event listener only guards and publishes; everything that reads, decides or writes happens in the
- * consumer. The stream is what makes that work survive a replica restart — there is no backfill or manual
+ * consumer, which folds a batch by entity before doing any of it, so repeated scores on one entity cost
+ * one evaluation rather than one each. The stream is what makes that work survive a replica restart — there is no backfill or manual
  * re-run to recover a dropped event, so an in-memory handoff would lose a trace from a review queue
  * permanently and silently.
  *
@@ -38,36 +39,6 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
 
     @Valid @NotBlank @JsonProperty
     private String streamName;
-
-    /**
-     * How long an entity waits after its first score before it is evaluated. Later scores on the same
-     * entity land inside the window and collapse into the same evaluation instead of repeating it.
-     */
-    @Valid @JsonProperty
-    @NotNull @MinDuration(value = 500, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 5, unit = TimeUnit.MINUTES)
-    private Duration debounceDelay;
-
-    /** How often the flush job looks for entities whose window has elapsed. */
-    @Valid @JsonProperty
-    @NotNull @MinDuration(value = 500, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
-    private Duration jobInterval;
-
-    /** Entities taken per flush; also the cap on how many entity ids one published message can carry. */
-    @Valid @JsonProperty
-    @Min(1) @Max(10000) private int jobBatchSize;
-
-    // Kept at or below jobInterval: a lease longer than the cycle would make the next tick a no-op.
-    @Valid @JsonProperty
-    @NotNull @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    @MaxDuration(value = 1, unit = TimeUnit.MINUTES)
-    private Duration jobLockTime;
-
-    @Valid @JsonProperty
-    @NotNull @MinDuration(value = 100, unit = TimeUnit.MILLISECONDS)
-    @MaxDuration(value = 5, unit = TimeUnit.SECONDS)
-    private Duration jobLockWaitTime;
 
     @Valid @NotBlank @JsonProperty
     private String consumerGroupName;
