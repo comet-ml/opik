@@ -32,6 +32,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -310,6 +312,43 @@ class BulkInsertV2ClientIntegrationTest {
                         + "AND entity_id = '%s' AND name = '%s'").formatted(WORKSPACE_ID, trace.id(), name),
                 row -> row.get("row_count", Long.class));
         assertThat(authored).isZero();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   "})
+    @DisplayName("a blank author still selects the authored table, normalized to empty")
+    void blankAuthorStillTakesTheAuthoredTable(String blankAuthor) {
+        // null and blank are not the same input here. null selects feedback_scores and drops two
+        // columns; blank is a present author that normalizes to "", so it stays on the authored table.
+        // The R2DBC template agrees -- StringTemplate's <if(author)> is true for "" and for whitespace,
+        // matching this path's author != null -- so the two writers pick the same table for this input.
+        var projectName = "blank-author-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+        var trace = newTraceBuilder().projectName(projectName).build();
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+
+        var name = randomName();
+        var score = newScore(trace.id(), projectName, name).toBuilder()
+                .projectId(projectId)
+                .build();
+
+        feedbackScoreDAO.scoreBatchOf(EntityType.TRACE, List.of(score), blankAuthor)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        var storedAuthor = queryOne(
+                ("SELECT author FROM authored_feedback_scores WHERE workspace_id = '%s' AND entity_id = '%s' "
+                        + "AND name = '%s' LIMIT 1").formatted(WORKSPACE_ID, trace.id(), name),
+                row -> row.get("author", String.class));
+        assertThat(storedAuthor).isEmpty();
+
+        Long unauthored = queryOne(
+                ("SELECT count() AS row_count FROM feedback_scores WHERE workspace_id = '%s' "
+                        + "AND entity_id = '%s' AND name = '%s'").formatted(WORKSPACE_ID, trace.id(), name),
+                row -> row.get("row_count", Long.class));
+        assertThat(unauthored).isZero();
     }
 
     @Test
