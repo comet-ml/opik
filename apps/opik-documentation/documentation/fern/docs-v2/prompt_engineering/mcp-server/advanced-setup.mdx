@@ -1,0 +1,349 @@
+---
+headline: MCP server advanced setup
+og:description: Configure the Opik MCP server by hand for any client, check what each client points at, and choose between the hosted and local server.
+og:site_name: Opik Documentation
+og:title: Opik MCP server advanced setup
+title: Advanced setup
+---
+
+`uvx opik mcp configure` covers the five clients it detects. This page is for
+everything else: writing the config yourself, checking what each client points
+at, and the difference between the hosted and local server.
+
+## Check what's configured
+
+Each AI client keeps its own copy of the MCP configuration, and it isn't updated
+when your Opik configuration changes. To see what every detected client points at:
+
+```bash
+uvx opik mcp status
+```
+
+```text
+  Claude Code
+    Config        ~/.claude.json
+    Connection    Hosted (HTTP + OAuth)
+    Reports to    https://www.comet.com/opik/api/v1/mcp
+    Status        ✓ in sync with your Opik configuration
+```
+
+A client flagged `✗ OUT OF SYNC` has drifted from your Opik configuration —
+re-run `uvx opik mcp configure` to fix it.
+
+<Warning>
+A client keeps its MCP connection for the lifetime of its process. After changing
+your Opik configuration or re-running setup, **restart your AI client** so it
+reconnects.
+</Warning>
+
+## Hosted or local server
+
+`uvx opik mcp configure` picks the right one automatically. The difference
+matters when you configure by hand:
+
+| | Hosted server | Local server |
+|---|---|---|
+| Available on | Opik Cloud, and any deployment that provides it | Everywhere, and with `--local-server` |
+| Transport | HTTP at `https://www.comet.com/opik/api/v1/mcp` | `uvx opik-mcp` over stdio |
+| Credentials | Browser sign-in (OAuth); **no API key stored** | `OPIK_API_KEY` in the client's config |
+| Workspace | Chosen at sign-in | Written into the client's config |
+| Needs `uv` | Only for the setup command | Yes, every run |
+
+<Warning>
+On the local server your workspace is written into the client's config, so it has
+to be the right one. If your Opik configuration doesn't name a workspace and your
+account has more than one, setup **stops** rather than guessing — otherwise your
+agent would read real traces from the wrong workspace and report them
+confidently. Run `uvx opik configure`, pick a workspace, then re-run
+`uvx opik mcp configure`.
+</Warning>
+
+## Set it up by hand
+
+On Opik Cloud, any MCP client can take the hosted server in one line:
+
+```bash
+npx add-mcp https://www.comet.com/opik/api/v1/mcp --name opik-mcp
+```
+
+[`add-mcp`](https://github.com/neon-solutions/add-mcp) writes the URL into
+Windsurf, Zed, Gemini CLI, Claude Desktop, Goose, Cline, Kiro and a dozen more.
+The client has to support browser sign-in (OAuth) for remote MCP servers; without
+it the hosted endpoint answers 401.
+
+For the skill pack on a client the CLI doesn't cover, the community
+[`skills`](https://github.com/vercel-labs/skills) CLI knows the skill directories
+for 76+ agents (needs Node.js):
+
+```bash
+npx skills add comet-ml/opik-skills
+```
+
+### Hosted server
+
+Every client below asks for the same URL:
+
+```text title="Remote MCP server URL"
+https://www.comet.com/opik/api/v1/mcp
+```
+
+On a self-hosted deployment this is your own Opik API base plus `/v1/mcp`, and
+the deployment has to run the MCP OAuth authorization server — it is off by
+default. See [MCP OAuth](/self-host/configure/mcp-oauth) for the flags. Where it
+is off, the endpoint has no sign-in routes at all, so use the local server
+instead.
+
+<Tabs>
+    <Tab title="Claude Code">
+
+    ```bash
+    claude mcp add --transport http opik-mcp https://www.comet.com/opik/api/v1/mcp
+    ```
+
+    Or edit `~/.claude.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "opik-mcp": {
+          "type": "http",
+          "url": "https://www.comet.com/opik/api/v1/mcp"
+        }
+      }
+    }
+    ```
+
+    Restart Claude Code, complete the browser sign-in, then ask
+    **"list my Opik projects"**.
+
+    </Tab>
+    <Tab title="Cursor">
+
+    Edit `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
+
+    ```json
+    {
+      "mcpServers": {
+        "opik-mcp": {
+          "type": "http",
+          "url": "https://www.comet.com/opik/api/v1/mcp"
+        }
+      }
+    }
+    ```
+
+    Reload Cursor and complete the browser sign-in. MCP needs a Cursor Pro plan
+    or higher.
+
+    </Tab>
+    <Tab title="VS Code Copilot">
+
+    Create or open `.vscode/mcp.json` in your workspace:
+
+    ```json
+    {
+      "servers": {
+        "opik-mcp": {
+          "type": "http",
+          "url": "https://www.comet.com/opik/api/v1/mcp"
+        }
+      }
+    }
+    ```
+
+    Reload the window and complete the browser sign-in.
+
+    </Tab>
+    <Tab title="Codex">
+
+    ```bash
+    codex mcp add opik-mcp --url https://www.comet.com/opik/api/v1/mcp
+    ```
+
+    Confirm with `codex mcp get opik-mcp`, start a new session and complete the
+    browser sign-in.
+
+    </Tab>
+    <Tab title="Claude Desktop">
+
+    Claude calls a remote MCP server a **custom connector** and adds it through
+    the UI rather than a config file.
+
+    - Pro or Max: **Customize → Connectors → + → Add custom connector**, then
+      paste the URL. Leave Advanced settings empty.
+    - Team or Enterprise: an owner adds it in
+      **Organization settings → Connectors → Add → Custom → Web**.
+
+    Until you finish signing in, the connector lists only the `authenticate` and
+    `complete_authentication` tools. The rest appear afterwards.
+
+    <Note>
+    Claude reaches the server from Anthropic's cloud, not from your machine, so a
+    self-hosted deployment has to be reachable from the public internet. One on
+    `localhost` or behind a VPN is out of reach — use the local server instead.
+    </Note>
+
+    </Tab>
+</Tabs>
+
+### Local server
+
+The local server runs on demand via `uvx opik-mcp`, with your credentials in the
+client's `env` block.
+
+<Tip>
+`OPIK_WORKSPACE` is **optional** — omit it and the server uses the `default`
+workspace, which is correct for local and OSS installs. Set it only if you
+connect to a named cloud workspace.
+</Tip>
+
+<Tabs>
+    <Tab title="Claude Code">
+
+    ```bash
+    claude mcp add --transport stdio opik-mcp \
+      --env OPIK_API_KEY=<your-key> \
+      --env OPIK_WORKSPACE=<your-workspace> \
+      -- uvx opik-mcp
+    ```
+
+    Or edit `~/.claude.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "opik-mcp": {
+          "type": "stdio",
+          "command": "uvx",
+          "args": ["opik-mcp"],
+          "env": {
+            "OPIK_API_KEY": "<your-key>",
+            "OPIK_WORKSPACE": "<your-workspace>"
+          }
+        }
+      }
+    }
+    ```
+
+    Restart Claude Code and verify with `/mcp`.
+
+    </Tab>
+    <Tab title="Cursor">
+
+    Edit `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
+
+    ```json
+    {
+      "mcpServers": {
+        "opik-mcp": {
+          "type": "stdio",
+          "command": "uvx",
+          "args": ["opik-mcp"],
+          "env": {
+            "OPIK_API_KEY": "<your-key>",
+            "OPIK_WORKSPACE": "<your-workspace>"
+          }
+        }
+      }
+    }
+    ```
+
+    Reload Cursor; the green dot next to `opik-mcp` confirms the connection.
+
+    </Tab>
+    <Tab title="VS Code Copilot">
+
+    Create or open `.vscode/mcp.json`, or run the
+    **MCP: Open User Configuration** command to add it globally:
+
+    ```json
+    {
+      "servers": {
+        "opik-mcp": {
+          "type": "stdio",
+          "command": "uvx",
+          "args": ["opik-mcp"],
+          "env": {
+            "OPIK_API_KEY": "<your-key>",
+            "OPIK_WORKSPACE": "<your-workspace>"
+          }
+        }
+      }
+    }
+    ```
+
+    Reload the window. The Copilot Chat **MCP** indicator shows `opik-mcp` once
+    the server is reachable.
+
+    </Tab>
+    <Tab title="Codex">
+
+    ```bash
+    codex mcp add opik-mcp \
+      --env OPIK_API_KEY=<your-key> \
+      --env OPIK_WORKSPACE=<your-workspace> \
+      -- uvx opik-mcp
+    ```
+
+    Or add an `[mcp_servers.opik-mcp]` table to `~/.codex/config.toml`:
+
+    ```toml
+    [mcp_servers.opik-mcp]
+    command = "uvx"
+    args = ["opik-mcp"]
+
+    [mcp_servers.opik-mcp.env]
+    OPIK_API_KEY = "<your-key>"
+    OPIK_WORKSPACE = "<your-workspace>"
+    ```
+
+    <Note>
+    `uvx opik mcp configure --ai-client codex` drives the `codex` CLI rather than
+    editing `config.toml`, so your comments and formatting are left alone.
+    </Note>
+
+    </Tab>
+    <Tab title="opencode">
+
+    Edit `~/.config/opencode/opencode.json` (or the file in
+    `$OPENCODE_CONFIG_DIR`). opencode uses its own vocabulary: `local` rather than
+    `stdio`, one `command` list, and `environment` rather than `env`:
+
+    ```json
+    {
+      "mcp": {
+        "opik-mcp": {
+          "type": "local",
+          "command": ["uvx", "opik-mcp"],
+          "environment": {
+            "OPIK_API_KEY": "<your-key>",
+            "OPIK_WORKSPACE": "<your-workspace>"
+          },
+          "enabled": true
+        }
+      }
+    }
+    ```
+
+    </Tab>
+</Tabs>
+
+<Tip>
+**Self-hosted Opik.** Add `COMET_URL_OVERRIDE` to the `env` block, and `OPIK_URL`
+if Opik lives at a non-default path.
+</Tip>
+
+## From a script or CI
+
+Setup writes into your AI client's own configuration, so a run with no terminal
+writes nothing unless you name the client:
+
+```bash
+uvx opik mcp configure --ai-client cursor --skills
+```
+
+Credentials come from `~/.opik.config`, or from `OPIK_API_KEY` and
+`OPIK_WORKSPACE` already in the environment, such as a CI secret — do not paste
+the key into the command line. `--ai-client` takes `claude-code`, `cursor`,
+`vscode`, `codex`, `opencode`, or `all`; repeat it for several. `--skills`
+installs the skill pack without asking, `--no-skills` skips it.

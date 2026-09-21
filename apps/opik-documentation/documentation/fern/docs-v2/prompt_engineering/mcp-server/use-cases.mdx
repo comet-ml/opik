@@ -1,0 +1,103 @@
+---
+headline: MCP server use cases
+og:description: Prompts to paste into your coding assistant once it is connected to Opik — instrumenting a project, debugging a trace, triaging production, and building evaluations.
+og:site_name: Opik Documentation
+og:title: Opik MCP server use cases
+title: Use cases
+---
+
+Once your assistant is [connected](/mcp-server), these are the things worth
+asking it for. Paste any prompt as written — your assistant works out which tools
+and skills it needs.
+
+<Tip>
+Start with **Instrument this project**. It exercises the whole loop — write code,
+run it, read the trace back — so if it works, everything is wired up correctly.
+</Tip>
+
+## Add tracing to your project
+
+Your assistant detects the language and framework, adds the decorators or
+integration, wires up config, then runs the app and reads the trace back to prove
+it landed.
+
+```text title="Instrument this project, end to end"
+Add Opik tracing to this project, then run it and show me the trace you created.
+```
+
+```text title="Trace one entry point"
+Add Opik tracing to the request handler in this file and mark it as the entry point.
+```
+
+```text title="Check where this repo is logging"
+List my Opik projects and tell me which one this repo is logging to.
+```
+
+## Debug a failing trace
+
+Your assistant reads the full span tree, the errors and the feedback scores, so
+you never paste a screenshot into chat.
+
+```text title="Explain one trace"
+Read this Opik trace and tell me why it failed: <paste the trace URL>
+```
+
+```text title="Find what's slow or failing"
+Find the failing and slowest traces from the last 24 hours and tell me what they
+have in common.
+```
+
+```text title="Score what you found"
+Score the three worst traces 0.2 with the reason you just gave me.
+```
+
+## Triage production
+
+[Diagnostics](/tracing/diagnostics) groups repeated failures into issues with a
+root cause and the traces that prove it. Your assistant can read those issues,
+fix the code, and close them.
+
+```text title="Work the queue"
+Show me the open Diagnostics issues in Opik, then fix the one hitting the most traces.
+```
+
+```text title="Check a single issue"
+Read this Diagnostics issue, show me two example traces, and tell me whether the
+suggested fix is right.
+```
+
+## Build and run evaluations
+
+Real traces make better test cases than invented ones, because they are inputs
+your app actually received.
+
+```text title="Turn real traces into a test suite"
+Build an Opik test suite from my recent traces, then run it and show me the scores.
+```
+
+```text title="Compare two prompts"
+Save my current prompt as a new version in Opik, run the suite against both
+versions, and tell me which one wins.
+```
+
+```text title="Close the loop on a fix"
+Re-run the test suite now that you've changed the code, and compare the scores to
+the last run.
+```
+
+## What a session looks like
+
+A typical investigative loop, using Claude Code:
+
+> **You:** Why did the experiment "gpt-4o-rerank-v3" regress on factuality?
+>
+> **Claude:** *(reads the failing traces)* Three traces failed because the reranker
+> dropped the system message. The remaining 12 traces scored above 0.8…
+>
+> **You:** Score the bottom 3 traces 0.2 with reason "dropped system message".
+>
+> **Claude:** *(writes the scores)* Done — three scores recorded on traces
+> `<id-1>`, `<id-2>`, `<id-3>`.
+
+From then on your assistant can check its own work against real traces every time
+you change something.

@@ -10,9 +10,45 @@ Your coding assistant already writes the code. Connect it to Opik and it can als
 see what that code does when it runs: read the traces, find the ones that failed,
 score them, and fix the code against real data instead of your description of it.
 
-## What you can ask for
+## Install in 1 minute
 
-Things you can ask for and get in one turn, without leaving your editor:
+One command connects your assistant to your traces and teaches it how to create
+them in the first place. It needs [`uv`](https://docs.astral.sh/uv/) and no Opik
+SDK:
+
+```bash
+uvx opik mcp configure
+```
+
+It detects your AI client — Claude Code, Cursor, VS Code Copilot, Codex or
+opencode — picks the right server for your Opik deployment, installs the Opik
+skill pack, and checks that what it wrote works.
+
+Then **start a new session**: assistants read their configuration at startup, so
+a newly added server needs a fresh one. On Opik Cloud, complete the browser
+sign-in when your client prompts for it, then ask **"list my Opik projects"** to
+confirm.
+
+<Tip>
+No `uv`? Install it with `curl -LsSf https://astral.sh/uv/install.sh | sh` on
+macOS and Linux, or
+`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+on Windows, then open a new terminal.
+</Tip>
+
+Cursor and VS Code can also be set up in one click, and any other coding agent
+with a prompt you paste into it:
+
+<div className="mcp-clients no-external-icon">
+  <a className="mcp-client" href="cursor:////anysphere.cursor-deeplink/mcp/install?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0=" title="Open Cursor and add the Opik MCP server (Cursor Pro or higher; MCP is not available on the Hobby plan)"><img src="/img/mcp/cursor.svg" alt="" /><span>Cursor</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
+  <a className="mcp-client" href="https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D" target="_blank" rel="noreferrer" title="Open VS Code and add the Opik MCP server"><img src="/img/mcp/vscode.svg" alt="" /><span>VS Code</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
+  <a className="mcp-client" href="#" data-opik-copy="Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server). Detect the coding agents installed here and which one you are; ask me 'only you, or all of them?' and wait. For each chosen agent, add the MCP server `opik-mcp` (Streamable HTTP, https://www.comet.com/opik/api/v1/mcp, no credentials) to its user-level config: use the client's own command with user scope where it has one (`claude mcp add --transport http --scope user ...`, `codex mcp add ... --url ...`), otherwise `npx add-mcp <url> --name opik-mcp -g -a <agent>`. Skip an agent that already has a server with that URL. Install the skills the same way: `npx skills add comet-ml/opik-skills -g -y -a <agent>`. Never print secrets you see in config files. Verify in the agent you are: reload MCP servers or ask me to, complete the browser sign-in if prompted, then call the Opik `list` tool with entity_type project and show the result; if the server only loads in a new session, say so and tell me what to ask you next. Report per agent: file, entry added, verified or pending sign-in. Change nothing else." title="Copies an installation prompt. Paste it into any coding agent."><span>Install prompt</span><Icon icon="fa-regular fa-copy" /><Icon icon="fa-solid fa-check" /><Icon icon="fa-solid fa-xmark" /></a>
+</div>
+
+Writing the config yourself, or the CLI didn't detect your client?
+[Advanced setup](/mcp-server/advanced-setup) has the exact block for each one.
+
+## What you can do with it
 
 <CardGroup cols={2}>
   <Card title="Instrument this project" icon="fa-solid fa-wand-magic-sparkles">
@@ -24,8 +60,8 @@ Things you can ask for and get in one turn, without leaving your editor:
     instead of you pasting screenshots into chat.
   </Card>
   <Card title="Triage what's breaking" icon="fa-solid fa-triangle-exclamation">
-    It pulls open [Diagnostics](/tracing/diagnostics) issues with their root cause and
-    affected traces, fixes the code, and resolves them.
+    It pulls open [Diagnostics](/tracing/diagnostics) issues with their root cause
+    and affected traces, fixes the code, and resolves them.
   </Card>
   <Card title="Build a test suite from real traces" icon="fa-solid fa-vial">
     It filters your traces, turns the interesting ones into suite items, and runs
@@ -33,129 +69,21 @@ Things you can ask for and get in one turn, without leaving your editor:
   </Card>
 </CardGroup>
 
-## Set it up
+[Use cases](/mcp-server/use-cases) has the prompts to paste for each of these.
 
-One command connects your assistant to your traces and teaches it how to create
-them in the first place. It needs [`uv`](https://docs.astral.sh/uv/) and no Opik
-SDK:
-
-<Steps>
-  <Step title="Install uv, if you don't have it">
-    ```bash title="macOS / Linux"
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-
-    ```powershell title="Windows"
-    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-    ```
-
-    Open a new terminal afterwards so `uvx` is on your `PATH`.
-  </Step>
-  <Step title="Run the setup command">
-    ```bash
-    uvx opik mcp configure
-    ```
-
-    It detects your AI client (Claude Code, Cursor, VS Code Copilot, Codex,
-    opencode), picks the right server for your Opik deployment, configures it,
-    installs the Opik skill pack, and checks that what it just wrote works.
-  </Step>
-  <Step title="Start a new session">
-    Assistants read their configuration at startup, so **start a new session**
-    before trying the prompts below. On Opik Cloud, complete the browser sign-in
-    when your client prompts for it, then ask **"list my Opik projects"** to
-    confirm the connection.
-  </Step>
-</Steps>
-
-Or set up Cursor and VS Code in one click, and any other coding agent with a
-prompt you paste into it. All three use the Opik Cloud hosted server and sign in
-through the browser:
-
-<div className="mcp-clients no-external-icon">
-  <a className="mcp-client" href="cursor:////anysphere.cursor-deeplink/mcp/install?name=opik-mcp&config=eyJ1cmwiOiJodHRwczovL3d3dy5jb21ldC5jb20vb3Bpay9hcGkvdjEvbWNwIn0=" title="Open Cursor and add the Opik MCP server (Cursor Pro or higher; MCP is not available on the Hobby plan)"><img src="/img/mcp/cursor.svg" alt="" /><span>Cursor</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
-  <a className="mcp-client" href="https://insiders.vscode.dev/redirect/mcp/install?name=opik-mcp&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fwww.comet.com%2Fopik%2Fapi%2Fv1%2Fmcp%22%7D" target="_blank" rel="noreferrer" title="Open VS Code and add the Opik MCP server"><img src="/img/mcp/vscode.svg" alt="" /><span>VS Code</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></a>
-  <a className="mcp-client" href="#" data-opik-copy="Connect my coding agents to Opik (https://www.comet.com/docs/opik/mcp-server). Detect the coding agents installed here and which one you are; ask me 'only you, or all of them?' and wait. For each chosen agent, add the MCP server `opik-mcp` (Streamable HTTP, https://www.comet.com/opik/api/v1/mcp, no credentials) to its user-level config: use the client's own command with user scope where it has one (`claude mcp add --transport http --scope user ...`, `codex mcp add ... --url ...`), otherwise `npx add-mcp <url> --name opik-mcp -g -a <agent>`. Skip an agent that already has a server with that URL. Install the skills the same way: `npx skills add comet-ml/opik-skills -g -y -a <agent>`. Never print secrets you see in config files. Verify in the agent you are: reload MCP servers or ask me to, complete the browser sign-in if prompted, then call the Opik `list` tool with entity_type project and show the result; if the server only loads in a new session, say so and tell me what to ask you next. Report per agent: file, entry added, verified or pending sign-in. Change nothing else." title="Copies an installation prompt. Paste it into any coding agent."><span>Install prompt</span><Icon icon="fa-regular fa-copy" /><Icon icon="fa-solid fa-check" /><Icon icon="fa-solid fa-xmark" /></a>
-</div>
-
-The Cursor and VS Code buttons add the server only. The copied prompt has your
-agent detect the coding agents on your machine, ask which ones to set up, install
-the server and the skills for them, and verify with a real call.
-
-## Try asking your agent
-
-Paste any of these into your assistant. Start with the first — it exercises the
-whole loop, so if it works, everything is wired up.
-
-```text title="Instrument this project, end to end"
-Add Opik tracing to this project, then run it and show me the trace you created.
-```
-
-```text title="Triage production"
-Show me the open Diagnostics issues in Opik, then fix the one hitting the most traces.
-```
-
-```text title="Find what's slow or failing"
-Find the failing and slowest traces from the last 24 hours and tell me what they
-have in common.
-```
-
-```text title="Turn real traces into a test suite"
-Build an Opik test suite from my recent traces, then run it and show me the scores.
-```
-
-From then on your assistant can check its own work against real traces every time
-you change something. A typical investigative loop, using Claude Code:
-
-> **You:** Why did the experiment "gpt-4o-rerank-v3" regress on factuality?
->
-> **Claude:** *(reads the failing traces)* Three traces failed because the reranker
-> dropped the system message. The remaining 12 traces scored above 0.8…
->
-> **You:** Score the bottom 3 traces 0.2 with reason "dropped system message".
->
-> **Claude:** *(writes the scores)* Done — three scores recorded on traces
-> `<id-1>`, `<id-2>`, `<id-3>`.
-
-## Common questions
-
-<AccordionGroup>
-  <Accordion title="Do I need the Opik SDK, Python or Node?">
-    No. `uvx opik mcp configure` needs only `uv`. The Cursor and VS Code buttons
-    need nothing. The language of your project does not matter.
-  </Accordion>
-  <Accordion title="My assistant doesn't see Opik, or shows no tools">
-    Clients read MCP servers and skills when a session starts, so start a new one.
-    If it still isn't there, run `uvx opik mcp status` to see what each client on
-    your machine points at, then re-run `uvx opik mcp configure`.
-  </Accordion>
-  <Accordion title="Is it safe to let an agent write to my workspace?">
-    The agent acts with your permissions and cannot exceed them. One tool,
-    `write`, can score, comment, save prompt versions and create traces, test
-    suites and experiments; everything else is read-only, and **nothing can be
-    deleted** — there is no delete operation at all. Keep your client's tool
-    approval on for writes. Trace content is text your users wrote, so treat
-    anything the agent reads from a trace as data, not as instructions.
-  </Accordion>
-  <Accordion title="My client is not in the list. Can I still use it?">
-    Yes. The CLI covers Claude Code, Cursor, VS Code Copilot, Codex and opencode;
-    any other client can be pointed at the server by hand. See
-    [Manual setup](/mcp-server-configuration#manual-setup).
-  </Accordion>
-  <Accordion title="How do I update?">
-    `uvx opik@latest mcp configure`. It re-runs setup for each client and refreshes
-    the skill pack. Start a new session afterwards.
-  </Accordion>
-</AccordionGroup>
-
-## Next steps
+## Go deeper
 
 <CardGroup cols={2}>
-  <Card title="Configuration & troubleshooting" icon="fa-regular fa-sliders" href="/mcp-server-configuration">
-    Status checks, hosted vs. local server, self-hosted Opik, per-client manual
-    setup, CI, and troubleshooting.
+  <Card title="Use cases" icon="fa-regular fa-lightbulb" href="/mcp-server/use-cases">
+    Prompts to paste, grouped by what you're trying to get done.
   </Card>
-  <Card title="Coding assistants" icon="fa-regular fa-robot" href="/integrations/coding-agents">
-    What else Opik offers for Claude Code, Cursor, Copilot and Codex.
+  <Card title="MCP tools reference" icon="fa-regular fa-wrench" href="/mcp-server/tools">
+    Every tool the server exposes, what it can read and write, and what it can't.
+  </Card>
+  <Card title="Advanced setup" icon="fa-regular fa-sliders" href="/mcp-server/advanced-setup">
+    Per-client config by hand, hosted vs. local server, workspaces, CI.
+  </Card>
+  <Card title="FAQ and troubleshooting" icon="fa-regular fa-circle-question" href="/mcp-server/faq">
+    It isn't connecting, or it's showing data you don't expect.
   </Card>
 </CardGroup>
