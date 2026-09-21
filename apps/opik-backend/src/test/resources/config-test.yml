@@ -1144,9 +1144,12 @@ environment:
   maxPerWorkspace: 5
 
 annotationQueueRouting:
-  # Default: false in production, true here so the tests exercise the pipeline
-  # Description: When false, score events are never published and nothing is routed automatically
-  enabled: true
+  # Default: false
+  # Description: When false, score events are never published and nothing is routed automatically.
+  #   Off here too, matching production: no test reads this block. The routing tests build their own
+  #   config, so leaving it on only made the listener run an automation lookup for every feedback score
+  #   written by every other integration test in the suite.
+  enabled: false
   # Default: annotation-queue-routing
   # Description: Redis stream name for queued annotation queue routing work
   streamName: 'annotation-queue-routing'
