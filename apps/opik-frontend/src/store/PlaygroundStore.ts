@@ -16,6 +16,7 @@ import lodashSet from "lodash/set";
 interface PlaygroundOutput {
   isLoading: boolean;
   value: string | null;
+  error?: string;
   stale: boolean;
   traceId?: string;
   selectedRuleIds?: string[] | null;
