@@ -63,8 +63,10 @@ const isPythonProxyError = (
 };
 
 export const pythonProxyErrorMessage = (detail: unknown): string =>
-  [detail, get(detail, "error"), get(detail, "detail")].find(isString) ??
-  "Python proxy error";
+  [detail, get(detail, "error"), get(detail, "detail")]
+    .filter(isString)
+    .map((value) => value.trim())
+    .find((value) => value !== "") ?? "Python proxy error";
 
 const isOpikError = (
   response: ChatCompletionResponse,
