@@ -277,7 +277,7 @@ areas:
       filter-traces:          { covered: true,  tier: t2-cuj }
       mcp-hint-on-trace-error: { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
       configure-columns:      { covered: false }
-      add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
+      add-trace-to-dataset:   { covered: true,  tier: t2-cuj, note: "AddToDatasetDialog, and the create-dataset-items-from-{traces,spans} endpoints behind it: field_mappings resolving a path, taking precedence over enrichment_options on a collision, being dropped when the path resolves to nothing, and being ignored for a TEST_SUITE dataset; plus the four validation rejections (blank name, blank path, uncompilable path, over the 100-entry cap) and that none of them writes. Driven through the dialog's Advanced mapping section for one trace — defaults, Preview, re-pointing a row through the JSON tree — and read back through the API" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details" }
       agent-graph-tab:        { covered: false }

@@ -1,4 +1,4 @@
-export { test, expect } from './export-comparison.fixture';
+export { test, expect } from './field-mapping-seed.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -166,4 +166,17 @@ export type {
   ExportComparisonRef,
   ExportComparisonFixtures,
 } from './export-comparison.fixture';
+export type {
+  FieldMappingSeedRef,
+  FieldMappingSeedFixtures,
+} from './field-mapping-seed.fixture';
+export {
+  FM_TRACE_INPUT,
+  FM_TRACE_OUTPUT,
+  FM_TRACE_METADATA,
+  FM_TRACE_TAGS,
+  FM_SPAN_INPUT,
+  FM_SPAN_OUTPUT,
+  FM_SPAN_MODEL,
+} from './field-mapping-seed.fixture';
 export type { ProjectRef } from '../core/backend';
