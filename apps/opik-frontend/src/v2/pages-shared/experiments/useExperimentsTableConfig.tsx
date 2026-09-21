@@ -13,6 +13,7 @@ import uniqBy from "lodash/uniqBy";
 
 import { Groups } from "@/types/groups";
 import {
+  COLUMN_PIN_ID,
   COLUMN_SELECT_ID,
   ColumnData,
   DynamicColumn,
@@ -44,6 +45,7 @@ import {
   generateActionsColumDef,
   generateDataRowCellDef,
   generateGroupedRowCellDef,
+  generatePinColumDef,
   generateSelectColumDef,
   getSharedShiftCheckboxClickHandler,
 } from "@/shared/DataTable/utils";
@@ -343,6 +345,7 @@ export const useExperimentsTableConfig = <
 
     const baseColumns = [
       firstColumn,
+      ...(hasGrouping ? [] : [generatePinColumDef<T>()]),
       ...groupColumns,
       ...regularColumns,
       ...scoresColumns,
@@ -393,7 +396,7 @@ export const useExperimentsTableConfig = <
       left:
         groupFieldNames.length > 0
           ? [COLUMN_NAME_ID, ...groupFieldNames]
-          : [COLUMN_SELECT_ID],
+          : [COLUMN_SELECT_ID, COLUMN_PIN_ID],
       right: [],
     } as ColumnPinningState;
   }, [groupFieldNames]);

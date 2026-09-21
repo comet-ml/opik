@@ -309,6 +309,7 @@
 
     --selection-bar: 237 68% 29%;
     --row-selected: 235 85% 97%;
+    --row-pinned: 30 63% 97%;
 
     --radius: 0.5rem;
 
@@ -581,6 +582,7 @@
 
     --selection-bar: 237 58% 39%;
     --row-selected: 0 0% 15%;
+    --row-pinned: 30 20% 13%;
   }
 
   /* CodeMirror cursor and selection fix for dark mode */
@@ -770,6 +772,10 @@
 
   .comet-table-row-active[data-row-active="true"] td {
     background: hsl(var(--primary-foreground));
+  }
+
+  .comet-table-row-active[data-row-pinned] td {
+    background: hsl(var(--row-pinned)) !important;
   }
 
   code,
