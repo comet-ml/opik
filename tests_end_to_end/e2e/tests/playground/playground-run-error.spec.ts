@@ -68,25 +68,32 @@ test.describe('Playground — failed run', { tag: ['@t2-cuj', '@area:playground'
       await sidebar.openFirstTrace();
     });
 
-    const failureText = await test.step('Verify the trace is marked as errored', async () => {
+    await test.step('Verify the trace is marked as errored', async () => {
       await expect(sidebar.errorCallout()).toBeVisible();
       await sidebar.expandErrorCallout();
-      // The channel label is ours, so it is assertable; the message is the backend's copy
-      // and is only ever compared against itself.
+      // The channel label is ours, so it is safe to pin; the message is the backend's copy.
       await expect(sidebar.errorCalloutBody()).toContainText(`exception_type: ${UNREACHABLE_EXCEPTION_TYPE}`);
-
-      const body = (await sidebar.errorCalloutBody().innerText()).trim();
-      const message = body.match(/message:\s*'([^']+)'/)?.[1];
-      expect(message, 'Expected the error block to carry a message').toBeTruthy();
-      return message as string;
     });
 
-    await test.step('Verify the same failure text is rendered as the run output', async () => {
+    const assistantText = await test.step('Verify the run output carries the failure text', async () => {
       await expect(sidebar.messagesTab()).toBeVisible();
       await sidebar.expectMessagesTabSelectedByDefault();
       await sidebar.clickMessagesTab();
       await expect(sidebar.messageRole('Assistant')).toBeVisible();
-      await expect(sidebar.messageBody('Assistant')).toContainText(failureText);
+
+      const text = (await sidebar.messageBody('Assistant').innerText()).trim();
+      expect(text, 'Expected the assistant turn to carry the failure text').not.toBe('');
+      return text;
+    });
+
+    await test.step('Verify the error block reports that same text', async () => {
+      const errorText = await sidebar.errorCalloutBody().innerText();
+      // Compared rather than pinned: the wording is the backend's. Both sides are
+      // whitespace-normalized because the error block line-folds long scalars, and the
+      // doubled apostrophes YAML uses to escape one are collapsed back.
+      const normalize = (value: string) =>
+        value.replace(/''/g, "'").replace(/\s+/g, ' ').trim();
+      expect(normalize(errorText)).toContain(normalize(assistantText));
     });
   });
 });
