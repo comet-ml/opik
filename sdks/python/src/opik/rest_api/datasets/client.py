@@ -444,6 +444,7 @@ class DatasetsClient:
         enrichment_options: SpanEnrichmentOptions,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
+        field_mappings: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -462,6 +463,9 @@ class DatasetsClient:
             Optional evaluators to apply to the created items
 
         execution_policy : typing.Optional[ExecutionPolicy]
+
+        field_mappings : typing.Optional[typing.Dict[str, str]]
+            Optional mapping of dataset item field name to a path into the span, e.g. 'input.input_text'. Takes precedence over the fields produced by enrichment_options. Ignored for test suite datasets.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -483,6 +487,7 @@ class DatasetsClient:
             enrichment_options=enrichment_options,
             evaluators=evaluators,
             execution_policy=execution_policy,
+            field_mappings=field_mappings,
             request_options=request_options,
         )
         return _response.data
@@ -495,6 +500,7 @@ class DatasetsClient:
         enrichment_options: TraceEnrichmentOptions,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
+        field_mappings: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -513,6 +519,9 @@ class DatasetsClient:
             Optional evaluators to apply to the created items
 
         execution_policy : typing.Optional[ExecutionPolicy]
+
+        field_mappings : typing.Optional[typing.Dict[str, str]]
+            Optional mapping of dataset item field name to a path into the trace, e.g. 'input.input_text'. Takes precedence over the fields produced by enrichment_options. Ignored for test suite datasets.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -534,6 +543,7 @@ class DatasetsClient:
             enrichment_options=enrichment_options,
             evaluators=evaluators,
             execution_policy=execution_policy,
+            field_mappings=field_mappings,
             request_options=request_options,
         )
         return _response.data
@@ -1968,6 +1978,7 @@ class AsyncDatasetsClient:
         enrichment_options: SpanEnrichmentOptions,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
+        field_mappings: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1986,6 +1997,9 @@ class AsyncDatasetsClient:
             Optional evaluators to apply to the created items
 
         execution_policy : typing.Optional[ExecutionPolicy]
+
+        field_mappings : typing.Optional[typing.Dict[str, str]]
+            Optional mapping of dataset item field name to a path into the span, e.g. 'input.input_text'. Takes precedence over the fields produced by enrichment_options. Ignored for test suite datasets.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2010,6 +2024,7 @@ class AsyncDatasetsClient:
             enrichment_options=enrichment_options,
             evaluators=evaluators,
             execution_policy=execution_policy,
+            field_mappings=field_mappings,
             request_options=request_options,
         )
         return _response.data
@@ -2022,6 +2037,7 @@ class AsyncDatasetsClient:
         enrichment_options: TraceEnrichmentOptions,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
+        field_mappings: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2040,6 +2056,9 @@ class AsyncDatasetsClient:
             Optional evaluators to apply to the created items
 
         execution_policy : typing.Optional[ExecutionPolicy]
+
+        field_mappings : typing.Optional[typing.Dict[str, str]]
+            Optional mapping of dataset item field name to a path into the trace, e.g. 'input.input_text'. Takes precedence over the fields produced by enrichment_options. Ignored for test suite datasets.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2064,6 +2083,7 @@ class AsyncDatasetsClient:
             enrichment_options=enrichment_options,
             evaluators=evaluators,
             execution_policy=execution_policy,
+            field_mappings=field_mappings,
             request_options=request_options,
         )
         return _response.data
