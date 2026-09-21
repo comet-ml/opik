@@ -369,7 +369,10 @@ describe("@track with non-Error thrown values", () => {
       expect(trace?.errorInfo).toEqual(span?.errorInfo);
       expect(trace?.errorInfo?.message).toBe(String(thrown));
       expect(typeof trace?.errorInfo?.exceptionType).toBe("string");
-      expect(typeof trace?.errorInfo?.traceback).toBe("string");
+      // The thrown value carries no stack of its own, so reporting one captured inside
+      // the decorator would point at Opik's frames instead of the caller's code.
+      expect(trace?.errorInfo?.traceback).toBe("");
+      expect(span?.errorInfo?.traceback).toBe("");
     }
   );
 

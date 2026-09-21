@@ -169,7 +169,9 @@ function toErrorInfo(error: unknown): {
     return {
       message: err.message,
       exceptionType: err.name,
-      traceback: err.stack ?? "",
+      // A coerced non-Error has no stack of its own, and the one `new Error()` would
+      // capture here points at this decorator rather than at the caller's code.
+      traceback: error instanceof Error ? (err.stack ?? "") : "",
     };
   } catch {
     return {
