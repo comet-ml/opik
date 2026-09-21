@@ -172,6 +172,15 @@ print(answers["billing"]["noul"])
 
 The call then appears in Opik the same way as a call made through `track_typesafe`.
 
+## Cost Tracking
+
+The `track_typesafe` integration automatically logs token usage and estimated cost for each traced call, based on the model and provider. TypeSafe AI bills input tokens only, so the estimated cost reflects the input tokens of each `system_one` call.
+
+Cost information is automatically captured and displayed in the Opik UI, including:
+
+- **Cost per trace**
+- **Total cost** aggregated at the project level
+
 ## Supported Methods
 
 `track_typesafe` logs calls to the following methods:
