@@ -118,6 +118,6 @@ export class PlaygroundLogsSidebarPage {
 
   /** The expanded error block, which renders error_info as a syntax-highlighted document. */
   errorCalloutBody(): Locator {
-    return this.traceDetailPanel().locator('[class*="border-destructive"]');
+    return this.traceDetailPanel().getByTestId('trace-error-callout');
   }
 }

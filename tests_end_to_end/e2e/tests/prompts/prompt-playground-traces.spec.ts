@@ -119,10 +119,12 @@ test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@area:play
         await sidebar.expectMessagesTabSelectedByDefault();
         await sidebar.clickMessagesTab();
         await expect(sidebar.messageRole('User')).toBeVisible();
+        await expect(sidebar.messageBody('User')).toContainText(messageContent);
         await expect(sidebar.messageRole('Assistant')).toBeVisible();
-        await expect(
-          sidebar.activeTabPanel().getByText(messageContent).first(),
-        ).toBeVisible();
+        // The completion is whatever the live model answered, so the claim is that the
+        // assistant turn carries the model's own text rather than an echo of the prompt.
+        await expect(sidebar.messageBody('Assistant')).not.toBeEmpty();
+        await expect(sidebar.messageBody('Assistant')).not.toContainText(messageContent);
       });
 
       await test.step('Open Prompts tab and verify prompt is linked', async () => {
