@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { processSSEChunk } from "./useCompletionProxyStreaming";
+import {
+  processSSEChunk,
+  pythonProxyErrorMessage,
+} from "./useCompletionProxyStreaming";
 
 describe("processSSEChunk", () => {
   describe("basic line processing", () => {
@@ -232,5 +235,54 @@ describe("processSSEChunk", () => {
 
       expect(fullContent).toBe("wedding surprise reactions|0.86, beach|0.75");
     });
+  });
+});
+
+describe("pythonProxyErrorMessage", () => {
+  // The two shapes the proxy actually sends. Reading only the first left the
+  // second assigning the wrapper object, which reached the user as
+  // "Run failed: [object Object]".
+  it("should read the message nested under detail", () => {
+    expect(pythonProxyErrorMessage({ detail: "Invalid API key" })).toBe(
+      "Invalid API key",
+    );
+  });
+
+  it("should read the message under error", () => {
+    expect(pythonProxyErrorMessage({ error: "Rate limit exceeded" })).toBe(
+      "Rate limit exceeded",
+    );
+  });
+
+  it("should take a detail that is already a message", () => {
+    expect(pythonProxyErrorMessage("Upstream timed out")).toBe(
+      "Upstream timed out",
+    );
+  });
+
+  it.each([
+    ["nothing", undefined],
+    ["null", null],
+    ["an unrecognised shape", { code: 500 }],
+    ["a nested object", { detail: { deeper: "value" } }],
+  ])("should fall back to a generic message given %s", (_label, detail) => {
+    expect(pythonProxyErrorMessage(detail)).toBe("Python proxy error");
+  });
+
+  it("should never hand back a value that renders as [object Object]", () => {
+    const shapes = [
+      { detail: "a" },
+      { error: "b" },
+      "c",
+      { code: 1 },
+      null,
+      undefined,
+    ];
+
+    for (const shape of shapes) {
+      expect(String(pythonProxyErrorMessage(shape))).not.toContain(
+        "[object Object]",
+      );
+    }
   });
 });

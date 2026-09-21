@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import dayjs from "dayjs";
-import isObject from "lodash/isObject";
+import get from "lodash/get";
+import isString from "lodash/isString";
 
 import { UsageType } from "@/types/shared";
 import {
@@ -60,6 +61,10 @@ const isPythonProxyError = (
 ): response is ChatCompletionPythonProxyErrorMessageType => {
   return "detail" in response;
 };
+
+export const pythonProxyErrorMessage = (detail: unknown): string =>
+  [detail, get(detail, "error"), get(detail, "detail")].find(isString) ??
+  "Python proxy error";
 
 const isOpikError = (
   response: ChatCompletionResponse,
@@ -212,14 +217,7 @@ const useCompletionProxyStreaming = ({
         const handlePythonProxyErrorMessage = (
           parsedMessage: ChatCompletionPythonProxyErrorMessageType,
         ) => {
-          if (
-            isObject(parsedMessage.detail) &&
-            "error" in parsedMessage.detail
-          ) {
-            pythonProxyError = parsedMessage.detail.error;
-          } else {
-            pythonProxyError = parsedMessage.detail ?? "Python proxy error";
-          }
+          pythonProxyError = pythonProxyErrorMessage(parsedMessage.detail);
         };
 
         // buffer to hold incomplete lines across chunks
