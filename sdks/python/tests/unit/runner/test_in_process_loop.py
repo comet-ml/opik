@@ -577,11 +577,17 @@ class TestJobExecution:
         )
 
         loop = asyncio.new_event_loop()
-        loop.run_until_complete(lp._execute_job(job))
-        loop.close()
+        try:
+            loop.run_until_complete(lp._execute_job(job))
+        finally:
+            loop.close()
 
         call_kwargs = mock_api.runners.report_job_result.call_args[1]
         assert call_kwargs["status"] == "completed"
+        # The function's return value must actually reach the reported
+        # result, not just a "completed" status -- confirms the job loop
+        # didn't drop or corrupt it while unpacking the filtered inputs.
+        assert call_kwargs["result"] == {"result": "answer: hello"}
         assert captured["query"] == "hello"
         assert captured["rest"] == ()
         assert set(captured["opts"].keys()) <= {"opik_args"}
