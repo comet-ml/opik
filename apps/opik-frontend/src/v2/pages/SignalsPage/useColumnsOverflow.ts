@@ -14,23 +14,32 @@ const useColumnsOverflow = (
   useLayoutEffect(() => {
     const columns = columnsRef.current;
     const container = columns?.offsetParent;
-    const list = columns?.querySelector(`[${ISSUES_LIST_ATTRIBUTE}]`);
-    if (!columns || !(container instanceof HTMLElement) || !list) {
+    if (!columns || !(container instanceof HTMLElement)) {
       setOverflows(false);
       return;
     }
 
-    const measure = () =>
+    // IssuesTab renders the list from its own query, so it can arrive after this ran: resolve it per
+    // measurement and watch the subtree, or a list that mounts late is never measured.
+    const measure = () => {
+      const list = columns.querySelector(`[${ISSUES_LIST_ATTRIBUTE}]`);
       setOverflows(
-        list.scrollHeight >
-          container.clientHeight - columns.offsetTop - STUCK_GAP_PX,
+        !!list &&
+          list.scrollHeight >
+            container.clientHeight - columns.offsetTop - STUCK_GAP_PX,
       );
+    };
 
     measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(container);
-    observer.observe(list);
-    return () => observer.disconnect();
+    const sizeObserver = new ResizeObserver(measure);
+    sizeObserver.observe(container);
+    const treeObserver = new MutationObserver(measure);
+    treeObserver.observe(columns, { childList: true, subtree: true });
+
+    return () => {
+      sizeObserver.disconnect();
+      treeObserver.disconnect();
+    };
   }, [columnsRef, issues]);
 
   return overflows;

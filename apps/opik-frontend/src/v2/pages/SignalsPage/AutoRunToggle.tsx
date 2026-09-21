@@ -56,8 +56,8 @@ const AutoRunToggle: React.FC<AutoRunToggleProps> = ({
     <TooltipWrapper
       content={
         enabled
-          ? "Turn off the daily automatic diagnostic"
-          : "Run a diagnostic automatically every day"
+          ? "Click to turn off daily auto-run"
+          : "Click to turn on daily auto-run"
       }
     >
       <button
