@@ -63,7 +63,8 @@ public class AnnotationQueueRoutingPublisher {
                     config.getStreamName(), config.getCodec());
 
             return stream
-                    .add(RedisStreamUtils.buildAddArgs(AnnotationQueueRoutingConfig.PAYLOAD_FIELD, message, config))
+                    .add(RedisStreamUtils.buildAddArgs(AnnotationQueueRoutingConfig.PAYLOAD_FIELD, message,
+                            config.getStreamMaxLen(), config.getStreamTrimLimit()))
                     // DEBUG, not ERROR: the buffer logs this failure at ERROR with the group's size and
                     // the fact that its members stay pending, so raising it here too only duplicates the
                     // stack trace with less context around it.
