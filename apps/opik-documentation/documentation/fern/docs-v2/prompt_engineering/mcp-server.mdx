@@ -16,25 +16,37 @@ One command connects your assistant to your traces and teaches it how to create
 them in the first place. It needs [`uv`](https://docs.astral.sh/uv/) and no Opik
 SDK:
 
-```bash
-uvx opik mcp configure
-```
+<Steps>
+  <Step title="Install uv, if you don't have it">
+    ```bash title="macOS / Linux"
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
 
-It detects your AI client — Claude Code, Cursor, VS Code Copilot, Codex or
-opencode — picks the right server for your Opik deployment, installs the Opik
-skill pack, and checks that what it wrote works.
+    ```powershell title="Windows"
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    ```
 
-Then **start a new session**: assistants read their configuration at startup, so
-a newly added server needs a fresh one. On Opik Cloud, complete the browser
-sign-in when your client prompts for it, then ask **"list my Opik projects"** to
-confirm.
+    Open a new terminal afterwards so `uvx` is on your `PATH`.
+  </Step>
+  <Step title="Run the setup command">
+    ```bash
+    uvx opik mcp configure
+    ```
 
-<Tip>
-No `uv`? Install it with `curl -LsSf https://astral.sh/uv/install.sh | sh` on
-macOS and Linux, or
-`powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
-on Windows, then open a new terminal.
-</Tip>
+    It detects your AI client (Claude Code, Cursor, VS Code Copilot, Codex,
+    opencode), picks the right server for your Opik deployment, configures it,
+    installs the Opik skill pack, and checks that what it just wrote works.
+  </Step>
+  <Step title="Start a new session">
+    Assistants read their configuration at startup, so **start a new session**
+    before trying anything. On Opik Cloud, complete the browser sign-in when your
+    client prompts for it, then ask your assistant to confirm the connection:
+
+    ```text title="Check it worked"
+    List my Opik projects.
+    ```
+  </Step>
+</Steps>
 
 Cursor and VS Code can also be set up in one click, and any other coding agent
 with a prompt you paste into it:
