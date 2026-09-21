@@ -279,7 +279,7 @@ areas:
       configure-columns:      { covered: false }
       add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
-      messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details" }
+      messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details. Not covered from the traces side; the playground-written shape is covered under playground.trace-messages-tab, which does not generalise to SDK-logged traces." }
       agent-graph-tab:        { covered: false }
       prompts-tab:            { covered: false, note: "PromptsTab — conditional on opik_prompts metadata + canViewPrompts, like agent-graph-tab" }
       attachments-media:      { covered: true,  tier: t2-cuj, note: "presigned multipart upload with mime_type omitted, asserting the type tika derives from each file name (incl. the octet-stream fallback), plus every attachment rendering as a thumbnail in the trace panel" }
@@ -458,6 +458,8 @@ areas:
       load-prompt-version:       { covered: true,  tier: t2-cuj }
       verify-trace-from-run:     { covered: true,  tier: t2-cuj }
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
+      run-error-info:            { covered: true,  tier: t2-cuj, note: "A failed playground run is recorded as failed. Seeds an unreachable custom provider (no mock gateway, no provider key — the connection is refused before a request is written), runs against it, and asserts the logged trace carries the error block AND still renders the failure text as the run's assistant turn, since output deliberately keeps what the playground showed the user." }
+      trace-messages-tab:        { covered: true,  tier: t2-cuj, note: "The Messages tab on a trace the playground wrote, whose completion is stored as a bare {output: string}. Asserts the tab is present at all and that its own panel renders the run as User and Assistant turns — the prior assertion only checked the prompt text was somewhere in the panel, which the Details JSON satisfies just as well, so it stayed green while the tab was missing entirely." }
       # Scoped: the Anthropic panel only, and only the two controls whose display
       # and whose request value can disagree. On claude-sonnet-4-6 the spec
       # asserts the sampling pair is one choice with one MOUNTED control (the
