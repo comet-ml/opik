@@ -251,6 +251,7 @@ areas:
     routes: ["/projects/$projectId/logs?type=traces", "/logs?type=spans"]
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
+      - trace-explore/dataset-item-field-mappings.spec.ts
       - trace-explore/mcp-hint.spec.ts
       - trace-explore/span-cached-token-cost.spec.ts
       - trace-explore/span-cost-resolution.spec.ts

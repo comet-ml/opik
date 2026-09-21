@@ -319,7 +319,13 @@ test.describe(
           {
             label: 'a path that does not compile',
             fieldMappings: { my_field: 'input[[' },
-            pattern: /unsupported field mappings/,
+            // The reason, not the envelope. "unsupported field mappings: " is
+            // the prefix `SupportedFieldMappingPathsValidator` puts on all
+            // three of its branches, so matching it would be satisfied by this
+            // path being rejected as a blank name — which the two cases above
+            // already cover. Only the per-violation clause says the compile
+            // step is what refused it.
+            pattern: /is not a valid path/,
           },
           {
             label: '101 mappings, one over the cap',
