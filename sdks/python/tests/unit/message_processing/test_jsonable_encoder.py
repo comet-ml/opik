@@ -187,6 +187,18 @@ class SlotsNode:
     child: Optional["SlotsNode"] = None
 
 
+@dataclasses.dataclass
+class InitFalseDefault:
+    a: int
+    b: int = dataclasses.field(default=7, init=False)
+
+
+@dataclasses.dataclass(slots=True)
+class SlotsWithUnsetField:
+    x: int
+    y: int = dataclasses.field(init=False)
+
+
 def test_jsonable_encoder__slots_dataclass__encoded_as_dict():
     assert jsonable_encoder.encode(SlotsPoint(x=1, y=2)) == {"x": 1, "y": 2}
 
@@ -221,6 +233,18 @@ def test_jsonable_encoder__same_slots_dataclass_in_sibling_branches__not_reporte
     encoded = jsonable_encoder.encode([shared, shared])
 
     assert encoded == [{"x": 1, "y": 2}, {"x": 1, "y": 2}]
+
+
+def test_jsonable_encoder__slots_dataclass_class_object__not_encoded_as_field_dict():
+    assert isinstance(jsonable_encoder.encode(SlotsPoint), str)
+
+
+def test_jsonable_encoder__dataclass_init_false_field_with_default__class_default_not_added():
+    assert jsonable_encoder.encode(InitFalseDefault(a=1)) == {"a": 1}
+
+
+def test_jsonable_encoder__slots_dataclass_unset_field__unset_field_omitted():
+    assert jsonable_encoder.encode(SlotsWithUnsetField(x=1)) == {"x": 1}
 
 
 def test_jsonable_encoder__non_serializable_to_text__bytes():
