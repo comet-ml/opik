@@ -30,7 +30,7 @@ class TestRichInstallView:
 
         return rich_view
 
-    def test_plan__shows_deployment_transport_and_every_path(self, view):
+    def test_plan__shows_deployment_and_transport(self, view):
         with view.console.capture() as capture:
             view.RichInstallView().plan(
                 "Opik Cloud · workspace acme-ai", "Local server via uvx", _targets()
@@ -39,9 +39,19 @@ class TestRichInstallView:
         out = capture.get()
         assert "Opik MCP server setup" in out
         assert "acme-ai" in out
-        assert "Will update" in out
-        assert "~/.cursor/mcp.json" in out
-        assert "Claude Code" in out
+        assert "Local server via uvx" in out
+
+    def test_plan__does_not_relist_the_clients_and_their_paths(self, view):
+        """The prompt listed them, the picker listed them; the results table
+        below reports what was actually written."""
+        with view.console.capture() as capture:
+            view.RichInstallView().plan(
+                "Opik Cloud · workspace acme-ai", "Local server via uvx", _targets()
+            )
+
+        out = capture.get()
+        assert "Will update" not in out
+        assert "~/.cursor/mcp.json" not in out
 
     def test_results__success_uses_the_short_form(self, view):
         """The path was already shown in the plan; repeating it just wraps."""
@@ -229,12 +239,20 @@ class TestChooseHosts:
         assert chosen == ["claude-code", "codex"]
 
     def test_logging_view__skip(self, monkeypatch):
-        monkeypatch.setattr("builtins.input", lambda prompt: "5")
+        """3 candidates, so 4 is All, 5 is "not listed" and 6 is Skip."""
+        monkeypatch.setattr("builtins.input", lambda prompt: "6")
 
         assert (
             mcp_view.LoggingInstallView().choose_hosts("pick", self._candidates(), [])
             == []
         )
+
+    def test_logging_view__client_not_listed(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda prompt: "5")
+
+        assert mcp_view.LoggingInstallView().choose_hosts(
+            "pick", self._candidates(), []
+        ) == [mcp_view.MANUAL_SETUP]
 
     def test_logging_view__invalid_then_valid__retries(self, monkeypatch):
         monkeypatch.setattr("builtins.input", mock.Mock(side_effect=["x", "99", "2"]))
@@ -271,23 +289,52 @@ class TestChooseHosts:
 
         assert chosen == ["claude-code", "cursor", "codex"]
 
-    def test_rich_view__single_candidate__skips_the_picker(self, monkeypatch):
+    def test_rich_view__single_candidate__still_offers_the_manual_row(
+        self, monkeypatch
+    ):
+        """One client used to skip the picker, and the manual row lives in it.
+
+        So the user this most concerns — one client detected, and it is not
+        theirs — met a yes/no where "my AI client is not listed" belonged, and
+        a no printed "Skipped" instead of the config they needed.
+        """
         from opik.cli import install_view as rich_view
         from opik.cli import selector
 
         monkeypatch.setattr(selector, "is_supported", lambda: True)
+        offered = {}
         monkeypatch.setattr(
             selector,
             "multiselect",
-            mock.Mock(side_effect=AssertionError("no picker for one item")),
+            lambda **kwargs: offered.update(kwargs) or [mcp_view.MANUAL_SETUP],
         )
-        monkeypatch.setattr("builtins.input", lambda prompt: "y")
 
         chosen = rich_view.RichInstallView().choose_hosts(
             "pick", [mcp_view.HostChoice("cursor", "Cursor")], ["cursor"]
         )
 
-        assert chosen == ["cursor"]
+        assert chosen == [mcp_view.MANUAL_SETUP]
+        labels = [choice.label for choice in offered["choices"]]
+        assert labels == ["Cursor", mcp_view.MANUAL_SETUP_LABEL]
+
+    def test_rich_view__single_candidate__offers_no_all_row(self, monkeypatch):
+        """Nothing for it to stand in for, and it would outnumber the clients."""
+        from opik.cli import install_view as rich_view
+        from opik.cli import selector
+
+        monkeypatch.setattr(selector, "is_supported", lambda: True)
+        offered = {}
+        monkeypatch.setattr(
+            selector,
+            "multiselect",
+            lambda **kwargs: offered.update(kwargs) or ["cursor"],
+        )
+
+        rich_view.RichInstallView().choose_hosts(
+            "pick", [mcp_view.HostChoice("cursor", "Cursor")], []
+        )
+
+        assert "All" not in [choice.label for choice in offered["choices"]]
 
     def test_rich_view__cancelled_picker__propagates_none(self, monkeypatch):
         from opik.cli import install_view as rich_view
@@ -300,3 +347,151 @@ class TestChooseHosts:
             rich_view.RichInstallView().choose_hosts("pick", self._candidates(), [])
             is None
         )
+
+
+class TestTheAllRow:
+    """The picker offers "All" as its first row.
+
+    Nothing is pre-ticked — this writes into other tools' config files — and
+    `multiselect` takes the highlighted row when the selection is empty, so
+    Enter used to register whichever client happened to be listed first. The
+    row Enter lands on now says All. The numbered-menu fallback has carried its
+    own "All of the above" all along; this is the picker's parity.
+    """
+
+    @staticmethod
+    def _candidates():
+        return [
+            mcp_view.HostChoice("claude-code", "Claude Code"),
+            mcp_view.HostChoice("codex", "Codex"),
+            mcp_view.HostChoice("cursor", "Cursor"),
+        ]
+
+    def _choose(self, monkeypatch, returns):
+        from opik.cli import install_view as rich_view
+        from opik.cli import selector
+
+        seen = {}
+
+        def fake(**kwargs):
+            seen["choices"] = kwargs["choices"]
+            return returns
+
+        monkeypatch.setattr(selector, "is_supported", lambda: True)
+        monkeypatch.setattr(selector, "multiselect", fake)
+        chosen = rich_view.RichInstallView().choose_hosts(
+            "pick", self._candidates(), []
+        )
+        return chosen, seen["choices"]
+
+    def test_all_is_the_first_row_and_not_listed_the_last(self, monkeypatch):
+        _, choices = self._choose(monkeypatch, [])
+
+        assert choices[0].label == "All"
+        assert choices[-1].label == mcp_view.MANUAL_SETUP_LABEL
+        assert [c.label for c in choices[1:-1]] == ["Claude Code", "Codex", "Cursor"]
+
+    def test_no_skip_row(self, monkeypatch):
+        """Escape is the silent decline; the extra row is the one with an answer."""
+        _, choices = self._choose(monkeypatch, [])
+
+        assert "Skip" not in [c.label for c in choices]
+
+    def test_not_listed__returns_the_sentinel_alone(self, monkeypatch):
+        """It must not reach the installer as a host key, or nothing installs."""
+        chosen, _ = self._choose(monkeypatch, [mcp_view.MANUAL_SETUP, "codex"])
+
+        assert chosen == [mcp_view.MANUAL_SETUP]
+
+    def test_choosing_all__expands_to_every_candidate(self, monkeypatch):
+        from opik.cli import install_view as rich_view
+
+        chosen, _ = self._choose(monkeypatch, [rich_view._ALL])
+
+        assert chosen == ["claude-code", "codex", "cursor"]
+
+    def test_choosing_some__returns_only_those(self, monkeypatch):
+        chosen, _ = self._choose(monkeypatch, ["codex", "cursor"])
+
+        assert chosen == ["codex", "cursor"]
+
+    def test_the_sentinel_never_leaks_out(self, monkeypatch):
+        """It is not a host key; passing it downstream would install nothing."""
+        from opik.cli import install_view as rich_view
+
+        chosen, _ = self._choose(monkeypatch, ["codex", rich_view._ALL])
+
+        assert rich_view._ALL not in chosen
+
+    def test_cancelled__still_propagates_none(self, monkeypatch):
+        chosen, _ = self._choose(monkeypatch, None)
+
+        assert chosen is None
+
+
+class TestLinks:
+    """URLs are coloured and clickable, without breaking plainer terminals.
+
+    One call has to cover all three: an OSC 8 hyperlink where the terminal
+    advertises support, the colour alone where it does not, and the bare URL in
+    a pipe or a CI log — where an escape sequence would corrupt the output.
+    """
+
+    URL = "https://www.comet.com/docs/opik/mcp-server"
+
+    @pytest.fixture
+    def view(self):
+        from opik.cli import install_view as rich_view
+
+        return rich_view
+
+    @staticmethod
+    def _rendered(view, monkeypatch, **console_kwargs):
+        import rich.console
+
+        recorder = rich.console.Console(width=120, **console_kwargs)
+        monkeypatch.setattr(view, "console", recorder)
+        with recorder.capture() as capture:
+            view.RichInstallView().problem(f"See {TestLinks.URL} for instructions.")
+        return capture.get()
+
+    def test_terminal__emits_an_osc8_hyperlink(self, view, monkeypatch):
+        out = self._rendered(view, monkeypatch, force_terminal=True)
+
+        assert "\x1b]8;" in out and self.URL in out
+
+    def test_terminal__the_url_is_its_own_colour(self, view, monkeypatch):
+        """Cyan against the yellow the rest of the message carries."""
+        out = self._rendered(view, monkeypatch, force_terminal=True)
+
+        assert "36m" in out, "cyan"
+        assert "33m" in out, "the surrounding text keeps its yellow"
+
+    def test_no_color_terminal__still_readable(self, view, monkeypatch):
+        out = self._rendered(view, monkeypatch, force_terminal=True, no_color=True)
+
+        assert self.URL in out
+
+    def test_not_a_terminal__no_escapes_at_all(self, view, monkeypatch):
+        """A pipe or a CI log must get the bare URL, still copy-pasteable."""
+        out = self._rendered(view, monkeypatch, force_terminal=False)
+
+        assert "\x1b" not in out
+        assert self.URL in out
+
+    def test_message_without_a_url__is_untouched(self, view, monkeypatch):
+        import rich.console
+
+        recorder = rich.console.Console(width=120, force_terminal=False)
+        monkeypatch.setattr(view, "console", recorder)
+        with recorder.capture() as capture:
+            view.RichInstallView().problem("Nothing to click here.")
+
+        assert capture.get().strip() == "Nothing to click here."
+
+    def test_trailing_punctuation__stays_out_of_the_link(self, view, monkeypatch):
+        """`See <url>.` must not make the full stop part of the address."""
+        linked = view._linkify(f"See {self.URL}.")
+
+        spans = [s for s in linked.spans if "link" in str(s.style)]
+        assert spans and linked.plain[spans[0].start : spans[0].end] == self.URL

@@ -839,6 +839,9 @@ navigation:
               - page: Groq
                 path: ./docs-v2/integrations/groq.mdx
                 slug: groq
+              - page: TypeSafe AI
+                path: ./docs-v2/integrations/typesafe.mdx
+                slug: typesafe
               - page: MiniMax
                 path: ./docs-v2/integrations/minimax.mdx
                 slug: minimax
