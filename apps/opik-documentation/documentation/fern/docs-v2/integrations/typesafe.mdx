@@ -11,7 +11,7 @@ title: Observability for TypeSafe AI (Python) with Opik
 
 [TypeSafe AI](https://typesafe.ai/) provides System One models such as Jev: instead of generating text, they answer typed questions (yes/no, choice, score) about a piece of state and return calibrated probabilities that software can act on directly.
 
-This guide explains how to integrate Opik with the TypeSafe AI Python SDK (`typesafe-sdk`). By using the `track_typesafe` method provided by Opik, you can log every `system_one` call within your Opik projects: Opik automatically records the state and questions you sent, the model used, token usage, and the answers returned.
+This guide explains how to integrate Opik with the TypeSafe AI Python SDK (`typesafe-sdk`). By using the `track_typesafe` method provided by Opik, you can easily track and evaluate your TypeSafe AI calls within your Opik projects as Opik will automatically log the questions you asked, the model used, token usage, and the answers returned.
 
 <Info>
   TypeSafe AI is currently in early access. This integration targets `typesafe-sdk` version 0.7.0 or newer.
@@ -64,7 +64,7 @@ if "TYPESAFE_API_KEY" not in os.environ:
 
 ## Logging TypeSafe AI calls
 
-In order to log TypeSafe AI calls to Opik, wrap the TypeSafe client with `track_typesafe`. Every `system_one` call made with the wrapped client is logged to Opik as an `llm` span. When the call happens inside a function decorated with `@track`, the span is nested under that function's span, so you can see the decision in the context of the step that requested it:
+In order to log TypeSafe AI calls to Opik, wrap the TypeSafe client with `track_typesafe`. All calls made with the wrapped client will be logged to Opik. If the call is made inside a function decorated with `@track`, it is logged as part of that function's trace, so you can see the decision in the context of the step that requested it:
 
 ```python
 import os
@@ -103,7 +103,7 @@ def triage_ticket(ticket: str) -> dict:
 print(triage_ticket("I was charged twice. Please fix this ASAP."))
 ```
 
-The trace contains a `triage_ticket` span with a nested `system_one` LLM span. The LLM span input contains the `state` and the `questions`, the output contains the `answers` keyed by question name, and the span records the `model`, the `typesafe` provider and the reported token usage. The remaining request parameters (`model`, `extra_body`, `retry`, `timeout`) and response details (`model`, `usage`) are stored in the span metadata. `extra_headers` and the `response_model` class are never logged, so credentials placed in custom headers do not end up in your traces.
+The trace can now be viewed in the Opik UI, with the TypeSafe AI call nested under the `triage_ticket` step. Custom request headers are never logged, so credentials do not end up in your traces.
 
 `track_typesafe` works the same way with the async client:
 
@@ -127,7 +127,7 @@ asyncio.run(main())
 
 ## Tracking plain HTTP requests
 
-If you call the TypeSafe AI REST API directly instead of using `typesafe-sdk`, you can still get the same span in Opik. Wrap the request in a function decorated with `@track(type="llm")` and, before returning, use `opik_context.update_current_span` to record the usage, provider and model:
+If you call the TypeSafe AI REST API directly instead of using `typesafe-sdk`, you can still log the calls to Opik. Wrap the request in a function decorated with `@track(type="llm")` and, before returning, use `opik_context.update_current_span` to record the usage, provider and model:
 
 ```python
 import os
@@ -170,7 +170,7 @@ answers = system_one(
 print(answers["billing"]["noul"])
 ```
 
-The function arguments become the span input and the returned `answers` become the span output. Setting `type="llm"` together with `model`, `provider` and `usage` makes the call appear in Opik exactly like a call made through `track_typesafe`.
+The call then appears in Opik the same way as a call made through `track_typesafe`.
 
 ## Supported Methods
 
@@ -178,5 +178,3 @@ The function arguments become the span input and the returned `answers` become t
 
 - `TypeSafeClient.system_one()`
 - `AsyncTypeSafeClient.system_one()`
-
-`client.models.list()` is a metadata lookup and is not traced.
