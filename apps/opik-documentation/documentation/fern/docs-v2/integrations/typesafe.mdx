@@ -44,46 +44,66 @@ Configure the Opik Python SDK for your deployment type. See the [Python SDK Conf
 
 ### Configuring TypeSafe AI
 
-You'll need to set your TypeSafe AI API key. You can create one in the [TypeSafe AI console](https://console.typesafe.ai/):
+In order to configure TypeSafe AI, you will need to have your TypeSafe AI API key. You can create one in the [TypeSafe AI console](https://console.typesafe.ai/).
+
+You can set it as an environment variable:
 
 ```bash
 export TYPESAFE_API_KEY="YOUR_API_KEY"
 ```
 
+Or set it programmatically:
+
+```python
+import os
+import getpass
+
+if "TYPESAFE_API_KEY" not in os.environ:
+    os.environ["TYPESAFE_API_KEY"] = getpass.getpass("Enter your TypeSafe AI API key: ")
+```
+
 ## Logging TypeSafe AI calls
 
-In order to log TypeSafe AI calls to Opik, wrap the TypeSafe client with `track_typesafe`. Every `system_one` call made with the wrapped client is logged to Opik as an `llm` span:
+In order to log TypeSafe AI calls to Opik, wrap the TypeSafe client with `track_typesafe`. Every `system_one` call made with the wrapped client is logged to Opik as an `llm` span. When the call happens inside a function decorated with `@track`, the span is nested under that function's span, so you can see the decision in the context of the step that requested it:
 
 ```python
 import os
 from typesafe_sdk import Choice, Noul, Score, TypeSafeClient
+from opik import track
 from opik.integrations.typesafe import track_typesafe
 
 os.environ["OPIK_PROJECT_NAME"] = "typesafe-integration-demo"
 
 client = track_typesafe(TypeSafeClient())
 
-response = client.system_one(
-    state={"document": "I was charged twice. Please fix this ASAP."},
-    questions={
-        "category": Choice(
-            instructions="What is this ticket about?",
-            criteria={"billing": None, "technical": None, "other": None},
-        ),
-        "is_urgent": Noul(instructions="The message conveys urgency"),
-        "frustration": Score(
-            instructions="How frustrated is the customer?",
-            criteria=["calm", "annoyed", "furious"],
-        ),
-    },
-)
 
-print(response.choices["category"].choice)
-print(response.nouls["is_urgent"].noul)
-print(response.scores["frustration"].score)
+@track
+def triage_ticket(ticket: str) -> dict:
+    response = client.system_one(
+        state={"document": ticket},
+        questions={
+            "category": Choice(
+                instructions="What is this ticket about?",
+                criteria={"billing": None, "technical": None, "other": None},
+            ),
+            "is_urgent": Noul(instructions="The message conveys urgency"),
+            "frustration": Score(
+                instructions="How frustrated is the customer?",
+                criteria=["calm", "annoyed", "furious"],
+            ),
+        },
+    )
+    return {
+        "category": response.choices["category"].choice,
+        "is_urgent": response.nouls["is_urgent"].noul > 0.5,
+        "frustration": response.scores["frustration"].score,
+    }
+
+
+print(triage_ticket("I was charged twice. Please fix this ASAP."))
 ```
 
-The span input contains the `state` and the `questions` serialized to plain JSON, the output contains the `answers` keyed by question name, and the span records the `model`, the `typesafe` provider and the reported token usage. The remaining request parameters (`model`, `extra_body`, `retry`, `timeout`) and response details (`model`, `usage`) are stored in the span metadata.
+The trace contains a `triage_ticket` span with a nested `system_one` LLM span. The LLM span input contains the `state` and the `questions`, the output contains the `answers` keyed by question name, and the span records the `model`, the `typesafe` provider and the reported token usage. The remaining request parameters (`model`, `extra_body`, `retry`, `timeout`) and response details (`model`, `usage`) are stored in the span metadata. `extra_headers` and the `response_model` class are never logged, so credentials placed in custom headers do not end up in your traces.
 
 `track_typesafe` works the same way with the async client:
 
@@ -105,89 +125,52 @@ async def main():
 asyncio.run(main())
 ```
 
-## Advanced Usage
+## Tracking plain HTTP requests
 
-### Using with the `@track` decorator
-
-If you have multiple steps in your pipeline, you can use the `@track` decorator to log the traces for each step. If TypeSafe AI is called within one of these steps, the call will be associated with that corresponding step:
+If you call the TypeSafe AI REST API directly instead of using `typesafe-sdk`, you can still get the same span in Opik. Wrap the request in a function decorated with `@track(type="llm")` and, before returning, use `opik_context.update_current_span` to record the usage, provider and model:
 
 ```python
 import os
-from typesafe_sdk import Choice, TypeSafeClient
-from opik import track
-from opik.integrations.typesafe import track_typesafe
+import requests
+from opik import opik_context, track
 
 os.environ["OPIK_PROJECT_NAME"] = "typesafe-integration-demo"
 
-client = track_typesafe(TypeSafeClient())
+TYPESAFE_API_URL = "https://api.typesafe.ai/v1/systemone"
 
 
-@track
-def classify_ticket(ticket: str) -> str:
-    response = client.system_one(
-        state=ticket,
-        questions={
-            "department": Choice(
-                instructions="Which team should handle this?",
-                criteria={"billing": None, "support": None, "sales": None},
-            )
+@track(type="llm", name="system_one")
+def system_one(state: str, questions: dict, model: str = "jev-latest") -> dict:
+    response = requests.post(
+        TYPESAFE_API_URL,
+        headers={"Authorization": f"Bearer {os.environ['TYPESAFE_API_KEY']}"},
+        json={"state": state, "model": model, "questions": questions},
+        timeout=10,
+    )
+    response.raise_for_status()
+    body = response.json()
+
+    usage = body.get("usage", {})
+    opik_context.update_current_span(
+        provider="typesafe",
+        model=body.get("model", model),
+        usage={
+            "prompt_tokens": usage.get("input_tokens", 0),
+            "completion_tokens": usage.get("output_tokens", 0),
+            "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
         },
     )
-    return response.choices["department"].choice
+    return body["answers"]
 
 
-@track
-def route_ticket(ticket: str) -> str:
-    department = classify_ticket(ticket)
-    return f"Routed to {department}"
-
-
-route_ticket("I was charged twice. Please fix this ASAP.")
-```
-
-The trace can now be viewed in the UI with hierarchical spans showing the relationship between the steps and the TypeSafe AI decision.
-
-### Custom response models
-
-If you pass a `response_model` to `system_one`, its `answers` are logged as the span output and any extra fields declared on the model are logged as metadata:
-
-```python
-from typesafe_sdk import ChoiceAnswer, SystemOneResponse
-
-
-class TicketAnswers(SystemOneResponse):
-    category: ChoiceAnswer
-
-
-response = client.system_one(
-    state="I was charged twice.",
-    questions={"category": Choice(criteria={"billing": None, "other": None})},
-    response_model=TicketAnswers,
+answers = system_one(
+    state="I was charged twice. Please help.",
+    questions={"billing": {"type": "noul", "instructions": "Is this about billing?"}},
 )
-print(response.category.choice)
+print(answers["billing"]["noul"])
 ```
 
-### Setting the provider name
-
-By default the provider recorded on each span is `typesafe`. You can override it by passing `provider` to `track_typesafe`, for example when routing calls through a proxy:
-
-```python
-from opik.integrations.typesafe import track_typesafe
-
-client = track_typesafe(TypeSafeClient(), provider="my-typesafe-proxy")
-```
-
-### What is not logged
-
-`extra_headers` and the `response_model` class are never logged, so credentials placed in custom headers do not end up in your traces.
-
-## Token usage
-
-TypeSafe AI reports `input_tokens` and `output_tokens` for every call. Opik logs them as `prompt_tokens`, `completion_tokens` and `total_tokens` on the span, alongside the original values under `original_usage.*`.
-
-<Note>
-  TypeSafe AI models (such as `jev-latest`) are not part of Opik's built-in pricing table yet, so an estimated cost is not computed for these spans.
-</Note>
+The function arguments become the span input and the returned `answers` become the span output. Setting `type="llm"` together with `model`, `provider` and `usage` makes the call appear in Opik exactly like a call made through `track_typesafe`.
 
 ## Supported Methods
 
