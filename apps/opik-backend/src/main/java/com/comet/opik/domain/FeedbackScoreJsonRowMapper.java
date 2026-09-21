@@ -15,9 +15,8 @@ import java.util.UUID;
  * {@code bulkInsert.v2ClientEnabled}.
  *
  * <p>The counterpart of {@code FeedbackScoreDAOImpl#bindParameters}: the two must produce identical
- * cells, since the toggle is meant to be safe to flip either way on a running install. That is why
- * {@link #getValueOrDefault(String)} lives here and is called by the binder as well — one copy, so the
- * two writers cannot drift on how an absent value is normalized.
+ * cells, since the toggle is meant to be safe to flip either way on a running install. Both normalize
+ * absent text with {@link StringUtils#trimToEmpty(String)} for that reason.
  */
 class FeedbackScoreJsonRowMapper {
 
@@ -42,15 +41,15 @@ class FeedbackScoreJsonRowMapper {
         node.put("project_id", score.projectId().toString());
         node.put("workspace_id", workspaceId);
         node.put("name", score.name());
-        node.put("category_name", getValueOrDefault(score.categoryName()));
+        node.put("category_name", StringUtils.trimToEmpty(score.categoryName()));
         // Decimal(18, 9) written as a quoted plain string, as ExperimentAggregatesDAOImpl does for
         // total_estimated_cost — no exponent notation, and no float round-tripping.
         node.put("value", score.value().toPlainString());
-        node.put("reason", getValueOrDefault(score.reason()));
+        node.put("reason", StringUtils.trimToEmpty(score.reason()));
         node.put("source", score.source().getValue());
 
         if (author != null) {
-            node.put("author", getValueOrDefault(author));
+            node.put("author", StringUtils.trimToEmpty(author));
             // FixedString(36) with no DEFAULT: "" for an absent queue id, which the column zero-pads —
             // the same cell the R2DBC bind writes.
             node.put("source_queue_id",
@@ -65,15 +64,5 @@ class FeedbackScoreJsonRowMapper {
         // a zero there would make every later score for the same key lose to the original row. This is
         // why the insert sets input_format_defaults_for_omitted_fields.
         return node;
-    }
-
-    /**
-     * Shared with {@code FeedbackScoreDAOImpl#bindParameters} deliberately — see the class javadoc.
-     */
-    static String getValueOrDefault(String value) {
-        return Optional.ofNullable(value)
-                .map(String::trim)
-                .filter(StringUtils::isNotEmpty)
-                .orElse("");
     }
 }

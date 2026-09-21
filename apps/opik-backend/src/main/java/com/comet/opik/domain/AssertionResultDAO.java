@@ -21,7 +21,6 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
@@ -148,7 +147,7 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
                             ? AssertionStatus.PASSED.getValue()
                             : AssertionStatus.FAILED.getValue())
                     .bind("source" + i, item.source().getValue())
-                    .bind("reason" + i, getValueOrDefault(item.reason()));
+                    .bind("reason" + i, StringUtils.trimToEmpty(item.reason()));
         }
     }
 
@@ -163,14 +162,7 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
                     .bind("name" + i, item.name())
                     .bind("status" + i, item.status().getValue())
                     .bind("source" + i, item.source().getValue())
-                    .bind("reason" + i, getValueOrDefault(item.reason()));
+                    .bind("reason" + i, StringUtils.trimToEmpty(item.reason()));
         }
-    }
-
-    private String getValueOrDefault(String value) {
-        return Optional.ofNullable(value)
-                .map(String::trim)
-                .filter(StringUtils::isNotEmpty)
-                .orElse("");
     }
 }

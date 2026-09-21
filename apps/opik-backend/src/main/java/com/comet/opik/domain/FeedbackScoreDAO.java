@@ -34,7 +34,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
-import static com.comet.opik.domain.FeedbackScoreJsonRowMapper.getValueOrDefault;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -381,11 +380,11 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("name" + i, feedbackScoreBatchItem.name())
                     .bind("value" + i, feedbackScoreBatchItem.value().toString())
                     .bind("source" + i, feedbackScoreBatchItem.source().getValue())
-                    .bind("reason" + i, getValueOrDefault(feedbackScoreBatchItem.reason()))
-                    .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()));
+                    .bind("reason" + i, StringUtils.trimToEmpty(feedbackScoreBatchItem.reason()))
+                    .bind("category_name" + i, StringUtils.trimToEmpty(feedbackScoreBatchItem.categoryName()));
 
             if (author != null) {
-                statement.bind("author" + i, getValueOrDefault(author));
+                statement.bind("author" + i, StringUtils.trimToEmpty(author));
                 statement.bind("source_queue_id" + i,
                         Optional.ofNullable(feedbackScoreBatchItem.sourceQueueId()).map(UUID::toString).orElse(""));
             }
