@@ -67,6 +67,33 @@ enum CutoverMigrationPreconditionLint {
     private static final Set<String> REQUIRED_BRANCHES = Set.of("0", "1");
 
     /**
+     * Statements that destroy, move or rewrite a whole table, or mutate its rows. None of them belongs in a migration
+     * during the mixed-fleet window: post-cutover the {@code Distributed} wrapper rejects row mutations outright, and a
+     * structural change rides the successor's table definition rather than an in-window {@code ALTER}.
+     */
+    private static final String DESTRUCTIVE_KIND = "(?:(?:OPTIMIZE|DROP|TRUNCATE|RENAME|ATTACH|DETACH)\\s+TABLE|DELETE\\s+FROM|EXCHANGE\\s+TABLES)";
+
+    /** Everything above plus the one kind a migration may legitimately use: {@code ALTER TABLE}. */
+    private static final String ANY_MUTATION_KIND = "(?:ALTER\\s+TABLE|" + DESTRUCTIVE_KIND + ")";
+
+    /**
+     * One statement kind against one set of table names.
+     *
+     * <p>{@code IF [NOT] EXISTS} sits between the keyword and the table in {@code DROP}, {@code TRUNCATE},
+     * {@code ATTACH} and {@code DETACH}, so a pattern that goes straight from keyword to table name misses every
+     * guarded-looking {@code DROP TABLE IF EXISTS <table>}. The database qualifier is matched quoted or unquoted —
+     * {@code analytics.spans}, {@code `${...}`.`spans`}, {@code "spans"} — because anchoring on the
+     * {@code ${ANALYTICS_DB_DATABASE_NAME}} prefix alone would let a qualified or quoted mutation through. The trailing
+     * lookahead keeps neighbouring tables out: {@code spans_attachments} matches no alternative followed by a
+     * non-word character.
+     */
+    private static String statement(String kinds, String tables) {
+        return "(?:" + kinds + "\\s+(?:IF\\s+(?:NOT\\s+)?EXISTS\\s+)?"
+                + "(?:[`\"]?[A-Za-z0-9_$.{}]+[`\"]?\\.)?"
+                + "[`\"]?(?:" + tables + ")[`\"]?(?![A-Za-z0-9_]))";
+    }
+
+    /**
      * The column, index or projection a statement adds, drops or modifies. Group 1 is the identifier, which is what
      * {@link #assertBranchesTouchTheSameObjects} compares across the two branches.
      *
@@ -80,11 +107,18 @@ enum CutoverMigrationPreconditionLint {
     private static final Pattern BLOCK_COMMENT = Pattern.compile("(?s)/\\*.*?\\*/");
 
     /**
-     * A line that looks like a changeset header but does not parse as one. Liquibase would not treat it as a changeset,
-     * so everything below it belongs to the <i>previous</i> changeset — and would inherit its guard. Rather than let a
-     * mutation smuggle itself in that way, an unparseable header is reported.
+     * A line that looks like a changeset header but does not parse as one — either naming nothing at all, or a token
+     * that is not {@code author:id}. Liquibase would not treat either as a changeset, so everything below it belongs to
+     * the <i>previous</i> changeset and inherits its guard, while {@link #changeSets} splits on it and judges it as a
+     * changeset of its own.
+     *
+     * <p>That divergence is the danger, and it runs in the direction that passes: a file whose second header reads
+     * {@code --changeset bogus} looks to this lint like a correctly paired pre/post migration, while Liquibase folds
+     * the post-cutover branch — guard and all — into the pre-cutover changeset, where the two {@code sqlCheck}s are
+     * ANDed and neither branch ever runs.
      */
-    private static final Pattern MALFORMED_CHANGESET = Pattern.compile("(?im)^\\s*--\\s*changeset\\s*$");
+    private static final Pattern MALFORMED_CHANGESET = Pattern
+            .compile("(?im)^\\s*--\\s*changeset(?:\\s*$|\\s+(?![^\\s:]+:[^\\s]).*$)");
 
     /** How a failure message names this family's tables, e.g. "a trace table". */
     private final String familyNoun;
@@ -115,6 +149,9 @@ enum CutoverMigrationPreconditionLint {
      */
     private final Pattern mutation;
 
+    /** The subset of {@link #mutation} that no migration may use on these tables at all; see {@link #DESTRUCTIVE_KIND}. */
+    private final Pattern destructiveMutation;
+
     /**
      * The topology check itself. Group 1 is the expected result, which is what distinguishes the pre-cutover branch
      * ({@code 0} — no shard) from the post-cutover one ({@code 1}).
@@ -127,18 +164,18 @@ enum CutoverMigrationPreconditionLint {
         this.liveTable = liveTable;
         this.shardTable = shardTable;
         this.cutoverSplicePoint = cutoverSplicePoint;
-        this.mutation = Pattern.compile("(?im)^\\s*"
-                // Every statement kind that changes one of these tables, including the structural ones a migration
-                // should not be doing in the mixed-fleet window but must not be able to smuggle past this lint if it
-                // tries.
-                + "(?:(?:ALTER|OPTIMIZE|DROP|TRUNCATE|RENAME|ATTACH|DETACH)\\s+TABLE|DELETE\\s+FROM|EXCHANGE\\s+TABLES)"
-                + "\\s+"
-                // Any database qualifier, quoted or not: `analytics.spans`, `${...}`.`spans`, "spans". Matching only
-                // the ${ANALYTICS_DB_DATABASE_NAME} prefix would let a qualified or quoted mutation through.
-                + "(?:[`\"]?[A-Za-z0-9_$.{}]+[`\"]?\\.)?"
-                // The trailing lookahead is what keeps a neighbouring table out: `spans_attachments` matches none of
-                // the three alternatives with a non-word character after it.
-                + "[`\"]?(%s|%s|%s_v2)[`\"]?(?![A-Za-z0-9_])".formatted(liveTable, shardTable, shardTable));
+        var familyTables = "%s|%s|%s_v2".formatted(liveTable, shardTable, shardTable);
+
+        // An INSERT is topology-sensitive only when it names a table that exists on one side and not the other. Into
+        // the live name it is correct on both — the Distributed wrapper accepts inserts and routes them to the shard —
+        // so requiring a guard there would be ceremony. Into the shadow or the shard it fails outright on the wrong
+        // topology, which is the same reason an unguarded shadow ALTER is caught below.
+        var singleTopologyTables = "%s|%s_v2".formatted(shardTable, shardTable);
+
+        this.mutation = Pattern.compile("(?im)^\\s*(?:"
+                + statement(ANY_MUTATION_KIND, familyTables) + "|"
+                + statement("INSERT\\s+INTO", singleTopologyTables) + ")");
+        this.destructiveMutation = Pattern.compile("(?im)^\\s*" + statement(DESTRUCTIVE_KIND, familyTables));
         this.topologyCheck = Pattern.compile(
                 "(?im)^\\s*--\\s*precondition-sql-check\\s+expectedResult:(\\d+)\\b"
                         // The check must actually interrogate the topology. Requiring only a number and the shard
@@ -196,6 +233,17 @@ enum CutoverMigrationPreconditionLint {
                         goes MARK_RAN on any install where the two families differ. Split it into a guarded pre/post \
                         pair per family, each keyed on its own shard.\
                         """.formatted(fileName, changeSet.name(), familyNoun, otherFamily.familyNoun));
+                continue;
+            }
+
+            if (destructiveMutation.matcher(statements).find()) {
+                problems.add("""
+                        %s: changeset '%s' drops, renames, truncates, exchanges, optimizes or deletes from a %s table. \
+                        No migration may do that during the mixed-fleet window, guarded or not — post-cutover the \
+                        Distributed wrapper rejects row mutations outright, and a structural change rides the \
+                        successor's table definition rather than an in-window ALTER. If you believe you need one, that \
+                        is a design conversation; see docs/cutover-table-schema-ddl.md.\
+                        """.formatted(fileName, changeSet.name(), familyNoun));
                 continue;
             }
 
@@ -278,8 +326,19 @@ enum CutoverMigrationPreconditionLint {
                         .formatted(fileName, preCutover, postCutover));
     }
 
+    /** Every column, index and projection {@code statements} names, lower-cased so casing cannot split a pair. */
+    private Set<String> mutatedObjectsIn(String statements) {
+        var objects = new LinkedHashSet<String>();
+        var matcher = MUTATED_OBJECT.matcher(statements);
+        while (matcher.find()) {
+            objects.add(matcher.group(1).toLowerCase());
+        }
+        return objects;
+    }
+
     /**
-     * Another cutover family whose tables {@code statements} also mutates, or {@code null} if it stays within this one.
+     * Another cutover family whose tables {@code statements} also mutate, or {@code null} when the statements stay
+     * within this family.
      *
      * <p>Combined migrations across both families are an established shape here ({@code 000008}, {@code 000055} and
      * {@code 000084} all alter {@code traces} and {@code spans} in a single changeset), and they predate the cutover,
@@ -292,16 +351,6 @@ enum CutoverMigrationPreconditionLint {
      * {@code sqlCheck} "on the changeset itself", which for a combined migration produces exactly that broken shape and
      * then passes both families' lints.
      */
-    /** Every column, index and projection {@code statements} names, lower-cased so casing cannot split a pair. */
-    private Set<String> mutatedObjectsIn(String statements) {
-        var objects = new LinkedHashSet<String>();
-        var matcher = MUTATED_OBJECT.matcher(statements);
-        while (matcher.find()) {
-            objects.add(matcher.group(1).toLowerCase());
-        }
-        return objects;
-    }
-
     private CutoverMigrationPreconditionLint otherFamilyMutating(String statements) {
         for (var family : values()) {
             if (family != this && family.mutation.matcher(statements).find()) {

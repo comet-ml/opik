@@ -198,6 +198,11 @@ one requires recreating the table and copying the data.
 weekly partition key did in `000114`, and as dropping `parent_span_id` from the spans sort key did in `000115`), not an
 in-window `ALTER`. If you believe you need one, that is a design conversation, not a migration.
 
+The lint enforces this rather than leaving it to discipline: a changeset that `DROP`s, `RENAME`s, `TRUNCATE`s,
+`EXCHANGE`s, `OPTIMIZE`s or `DELETE`s from one of these tables is rejected outright, guarded or not. A guard would not
+save it — post-cutover the `Distributed` wrapper rejects row mutations anyway, so the post-cutover branch would fail on
+every cut-over install.
+
 The invariant above still holds for structural changes, and the gates still enforce it — they compare the sorting and
 primary keys regardless of how a change was made.
 
@@ -240,7 +245,7 @@ The freeze is **per family**: a traces soak does not freeze spans DDL, and vice 
 |---|---|
 | `TracesSchemaParityPreCutoverTest` / `SpansSchemaParityPreCutoverTest` | applies the real changelog as a fresh install does, then asserts three-way parity: `<x>` ≅ the `<x>_local_v2` shadow ≅ the backfill column list |
 | `TracesSchemaParityPostCutoverTest` / `SpansSchemaParityPostCutoverTest` | stops the changelog after the family's splice point, splices in the runbook's `EXCHANGE` + wrap, resumes — so **your** migration runs on the post-cutover topology — then asserts the wrapper exposes exactly the shard's columns |
-| `TracesMigrationPreconditionLintTest` / `SpansMigrationPreconditionLintTest` | a fast, container-free check that a migration mutating the family's tables **strictly after** its splice point carries the guard **on the mutating changeset itself**, keyed on **its own** shard, ships **both** complementary branches applying the **same** change, and does not mutate the other family in the same changeset |
+| `TracesMigrationPreconditionLintTest` / `SpansMigrationPreconditionLintTest` | a fast, container-free check that a migration mutating the family's tables **strictly after** its splice point carries the guard **on the mutating changeset itself**, keyed on **its own** shard, ships **both** complementary branches applying the **same** change, does not mutate the other family in the same changeset, and uses no destructive statement at all |
 | `Trace/SpanMutationRoutingArchTest` and `Trace/SpanMutationSqlRoutingTest` | runtime DAO mutations resolve their table through `TraceDAOImpl#tracesMutationTable()` / `SpanDAO#selectSpansMutationTable` and never name a physical table directly |
 
 The splice point is the last migration that shapes the family's shadow table, and is declared once, on
@@ -273,6 +278,9 @@ Common failures:
   side, or the two have converged and the entry is now dead. Either fix the change or delete the entry.
 * *"mutates both ... tables"* — one changeset touches both families. Split it into a guarded pair per family, as
   [One family per changeset](#one-family-per-changeset) shows.
+* *"No migration may do that during the mixed-fleet window"* — your changeset drops, renames, truncates, exchanges,
+  optimizes or deletes from a cutover table. A guard would not save it; see
+  [Rare: structural changes](#rare-structural-changes).
 * *"must apply the same change"* — your two branches name different columns or indices. Which tables each branch targets
   differs by design; which objects they name must not, or installs end up split by the order in which they migrated and
   cut over. No parity gate can catch this, because each only ever runs one branch.

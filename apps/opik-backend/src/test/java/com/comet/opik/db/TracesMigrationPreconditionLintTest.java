@@ -254,13 +254,70 @@ class TracesMigrationPreconditionLintTest {
                             "ALTER TABLE `traces` ADD COLUMN IF NOT EXISTS foo String DEFAULT '';"),
                     Arguments.of("quoted and qualified",
                             "ALTER TABLE `analytics`.`traces_local` ADD COLUMN IF NOT EXISTS foo String DEFAULT '';"),
+                    Arguments.of("an insert into the shadow, which post-cutover does not exist",
+                            "INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 SELECT * FROM ${ANALYTICS_DB_DATABASE_NAME}.traces;"),
+                    Arguments.of("an insert into the shard, which pre-cutover does not exist",
+                            "INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces_local SELECT * FROM ${ANALYTICS_DB_DATABASE_NAME}.traces;"));
+        }
+
+        /**
+         * Statements no migration may use on these tables at all, guarded or not. A guard would not save them:
+         * post-cutover the {@code Distributed} wrapper rejects row mutations outright, and a structural change rides
+         * the successor's table definition rather than an in-window {@code ALTER}. Telling an author to "add a
+         * topology guard" to a {@code DROP TABLE} would be actively bad advice, which is why these get their own
+         * verdict.
+         *
+         * <p>The {@code IF EXISTS} forms are here because the keyword sits between the statement and the table name:
+         * a pattern that goes straight from one to the other sees no mutation at all.
+         */
+        static Stream<Arguments> destructiveMutations() {
+            return Stream.of(
                     Arguments.of("a delete",
                             "DELETE FROM ${ANALYTICS_DB_DATABASE_NAME}.traces WHERE workspace_id = 'x';"),
                     Arguments.of("a rename",
                             "RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces TO ${ANALYTICS_DB_DATABASE_NAME}.traces_old;"),
                     Arguments.of("a drop", "DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local;"),
+                    Arguments.of("a drop guarded by IF EXISTS",
+                            "DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2;"),
+                    Arguments.of("a truncate guarded by IF EXISTS",
+                            "TRUNCATE TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces;"),
+                    Arguments.of("a detach guarded by IF EXISTS",
+                            "DETACH TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces;"),
+                    Arguments.of("an optimize",
+                            "OPTIMIZE TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces FINAL;"),
                     Arguments.of("an exchange",
                             "EXCHANGE TABLES ${ANALYTICS_DB_DATABASE_NAME}.traces AND ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2;"));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("destructiveMutations")
+        void rejectsADestructiveMutationEvenWhenGuarded(String description, String statement) {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_destructive_pre_cutover
+                    %s
+                    """.formatted(GUARD_PRE) + statement + "\n";
+
+            assertThat(LINT.problems("000200_destructive.sql", sql))
+                    .as("%s must be rejected outright, not merely asked for a guard", description)
+                    .singleElement(STRING)
+                    .contains("No migration may do that during the mixed-fleet window");
+        }
+
+        /**
+         * The complement: an insert into the <i>live</i> name is correct on both topologies, because the
+         * {@code Distributed} wrapper accepts inserts and routes them to the shard. Requiring a guard there would be
+         * ceremony, so only the single-topology tables above are flagged.
+         */
+        @Test
+        void ignoresAnInsertIntoTheLiveTable() {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_seed
+                    INSERT INTO ${ANALYTICS_DB_DATABASE_NAME}.traces (id) SELECT id FROM ${ANALYTICS_DB_DATABASE_NAME}.staging;
+                    """;
+
+            assertThat(LINT.problems("000200_seed.sql", sql)).isEmpty();
         }
 
         @ParameterizedTest(name = "{0}")
@@ -359,6 +416,32 @@ class TracesMigrationPreconditionLintTest {
                     ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' ADD COLUMN IF NOT EXISTS bar String DEFAULT '';
                     """
                     .formatted(GUARD_PRE);
+
+            assertThat(LINT.problems("000200_add_foo.sql", sql))
+                    .singleElement(STRING)
+                    .contains("does not name an author:id");
+        }
+
+        /**
+         * A header naming a token that is not {@code author:id} is the same hazard as one naming nothing, and it runs
+         * in the direction that passes: this lint splits on it and sees a correctly paired pre/post migration, while
+         * Liquibase folds the second branch — guard and all — into the first, where the two {@code sqlCheck}s are ANDed
+         * and neither branch ever runs.
+         */
+        @Test
+        void rejectsAChangesetHeaderThatDoesNotNameAnAuthorAndId() {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_pre_cutover
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ADD COLUMN IF NOT EXISTS foo String;
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ADD COLUMN IF NOT EXISTS foo String;
+
+                    --changeset bogus
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ADD COLUMN IF NOT EXISTS foo String;
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ADD COLUMN IF NOT EXISTS foo String;
+                    """.formatted(GUARD_PRE, GUARD_POST);
 
             assertThat(LINT.problems("000200_add_foo.sql", sql))
                     .singleElement(STRING)
