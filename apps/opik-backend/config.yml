@@ -180,8 +180,10 @@ databaseAnalyticsDataModel:
   #   Distributed `spans`. Post-wrap, changes to `spans` split by kind exactly as for traces: row mutations (DELETE) +
   #   MATERIALIZE COLUMN/ADD INDEX/MODIFY TTL target `spans_local` only (the Distributed `spans` rejects them);
   #   ADD/DROP/MODIFY COLUMN must target both `spans_local` and `spans`, else reads can't see the column (code 47).
-  #   Independent of the trace flag, and NOT covered by the `clickhouse-traces-topology` readiness check, which
-  #   asserts the trace flag only.
+  #   Independent of the trace flag, and asserted against the live database by its own `clickhouse-spans-topology`
+  #   readiness check below (the `clickhouse-traces-topology` one asserts the trace flag only): set it wrong in either
+  #   direction and the backend fails readiness at startup with a message naming the flag and the observed engine,
+  #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: ${ANALYTICS_DB_DATA_MODEL_SPANS_DISTRIBUTED_WRAP_ENABLED:-false}
 
 bulkInsert:
@@ -295,6 +297,16 @@ health:
     # rather than a fleet-wide outage; the cluster-wide "did this DDL reach every replica" gate lives in the cutover's
     # exchange_and_wrap.sh / finalize.sh, and the self-host troubleshooting page carries the query for operators.
     - name: clickhouse-traces-topology
+      critical: true
+      type: ready
+    # The spans sibling of the check above, asserting databaseAnalyticsDataModel.spansDistributedWrapEnabled against
+    # the actual `spans` topology. They share one implementation, so everything said above applies here too, over
+    # `spans`/`spans_local` and the spans flag. A separate probe rather than one merged check because the two cutovers
+    # flip independently: an estate can be wrapped on traces and not on spans, and an operator reading /health-check
+    # has to see which of the two disagrees with its table. It matters more on spans, not less: spans have no
+    # standalone delete endpoint, so an unguarded mismatch surfaces as a failing trace-delete cascade or a retention
+    # sweep that reclaims nothing, never on the operation that caused it.
+    - name: clickhouse-spans-topology
       critical: true
       type: ready
     - name: mysql

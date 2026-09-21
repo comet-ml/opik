@@ -437,6 +437,10 @@ def _read_block_from_json_file(
     return block if isinstance(block, dict) else None
 
 
+#: Ordered by priority, and that order is what the user sees: the consent prompt
+#: lists these, the picker offers them in this sequence, and the `--ai-client`
+#: help prints them. Claude Code and Codex lead because they are the highest-
+#: volume clients in the telemetry.
 HOST_TARGETS: List[HostTarget] = [
     HostTarget(
         key="claude-code",
@@ -446,6 +450,17 @@ HOST_TARGETS: List[HostTarget] = [
         is_detected=lambda: shutil.which("claude") is not None
         or _claude_config_path().exists(),
         install=_install_claude_code,
+    ),
+    HostTarget(
+        key="codex",
+        display_name="Codex",
+        config_path=_codex_config_path,
+        # Unused: Codex config is TOML, so reads go through `read_block` instead.
+        top_level_key="mcp_servers",
+        is_detected=lambda: shutil.which("codex") is not None
+        or _codex_config_path().exists(),
+        install=_install_codex,
+        read_block=_read_codex_block,
     ),
     HostTarget(
         key="cursor",
@@ -462,17 +477,6 @@ HOST_TARGETS: List[HostTarget] = [
         top_level_key="servers",
         is_detected=lambda: _vscode_user_config_path().parent.exists(),
         install=_install_vscode,
-    ),
-    HostTarget(
-        key="codex",
-        display_name="Codex",
-        config_path=_codex_config_path,
-        # Unused: Codex config is TOML, so reads go through `read_block` instead.
-        top_level_key="mcp_servers",
-        is_detected=lambda: shutil.which("codex") is not None
-        or _codex_config_path().exists(),
-        install=_install_codex,
-        read_block=_read_codex_block,
     ),
     HostTarget(
         key="opencode",
