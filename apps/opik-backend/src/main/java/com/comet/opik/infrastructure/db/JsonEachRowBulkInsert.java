@@ -4,15 +4,16 @@ import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.insert.InsertSettings;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
-import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.io.SerializedString;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -80,39 +81,30 @@ public class JsonEachRowBulkInsert {
 
     private final Client clickHouseClient;
 
+    private final ObjectMapper objectMapper;
+
     private final ObjectWriter rowWriter;
 
     /**
-     * The row writer is built here, in the constructor, rather than in a static initializer.
+     * The mapper is injected rather than read from {@code JsonUtils}: that one is a static field the
+     * application <em>replaces</em> during startup, so anything reaching for it risks the pre-configuration
+     * instance, and it is on its way out of the codebase. What this class needs from it is the
+     * <b>serialization</b> configuration — {@code NON_NULL} inclusion, snake_case naming, the
+     * date/duration handling and the {@code JavaTimeModule} — which {@code OpikApplication} applies to the
+     * Dropwizard mapper bound here.
      *
-     * <p>{@code JsonUtils.configure} <em>replaces</em> the static mapper during startup — the hazard
-     * {@code JsonUtilsConfigurationBundle}'s javadoc warns about — so anything capturing it at class-load
-     * holds the pre-bundle instance. What that instance carries is the mapper's <b>serialization</b>
-     * configuration: {@code NON_NULL} inclusion, snake_case naming, the date/duration handling and the
-     * {@code JavaTimeModule}. Deriving the writer from whatever mapper the application configured is the
-     * point; Guice builds this singleton after the bundle has run.
-     *
-     * <p>Note what this does <b>not</b> buy, because it would be easy to assume otherwise: the
-     * {@code jacksonConfig} limits ({@code maxStringLength} / {@code maxDocumentLength}) are
-     * {@link com.fasterxml.jackson.core.StreamReadConstraints} — parser-side only, as
-     * {@code JsonUtils#applyStreamReadConstraints}' own javadoc states. They bound what is read, e.g. an
-     * inbound request body, and place no bound whatsoever on what this class writes. The outbound
-     * payload here is as large as the batch it is given: {@code ExperimentItemBulkUpload} caps a bulk
-     * request at 4MB, but a {@code FeedbackScoreBatch} carries no such annotation, so an outbound guard
-     * would be a new behaviour rather than one inherited from the mapper.
-     *
-     * <p>{@code FLUSH_AFTER_WRITE_VALUE} is left <b>enabled</b> here, which is the library default and
+     * <p>{@code FLUSH_AFTER_WRITE_VALUE} is left <b>enabled</b>, which is the library default and
      * load-bearing for the framing in {@link #serialize}: rows go through the generator's own buffer
      * while the row separator is written straight to the {@link BufferedWriter}, so without a flush per
      * row the separator would overtake the row it is supposed to follow and merge two rows into one
      * malformed document. The generator's {@code FLUSH_PASSED_TO_STREAM} is disabled instead, so that
-     * flush empties the generator into the {@link BufferedWriter} without draining the writer itself —
-     * which is what keeps the buffering that makes a large batch cheap to write.
+     * flush empties the generator into the {@link BufferedWriter} without draining the writer itself.
      */
     @Inject
-    public JsonEachRowBulkInsert(@NonNull Client clickHouseClient) {
+    public JsonEachRowBulkInsert(@NonNull Client clickHouseClient, @NonNull ObjectMapper objectMapper) {
         this.clickHouseClient = clickHouseClient;
-        this.rowWriter = JsonUtils.getMapper().writer();
+        this.objectMapper = objectMapper;
+        this.rowWriter = objectMapper.writer();
     }
 
     /**
@@ -126,7 +118,7 @@ public class JsonEachRowBulkInsert {
             @NonNull Collection<T> items,
             @NonNull Function<T, ObjectNode> rowMapper) {
 
-        if (items.isEmpty()) {
+        if (CollectionUtils.isEmpty(items)) {
             return Mono.just(0L);
         }
 
@@ -200,7 +192,7 @@ public class JsonEachRowBulkInsert {
         // writer, then the writer into payload. Both are resources so a row that fails to serialize
         // still releases the generator's buffer back to Jackson's recycler on the way out.
         try (var writer = new BufferedWriter(new OutputStreamWriter(payload, StandardCharsets.UTF_8));
-                var generator = JsonUtils.getMapper().getFactory().createGenerator(writer)) {
+                var generator = objectMapper.getFactory().createGenerator(writer)) {
 
             // Both set before anything is written, since they govern what close() and flush() do.
             // The generator writes into, but does not own, the writer, which the try-with-resources
@@ -219,6 +211,11 @@ public class JsonEachRowBulkInsert {
                 rowWriter.writeValue(generator, rowMapper.apply(item));
                 writer.newLine();
             }
+
+            // The payload is complete here rather than as a side effect of the closes below.
+            // FLUSH_AFTER_WRITE_VALUE has already drained the generator into the writer after every
+            // row, so this pushes the whole batch into payload; closing would do it too.
+            writer.flush();
         }
         return payload;
     }

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -13,6 +14,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -40,9 +42,11 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
@@ -156,6 +160,10 @@ class BulkInsertV2ClientIntegrationTest {
     // FeedbackScoreService#getAuthor takes the author from the request context, so anything arriving
     // over HTTP has one and lands in authored_feedback_scores -- the 10-column form of the row. The
     // author-less feedback_scores form is only reachable from a context with no USER_NAME.
+    private static String randomName() {
+        return "metric-" + RandomStringUtils.secure().nextAlphanumeric(12);
+    }
+
     private FeedbackScoreBatchItem newScore(UUID traceId, String projectName, String name) {
         return factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                 .id(traceId)
@@ -171,16 +179,17 @@ class BulkInsertV2ClientIntegrationTest {
     @Test
     @DisplayName("feedback scores round-trip their decimal value, reason, author and source queue id")
     void feedbackScoresRoundTrip() {
-        // Decimal(18, 9) at full scale, written as a quoted plain string; and a reason carrying a
-        // newline and quotes, which would end the JSONEachRow line early if it were not escaped.
         var trace = newTraceBuilder().build();
         traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
 
-        var value = new BigDecimal("0.123456789");
-        var reason = "line one\nline \"two\"\ttabbed 日本語";
+        // Decimal(18, 9) at full scale, and a reason whose control characters would end the JSONEachRow
+        // line early if they were not escaped -- with a random tail so the assertion is not satisfied by
+        // a hardcoded value surviving somewhere it should not.
+        var value = new BigDecimal("0." + RandomStringUtils.secure().nextNumeric(9));
+        var reason = "line one\nline \"two\"\ttabbed 日本語 " + RandomStringUtils.secure().nextAlphanumeric(16);
         // A podam-generated trace id, which is a valid UUIDv7 -- ingestion rejects anything else.
         var sourceQueueId = factory.manufacturePojo(Trace.class).id();
-        var score = newScore(trace.id(), trace.projectName(), "relevance").toBuilder()
+        var score = newScore(trace.id(), trace.projectName(), randomName()).toBuilder()
                 .value(value)
                 .reason(reason)
                 .sourceQueueId(sourceQueueId)
@@ -188,17 +197,23 @@ class BulkInsertV2ClientIntegrationTest {
 
         traceResourceClient.feedbackScores(List.of(score), API_KEY, WORKSPACE_NAME);
 
-        var actual = traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY);
-        assertThat(actual.feedbackScores()).hasSize(1);
-        var stored = actual.feedbackScores().getFirst();
-        assertThat(stored.name()).isEqualTo("relevance");
-        assertThat(stored.value()).isEqualByComparingTo(value);
-        assertThat(stored.categoryName()).isEqualTo("quality");
-        assertThat(stored.reason()).isEqualTo(reason);
-        assertThat(stored.source()).isEqualTo(score.source());
-        // The author and source_queue_id cells only surface through value_by_author. source_queue_id is
-        // a FixedString(36) with no DEFAULT: the other test covers the absent case, written as "" and
-        // read back as null, and this is the populated one.
+        var expected = FeedbackScore.builder()
+                .name(score.name())
+                .categoryName(score.categoryName())
+                .value(value)
+                .reason(reason)
+                .source(score.source())
+                .build();
+
+        var actual = traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY).feedbackScores();
+        assertThat(actual)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(TraceAssertions.IGNORED_FIELDS_SCORES)
+                .containsExactly(expected);
+
+        // valueByAuthor and sourceQueueId are in IGNORED_FIELDS_SCORES because they are not usually
+        // deterministic, but they are two of the columns this write path is responsible for, so they are
+        // asserted here rather than left to the shared comparison.
+        var stored = actual.getFirst();
         assertThat(stored.valueByAuthor()).hasSize(1);
         var entry = stored.valueByAuthor().values().iterator().next();
         assertThat(entry.author()).isEqualTo(USER);
@@ -213,59 +228,66 @@ class BulkInsertV2ClientIntegrationTest {
 
         // Distinct names, so each is its own row under the table's ORDER BY key rather than a dedup
         // candidate.
-        var scores = List.of(
-                newScore(trace.id(), trace.projectName(), "relevance"),
-                newScore(trace.id(), trace.projectName(), "coherence"),
-                newScore(trace.id(), trace.projectName(), "fluency"));
+        var scores = IntStream.range(0, 3)
+                .mapToObj(i -> newScore(trace.id(), trace.projectName(), randomName()))
+                .toList();
 
         traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
 
-        // Raw rows, no FINAL: reads collapse duplicates, so cardinality is the only assertion that sees
-        // a writer emitting every row twice.
+        var expected = scores.stream()
+                .map(score -> FeedbackScore.builder()
+                        .name(score.name())
+                        .categoryName(score.categoryName())
+                        .value(score.value())
+                        .reason(score.reason())
+                        .source(score.source())
+                        .build())
+                .toList();
+
+        var actual = traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY).feedbackScores();
+        assertThat(actual)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(TraceAssertions.IGNORED_FIELDS_SCORES)
+                .containsExactlyInAnyOrderElementsOf(expected);
+
+        // Both timestamps are omitted from the JSON row so their column DEFAULT now64(9) stamps them.
+        // last_updated_at is the ReplacingMergeTree version, so a zero there would make every later score
+        // for the same key lose to the original row -- which the API read surfaces directly.
+        assertThat(actual).allSatisfy(stored -> {
+            assertThat(stored.createdAt()).isAfter(Instant.parse("2000-01-01T00:00:00Z"));
+            assertThat(stored.lastUpdatedAt()).isAfter(Instant.parse("2000-01-01T00:00:00Z"));
+        });
+
+        // The one assertion that cannot be made through the API: reads collapse duplicates, so a writer
+        // emitting every row twice is invisible to them. Raw rows with no FINAL is the only view that
+        // sees it.
         Long storedRows = queryOne(
                 ("SELECT count() AS row_count FROM authored_feedback_scores WHERE workspace_id = '%s' "
                         + "AND entity_id = '%s'").formatted(WORKSPACE_ID, trace.id()),
                 row -> row.get("row_count", Long.class));
         assertThat(storedRows).isEqualTo(scores.size());
-
-        // Both timestamps are omitted from the JSON row so their DEFAULT now64(9) stamps them.
-        // last_updated_at is the ReplacingMergeTree version, so a zero there would make every later
-        // score for the same key lose to the original row.
-        Long stampedRows = queryOne(
-                ("SELECT count() AS row_count FROM authored_feedback_scores WHERE workspace_id = '%s' "
-                        + "AND entity_id = '%s' AND created_at > toDateTime64('2000-01-01 00:00:00', 9) "
-                        + "AND last_updated_at > toDateTime64('2000-01-01 00:00:00', 9)")
-                        .formatted(WORKSPACE_ID, trace.id()),
-                row -> row.get("row_count", Long.class));
-        assertThat(stampedRows).isEqualTo(scores.size());
-
-        var readBack = traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY).feedbackScores();
-        assertThat(readBack).hasSize(scores.size());
-        // The absent source_queue_id half of the pair asserted in the round-trip test: written as "",
-        // which the FixedString(36) zero-pads, and read back as null.
-        assertThat(readBack)
-                .allSatisfy(stored -> assertThat(stored.valueByAuthor().values())
-                        .allSatisfy(entry -> assertThat(entry.sourceQueueId()).isNull()));
     }
 
     @Test
     @DisplayName("an authorless score takes the 8-column feedback_scores branch, not the authored table")
     void authorlessScoreGoesToTheUnauthoredTable() {
-        // Driven through the DAO rather than HTTP on purpose: FeedbackScoreService#getAuthor reads the
-        // author off the request context, so everything arriving over HTTP has one and only ever
-        // exercises authored_feedback_scores. This is the other branch of toJsonRow -- a different
-        // target table and two fewer columns -- and nothing else in the suite reaches it.
-        // Called at the DAO seam, below the service layer that resolves projectName -> projectId, so the
-        // project has to exist and the id has to be passed explicitly.
+        // One of two tests here that cannot be black box. FeedbackScoreService#getAuthor reads the author
+        // off the request context, so every score arriving over HTTP has one and only ever reaches
+        // authored_feedback_scores. This is the other branch of the row mapper -- a different target
+        // table and two fewer columns -- so the DAO seam is the only way in, and the target table is the
+        // assertion, which no API read exposes.
         var projectName = "authorless-" + RandomStringUtils.secure().nextAlphanumeric(12);
         var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
         var trace = newTraceBuilder().projectName(projectName).build();
         traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
 
-        var score = newScore(trace.id(), projectName, "relevance").toBuilder()
+        var name = randomName();
+        var value = new BigDecimal("0." + RandomStringUtils.secure().nextNumeric(9));
+        var reason = RandomStringUtils.secure().nextAlphanumeric(24);
+        // Below the service layer that resolves projectName -> projectId, so the id is passed explicitly.
+        var score = newScore(trace.id(), projectName, name).toBuilder()
                 .projectId(projectId)
-                .value(new BigDecimal("0.987654321"))
-                .reason("no author here")
+                .value(value)
+                .reason(reason)
                 .build();
 
         feedbackScoreDAO.scoreBatchOf(EntityType.TRACE, List.of(score), null)
@@ -274,35 +296,31 @@ class BulkInsertV2ClientIntegrationTest {
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
                 .block();
 
-        Long unauthored = queryOne(
-                ("SELECT count() AS row_count FROM feedback_scores WHERE workspace_id = '%s' "
-                        + "AND entity_id = '%s' AND name = 'relevance'").formatted(WORKSPACE_ID, trace.id()),
-                row -> row.get("row_count", Long.class));
-        assertThat(unauthored).isEqualTo(1L);
-
-        // And nothing leaked into the authored table, which is what a mis-selected branch would look
-        // like -- the row would still be written, just to the wrong place.
-        Long authored = queryOne(
-                ("SELECT count() AS row_count FROM authored_feedback_scores WHERE workspace_id = '%s' "
-                        + "AND entity_id = '%s' AND name = 'relevance'").formatted(WORKSPACE_ID, trace.id()),
-                row -> row.get("row_count", Long.class));
-        assertThat(authored).isEqualTo(0L);
-
         var stored = queryOne(
                 ("SELECT value, reason, source FROM feedback_scores WHERE workspace_id = '%s' "
-                        + "AND entity_id = '%s' AND name = 'relevance' LIMIT 1").formatted(WORKSPACE_ID, trace.id()),
+                        + "AND entity_id = '%s' AND name = '%s' LIMIT 1").formatted(WORKSPACE_ID, trace.id(), name),
                 row -> row.get("value", BigDecimal.class) + "|" + row.get("reason", String.class) + "|"
                         + row.get("source", String.class));
-        assertThat(stored).isEqualTo("0.987654321|no author here|" + score.source().getValue());
+        assertThat(stored).isEqualTo("%s|%s|%s".formatted(value.toPlainString(), reason, score.source().getValue()));
+
+        // Nothing leaked into the authored table, which is what a mis-selected branch looks like -- the
+        // row is still written, just to the wrong place.
+        Long authored = queryOne(
+                ("SELECT count() AS row_count FROM authored_feedback_scores WHERE workspace_id = '%s' "
+                        + "AND entity_id = '%s' AND name = '%s'").formatted(WORKSPACE_ID, trace.id(), name),
+                row -> row.get("row_count", Long.class));
+        assertThat(authored).isZero();
     }
 
     @Test
     @DisplayName("a score with no value is rejected by name, on the v2 path too")
     void scoreWithoutAValueIsRejectedByName() {
-        // The R2DBC binder rejects this per item before binding; the JSONEachRow mapper would instead
-        // NPE inside toJsonRow and take the whole batch down. The check sits ahead of the branch so
-        // both writers fail the same way -- this pins that it still does with v2 selected.
-        var score = newScore(UUID.randomUUID(), "some-project", "relevance").toBuilder()
+        // The other non-black-box case: a null value is rejected by bean validation long before the DAO,
+        // so HTTP cannot reach this guard. It exists because the R2DBC binder rejects per item while the
+        // row mapper would NPE and take the whole batch down, and it now sits ahead of the path branch so
+        // both writers fail alike. This pins that with v2 selected.
+        var name = randomName();
+        var score = newScore(factory.manufacturePojo(Trace.class).id(), "some-project", name).toBuilder()
                 .projectId(UUID.randomUUID())
                 .value(null)
                 .build();
@@ -313,7 +331,7 @@ class BulkInsertV2ClientIntegrationTest {
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
                 .block())
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("relevance")
+                .hasMessageContaining(name)
                 .hasMessageContaining("cannot be stored without a value");
     }
 }

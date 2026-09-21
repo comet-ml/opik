@@ -2,13 +2,12 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.SentinelTranslation;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.Nullable;
 import lombok.NonNull;
+import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
-
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * Builds the {@code JSONEachRow} row for a feedback score, for the write path behind
@@ -16,12 +15,10 @@ import java.util.UUID;
  *
  * <p>The counterpart of {@code FeedbackScoreDAOImpl#bindParameters}: the two must produce identical
  * cells, since the toggle is meant to be safe to flip either way on a running install. Both normalize
- * absent text with {@link StringUtils#trimToEmpty(String)} for that reason.
+ * absent text with {@link StringUtils#stripToEmpty(String)} for that reason.
  */
+@UtilityClass
 class FeedbackScoreJsonRowMapper {
-
-    private FeedbackScoreJsonRowMapper() {
-    }
 
     /**
      * The row as {@code JSONEachRow}, rather than 8 named parameters per row — 10 for the authored
@@ -35,8 +32,8 @@ class FeedbackScoreJsonRowMapper {
      *                         while this runs per row. {@code null} — not {@code ""} — means the
      *                         unauthored table, and drops both columns.
      */
-    static ObjectNode toJsonRow(@NonNull FeedbackScoreItem score, @NonNull EntityType entityType,
-            @Nullable String normalizedAuthor, @NonNull String userName, @NonNull String workspaceId) {
+    ObjectNode toJsonRow(@NonNull FeedbackScoreItem score, @NonNull EntityType entityType,
+            @NonNull String userName, @NonNull String workspaceId, @Nullable String normalizedAuthor) {
 
         var node = JsonUtils.createObjectNode();
 
@@ -45,19 +42,21 @@ class FeedbackScoreJsonRowMapper {
         node.put("project_id", score.projectId().toString());
         node.put("workspace_id", workspaceId);
         node.put("name", score.name());
-        node.put("category_name", StringUtils.trimToEmpty(score.categoryName()));
-        // Decimal(18, 9) written as a quoted plain string, as ExperimentAggregatesDAOImpl does for
-        // total_estimated_cost — no exponent notation, and no float round-tripping.
+        node.put("category_name", StringUtils.stripToEmpty(score.categoryName()));
+        // toPlainString, not toString: the latter switches to scientific notation below 1e-6 and for a
+        // negative scale, so an ordinary 0.0000001 would go out as "1E-7". Verified against ClickHouse
+        // that both notations parse to the same Decimal(18, 9) cell, through JSONEachRow and through
+        // FORMAT Values, so this differs from the R2DBC bind's toString() on the wire only — the stored
+        // value, and anything already stored, is unaffected.
         node.put("value", score.value().toPlainString());
-        node.put("reason", StringUtils.trimToEmpty(score.reason()));
+        node.put("reason", StringUtils.stripToEmpty(score.reason()));
         node.put("source", score.source().getValue());
 
         if (normalizedAuthor != null) {
             node.put("author", normalizedAuthor);
             // FixedString(36) with no DEFAULT: "" for an absent queue id, which the column zero-pads —
             // the same cell the R2DBC bind writes.
-            node.put("source_queue_id",
-                    Optional.ofNullable(score.sourceQueueId()).map(UUID::toString).orElse(""));
+            node.put("source_queue_id", SentinelTranslation.nullToEmptyUuid(score.sourceQueueId()));
         }
 
         node.put("created_by", userName);

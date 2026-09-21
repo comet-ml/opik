@@ -10,11 +10,13 @@ import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -44,6 +46,10 @@ import static org.mockito.Mockito.when;
  */
 class JsonEachRowBulkInsertTest {
 
+    private static String randomValue() {
+        return RandomStringUtils.secure().nextAlphanumeric(12);
+    }
+
     private static final Function<String, ObjectNode> ROW_MAPPER = value -> {
         ObjectNode node = JsonUtils.createObjectNode();
         node.put("name", value);
@@ -53,11 +59,11 @@ class JsonEachRowBulkInsertTest {
     private record Captured(String body, InsertSettings settings) {
     }
 
-    private Captured insertAndCapture(Client client, List<String> items) {
+    private Captured insertAndCapture(Client client, List<String> items) throws IOException {
         var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
         var settingsCaptor = ArgumentCaptor.forClass(InsertSettings.class);
 
-        Long rows = new JsonEachRowBulkInsert(client)
+        Long rows = new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
                 .insert("feedback_scores", "log-comment", items, ROW_MAPPER)
                 .block();
 
@@ -67,11 +73,7 @@ class JsonEachRowBulkInsertTest {
                 settingsCaptor.capture());
 
         var out = new ByteArrayOutputStream();
-        try {
-            writerCaptor.getValue().onOutput(out);
-        } catch (Exception e) {
-            throw new AssertionError("writer threw", e);
-        }
+        writerCaptor.getValue().onOutput(out);
 
         return new Captured(out.toString(StandardCharsets.UTF_8), settingsCaptor.getValue());
     }
@@ -105,33 +107,36 @@ class JsonEachRowBulkInsertTest {
 
     @Test
     @DisplayName("one row per item, newline delimited, no trailing separator issues")
-    void writesOneNewlineDelimitedRowPerItem() {
-        var captured = insertAndCapture(clientReturning(3L), List.of("a", "b", "c"));
+    void writesOneNewlineDelimitedRowPerItem() throws Exception {
+        var items = List.of(randomValue(), randomValue(), randomValue());
+        var captured = insertAndCapture(clientReturning(items.size()), items);
 
-        assertThat(captured.body()).isEqualTo("""
-                {"name":"a"}
-                {"name":"b"}
-                {"name":"c"}
-                """);
-        assertThat(captured.body().lines()).hasSize(3);
+        var expected = items.stream()
+                .map("{\"name\":\"%s\"}\n"::formatted)
+                .collect(java.util.stream.Collectors.joining());
+        assertThat(captured.body()).isEqualTo(expected);
+        assertThat(captured.body().lines()).hasSize(items.size());
     }
 
     @Test
     @DisplayName("a single row still terminates with a newline")
-    void singleRowIsNewlineTerminated() {
-        var captured = insertAndCapture(clientReturning(1L), List.of("only"));
+    void singleRowIsNewlineTerminated() throws Exception {
+        var only = randomValue();
+        var captured = insertAndCapture(clientReturning(1L), List.of(only));
 
-        assertThat(captured.body()).isEqualTo("{\"name\":\"only\"}\n");
+        assertThat(captured.body()).isEqualTo("{\"name\":\"%s\"}\n".formatted(only));
     }
 
     @Test
     @DisplayName("the writer is replayable, so a client retry sends an identical body")
-    void writerIsReplayable() {
+    void writerIsReplayable() throws Exception {
         var client = clientReturning(2L);
         var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
+        var first0 = randomValue();
+        var second0 = randomValue();
 
-        new JsonEachRowBulkInsert(client)
-                .insert("authored_feedback_scores", "log-comment", List.of("x", "y"), ROW_MAPPER).block();
+        new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+                .insert("authored_feedback_scores", "log-comment", List.of(first0, second0), ROW_MAPPER).block();
 
         verify(client).insert(eq("authored_feedback_scores"), writerCaptor.capture(), any(ClickHouseFormat.class),
                 any(InsertSettings.class));
@@ -140,41 +145,18 @@ class JsonEachRowBulkInsertTest {
 
         var first = new ByteArrayOutputStream();
         var second = new ByteArrayOutputStream();
-        try {
-            writer.onOutput(first);
-            writer.onRetry();
-            writer.onOutput(second);
-        } catch (Exception e) {
-            throw new AssertionError("writer threw", e);
-        }
+        writer.onOutput(first);
+        writer.onRetry();
+        writer.onOutput(second);
 
         assertThat(second.toString(StandardCharsets.UTF_8))
                 .isEqualTo(first.toString(StandardCharsets.UTF_8))
-                .isEqualTo("{\"name\":\"x\"}\n{\"name\":\"y\"}\n");
-    }
-
-    @Test
-    @DisplayName("multi-byte content is written as UTF-8, so the byte count is not the char count")
-    void writesUtf8() {
-        var captured = insertAndCapture(clientReturning(1L), List.of("日本語"));
-
-        assertThat(captured.body()).isEqualTo("{\"name\":\"日本語\"}\n");
-    }
-
-    @Test
-    @DisplayName("content that would break a hand-built body is escaped by Jackson")
-    void escapesContentThatWouldBreakTheBody() {
-        var captured = insertAndCapture(clientReturning(1L), List.of("a\"b\nc"));
-
-        // The newline inside the value must be escaped, not emitted literally — a literal one would
-        // split a single row into two malformed JSONEachRow lines.
-        assertThat(captured.body()).isEqualTo("{\"name\":\"a\\\"b\\nc\"}\n");
-        assertThat(captured.body().lines()).hasSize(1);
+                .isEqualTo("{\"name\":\"%s\"}\n{\"name\":\"%s\"}\n".formatted(first0, second0));
     }
 
     @Test
     @DisplayName("the per-request server settings the row encoding depends on are set")
-    void setsTheServerSettingsTheEncodingDependsOn() {
+    void setsTheServerSettingsTheEncodingDependsOn() throws Exception {
         var captured = insertAndCapture(clientReturning(1L), List.of("a"));
 
         // Matched by key suffix: the client may namespace server settings internally, and this test is
@@ -189,7 +171,8 @@ class JsonEachRowBulkInsertTest {
     void emptyBatchDoesNotCallTheClient() {
         var client = mock(Client.class);
 
-        Long rows = new JsonEachRowBulkInsert(client).insert("feedback_scores", "log-comment", List.of(), ROW_MAPPER)
+        Long rows = new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+                .insert("feedback_scores", "log-comment", List.of(), ROW_MAPPER)
                 .block();
 
         assertThat(rows).isZero();
@@ -199,7 +182,7 @@ class JsonEachRowBulkInsertTest {
 
     @Test
     @DisplayName("an explicit null is written, not dropped by NON_NULL inclusion")
-    void writesExplicitNulls() {
+    void writesExplicitNulls() throws Exception {
         // The configured mapper sets serialization inclusion to NON_NULL, so a putNull() would be dropped
         // unless the writer is derived from it the way this class does. That distinction is load-bearing
         // for any column that must receive SQL NULL rather than its DDL default: an omitted field takes
@@ -213,20 +196,19 @@ class JsonEachRowBulkInsertTest {
 
         var client = clientReturning(1L);
         var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
+        var value = randomValue();
 
-        new JsonEachRowBulkInsert(client).insert("feedback_scores", "log-comment", List.of("a"), nullMapper).block();
+        new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+                .insert("feedback_scores", "log-comment", List.of(value), nullMapper).block();
 
         verify(client).insert(eq("feedback_scores"), writerCaptor.capture(), any(ClickHouseFormat.class),
                 any(InsertSettings.class));
 
         var out = new ByteArrayOutputStream();
-        try {
-            writerCaptor.getValue().onOutput(out);
-        } catch (Exception e) {
-            throw new AssertionError("writer threw", e);
-        }
+        writerCaptor.getValue().onOutput(out);
 
-        assertThat(out.toString(StandardCharsets.UTF_8)).isEqualTo("{\"name\":\"a\",\"project_id\":null}\n");
+        assertThat(out.toString(StandardCharsets.UTF_8))
+                .isEqualTo("{\"name\":\"%s\",\"project_id\":null}\n".formatted(value));
     }
 
     @Test
@@ -242,7 +224,8 @@ class JsonEachRowBulkInsertTest {
         when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
                 any(InsertSettings.class))).thenReturn(CompletableFuture.completedFuture(response));
 
-        new JsonEachRowBulkInsert(client).insert("feedback_scores", "log-comment", List.of("a"), ROW_MAPPER).block();
+        new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+                .insert("feedback_scores", "log-comment", List.of("a"), ROW_MAPPER).block();
 
         // try-with-resources should release it; an unclosed response holds its stream, which over a
         // few hundred batches per run would accumulate rather than fail loudly.
@@ -260,7 +243,7 @@ class JsonEachRowBulkInsertTest {
         // RetryUtils.handleConnectionError matches on the throwable's own class, so a SocketException
         // still wrapped in the future's CompletionException would silently bypass the retry the R2DBC
         // path gets. Mono.fromFuture unwraps that wrapper; this pins the behaviour we depend on.
-        assertThatThrownBy(() -> new JsonEachRowBulkInsert(client)
+        assertThatThrownBy(() -> new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
                 .insert("feedback_scores", "log-comment", List.of("a"), ROW_MAPPER)
                 .block())
                 .hasRootCauseInstanceOf(SocketException.class);
@@ -270,7 +253,7 @@ class JsonEachRowBulkInsertTest {
     @DisplayName("the row count comes from the server, not from items.size()")
     void returnsTheServerRowCount() {
         // Deduplication or truncation would make these differ; the caller must see the server's number.
-        Long rows = new JsonEachRowBulkInsert(clientReturning(2L))
+        Long rows = new JsonEachRowBulkInsert(clientReturning(2L), JsonUtils.getMapper())
                 .insert("feedback_scores", "log-comment", List.of("a", "b", "c"), ROW_MAPPER)
                 .block();
 

@@ -281,6 +281,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             ;
             """;
 
+    private static final String AUTHORED_FEEDBACK_SCORES_TABLE = "authored_feedback_scores";
+    private static final String FEEDBACK_SCORES_TABLE = "feedback_scores";
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
@@ -359,14 +362,14 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         // Batch-invariant, so normalized once rather than per row. Kept null when absent: it is null
         // that selects the unauthored table below and drops the two columns with it.
-        var normalizedAuthor = author == null ? null : StringUtils.trimToEmpty(author);
+        var normalizedAuthor = author == null ? null : StringUtils.stripToEmpty(author);
 
         return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
-                normalizedAuthor != null ? "authored_feedback_scores" : "feedback_scores",
+                normalizedAuthor != null ? AUTHORED_FEEDBACK_SCORES_TABLE : FEEDBACK_SCORES_TABLE,
                 getLogComment("bulk_insert_feedback_score", workspaceId, userName, scores.size()),
                 scores,
-                score -> FeedbackScoreJsonRowMapper.toJsonRow(score, entityType, normalizedAuthor, userName,
-                        workspaceId)));
+                score -> FeedbackScoreJsonRowMapper.toJsonRow(score, entityType, userName, workspaceId,
+                        normalizedAuthor)));
     }
 
     @Override
@@ -380,7 +383,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         // Batch-invariant, so normalized once rather than per row. Kept null when absent: author being
         // null is what selects the unauthored table and drops these two columns, so it must not be
         // flattened to "" here.
-        var normalizedAuthor = author == null ? null : StringUtils.trimToEmpty(author);
+        var normalizedAuthor = author == null ? null : StringUtils.stripToEmpty(author);
 
         for (var i = 0; i < scores.size(); i++) {
 
@@ -392,8 +395,8 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("name" + i, feedbackScoreBatchItem.name())
                     .bind("value" + i, feedbackScoreBatchItem.value().toString())
                     .bind("source" + i, feedbackScoreBatchItem.source().getValue())
-                    .bind("reason" + i, StringUtils.trimToEmpty(feedbackScoreBatchItem.reason()))
-                    .bind("category_name" + i, StringUtils.trimToEmpty(feedbackScoreBatchItem.categoryName()));
+                    .bind("reason" + i, StringUtils.stripToEmpty(feedbackScoreBatchItem.reason()))
+                    .bind("category_name" + i, StringUtils.stripToEmpty(feedbackScoreBatchItem.categoryName()));
 
             if (normalizedAuthor != null) {
                 statement.bind("author" + i, normalizedAuthor);

@@ -147,7 +147,7 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
                             ? AssertionStatus.PASSED.getValue()
                             : AssertionStatus.FAILED.getValue())
                     .bind("source" + i, item.source().getValue())
-                    .bind("reason" + i, StringUtils.trimToEmpty(item.reason()));
+                    .bind("reason" + i, StringUtils.stripToEmpty(item.reason()));
         }
     }
 
@@ -162,7 +162,7 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
                     .bind("name" + i, item.name())
                     .bind("status" + i, item.status().getValue())
                     .bind("source" + i, item.source().getValue())
-                    .bind("reason" + i, StringUtils.trimToEmpty(item.reason()));
+                    .bind("reason" + i, StringUtils.stripToEmpty(item.reason()));
         }
     }
 }
