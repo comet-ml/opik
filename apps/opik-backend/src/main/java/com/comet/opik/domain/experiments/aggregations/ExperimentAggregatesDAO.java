@@ -700,6 +700,19 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      * stable id) to the stable {@code dataset_item_id} at aggregation time. Compare reads still
      * resolve at read time too (see {@code DatasetItemVersionDAO}), so this is best-effort
      * hygiene — over time it phases out legacy values from EIA without a backfill migration.
+     *
+     * <p>The {@code lookup_div} join is bounded by {@code dataset_id} so the right side can be
+     * pruned by the primary key. ClickHouse builds a join's right side in full before it can join,
+     * and {@code dataset_item_versions} is sorted by
+     * {@code (workspace_id, dataset_id, dataset_version_id, id)}. Bounding on {@code workspace_id}
+     * alone leaves every dataset in the workspace in range; adding {@code dataset_id}, the second
+     * key column, narrows that to one contiguous range and prunes at part selection. Matching on
+     * {@code lookup_div.id} cannot do this — {@code id} is the fourth key column, so it only
+     * filters granules that have already been read.
+     *
+     * <p>{@code IN} rather than {@code =}: {@code experiments} is a ReplacingMergeTree whose
+     * replacing key includes {@code dataset_id}, so one id can carry more than one row and {@code =}
+     * would drop the others' items from the join.
      */
     private static final String GET_EXPERIMENT_ITEMS = """
             SELECT
@@ -715,6 +728,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             FROM experiment_items AS ei
             LEFT JOIN dataset_item_versions AS lookup_div FINAL
                 ON lookup_div.workspace_id = ei.workspace_id
+                AND lookup_div.dataset_id IN (
+                    SELECT dataset_id
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    AND id = :experiment_id
+                )
                 AND lookup_div.id = ei.dataset_item_id
             WHERE ei.workspace_id = :workspace_id
             AND ei.experiment_id = :experiment_id
