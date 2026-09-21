@@ -48,7 +48,7 @@ const PlaygroundPromptOutput = ({
     }
 
     if (error) {
-      return <PlaygroundOutputError message={error} />;
+      return <PlaygroundOutputError message={error} stale={stale} />;
     }
 
     return (
