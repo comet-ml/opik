@@ -28,6 +28,7 @@ import pytest
 
 
 from opik import id_helpers
+from opik.api_objects import helpers
 from opik.cli.imports.experiment import _import_traces_for_project
 from opik.cli.imports.project import import_traces_from_directory
 from opik.cli.imports.utils import (
@@ -118,12 +119,18 @@ def _write_trace_file(
 
 
 class _RecordingClient:
-    """Mock Opik client that assigns ids the way the real one does.
+    """Test double that reproduces the parts of the client these tests depend on.
 
-    Both ``Opik.trace`` and ``Opik.span`` mint a fresh UUIDv7 when the caller
-    passes no id, and honour one that is passed. Keeping that precedence here is
-    what makes these tests fail rather than silently pass if the importer ever
-    starts supplying an id of its own again.
+    Two behaviours are delegated rather than faked, because a test that only
+    recorded kwargs would pass while the real client raised:
+
+    - ``Opik.trace`` and ``Opik.span`` mint a fresh UUIDv7 when the caller passes
+      no id, and honour one that is passed. That precedence is what makes these
+      tests fail if the importer ever starts supplying an id of its own again.
+    - ``Opik.span`` merges usage into the span's metadata through
+      ``helpers.add_usage_to_metadata``, which unpacks the metadata and so raises
+      on anything that is not a mapping. Calling the real helper is what makes a
+      bad metadata shape surface here instead of at runtime.
     """
 
     def __init__(self) -> None:
@@ -138,8 +145,11 @@ class _RecordingClient:
         return MagicMock(id=trace_id)
 
     def span(self, **kwargs: Any) -> MagicMock:
+        metadata = helpers.add_usage_to_metadata(
+            usage=kwargs.get("usage"), metadata=kwargs.get("metadata")
+        )
         span_id = kwargs.get("id") or id_helpers.generate_id()
-        self.spans.append({**kwargs, "id": span_id})
+        self.spans.append({**kwargs, "id": span_id, "metadata": metadata})
         return MagicMock(id=span_id)
 
 
@@ -266,7 +276,7 @@ class TestImportedTraceIdContract:
 
         (span,) = run_import(tmp_path).spans
 
-        assert span["metadata"] == {"_import_metadata": ["not an object"]}
+        assert span["metadata"]["_import_metadata"] == ["not an object"]
 
     def test_import__files_yielded_out_of_order__new_ids_follow_source_order(
         self, tmp_path: Path, run_import: Any

@@ -467,8 +467,11 @@ def recreate_experiment(
             debug,
         )
 
-        experiment_metadata = experiment_info.get("metadata") or {}
-        experiment_metadata = experiment_metadata.copy() if experiment_metadata else {}
+        # Resolved to an object before the mutations below, which all assume a
+        # mapping: exported metadata is an arbitrary JSON value.
+        experiment_metadata = dict(
+            as_metadata_object(experiment_info.get("metadata")) or {}
+        )
 
         # Migrate path: strip prompt_versions pointers — destination prompt entity
         # isn't migrated (epic decision: avoid dangling UI links, accept loss).
