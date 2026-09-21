@@ -257,6 +257,16 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         call_kwargs["messages"] = non_system_messages
         call_kwargs.setdefault("max_tokens", DEFAULT_MAX_TOKENS)
 
+        # `messages.parse()` has no `cache_control` keyword even though the
+        # API accepts it top-level, so send it through `extra_body`, which
+        # both `create()` and `parse()` merge into the request body.
+        cache_control = call_kwargs.pop("cache_control", None)
+        if cache_control is not None:
+            call_kwargs["extra_body"] = {
+                **call_kwargs.get("extra_body", {}),
+                "cache_control": cache_control,
+            }
+
         if system_text:
             call_kwargs["system"] = system_text
 

@@ -49,9 +49,10 @@ OPENAI_REASONING_EFFORT = "minimal"
 # ---------------------------------------------------------------------------
 # Anthropic
 # ---------------------------------------------------------------------------
-# Using Anthropic's moving aliases (e.g. "claude-sonnet-4-0") rather than
-# pinned timestamped releases so upgrades don't require touching this file
-# every few weeks.
+# Default: Haiku — the cheapest Claude tier Anthropic still serves. Sonnet
+# is kept only for the agentic LLM judge, where Haiku wraps the verdict in a
+# ```json fence the strict parser rejects (see
+# metrics_with_llm_judge/agentic/conftest.py).
 ANTHROPIC_CLAUDE_SONNET = "claude-sonnet-4-6"
 ANTHROPIC_CLAUDE_HAIKU = "claude-haiku-4-5-20251001"
 
@@ -62,7 +63,7 @@ ANTHROPIC_CLAUDE_HAIKU_SHORT = "claude-haiku-4"
 LITELLM_ANTHROPIC_CLAUDE_SONNET = f"anthropic/{ANTHROPIC_CLAUDE_SONNET}"
 LITELLM_ANTHROPIC_CLAUDE_HAIKU = f"anthropic/{ANTHROPIC_CLAUDE_HAIKU}"
 
-AISUITE_ANTHROPIC_CLAUDE_SONNET = f"anthropic:{ANTHROPIC_CLAUDE_SONNET}"
+AISUITE_ANTHROPIC_CLAUDE_HAIKU = f"anthropic:{ANTHROPIC_CLAUDE_HAIKU}"
 
 # ---------------------------------------------------------------------------
 # Google Gemini
