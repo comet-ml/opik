@@ -4,11 +4,13 @@ import { uuid7, type BackendClient, type SpanBatchSeed } from '../core/backend';
 import { skipUnlessBackdatedIdsAccepted } from './uuid-window-guard';
 import {
   COST_PER_SPAN_USD,
+  PAST_7_DAYS_PRESET,
   DAYS_BACK_EARLY,
   DAYS_BACK_LATE,
   DAYS_BACK_PREVIOUS,
   costedSpan,
   deleteSeededTraces,
+  past7DaysIntervalStart,
   utcDayOf,
   utcNoonDaysBack,
 } from './cost-buckets';
@@ -66,14 +68,6 @@ export interface ThreadCostBucketsRef {
 
 export interface ThreadCostBucketsFixtures {
   threadCostBuckets: ThreadCostBucketsRef;
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** UTC start of day, `days` back — how the front end builds `past7days`. */
-function utcStartOfDayAgo(days: number): Date {
-  const at = new Date(Date.now() - days * DAY_MS);
-  return new Date(`${at.toISOString().slice(0, 10)}T00:00:00.000Z`);
 }
 
 /** One turn of a seeded conversation: when it ran and how many spans it billed. */
@@ -272,8 +266,8 @@ export const test = baseTest.extend<ThreadCostBucketsFixtures>({
           threadCount: 1,
           totalCostUsd: previousThread.costUsd,
         },
-        intervalStart: utcStartOfDayAgo(6),
-        timeRangePreset: 'past7days',
+        intervalStart: past7DaysIntervalStart(),
+        timeRangePreset: PAST_7_DAYS_PRESET,
       };
 
       await testInfo.attach('opik.threadCostBuckets', {

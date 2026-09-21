@@ -61,6 +61,27 @@ export function utcNoonDaysBack(days: number): Date {
   );
 }
 
+/**
+ * The Logs page's `past7days` preset, as the two values a seed has to agree with
+ * it on: the `time_range` key to open the page with, and the `interval_start`
+ * the page derives from it — UTC start of day, six days back.
+ *
+ * One fact in one place, because the two are only correct together. A seed that
+ * opened the page on `past7days` while sending the API a window of a different
+ * length would compare the chart to a series nobody drew, and the KPI cards
+ * derive their previous period from this length too — so a drift here moves the
+ * previous period as well, silently.
+ */
+export const PAST_7_DAYS_PRESET = 'past7days';
+const PAST_7_DAYS_BACK = 6;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The `interval_start` `past7days` implies: UTC start of day, six days back. */
+export function past7DaysIntervalStart(): Date {
+  const at = new Date(Date.now() - PAST_7_DAYS_BACK * DAY_MS);
+  return new Date(`${at.toISOString().slice(0, 10)}T00:00:00.000Z`);
+}
+
 /** The UTC date an instant falls on, as `YYYY-MM-DD` — a daily bucket's key. */
 export function utcDayOf(moment: Date | string): string {
   const at = typeof moment === 'string' ? new Date(moment) : moment;

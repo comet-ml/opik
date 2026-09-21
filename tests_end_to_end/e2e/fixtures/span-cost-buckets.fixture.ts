@@ -4,10 +4,12 @@ import { uuid7, type SpanBatchSeed } from '../core/backend';
 import { skipUnlessBackdatedIdsAccepted } from './uuid-window-guard';
 import {
   COST_PER_SPAN_USD,
+  PAST_7_DAYS_PRESET,
   DAYS_BACK_EARLY,
   DAYS_BACK_LATE,
   costedSpan,
   deleteSeededTraces,
+  past7DaysIntervalStart,
   utcDayOf,
   utcNoonDaysBack,
 } from './cost-buckets';
@@ -40,14 +42,6 @@ export interface SpanCostBucketsRef {
 
 export interface SpanCostBucketsFixtures {
   spanCostBuckets: SpanCostBucketsRef;
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** UTC start of day, `days` back — how the front end builds `past7days`. */
-function utcStartOfDayAgo(days: number): Date {
-  const at = new Date(Date.now() - days * DAY_MS);
-  return new Date(`${at.toISOString().slice(0, 10)}T00:00:00.000Z`);
 }
 
 /**
@@ -159,8 +153,8 @@ export const test = baseTest.extend<SpanCostBucketsFixtures>({
         },
         totalCostUsd: spans.length * COST_PER_SPAN_USD,
         spanCount: spans.length,
-        intervalStart: utcStartOfDayAgo(6),
-        timeRangePreset: 'past7days',
+        intervalStart: past7DaysIntervalStart(),
+        timeRangePreset: PAST_7_DAYS_PRESET,
       };
 
       await testInfo.attach('opik.spanCostBuckets', {
