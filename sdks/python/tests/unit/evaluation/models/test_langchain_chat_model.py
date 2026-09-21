@@ -82,6 +82,17 @@ def test_generate_provider_response__track_disabled__does_not_attach_opik_tracer
 
 
 @pytest.mark.asyncio
+async def test_agenerate_provider_response__track_enabled__attaches_opik_tracer(
+    stub_opik_tracer, stub_message_conversion
+):
+    tested = _build_model(track=True)
+
+    await tested.agenerate_provider_response(messages=MESSAGES)
+
+    assert _tracer_count(tested._engine.ainvoke.call_args.kwargs) == 1
+
+
+@pytest.mark.asyncio
 async def test_agenerate_provider_response__track_disabled__does_not_attach_opik_tracer(
     stub_opik_tracer, stub_message_conversion
 ):
