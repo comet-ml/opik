@@ -196,28 +196,29 @@ public class JsonEachRowBulkInsert {
         // they copy out with toByteArray() before the block ends, while this one is handed to the client
         // as writeTo and read on its thread after this method returns, so it has to outlive the block.
         var payload = new ByteArrayOutputStream();
-        try (var writer = new BufferedWriter(new OutputStreamWriter(payload, StandardCharsets.UTF_8))) {
-            JsonGenerator generator = JsonUtils.getMapper().getFactory().createGenerator(writer);
-            // The generator writes into, but does not own, the writer: the enclosing
-            // try-with-resources closes it, and closing it twice would flush a closed writer.
+        // Declared in this order so they close in the reverse one: the generator drains into the
+        // writer, then the writer into payload. Both are resources so a row that fails to serialize
+        // still releases the generator's buffer back to Jackson's recycler on the way out.
+        try (var writer = new BufferedWriter(new OutputStreamWriter(payload, StandardCharsets.UTF_8));
+                var generator = JsonUtils.getMapper().getFactory().createGenerator(writer)) {
+
+            // Both set before anything is written, since they govern what close() and flush() do.
+            // The generator writes into, but does not own, the writer, which the try-with-resources
+            // closes; left enabled, closing the generator would close the writer under it.
             generator.disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
-            // Keep generator.flush() from draining the BufferedWriter as well. Without this the
-            // per-row flush below would push every row through to the byte buffer, and the
-            // BufferedWriter would buffer nothing.
+            // Keep the per-row flush from draining the BufferedWriter as well, which would leave it
+            // buffering nothing.
             generator.disable(JsonGenerator.Feature.FLUSH_PASSED_TO_STREAM);
             // Jackson's default root separator is a space, which would prepend one to every row
             // after the first. The separator that matters is written by newLine() below.
             generator.setRootValueSeparator(EMPTY_ROOT_SEPARATOR);
+
             for (T item : items) {
                 // writeValue flushes the generator into the writer (FLUSH_AFTER_WRITE_VALUE), so the
                 // row is fully written before its terminator goes in after it.
                 rowWriter.writeValue(generator, rowMapper.apply(item));
                 writer.newLine();
             }
-            generator.close();
-            // Explicit because FLUSH_PASSED_TO_STREAM is off: nothing above this line pushes the
-            // writer into payload, so without it the buffer's completeness rests on close() alone.
-            writer.flush();
         }
         return payload;
     }
