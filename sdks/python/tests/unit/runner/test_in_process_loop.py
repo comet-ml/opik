@@ -543,6 +543,49 @@ class TestJobExecution:
         assert call_kwargs["status"] == "failed"
         assert "TypeError" in call_kwargs["error"]
 
+    def test_execute_job__variadic_entrypoint__registration_omits_variadic_and_call_succeeds(
+        self, mock_api, shutdown_event
+    ):
+        """Cross-layer regression for the *args/**kwargs registration bug (skip
+        variadic params in runner entrypoint registration): `extract_params`
+        must drop variadic parameters from the published registration payload,
+        and the job loop must still be able to invoke the entrypoint via
+        `func(**inputs)` using only the bound keyword inputs a UI built from
+        that payload would ever send -- `*rest` stays empty and `**opts` only
+        carries what the loop injects (e.g. `opik_args`), never a `query`
+        duplicate."""
+        captured = {}
+
+        def my_agent(query: str, *rest, **opts):
+            captured["query"] = query
+            captured["rest"] = rest
+            captured["opts"] = opts
+            return f"answer: {query}"
+
+        params = registry.extract_params(my_agent)
+        # Registration payload: *rest / **opts must not be published as inputs.
+        assert [p.name for p in params] == ["query"]
+
+        registry.register("variadic_agent", my_agent, "proj", params, "")
+
+        lp = in_process_loop.InProcessRunnerLoop(mock_api, "r-1", shutdown_event)
+
+        # Filtered job inputs: only "query" is supplied, exactly what a caller
+        # driven by the published (variadic-free) params would send.
+        job = LocalRunnerJob(
+            id="j-1", agent_name="variadic_agent", inputs={"query": "hello"}
+        )
+
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(lp._execute_job(job))
+        loop.close()
+
+        call_kwargs = mock_api.runners.report_job_result.call_args[1]
+        assert call_kwargs["status"] == "completed"
+        assert captured["query"] == "hello"
+        assert captured["rest"] == ()
+        assert set(captured["opts"].keys()) <= {"opik_args"}
+
     def test_execute_job__report_failure__does_not_raise(
         self, mock_api, shutdown_event
     ):
