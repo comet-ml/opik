@@ -57,7 +57,7 @@ describe("PlaygroundPromptOutput", () => {
     expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
   });
 
-  it("should render a successful run unchanged", () => {
+  it("should render successful run output", () => {
     output = { isLoading: false, value: "the answer", stale: false };
 
     renderOutput();
