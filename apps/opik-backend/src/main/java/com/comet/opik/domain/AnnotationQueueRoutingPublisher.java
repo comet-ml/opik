@@ -42,7 +42,7 @@ public class AnnotationQueueRoutingPublisher {
             @NonNull AnnotationQueue.AnnotationScope scope, @NonNull Set<UUID> entityIds,
             @NonNull Set<String> scoreNames) {
 
-        if (!config.isEnabled() || entityIds.isEmpty()) {
+        if (entityIds.isEmpty()) {
             return Mono.empty();
         }
 
