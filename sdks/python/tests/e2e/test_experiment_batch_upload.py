@@ -97,7 +97,11 @@ def _score(index: int) -> FeedbackScoreDict:
 
 @pytest.mark.parametrize("num_threads", [1, 4])
 def test_batch_upload_items__generator_source__every_item_lands_exactly_once(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str, num_threads: int
+    opik_client: opik.Opik,
+    dataset_name: str,
+    experiment_name: str,
+    num_threads: int,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     """A one-shot generator uploaded to a real backend, across several requests.
 
@@ -105,13 +109,25 @@ def test_batch_upload_items__generator_source__every_item_lands_exactly_once(
     fragments, the explicit gzip and the `Content-Encoding` that labels it, and the
     auth headers `wrapper_headers` supplies are only ever asserted against a captured
     body in the unit tests, so a body the backend rejects would not fail any of them.
-    2,500 items is three requests at the 1000-item cap, and both thread counts are
+    250 items is three requests at a 100-item cap -- lowered from 1000 so the test
+    spans several requests without thousands of items -- and both thread counts are
     covered because one sends inline and the other hands bodies to the send pool.
 
     A generator is the input this path could not take at all before: the method
     typed its argument `List` and called `len()` on it.
     """
-    item_count = 2_500
+    monkeypatch.setattr(constants, "EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE", 100)
+    sent_batch_sizes: List[int] = []
+    send_batch = experiment_module.Experiment._send_batch
+
+    def _counting_send_batch(self: Any, upload: Any, body: bytes, batch: Any) -> None:
+        sent_batch_sizes.append(len(batch))
+        send_batch(self, upload, body, batch)
+
+    monkeypatch.setattr(
+        experiment_module.Experiment, "_send_batch", _counting_send_batch
+    )
+    item_count = 250
     dataset, ids_by_index = _create_dataset(opik_client, dataset_name, item_count)
     experiment = opik_client.create_experiment(
         dataset_name=dataset.name, name=experiment_name, project_name=PROJECT_NAME
@@ -145,6 +161,7 @@ def test_batch_upload_items__generator_source__every_item_lands_exactly_once(
     experiment.batch_upload_items(
         source(), project_name=PROJECT_NAME, num_threads=num_threads
     )
+    assert sorted(sent_batch_sizes) == [50, 100, 100]
 
     stored = _wait_for_experiment_items(experiment, item_count)
     _assert_each_dataset_item_once(stored, list(ids_by_index.values()))
