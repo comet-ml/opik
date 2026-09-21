@@ -16,18 +16,20 @@ Things you can ask for and get in one turn, without leaving your editor:
 
 <CardGroup cols={2}>
   <Card title="Instrument this project" icon="fa-solid fa-wand-magic-sparkles">
-    Your assistant adds tracing in the right places for your framework, runs the
-    app, and confirms the traces arrived.
+    It adds tracing in the right places for your framework, runs the app, and
+    reads the trace back to prove it arrived.
   </Card>
-  <Card title="Why did this get worse?" icon="fa-solid fa-magnifying-glass-chart">
-    It reads the failing traces and their scores directly, instead of you pasting
-    screenshots into chat.
+  <Card title="Why did this trace fail?" icon="fa-solid fa-magnifying-glass-chart">
+    It reads the whole span tree, the errors and the feedback scores directly,
+    instead of you pasting screenshots into chat.
   </Card>
-  <Card title="Build me a test suite" icon="fa-solid fa-vial">
-    From traces you already have, so the cases are real ones your app hit.
+  <Card title="Triage what's breaking" icon="fa-solid fa-triangle-exclamation">
+    It pulls open [Diagnostics](/tracing/diagnostics) issues with their root cause and
+    affected traces, fixes the code, and resolves them.
   </Card>
-  <Card title="Keep an eye on this" icon="fa-solid fa-gauge-high">
-    Every later change can be checked against real traces as you make it.
+  <Card title="Build a test suite from real traces" icon="fa-solid fa-vial">
+    It filters your traces, turns the interesting ones into suite items, and runs
+    an experiment over them.
   </Card>
 </CardGroup>
 
@@ -61,7 +63,8 @@ SDK:
   <Step title="Start a new session">
     Assistants read their configuration at startup, so **start a new session**
     before trying the prompts below. On Opik Cloud, complete the browser sign-in
-    when your client prompts for it.
+    when your client prompts for it, then ask **"list my Opik projects"** to
+    confirm the connection.
   </Step>
 </Steps>
 
@@ -88,12 +91,13 @@ whole loop, so if it works, everything is wired up.
 Add Opik tracing to this project, then run it and show me the trace you created.
 ```
 
-```text title="Confirm where this repo is logging"
-List my Opik projects and tell me which one this repo is logging to.
+```text title="Triage production"
+Show me the open Diagnostics issues in Opik, then fix the one hitting the most traces.
 ```
 
 ```text title="Find what's slow or failing"
-Look at the last 20 traces in Opik and tell me what's slowest and what's failing.
+Find the failing and slowest traces from the last 24 hours and tell me what they
+have in common.
 ```
 
 ```text title="Turn real traces into a test suite"
@@ -127,15 +131,16 @@ you change something. A typical investigative loop, using Claude Code:
   </Accordion>
   <Accordion title="Is it safe to let an agent write to my workspace?">
     The agent acts with your permissions and cannot exceed them. One tool,
-    `write`, can score, comment, save prompt versions and create traces; everything
-    else is read-only. Keep your client's tool approval on for writes. Trace content
-    is text your users wrote, so treat anything the agent reads from a trace as
-    data, not as instructions.
+    `write`, can score, comment, save prompt versions and create traces, test
+    suites and experiments; everything else is read-only, and **nothing can be
+    deleted** — there is no delete operation at all. Keep your client's tool
+    approval on for writes. Trace content is text your users wrote, so treat
+    anything the agent reads from a trace as data, not as instructions.
   </Accordion>
   <Accordion title="My client is not in the list. Can I still use it?">
     Yes. The CLI covers Claude Code, Cursor, VS Code Copilot, Codex and opencode;
     any other client can be pointed at the server by hand. See
-    [Manual setup](/mcp-server-advanced#manual-setup).
+    [Manual setup](/mcp-server-configuration#manual-setup).
   </Accordion>
   <Accordion title="How do I update?">
     `uvx opik@latest mcp configure`. It re-runs setup for each client and refreshes
@@ -146,7 +151,7 @@ you change something. A typical investigative loop, using Claude Code:
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Advanced configuration" icon="fa-regular fa-sliders" href="/mcp-server-advanced">
+  <Card title="Configuration & troubleshooting" icon="fa-regular fa-sliders" href="/mcp-server-configuration">
     Status checks, hosted vs. local server, self-hosted Opik, per-client manual
     setup, CI, and troubleshooting.
   </Card>

@@ -102,14 +102,17 @@ navigation:
             path: ./docs-v2/quickstart.mdx
             slug: /quickstart
             icon: fa-regular fa-bolt
-          - page: MCP Server
-            path: ./docs-v2/prompt_engineering/mcp-server.mdx
-            slug: mcp-server
+          - section: MCP Server
+            skip-slug: true
+            collapsed: true
             icon: fa-regular fa-network-wired
-          - page: MCP Advanced Setup
-            path: ./docs-v2/prompt_engineering/mcp-server-advanced.mdx
-            slug: mcp-server-advanced
-            icon: fa-regular fa-sliders
+            contents:
+              - page: Overview
+                path: ./docs-v2/prompt_engineering/mcp-server.mdx
+                slug: mcp-server
+              - page: Configuration & troubleshooting
+                path: ./docs-v2/prompt_engineering/mcp-server-configuration.mdx
+                slug: mcp-server-configuration
           - page: Ollie Agent
             path: ./docs-v2/ollie.mdx
             slug: ollie
@@ -679,12 +682,16 @@ navigation:
           - page: Overview
             path: ./docs-v2/integrations/coding-agents.mdx
             slug: coding-agents
-          - page: MCP Server
-            path: ./docs-v2/prompt_engineering/mcp-server.mdx
-            slug: mcp-server
-          - page: MCP Advanced Setup
-            path: ./docs-v2/prompt_engineering/mcp-server-advanced.mdx
-            slug: mcp-server-advanced
+          - section: MCP Server
+            skip-slug: true
+            collapsed: true
+            contents:
+              - page: Overview
+                path: ./docs-v2/prompt_engineering/mcp-server.mdx
+                slug: mcp-server
+              - page: Configuration & troubleshooting
+                path: ./docs-v2/prompt_engineering/mcp-server-configuration.mdx
+                slug: mcp-server-configuration
           - page: Claude Code
             path: ./docs-v2/integrations/claude-code.mdx
             slug: claude-code

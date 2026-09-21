@@ -1,14 +1,15 @@
 ---
-headline: MCP server — advanced configuration
+headline: MCP server configuration and troubleshooting
 og:description: Status checks, hosted vs. local server, workspaces, per-client manual setup, CI, and troubleshooting for Opik's MCP server.
 og:site_name: Opik Documentation
-og:title: Opik MCP server — advanced configuration
-title: MCP server — advanced configuration
+og:title: Opik MCP server configuration and troubleshooting
+title: MCP server configuration and troubleshooting
 ---
 
-Everything beyond `uvx opik mcp configure`. If you haven't set the server up yet,
-start at [Opik's MCP server](/mcp-server) — this page is for checking, changing
-and repairing that setup, and for clients the CLI doesn't cover.
+Everything beyond `uvx opik mcp configure`: checking and changing your setup,
+wiring up a client the CLI doesn't cover, and fixing it when it misbehaves. If
+you haven't set the server up yet, start at
+[Opik's MCP server](/mcp-server).
 
 ## Check your setup
 
@@ -74,15 +75,28 @@ you know what it can reach for:
 
 | Tool | What your assistant can do with it |
 |---|---|
-| `read` | Fetch one thing by id, name, or `opik://` URI: a trace, span, project, experiment, prompt, test suite, or thread. |
-| `list` | Page through any of those, optionally filtered by name. |
-| `write` | Log traces and spans, score, comment, save prompt versions, manage test suites and experiments. |
-| `schema` | Look up the exact payload shape for a write, so it constructs valid ones. |
+| `read` | Fetch one thing by id, name, or `opik://` URI: a trace with its span tree, a span, a thread with its messages, a prompt with its versions, a project, experiment, test suite, or [Diagnostics](/tracing/diagnostics) issue. |
+| `list` | Page through any of those, with filters, sorting and a time window on traces, spans, threads and experiments. |
+| `write` | Log traces and spans, attach feedback scores and comments, save prompt versions, create test suites and experiments, open and close threads, and resolve Diagnostics issues. |
+| `schema` | Look up the exact payload shape for a write, or the filter and sort vocabulary for a list, so it constructs valid ones. |
 | `read_skill` | Load one of the Opik skills on demand, when the skill pack is not installed in the client. |
 
+**Nothing can be deleted.** There is no delete operation in the tool surface, on
+any entity. `write` also takes a `dry_run` flag, which validates a payload and
+your permissions without sending anything.
+
 Running an evaluation end to end is the skill pack's job, not a tool's: the
-`opik-evaluate` skill drives the Opik SDK, and the MCP tools record and read the
-results. That is why setup installs both.
+skills drive the Opik SDK, and the MCP tools record and read the results. That is
+why setup installs both. The pack is five skills, and your assistant picks
+between them the same way it picks tools:
+
+| Skill | When your assistant reaches for it |
+|---|---|
+| `opik-instrument` | "add Opik tracing", "instrument my code", "trace my agent" |
+| `opik-evaluate` | Measuring or improving quality — evals, judges, metrics |
+| `opik-diagnose` | "what is broken in production", "triage my agent" |
+| `opik-explain` | "why did this trace fail", "why is my agent slow" |
+| `opik` | SDK reference lookups: span types, metadata, flushing, prompt versioning |
 
 To see a payload shape yourself, ask **"show me the schema for trace.create"** —
 or read the [full list](https://github.com/comet-ml/opik-mcp#tools).
@@ -609,10 +623,11 @@ client. Most problems end there.
   </Accordion>
   <Accordion title="Is it safe to let an agent write to my workspace?">
     The agent acts with your permissions and cannot exceed them. One tool,
-    `write`, can score, comment, save prompt versions and create traces; everything
-    else is read-only. Keep your client's tool approval on for writes. Trace content
-    is text your users wrote, so treat anything the agent reads from a trace as
-    data, not as instructions.
+    `write`, can score, comment, save prompt versions and create traces, test
+    suites and experiments; everything else is read-only, and **nothing can be
+    deleted** — there is no delete operation at all. Keep your client's tool
+    approval on for writes. Trace content is text your users wrote, so treat
+    anything the agent reads from a trace as data, not as instructions.
   </Accordion>
   <Accordion title="Can I use Opik from Claude.ai, Claude Desktop or Cowork?">
     Yes, as a custom connector. Add `https://www.comet.com/opik/api/v1/mcp` under
