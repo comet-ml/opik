@@ -16,7 +16,7 @@ matching skip-on-missing-credentials wrappers.
 """
 
 import os
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any, Iterator, List, Tuple
 
 import pytest
 
@@ -32,27 +32,20 @@ from tests import llm_constants
 #   canonical "doesn't call tools" failure mode (see
 #   `SupportedJudgeProvider.java`), so don't swap it in here without
 #   re-validating tool-use tests by hand.
-# - Anthropic `claude-sonnet-4-6` (native `AnthropicChatModel`): the
-#   Claude tier we run the agentic judge against. Haiku is cheaper but
-#   on the agentic path (tools in the request, so `response_format` is
-#   best-effort) it narrates in prose and wraps the verdict in a
-#   ```json fence rather than emitting the bare object the parser
-#   expects; Sonnet follows the structured-output contract reliably.
-# - Anthropic `claude-sonnet-4-6` *via LiteLLM* (`litellm_anthropic`):
-#   identical model string as the native row, but routed through the
-#   LiteLLM adapter by forcing `_should_use_anthropic_native=False`.
-#   This is the only parametrize entry that exercises Anthropic-by-
-#   LiteLLM; without it, the LiteLLM path for tool-use never gets
-#   touched by this suite (OpenAI uses LiteLLM too, but its provider
-#   quirks differ from Anthropic's).
-#
-# Both Anthropic rows enable prompt caching. The agentic system prompt
-# plus the tool schemas is a ~3k-token prefix that is identical on every
-# turn of every test, well above Sonnet's 1024-token cache minimum, and
-# Sonnet is the priciest model in the suite — so cache reads (10% of the
-# input price) are where the money goes. The native SDK takes a top-level
-# `cache_control` marker; LiteLLM takes `cache_control_injection_points`
-# on the system message, which caches the tools + system prefix.
+# - Anthropic `claude-haiku-4-5` (native `AnthropicChatModel`): the
+#   cheapest Claude tier. It was pinned to Sonnet for a while because on
+#   the agentic path Haiku sometimes wrapped the verdict in a ```json
+#   fence the strict parser rejects; if that resurfaces, harden
+#   `llm_judge/parsers.py` rather than paying for Sonnet.
+# - The same Haiku model *via LiteLLM* (`litellm_anthropic`): identical
+#   model string as the native row, but routed through the LiteLLM
+#   adapter by forcing `_should_use_anthropic_native=False`. This is the
+#   only parametrize entry that exercises Anthropic-by-LiteLLM; without
+#   it, the LiteLLM path for tool-use never gets touched by this suite
+#   (OpenAI uses LiteLLM too, but its provider quirks differ from
+#   Anthropic's). It only means something because the suite's
+#   requirements install the `anthropic` package — otherwise the factory
+#   falls back to LiteLLM for both rows anyway.
 #
 # The fixture-name lists materialize via `request.getfixturevalue` —
 # each wrapper either yields (creds present) or calls `pytest.skip`,
@@ -61,16 +54,12 @@ from tests import llm_constants
 _JUDGE_MODEL_PARAMS: List[Tuple[str, List[str]]] = [
     (llm_constants.OPENAI_GPT_4O_MINI, ["_skip_unless_openai_configured"]),
     (
-        f"{llm_constants.ANTHROPIC_CLAUDE_SONNET}",
-        ["_skip_unless_anthropic_configured", "_cache_anthropic_prompt_native"],
+        llm_constants.ANTHROPIC_CLAUDE_HAIKU,
+        ["_skip_unless_anthropic_configured"],
     ),
     (
-        f"{llm_constants.LITELLM_ANTHROPIC_CLAUDE_SONNET}",
-        [
-            "_skip_unless_anthropic_configured",
-            "_force_litellm_path",
-            "_cache_anthropic_prompt_litellm",
-        ],
+        llm_constants.LITELLM_ANTHROPIC_CLAUDE_HAIKU,
+        ["_skip_unless_anthropic_configured", "_force_litellm_path"],
     ),
 ]
 
@@ -145,53 +134,6 @@ def _force_litellm_path(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         # Clear again on the way out so subsequent tests start from a
         # clean cache and the native path is rebuilt freshly.
         models_factory._MODEL_CACHE.clear()
-
-
-def _inject_model_kwargs(
-    monkeypatch: pytest.MonkeyPatch, extra_kwargs: Dict[str, Any]
-) -> Iterator[None]:
-    """Add `extra_kwargs` to every model the factory builds.
-
-    `LLMJudge` only forwards `temperature` / `seed` / `reasoning_effort`
-    to `models_factory.get`, so provider-specific knobs like prompt
-    caching have no public path in. Wrapping `_create_model` is the
-    narrowest hook: the cache key is computed before it runs, so the
-    injected kwargs never leak into cache lookups.
-    """
-    original_create_model = models_factory._create_model
-
-    def create_model_with_extra(
-        model_name: str, track: bool, model_kwargs: Dict[str, Any]
-    ) -> Any:
-        return original_create_model(
-            model_name, track, {**model_kwargs, **extra_kwargs}
-        )
-
-    monkeypatch.setattr(models_factory, "_create_model", create_model_with_extra)
-    models_factory._MODEL_CACHE.clear()
-    try:
-        yield
-    finally:
-        models_factory._MODEL_CACHE.clear()
-
-
-@pytest.fixture
-def _cache_anthropic_prompt_native(
-    monkeypatch: pytest.MonkeyPatch,
-) -> Iterator[None]:
-    yield from _inject_model_kwargs(
-        monkeypatch, {"cache_control": {"type": "ephemeral"}}
-    )
-
-
-@pytest.fixture
-def _cache_anthropic_prompt_litellm(
-    monkeypatch: pytest.MonkeyPatch,
-) -> Iterator[None]:
-    yield from _inject_model_kwargs(
-        monkeypatch,
-        {"cache_control_injection_points": [{"location": "message", "role": "system"}]},
-    )
 
 
 @pytest.fixture(params=JUDGE_MODEL_PARAMS)

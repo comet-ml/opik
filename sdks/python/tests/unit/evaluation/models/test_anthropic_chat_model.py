@@ -220,12 +220,6 @@ class TestMessageAdapter:
         assert "logprobs" in warned
         assert "top_logprobs" in warned
 
-    def test_filter_unsupported_params__cache_control_is_kept(self):
-        result = message_adapter.filter_unsupported_params(
-            {"cache_control": {"type": "ephemeral"}}, set()
-        )
-        assert result == {"cache_control": {"type": "ephemeral"}}
-
     def test_filter_unsupported_params_warns_once(self):
         warned: set = set()
         message_adapter.filter_unsupported_params({"logprobs": True}, warned)
@@ -784,21 +778,6 @@ class TestParamFiltering:
         assert "logprobs" not in model._completion_kwargs
         assert "top_logprobs" not in model._completion_kwargs
         assert "frequency_penalty" not in model._completion_kwargs
-
-    def test_build_call_kwargs__cache_control__moved_into_extra_body(self, monkeypatch):
-        _install_anthropic_stub(monkeypatch)
-        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
-
-        model = anthropic_chat_model.AnthropicChatModel(
-            model_name="anthropic/claude-sonnet-4-20250514",
-            track=False,
-            cache_control={"type": "ephemeral"},
-        )
-
-        call_kwargs = model._build_call_kwargs([{"role": "user", "content": "hi"}], {})
-
-        assert "cache_control" not in call_kwargs
-        assert call_kwargs["extra_body"] == {"cache_control": {"type": "ephemeral"}}
 
     def test_normalizes_constructor_tools_into_anthropic_shape(self, monkeypatch):
         """Regression: OpenAI-shape `tools` passed at construction time

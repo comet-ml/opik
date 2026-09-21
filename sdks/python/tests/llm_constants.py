@@ -49,18 +49,13 @@ OPENAI_REASONING_EFFORT = "minimal"
 # ---------------------------------------------------------------------------
 # Anthropic
 # ---------------------------------------------------------------------------
-# Default: Haiku — the cheapest Claude tier Anthropic still serves. Sonnet
-# is kept only for the agentic LLM judge, where Haiku wraps the verdict in a
-# ```json fence the strict parser rejects (see
-# metrics_with_llm_judge/agentic/conftest.py).
-ANTHROPIC_CLAUDE_SONNET = "claude-sonnet-4-6"
+# Haiku — the cheapest Claude tier Anthropic still serves — is the only model
+# used for direct Anthropic API calls (Bedrock has its own constants below).
 ANTHROPIC_CLAUDE_HAIKU = "claude-haiku-4-5-20251001"
 
-# Short prefixes for version checking in tests (e.g. ANY_STRING.starting_with(...))
-ANTHROPIC_CLAUDE_SONNET_SHORT = "claude-sonnet-4"
+# Short prefix for version checking in tests (e.g. ANY_STRING.starting_with(...))
 ANTHROPIC_CLAUDE_HAIKU_SHORT = "claude-haiku-4"
 
-LITELLM_ANTHROPIC_CLAUDE_SONNET = f"anthropic/{ANTHROPIC_CLAUDE_SONNET}"
 LITELLM_ANTHROPIC_CLAUDE_HAIKU = f"anthropic/{ANTHROPIC_CLAUDE_HAIKU}"
 
 AISUITE_ANTHROPIC_CLAUDE_HAIKU = f"anthropic:{ANTHROPIC_CLAUDE_HAIKU}"

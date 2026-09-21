@@ -45,7 +45,6 @@ _SUPPORTED_PARAMS: frozenset[str] = frozenset(
         "tools",
         "tool_choice",
         "metadata",
-        "cache_control",
     }
 )
 
