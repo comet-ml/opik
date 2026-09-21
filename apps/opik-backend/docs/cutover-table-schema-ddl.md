@@ -293,7 +293,7 @@ The successors were designed rather than copied, so each differs from its live t
 not flag. Those differences are **enumerated one by one** on `CutoverSchemaParity`, with a reason each, and pinned on
 *both* sides — so a column that drifts away from its documented type fails even though it still "differs".
 
-Spans carries three kinds traces does not:
+Spans carries three kinds of difference that traces does not:
 
 * **more type differences** — eleven of thirty-eight shared columns rather than six of thirty-one. The extra five are
   `parent_span_id` (`String` → `FixedString(36)`), `usage` (`Map(String, Int32)` → `Map(String, Int64)`), and the three

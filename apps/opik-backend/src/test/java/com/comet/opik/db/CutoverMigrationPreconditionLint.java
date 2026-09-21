@@ -252,9 +252,25 @@ enum CutoverMigrationPreconditionLint {
                     && ON_ERROR_HALT.matcher(changeSet.body()).find()
                     && check.find();
             if (guarded) {
-                guardedBranches.add(check.group(1));
-                branchCounts.merge(check.group(1), 1, Integer::sum);
-                branchObjects.computeIfAbsent(check.group(1), branch -> new LinkedHashSet<>())
+                var branch = check.group(1);
+
+                // The check counts rows in system.tables for one exact table name, so 0 and 1 are the only answers it
+                // can give. Anything else is unsatisfiable: the changeset is recorded MARK_RAN on every install and its
+                // DDL lands nowhere. A typo'd *pair* is already caught by the both-branches rule below, but a typo
+                // alongside a correct pair would otherwise leave a whole changeset unexamined.
+                if (!REQUIRED_BRANCHES.contains(branch)) {
+                    problems.add("""
+                            %s: changeset '%s' guards on expectedResult:%s, which its own check can never return — it \
+                            counts the rows in system.tables for one table name, so the only answers are 0 \
+                            (pre-cutover) and 1 (post-cutover). The changeset would be recorded MARK_RAN on every \
+                            install and its statements would never run anywhere.\
+                            """.formatted(fileName, changeSet.name(), branch));
+                    continue;
+                }
+
+                guardedBranches.add(branch);
+                branchCounts.merge(branch, 1, Integer::sum);
+                branchObjects.computeIfAbsent(branch, key -> new LinkedHashSet<>())
                         .addAll(mutatedObjectsIn(statements));
             } else {
                 problems.add("""

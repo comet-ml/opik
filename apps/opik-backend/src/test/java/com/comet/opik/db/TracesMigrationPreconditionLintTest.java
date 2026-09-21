@@ -383,6 +383,41 @@ class TracesMigrationPreconditionLintTest {
         }
 
         /**
+         * A branch key the check can never return. The sqlCheck counts rows in {@code system.tables} for one table
+         * name, so 0 and 1 are the only answers; anything else leaves the changeset recorded {@code MARK_RAN} on every
+         * install, with its statements never running anywhere.
+         *
+         * <p>The typo'd <i>pair</i> is already caught by the both-branches rule, which reports "found only [0, 2]".
+         * This is the case it misses: a correct pair plus a stray third changeset, where the branch set still contains
+         * 0 and 1 and the odd one out goes unexamined.
+         */
+        @Test
+        void rejectsABranchKeyTheCheckCanNeverReturn() {
+            var sql = """
+                    --liquibase formatted sql
+                    --changeset opik:000200_pre_cutover
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ADD COLUMN IF NOT EXISTS foo String;
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local_v2 ADD COLUMN IF NOT EXISTS foo String;
+
+                    --changeset opik:000200_post_cutover
+                    %s
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces_local ADD COLUMN IF NOT EXISTS foo String;
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ADD COLUMN IF NOT EXISTS foo String;
+
+                    --changeset opik:000200_typo
+                    --preconditions onFail:MARK_RAN onError:HALT
+                    --precondition-sql-check expectedResult:2 SELECT count() FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'traces_local'
+                    ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ADD COLUMN IF NOT EXISTS never_lands String;
+                    """
+                    .formatted(GUARD_PRE, GUARD_POST);
+
+            assertThat(LINT.problems("000200_add_foo.sql", sql))
+                    .singleElement(STRING)
+                    .contains("can never return");
+        }
+
+        /**
          * A block-commented mutation is not a mutation. Rejecting one would be a false positive — the kind that teaches
          * people the lint is noise and to work around it.
          */
