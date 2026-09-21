@@ -218,6 +218,7 @@ const usePromptDatasetItemCombination = ({
         updateOutput(prompt.id, datasetItemId, {
           isLoading: true,
           value: null,
+          error: undefined,
           selectedRuleIds,
           usage: undefined,
         });
@@ -299,10 +300,12 @@ const usePromptDatasetItemCombination = ({
         }
       } catch (error) {
         const typedError = error as Error;
+        // Stopping a run is not a failure
+        const stopped = controller.signal.aborted;
 
         updateOutput(prompt.id, datasetItemId, {
-          value: typedError.message,
           isLoading: false,
+          ...(stopped ? {} : { error: typedError.message }),
         });
       } finally {
         deleteAbortController(key);
