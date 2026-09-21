@@ -34,7 +34,9 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
     if seen is None:
         seen = set()
 
-    if hasattr(obj, "__dict__"):
+    # slots=True dataclass instances have no __dict__ but are encoded recursively.
+    track_cycles = hasattr(obj, "__dict__") or dataclasses.is_dataclass(obj)
+    if track_cycles:
         obj_id = id(obj)
         if obj_id in seen:
             LOGGER.debug(f"Found cyclic reference to {type(obj).__name__} id={obj_id}")
@@ -47,7 +49,18 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
                 return encode(encoder(obj), seen)
 
         if dataclasses.is_dataclass(obj):
-            obj_dict = obj.__dict__
+            obj_dict = getattr(obj, "__dict__", {})
+            if not isinstance(obj, type):
+                # Fields declared through __slots__ are not stored in __dict__,
+                # which is missing or partial for slots=True dataclasses.
+                obj_dict = {
+                    **{
+                        field.name: getattr(obj, field.name)
+                        for field in dataclasses.fields(obj)
+                        if hasattr(obj, field.name)
+                    },
+                    **obj_dict,
+                }
             return encode(obj_dict, seen)
 
         if isinstance(obj, pydantic.BaseModel):
@@ -99,7 +112,7 @@ def encode(obj: Any, seen: Optional[Set[int]] = None) -> Any:
     finally:
         # Once done encoding this object, remove from `seen`,
         # so the same object can appear again at a sibling branch.
-        if hasattr(obj, "__dict__"):
+        if track_cycles:
             obj_id = id(obj)
             seen.remove(obj_id)
 
