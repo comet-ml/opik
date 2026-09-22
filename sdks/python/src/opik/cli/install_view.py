@@ -344,12 +344,18 @@ class RichInstallView(mcp_view.InstallView):
         if not selector.is_supported():
             return mcp_view.numbered_menu(title, candidates)
 
-        # "All" first, and the cursor starts on it. Nothing is pre-ticked — this
-        # writes into other tools' config files, so the list stays opt-in — but
-        # with an empty selection Enter takes the highlighted row, which meant
-        # Enter registered whichever single client happened to be first. Now the
-        # row it lands on says All. The numbered-menu fallback above has carried
-        # its own "All of the above" all along; this gives the picker the parity.
+        # The clients first, then the two catch-all rows: `All`, then the manual
+        # one. That is the order the numbered-menu fallback below has always
+        # used, and it keeps the rows the user is actually choosing between at
+        # the top rather than behind a summary row.
+        #
+        # Nothing is pre-ticked — this writes into other tools' config files, so
+        # the list stays opt-in — and with an empty selection `multiselect` takes
+        # the highlighted row, so a bare Enter registers the first client rather
+        # than all of them. That is the conservative half of the trade: the
+        # clients are listed in priority order, so the row Enter lands on is the
+        # most likely one, and picking every client stays a deliberate act.
+        #
         # One candidate skips the `All` row, having nothing to stand in for, but
         # still gets the picker. A one-item list was not thought worth arrow keys
         # until the manual row moved in here: skipping the picker skipped that
@@ -362,11 +368,11 @@ class RichInstallView(mcp_view.InstallView):
         )
         chosen = selector.multiselect(
             title=title,
-            choices=all_row
-            + [
+            choices=[
                 selector.Choice(key=c.key, label=c.label, hint=c.hint)
                 for c in candidates
             ]
+            + all_row
             + [
                 selector.Choice(
                     key=mcp_view.MANUAL_SETUP,
@@ -382,7 +388,7 @@ class RichInstallView(mcp_view.InstallView):
         # answer to it is a link rather than nothing.
         if chosen is None:
             return None
-        # `All` first: the two are mutually exclusive by construction — select-all
+        # `All` wins: the two are mutually exclusive by construction — select-all
         # skips synthetic rows — but a list holding both can only have meant all.
         if _ALL in chosen:
             return [c.key for c in candidates]
