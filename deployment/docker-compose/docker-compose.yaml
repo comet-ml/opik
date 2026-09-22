@@ -116,7 +116,7 @@ services:
     entrypoint: [ "/bin/sh", "-c" ]
     command: [ "mkdir -p /data && exec minio server --console-address ':9090' /data" ]
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:9000/minio/health/live" ]
+      test: [ "CMD", "mc", "ready", "local" ]
       interval: 1s
       timeout: 10s
       retries: 30

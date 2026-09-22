@@ -4,12 +4,12 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -32,8 +32,14 @@ public class CustomChartsConfig {
      * <p>Held as a String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot
      * bind to a collection; {@link #getEnabledWorkspaces()} splits, strips and drops blanks.
      */
+    /**
+     * Nullable rather than {@code @NotNull}: Dropwizard substitutes an env var that is set but empty as an empty
+     * scalar, which binds to null and would fail validation before startup — so exporting
+     * {@code TOGGLE_CUSTOM_CHARTS_WORKSPACES=""}, the obvious way to turn the feature off, would stop the backend
+     * booting. Null and blank both mean "no workspace allowlisted".
+     */
     @JsonProperty
-    private @NotNull String enabledWorkspaces = "";
+    private String enabledWorkspaces = "";
 
     /**
      * Derived: the parsed, stripped, blank-free set of allowlisted workspace ids. Parsed on first use and kept,
@@ -43,7 +49,7 @@ public class CustomChartsConfig {
     public Set<String> getEnabledWorkspaces() {
         Set<String> parsed = parsedEnabledWorkspaces;
         if (parsed == null) {
-            parsed = Arrays.stream(enabledWorkspaces.split(","))
+            parsed = Arrays.stream(Objects.toString(enabledWorkspaces, "").split(","))
                     .map(String::strip)
                     .filter(workspaceId -> !workspaceId.isEmpty())
                     .collect(Collectors.toUnmodifiableSet());
