@@ -36,8 +36,8 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-@DisplayName("Entity name enricher Test")
-class EntityNameEnricherTest {
+@DisplayName("Free-form SQL result name enricher Test")
+class FreeFormSqlResultNameEnricherTest {
 
     private static final String CALLER_WORKSPACE = UUID.randomUUID().toString();
 
@@ -48,7 +48,7 @@ class EntityNameEnricherTest {
     @Mock
     private ProjectDAO projectDAO;
 
-    private EntityNameEnricher enricher;
+    private FreeFormSqlResultNameEnricher enricher;
 
     @BeforeEach
     void setUp() {
@@ -61,7 +61,7 @@ class EntityNameEnricherTest {
         });
         when(projectDAO.findByIds(anySet(), anyString())).thenReturn(List.of());
 
-        enricher = new EntityNameEnricher(template, new FreeFormSqlConfig());
+        enricher = new FreeFormSqlResultNameEnricher(template, new FreeFormSqlConfig());
     }
 
     @Test

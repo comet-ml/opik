@@ -15,7 +15,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.HashMap;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,7 +39,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 @Singleton
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-public class EntityNameEnricher {
+public class FreeFormSqlResultNameEnricher {
 
     /** Id column -> the sibling it gets. A column the query already selected under the sibling name is left alone. */
     private static final Map<String, String> NAME_COLUMNS = Map.of(
@@ -55,29 +55,32 @@ public class EntityNameEnricher {
      * is honest where an empty cell would read as "no name".
      */
     public List<JsonNode> enrich(@NonNull List<JsonNode> rows, @NonNull String workspaceId) {
-        Map<String, Set<UUID>> idsByColumn = new HashMap<>();
+        Map<String, Map<UUID, String>> labelsByColumn = new HashMap<>();
         NAME_COLUMNS.keySet().forEach(idColumn -> {
-            Set<UUID> ids = collectIds(rows, idColumn);
-            if (!ids.isEmpty()) {
-                idsByColumn.put(idColumn, ids);
+            Map<UUID, String> labels = rawLabels(rows, idColumn);
+            if (!labels.isEmpty()) {
+                labelsByColumn.put(idColumn, labels);
             }
         });
-        if (idsByColumn.isEmpty()) {
+        if (labelsByColumn.isEmpty()) {
             return rows;
         }
 
-        Map<String, Map<UUID, String>> namesByColumn = lookUpNames(idsByColumn, workspaceId);
-        rows.forEach(row -> namesByColumn.forEach((idColumn, names) -> addName(row, idColumn, names)));
+        resolveNames(labelsByColumn, workspaceId);
+        rows.forEach(row -> labelsByColumn.forEach((idColumn, labels) -> addName(row, idColumn, labels)));
         return rows;
     }
 
-    /** One transaction for both lookups: this runs on the render path, so it should cost one round trip, not two. */
-    private Map<String, Map<UUID, String>> lookUpNames(Map<String, Set<UUID>> idsByColumn, String workspaceId) {
-        return template.inTransaction(READ_ONLY, handle -> {
-            Map<String, Map<UUID, String>> namesByColumn = new HashMap<>();
-            idsByColumn.forEach((idColumn, ids) -> namesByColumn.put(idColumn, names(handle, idColumn, ids,
-                    workspaceId)));
-            return namesByColumn;
+    /**
+     * Overwrites the seeded raw ids with real names where they resolve. One transaction for both lookups: this runs
+     * on the render path, so it should cost one round trip, not two. Anything that does not resolve — an id from
+     * another workspace, a column over the cap — simply keeps the label it was seeded with.
+     */
+    private void resolveNames(Map<String, Map<UUID, String>> labelsByColumn, String workspaceId) {
+        template.inTransaction(READ_ONLY, handle -> {
+            labelsByColumn.forEach(
+                    (idColumn, labels) -> labels.putAll(names(handle, idColumn, labels.keySet(), workspaceId)));
+            return null;
         });
     }
 
@@ -107,22 +110,25 @@ public class EntityNameEnricher {
         return byId;
     }
 
-    /** A null, blank or unparseable id is skipped: a malformed value is a bug in one chart, not a reason to fail it. */
-    private static Set<UUID> collectIds(List<JsonNode> rows, String idColumn) {
-        Set<UUID> ids = new LinkedHashSet<>();
-        for (JsonNode row : rows) {
-            parseId(row, idColumn).ifPresent(ids::add);
-        }
-        return ids;
+    /**
+     * Every id the column holds, mapped to its own raw text. Seeding the fallback here rather than at the point of
+     * use means an unresolved id needs no special case later — and {@code keySet()} is the lookup's input.
+     *
+     * <p>A null, blank or unparseable id is skipped: a malformed value is a bug in one chart, not a reason to fail it.
+     */
+    private static Map<UUID, String> rawLabels(List<JsonNode> rows, String idColumn) {
+        Map<UUID, String> labels = new LinkedHashMap<>();
+        rows.forEach(row -> parseId(row, idColumn)
+                .ifPresent(id -> labels.putIfAbsent(id, row.get(idColumn).asText())));
+        return labels;
     }
 
-    private static void addName(JsonNode row, String idColumn, Map<UUID, String> names) {
+    private static void addName(JsonNode row, String idColumn, Map<UUID, String> labels) {
         String nameColumn = NAME_COLUMNS.get(idColumn);
         if (!(row instanceof ObjectNode object) || row.has(nameColumn)) {
             return;
         }
-        parseId(row, idColumn).ifPresent(id -> object.put(nameColumn,
-                names.getOrDefault(id, row.get(idColumn).asText())));
+        parseId(row, idColumn).ifPresent(id -> object.put(nameColumn, labels.get(id)));
     }
 
     private static Optional<UUID> parseId(JsonNode row, String idColumn) {
