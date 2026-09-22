@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
@@ -48,6 +49,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -62,6 +64,7 @@ import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspa
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItems;
 import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.assertExperimentResults;
+import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -98,6 +101,13 @@ class BulkInsertV2ClientIntegrationTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
     private static final String AUTHOR_FOR_REJECTION = "author-that-never-gets-used";
+
+    /**
+     * Tolerance for the ClickHouse container's clock against this JVM's when asserting a server-stamped
+     * timestamp. Wide enough not to flake on a loaded CI box, far narrower than the drift a stale or
+     * hard-coded value would show.
+     */
+    private static final Duration CLOCK_SKEW = Duration.ofMinutes(2);
 
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysqlContainer = MySQLContainerUtils.newMySQLContainer();
@@ -493,5 +503,80 @@ class BulkInsertV2ClientIntegrationTest {
         assertThat(actualTags).isEqualTo(expectedTags);
         // Not vacuous: three of the four carry tags, so a mapper that dropped them would fail here.
         assertThat(actualTags.values().stream().filter(t -> !t.isEmpty())).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("a dataset item version carries the item's authorship and server-stamps the row's own timestamps")
+    void datasetItemVersionsCarryAuthorshipAndServerStampRowTimestamps() {
+        // The version table, not dataset_items. With versioning enabled every read above already goes
+        // through DatasetItemVersionDAO, so the shared assertion covers the columns the two tables have
+        // in common. What it cannot cover is IGNORED_FIELDS_DATA_ITEM -- and four of those ignored
+        // fields are exactly the columns this table adds: item_created_at/by and item_last_updated_at/by,
+        // which the read aliases back onto createdAt/createdBy.
+        var datasetName = "v2-bulk-versions-" + RandomStringUtils.secure().nextAlphanumeric(12);
+
+        var items = IntStream.range(0, 3)
+                .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                        // MANUAL requires both ids absent; the source/id pairing itself is covered by
+                        // datasetItemsRoundTrip, so this test keeps that arm fixed and varies nothing.
+                        .source(DatasetItemSource.MANUAL)
+                        .traceId(null)
+                        .spanId(null)
+                        .build())
+                .toList();
+
+        var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                .datasetName(datasetName)
+                .datasetId(null)
+                .items(items)
+                .build();
+        // Bracketed rather than lower-bounded: an epoch is not the only wrong value a timestamp column
+        // can hold. A hard-coded or stale constant clears any "after 2000" check while proving nothing
+        // about server stamping, so the window is the write itself, widened only by clock skew between
+        // this JVM and the ClickHouse container.
+        var before = Instant.now().minus(CLOCK_SKEW);
+        datasetResourceClient.createDatasetItems(batch, WORKSPACE_NAME, API_KEY);
+        var after = Instant.now().plus(CLOCK_SKEW);
+
+        var actual = items.stream()
+                .map(item -> datasetResourceClient.getDatasetItem(item.id(), API_KEY, WORKSPACE_NAME))
+                .toList();
+
+        assertThat(actual).allSatisfy(stored -> {
+            assertThat(stored.createdBy()).isEqualTo(USER);
+            assertThat(stored.lastUpdatedBy()).isEqualTo(USER);
+            // item_created_at has no column DEFAULT, so an omitted or zeroed one reads back as the
+            // epoch rather than being stamped. DatasetItem marks these READ_ONLY, so an item arriving
+            // over HTTP never carries its own and the mapper's fallback is the only thing that fills
+            // them.
+            assertThat(stored.createdAt()).isBetween(before, after);
+            assertThat(stored.lastUpdatedAt()).isBetween(before, after);
+        });
+
+        // One instant for the whole batch rather than one per row. This is a deliberate difference from
+        // the R2DBC path, where formatTimestamp(null) mints a fresh Instant.now() per row: the helper
+        // re-runs the mapper on every insert attempt, so a per-row clock would give a retried row
+        // different timestamp bytes under the same id.
+        assertThat(actual.stream().map(DatasetItem::createdAt).distinct()).hasSize(1);
+
+        // The row's own created_at / last_updated_at are omitted from the JSON so their DEFAULT now64(9)
+        // stamps them, and no read exposes either. last_updated_at is the ReplacingMergeTree version, so
+        // a zero there would make every later write for the same key lose to this row for good.
+        var ids = items.stream().map(item -> "'" + item.id() + "'").collect(joining(","));
+        var stamped = queryOne(
+                ("SELECT count() AS row_count, min(created_at) AS min_created, "
+                        + "min(last_updated_at) AS min_updated, max(metadata) AS max_metadata "
+                        + "FROM dataset_item_versions WHERE workspace_id = '%s' AND id IN (%s)")
+                        .formatted(WORKSPACE_ID, ids),
+                row -> new Object[]{row.get("row_count", Long.class), row.get("min_created", Instant.class),
+                        row.get("min_updated", Instant.class), row.get("max_metadata", String.class)});
+
+        assertThat(stamped[0]).isEqualTo((long) items.size());
+        // Same window as above: these are stamped by now64(9) on the server, so they are the one pair
+        // here whose value the client never supplies at all.
+        assertThat((Instant) stamped[1]).isBetween(before, after);
+        assertThat((Instant) stamped[2]).isBetween(before, after);
+        // Written as "" unconditionally, matching the binder -- not carried from the item.
+        assertThat(stamped[3]).isEqualTo("");
     }
 }
