@@ -347,6 +347,81 @@ export class PlaygroundPage {
     return (await this.outputCells().allInnerTexts()).filter(hasProducedOutput).length;
   }
 
+  // ── failed-run output (OPIK-8468) ───────────────────────────────────────
+  //
+  // A run that fails renders `PlaygroundOutputError` — a red "Run failed: <message>" tag —
+  // in place of the model's answer, on both output surfaces. `RUN_ERROR_TEXT` above sniffs
+  // a failure out of a cell's own text instead, because before OPIK-8468 the failure WAS
+  // the output string and there was nothing else to read. It is deliberately left in
+  // place: these specs run against deployed Opik, so `waitForRunsComplete` still has to
+  // recognise a failure on a version that predates this tag.
+
+  /**
+   * Every "Run failed:" tag on the page — the single-prompt panels and the dataset output
+   * cells render the same component, so this spans both surfaces.
+   */
+  outputErrorTags(): Locator {
+    return this.page.getByTestId('playground-output-error');
+  }
+
+  /** The failure tags inside the dataset/suite results table only. */
+  resultsOutputErrorTags(): Locator {
+    return this.resultsTable().getByTestId('playground-output-error');
+  }
+
+  /**
+   * Rendered model answers. `MarkdownPreview` stamps `.comet-markdown` on every answer it
+   * renders, on both output surfaces — so "a failed run renders none of these" is the
+   * assertion OPIK-8468 exists for. Addressed by class rather than by testid because the
+   * component is shared far outside the Playground, where stamping one would reach well
+   * beyond this area.
+   */
+  renderedAnswers(): Locator {
+    return this.page.locator('.comet-markdown');
+  }
+
+  /** Rendered model answers inside the results table only. */
+  resultsRenderedAnswers(): Locator {
+    return this.resultsTable().locator('.comet-markdown');
+  }
+
+  /** The "No runs yet" placeholder an output surface shows until its row has been run. */
+  noRunsYetPlaceholders(): Locator {
+    return this.page.getByText(IDLE_CELL_TEXT, { exact: true });
+  }
+
+  /** The same placeholder, scoped to the results table. */
+  resultsNoRunsYetPlaceholders(): Locator {
+    return this.resultsTable().getByText(IDLE_CELL_TEXT, { exact: true });
+  }
+
+  /**
+   * The duration and token chips of the single-prompt output header. Each is its own span
+   * whose whole text is the chip, so both are matched anchored — a substring match would
+   * also fire on a model name that happened to end in "s".
+   */
+  durationChips(): Locator {
+    return this.page.getByText(/^\d+\.\d+s$/);
+  }
+
+  tokenChips(): Locator {
+    return this.page.getByText(/^\d+ tokens$/);
+  }
+
+  /**
+   * Wait until exactly `count` failure tags have rendered.
+   *
+   * `waitForRunsComplete` is the wrong signal for a spec that provokes a failure on
+   * purpose — it treats an errored cell as a fault and throws. The count is exact rather
+   * than a floor so that a run which fails some rows and silently drops the rest fails
+   * here, loudly, instead of passing on the first tag to appear.
+   */
+  async waitForOutputErrors(count: number, timeoutMs = 60_000): Promise<void> {
+    return test.step(`wait for ${count} failed-run tag(s)`, async () => {
+      await expect(this.outputErrorTags()).toHaveCount(count, { timeout: timeoutMs });
+    });
+  }
+
   /**
    * Read the "<N>% pass rate" badge from the Prompt A column header.
    * Returns null if no run has completed yet.
