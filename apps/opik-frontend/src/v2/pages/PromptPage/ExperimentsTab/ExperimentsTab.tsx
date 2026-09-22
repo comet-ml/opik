@@ -59,6 +59,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import useTablePageSize from "@/hooks/useTablePageSize";
 import { useExperimentsTableConfig } from "@/v2/pages-shared/experiments/useExperimentsTableConfig";
+import useExperimentsPinning from "@/v2/pages-shared/experiments/useExperimentsPinning";
 import {
   FILTER_AND_GROUP_COLUMNS,
   useExperimentsGroupsAndFilters,
@@ -138,6 +139,10 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [pinnedIds, setPinnedIds] = useLocalStorageState<string[]>(
+    `${STORAGE_KEY_PREFIX}-pinned-experiments-${promptId}`,
+    { defaultValue: [] },
+  );
 
   const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
     COLUMNS_SORT_KEY,
@@ -373,7 +378,15 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       expandedMap: expandingConfig.expanded as Record<string, boolean>,
     });
 
-  const experiments = useMemo(() => data?.content ?? [], [data?.content]);
+  const loadedExperiments = useMemo(() => data?.content ?? [], [data?.content]);
+  const { experiments, pinningConfig } = useExperimentsPinning({
+    rows: loadedExperiments,
+    workspaceName,
+    projectId: activeProjectId ?? undefined,
+    pinnedIds,
+    setPinnedIds,
+    enabled: groups.length === 0,
+  });
 
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
@@ -520,6 +533,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
           rowSelection,
           setRowSelection,
         }}
+        pinningConfig={pinningConfig}
         expandingConfig={expandingConfig}
         groupingConfig={groupingConfig}
         getRowId={getExperimentRowId}
