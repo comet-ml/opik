@@ -71,12 +71,12 @@ class DatasetItemVersionJsonRowMapper {
 
         JsonRowValues.putStringArray(node, "tags", item.tags());
 
-        node.put("evaluators", DatasetItemVersionDAOImpl.serializeEvaluators(item.evaluators()));
-        node.put("execution_policy", DatasetItemVersionDAOImpl.serializeExecutionPolicy(item.executionPolicy()));
+        node.put("evaluators", DatasetItemResultMapper.serializeEvaluators(item.evaluators()));
+        node.put("execution_policy", DatasetItemResultMapper.serializeExecutionPolicy(item.executionPolicy()));
 
         node.put("item_created_at",
-                DatasetItemVersionDAOImpl.formatTimestamp(item.createdAt() != null ? item.createdAt() : nowForBatch));
-        node.put("item_last_updated_at", DatasetItemVersionDAOImpl
+                DatasetItemResultMapper.formatTimestamp(item.createdAt() != null ? item.createdAt() : nowForBatch));
+        node.put("item_last_updated_at", DatasetItemResultMapper
                 .formatTimestamp(item.lastUpdatedAt() != null ? item.lastUpdatedAt() : nowForBatch));
         node.put("item_created_by", item.createdBy() != null ? item.createdBy() : userName);
         node.put("item_last_updated_by", item.lastUpdatedBy() != null ? item.lastUpdatedBy() : userName);

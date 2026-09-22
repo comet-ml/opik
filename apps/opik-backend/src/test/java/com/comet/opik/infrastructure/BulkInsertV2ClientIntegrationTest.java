@@ -49,6 +49,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
@@ -100,6 +101,13 @@ class BulkInsertV2ClientIntegrationTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(32);
     private static final String AUTHOR_FOR_REJECTION = "author-that-never-gets-used";
+
+    /**
+     * Tolerance for the ClickHouse container's clock against this JVM's when asserting a server-stamped
+     * timestamp. Wide enough not to flake on a loaded CI box, far narrower than the drift a stale or
+     * hard-coded value would show.
+     */
+    private static final Duration CLOCK_SKEW = Duration.ofMinutes(2);
 
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysqlContainer = MySQLContainerUtils.newMySQLContainer();
@@ -522,7 +530,13 @@ class BulkInsertV2ClientIntegrationTest {
                 .datasetId(null)
                 .items(items)
                 .build();
+        // Bracketed rather than lower-bounded: an epoch is not the only wrong value a timestamp column
+        // can hold. A hard-coded or stale constant clears any "after 2000" check while proving nothing
+        // about server stamping, so the window is the write itself, widened only by clock skew between
+        // this JVM and the ClickHouse container.
+        var before = Instant.now().minus(CLOCK_SKEW);
         datasetResourceClient.createDatasetItems(batch, WORKSPACE_NAME, API_KEY);
+        var after = Instant.now().plus(CLOCK_SKEW);
 
         var actual = items.stream()
                 .map(item -> datasetResourceClient.getDatasetItem(item.id(), API_KEY, WORKSPACE_NAME))
@@ -535,8 +549,8 @@ class BulkInsertV2ClientIntegrationTest {
             // epoch rather than being stamped. DatasetItem marks these READ_ONLY, so an item arriving
             // over HTTP never carries its own and the mapper's fallback is the only thing that fills
             // them.
-            assertThat(stored.createdAt()).isAfter(Instant.parse("2000-01-01T00:00:00Z"));
-            assertThat(stored.lastUpdatedAt()).isAfter(Instant.parse("2000-01-01T00:00:00Z"));
+            assertThat(stored.createdAt()).isBetween(before, after);
+            assertThat(stored.lastUpdatedAt()).isBetween(before, after);
         });
 
         // One instant for the whole batch rather than one per row. This is a deliberate difference from
@@ -558,8 +572,10 @@ class BulkInsertV2ClientIntegrationTest {
                         row.get("min_updated", Instant.class), row.get("max_metadata", String.class)});
 
         assertThat(stamped[0]).isEqualTo((long) items.size());
-        assertThat((Instant) stamped[1]).isAfter(Instant.parse("2000-01-01T00:00:00Z"));
-        assertThat((Instant) stamped[2]).isAfter(Instant.parse("2000-01-01T00:00:00Z"));
+        // Same window as above: these are stamped by now64(9) on the server, so they are the one pair
+        // here whose value the client never supplies at all.
+        assertThat((Instant) stamped[1]).isBetween(before, after);
+        assertThat((Instant) stamped[2]).isBetween(before, after);
         // Written as "" unconditionally, matching the binder -- not carried from the item.
         assertThat(stamped[3]).isEqualTo("");
     }

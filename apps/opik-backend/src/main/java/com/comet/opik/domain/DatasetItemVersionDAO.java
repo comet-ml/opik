@@ -7,7 +7,6 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemEdit;
-import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.filter.DatasetItemFilter;
@@ -27,7 +26,6 @@ import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
 import com.comet.opik.utils.ErrorUtils;
-import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
@@ -62,6 +60,9 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.DatasetItemResultMapper.formatTimestamp;
+import static com.comet.opik.domain.DatasetItemResultMapper.serializeEvaluators;
+import static com.comet.opik.domain.DatasetItemResultMapper.serializeExecutionPolicy;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
@@ -3970,10 +3971,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     /**
-     * Formats an Instant for ClickHouse DateTime64(9, 'UTC').
-     * ClickHouse doesn't accept the 'Z' suffix from ISO-8601 format.
-     */
-    /**
      * Same rows as {@link #BATCH_INSERT_ITEMS}, streamed as JSONEachRow instead of bound as 17 named
      * parameters per row plus 5 shared ones. See {@link DatasetItemVersionJsonRowMapper} for the
      * per-column parity notes.
@@ -3984,48 +3981,35 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private Mono<Long> insertItemsJsonEachRow(UUID datasetId, UUID newVersionId, List<DatasetItem> items,
             String workspaceId, String userName) {
 
-        // Resolved once for the whole batch, before serialization: the helper re-runs the mapper on
-        // every attempt, so a per-row Instant.now() would give a retried row different timestamp bytes
-        // under the same id.
-        Instant nowForBatch = Instant.now();
-        // The R2DBC path opens and closes this segment, so without it a v2 insert vanishes from the
-        // dataset-item instrumentation stream rather than showing as fast.
-        Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
+        // Everything here is deferred to subscription. The R2DBC path gets that from
+        // asyncTemplate.nonTransaction's lambda and DatasetItemDAO from makeMonoContextAware's; this
+        // path calls the helper directly, so without the defer both lines below would run at assembly
+        // -- leaking a segment whenever the publisher is assembled and never subscribed, parenting it
+        // to whatever Context.current() happened to be at assembly time, and reusing one Segment
+        // across a resubscription.
+        return Mono.defer(() -> {
+            // One instant for the whole batch, resolved before serialization: the helper re-runs the
+            // mapper on every attempt, so a per-row Instant.now() would give a retried row different
+            // timestamp bytes under the same id. Inside the defer so a resubscription gets its own.
+            Instant nowForBatch = Instant.now();
+            // The R2DBC path opens and closes this segment, so without it a v2 insert vanishes from the
+            // dataset-item instrumentation stream rather than showing as fast.
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
 
-        return jsonBulkInsert.insert(
-                DATASET_ITEM_VERSIONS,
-                getLogComment("insert_delta_items", workspaceId, userName, items.size()),
-                items,
-                item -> DatasetItemVersionJsonRowMapper.toJsonRow(
-                        item, datasetId, newVersionId, workspaceId, userName, nowForBatch))
-                .doOnError(e -> log.error("Batch insert items failed for dataset '{}', version '{}'",
-                        datasetId, newVersionId, e))
-                .doFinally(signalType -> endSegment(segment));
-    }
-
-    static String formatTimestamp(Instant timestamp) {
-        if (timestamp == null) {
-            return Instant.now().toString().replace("Z", "");
-        }
-        return timestamp.toString().replace("Z", "");
+            return jsonBulkInsert.insert(
+                    DATASET_ITEM_VERSIONS,
+                    getLogComment("insert_delta_items", workspaceId, userName, items.size()),
+                    items,
+                    item -> DatasetItemVersionJsonRowMapper.toJsonRow(
+                            item, datasetId, newVersionId, workspaceId, userName, nowForBatch))
+                    .doOnError(e -> log.error("Batch insert items failed for dataset '{}', version '{}'",
+                            datasetId, newVersionId, e))
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
     private static String base64Encode(String value) {
         return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
-    }
-
-    static String serializeEvaluators(List<EvaluatorItem> evaluators) {
-        if (evaluators == null || evaluators.isEmpty()) {
-            return EvaluatorItem.EMPTY_LIST_JSON;
-        }
-        return JsonUtils.writeValueAsString(evaluators);
-    }
-
-    static String serializeExecutionPolicy(ExecutionPolicy executionPolicy) {
-        if (executionPolicy == null) {
-            return "";
-        }
-        return JsonUtils.writeValueAsString(executionPolicy);
     }
 
     @Override

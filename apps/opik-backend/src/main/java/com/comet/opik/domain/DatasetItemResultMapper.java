@@ -308,4 +308,35 @@ public class DatasetItemResultMapper {
             return DatasetItemResultMapper.mapColumnsField(columnsMap, filterFieldPrefix);
         }));
     }
+
+    /**
+     * The write-side counterparts of {@link #getEvaluators} and the version table's timestamp columns.
+     * Shared rather than private to the DAO because both write paths need them and must not drift: the
+     * R2DBC binder and {@code DatasetItemVersionJsonRowMapper} call these same three. Keeping them here
+     * also stops the JSON mapper depending on the DAO that calls it.
+     *
+     * <p>{@code formatTimestamp} strips the trailing {@code Z}, which is why the JSONEachRow insert sets
+     * {@code date_time_input_format=best_effort}. A null mints a fresh {@code Instant.now()} per call, so
+     * a caller that is re-run on retry must resolve its own fallback once and pass it in.
+     */
+    static String formatTimestamp(Instant timestamp) {
+        if (timestamp == null) {
+            return Instant.now().toString().replace("Z", "");
+        }
+        return timestamp.toString().replace("Z", "");
+    }
+
+    static String serializeEvaluators(List<EvaluatorItem> evaluators) {
+        if (evaluators == null || evaluators.isEmpty()) {
+            return EvaluatorItem.EMPTY_LIST_JSON;
+        }
+        return JsonUtils.writeValueAsString(evaluators);
+    }
+
+    static String serializeExecutionPolicy(ExecutionPolicy executionPolicy) {
+        if (executionPolicy == null) {
+            return "";
+        }
+        return JsonUtils.writeValueAsString(executionPolicy);
+    }
 }
