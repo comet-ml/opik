@@ -1179,6 +1179,11 @@ while (( PASS < MAX_PASSES )); do
             echo "           --window-from '$EFFECTIVE_GAP_START' --window-to '$SWAP_DONE'"
             echo "     The upper bound is the swap, not now: the parked table holds nothing created after it, and the"
             echo "     compare passes only on equal row counts, so a later bound fails on live traffic, not fidelity."
+            echo "     IT ALSO NEEDS USER DELETES QUIESCED to return a clean PASS: a gap-window span deleted after the"
+            echo "     swap is masked here and still live in the frozen backup, and that compare knows nothing of the"
+            echo "     deletion bridge, so it reports the difference as a mismatch on a healthy cutover. If deletes are"
+            echo "     flowing, expect that and check the differing keys against deletion_events_local at/after"
+            echo "     --swap-done; the gate for write loss is THIS run's four counts, not that compare."
             echo "  2. Keep '$PARKED_TABLE' for the soak. finalize.sh refuses to retire it without --confirm-gap-reconciled,"
             echo "     which is this run."
         else
@@ -1209,8 +1214,19 @@ echo "  missing_keys=$MISSING stale_keys=$STALE payload_mismatch_keys=$PAYLOAD" 
     echo "  absent there by construction, so only this check can see it. 'unreadable' means the check could not be" >&2
     echo "  evaluated, which is equally disqualifying: do NOT run finalize.sh on either." >&2
 }
-echo "This is NOT convergence stalling on write volume: the parked table is frozen, so repeated passes cannot keep" >&2
-echo "finding new work unless something else is wrong. Investigate before re-running:" >&2
+if [[ "$DIRECTION" == "reverse" && "$REVERSE_REPLAY_STATE" != "ok" ]]; then
+    echo "FIRST, RULE OUT ONGOING DELETE TRAFFIC — in this direction it is the likeliest cause and it is not a defect." >&2
+    echo "  The SWEEP reads the frozen parked table and converges by construction, but this gate also reads the" >&2
+    echo "  reverse-replay postcondition, which reads the LIVE table and the BRIDGE. Neither is frozen. So a user" >&2
+    echo "  deleting a trace and then re-creating its spans under the same ids manufactures a fresh 'resurrected' key" >&2
+    echo "  as fast as each pass masks the previous one, so no number of passes can catch up. Quiesce TRACE deletes" >&2
+    echo "  and re-run; the run converges immediately if that was it. Only if the count persists with deletes" >&2
+    echo "  stopped is something actually wrong." >&2
+else
+    echo "This is NOT convergence stalling on write volume: the parked table is frozen, so repeated passes cannot keep" >&2
+    echo "finding new work unless something else is wrong." >&2
+fi
+echo "Investigate before re-running:" >&2
 echo "  * missing_keys — the sweep did not land those rows. Check the run's errors, and check --swap-done against the" >&2
 echo "    RECORDED value (a late value under-excludes; an early one over-excludes and usually surfaces here)." >&2
 echo "  * stale_keys / payload_mismatch_keys — the live row disagrees with the frozen one at the same or an older" >&2

@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -12,6 +13,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
@@ -20,10 +22,10 @@ import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
-import io.r2dbc.spi.Connection;
-import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Row;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -45,6 +47,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
@@ -53,6 +56,7 @@ import java.util.stream.IntStream;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.assertExperimentResults;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -120,28 +124,29 @@ class BulkInsertV2ClientIntegrationTest {
     }
 
     private TraceResourceClient traceResourceClient;
-    private ConnectionFactory clickHouseConnectionFactory;
+    private TransactionTemplateAsync clickHouseTemplate;
     private FeedbackScoreDAO feedbackScoreDAO;
     private ProjectResourceClient projectResourceClient;
+    private ExperimentResourceClient experimentResourceClient;
 
     @BeforeAll
-    void beforeAll(ClientSupport clientSupport, FeedbackScoreDAO feedbackScoreDAO) {
+    void beforeAll(ClientSupport clientSupport, FeedbackScoreDAO feedbackScoreDAO, Injector injector) {
         this.feedbackScoreDAO = feedbackScoreDAO;
+        // The shared template rather than a connection factory of our own, so the suite does not open and
+        // close a connection per assertion.
+        this.clickHouseTemplate = injector.getInstance(TransactionTemplateAsync.class);
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
-        clickHouseConnectionFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(
-                clickHouseContainer, DATABASE_NAME).build();
+        experimentResourceClient = new ExperimentResourceClient(clientSupport, baseUrl, factory);
     }
 
     private <T> T queryOne(String sql, Function<Row, T> mapper) {
-        return Mono.usingWhen(
-                clickHouseConnectionFactory.create(),
-                connection -> Mono.from(connection.createStatement(sql).execute())
-                        .flatMap(result -> Mono.from(result.map((row, ignored) -> mapper.apply(row)))),
-                Connection::close)
+        return clickHouseTemplate.nonTransaction(connection -> Mono
+                .from(connection.createStatement(sql).execute())
+                .flatMap(result -> Mono.from(result.map((row, ignored) -> mapper.apply(row)))))
                 .block();
     }
 
@@ -363,5 +368,56 @@ class BulkInsertV2ClientIntegrationTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining(name)
                 .hasMessageContaining("cannot be stored without a value");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    @DisplayName("experiment items round-trip through JSONEachRow, with and without a project id")
+    void experimentItemsRoundTrip(boolean withProjectId) {
+        var experiment = experimentResourceClient.createPartialExperiment().build();
+        var experimentId = experimentResourceClient.create(experiment, API_KEY, WORKSPACE_NAME);
+
+        // project_id is Nullable(FixedString(36)) and the only column this mapper writes as an explicit
+        // null rather than omitting. The null case is reachable end to end: ExperimentItemService resolves
+        // a project from projectName, then from the trace, so an item with neither and a trace id that
+        // backs no trace arrives at the DAO with project_id still null.
+        var projectName = withProjectId ? "experiment-items-" + RandomStringUtils.secure().nextAlphanumeric(12) : null;
+        var projectId = withProjectId
+                ? projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME)
+                : null;
+
+        // Same shape as ExperimentsResourceTest#getExperimentItemsBatch: trace-derived fields nulled
+        // because no trace backs these items, and created/lastUpdatedBy are server-set. What is left is
+        // the set of columns this write path owns.
+        var items = IntStream.range(0, 3)
+                .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experimentId)
+                        .projectId(projectId)
+                        .projectName(projectName)
+                        .traceVisibilityMode(null)
+                        .usage(null)
+                        .duration(null)
+                        .input(null)
+                        .output(null)
+                        .totalEstimatedCost(null)
+                        .feedbackScores(null)
+                        .comments(null)
+                        .createdBy(USER)
+                        .lastUpdatedBy(USER)
+                        .build())
+                .toList();
+
+        experimentResourceClient.createExperimentItem(new HashSet<>(items), API_KEY, WORKSPACE_NAME);
+
+        // Read each by id rather than streaming: the stream endpoints join the trace, while this returns
+        // the row as written -- which is what this path owns.
+        var actual = items.stream()
+                .map(item -> experimentResourceClient.getExperimentItem(item.id(), API_KEY, WORKSPACE_NAME))
+                .toList();
+
+        // The shared helper rather than field by field: it compares the whole object and owns its list of
+        // ignored fields, so a column this path stops writing cannot slip through unnoticed. projectId is
+        // not among the ignored fields, so both arms of the null branch are actually asserted.
+        assertExperimentResults(actual, items, USER);
     }
 }

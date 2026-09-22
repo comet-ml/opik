@@ -31,6 +31,11 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
     the final `assistant` message within each window is relevant and coherent in
     relation to the preceding conversational context.
 
+    Only windows that end with an `assistant` message are graded: a window whose last
+    message is from the `user` has no answer to assess, so it neither costs a model
+    call nor counts towards the score. A conversation with no assistant reply at all
+    therefore has nothing to grade, and raises rather than scoring it as incoherent.
+
     It supports both synchronous and asynchronous operations to
     accommodate the model's operation type. It returns a score between `0.0` and `1.0`,
     where `0.0` indicates a low coherence score and `1.0` indicates a high coherence score.
@@ -138,7 +143,7 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
-            turns_windows = (
+            windows_to_grade = _windows_to_grade(
                 conversation_helpers.extract_turns_windows_from_conversation(
                     conversation=conversation, window_size=self._window_size
                 )
@@ -146,7 +151,7 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
 
             verdicts = [
                 self._evaluate_window(conversation_sliding_window=window)
-                for window in turns_windows
+                for window in windows_to_grade
             ]
 
             score = _score_from_verdicts(verdicts=verdicts)
@@ -167,7 +172,7 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
-            turns_windows = (
+            windows_to_grade = _windows_to_grade(
                 conversation_helpers.extract_turns_windows_from_conversation(
                     conversation=conversation, window_size=self._window_size
                 )
@@ -177,7 +182,7 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
                 await asyncio.gather(
                     *[
                         self._a_evaluate_window(conversation_sliding_window=window)
-                        for window in turns_windows
+                        for window in windows_to_grade
                     ]
                 )
             )
@@ -337,11 +342,25 @@ def _evaluate_conversation_from_model_output(
 def _score_from_verdicts(
     verdicts: List[schema.EvaluateConversationCoherenceResponse],
 ) -> float:
-    if len(verdicts) == 0:
-        return 0.0
-
     relevant_count = sum(v.verdict.strip().lower() != "no" for v in verdicts)
     return relevant_count / len(verdicts)
+
+
+def _windows_to_grade(
+    turns_windows: List[conversation_types.Conversation],
+) -> List[conversation_types.Conversation]:
+    """Keeps only the windows that end with an assistant reply.
+
+    The judge is asked whether the last `assistant` message of a window is relevant to
+    the turns preceding it. A window that ends with a `user` message - a thread that
+    was never answered, or a user message no assistant message answered - has no such
+    message, so grading it would score the user's own words as the agent's answer and
+    would count as a window in the denominator of the score.
+    """
+    graded = [window for window in turns_windows if window[-1]["role"] == "assistant"]
+    if not graded:
+        raise ValueError("Conversation contains no assistant messages")
+    return graded
 
 
 def _has_retrieved_documents(

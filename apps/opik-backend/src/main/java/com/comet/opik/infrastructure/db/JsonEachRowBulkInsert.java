@@ -9,6 +9,7 @@ import com.fasterxml.jackson.core.io.SerializedString;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -115,9 +116,11 @@ public class JsonEachRowBulkInsert {
      */
     public <T> Mono<Long> insert(@NonNull String table,
             @NonNull String logComment,
-            @NonNull Collection<T> items,
+            @Nullable Collection<T> items,
             @NonNull Function<T, ObjectNode> rowMapper) {
 
+        // Nullable rather than @NonNull: the check below treats a null batch as a no-op, and rejecting it
+        // one line earlier would make that unreachable.
         if (CollectionUtils.isEmpty(items)) {
             return Mono.just(0L);
         }

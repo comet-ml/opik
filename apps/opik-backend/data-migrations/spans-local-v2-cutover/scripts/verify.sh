@@ -210,8 +210,11 @@ CH_ARGS=()
 [[ -z "$CH_PORT" ]] || CH_ARGS+=(--port "$CH_PORT")
 CH_ARGS+=(--database "$DATABASE" --log_comment 'spans_local_v2_cutover:verify' --receive_timeout="$RECEIVE_TIMEOUT")
 
+# --format TabSeparated is explicit, not redundant: clickhouse-client takes a default format from the user's own client
+# config, and a pretty/bordered default would put headers and box-drawing into every scalar read below. Those are parsed
+# as scalars — counts, timestamps and names — so the failure would not be an error, it would be a wrong verdict.
 ch() {
-    clickhouse-client "${CH_ARGS[@]}" --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$1"
 }
 
 log() {
@@ -286,7 +289,7 @@ render_block() {
 compare_window() {
     local sql
     sql="$(render_block compare "$1" "$2")" || exit 2
-    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --multiquery --query "$sql"
 }
 
 # Per-key differences for one window (only run on a mismatch, under --drill-down).
@@ -295,7 +298,7 @@ compare_window() {
 drill_down_window() {
     local sql
     sql="$(render_block drill-down "$1" "$2")" || return 1
-    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --multiquery --query "$sql"
 }
 
 # Count of keys in one window that GENUINELY differ, re-checked on the sorting key so FINAL cannot hide a
@@ -305,16 +308,19 @@ drill_down_window() {
 confirm_keys_window() {
     local sql
     sql="$(render_block confirm-keys "$1" "$2")" || exit 2
-    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --multiquery --query "$sql"
 }
 
 # Per side, how many keys in one window carry MORE THAN ONE DISTINCT ROW at their newest last_updated_at — i.e. where
-# FINAL had to choose between rows that differ. Run ONLY when confirm-keys returned 0, because that is the only verdict
-# whose soundness depends on it; see the version-ties block for why it is a separate statement and an upper bound.
+# FINAL had to choose between rows that differ. Run on ANY differing window, because a tie reaches both verdicts: where
+# the two sides' arbitrary picks COINCIDE the window lands on confirm-keys = 0 and this DECIDES it; where they DIFFER
+# the key counts as genuinely differing and this DIAGNOSES the MISMATCH — which is the branch the spans-only tie
+# usually takes. See the version-ties block for why it is a separate statement, and why the count is an upper bound
+# over the window rather than a per-key attribution (so it explains differing keys without clearing them).
 version_ties_window() {
     local sql
     sql="$(render_block version-ties "$1" "$2")" || exit 2
-    clickhouse-client "${CH_ARGS[@]}" --multiquery --query "$sql"
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --multiquery --query "$sql"
 }
 
 ROWS="$(ch "SELECT count() FROM $OLD_TABLE")"
@@ -441,8 +447,39 @@ compare_one_window() {
     else
         mismatches=$((mismatches + 1))
         log "MISMATCH $label ($LO .. $HI): src_rows=$src_rows dst_rows=$dst_rows src_checksum=$src_checksum dst_checksum=$dst_checksum genuinely_differing_keys=$unresolved" >&2
-        log "  A version tie can also produce this: where a key's newest last_updated_at is carried by more than one" >&2
-        log "  DISTINCT row, FINAL may pick a different one per side, the part layouts differing. See the runbook's triage." >&2
+        # Ask the tie detector HERE too, not only on the confirm-keys == 0 branch. A tie leaves each side's winner
+        # arbitrary, and the two directions land in different branches: when the picks COINCIDE the window reaches
+        # confirm-keys == 0 and the block above decides it, but when they DIFFER the key is counted in
+        # genuinely_differing_keys and lands here — which is where the spans-only tie (one span id, two
+        # parent_span_id values, one last_updated_at) actually shows up. Without this the counts the runbook tells an
+        # operator to read are never printed for the case that produces them.
+        #
+        # The verdict stays MISMATCH. A tie EXPLAINS differing keys, it does not clear them, and the counts are a
+        # window-wide upper bound (see the version-ties block) rather than a per-key attribution — so downgrading to
+        # INCONCLUSIVE here would let one unrelated tie relabel a genuinely broken window as merely undecidable.
+        # Both exit non-zero either way; what this adds is the diagnosis, not a different gate.
+        ties_out="$(version_ties_window "$LO" "$HI")" || ties_out=""
+        read -r src_ties dst_ties <<< "$ties_out"
+        if ! [[ "$src_ties" =~ ^[0-9]+$ && "$dst_ties" =~ ^[0-9]+$ ]]; then
+            log "  version_ties=UNREAD (the tie check returned '$ties_out', expected two counts). The MISMATCH above" >&2
+            log "  stands on its own; what is unknown is whether a tie accounts for any of it." >&2
+        elif (( src_ties == 0 && dst_ties == 0 )); then
+            log "  version_ties=src:0/dst:0 — no key in this window has a tied newest version, so every differing key" >&2
+            log "  above is a REAL difference. This is the shape that means a genuine fidelity failure." >&2
+        else
+            log "  version_ties=src:$src_ties/dst:$dst_ties — this window holds keys whose newest last_updated_at is" >&2
+            log "  carried by MORE THAN ONE DISTINCT row, so FINAL and argMax each chose arbitrarily and may have" >&2
+            log "  landed on different rows per side. A tie can therefore account for some or all of the differing" >&2
+            log "  keys above WITHOUT the copy being wrong — but the count is an upper bound over the whole window," >&2
+            log "  not a per-key attribution, so it cannot clear them: resolve each differing key from both sides'" >&2
+            log "  version sets, per the runbook's triage." >&2
+            if (( src_ties > 0 && dst_ties == 0 )); then
+                log "  src:N/dst:0 is the SPANS-ONLY cause: the same span at one last_updated_at under two" >&2
+                log "  parent_span_id values. The source keeps both (parent_span_id is in its sort key and is" >&2
+                log "  mutable); the successor collapses them to one key and picks arbitrarily. Re-copying does not" >&2
+                log "  break the tie." >&2
+            fi
+        fi
     fi
     if [[ "$DRILL_DOWN" == "1" ]]; then
         log "  differing keys (key, src_hash, dst_hash; NULL = missing on that side):" >&2
