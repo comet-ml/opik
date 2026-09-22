@@ -239,6 +239,12 @@ class WeeklyPartitionsTest {
         // Exactly one week apart, so the two land in different weeks whatever the random base: a week is seven days,
         // so the later id's Monday is always the next one. Passed newest-first, so the ascending order in the result
         // is the derivation's and not the caller's.
+        //
+        // The expectation is built from the derivation's own single-id answer on purpose: what this pins is the
+        // RELATION between the two calls - a batch's weeks are its ids' weeks, flattened, deduplicated and ascending
+        // - and the per-era values it composes are pinned against ClickHouse above. Not self-confirming: dropping
+        // .sorted(), .distinct() or the flattening from weeksOf each fails one of these cases, because a single-id
+        // call is unaffected by all three.
         var olderIdAt = randomIdAt();
         var older = ID_GENERATOR.generateId(olderIdAt);
         var newer = ID_GENERATOR.generateId(olderIdAt.plus(7, ChronoUnit.DAYS));
@@ -246,7 +252,7 @@ class WeeklyPartitionsTest {
         var actualWeeks = WeeklyPartitions.weeksOf(List.of(newer, older));
         var expectedWeeks = List.of(weekOf(older), weekOf(newer));
 
-        assertThat(actualWeeks).contains(expectedWeeks);
+        assertThat(actualWeeks).hasValue(expectedWeeks);
     }
 
     @Test
@@ -259,7 +265,7 @@ class WeeklyPartitionsTest {
 
         var actualWeeks = WeeklyPartitions.weeksOf(List.of(farFuture));
 
-        assertThat(actualWeeks).contains(expectedWeeks);
+        assertThat(actualWeeks).hasValue(expectedWeeks);
     }
 
     @Test
@@ -274,7 +280,7 @@ class WeeklyPartitionsTest {
         var actualWeeks = WeeklyPartitions.weeksOf(List.of(first, second));
         var expectedWeeks = List.of(weekOf(first));
 
-        assertThat(actualWeeks).contains(expectedWeeks);
+        assertThat(actualWeeks).hasValue(expectedWeeks);
     }
 
     private static Stream<Arguments> weeksOfYieldsNoWeeks() {

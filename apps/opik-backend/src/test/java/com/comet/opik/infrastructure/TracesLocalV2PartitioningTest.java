@@ -99,6 +99,19 @@ class TracesLocalV2PartitioningTest {
      */
     private static final Instant FAR_FUTURE_INSTANT = Instant.parse("2201-06-01T00:00:00Z");
 
+    /**
+     * The predicate the trace-id-list reads emit. Declared once because the week-set cases run it both ways — through
+     * {@code EXPLAIN} for the part counts and executed for the rows — and those have to be the same statement, or the
+     * pruning claim and the row claim are about different queries.
+     */
+    private static final String SELECT_BY_ID_LIST_AND_WEEK_SET = """
+            SELECT id
+            FROM traces_local_v2
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
+            AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks
+            """;
+
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
     private final ClickHouseContainer clickHouseContainer = ClickHouseContainerUtils
             .newClickHouseContainer(zookeeperContainer);
@@ -217,21 +230,23 @@ class TracesLocalV2PartitioningTest {
         // The exact predicate the four trace-id-list read paths emit (OPIK-8332): the id list paired with the discrete
         // set of weeks those ids resolve to, written as the partition key's own expression so ClickHouse matches it
         // directly instead of inferring monotonicity over each part's id_at MinMax.
-        var actualParts = prunedParts("""
-                SELECT
-                    id
-                FROM traces_local_v2
-                WHERE workspace_id = :workspace_id
-                    AND id IN :ids
-                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks
-                """, statement -> statement
+        var ids = new UUID[]{seed.ids().get(1), seed.ids().get(2)};
+
+        var actualParts = prunedParts(SELECT_BY_ID_LIST_AND_WEEK_SET, statement -> statement
                 .bind("workspace_id", seed.workspaceId())
-                .bind("ids", new UUID[]{seed.ids().get(1), seed.ids().get(2)})
-                .bind("id_weeks", derivedWeeksOf(seed.ids().get(1), seed.ids().get(2))));
+                .bind("ids", ids)
+                .bind("id_weeks", derivedWeeksOf(ids)));
+        var actualIds = idsMatching(SELECT_BY_ID_LIST_AND_WEEK_SET, seed.workspaceId(), statement -> statement
+                .bind("ids", ids)
+                .bind("id_weeks", derivedWeeksOf(ids)));
 
         // Same two inner weeks as the control above, so the pair differs only in the added week set: weeks 0 and 3
         // prune away and selected drops below total.
         assertThat(actualParts.selected()).isLessThan(actualParts.total());
+        // And the rows still come back. Pruning alone is not enough to pass: a week set naming partitions no row is
+        // in prunes to nothing, which satisfies the count assertion above while returning an empty result. Asserting
+        // both is what stops a wrong derivation from making this case pass more emphatically than a right one.
+        assertThat(actualIds).containsExactlyInAnyOrder(ids[0].toString(), ids[1].toString());
     }
 
     /**
@@ -272,15 +287,11 @@ class TracesLocalV2PartitioningTest {
                         .bind("min_id", seed.ids().getFirst())
                         .bind("max_id", farFuture));
 
-        var inSetParts = prunedParts("""
-                SELECT
-                    id
-                FROM traces_local_v2
-                WHERE workspace_id = :workspace_id
-                    AND id IN :ids
-                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks
-                """, statement -> statement
+        var inSetParts = prunedParts(SELECT_BY_ID_LIST_AND_WEEK_SET, statement -> statement
                 .bind("workspace_id", seed.workspaceId())
+                .bind("ids", ids)
+                .bind("id_weeks", derivedWeeksOf(ids)));
+        var inSetIds = idsMatching(SELECT_BY_ID_LIST_AND_WEEK_SET, seed.workspaceId(), statement -> statement
                 .bind("ids", ids)
                 .bind("id_weeks", derivedWeeksOf(ids)));
 
@@ -288,6 +299,9 @@ class TracesLocalV2PartitioningTest {
                 .as("the discrete week set selects fewer parts than the range across the same ids: set=%s, range=%s",
                         inSetParts, rangeParts)
                 .isLessThan(rangeParts.selected());
+        // Fewer parts only counts if it is the same answer: both forms are strict consequences of the id list, so the
+        // set has to return what the range does while touching less. Without this a set naming nothing would win.
+        assertThat(inSetIds).containsExactlyInAnyOrder(ids[0].toString(), ids[1].toString());
     }
 
     /**
@@ -307,13 +321,7 @@ class TracesLocalV2PartitioningTest {
     void weekInSetKeepsFarFutureRowsThatTheIdListAdmits() {
         var seed = seedPresentAndFarFuture();
 
-        var actualIds = idsMatching("""
-                SELECT id
-                FROM traces_local_v2
-                WHERE workspace_id = :workspace_id
-                AND id IN :ids
-                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks
-                """, seed.workspaceId(), statement -> statement
+        var actualIds = idsMatching(SELECT_BY_ID_LIST_AND_WEEK_SET, seed.workspaceId(), statement -> statement
                 .bind("ids", new UUID[]{seed.present(), seed.farFuture()})
                 .bind("id_weeks", derivedWeeksOf(seed.present(), seed.farFuture())));
         var expectedIds = List.of(seed.present().toString(), seed.farFuture().toString());
