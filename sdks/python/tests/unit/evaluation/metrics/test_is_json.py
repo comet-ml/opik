@@ -28,6 +28,10 @@ from opik.evaluation.metrics.heuristics import is_json
         "3.14159",
         "1e-5",
         "-2.5e+3",
+        # Legal JSON number literals that overflow to inf; JSON.parse accepts
+        # them too, so they must stay valid even though the value is non-finite.
+        "1e400",
+        "-1e400",
         # JSON Primitives - Null & Booleans
         "null",
         "true",
