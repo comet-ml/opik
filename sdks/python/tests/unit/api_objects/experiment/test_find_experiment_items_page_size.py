@@ -184,9 +184,14 @@ def test_find_experiment_items_for_dataset__unusable_total_falls_back_to_walking
         truncate=False,
         max_results=10000,
         page_size=100,
+        num_threads=1,
     )
 
-    assert len(items) == 250
+    assert [item.id for item in items] == [
+        f"experiment-item-{index}" for index in range(250)
+    ]
+    # Page 4 is the empty one that ends a walk with no page count to stop at.
+    assert datasets_client.requested_pages == [1, 2, 3, 4]
 
 
 def _experiment(experiments_client: Any) -> experiment_module.Experiment:
