@@ -52,7 +52,7 @@ const THROWS: Array<{ label: string; make: () => unknown }> = [
   },
 ];
 
-test.describe('TypeScript SDK @track — non-Error throws', { tag: ['@t2-cuj', '@area:traces'] }, () => {
+test.describe('TypeScript SDK track() — non-Error throws', { tag: ['@t2-cuj', '@area:traces'] }, () => {
   test('a non-Error thrown from a tracked function reaches the caller unchanged and still closes its trace', { tag: ['@cap:traces.list-traces'] }, async ({
     project,
     envConfig,
@@ -62,17 +62,26 @@ test.describe('TypeScript SDK @track — non-Error throws', { tag: ['@t2-cuj', '
   }) => {
     test.setTimeout(180_000);
 
+    // An OSS deployment has no auth wall and global-setup mints no key for it —
+    // `makeTypescriptSdk` states the same rule for the estate's other SDK caller.
+    // Requiring a key unconditionally would fail this spec on every OSS run
+    // before it reached the behaviour it exists to check.
     expect(
-      envConfig.apiKey,
-      'the SDK needs an API key — global-setup mints one into OPIK_API_KEY',
-    ).toBeTruthy();
+      envConfig.deployment === 'oss' || Boolean(envConfig.apiKey),
+      'a non-OSS deployment needs an API key — global-setup mints one into OPIK_API_KEY',
+    ).toBe(true);
 
-    // `track` does not take a client: it builds its own `OpikClient()` from the
-    // environment on first use and caches it for the life of the worker. The
-    // key and workspace are already in the worker's env (global-setup), so only
-    // the URL has to be pointed at the deployment under test — and it must be
-    // set before the first tracked call, not after.
+    // `track` does not take a client, and it does not use the one `setGlobalClient`
+    // holds either: it builds its own `OpikClient()` from the environment on first
+    // use and caches it for the life of the worker. So every input that client
+    // reads has to be pinned to the deployment under test, before the first tracked
+    // call rather than after. None of the three can be assumed already correct —
+    // the workspace reaches env.config from OPIK_TEST_USER_NAME as often as from
+    // OPIK_WORKSPACE, and a client that defaults to "default" would write these
+    // traces somewhere the project lookup below can never see them.
     process.env.OPIK_URL_OVERRIDE = envConfig.apiBaseUrl;
+    process.env.OPIK_WORKSPACE = envConfig.workspace;
+    if (envConfig.apiKey) process.env.OPIK_API_KEY = envConfig.apiKey;
 
     const names = THROWS.map(({ label }) => `${testNamespace}-track-${label}`);
 

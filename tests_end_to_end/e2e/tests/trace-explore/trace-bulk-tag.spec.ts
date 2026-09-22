@@ -28,7 +28,7 @@ import { LogsPage } from '@e2e/pom/logs.page';
  * agreed with itself but not with the UI still fails.
  */
 test.describe('Trace bulk tagging — CUJ', { tag: ['@t2-cuj', '@area:traces'] }, () => {
-  test('Bulk-tagging a selection tags exactly those traces and merges with their existing tags', { tag: ['@cap:traces.trace-tag-add-remove'] }, async ({
+  test('Bulk-tagging a selection tags exactly those traces and merges with their existing tags', { tag: ['@cap:traces.trace-tag-add-remove', '@cap:traces.open-trace-panel'] }, async ({
     bulkTagTraces,
     project,
     testNamespace,
