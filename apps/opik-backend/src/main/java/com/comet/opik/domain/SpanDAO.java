@@ -1995,7 +1995,9 @@ public class SpanDAO {
             // Inside the defer so a resubscription gets its own rather than replaying the first
             // subscription's clock, and one per batch rather than per row because the helper re-runs the
             // mapper on every insert attempt.
-            Instant nowForBatch = Instant.now();
+            // Rendered once here rather than per row: the value is the same for every row in
+            // the batch, and the mapper would otherwise reformat a batch-invariant instant.
+            String nowForBatch = Instant.now().toString();
 
             return jsonBulkInsert.insert(
                     SPANS_TABLE,

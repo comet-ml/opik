@@ -10,7 +10,6 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
-import java.time.Instant;
 import java.util.Optional;
 
 import static com.comet.opik.utils.SentinelTranslation.nullToEpoch;
@@ -41,12 +40,14 @@ class TraceJsonRowMapper {
      * @param truncationSize     {@code responseFormatting.truncationSize}. Non-positive means the column
      *                           is left out so its DDL default applies, matching what the binder's
      *                           {@code bindNull} achieves via {@code input_format_null_as_default}.
-     * @param nowForBatch        fallback for an absent {@code last_updated_at}, resolved once per batch:
-     *                           the helper re-runs this mapper on every insert attempt, and downstream
-     *                           {@code MAX(last_updated_at)} aggregations want one timestamp per batch.
+     * @param nowForBatch        fallback for an absent {@code last_updated_at}, already rendered.
+     *                           Resolved AND formatted once per batch by the caller: the helper re-runs
+     *                           this mapper on every insert attempt, downstream
+     *                           {@code MAX(last_updated_at)} aggregations want one timestamp per batch,
+     *                           and rendering it here would reformat a batch-invariant value per row.
      */
     ObjectNode toJsonRow(@NonNull Trace trace, @NonNull String userName, @NonNull String workspaceId,
-            @NonNull Instant nowForBatch, boolean nonNullableColumns, int truncationSize) {
+            @NonNull String nowForBatch, boolean nonNullableColumns, int truncationSize) {
 
         // Computed once: each is also the input to its *_slim counterpart below.
         String inputValue = TruncationUtils.toJsonString(trace.input());
@@ -81,7 +82,7 @@ class TraceJsonRowMapper {
         // takes the ISO form, and ClickHouse truncates to the column's own scale -- last_updated_at is
         // DateTime64(6) where start_time and end_time are DateTime64(9).
         node.put("last_updated_at",
-                (trace.lastUpdatedAt() != null ? trace.lastUpdatedAt() : nowForBatch).toString());
+                trace.lastUpdatedAt() != null ? trace.lastUpdatedAt().toString() : nowForBatch);
         node.put("error_info", trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "");
         node.put("created_by", userName);
         node.put("last_updated_by", userName);

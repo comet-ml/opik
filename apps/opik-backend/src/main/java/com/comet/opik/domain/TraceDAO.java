@@ -4522,7 +4522,9 @@ class TraceDAOImpl implements TraceDAO {
             // Inside the defer, so a resubscription gets its own rather than replaying the first
             // subscription's clock. The helper re-runs the mapper on every attempt, so this must not be
             // per row either: downstream MAX(last_updated_at) aggregations want one stamp per batch.
-            Instant nowForBatch = Instant.now();
+            // Rendered once here rather than per row: the value is the same for every row in
+            // the batch, and the mapper would otherwise reformat a batch-invariant instant.
+            String nowForBatch = Instant.now().toString();
 
             return jsonBulkInsert.insert(
                     TRACES_TABLE,

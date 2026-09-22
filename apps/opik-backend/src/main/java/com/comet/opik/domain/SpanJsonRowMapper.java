@@ -11,7 +11,6 @@ import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -55,10 +54,12 @@ class SpanJsonRowMapper {
      *                           have been migrated off {@code Nullable} to their sentinels.
      * @param truncationSize     {@code responseFormatting.truncationSize}. Non-positive leaves the column
      *                           out so its DDL default applies, matching the binder's {@code bindNull}.
-     * @param nowForBatch        fallback for an absent {@code last_updated_at}, resolved once per batch.
+     * @param nowForBatch        fallback for an absent {@code last_updated_at}, already rendered.
+     *                           Resolved AND formatted once per batch by the caller, so a
+     *                           batch-invariant value is not reformatted per row.
      */
     ObjectNode toJsonRow(@NonNull Span span, @NonNull String userName, @NonNull String workspaceId,
-            @NonNull Instant nowForBatch, @NonNull BigDecimal cost, @NonNull String costVersion,
+            @NonNull String nowForBatch, @NonNull BigDecimal cost, @NonNull String costVersion,
             boolean nonNullableColumns, int truncationSize) {
 
         // Computed once: each is also the input to its *_slim counterpart below.
@@ -107,7 +108,7 @@ class SpanJsonRowMapper {
         // Instant.toString(), as above: best_effort takes the ISO form and ClickHouse truncates to the
         // column's scale -- last_updated_at is DateTime64(6) where start_time / end_time are (9).
         node.put("last_updated_at",
-                (span.lastUpdatedAt() != null ? span.lastUpdatedAt() : nowForBatch).toString());
+                span.lastUpdatedAt() != null ? span.lastUpdatedAt().toString() : nowForBatch);
         node.put("error_info", span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "");
         node.put("created_by", userName);
         node.put("last_updated_by", userName);
