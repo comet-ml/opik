@@ -285,9 +285,19 @@ spec:
               # (so a mid-roll or multi-replica operator is handled by Kubernetes rather
               # than by polling for exactly one Ready pod), and it never grants pod-delete.
               echo ">> restarting operator deployment/${OPERATOR_DEPLOY} so it rebuilds the StatefulSets with the cache volume"
-              if ! kubectl rollout restart "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE"; then
-                echo "WARNING: could not restart deployment/${OPERATOR_DEPLOY} in ${NAMESPACE} — the operator may be externally managed or absent. Skipping the bounce; the cluster will self-heal passively (~7 min/replica)." >&2
+              # Distinguish "no operator here to bounce" from "the bounce was rejected".
+              # An absent Deployment means an externally-managed or relocated operator:
+              # nothing was attempted, passive self-heal is the whole story, and failing
+              # the release would be wrong. Any other failure (RBAC denial, admission
+              # webhook, API error) means the bounce WAS attempted and refused — that is
+              # a real misconfiguration and must not be reported as a successful migration.
+              if ! kubectl get "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" >/dev/null 2>&1; then
+                echo "WARNING: deployment/${OPERATOR_DEPLOY} not found in ${NAMESPACE} — the operator is externally managed, relocated, or not installed by this chart. Skipping the bounce; the cluster will self-heal passively (~7 min/replica)." >&2
                 exit 0
+              fi
+              if ! restart_err="$(kubectl rollout restart "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" 2>&1)"; then
+                echo "${restart_err}" >&2
+                die "could not restart deployment/${OPERATOR_DEPLOY} in ${NAMESPACE} — the operator exists but the restart was refused (check the migration ServiceAccount's get/patch permission on this Deployment). Not reporting success: the cluster was left unrecovered."
               fi
 
               # Wait until every CH pod is Ready and no StatefulSet is missing the VCT.

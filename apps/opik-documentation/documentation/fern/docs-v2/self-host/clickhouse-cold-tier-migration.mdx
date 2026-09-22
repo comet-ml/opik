@@ -49,11 +49,7 @@ clickhouse:
 ```
 
 <Note>
-<Note>
-Because `coldTierMigration.enabled` defaults to `true`, upgrading a release that **already** has `clickhouse.tieredStorage.enabled: true` activates this job on the next upgrade without any action on your part. It is a no-op when every replica already carries the cache volume, but it does add a post-upgrade hook to that release — set `coldTierMigration.enabled: false` to opt out.
-</Note>
-
-`coldTierMigration.enabled` defaults to `true`. It only does work when the cold tier is enabled, and is a no-op when every replica already has the cache volume — so it is safe to leave on across upgrades. Because it only bounces the operator (never deletes ClickHouse StatefulSets, pods, or data), it is safe on an existing release. To opt out **without** disabling the cold tier:
+`coldTierMigration.enabled` defaults to `true`, so upgrading a release that **already** has `clickhouse.tieredStorage.enabled: true` activates this job on the next upgrade without any action on your part. It only does work when the cold tier is enabled, and is a no-op when every replica already has the cache volume — so it is safe to leave on across upgrades, though it does add a post-upgrade hook to the release. Because it only bounces the operator (never deletes ClickHouse StatefulSets, pods, or data), it is safe on an existing release. To opt out **without** disabling the cold tier:
 
 ```yaml
 clickhouse:
