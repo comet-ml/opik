@@ -28,7 +28,7 @@ const AnnotateQueueCell = (context: CellContext<AnnotationQueue, string>) => {
         target="_blank"
       >
         <Button variant="tableLink" size="sm">
-          Annotate queue
+          Annotator&apos;s view
           <ExternalLink className="ml-1.5 mt-1 size-3.5 shrink-0" />
         </Button>
       </Link>
