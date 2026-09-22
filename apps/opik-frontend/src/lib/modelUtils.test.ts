@@ -707,7 +707,9 @@ describe("Requesty models", () => {
     ).toEqual([]);
   });
 
-  it("coerces temperature to 1 and drops topP when switching into requesty/openai/gpt-5", () => {
+  it("keeps the sampling pair in the config but omits both from a requesty/openai/gpt-5 request", () => {
+    // Same rule as the OpenAI reasoning models above: the config keeps the user's values for the
+    // next model that takes them, the request builder leaves both out.
     const config: LLMOpenAIConfigsType = {
       temperature: 0,
       maxCompletionTokens: 4000,
@@ -719,8 +721,14 @@ describe("Requesty models", () => {
       model: PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5,
       provider: REQUESTY,
     });
-    expect(result?.temperature).toBe(1);
-    expect(result?.topP).toBeUndefined();
+    expect(result?.temperature).toBe(0);
+    expect(result?.topP).toBe(0.9);
+    const sanitized = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5,
+      result as unknown as Record<string, unknown>,
+    );
+    expect(sanitized.temperature).toBeUndefined();
+    expect(sanitized.topP).toBeUndefined();
   });
 
   it("coerces an invalid reasoningEffort to high for requesty/openai/gpt-5", () => {
@@ -754,18 +762,18 @@ describe("Requesty models", () => {
     expect(result).toBe(config);
   });
 
-  it("strips an invalid reasoningEffort and topP from a requesty/openai/gpt-5 request", () => {
+  it("replaces an invalid reasoningEffort and strips the sampling pair from a requesty/openai/gpt-5 request", () => {
     const result = sanitizeConfigForRequest(
       PROVIDER_MODEL_TYPE.REQUESTY_OPENAI_GPT_5,
       {
         temperature: 1,
         topP: 0.9,
-        reasoningEffort: "xhigh",
+        reasoningEffort: "xhigh", // gpt-5 does not accept xhigh
       },
     );
     expect(result.topP).toBeUndefined();
-    expect(result.reasoningEffort).toBeUndefined();
-    expect(result.temperature).toBe(1);
+    expect(result.temperature).toBeUndefined();
+    expect(result.reasoningEffort).toBe("high");
   });
 
   it("keeps a valid reasoningEffort for a requesty/openai/gpt-5 request", () => {
