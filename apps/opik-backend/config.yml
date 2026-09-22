@@ -227,9 +227,7 @@ databaseAnalyticsReadOnlyFreeFormSql:
   #   above the read-only profile's max_execution_time (180s) so the server-side cap fires first.
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_SOCKET_TIMEOUT:-200s}
 
-# Credentials for the extended free-form SQL read-only ClickHouse user - the same free-form SQL path as the block
-# above, on an account whose row policies read the evaluation tables workspace-wide. Named for that reach rather
-# than for Custom Charts, its only consumer today. Same connection params as databaseAnalytics, same profile shape.
+# Description: credentials for the extended free-form SQL read-only ClickHouse user.
 # Only used for workspaces in customCharts.enabledWorkspaces.
 databaseAnalyticsReadOnlyFreeFormExtendedSql:
   #  Default: comet_readonly_freeform_extended_sql_user

@@ -192,9 +192,8 @@ databaseAnalyticsReadOnlyFreeFormSql:
   # Plain value (no env var).
   socketTimeout: 200s
 
-# Description: credentials for the extended free-form SQL read-only user (Custom Charts is its only consumer
-#   today), provisioned the same way (users.xml). The block is required even when the feature is off: the field is
-#   @Valid @NotNull and its username is @NotBlank, so an absent block fails config validation at boot.
+# Description: credentials for the extended free-form SQL read-only user. The block is required even when
+# the feature is off: an absent block fails config validation at boot.
 databaseAnalyticsReadOnlyFreeFormExtendedSql:
   username: comet_readonly_freeform_extended_sql_user
   password: opik

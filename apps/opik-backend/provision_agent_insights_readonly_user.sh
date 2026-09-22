@@ -3,17 +3,13 @@ set -euo pipefail
 
 # Provision the read-only free-form SQL ClickHouse users, settings profiles, grants and row policies.
 #
-# Two users, both created together, deliberately separate accounts (see OPIK-8329 design 8.11):
+# Two users, both created together, deliberately separate accounts:
 #   - Agent Insights - traces/spans/authored_feedback_scores, all bound to workspace AND project.
-#   - Extended free-form SQL, Custom Charts being its only consumer today - the same three tables plus
+#   - Extended free-form SQL for Custom Charts - the same three tables plus
 #     experiments, experiment_items, dataset_items, feedback_scores and trace_threads. traces/spans keep a project
-#     bound but an optional one; everything else is workspace-bound only, authored_feedback_scores included. That
-#     last policy differs from Agent Insights' and is why this cannot be one shared user: relaxing it in place
-#     would widen the existing feature's reach across projects.
+#     bound but an optional one; everything else is workspace-bound only, authored_feedback_scores included..
 #
 # Opt-in: only runs when TOGGLE_OLLIE_ENABLED=true; otherwise it's a no-op so default installs are untouched.
-# Neither account depends on TOGGLE_CUSTOM_CHARTS_WORKSPACES: both are inert without a caller, and tying an
-# account's existence to a toggle only means flipping that toggle needs a redeploy before it takes effect.
 # This is the single local copy of the DDL, shared by docker-compose (backend container, between run_db_migrations.sh
 # and entrypoint.sh) and scripts/dev-runner.sh. It mirrors the prod provisioning owned by OPIK-6846 — keep them in
 # sync. Must run AFTER the analytics migrations (the GRANT/ROW POLICY statements reference the opik tables) and BEFORE
@@ -48,9 +44,6 @@ ch_url="http://${ch_host}:${ch_port}/?user=${ch_admin_user}&password=${ch_admin_
 
 echo "Provisioning read-only ClickHouse users '${ro_user}' and '${ro_ext_user}' on ${ch_host}:${ch_port}/${ch_db}..."
 
-# Both users are created before the settings profile, which names both in its TO clause and would be rejected if
-# either did not exist yet. One profile rather than two identical ones - note that tuning it changes the safety
-# envelope of both features at once.
 statements=(
     "CREATE USER IF NOT EXISTS ${ro_user} IDENTIFIED BY '${ro_pass}'"
     "CREATE USER IF NOT EXISTS ${ro_ext_user} IDENTIFIED BY '${ro_ext_pass}'"
@@ -58,7 +51,7 @@ statements=(
 )
 
 # Agent Insights: three tables, every one bound to workspace AND project. The extended account reads the
-# same three, so they are granted once to both; only the row policies below differ between them.
+# same three, so they are granted once to both.
 statements+=(
     "GRANT SELECT ON ${ch_db}.spans TO ${ro_user}, ${ro_ext_user}"
     "GRANT SELECT ON ${ch_db}.traces TO ${ro_user}, ${ro_ext_user}"
@@ -71,16 +64,11 @@ statements+=(
 # Extended account: five tables beyond the three granted above, and its own policies on all eight.
 #
 # traces and spans keep a project bound, but an optional one: '*' means every project in the workspace, so the
-# caller picks the scope per request. getSetting() is a query-time constant, so ClickHouse folds the comparison
-# before index analysis and the (workspace_id, project_id, ...) prefix still prunes - measured at 51.44k rows read
-# against 51.42k for a plain equality. The sentinel is '*' rather than '' because the profile defaults the setting
+# caller picks the scope per request. The sentinel is '*' rather than '' because the profile defaults the setting
 # to '': an empty value matches neither branch and returns nothing, so a dropped setting fails closed instead of
 # widening to the whole workspace.
 #
-# Everything else is workspace-only. dataset_items has no project_id column at all, and project_id is empty on
-# ~77% of experiments / ~69% of experiment_items in production, so a project bound on those would silently hide
-# most rows rather than fail. authored_feedback_scores is workspace-only here too, and that policy difference is
-# what makes this a second account rather than extra grants on the first.
+# Everything else (including authored_feedback_scores) is workspace-only.
 statements+=(
     "GRANT SELECT ON ${ch_db}.feedback_scores TO ${ro_ext_user}"
     "GRANT SELECT ON ${ch_db}.experiments TO ${ro_ext_user}"
