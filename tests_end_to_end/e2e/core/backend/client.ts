@@ -618,6 +618,36 @@ export interface AnnotationQueueDetail {
   reviewers: AnnotationQueueReviewerRef[];
 }
 
+/** One `score_name <operator> value` comparison inside a queue's automation. */
+export interface AnnotationQueueScoreCondition {
+  scoreName: string;
+  operator: string;
+  value: number;
+}
+
+/**
+ * A queue's automation block. `groups` are OR-ed with each other; the conditions
+ * within a group are AND-ed, so `[[a, b], [c]]` reads `(a AND b) OR c`.
+ */
+export interface AnnotationQueueAutomationRef {
+  enabled: boolean;
+  groups: AnnotationQueueScoreCondition[][];
+}
+
+export interface AnnotationQueueSettingsRef {
+  commentsEnabled: boolean;
+  /**
+   * `null` when the queue carries no automation block at all — how every queue
+   * created through the SDK, and every queue predating automation, is stored.
+   * Distinct from `{ enabled: false, ... }`, which is a configured automation
+   * that is switched off.
+   */
+  automation: AnnotationQueueAutomationRef | null;
+}
+
+/** How an item came to be in a queue, as `items/search` reports it. */
+export type AnnotationQueueItemSource = 'automated' | 'manual';
+
 /**
  * One row of `GET /v1/private/traces/threads` — the aggregate the Threads view
  * renders per conversation. Every field a wrong `traces` prefilter would corrupt
@@ -3839,6 +3869,242 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * A queue's automation configuration and its comment setting.
+     *
+     * Through `rawFetch` rather than the pinned SDK because `AnnotationQueuePublic`
+     * (opik 2.2.29) has no `automation` field at all — `getAnnotationQueueById`
+     * drops it on deserialisation, so a spec reading automation through the typed
+     * client would see `undefined` whatever the server actually stored, and pass
+     * for the wrong reason.
+     *
+     * Throws rather than defaulting on a body that doesn't carry the fields: a
+     * missing `comments_enabled` means the API changed shape, and silently
+     * reading it as `false` would turn that into a green run.
+     */
+    async getAnnotationQueueSettings(id: string): Promise<AnnotationQueueSettingsRef | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/annotation-queues/${id}`,
+      );
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`GET annotation queue ${id}: expected 200, got ${status}: ${message}`);
+      }
+
+      const body = json as {
+        comments_enabled?: unknown;
+        automation?: {
+          enabled?: unknown;
+          conditions?: {
+            groups?: Array<{
+              conditions?: Array<{ score_name?: unknown; operator?: unknown; value?: unknown }>;
+            }>;
+          };
+        } | null;
+      } | null;
+
+      if (typeof body?.comments_enabled !== 'boolean') {
+        throw new Error(
+          `GET annotation queue ${id}: no boolean comments_enabled in the response body`,
+        );
+      }
+
+      const automation = body.automation ?? null;
+      if (automation === null) {
+        return { commentsEnabled: body.comments_enabled, automation: null };
+      }
+      if (typeof automation.enabled !== 'boolean') {
+        throw new Error(`GET annotation queue ${id}: automation block carries no boolean enabled`);
+      }
+
+      return {
+        commentsEnabled: body.comments_enabled,
+        automation: {
+          enabled: automation.enabled,
+          groups: (automation.conditions?.groups ?? []).map((group) =>
+            (group.conditions ?? []).map((condition) => ({
+              scoreName: String(condition.score_name),
+              operator: String(condition.operator),
+              value: Number(condition.value),
+            })),
+          ),
+        },
+      };
+    },
+
+    /**
+     * Create an annotation queue, returning its id.
+     *
+     * Exists alongside the SDK's `createAnnotationQueue` because that one can
+     * express neither `comments_enabled` nor `automation` (the pinned 2.2.29
+     * `AnnotationQueueWrite` has no automation field), and both are the subject
+     * of the automation specs. Omitting `conditionGroups` stores no automation
+     * block at all — the shape every pre-automation queue has.
+     *
+     * The id comes off the `Location` header the backend answers 201 with.
+     */
+    async createAnnotationQueueRaw(args: {
+      projectId: string;
+      name: string;
+      scope: 'trace' | 'thread';
+      commentsEnabled: boolean;
+      feedbackDefinitionNames: string[];
+      /** OR-ed groups of AND-ed conditions. Omit for a queue with no automation. */
+      conditionGroups?: AnnotationQueueScoreCondition[][];
+    }): Promise<string> {
+      const body = {
+        project_id: args.projectId,
+        name: args.name,
+        scope: args.scope,
+        comments_enabled: args.commentsEnabled,
+        feedback_definition_names: args.feedbackDefinitionNames,
+        ...(args.conditionGroups === undefined
+          ? {}
+          : {
+              automation: {
+                enabled: true,
+                conditions: {
+                  groups: args.conditionGroups.map((group) => ({
+                    conditions: group.map((condition) => ({
+                      score_name: condition.scoreName,
+                      operator: condition.operator,
+                      value: condition.value,
+                    })),
+                  })),
+                },
+              },
+            }),
+      };
+
+      // Retries 5xx on `postSeedWrite`'s backoff and for its reason: the ingress
+      // answers 500/502 in short bursts, and a spec that seeds through REST
+      // otherwise inherits that as flake. Not routed through `postSeedWrite`
+      // itself because that helper discards the response, and the Location
+      // header is the only place the new queue's id appears.
+      //
+      // Unlike `postSeedWrite` this is NOT an upsert on a caller-supplied id, so
+      // a retry after a request that secretly landed would create a second queue
+      // under the same name. The caller's fixture-namespaced name makes that
+      // visible rather than silent, and it is the lesser risk: without the
+      // retry, an observed burst failed three consecutive Playwright attempts.
+      const backoffMs = [1_000, 3_000, 8_000];
+      let status = 0;
+      let message = '<no response>';
+      let location: string | null | undefined = null;
+
+      for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
+        ({ status, message, location } = await rawFetch(
+          'POST',
+          '/v1/private/annotation-queues/',
+          { body },
+        ));
+        if (status < 500) break;
+        if (attempt < backoffMs.length) {
+          await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+        }
+      }
+
+      if (status !== 201) {
+        throw new Error(
+          `create annotation queue "${args.name}": expected 201, got ${status}: ${message}`,
+        );
+      }
+      const id = location?.split('/').pop();
+      if (!id) {
+        throw new Error(
+          `create annotation queue "${args.name}": 201 carried no Location header to read the id from`,
+        );
+      }
+      return id;
+    },
+
+    /**
+     * How each of the given items got into the queue, keyed by item id.
+     *
+     * Ids with no membership are simply absent from the response, so a caller
+     * asserting "this one was never added" checks for absence here rather than
+     * for a source value. This is the same lookup the items table's Source column
+     * renders from (`useQueueItemSources`).
+     */
+    async getAnnotationQueueItemSources(
+      queueId: string,
+      itemIds: string[],
+    ): Promise<Record<string, AnnotationQueueItemSource>> {
+      // Retried on 5xx for the same reason `postSeedWrite` is: the ingress in
+      // front of this deployment answers 500/502 in short bursts, uncorrelated
+      // with the request. Observed here as a single 500 between two identical
+      // calls that both answered 200. Only 5xx is retried — a 4xx is this suite
+      // sending something the API rejects, and repeating it would only delay the
+      // message saying so. Safe to repeat: this is a read.
+      const backoffMs = [1_000, 3_000];
+      let status = 0;
+      let message = '<no response>';
+      let json: unknown = null;
+
+      for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
+        ({ status, message, json } = await rawFetch(
+          'POST',
+          `/v1/private/annotation-queues/${queueId}/items/search`,
+          { body: { ids: itemIds } },
+        ));
+        if (status < 500) break;
+        if (attempt < backoffMs.length) {
+          await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+        }
+      }
+
+      if (status !== 200) {
+        throw new Error(
+          `search items of annotation queue ${queueId}: expected 200, got ${status}: ${message}`,
+        );
+      }
+      const content = (json as { content?: unknown } | null)?.content;
+      if (!Array.isArray(content)) {
+        throw new Error(
+          `search items of annotation queue ${queueId}: response carried no content array`,
+        );
+      }
+      return Object.fromEntries(
+        (content as Array<{ id: string; source: AnnotationQueueItemSource }>).map((item) => [
+          item.id,
+          item.source,
+        ]),
+      );
+    },
+
+    /**
+     * Queues in one project, by name.
+     *
+     * Deliberately filters client-side over a project-scoped listing rather than
+     * using the endpoint's own `name=` parameter: that parameter answers 500
+     * unless it matches exactly one queue (verified against this build — 0 matches
+     * and 5 matches both 500), so a lookup that legitimately finds nothing would
+     * fail as a server error instead of an empty result.
+     */
+    async findAnnotationQueuesByName(projectId: string, name: string): Promise<string[]> {
+      const query = new URLSearchParams({ project_id: projectId, size: '500', page: '1' });
+      const { status, message, json } = await rawFetch(
+        'GET',
+        '/v1/private/annotation-queues',
+        { query },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `list annotation queues of project ${projectId}: expected 200, got ${status}: ${message}`,
+        );
+      }
+      const content = (json as { content?: unknown } | null)?.content;
+      if (!Array.isArray(content)) {
+        throw new Error(
+          `list annotation queues of project ${projectId}: response carried no content array`,
+        );
+      }
+      return (content as Array<{ id: string; name: string }>)
+        .filter((queue) => queue.name === name)
+        .map((queue) => queue.id);
     },
 
     /**

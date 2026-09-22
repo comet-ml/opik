@@ -17,6 +17,7 @@ export interface BystanderFixtures {
   bystanderExperiment: BystanderExperimentRef;
   bystanderTestSuite: BystanderTestSuiteRef;
   registerDatasetCleanup: (id: string, name: string) => void;
+  registerAnnotationQueueCleanup: (id: string, name: string) => void;
   registerExperimentCleanup: (id: string, name: string) => void;
 }
 
@@ -114,6 +115,28 @@ export const test = baseTest.extend<BystanderFixtures>({
           await backendClient.deleteDataset(id);
         } catch (err) {
           console.warn(`[registerDatasetCleanup] delete warning for ${name}:`, err);
+        }
+      }
+    }
+  },
+
+  /**
+   * For annotation queues a test creates through the UI, whose id only exists
+   * once the form has been submitted. Annotation queues cascade with neither
+   * their project nor the run-prefix sweep in `global-teardown.ts`, so an
+   * unregistered one is orphaned permanently.
+   */
+  registerAnnotationQueueCleanup: async ({ backendClient }, use, testInfo) => {
+    const registry: Array<{ id: string; name: string }> = [];
+    await use((id, name) => {
+      registry.push({ id, name });
+    });
+    if (!shouldLeaveArtifacts(testInfo)) {
+      for (const { id, name } of registry) {
+        try {
+          await backendClient.deleteAnnotationQueue(id);
+        } catch (err) {
+          console.warn(`[registerAnnotationQueueCleanup] delete warning for ${name}:`, err);
         }
       }
     }

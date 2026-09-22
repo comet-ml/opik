@@ -384,6 +384,34 @@ export class LogsPage {
   }
 
   /**
+   * Add the currently selected traces to an annotation queue, through the
+   * actions panel's "Add to" menu. Callers select rows first via selectTrace().
+   *
+   * The queue is picked by name: `AddToQueueDialog` renders each queue as a
+   * clickable div carrying the queue's name, with no role or testid of its own,
+   * so the name is both the only handle and the right one — it identifies the
+   * queue rather than its position in a list whose order the test does not fix.
+   * Fixture-namespaced names make it unambiguous; `toHaveCount(1)` makes a
+   * collision fail loudly instead of clicking the wrong queue.
+   */
+  async addSelectedTracesToQueue(queueName: string): Promise<void> {
+    return test.step(`Add the selected traces to annotation queue "${queueName}"`, async () => {
+      await this.page.getByRole('button', { name: 'Add to' }).click();
+      await this.page.getByRole('menuitem', { name: 'Annotation queue' }).click();
+
+      const dialog = this.page.getByRole('dialog').filter({
+        has: this.page.getByRole('heading', { name: 'Add to annotation queue' }),
+      });
+      await dialog.waitFor({ state: 'visible' });
+
+      const option = dialog.getByText(queueName, { exact: true });
+      await expect(option).toHaveCount(1);
+      await option.click();
+      await dialog.waitFor({ state: 'detached' });
+    });
+  }
+
+  /**
    * The bulk-delete (trash) button in the traces actions panel. It renders as an
    * icon-only button with no accessible name — the "Delete" label lives in a
    * hover tooltip portal — so the testid is the only stable handle.

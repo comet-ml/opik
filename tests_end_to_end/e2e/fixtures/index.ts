@@ -1,4 +1,4 @@
-export { test, expect } from './export-comparison.fixture';
+export { test, expect } from './automated-queue.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -166,4 +166,10 @@ export type {
   ExportComparisonRef,
   ExportComparisonFixtures,
 } from './export-comparison.fixture';
+export type {
+  AutomatedQueueRef,
+  AutomatedQueueTraceRef,
+  AutomatedQueueFixtures,
+} from './automated-queue.fixture';
+export { QUALITY_THRESHOLD, SAFETY_THRESHOLD } from './automated-queue.fixture';
 export type { ProjectRef } from '../core/backend';
