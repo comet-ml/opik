@@ -3,12 +3,15 @@ package com.comet.opik.db;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.io.IOException;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assumptions.assumeThat;
 
 /**
  * The cutover backfill's {@code INSERT}/{@code SELECT} mapping check, exercised against crafted statements.
@@ -24,8 +27,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * still perfectly consistent with each other. No table-to-table comparison can see it. Without the cases below, the
  * single guard against that outcome had nothing showing it works.
  *
- * <p>The parse is family-independent, so one constant exercises it; {@code TRACES} is used because its backfill is the
- * one already shipped.
+ * <p>The parse is family-independent, so one constant exercises the crafted cases below; {@code TRACES} carries
+ * them. The last test is the other half and runs per family, over the statements each one actually ships.
  */
 class CutoverBackfillParityTest {
 
@@ -128,5 +131,28 @@ class CutoverBackfillParityTest {
         assertThatThrownBy(() -> PARITY.assertInsertMatchesSelectIn(sql))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("must name its destination");
+    }
+
+    /**
+     * The crafted cases above prove the parser fires; this points it at the real thing.
+     *
+     * <p>Four statements per family spell the copy's column list out independently — the backfill, the delta, and
+     * both post-swap sweeps — and only the backfill was read, by the container gate. The three this adds are the ones
+     * that run latest and closest to live data: the delta immediately before the {@code EXCHANGE}, the sweeps after
+     * it. A column present on both tables and in the backfill but missing from the delta is copied in bulk and
+     * dropped from every row written during the cutover window, leaving the two tables consistent with each other and
+     * the loss invisible to every count and every table-to-table compare the procedure runs.
+     *
+     * <p>Needs no container: it compares shipped files to each other, so it runs in every build rather than only
+     * where the parity gate's ClickHouse does.
+     */
+    @ParameterizedTest
+    @EnumSource(CutoverSchemaParity.class)
+    void everyShippedCopyStatementNamesTheBackfillColumnsInOrder(CutoverSchemaParity family) throws IOException {
+        assumeThat(family.backfillIsPending())
+                .as("%s has not shipped its backfill yet, so there is no list for the others to match", family)
+                .isFalse();
+
+        family.assertCopyStatementsMatchTheBackfill();
     }
 }
