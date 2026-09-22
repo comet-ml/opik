@@ -7,7 +7,7 @@ set -euo pipefail
 #   - Agent Insights - traces/spans/authored_feedback_scores, all bound to workspace AND project.
 #   - Extended free-form SQL for Custom Charts - the same three tables plus
 #     experiments, experiment_items, dataset_items, feedback_scores and trace_threads. traces/spans keep a project
-#     bound but an optional one; everything else is workspace-bound only, authored_feedback_scores included..
+#     bound but an optional one; everything else is workspace-bound only, authored_feedback_scores included.
 #
 # Opt-in: only runs when TOGGLE_OLLIE_ENABLED=true; otherwise it's a no-op so default installs are untouched.
 # This is the single local copy of the DDL, shared by docker-compose (backend container, between run_db_migrations.sh

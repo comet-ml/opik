@@ -116,8 +116,8 @@
 
         <!--
             Extended free-form SQL account. Same profile with comet_readonly_freeform_sql_user shape,
-            wider reach: traces/spans stay bound to workspace AND project, every other table is
-            workspace-only - authored_feedback_scores included.
+            wider reach: traces/spans stay bound to workspace and, when SQL_project_id is not '*', to that
+            project too; every other table is workspace-only - authored_feedback_scores included.
         -->
         <comet_readonly_freeform_extended_sql_user>
             <password>opik</password>
