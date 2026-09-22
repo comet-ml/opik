@@ -47,6 +47,8 @@ import java.util.UUID;
 
 import static com.comet.opik.api.metrics.BreakdownQueryBuilder.getBreakdownGroupExpression;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.SpanMetricsQueries.SPAN_FILTERED_PREFIX;
+import static com.comet.opik.domain.SpanMetricsQueries.TOKEN_USAGE_NAMES;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -90,8 +92,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 WHERE workspace_id = :workspace_id
                   <if(project_ids)> AND project_id IN :project_ids <endif>
                   AND id BETWEEN :id_prior_start AND :id_end
-                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'))
-                  AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      >= (toDate32(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'), 1)))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      \\<= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
             ) t ON t.id = fs.entity_id
             WHERE workspace_id = :workspace_id
@@ -109,8 +113,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             WHERE workspace_id = :workspace_id
                 <if(project_ids)> AND project_id IN :project_ids <endif>
                 AND id BETWEEN :id_prior_start AND :id_end
-                AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'))
-                AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    >= (toDate32(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_prior_start), 'UTC'), 1)))
+                AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
                 AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_prior_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9);
             """;
 
@@ -128,8 +134,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     WHERE workspace_id = :workspace_id
                       AND project_id IN :project_ids
                       AND id BETWEEN :id_start AND :id_end
-                      AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
-                      AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
+                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
                       AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 ) t ON t.id = fs.entity_id
                 WHERE workspace_id = :workspace_id
@@ -164,8 +172,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     FROM traces final
                     WHERE workspace_id = :workspace_id
                       AND id BETWEEN :id_start AND :id_end
-                      AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
-                      AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
+                      AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                          <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
                       AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 ) t ON t.id = fs.entity_id
                 WHERE workspace_id = :workspace_id
@@ -195,8 +205,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id IN :project_ids
                   AND id BETWEEN :id_start AND :id_end
-                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
-                  AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 GROUP BY project_id, bucket
                 ORDER BY project_id, bucket
@@ -221,8 +233,10 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND id BETWEEN :id_start AND :id_end
-                  AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'))
-                  AND toMonday(id_at) <= toMonday(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      >= (toDate32(UUIDv7ToDateTime(toUUID(:id_start), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_start), 'UTC'), 1)))
+                  AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                      <= (toDate32(UUIDv7ToDateTime(toUUID(:id_end), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:id_end), 'UTC'), 1)))
                   AND start_time BETWEEN parseDateTime64BestEffort(:timestamp_start, 9) AND parseDateTime64BestEffort(:timestamp_end, 9)
                 GROUP BY bucket
                 ORDER BY bucket
@@ -243,9 +257,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
     // projects: WorkspaceMetricsService resolves the "all projects" request into every project id up front, so the
     // predicate is always a bounded `project_id IN :project_ids` list that prunes on the spans primary key
     // (workspace_id, project_id, ...) — never an unconstrained workspace-wide scan.
-    private static final String SPAN_FILTERED_PREFIX = SpanMetricsQueries
-            .spanFilteredPrefix("project_id IN :project_ids");
-
     // Span filtering is reused from ProjectMetricsDAO's SPAN_FILTERED_PREFIX (above), but the output is shaped in the
     // workspace-native style like GET_COSTS_DAILY: each row is a finished series {project_id, name, data}, where data is
     // a groupArray(tuple(bucket, value)). No breakdown => one series per usage key; with a provider/model breakdown =>
@@ -268,7 +279,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                 ORDER BY name, bucket
                 <if(with_fill)>WITH FILL
                     FROM <fill_from>
-                    TO toDateTime(UUIDv7ToDateTime(toUUID(:uuid_to_time)))
+                    TO toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_to_time)), 0, 'UTC')
                     STEP <step><endif>
             )
             SELECT NULL AS project_id,
@@ -304,11 +315,6 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
             GROUP BY group_name
             SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
-
-    // Distinct span token-usage key names across an explicit project set, all-time. Shares SpanMetricsQueries with
-    // ProjectMetricsDAO's per-project query; only the project predicate differs (a bounded project_id IN (...) list).
-    private static final String GET_WORKSPACE_TOKEN_USAGE_NAMES = SpanMetricsQueries
-            .tokenUsageNames("project_id IN :project_ids");
 
     private static final String WORKSPACE_METRIC_QUERY_NAME_PREFIX = "WorkspaceMetrics_";
 
@@ -384,7 +390,7 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(projectIds),
                 "projectIds must be resolved before querying workspace token usage names");
         return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-            var stTemplate = getSTWithLogComment(GET_WORKSPACE_TOKEN_USAGE_NAMES,
+            var stTemplate = getSTWithLogComment(TOKEN_USAGE_NAMES,
                     WORKSPACE_METRIC_QUERY_NAME_PREFIX + "tokenUsageNames", workspaceId, userName, projectIds.size());
 
             var statement = connection.createStatement(stTemplate.render())
@@ -414,12 +420,12 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
                     userName, request.projectIds().size());
 
             if (isTotal) {
-                stTemplate.add("bucket", "toDateTime(UUIDv7ToDateTime(toUUID(:uuid_from_time)))");
+                stTemplate.add("bucket", "toDateTime64(UUIDv7ToDateTime(toUUID(:uuid_from_time)), 0, 'UTC')");
             } else {
                 stTemplate.add("step", intervalToSql(interval))
-                        .add("bucket", wrapWeekly(interval,
+                        .add("bucket", pinBucket(
                                 "toStartOfInterval(span_time, %s)".formatted(intervalToSql(interval))))
-                        .add("fill_from", wrapWeekly(interval,
+                        .add("fill_from", pinBucket(
                                 "toStartOfInterval(UUIDv7ToDateTime(toUUID(:uuid_from_time)), %s)"
                                         .formatted(intervalToSql(interval))));
             }
@@ -469,11 +475,14 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         });
     }
 
-    private String wrapWeekly(TimeInterval interval, String stmt) {
-        if (interval == TimeInterval.WEEKLY) {
-            return "toDateTime(%s)".formatted(stmt);
-        }
-        return stmt;
+    /**
+     * Pins a {@code WITH FILL} time expression to {@code DateTime64(0, 'UTC')}, so {@code bucket},
+     * {@code fill_from} and the {@code TO} clause share one width; ClickHouse rejects a {@code WITH FILL} whose
+     * three disagree (code 475). See {@code ProjectMetricsDAO.pinBucket} for why every interval needs it, and for
+     * what it does <em>not</em> fix.
+     */
+    private String pinBucket(String stmt) {
+        return "toDateTime64(%s, 0, 'UTC')".formatted(stmt);
     }
 
     private String intervalToSql(TimeInterval interval) {
@@ -579,8 +588,12 @@ class WorkspaceMetricsDAOImpl implements WorkspaceMetricsDAO {
         return dataItems.isEmpty() ? null : dataItems;
     }
 
-    // Bucket timestamps come back as OffsetDateTime for DateTime64 columns (e.g. the cost query's start_time) but as
-    // LocalDateTime for plain DateTime expressions (e.g. UUIDv7ToDateTime-derived span_time). Both represent UTC.
+    /**
+     * Both bucket shapes this DAO produces, read as one {@code Instant}: the span-metric buckets are
+     * {@code DateTime64} — {@link #pinBucket} casts them — and arrive as {@code OffsetDateTime}, while the daily
+     * cost and feedback buckets are a bare {@code toStartOfInterval} and arrive as {@code LocalDateTime}. Both
+     * represent UTC.
+     */
     private Instant toInstant(Object bucket) {
         return switch (bucket) {
             case OffsetDateTime offsetDateTime -> offsetDateTime.toInstant();

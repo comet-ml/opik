@@ -45,6 +45,15 @@ export class DatasetItemsPage {
     return this.page.getByText(`v${version}`, { exact: true });
   }
 
+  /**
+   * Every rendered item row. Exposed so callers can use a retrying
+   * `toHaveCount(...)` instead of the one-shot `countItems()`, which reads
+   * whatever happens to be in the DOM at that instant.
+   */
+  itemRows(): Locator {
+    return this.itemsTableBody.locator('tr[data-row-id]');
+  }
+
   itemRow(index: number): Locator {
     return this.itemsTableBody.locator('tr[data-row-id]').nth(index);
   }
@@ -155,6 +164,20 @@ export class DatasetItemsPage {
    */
   versionItemCount(versionName: string): Locator {
     return this.versionHistoryRow(versionName).locator('[data-cell-id$="_items_total"]');
+  }
+
+  /**
+   * The "Changes" cell of a version row: the added / modified / deleted tags
+   * the column renders, e.g. `+ 1` for a version that added one item and
+   * changed nothing else, or `-` for a version with no counted change.
+   *
+   * Addressed by `data-cell-id` for the same reason as `versionItemCount`.
+   * This is the only place the per-version added/modified split is visible to
+   * a user — "Item count" alone cannot tell a version that added one item
+   * apart from one that added two and deleted one.
+   */
+  versionChangeSummary(versionName: string): Locator {
+    return this.versionHistoryRow(versionName).locator('[data-cell-id$="_change_summary"]');
   }
 
   async search(term: string): Promise<void> {

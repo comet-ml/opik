@@ -13,7 +13,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 /**
  * Architectural guard for the span deletion event capturing. Spans have no standalone user delete
  * ({@code DELETE /spans/{id}} returns 501); the only span-deletion path is the trace-delete cascade in
- * {@link SpanService}, which records the deleted ids in {@code deletion_events_local} after the delete so they
+ * {@link SpanService}, which records the ids in {@code deletion_events_local} before the delete so they
  * survive the data-model migration's table copy. A new caller of {@code SpanDAO.deleteByIds(Set, UUID)} would issue
  * the lightweight delete without that capture, silently bypassing the bridge, so this rule fails the build if one
  * appears. Retention paths ({@code deleteForRetention*}) are intentionally not captured and are separate methods, so

@@ -80,6 +80,34 @@ export class PromptsPage {
       .filter({ has: this.page.getByRole('cell', { name, exact: true }) });
   }
 
+  /**
+   * Unlike the sibling pages, the confirm heading interpolates the prompt
+   * name ("Delete <name>") while the button stays a fixed "Delete prompt".
+   */
+  async deletePromptByName(name: string): Promise<void> {
+    return test.step(`delete prompt "${name}" via row actions`, async () => {
+      const row = this.promptRow(name);
+      await row.waitFor({ state: 'visible' });
+      await row.getByRole('button', { name: 'Actions menu' }).click();
+      await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+
+      const confirm = this.deletePromptConfirmDialog(name);
+      await confirm.waitFor({ state: 'visible' });
+      await confirm.getByRole('button', { name: 'Delete prompt' }).click();
+
+      await confirm.waitFor({ state: 'hidden' });
+      // Deletion is a refetch, not an optimistic update — wait for the row.
+      await row.waitFor({ state: 'detached' });
+    });
+  }
+
+  /** The destructive confirm dialog raised by the row's Delete action. */
+  deletePromptConfirmDialog(name: string): Locator {
+    return this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: `Delete ${name}`, exact: true }),
+    });
+  }
+
   async openPromptByName(name: string): Promise<PromptDetailPage> {
     return test.step(`open prompt "${name}"`, async () => {
       if (!this.projectId) {

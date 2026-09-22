@@ -95,6 +95,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItems;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -126,9 +127,6 @@ class ExperimentAggregatesIntegrationTest {
             .newClickHouseContainer(ZOOKEEPER_CONTAINER);
     private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer();
     private final RandomGenerator random = new Random();
-
-    public static final String[] IGNORED_FIELDS_DATA_ITEM = {"createdAt", "lastUpdatedAt", "experimentItems",
-            "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId"};
 
     public static final String[] IGNORED_FIELDS_EXPERIMENT_ITEM = {"createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "comments", "projectName", "executionPolicy"};
@@ -786,6 +784,56 @@ class ExperimentAggregatesIntegrationTest {
                 .as("Groups from aggregates should match groups from raw data for scenario: %s", testName)
                 .usingRecursiveComparison()
                 .isEqualTo(groupsFromRaw);
+    }
+
+    @Test
+    @DisplayName("findGroups returns the project-scoped experiments that the ungrouped list returns")
+    void testFindGroupsMatchesUngroupedListForProjectScopedExperiment() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        // An unrelated experiment with traces, so the workspace resolves a non-empty target project set.
+        var otherProject = createProject(apiKey, workspaceName);
+        var otherDataset = createDataset(apiKey, workspaceName);
+        var otherExperiment = createExperiment(otherDataset, apiKey, workspaceName);
+        createExperimentItemWithData(otherExperiment.id(), otherDataset.id(), otherProject.name(),
+                PodamFactoryUtils.manufacturePojoList(factory, String.class), apiKey, workspaceName);
+
+        // The experiment under test: scoped to a project, no items yet, so its aggregate carries no project.
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetId(dataset.id())
+                .datasetName(dataset.name())
+                .projectId(project.id())
+                .build();
+        experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+        Stream.of(otherExperiment, experiment)
+                .forEach(exp -> experimentAggregatesService.populateAggregations(exp.id())
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block());
+
+        var listed = experimentResourceClient.getProjectExperiments(project.id(), 1, 10, null, null, null, false,
+                null, null, false, apiKey, workspaceName, 200);
+
+        assertThat(listed.content())
+                .as("the ungrouped list must return the experiment, otherwise the comparison is vacuous")
+                .extracting(Experiment::id)
+                .contains(experiment.id());
+
+        var groups = experimentResourceClient.findGroups(
+                List.of(GroupBy.builder().field(GroupingFactory.DATASET_ID).type(FieldType.STRING).build()),
+                null, null, null, project.id(), apiKey, workspaceName, 200);
+
+        assertThat(groups.content())
+                .as("grouping must return the project's own experiment and nothing else")
+                .containsOnlyKeys(dataset.id().toString());
     }
 
     @ParameterizedTest(name = "Group aggregations by {0}")
@@ -1506,11 +1554,15 @@ class ExperimentAggregatesIntegrationTest {
     void assertDatasetItemsWithExperimentItems(List<DatasetItem> expectedDatasetItem,
             List<DatasetItem> actualDatasetItems) {
 
-        assertThat(actualDatasetItems)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                .isEqualTo(expectedDatasetItem);
+        assertDatasetItems(actualDatasetItems, expectedDatasetItem);
 
         for (var i = 0; i < actualDatasetItems.size(); i++) {
+            // The shared helper ignores runSummariesByExperiment, but parity between the two read paths is
+            // exactly what this test exists to prove: the aggregates query omits assertions_array, so a
+            // divergence here means the aggregates path silently lost its assertion summaries.
+            assertThat(actualDatasetItems.get(i).runSummariesByExperiment())
+                    .isEqualTo(expectedDatasetItem.get(i).runSummariesByExperiment());
+
             var actualExperiments = actualDatasetItems.get(i).experimentItems();
             var expectedExperiments = expectedDatasetItem.get(i).experimentItems();
 

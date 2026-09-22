@@ -2,9 +2,13 @@ import React, { useCallback, useRef } from "react";
 
 export type DataTableWrapperProps = {
   children: React.ReactNode;
+  scrollRef?: React.Ref<HTMLDivElement>;
 };
 
-const DataTableWrapper: React.FC<DataTableWrapperProps> = ({ children }) => {
+const DataTableWrapper: React.FC<DataTableWrapperProps> = ({
+  children,
+  scrollRef,
+}) => {
   const rafId = useRef(0);
   const wasScrolled = useRef(false);
 
@@ -22,6 +26,7 @@ const DataTableWrapper: React.FC<DataTableWrapperProps> = ({ children }) => {
 
   return (
     <div
+      ref={scrollRef}
       className="overflow-x-auto overflow-y-hidden rounded-md border"
       data-table-scroll-container
       onScroll={handleScroll}

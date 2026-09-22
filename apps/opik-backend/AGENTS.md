@@ -10,6 +10,10 @@
 - Tests: `apps/opik-backend/src/test/java`
 - Resources: `apps/opik-backend/src/main/resources`
 - Migrations/config: `apps/opik-backend/data-migrations` and local runtime scripts (`scripts/`)
+- **Changing the `traces` or `spans` ClickHouse schema requires the topology-aware DDL pattern** — read
+  `docs/cutover-table-schema-ddl.md` first. Both are mid-migration to partitioned successors, so a migration has to be
+  correct against both the pre- and post-cutover layouts, and the ways of getting it wrong raise nothing at migration
+  time.
 - Related modules in the repository: `apps/opik-frontend`, `apps/opik-documentation`, `sdks/*`, `tests_end_to_end`, `deployment`
 
 ## Build, Test, and Development Commands

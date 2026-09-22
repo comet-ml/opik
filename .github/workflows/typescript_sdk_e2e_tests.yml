@@ -24,6 +24,7 @@ concurrency:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -52,6 +53,9 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   build-opik:
+    # Fork PRs get a read-only GITHUB_TOKEN, so the GHCR push below always
+    # 403s. Skip rather than fail; delete once fork PRs can run E2E.
+    if: ${{ github.event.pull_request.head.repo.fork != true }}
     # The reusable build workflow pushes images to GHCR; pass down the
     # packages: write grant here rather than at the workflow level (a called
     # workflow's permissions can only be maintained or reduced from the
@@ -62,6 +66,8 @@ jobs:
     uses: ./.github/workflows/build_e2e_docker.yaml
 
   run-e2e:
+    # No explicit if: needed here -- the default success() check skips this
+    # whenever build-opik is skipped.
     needs: [select-matrix, build-opik]
     name: TypeScript SDK E2E Tests Node ${{matrix.node_version}}
     permissions:
@@ -124,7 +130,7 @@ jobs:
 
       - name: Install TypeScript SDK dependencies
         working-directory: sdks/typescript
-        run: npm ci
+        run: npm ci --no-audit
 
       - name: Build TypeScript SDK
         working-directory: sdks/typescript

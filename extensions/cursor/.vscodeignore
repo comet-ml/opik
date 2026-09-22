@@ -14,8 +14,13 @@ node_modules/**
 .eslintrc.json
 .prettierrc
 .github/**
+.claude/**
+scripts/**
 *.vsix
 test/**
+tests/**
+out-test/**
+tsconfig.tests.json
 .npmignore
 package-lock.json
 yarn.lock

@@ -69,6 +69,7 @@ import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import useExperimentItemsState from "@/v2/pages-shared/experiments/useExperimentItemsState";
 import useExperimentItemsData from "@/v2/pages-shared/experiments/useExperimentItemsData";
+import getAllCompareExperimentsItems from "@/api/datasets/getAllCompareExperimentsItems";
 import useExperimentItemsSidebar from "@/v2/pages-shared/experiments/useExperimentItemsSidebar";
 import PassedCell from "@/v2/pages-shared/experiments/TestSuiteExperiment/PassedCell";
 import TestSuiteExperimentPanel from "@/v2/pages-shared/experiments/TestSuiteExperiment/ExperimentItemSidebar/TestSuiteExperimentPanel";
@@ -382,9 +383,22 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
+  // With rows selected, export just those - they are already on screen, so one refetch of this page is enough.
+  // With nothing selected, export the whole result set behind the current filters, which needs every page.
   const getDataForExport = useCallback(async (): Promise<
     ExperimentsCompare[]
   > => {
+    if (!selectedRows.length) {
+      return getAllCompareExperimentsItems({
+        workspaceName,
+        datasetId,
+        experimentsIds,
+        filters,
+        sorting,
+        search: search as string,
+      });
+    }
+
     const result = await refetchExportData();
 
     if (result.error) {
@@ -399,7 +413,17 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     const selectedIds = Object.keys(rowSelection);
 
     return allRows.filter((row) => selectedIds.includes(row.id));
-  }, [refetchExportData, rowSelection]);
+  }, [
+    selectedRows.length,
+    workspaceName,
+    datasetId,
+    experimentsIds,
+    filters,
+    sorting,
+    search,
+    refetchExportData,
+    rowSelection,
+  ]);
 
   const columns = useMemo(() => {
     const retVal = [
@@ -682,6 +706,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             experiments={experiments}
+            totalRows={total}
           />
           <Separator orientation="vertical" className="mx-[2px] h-4" />
           <DataTableRowHeightSelector
@@ -723,6 +748,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
+        columnVirtualization={{ enabled: true }}
         stickyHeader
         meta={meta}
         showSkeleton={isTableLoading}

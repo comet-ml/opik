@@ -11,6 +11,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.GenericType;
 import lombok.Builder;
@@ -109,6 +110,18 @@ class HealthCheckIntegrationTest {
                     .name("clickhouse-cluster").healthy(true).critical(true).type(READY).build();
             var clickhouseColdStorageDiskResponse = HealthCheckResponse.builder()
                     .name("clickhouse-cold-storage-disk").healthy(true).critical(true).type(READY).build();
+            // databaseAnalyticsDataModel.tracesDistributedWrapEnabled is false in config-test and the migrated
+            // `traces` is a ReplicatedReplacingMergeTree, so flag and topology agree — the matching-config case, which has to
+            // boot and report ready like any default install. Unlike the two probes above this one is not
+            // toggle-gated, so it really does run its system.tables query here.
+            var clickhouseTracesTopologyResponse = HealthCheckResponse.builder()
+                    .name("clickhouse-traces-topology").healthy(true).critical(true).type(READY).build();
+            // Same for the spans sibling: databaseAnalyticsDataModel.spansDistributedWrapEnabled is false in
+            // config-test and the migrated `spans` is a ReplicatedReplacingMergeTree, so the two agree. Both topology probes
+            // report here, which is the point of keeping them separate — a default install has to show one row per
+            // cutover, since the two flip independently.
+            var clickhouseSpansTopologyResponse = HealthCheckResponse.builder()
+                    .name("clickhouse-spans-topology").healthy(true).critical(true).type(READY).build();
             var mysqlResponse = HealthCheckResponse.builder()
                     .name("mysql").healthy(true).critical(true).type(READY).build();
             var redisResponse = HealthCheckResponse.builder()
@@ -126,6 +139,8 @@ class HealthCheckIntegrationTest {
                     clickhouseFreeformSqlResponse,
                     clickhouseClusterResponse,
                     clickhouseColdStorageDiskResponse,
+                    clickhouseTracesTopologyResponse,
+                    clickhouseSpansTopologyResponse,
                     mysqlResponse,
                     redisResponse,
                     dbResponse,
@@ -138,6 +153,8 @@ class HealthCheckIntegrationTest {
                     arguments("clickhouse-readonly-freeform-sql", List.of(clickhouseFreeformSqlResponse)),
                     arguments("clickhouse-cluster", List.of(clickhouseClusterResponse)),
                     arguments("clickhouse-cold-storage-disk", List.of(clickhouseColdStorageDiskResponse)),
+                    arguments("clickhouse-traces-topology", List.of(clickhouseTracesTopologyResponse)),
+                    arguments("clickhouse-spans-topology", List.of(clickhouseSpansTopologyResponse)),
                     arguments("shared_http_client", List.of(sharedHttpClientResponse)),
                     arguments("all", all));
         }
@@ -156,7 +173,7 @@ class HealthCheckIntegrationTest {
      * {@code apps/opik-backend/provision_agent_insights_readonly_user.sh}), so the {@code
      * clickhouse-readonly-freeform-sql} probe actually runs against it. Without the {@code
      * newQuerySettings()} override in
-     * {@link com.comet.opik.infrastructure.db.ClickHouseReadOnlyFreeFormSqlHealthCheck} the probe
+     * {@link com.comet.opik.infrastructure.db.healthchecks.ClickHouseReadOnlyFreeFormSqlHealthCheck} the probe
      * is rejected with {@code Code: 164. DB::Exception: Cannot modify 'max_execution_time'
      * setting in readonly mode. (READONLY)}.
      */
@@ -167,7 +184,7 @@ class HealthCheckIntegrationTest {
 
         @RegisterApp
         private final TestDropwizardAppExtension app = newApp(List.of(
-                new CustomConfig("serviceToggles.ollieEnabled", "true")));
+                CustomConfig.builder().key("serviceToggles.ollieEnabled").value("true").build()));
 
         private ClientSupport client;
         private String baseURI;
@@ -204,8 +221,14 @@ class HealthCheckIntegrationTest {
 
         @RegisterApp
         private final TestDropwizardAppExtension app = newApp(List.of(
-                new CustomConfig("databaseAnalytics.clusterHealthCheckEnabled", "true"),
-                new CustomConfig("databaseAnalytics.coldStorageDiskHealthCheckEnabled", "true")));
+                CustomConfig.builder()
+                        .key("databaseAnalytics.clusterHealthCheckEnabled")
+                        .value("true")
+                        .build(),
+                CustomConfig.builder()
+                        .key("databaseAnalytics.coldStorageDiskHealthCheckEnabled")
+                        .value("true")
+                        .build()));
 
         private ClientSupport client;
         private String baseURI;
@@ -234,6 +257,175 @@ class HealthCheckIntegrationTest {
             Awaitility.await()
                     .atMost(5, TimeUnit.SECONDS)
                     .untilAsserted(() -> assertResponse(readHealthCheck(client, baseURI, name), List.of(expected)));
+        }
+    }
+
+    /**
+     * The flag-on-without-the-wrap mismatch: {@code databaseAnalyticsDataModel.tracesDistributedWrapEnabled=true} over
+     * a migrated {@code traces} that is still a {@code ReplicatedMergeTree}. That is a real, reachable
+     * misconfiguration — an operator flips the flag but never applies the wrap — and every trace delete on such an
+     * install fails with {@code UNKNOWN_TABLE} (60) because the DAO routes at a {@code traces_local} that does not
+     * exist. The point of OPIK-7773 is that this shows up as a failed readiness probe at startup instead, so the app
+     * is pulled from rotation before it serves traffic it cannot mutate.
+     *
+     * <p>Safe on the shared container: the probe only reads {@code system.tables}, so nothing here reshapes the
+     * schema. The opposite mismatch needs a really wrapped {@code traces} and so lives in
+     * {@code ClickHouseTracesTopologyReadinessTest}, on its own containers.
+     */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    class TracesDistributedWrapEnabledWithoutTheWrap {
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app = newApp(List.of(
+                CustomConfig.builder()
+                        .key("databaseAnalyticsDataModel.tracesDistributedWrapEnabled")
+                        .value("true")
+                        .build()));
+
+        private ClientSupport client;
+        private String baseURI;
+
+        @BeforeAll
+        void setUpAll(ClientSupport client) {
+            this.client = client;
+            this.baseURI = TestUtils.getBaseUrl(client);
+            ClientSupportUtils.config(client);
+        }
+
+        @Test
+        void healthCheckFailsReadiness() {
+            var expected = HealthCheckResponse.builder()
+                    .name("clickhouse-traces-topology").healthy(false).critical(true).type(READY).build();
+
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertResponse(
+                            readHealthCheck(client, baseURI, "clickhouse-traces-topology"), List.of(expected)));
+        }
+
+        /**
+         * The check is only worth having if it actually pulls the pod from rotation, so this asserts the aggregate
+         * endpoint the Kubernetes readiness probe really hits — {@code /health-check?name=all&type=ready}, per the
+         * chart's {@code component.backend.readinessProbe} — rather than just the per-check row above.
+         */
+        @Test
+        void readinessProbeFailsWhileTheTopologyDisagreesWithTheFlag() {
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        try (var response = client.target("%s/health-check?name=all&type=ready".formatted(baseURI))
+                                .request()
+                                .get()) {
+                            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_SERVICE_UNAVAILABLE);
+                        }
+                    });
+        }
+    }
+
+    /**
+     * The spans mirror of {@link TracesDistributedWrapEnabledWithoutTheWrap}:
+     * {@code databaseAnalyticsDataModel.spansDistributedWrapEnabled=true} over a migrated {@code spans} that is still
+     * a {@code ReplicatedMergeTree}. On spans the mismatch is quieter than on traces and so worth catching earlier —
+     * spans have no standalone delete endpoint, so it surfaces as a failing trace-delete cascade or a retention sweep
+     * that cannot clear anything, never on the operation that caused it (OPIK-8376).
+     *
+     * <p>The traces probe is asserted alongside to stay healthy: the spans flag must move only the spans probe, which
+     * is what makes two probes over one shared implementation worth having.
+     *
+     * <p>Safe on the shared container: the probe only reads {@code system.tables}, so nothing here reshapes the
+     * schema. The opposite mismatch needs a really wrapped {@code spans} and so lives in
+     * {@code ClickHouseSpansTopologyReadinessTest}, on its own containers.
+     */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
+    class SpansDistributedWrapEnabledWithoutTheWrap {
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app = newApp(List.of(
+                CustomConfig.builder()
+                        .key("databaseAnalyticsDataModel.spansDistributedWrapEnabled")
+                        .value("true")
+                        .build()));
+
+        private ClientSupport client;
+        private String baseURI;
+
+        @BeforeAll
+        void setUpAll(ClientSupport client) {
+            this.client = client;
+            this.baseURI = TestUtils.getBaseUrl(client);
+            ClientSupportUtils.config(client);
+        }
+
+        @Test
+        void healthCheckFailsReadiness() {
+            var expected = HealthCheckResponse.builder()
+                    .name("clickhouse-spans-topology").healthy(false).critical(true).type(READY).build();
+
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertResponse(
+                            readHealthCheck(client, baseURI, "clickhouse-spans-topology"), List.of(expected)));
+        }
+
+        /**
+         * The acceptance criterion the readiness endpoint cannot cover: the failure has to <b>name the flag and the
+         * observed engine</b>, and {@code /health-check} carries only the verdict (name, healthy, critical, type).
+         * The message reaches an operator on the admin connector's {@code /healthcheck}, so that is where it is
+         * asserted — over a real ClickHouse, so the engine it names is the one the migrations actually create rather
+         * than a fixture's idea of it. The unit test pins the full wording; this pins that it is reachable and true of
+         * the live database.
+         */
+        @Test
+        void theAdminEndpointCarriesTheMessageNamingTheFlagAndTheObservedEngine() {
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        // Unhealthy checks make this endpoint answer 500 while still carrying the JSON body, so the
+                        // status is deliberately not asserted.
+                        try (var response = client.targetAdmin("/healthcheck").request().get()) {
+                            var message = response.readEntity(JsonNode.class)
+                                    .get("clickhouse-spans-topology")
+                                    .get("message")
+                                    .asText();
+
+                            assertThat(message)
+                                    .contains("databaseAnalyticsDataModel.spansDistributedWrapEnabled=true")
+                                    .contains("ReplicatedReplacingMergeTree");
+                        }
+                    });
+        }
+
+        @Test
+        void theTracesProbeIsUnaffectedByTheSpansFlag() {
+            var expected = HealthCheckResponse.builder()
+                    .name("clickhouse-traces-topology").healthy(true).critical(true).type(READY).build();
+
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertResponse(
+                            readHealthCheck(client, baseURI, "clickhouse-traces-topology"), List.of(expected)));
+        }
+
+        /**
+         * The check is only worth having if it actually pulls the pod from rotation, so this asserts the aggregate
+         * endpoint the Kubernetes readiness probe really hits — {@code /health-check?name=all&type=ready}, per the
+         * chart's {@code component.backend.readinessProbe} — rather than just the per-check row above.
+         */
+        @Test
+        void readinessProbeFailsWhileTheTopologyDisagreesWithTheFlag() {
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        try (var response = client.target("%s/health-check?name=all&type=ready".formatted(baseURI))
+                                .request()
+                                .get()) {
+                            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_SERVICE_UNAVAILABLE);
+                        }
+                    });
         }
     }
 

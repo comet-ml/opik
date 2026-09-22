@@ -4,13 +4,16 @@ import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 
-interface EyeInputProps extends InputProps {}
+interface EyeInputProps extends InputProps {
+  revealable?: boolean;
+}
 
-const EyeInput = (props: EyeInputProps) => {
+const EyeInput = ({ revealable = true, ...props }: EyeInputProps) => {
   const [hidden, setHidden] = useState(true);
   const id = useId();
 
-  const Icon = hidden ? Eye : EyeOff;
+  const isHidden = hidden || !revealable;
+  const Icon = isHidden ? Eye : EyeOff;
 
   return (
     <div className="relative">
@@ -20,21 +23,23 @@ const EyeInput = (props: EyeInputProps) => {
         style={
           {
             ...(props?.style || {}),
-            WebkitTextSecurity: hidden ? "disc" : "none",
+            WebkitTextSecurity: isHidden ? "disc" : "none",
           } as React.CSSProperties
         }
-        className={cn(props.className, "pr-8")}
+        className={cn(props.className, revealable && "pr-8")}
       />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="absolute right-0 top-1/2 -translate-y-1/2"
-        onClick={() => setHidden((h) => !h)}
-        disabled={props.disabled}
-      >
-        <Icon className="size-4 text-light-slate" />
-      </Button>
+      {revealable && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute right-0 top-1/2 -translate-y-1/2"
+          onClick={() => setHidden((h) => !h)}
+          disabled={props.disabled}
+        >
+          <Icon className="size-4 text-light-slate" />
+        </Button>
+      )}
     </div>
   );
 };

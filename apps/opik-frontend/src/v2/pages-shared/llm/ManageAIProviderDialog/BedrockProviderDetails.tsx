@@ -10,6 +10,7 @@ import { Input } from "@/ui/input";
 import { Description } from "@/ui/description";
 import { Button } from "@/ui/button";
 import CustomHeadersField from "./CustomHeadersField";
+import AuthConfigSection from "./AuthConfigSection";
 
 type BedrockProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
@@ -82,50 +83,6 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
 
       <FormField
         control={form.control}
-        name="apiKey"
-        render={({ field, formState }) => {
-          const validationErrors = get(formState.errors, ["apiKey"]);
-
-          return (
-            <FormItem>
-              <Label htmlFor="apiKey">API key</Label>
-              <FormControl>
-                <EyeInput
-                  id="apiKey"
-                  placeholder="API key"
-                  value={field.value}
-                  onChange={(e) => field.onChange(e.target.value)}
-                  className={cn({
-                    "border-destructive": Boolean(validationErrors?.message),
-                  })}
-                />
-              </FormControl>
-              <FormMessage />
-              <Description>
-                Click{" "}
-                <Button
-                  variant="link"
-                  size="sm"
-                  asChild
-                  className="inline px-0"
-                >
-                  <a
-                    href="https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    here
-                  </a>
-                </Button>{" "}
-                for instructions on how to create a service account and assign
-                the correct permissions.
-              </Description>
-            </FormItem>
-          );
-        }}
-      />
-      <FormField
-        control={form.control}
         name="models"
         render={({ field, formState }) => {
           const validationErrors = get(formState.errors, ["models"]);
@@ -155,6 +112,58 @@ const BedrockProviderDetails: React.FC<BedrockProviderDetailsProps> = ({
       />
 
       <CustomHeadersField form={form} />
+
+      <AuthConfigSection
+        form={form}
+        staticModeFields={
+          <FormField
+            control={form.control}
+            name="apiKey"
+            render={({ field, formState }) => {
+              const validationErrors = get(formState.errors, ["apiKey"]);
+
+              return (
+                <FormItem>
+                  <Label htmlFor="apiKey">API key</Label>
+                  <FormControl>
+                    <EyeInput
+                      id="apiKey"
+                      placeholder="API key"
+                      value={field.value}
+                      onChange={(e) => field.onChange(e.target.value)}
+                      className={cn({
+                        "border-destructive": Boolean(
+                          validationErrors?.message,
+                        ),
+                      })}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                  <Description>
+                    Click{" "}
+                    <Button
+                      variant="link"
+                      size="sm"
+                      asChild
+                      className="inline px-0"
+                    >
+                      <a
+                        href="https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started-api-keys.html"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        here
+                      </a>
+                    </Button>{" "}
+                    for instructions on how to create a service account and
+                    assign the correct permissions.
+                  </Description>
+                </FormItem>
+              );
+            }}
+          />
+        }
+      />
     </div>
   );
 };

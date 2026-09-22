@@ -8,6 +8,7 @@ import lombok.experimental.UtilityClass;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -42,6 +43,38 @@ public class AuthTestUtils {
         mockTargetWorkspace(server, apiKey, workspaceName, workspaceId, user, null);
     }
 
+    /**
+     * Stubs the auth call so it returns the caller's workspace permissions, the way the platform does. Pass
+     * the granted permission names; anything omitted is simply absent, which is how a withheld permission
+     * reaches the backend.
+     */
+    public static void mockTargetWorkspaceWithPermissions(WireMockServer server, String apiKey,
+            String workspaceName, String workspaceId, String user, List<String> grantedPermissions) {
+        mockTargetWorkspace(server, apiKey, workspaceName, workspaceId, user);
+
+        server.stubFor(
+                post(urlPathEqualTo("/opik/workspace-permissions"))
+                        .withHeader(HttpHeaders.AUTHORIZATION, equalTo(apiKey))
+                        .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                        .willReturn(okJson(newPermissionsResponse(user, workspaceName, grantedPermissions))));
+    }
+
+    /**
+     * The workspace permissions API answers what a caller may see, on its own endpoint per credential type.
+     * The authentication response carries no permissions, so these stubs are what a test with the redaction
+     * feature enabled needs in addition to the authentication stub.
+     */
+    private static String newPermissionsResponse(String user, String workspaceName,
+            List<String> grantedPermissions) {
+        var response = new LinkedHashMap<String, Object>();
+        response.put("userName", user);
+        response.put("workspaceName", workspaceName);
+        response.put("permissions", grantedPermissions.stream()
+                .map(name -> Map.of("permissionName", name, "permissionValue", "true"))
+                .toList());
+        return JsonUtils.writeValueAsString(response);
+    }
+
     public static void mockTargetWorkspace(
             WireMockServer server, String apiKey, String workspaceName, String workspaceId, String user,
             List<Quota> quotas) {
@@ -73,6 +106,22 @@ public class AuthTestUtils {
                         .withRequestBody(
                                 matchingJsonPath("$.requiredPermissions[0]", equalTo(requiredPermission)))
                         .willReturn(forbidden()));
+    }
+
+    /**
+     * The session-cookie counterpart of {@link #mockTargetWorkspaceWithPermissions}. Browser and OAuth callers
+     * authenticate through {@code /opik/auth-session}, which returns the same permission set, so anything that
+     * reads permissions has to be exercised on this path too and not only with an api key.
+     */
+    public static void mockSessionCookieTargetWorkspaceWithPermissions(WireMockServer server, String sessionToken,
+            String workspaceName, String workspaceId, String user, List<String> grantedPermissions) {
+        mockSessionCookieTargetWorkspace(server, sessionToken, workspaceName, workspaceId, user);
+
+        server.stubFor(
+                post(urlPathEqualTo("/opik/workspace-permissions-session"))
+                        .withCookie(SESSION_COOKIE, equalTo(sessionToken))
+                        .withRequestBody(matchingJsonPath("$.workspaceName", equalTo(workspaceName)))
+                        .willReturn(okJson(newPermissionsResponse(user, workspaceName, grantedPermissions))));
     }
 
     public static void mockSessionCookieTargetWorkspace(WireMockServer server, String sessionToken,

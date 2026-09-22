@@ -23,7 +23,6 @@ const EMPTY_LAYOUT = {
 export type ColumnVirtualizationConfig = {
   enabled?: boolean;
   overscan?: number;
-  getScrollElement?: () => HTMLElement | null;
 };
 
 const useColumnVirtualization = <TData>(
@@ -31,25 +30,17 @@ const useColumnVirtualization = <TData>(
   config?: ColumnVirtualizationConfig,
   { supported = true }: { supported?: boolean } = {},
 ): ColumnWindow => {
-  const { scrollContainer: pageBodyScrollContainer } =
+  const { scrollContainer, horizontalScrollContainer } =
     usePageBodyScrollContainer();
   const visibleColumns = table.getVisibleLeafColumns();
   const columnSizing = table.getState().columnSizing;
 
-  const {
-    enabled: optedIn = false,
-    overscan = DEFAULT_OVERSCAN_COLUMNS,
-    getScrollElement,
-  } = config ?? {};
+  const { enabled: optedIn = false, overscan = DEFAULT_OVERSCAN_COLUMNS } =
+    config ?? {};
 
-  const scrollElement = getScrollElement
-    ? getScrollElement()
-    : pageBodyScrollContainer;
+  const scrollElement = horizontalScrollContainer ?? scrollContainer;
 
-  const windowable =
-    supported &&
-    table.getHeaderGroups().length === 1 &&
-    table.getState().grouping.length === 0;
+  const windowable = supported && table.getState().grouping.length === 0;
 
   const enabled = windowable && optedIn && Boolean(scrollElement);
 

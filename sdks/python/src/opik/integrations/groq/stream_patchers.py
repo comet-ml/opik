@@ -41,7 +41,7 @@ def patch_sync_stream(
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from groq.Stream.",
+                    "Exception raised from groq.Stream: %s",
                     str(exception),
                     exc_info=True,
                 )
@@ -94,7 +94,7 @@ def patch_async_stream(
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from groq.AsyncStream.",
+                    "Exception raised from groq.AsyncStream: %s",
                     str(exception),
                     exc_info=True,
                 )

@@ -79,6 +79,11 @@ export type ChatCompletionResponse =
   | ChatCompletionSuccessMessageType
   | ChatCompletionProviderErrorMessageType;
 
+export interface LogErrorInfo {
+  exception_type: string;
+  message: string;
+}
+
 export interface LogTrace {
   id: string;
   projectName: string;
@@ -87,6 +92,7 @@ export interface LogTrace {
   endTime: string;
   input: { messages: ProviderMessageType[] };
   output: { output: string | null };
+  errorInfo?: LogErrorInfo;
   metadata?: Record<string, unknown>;
   source?: string;
 }
@@ -104,6 +110,7 @@ export interface LogSpan {
   output:
     | { choices: ChatCompletionMessageChoiceType[] }
     | { output: string | null };
+  errorInfo?: LogErrorInfo;
   usage?: UsageType | null;
   model?: string;
   provider?: string;
@@ -111,7 +118,9 @@ export interface LogSpan {
     created_from: string;
     usage: UsageType | null;
     model: string;
-    parameters: LLMPromptConfigsType;
+    // The parameters the request carried, not the stored config: the two differ wherever the
+    // selected model rejects something the config keeps.
+    parameters: Record<string, unknown>;
   };
 }
 

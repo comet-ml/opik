@@ -31,6 +31,9 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
+    private BulkInsertConfig bulkInsert = BulkInsertConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
     private UuidValidationConfig uuidValidation = UuidValidationConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
@@ -41,6 +44,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private McpOAuthConfig mcpOAuth = new McpOAuthConfig();
+
+    @Valid @NotNull @JsonProperty
+    private CipxTokenValidationConfig cipxTokenValidation = new CipxTokenValidationConfig();
 
     @Valid @NotNull @JsonProperty
     private RedisConfig redis = new RedisConfig();
@@ -77,6 +83,9 @@ public class OpikConfiguration extends JobConfiguration {
     private LlmProviderClientConfig llmProviderClient = new LlmProviderClientConfig();
 
     @Valid @NotNull @JsonProperty
+    private LlmProviderTokenAuthConfig llmProviderTokenAuth = new LlmProviderTokenAuthConfig();
+
+    @Valid @NotNull @JsonProperty
     private CacheConfiguration cacheManager = new CacheConfiguration();
 
     @Valid @NotNull @JsonProperty
@@ -87,6 +96,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private AgentInsightsReportConfig agentInsightsReport = new AgentInsightsReportConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AnnotationQueueRoutingConfig annotationQueueRouting = new AnnotationQueueRoutingConfig();
 
     @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
@@ -187,4 +199,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private ReportGenerationConfig reportGeneration = new ReportGenerationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private RedactionConfig redaction = new RedactionConfig();
 }

@@ -319,6 +319,19 @@ be able to compare multiple experiments side by side.
   <img src="/img/evaluation/evaluation_results.png" />
 </Frame>
 
+<Tip>
+  **Recommended if you build with an AI coding assistant.** One command — `opik configure` —
+  installs both the [MCP server](/mcp-server) and the Opik skills, and your assistant can then run
+  the evaluation between its own development iterations, read the scores back, and keep going until
+  they stop improving. Each run lands as an experiment you can compare side by side.
+
+  An example prompt:
+
+  *"Evaluate my agent against the qa-regression dataset with Opik, then improve the prompt and
+  re-run the evaluation until the hallucination score stops improving. Show me each experiment's
+  scores as you go."*
+</Tip>
+
 ## Advanced usage
 
 ### Missing arguments for scoring methods

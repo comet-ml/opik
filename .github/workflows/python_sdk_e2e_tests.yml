@@ -24,6 +24,7 @@ concurrency:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
   OPIK_URL_OVERRIDE: http://localhost:8080
@@ -53,6 +54,9 @@ jobs:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
     build-opik:
+        # Fork PRs get a read-only GITHUB_TOKEN, so the GHCR push below always
+        # 403s. Skip rather than fail; delete once fork PRs can run E2E.
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
         # The reusable build workflow pushes images to GHCR; pass down the
         # packages: write grant here rather than at the workflow level (a
         # called workflow's permissions can only be maintained or reduced from
@@ -65,6 +69,8 @@ jobs:
           include_guardrails: true
 
     run-e2e:
+        # No explicit if: needed here -- the default success() check skips this
+        # whenever build-opik is skipped.
         needs: [select-matrix, build-opik]
         name: Python SDK E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
@@ -109,7 +115,7 @@ jobs:
             python-version: ${{matrix.python_version}}
 
         - name: Set up uv
-          uses: astral-sh/setup-uv@v9.0.0
+          uses: astral-sh/setup-uv@v10.0.1
 
         - name: Run latest Opik server
           env:
@@ -117,6 +123,9 @@ jobs:
             # Avoid Buildx Bake concurrent image export collisions in CI.
             COMPOSE_BAKE: false
             TOGGLE_RUNNERS_ENABLED: "true"
+            # Match how the server runs in production: ids whose embedded UUIDv7
+            # timestamp is outside the ingestion window are rejected, not accepted.
+            UUID_VALIDATION_ENABLED: "true"
             OPIK_BACKEND_PULL_POLICY: never
             PYTHON_BACKEND_PULL_POLICY: never
             OPIK_GUARDRAILS_BACKEND_PULL_POLICY: never

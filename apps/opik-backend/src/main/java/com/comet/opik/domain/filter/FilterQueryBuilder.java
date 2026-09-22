@@ -541,6 +541,7 @@ public class FilterQueryBuilder {
             ImmutableMap.<DashboardField, String>builder()
                     .put(DashboardField.ID, ID_DB)
                     .put(DashboardField.NAME, NAME_DB)
+                    .put(DashboardField.DESCRIPTION, DESCRIPTION_DB)
                     .put(DashboardField.TYPE, TYPE_DB)
                     .put(DashboardField.SCOPE, SCOPE_DB)
                     .put(DashboardField.CREATED_AT, CREATED_AT_DB)
@@ -800,6 +801,7 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.DASHBOARD, Set.of(
                 DashboardField.ID,
                 DashboardField.NAME,
+                DashboardField.DESCRIPTION,
                 DashboardField.TYPE,
                 DashboardField.SCOPE,
                 DashboardField.CREATED_AT,

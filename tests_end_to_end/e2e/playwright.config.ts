@@ -62,5 +62,18 @@ export default defineConfig({
         OPIK_WORKSPACE: env.workspace,
       },
     },
+    {
+      // Mock OAuth2 token service + bearer-validating LLM gateway for the
+      // dynamic token auth specs (OPIK-7940). Hermetic: no external keys.
+      // In CI the backend runs inside docker-compose, so the mock binds 0.0.0.0 and the
+      // backend reaches it through the host (MOCK_AUTH_URL_FOR_BACKEND, set by the workflow).
+      command: `uv run --no-project python mock_token_auth_service.py --port ${process.env.MOCK_AUTH_PORT ?? '9878'} --host ${process.env.CI ? '0.0.0.0' : '127.0.0.1'}`,
+      cwd: 'services/mock-token-auth',
+      url: `http://localhost:${process.env.MOCK_AUTH_PORT ?? '9878'}/health`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 15_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
   ],
 });

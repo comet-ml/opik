@@ -17,6 +17,24 @@ Use the repository template at `.github/pull_request_template.md` — read the F
 
 Also fill in the template's `## AI-WATERMARK` section (yes/no; if yes: Tools, Model(s), Scope, Human verification). Never invent a different structure such as `## Summary` / `## Test Plan`.
 
+A section that does not apply gets `N/A` — never delete a heading.
+
+### `## Details` — style
+
+Write what changes for a user. A reviewer reads the diff for the code; this section tells them what is different when they use the product.
+
+- **Short.** Most PRs need 3–10 bullets. If it runs longer, the section is doing the diff's job — cut it.
+- **Bullets, not prose paragraphs.** One behavior per bullet. Nest one level for sub-cases.
+- **Authoritative.** State what happens: "The run is scored once." Not "This should now mean that the run will be scored once."
+- **No fluff.** No motivation paragraph, no "this PR …", no approach summary, no benefits list, no restating the diff.
+- **Observable behavior first.** What the UI shows, what the API returns, what gets scored, stored or logged. Name a class, method or file only when the behavior makes no sense without it.
+
+Pick the shape that fits the change — do not force one:
+
+- **Before / After bullet lists** when a behavior changed and the contrast is the point.
+- **A flat bullet list** for a new capability, where there is no "before".
+- **One or two lines** when users cannot see the change (refactor, dependency bump) — say what is unchanged and what improved, then stop.
+
 ## Changelog Entry
 
 ```markdown
@@ -56,8 +74,8 @@ When documenting a feature, cover:
 ## Key Files
 
 - `apps/opik-documentation/documentation/fern/docs-v2/self-host/changelog.mdx` - Self-hosted deployment changelog (breaking/critical changes only; the former repo-root `CHANGELOG.md` was removed)
-- `apps/opik-documentation/documentation/fern/docs/changelog/` - Main product docs changelog entries (dated `.mdx` files)
-- `apps/opik-documentation/documentation/fern/docs/agent_optimization/getting_started/changelog.mdx` - Agent Optimizer release changelog
+- `apps/opik-documentation/documentation/fern/docs-v2/changelog/` - Main product docs changelog entries (dated `.mdx` files)
+- `apps/opik-documentation/documentation/fern/docs-v2/development/optimization-runs/changelog.mdx` - Agent Optimizer release changelog
 - `apps/opik-documentation/documentation/fern/docs.yml` - Docs routing/navigation source of truth for changelog surfaces
 - `.github/release-drafter.yml` - Release template
 
@@ -65,8 +83,8 @@ When documenting a feature, cover:
 
 - Pick the changelog target by scope; do not default everything to one surface.
 - Use `apps/opik-documentation/documentation/fern/docs-v2/self-host/changelog.mdx` only for self-hosted deployment breaking/critical/security-impacting notes.
-- Use `apps/opik-documentation/documentation/fern/docs/changelog/*.mdx` for general Opik product release notes shown in `/docs/opik/changelog`.
-- Use `apps/opik-documentation/documentation/fern/docs/agent_optimization/getting_started/changelog.mdx` for Agent Optimizer version updates (for example `sdks/opik_optimizer` releases like `3.1.0`).
+- Use `apps/opik-documentation/documentation/fern/docs-v2/changelog/*.mdx` for general Opik product release notes shown in `/docs/opik/changelog`.
+- Use `apps/opik-documentation/documentation/fern/docs-v2/development/optimization-runs/changelog.mdx` for Agent Optimizer version updates (for example `sdks/opik_optimizer` releases like `3.1.0`).
 - Liquibase `changelog.xml` files are migration manifests, not user-facing release-note changelogs.
 - If unsure where an entry belongs, confirm the surface from `apps/opik-documentation/documentation/fern/docs.yml` before editing.
 

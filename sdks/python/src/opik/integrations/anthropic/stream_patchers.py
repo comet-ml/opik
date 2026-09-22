@@ -1,7 +1,9 @@
 import anthropic
+import inspect
 import logging
 import functools
 from typing import (
+    Dict,
     Optional,
     Callable,
     Iterator,
@@ -15,6 +17,26 @@ from opik.decorator import generator_wrappers, error_info_collector
 from anthropic.lib.streaming import _messages
 
 LOGGER = logging.getLogger(__name__)
+
+_ACCUMULATE_EVENT_ACCEPTS_JSON_BUFS = (
+    "json_bufs" in inspect.signature(_messages.accumulate_event).parameters
+)
+
+
+def _accumulate_event(
+    event: Any, current_snapshot: Any, json_bufs: Dict[int, bytes]
+) -> Any:
+    # Since anthropic 1.5.0 the caller owns the buffer that partial tool input JSON
+    # is accumulated into, and passing it is mandatory.
+    if _ACCUMULATE_EVENT_ACCEPTS_JSON_BUFS:
+        return _messages.accumulate_event(
+            event=event,
+            current_snapshot=current_snapshot,
+            json_bufs=json_bufs,
+        )
+
+    return _messages.accumulate_event(event=event, current_snapshot=current_snapshot)
+
 
 original_stream_iter_method = anthropic.Stream.__iter__
 original_async_stream_aiter_method = anthropic.AsyncStream.__aiter__
@@ -79,34 +101,35 @@ def patch_sync_stream(
         ) -> Iterator[Any]:
             try:
                 accumulated_message = None
+                json_bufs: Dict[int, bytes] = {}
                 error_info: Optional[ErrorInfoDict] = None
 
                 for item in dunder_iter_func(self):
-                    accumulated_message = _messages.accumulate_event(
-                        event=item, current_snapshot=accumulated_message
+                    accumulated_message = _accumulate_event(
+                        event=item,
+                        current_snapshot=accumulated_message,
+                        json_bufs=json_bufs,
                     )
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from anthropic.Stream.",
+                    "Exception raised from anthropic.Stream: %s",
                     str(exception),
                     exc_info=True,
                 )
                 error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
-                if not hasattr(self, "opik_tracked_instance"):
-                    return
-
-                delattr(self, "opik_tracked_instance")
-                output = accumulated_message if error_info is None else None
-                finally_callback(
-                    output=output,
-                    error_info=error_info,
-                    capture_output=True,
-                    generators_span_to_end=self.span_to_end,
-                    generators_trace_to_end=self.trace_to_end,
-                )
+                if hasattr(self, "opik_tracked_instance"):
+                    delattr(self, "opik_tracked_instance")
+                    output = accumulated_message if error_info is None else None
+                    finally_callback(
+                        output=output,
+                        error_info=error_info,
+                        capture_output=True,
+                        generators_span_to_end=self.span_to_end,
+                        generators_trace_to_end=self.trace_to_end,
+                    )
 
         return wrapper
 
@@ -141,34 +164,35 @@ def patch_async_stream(
         ) -> AsyncIterator[Any]:
             try:
                 accumulated_message = None
+                json_bufs: Dict[int, bytes] = {}
                 error_info: Optional[ErrorInfoDict] = None
 
                 async for item in dunder_aiter_func(self):
-                    accumulated_message = _messages.accumulate_event(
-                        event=item, current_snapshot=accumulated_message
+                    accumulated_message = _accumulate_event(
+                        event=item,
+                        current_snapshot=accumulated_message,
+                        json_bufs=json_bufs,
                     )
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from anthropic.AsyncStream.",
+                    "Exception raised from anthropic.AsyncStream: %s",
                     str(exception),
                     exc_info=True,
                 )
                 error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
-                if not hasattr(self, "opik_tracked_instance"):
-                    return
-
-                delattr(self, "opik_tracked_instance")
-                output = accumulated_message if error_info is None else None
-                finally_callback(
-                    output=output,
-                    error_info=error_info,
-                    capture_output=True,
-                    generators_span_to_end=self.span_to_end,
-                    generators_trace_to_end=self.trace_to_end,
-                )
+                if hasattr(self, "opik_tracked_instance"):
+                    delattr(self, "opik_tracked_instance")
+                    output = accumulated_message if error_info is None else None
+                    finally_callback(
+                        output=output,
+                        error_info=error_info,
+                        capture_output=True,
+                        generators_span_to_end=self.span_to_end,
+                        generators_trace_to_end=self.trace_to_end,
+                    )
 
         return wrapper
 
@@ -222,29 +246,25 @@ def patch_sync_message_stream_manager(
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from anthropic.MessageStream.",
+                    "Exception raised from anthropic.MessageStream: %s",
                     str(exception),
                     exc_info=True,
                 )
                 error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
-                if not hasattr(self, "opik_tracked_instance"):
-                    return
-
-                delattr(self, "opik_tracked_instance")
-
-                accumulated_output = (
-                    self.get_final_message() if error_info is None else None
-                )
-
-                finally_callback(
-                    output=accumulated_output,
-                    error_info=error_info,
-                    capture_output=True,
-                    generators_span_to_end=self.span_to_end,
-                    generators_trace_to_end=self.trace_to_end,
-                )
+                if hasattr(self, "opik_tracked_instance"):
+                    delattr(self, "opik_tracked_instance")
+                    accumulated_output = (
+                        self.get_final_message() if error_info is None else None
+                    )
+                    finally_callback(
+                        output=accumulated_output,
+                        error_info=error_info,
+                        capture_output=True,
+                        generators_span_to_end=self.span_to_end,
+                        generators_trace_to_end=self.trace_to_end,
+                    )
 
         return wrapper
 
@@ -312,29 +332,25 @@ def patch_async_message_stream_manager(
                     yield item
             except Exception as exception:
                 LOGGER.debug(
-                    "Exception raised from anthropic.AsyncMessageStream.",
+                    "Exception raised from anthropic.AsyncMessageStream: %s",
                     str(exception),
                     exc_info=True,
                 )
                 error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
-                if not hasattr(self, "opik_tracked_instance"):
-                    return
-
-                delattr(self, "opik_tracked_instance")
-
-                accumulated_output = (
-                    await self.get_final_message() if error_info is None else None
-                )
-
-                finally_callback(
-                    output=accumulated_output,
-                    error_info=error_info,
-                    capture_output=True,
-                    generators_span_to_end=self.span_to_end,
-                    generators_trace_to_end=self.trace_to_end,
-                )
+                if hasattr(self, "opik_tracked_instance"):
+                    delattr(self, "opik_tracked_instance")
+                    accumulated_output = (
+                        await self.get_final_message() if error_info is None else None
+                    )
+                    finally_callback(
+                        output=accumulated_output,
+                        error_info=error_info,
+                        capture_output=True,
+                        generators_span_to_end=self.span_to_end,
+                        generators_trace_to_end=self.trace_to_end,
+                    )
 
         return wrapper
 
@@ -408,22 +424,18 @@ def patch_sync_beta_message_stream_manager(
                 error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
-                if not hasattr(self, "opik_tracked_instance"):
-                    return
-
-                delattr(self, "opik_tracked_instance")
-
-                accumulated_output = (
-                    self.get_final_message() if error_info is None else None
-                )
-
-                finally_callback(
-                    output=accumulated_output,
-                    error_info=error_info,
-                    capture_output=True,
-                    generators_span_to_end=self.span_to_end,
-                    generators_trace_to_end=self.trace_to_end,
-                )
+                if hasattr(self, "opik_tracked_instance"):
+                    delattr(self, "opik_tracked_instance")
+                    accumulated_output = (
+                        self.get_final_message() if error_info is None else None
+                    )
+                    finally_callback(
+                        output=accumulated_output,
+                        error_info=error_info,
+                        capture_output=True,
+                        generators_span_to_end=self.span_to_end,
+                        generators_trace_to_end=self.trace_to_end,
+                    )
 
         return wrapper
 
@@ -492,22 +504,18 @@ def patch_async_beta_message_stream_manager(
                 error_info = error_info_collector.collect(exception)
                 raise exception
             finally:
-                if not hasattr(self, "opik_tracked_instance"):
-                    return
-
-                delattr(self, "opik_tracked_instance")
-
-                accumulated_output = (
-                    await self.get_final_message() if error_info is None else None
-                )
-
-                finally_callback(
-                    output=accumulated_output,
-                    error_info=error_info,
-                    capture_output=True,
-                    generators_span_to_end=self.span_to_end,
-                    generators_trace_to_end=self.trace_to_end,
-                )
+                if hasattr(self, "opik_tracked_instance"):
+                    delattr(self, "opik_tracked_instance")
+                    accumulated_output = (
+                        await self.get_final_message() if error_info is None else None
+                    )
+                    finally_callback(
+                        output=accumulated_output,
+                        error_info=error_info,
+                        capture_output=True,
+                        generators_span_to_end=self.span_to_end,
+                        generators_trace_to_end=self.trace_to_end,
+                    )
 
         return wrapper
 

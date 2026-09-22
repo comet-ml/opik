@@ -1,9 +1,8 @@
 from typing import Optional
 import sentry_sdk
-from . import user_details
 from .error_filtering import sentry_filter_chain
 from .types import Event, Hint
-from . import environment_details
+from .. import environment, environment_details
 
 
 def callback(event: Event, hint: Hint) -> Optional[Event]:
@@ -29,9 +28,9 @@ def callback(event: Event, hint: Hint) -> Optional[Event]:
 
 def _add_extra_details(event: Event) -> None:
     if "user" in event:
-        event["user"]["id"] = user_details.get_id()
+        event["user"]["id"] = environment.get_user_identifier()
     else:
-        event["user"] = {"id": user_details.get_id()}
+        event["user"] = {"id": environment.get_user_identifier()}
 
     opik_sdk_context = environment_details.collect_context_once()
     tags = environment_details.collect_tags_once()

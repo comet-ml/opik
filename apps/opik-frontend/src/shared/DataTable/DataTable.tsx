@@ -13,6 +13,7 @@ import {
   GroupingState,
   Row,
   RowData,
+  RowPinningState,
   RowSelectionState,
   TableMeta,
   useReactTable,
@@ -60,6 +61,7 @@ import useColumnVirtualization, {
   ColumnSpacerCell,
   isColumnSpacer,
   sliceColumnWindow,
+  sliceColumnWindowHeaders,
 } from "@/shared/DataTable/columnVirtualization";
 
 declare module "@tanstack/react-table" {
@@ -108,6 +110,11 @@ interface SelectionConfig {
   setRowSelection?: OnChangeFn<RowSelectionState>;
 }
 
+export interface PinningConfig {
+  rowPinning: RowPinningState;
+  setRowPinning: OnChangeFn<RowPinningState>;
+}
+
 interface GroupingConfig {
   groupedColumnMode: false | "reorder" | "remove";
   grouping: GroupingState;
@@ -133,6 +140,7 @@ interface DataTableProps<TData, TValue> {
   sortConfig?: SortConfig;
   resizeConfig?: ResizeConfig;
   selectionConfig?: SelectionConfig;
+  pinningConfig?: PinningConfig;
   groupingConfig?: GroupingConfig;
   expandingConfig?: ExpandingConfig;
   getRowId?: (row: TData) => string;
@@ -169,6 +177,7 @@ const DataTable = <TData, TValue>({
   sortConfig,
   resizeConfig,
   selectionConfig,
+  pinningConfig,
   groupingConfig,
   expandingConfig,
   getRowId,
@@ -209,6 +218,7 @@ const DataTable = <TData, TValue>({
         }
       : {}),
     enableSorting: sortConfig?.enabled ?? false,
+    keepPinnedRows: false,
     enableMultiSort: sortConfig?.enabledMultiSorting ?? false,
     enableSortingRemoval: false,
     onSortingChange: sortConfig?.setSorting,
@@ -216,6 +226,7 @@ const DataTable = <TData, TValue>({
     getExpandedRowModel: getExpandedRowModel(),
     getGroupedRowModel: getGroupedRowModel(),
     onRowSelectionChange: selectionConfig?.setRowSelection,
+    onRowPinningChange: pinningConfig?.setRowPinning,
     onGroupingChange: groupingConfig?.setGrouping,
     onExpandedChange: expandingConfig?.setExpanded,
     onColumnSizingChange: resizeConfig?.onColumnResize,
@@ -223,6 +234,9 @@ const DataTable = <TData, TValue>({
       ...(sortConfig?.sorting && { sorting: sortConfig.sorting }),
       ...(selectionConfig?.rowSelection && {
         rowSelection: selectionConfig.rowSelection,
+      }),
+      ...(pinningConfig?.rowPinning && {
+        rowPinning: pinningConfig.rowPinning,
       }),
       ...(groupingConfig?.grouping && { grouping: groupingConfig.grouping }),
       ...(expandingConfig?.expanded && { expanded: expandingConfig.expanded }),
@@ -462,52 +476,54 @@ const DataTable = <TData, TValue>({
                       !isLastRow && "!border-b-0",
                     )}
                   >
-                    {sliceColumnWindow(headerGroup.headers, columnWindow).map(
-                      (header) => {
-                        if (isColumnSpacer(header)) {
-                          return (
-                            <ColumnSpacerCell
-                              key={header.id}
-                              spacer={header}
-                              isHeader
-                            />
-                          );
-                        }
-
+                    {sliceColumnWindowHeaders(
+                      headerGroup.headers,
+                      columnWindow,
+                    ).map((entry) => {
+                      if (isColumnSpacer(entry)) {
                         return (
-                          <TableHead
-                            key={header.id}
-                            data-header-id={header.id}
-                            style={{
-                              zIndex:
-                                TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),
-                              ...getCommonPinningStyles({
-                                column: header.column,
-                                isHeader: true,
-                                isLastHeaderRow: isLastRow,
-                                lastRightPinnedColumnId,
-                              }),
-                            }}
-                            className={getCommonPinningClasses({
+                          <ColumnSpacerCell
+                            key={entry.id}
+                            spacer={entry}
+                            isHeader
+                          />
+                        );
+                      }
+
+                      const { header, colSpan, key } = entry;
+
+                      return (
+                        <TableHead
+                          key={key ?? header.id}
+                          data-header-id={header.id}
+                          style={{
+                            zIndex: TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),
+                            ...getCommonPinningStyles({
                               column: header.column,
                               isHeader: true,
-                              lastLeftPinnedColumnId,
-                            })}
-                            colSpan={header.colSpan}
-                          >
-                            {header.isPlaceholder
-                              ? ""
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext(),
-                                )}
-                            {isResizable ? (
-                              <DataTableColumnResizer header={header} />
-                            ) : null}
-                          </TableHead>
-                        );
-                      },
-                    )}
+                              isLastHeaderRow: isLastRow,
+                              lastRightPinnedColumnId,
+                            }),
+                          }}
+                          className={getCommonPinningClasses({
+                            column: header.column,
+                            isHeader: true,
+                            lastLeftPinnedColumnId,
+                          })}
+                          colSpan={colSpan}
+                        >
+                          {header.isPlaceholder
+                            ? ""
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                          {isResizable ? (
+                            <DataTableColumnResizer header={header} />
+                          ) : null}
+                        </TableHead>
+                      );
+                    })}
                   </TableRow>
                 );
               })}

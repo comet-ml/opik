@@ -22,6 +22,13 @@ public enum WorkspaceUserPermission {
     ONLINE_EVALUATION_RULE_UPDATE("online_evaluation_rule_update"),
     ALERT_UPDATE("alert_update"),
 
+    /**
+     * Reading stored content rather than a redacted view of it. Not named for traces: it gates every stored
+     * value read-time redaction can reach - traces, spans, threads, experiments, datasets, runner jobs and
+     * analytics results - so a trace-shaped name would understate it.
+     */
+    ORIGINAL_DATA_VIEW("original_data_view"),
+
     DASHBOARD_VIEW("dashboard_view"),
     DASHBOARD_CREATE("dashboard_create"),
     DASHBOARD_EDIT("dashboard_edit"),

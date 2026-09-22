@@ -20,6 +20,8 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUse
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.EvalTriggerScope;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.SpanField;
@@ -60,6 +62,7 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessageType;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -742,6 +745,130 @@ class AutomationRuleEvaluatorsResourceTest {
             }
         }
 
+        /**
+         * The 500 this guards against was a read-path defect, so it only shows at the boundary: the row
+         * commits, then create's own read-back and every later list of the project fail together. A
+         * mapper test cannot see that. The control rule is the point — one bad row used to take the
+         * whole page down with it.
+         */
+        @ParameterizedTest
+        @ValueSource(strings = {
+                "[Source Text]\n<<<<< SOURCE_TEXT START >>>>>\n{{input}}",
+                "[test]",
+                "[]",
+                "[null]",
+                "[{}]",
+                "[{\"foo\": \"bar\"}]",
+                "[{\"type\": 42}]",
+                "[{\"type\": \"text\", \"text\": \"Example\"}]\n\nNow evaluate {{input}}"})
+        @DisplayName("create evaluator: a prompt that opens with '[' round-trips and does not break the project's list")
+        void createEvaluator__whenPromptOpensWithABracket__thenRoundTripsAndListingStillWorks(String prompt) {
+            var projectId = projectResourceClient.createProject(
+                    "project-" + RandomStringUtils.secure().nextAlphanumeric(36), API_KEY, WORKSPACE_NAME);
+
+            var control = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var controlId = evaluatorsResourceClient.createEvaluator(control, WORKSPACE_NAME, API_KEY);
+
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .code(bracketPromptCode(prompt))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            try (var response = evaluatorsResourceClient.getEvaluator(
+                    id, projectId, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actual = (AutomationRuleEvaluatorLlmAsJudge) response.readEntity(AutomationRuleEvaluator.class);
+                var message = actual.getCode().messages().getFirst();
+                assertThat(message.content()).isEqualTo(prompt);
+                assertThat(message.contentArray()).isNull();
+            }
+
+            // Both rows by id, and the prompt read back through the listing itself: the regression was the
+            // listing mapping every row, so a size check alone would pass on two of anything.
+            var page = evaluatorsResourceClient.findEvaluatorPage(
+                    projectId, null, null, null, 1, 10, WORKSPACE_NAME, API_KEY);
+            assertThat(page.content()).extracting(AutomationRuleEvaluator::getId)
+                    .containsExactlyInAnyOrder(id, controlId);
+            var listed = (AutomationRuleEvaluatorLlmAsJudge) page.content().stream()
+                    .filter(rule -> id.equals(rule.getId()))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(listed.getCode().messages().getFirst().content()).isEqualTo(prompt);
+        }
+
+        @Test
+        @DisplayName("create evaluator: an empty content array reads back as text, since a message with no parts cannot render")
+        void createEvaluator__whenContentArrayIsEmpty__thenItReadsBackAsText() {
+            var projectId = projectResourceClient.createProject(
+                    "project-" + RandomStringUtils.secure().nextAlphanumeric(36), API_KEY, WORKSPACE_NAME);
+
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .code(structuredCode(List.of()))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            try (var response = evaluatorsResourceClient.getEvaluator(
+                    id, projectId, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actual = (AutomationRuleEvaluatorLlmAsJudge) response.readEntity(AutomationRuleEvaluator.class);
+                var message = actual.getCode().messages().getFirst();
+                // Sent as an array and returned as text. Pinned deliberately: preserving the empty array
+                // would hand the renderer a message with no parts, which langchain4j rejects outright.
+                assertThat(message.content()).isEqualTo("[]");
+                assertThat(message.contentArray()).isNull();
+            }
+        }
+
+        @Test
+        @DisplayName("create evaluator: genuine content parts survive the round trip")
+        void createEvaluator__whenContentIsStructured__thenItStaysStructured() {
+            var projectId = projectResourceClient.createProject(
+                    "project-" + RandomStringUtils.secure().nextAlphanumeric(36), API_KEY, WORKSPACE_NAME);
+
+            var parts = List.of(
+                    LlmAsJudgeMessageContent.builder().type("text").text("describe this").build(),
+                    LlmAsJudgeMessageContent.builder().type("image_url")
+                            .imageUrl(LlmAsJudgeMessageContent.ImageUrl.builder()
+                                    .url("https://example.com/a.png").detail("high").build())
+                            .build());
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .code(structuredCode(parts))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            try (var response = evaluatorsResourceClient.getEvaluator(
+                    id, projectId, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+                var actual = (AutomationRuleEvaluatorLlmAsJudge) response.readEntity(AutomationRuleEvaluator.class);
+                var message = actual.getCode().messages().getFirst();
+                assertThat(message.content()).isNull();
+                assertThat(message.contentArray()).isEqualTo(parts);
+            }
+        }
+
+        private AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode bracketPromptCode(String prompt) {
+            return codeWithMessage(LlmAsJudgeMessage.builder()
+                    .role(ChatMessageType.USER)
+                    .content(prompt)
+                    .build());
+        }
+
+        private AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode structuredCode(List<LlmAsJudgeMessageContent> parts) {
+            return codeWithMessage(LlmAsJudgeMessage.builder()
+                    .role(ChatMessageType.USER)
+                    .contentArray(parts)
+                    .build());
+        }
+
+        private AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode codeWithMessage(LlmAsJudgeMessage message) {
+            return factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).getCode().toBuilder()
+                    .messages(List.of(message))
+                    .variables(Map.of())
+                    .build();
+        }
+
         @ParameterizedTest
         @ValueSource(strings = {"0", "-0.5"})
         @DisplayName("create evaluator: when max_cost_usd is not positive, then reject at the API boundary")
@@ -979,6 +1106,73 @@ class AutomationRuleEvaluatorsResourceTest {
                         .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
                 assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
                         .anyMatch(error -> error.contains("cannot exceed 150 characters"));
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(floats = {-0.1f, 1.1f})
+        @DisplayName("create evaluator: when the sampling rate is outside [0,1], then reject at the API boundary")
+        void createEvaluator__whenSamplingRateOutOfRange__thenReturnUnprocessableEntity(float samplingRate) {
+            var projectId = createProject();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            try (var response = evaluatorsResourceClient.createEvaluator(
+                    evaluator, WORKSPACE_NAME, API_KEY, HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
+                assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
+                        .anyMatch(error -> error.contains("samplingRate"));
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(floats = {0f, 1f})
+        @DisplayName("create evaluator: the inclusive sampling rate bounds are accepted")
+        void createEvaluator__whenSamplingRateOnBounds__thenSucceed(float samplingRate) {
+            var projectId = createProject();
+            var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            assertThat(evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY)).isNotNull();
+        }
+
+        @ParameterizedTest
+        @ValueSource(floats = {-0.1f, 1.1f})
+        @DisplayName("update evaluator: when the sampling rate is outside [0,1], then reject at the API boundary")
+        void updateEvaluator__whenSamplingRateOutOfRange__thenReturnUnprocessableEntity(float samplingRate) {
+            var projectId = createProject();
+            var id = createLlmRule("Resample me " + UUID.randomUUID(), projectId);
+
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(id, WORKSPACE_NAME, update, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode())
+                        .isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                assertThat(response.readEntity(com.comet.opik.api.error.ErrorMessage.class).errors())
+                        .anyMatch(error -> error.contains("samplingRate"));
+            }
+        }
+
+        @ParameterizedTest
+        @ValueSource(floats = {0f, 1f})
+        @DisplayName("update evaluator: the inclusive sampling rate bounds are accepted")
+        void updateEvaluator__whenSamplingRateOnBounds__thenSucceed(float samplingRate) {
+            var projectId = createProject();
+            var id = createLlmRule("Resample me " + UUID.randomUUID(), projectId);
+
+            var update = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .samplingRate(samplingRate)
+                    .projectIds(Set.of(projectId))
+                    .build();
+
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(id, WORKSPACE_NAME, update, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
             }
         }
 
@@ -1431,7 +1625,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             "output", "abc",
                             "reference", "abc"))
                     .build();
-            var pythonEvaluatorResponse = factory.manufacturePojo(PythonEvaluatorResponse.class);
+            var pythonEvaluatorResponse = withUsableScores(factory.manufacturePojo(PythonEvaluatorResponse.class));
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/pythonBackendMock/v1/private/evaluators/python"))
                             .withRequestBody(equalToJson(OBJECT_MAPPER.writeValueAsString(pythonEvaluatorRequest)))
@@ -1486,7 +1680,7 @@ class AutomationRuleEvaluatorsResourceTest {
                                     .build()))
                     .build();
 
-            var pythonEvaluatorResponse = factory.manufacturePojo(PythonEvaluatorResponse.class);
+            var pythonEvaluatorResponse = withUsableScores(factory.manufacturePojo(PythonEvaluatorResponse.class));
 
             // When
             wireMock.server().stubFor(
@@ -1967,6 +2161,21 @@ class AutomationRuleEvaluatorsResourceTest {
             AutomationRuleEvaluator<?, ?> expectedRuleEvaluator) {
         assertThat(actualRuleEvaluator.getCreatedAt()).isAfter(expectedRuleEvaluator.getCreatedAt());
         assertThat(actualRuleEvaluator.getLastUpdatedAt()).isAfter(expectedRuleEvaluator.getLastUpdatedAt());
+    }
+
+    /**
+     * Podam randomizes {@code scoring_failed}, and a score carrying that flag is dropped with a warning on
+     * the rule's log rather than stored — the SDK pairs the flag with a placeholder zero, which would
+     * otherwise be recorded as a genuine score. These log assertions are about a normal scoring run
+     * (four INFO entries, one of them "stored successfully"), so the flag is pinned off here; leaving it
+     * random would make them pass or fail on the roll.
+     */
+    private PythonEvaluatorResponse withUsableScores(PythonEvaluatorResponse response) {
+        return response.toBuilder()
+                .scores(response.scores().stream()
+                        .map(score -> score.toBuilder().scoringFailed(false).build())
+                        .toList())
+                .build();
     }
 
     private void assertTraceLogResponse(LogPage logPage, UUID id, Trace trace) {

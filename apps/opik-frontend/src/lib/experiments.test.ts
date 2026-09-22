@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildExperimentName,
   EXPERIMENT_TAB,
   formatPromptVersionLabel,
   getAvailableExperimentTabs,
   isExperimentTabId,
+  suggestNextExperimentName,
 } from "./experiments";
 import { EVALUATION_METHOD, Experiment } from "@/types/datasets";
 
@@ -109,5 +111,61 @@ describe("experiments utilities", () => {
         }),
       ).toBe("My Prompt");
     });
+  });
+});
+
+describe("buildExperimentName", () => {
+  it("appends the lowercase column letter", () => {
+    expect(buildExperimentName("concise", 0)).toBe("concise_a");
+    expect(buildExperimentName("concise", 1)).toBe("concise_b");
+    expect(buildExperimentName("concise", 2)).toBe("concise_c");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(buildExperimentName("  concise  ", 0)).toBe("concise_a");
+  });
+
+  it("keeps a run number the user typed, letter last", () => {
+    expect(buildExperimentName("concise_02", 0)).toBe("concise_02_a");
+  });
+});
+
+describe("suggestNextExperimentName", () => {
+  it("starts repeats at 02", () => {
+    expect(suggestNextExperimentName("concise", null)).toBe("concise_02");
+  });
+
+  it("increments only a counter it suggested itself", () => {
+    expect(suggestNextExperimentName("concise_02", "concise_02")).toBe(
+      "concise_03",
+    );
+    expect(suggestNextExperimentName("concise_09", "concise_09")).toBe(
+      "concise_10",
+    );
+    expect(suggestNextExperimentName("concise_99", "concise_99")).toBe(
+      "concise_100",
+    );
+  });
+
+  it("leaves a number the user typed alone", () => {
+    expect(suggestNextExperimentName("prompt_gpt_4", null)).toBe(
+      "prompt_gpt_4_02",
+    );
+    expect(suggestNextExperimentName("llama_70", null)).toBe("llama_70_02");
+    expect(suggestNextExperimentName("eval_2026", null)).toBe("eval_2026_02");
+  });
+
+  it("stops incrementing once the user edits the name", () => {
+    expect(suggestNextExperimentName("gpt_4", "concise_03")).toBe("gpt_4_02");
+  });
+
+  it("keeps the padding width it already used", () => {
+    expect(suggestNextExperimentName("concise_002", "concise_002")).toBe(
+      "concise_003",
+    );
+  });
+
+  it("trims before suggesting", () => {
+    expect(suggestNextExperimentName("  concise  ", null)).toBe("concise_02");
   });
 });

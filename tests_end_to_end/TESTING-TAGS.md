@@ -50,8 +50,6 @@ be `@t2-cuj` *and* `@t1-stsaas`: t2 depth, but also part of the STSaaS sanity se
 |---|---|
 | `@t1-stsaas` | include in the STSaaS customer-env sanity run (`test:t1-stsaas`) |
 | `@provider-sanity` | LLM-provider matrix; own cadence, no deploy gating |
-| `@release-gate` | release-gate spec (see `e2e/tests/_release-gate/README.md`) |
-| `@release-gate:<version>` | version-stamped gate spec |
 
 Worked example — `optimization-studio.spec.ts`:
 
@@ -254,8 +252,7 @@ quoted literals inside `tag: [...]`. If you find yourself generating tests in a
 loop where each iteration covers a *different* capability, write them as separate
 `test()` calls with literal tags — see `prompt-library-smoke.spec.ts`.
 
-Exempt (`rules.exempt_dirs`): `_seed` (harness self-test), `_release-gate`
-(ephemeral, version-stamped).
+Exempt (`rules.exempt_dirs`): `_seed` (harness self-test).
 
 Legacy and retired tags get a specific message telling you the replacement,
 rather than a generic "unrecognised".

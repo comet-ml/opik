@@ -41,6 +41,33 @@ export function findSqlite3Binary(): string {
     return 'sqlite3';
 }
 
+const UNIT_SEPARATOR = '\x1f';
+const RECORD_SEPARATOR = '\x1e';
+
+function parseAsciiOutput(stdout: string): any[] {
+    if (!stdout) {
+        return [];
+    }
+
+    const records = stdout.split(RECORD_SEPARATOR);
+    while (records.length > 0 && records[records.length - 1] === '') {
+        records.pop();
+    }
+    if (records.length < 2) {
+        return [];
+    }
+
+    const columns = records[0].split(UNIT_SEPARATOR);
+    return records.slice(1).map(record => {
+        const cells = record.split(UNIT_SEPARATOR);
+        const row: Record<string, string> = {};
+        columns.forEach((column, index) => {
+            row[column] = cells[index] ?? '';
+        });
+        return row;
+    });
+}
+
 /**
  * Execute a SQL query against a SQLite database using the native sqlite3 CLI
  * @param dbPath Path to the SQLite database file
@@ -58,20 +85,23 @@ export async function executeQuery(dbPath: string, query: string): Promise<any[]
     }
     
     try {
-        // Execute sqlite3 with JSON output mode
-        // -json flag outputs results as JSON array
-        // -readonly opens database in read-only mode (safer)
+        // -ascii is used instead of -json because the JSON writer in the sqlite3
+        // shipped with macOS is quadratic in cell length: one 561KB value takes
+        // 17s to serialize and a 5.5MB result set takes 56s, which blew the
+        // timeout below. -ascii emits raw cells separated by 0x1F/0x1E, which no
+        // value in the Cursor database contains, and runs in 50ms.
         const { stdout, stderr } = await execFileAsync(
             sqlite3Binary,
             [
-                '-json',        // Output as JSON
+                '-ascii',       // Unit/record separated output, no escaping cost
+                '-header',      // First record carries the column names
                 '-readonly',    // Read-only mode
                 dbPath,         // Database file path
                 query           // SQL query
             ],
             {
-                maxBuffer: 100 * 1024 * 1024, // 100MB buffer for large result sets
-                timeout: 30000 // 30 second timeout
+                maxBuffer: 512 * 1024 * 1024,
+                timeout: 120000
             }
         );
         
@@ -80,17 +110,7 @@ export async function executeQuery(dbPath: string, query: string): Promise<any[]
             console.warn(`SQLite stderr: ${stderr}`);
         }
         
-        // Parse JSON output
-        if (!stdout || stdout.trim() === '') {
-            return [];
-        }
-        
-        try {
-            const results = JSON.parse(stdout);
-            return Array.isArray(results) ? results : [];
-        } catch (parseError) {
-            throw new Error(`Failed to parse SQLite JSON output: ${parseError}`);
-        }
+        return parseAsciiOutput(stdout);
         
     } catch (error: any) {
         // Enhance error message for common issues
@@ -103,8 +123,10 @@ export async function executeQuery(dbPath: string, query: string): Promise<any[]
             );
         }
         
-        if (error.code === 'ETIMEDOUT') {
-            throw new Error(`SQLite query timeout after 30 seconds: ${query.substring(0, 100)}...`);
+        // execFile reports a timeout kill as signal SIGTERM with a null code,
+        // not as ETIMEDOUT, so both shapes have to be recognised here.
+        if (error.code === 'ETIMEDOUT' || (error.killed && error.signal === 'SIGTERM')) {
+            throw new Error(`SQLite query timed out: ${query.substring(0, 100)}...`);
         }
         
         // Re-throw with context

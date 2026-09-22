@@ -49,6 +49,7 @@ import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -1418,6 +1419,158 @@ class OptimizationsResourceTest {
         }
 
         /**
+         * Tagged attribution is scoped to the projects of the runs in scope, on the traces read and on the spans read
+         * alike. A run created with neither {@code project_id} nor {@code project_name} resolves to no project at
+         * all, so that set is empty for it and there is no tagged spend to find - its cost stays trial-only, which
+         * for a run with no trials is zero.
+         * <p>
+         * The fixture is otherwise the one
+         * {@link #findAndGetById__whenOptimizationHasNoExperiments__taggedCostAgreesAndFollowsTheTag} charges in
+         * full, which is what makes the zero here the project's doing rather than a fixture that never landed.
+         */
+        @Test
+        void getByIdWhenRunHasNoProjectExcludesTaggedCost() {
+            var apiKey = "apiKey-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceName = "workspace-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "dataset-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // createPartialOptimization leaves both project fields unset, which is what resolves to no project.
+            var requestedOptimization = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .build();
+            var optimizationId = optimizationResourceClient.create(requestedOptimization, apiKey, workspaceName);
+
+            var generatedTrace = podamFactory.manufacturePojo(Trace.class);
+            var taggedTrace = generatedTrace.toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .tags(SetUtils.union(generatedTrace.tags(), Set.of(optimizationId.toString())))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            var expectedOptimization = requestedOptimization.toBuilder()
+                    .id(optimizationId)
+                    .numTrials(0L)
+                    .build();
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actualOptimization = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actualOptimization)
+                                .usingRecursiveComparison()
+                                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                                .isEqualTo(expectedOptimization);
+                        assertThat(actualOptimization.totalOptimizationCost())
+                                .isEqualByComparingTo(BigDecimal.ZERO);
+                    });
+        }
+
+        /**
+         * The week floor the tagged scan carries is emitted only where {@code traces} is the weekly-partitioned
+         * successor. This suite runs on the estate the migrations produce, where it is not, and there a tagged trace
+         * whose week is below that floor must still be counted: the legacy {@code id_at} is a 32-bit
+         * {@code DateTime}, so a far-future id is filed under a wrapped past week that a floor would exclude, and
+         * those rows are legitimate. {@code OptimizationsTaggedCostWeekBoundTest} covers the bounded side.
+         * <p>
+         * The run's id is minted weeks ahead rather than the trace's weeks behind because ingestion validates a trace
+         * id against a window around now, while an optimization id is only checked for being a UUIDv7. Either way
+         * what it produces is the shape a floor would reject - a tagged trace older than the run's own week.
+         */
+        @Test
+        void getByIdWhenTracesAreUnpartitionedIncludesTaggedTraceOlderThanTheRun() {
+            var apiKey = "apiKey-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceName = "workspace-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var datasetName = "dataset-%s".formatted(RandomStringUtils.secure().nextAlphanumeric(32));
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var optimizationId = ID_GENERATOR.construct(Instant.now().plus(21, ChronoUnit.DAYS).toEpochMilli());
+            var requestedOptimization = optimizationResourceClient.createPartialOptimization()
+                    .id(optimizationId)
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .projectName(project.name())
+                    .build();
+            optimizationResourceClient.create(requestedOptimization, apiKey, workspaceName);
+
+            var generatedTrace = podamFactory.manufacturePojo(Trace.class);
+            var taggedTrace = generatedTrace.toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .tags(SetUtils.union(generatedTrace.tags(), Set.of(optimizationId.toString())))
+                    .guardrailsValidations(null)
+                    .threadId(null)
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(taggedTrace), apiKey, workspaceName);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectId(projectId)
+                    .projectName(project.name())
+                    .traceId(taggedTrace.id())
+                    .parentSpanId(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.batchCreateSpans(List.of(span), apiKey, workspaceName);
+
+            // The run page's view of a run with no experiments: its own row as written, plus the project its name
+            // resolved to. The cost is asserted apart from it because OPTIMIZATION_IGNORED_FIELDS excludes it - it is
+            // a Decimal whose scale the round-trip changes, so it needs comparison by value.
+            var expectedOptimization = requestedOptimization.toBuilder()
+                    .projectId(projectId)
+                    .numTrials(0L)
+                    .build();
+
+            await().atMost(30, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actualOptimization = optimizationResourceClient.get(
+                                optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actualOptimization)
+                                .usingRecursiveComparison()
+                                .ignoringFields(OPTIMIZATION_IGNORED_FIELDS)
+                                .isEqualTo(expectedOptimization);
+                        assertThat(actualOptimization.totalOptimizationCost())
+                                .isEqualByComparingTo(span.totalEstimatedCost());
+                    });
+        }
+
+        /**
          * The tagged-cost branch must charge one span once, from its newest version, no matter how many
          * physical rows it has. A span re-ingested under a different parent is the case that used to break
          * both halves of that: {@code /v1/private/spans/batch} goes through {@code SpanDAO.BULK_INSERT},
@@ -1644,6 +1797,197 @@ class OptimizationsResourceTest {
 
                         StatsUtils.assertBigDecimalEquals(actual.bestDuration(), actual.baselineDuration());
                     });
+        }
+
+        /**
+         * A dataset run - what the Studio and every SDK optimizer produce. The objective is scored per trace
+         * as a feedback score and written to no experiment_scores column at all, so the candidate rollups have
+         * to read it from the traces.
+         * <p>
+         * Every other test here that asserts a real best_* builds its trials with experimentScores, i.e. the
+         * test-suite shape, which is why OPIK-8060 survived: reading only experiment_scores left every
+         * candidate in a dataset run unscored, they all tied, the best_* rollups fell through to their
+         * earliest-created tie-break, and "best" collapsed onto the baseline. The runs list then reported the
+         * baseline's latency and cost with a 0% delta while the run page reported the genuine best trial.
+         */
+        @Test
+        @DisplayName("Get optimizer by id when the objective is scored on traces, then best comes from the best-scoring candidate")
+        void getById__whenObjectiveScoredOnTraces__bestComesFromBestScoringCandidate() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetName = "dataset-run-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            var objectiveName = "levenshtein_ratio";
+            var optimizationId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .build(),
+                    apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // The baseline is slow and expensive and scores badly; the winner is created later and beats it on
+            // all three. Whole-second durations and integer costs keep both branches of bigDecimalComparator
+            // (absolute tolerance, then integer part) agreeing on which candidate a value came from.
+            var baselineTrial = createDatasetTrial(datasetId, datasetName, optimizationId, apiKey, workspaceName);
+            var winnerTrial = createDatasetTrial(datasetId, datasetName, optimizationId, apiKey, workspaceName);
+
+            var baselineDuration = BigDecimal.valueOf(9);
+            var baselineCost = BigDecimal.valueOf(9);
+            var winnerDuration = BigDecimal.valueOf(1);
+            var winnerCost = BigDecimal.valueOf(1);
+
+            scoreTrial(baselineTrial, items, project, apiKey, workspaceName, 9, baselineCost, objectiveName,
+                    BigDecimal.valueOf(0.2));
+            scoreTrial(winnerTrial, items, project, apiKey, workspaceName, 1, winnerCost, objectiveName,
+                    BigDecimal.valueOf(0.8));
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actual.numTrials()).isEqualTo(2L);
+
+                        // The scores must survive the trip at all - they were a flat 0 before the fix.
+                        assertThat(actual.bestObjectiveScore()).isNotNull();
+                        assertThat(actual.bestObjectiveScore().doubleValue()).isCloseTo(0.8, within(1e-6));
+                        assertThat(actual.baselineObjectiveScore()).isNotNull();
+                        assertThat(actual.baselineObjectiveScore().doubleValue()).isCloseTo(0.2, within(1e-6));
+
+                        // best_* must come from the winner, and baseline_* from the baseline. Asserting they
+                        // merely differ would still pass if both rollups drifted onto the same wrong candidate.
+                        StatsUtils.assertBigDecimalEquals(actual.bestDuration(), winnerDuration);
+                        StatsUtils.assertBigDecimalEquals(actual.bestCost(), winnerCost);
+                        StatsUtils.assertBigDecimalEquals(actual.baselineDuration(), baselineDuration);
+                        StatsUtils.assertBigDecimalEquals(actual.baselineCost(), baselineCost);
+                    });
+        }
+
+        /**
+         * A candidate that evaluated fewer items than a full evaluation covers holds a partial average, which
+         * is not a result and must not win - the gate the run page applies (OPIK-7460, isStillEvaluating).
+         * Optimizers that evaluate most trials on a subset (GEPA and friends) make this the common case, and
+         * without the same gate here the runs list crowned a subset trial while the run page reported the best
+         * fully evaluated one - the two views still disagreeing after the scores themselves were fixed
+         * (OPIK-8060).
+         */
+        @Test
+        @DisplayName("Get optimizer by id when a partially evaluated candidate scores highest, then best skips it")
+        void getById__whenTopCandidateIsPartiallyEvaluated__bestSkipsIt() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            mockTargetWorkspace(apiKey, workspaceName, UUID.randomUUID().toString());
+
+            var datasetName = "partial-eval-" + UUID.randomUUID();
+            var datasetId = datasetResourceClient.createDataset(
+                    Dataset.builder().name(datasetName).build(), apiKey, workspaceName);
+
+            List<DatasetItem> items = PodamFactoryUtils.manufacturePojoList(podamFactory, DatasetItem.class);
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder().datasetId(datasetId).items(items).build(), workspaceName, apiKey);
+
+            var objectiveName = "levenshtein_ratio";
+            var optimizationId = optimizationResourceClient.create(
+                    optimizationResourceClient.createPartialOptimization()
+                            .datasetId(datasetId)
+                            .datasetName(datasetName)
+                            .objectiveName(objectiveName)
+                            .build(),
+                    apiKey, workspaceName);
+
+            Project project = podamFactory.manufacturePojo(Project.class).toBuilder()
+                    .name("Experiment-%s".formatted(datasetName))
+                    .build();
+            projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var baselineTrial = createDatasetTrial(datasetId, datasetName, optimizationId, apiKey, workspaceName);
+            // Created before the complete trial, so under a score tie it would also win the tie-break - the
+            // gate, not the ordering, is what has to keep it out.
+            var partialTrial = createDatasetTrial(datasetId, datasetName, optimizationId, apiKey, workspaceName);
+            var completeTrial = createDatasetTrial(datasetId, datasetName, optimizationId, apiKey, workspaceName);
+
+            // The baseline covers every item, which is what defines a full evaluation for this run.
+            scoreTrial(baselineTrial, items, project, apiKey, workspaceName, 9, BigDecimal.valueOf(9),
+                    objectiveName, BigDecimal.valueOf(0.2));
+            // Top score, fastest, cheapest - and only one item deep, so none of that counts.
+            scoreTrial(partialTrial, items.subList(0, 1), project, apiKey, workspaceName, 1, BigDecimal.valueOf(1),
+                    objectiveName, BigDecimal.valueOf(0.9));
+            scoreTrial(completeTrial, items, project, apiKey, workspaceName, 4, BigDecimal.valueOf(4),
+                    objectiveName, BigDecimal.valueOf(0.5));
+
+            await().atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(1, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var actual = optimizationResourceClient.get(optimizationId, apiKey, workspaceName, 200);
+
+                        assertThat(actual.numTrials()).isEqualTo(3L);
+
+                        // 0.5, not the partial candidate's 0.9.
+                        assertThat(actual.bestObjectiveScore()).isNotNull();
+                        assertThat(actual.bestObjectiveScore().doubleValue()).isCloseTo(0.5, within(1e-6));
+
+                        StatsUtils.assertBigDecimalEquals(actual.bestDuration(), BigDecimal.valueOf(4));
+                        StatsUtils.assertBigDecimalEquals(actual.bestCost(), BigDecimal.valueOf(4));
+                        StatsUtils.assertBigDecimalEquals(actual.baselineDuration(), BigDecimal.valueOf(9));
+                        StatsUtils.assertBigDecimalEquals(actual.baselineCost(), BigDecimal.valueOf(9));
+                    });
+        }
+
+        /** A trial that is its own candidate and carries no experiment-level score. */
+        private Experiment createDatasetTrial(UUID datasetId, String datasetName, UUID optimizationId,
+                String apiKey, String workspaceName) {
+            var trial = experimentResourceClient.createPartialExperiment()
+                    .datasetId(datasetId)
+                    .datasetName(datasetName)
+                    .optimizationId(optimizationId)
+                    .type(ExperimentType.TRIAL)
+                    .metadata(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(
+                            Map.of("candidate_id", UUID.randomUUID().toString()))))
+                    .build();
+            experimentResourceClient.create(trial, apiKey, workspaceName);
+            return trial;
+        }
+
+        /**
+         * Backs a trial with one trace and one span per item, every trace lasting {@code durationSeconds} and
+         * every span costing {@code costPerSpan}, then scores each trace with the objective. Per-trace cost
+         * reduces to the span cost and the duration p50 to the single distinct duration, so the candidate's
+         * rolled-up figures are exactly these arguments.
+         */
+        private void scoreTrial(Experiment trial, List<DatasetItem> datasetItems, Project project, String apiKey,
+                String workspaceName, long durationSeconds, BigDecimal costPerSpan, String objectiveName,
+                BigDecimal score) {
+            var traceEnd = Instant.now().minusSeconds(1);
+            var traces = createTracesSpansAndItems(trial, datasetItems, project, apiKey, workspaceName,
+                    traceEnd.minusSeconds(durationSeconds), traceEnd, costPerSpan);
+
+            traceResourceClient.feedbackScores(
+                    traces.stream()
+                            .map(trace -> podamFactory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                    .projectName(project.name())
+                                    .id(trace.id())
+                                    .name(objectiveName)
+                                    .value(score)
+                                    .build())
+                            .map(FeedbackScoreBatchItem.class::cast)
+                            .toList(),
+                    apiKey, workspaceName);
         }
 
         private List<Trace> createTracesSpansAndItems(Experiment experiment, List<DatasetItem> datasetItems,

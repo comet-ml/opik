@@ -49,8 +49,14 @@ from .alert_write import AlertWrite
 from .alert_write_alert_type import AlertWriteAlertType
 from .analytics_query_response import AnalyticsQueryResponse
 from .annotation_queue import AnnotationQueue
+from .annotation_queue_automation import AnnotationQueueAutomation
+from .annotation_queue_automation_public import AnnotationQueueAutomationPublic
+from .annotation_queue_automation_write import AnnotationQueueAutomationWrite
 from .annotation_queue_batch import AnnotationQueueBatch
 from .annotation_queue_item_ids import AnnotationQueueItemIds
+from .annotation_queue_item_public import AnnotationQueueItemPublic
+from .annotation_queue_item_public_source import AnnotationQueueItemPublicSource
+from .annotation_queue_items_public import AnnotationQueueItemsPublic
 from .annotation_queue_page_public import AnnotationQueuePagePublic
 from .annotation_queue_public import AnnotationQueuePublic
 from .annotation_queue_public_scope import AnnotationQueuePublicScope
@@ -241,9 +247,18 @@ from .comment_public import CommentPublic
 from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
+from .condition_group import ConditionGroup
+from .condition_group_public import ConditionGroupPublic
+from .condition_group_write import ConditionGroupWrite
+from .conditions import Conditions
+from .conditions_public import ConditionsPublic
+from .conditions_write import ConditionsWrite
 from .consent_response import ConsentResponse
 from .count_value_stat_public import CountValueStatPublic
 from .create_session_response import CreateSessionResponse
+from .credential import Credential
+from .credential_public import CredentialPublic
+from .credential_write import CredentialWrite
 from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
 from .dashboard_public_scope import DashboardPublicScope
@@ -571,6 +586,12 @@ from .provider_api_key_page_public import ProviderApiKeyPagePublic
 from .provider_api_key_provider import ProviderApiKeyProvider
 from .provider_api_key_public import ProviderApiKeyPublic
 from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
+from .provider_auth_config import ProviderAuthConfig
+from .provider_auth_config_public import ProviderAuthConfigPublic
+from .provider_auth_config_public_send_as import ProviderAuthConfigPublicSendAs
+from .provider_auth_config_send_as import ProviderAuthConfigSendAs
+from .provider_auth_config_write import ProviderAuthConfigWrite
+from .provider_auth_config_write_send_as import ProviderAuthConfigWriteSendAs
 from .recent_activity_item_public import RecentActivityItemPublic
 from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
@@ -588,6 +609,12 @@ from .retention_rule_page_public import RetentionRulePagePublic
 from .retention_rule_public import RetentionRulePublic
 from .retention_rule_public_level import RetentionRulePublicLevel
 from .retention_rule_public_retention import RetentionRulePublicRetention
+from .score_condition import ScoreCondition
+from .score_condition_operator import ScoreConditionOperator
+from .score_condition_public import ScoreConditionPublic
+from .score_condition_public_operator import ScoreConditionPublicOperator
+from .score_condition_write import ScoreConditionWrite
+from .score_condition_write_operator import ScoreConditionWriteOperator
 from .score_name import ScoreName
 from .score_name_public import ScoreNamePublic
 from .service_toggles_config import ServiceTogglesConfig
@@ -771,8 +798,14 @@ __all__ = [
     "AlertWriteAlertType",
     "AnalyticsQueryResponse",
     "AnnotationQueue",
+    "AnnotationQueueAutomation",
+    "AnnotationQueueAutomationPublic",
+    "AnnotationQueueAutomationWrite",
     "AnnotationQueueBatch",
     "AnnotationQueueItemIds",
+    "AnnotationQueueItemPublic",
+    "AnnotationQueueItemPublicSource",
+    "AnnotationQueueItemsPublic",
     "AnnotationQueuePagePublic",
     "AnnotationQueuePublic",
     "AnnotationQueuePublicScope",
@@ -925,9 +958,18 @@ __all__ = [
     "CompleteMultipartUploadRequest",
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
+    "ConditionGroup",
+    "ConditionGroupPublic",
+    "ConditionGroupWrite",
+    "Conditions",
+    "ConditionsPublic",
+    "ConditionsWrite",
     "ConsentResponse",
     "CountValueStatPublic",
     "CreateSessionResponse",
+    "Credential",
+    "CredentialPublic",
+    "CredentialWrite",
     "DashboardPagePublic",
     "DashboardPublic",
     "DashboardPublicScope",
@@ -1246,6 +1288,12 @@ __all__ = [
     "ProviderApiKeyProvider",
     "ProviderApiKeyPublic",
     "ProviderApiKeyPublicProvider",
+    "ProviderAuthConfig",
+    "ProviderAuthConfigPublic",
+    "ProviderAuthConfigPublicSendAs",
+    "ProviderAuthConfigSendAs",
+    "ProviderAuthConfigWrite",
+    "ProviderAuthConfigWriteSendAs",
     "RecentActivityItemPublic",
     "RecentActivityItemPublicType",
     "RecentActivityPagePublic",
@@ -1263,6 +1311,12 @@ __all__ = [
     "RetentionRulePublic",
     "RetentionRulePublicLevel",
     "RetentionRulePublicRetention",
+    "ScoreCondition",
+    "ScoreConditionOperator",
+    "ScoreConditionPublic",
+    "ScoreConditionPublicOperator",
+    "ScoreConditionWrite",
+    "ScoreConditionWriteOperator",
     "ScoreName",
     "ScoreNamePublic",
     "ServiceTogglesConfig",

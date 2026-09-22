@@ -13,7 +13,7 @@ This skill is how we add an end-to-end test to the Opik E2E suite. You give it a
 
 The suite is at `tests_end_to_end/e2e/`. Inside it:
 
-- **Specs:** `tests/<feature>/<name>.spec.ts` — one feature directory per page family (`datasets`, `trace-explore`, `experiments`, `test-suites`, `online-evaluation`, …). Dev-authored release-gate specs are the exception: they live under `tests/_release-gate/` with `@release-gate` tags — see [conventions.md](conventions.md) and `.agents/skills/explore-feature/release-gate-contract.md`.
+- **Specs:** `tests/<feature>/<name>.spec.ts` — one feature directory per page family (`datasets`, `trace-explore`, `experiments`, `test-suites`, `online-evaluation`, …).
 - **Page Object Models:** `pom/<name>.page.ts` — one class per page, methods for the interactions a test needs.
 - **Fixtures:** `fixtures/<name>.fixture.ts` — seed entities (project, dataset, trace, experiment, testSuite) and tear them down. Composed in a chain; re-exported from `fixtures/index.ts`.
 - **SDK clients:** `core/sdk/` — `sdkClient.python` (HTTP wrapper over the bridge) and `sdkClient.typescript` (direct `new Opik({...})`) for seeding. `core/backend/` holds the typed REST client for inspection + teardown.
@@ -169,4 +169,6 @@ When the work is done, remind the dev to restore: `cp ~/.opik.config.bak ~/.opik
 | "`page.locator('tbody tr:nth-child(3)')` is fine" | Flagging the missing testid — brittle structural selectors are the top source of flake; add a `data-testid`. |
 | "I'll create the dataset through the UI so the page has data" | SDK/bridge seeding — UI-create is what the test exercises, not how you set up. |
 | "`@cap:traces.bulk-delete-traces` describes what my test does" | Checking the taxonomy — `@area:`/`@cap:` values are a fixed vocabulary in `taxonomy.yaml`, not free text. CI's `tag-lint` rejects invented names, and the capability you want is usually already reserved there. |
+| "I'll clean up in a `try`/`finally` at the end of the test" | Fixture teardown — it already runs on pass, fail and timeout, and keeps cleanup out of the assertions (where it also escapes `test.step()` and never reaches the trace). Add a fixture, or a register-callback one when the id only appears mid-test. |
+| "Adding a fixture would touch files outside my ticket" | Nothing — `fixtures/` and `core/backend/client.ts` are where seeding and teardown belong. Reuse first, but adding one is normal, not scope creep. |
 | "The spec passes, so I'm done" | `tag_lint.py`, the feature-directory run, and `tsc` — a green single spec hides tag errors and sibling breakage from a shared POM. |

@@ -1,6 +1,7 @@
 from typing import Optional, List, Callable
 
 from .. import asyncio_support
+from ... import analytics
 from ...api_objects import opik_client
 from ...api_objects.threads import threads_client
 from ..metrics.conversation import conversation_thread_metric
@@ -133,6 +134,7 @@ def evaluate_threads(
         >>>     trace_context_transform=lambda trace: trace.metadata["retrieved_docs"],
         >>> )
     """
+    analytics.track_event("evaluation", "evaluate_threads")
     client = opik_client.get_global_client()
     threads_client_ = threads_client.ThreadsClient(client)
 

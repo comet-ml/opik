@@ -1,81 +1,33 @@
 import * as vscode from 'vscode';
-import { TraceData } from './interface';
+import { PendingUsage, TraceData, TurnUsage } from './interface';
 import { captureException } from './sentry';
+import { latestUsageModel } from './cursor/usageAggregation';
+import { deliverTracesWithClient, LoggedTurn } from './cursor/traceDelivery';
 
-export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Promise<void> {
-    if (traces.length === 0) return;
-    
+async function createClient(apiKey: string) {
+    const config = vscode.workspace.getConfiguration();
+    const { Opik } = await import('opik');
+
+    return new Opik({
+        apiKey: apiKey,
+        apiUrl: config.get<string>('opik.apiUrl', 'https://www.comet.com/opik/api'),
+        workspaceName: config.get<string>('opik.workspace', 'default'),
+    });
+}
+
+export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Promise<LoggedTurn[]> {
+    if (traces.length === 0) {
+        return [];
+    }
+
     console.log(`📦 Processing ${traces.length} traces using Opik SDK`);
-    
     try {
-        // Get configuration values
-        const config = vscode.workspace.getConfiguration();
-        const apiUrl = config.get<string>('opik.apiUrl', 'https://www.comet.com/opik/api');
-        const workspace = config.get<string>('opik.workspace', 'default');
-
-        // Dynamically import Opik SDK
-        const { Opik } = await import('opik');
-
-        // Initialize Opik client
-        const client = new Opik({
-            apiKey: apiKey,
-            apiUrl: apiUrl,
-            workspaceName: workspace
-        });
-        
-        // Process traces using the SDK
-        for (const traceData of traces) {
-            // Add metadata to indicate source
-            const metadata = {
-                ...(traceData.metadata || {}),
-                created_from: "cursor-extension"
-            };
-            
-            // Create trace using SDK
-            const trace = client.trace({
-                name: traceData.name,
-                projectName: traceData.project_name,
-                input: traceData.input,
-                output: traceData.output,
-                startTime: new Date(traceData.start_time),
-                endTime: traceData.end_time ? new Date(traceData.end_time) : undefined,
-                tags: traceData.tags,
-                metadata: metadata,
-                threadId: traceData.thread_id
-            });
-            
-            // Create LLM span with usage data if available
-            if (traceData.usage && (traceData.usage.completion_tokens || traceData.usage.prompt_tokens || traceData.usage.total_tokens)) {
-                const span = trace.span({
-                    name: traceData.name,
-                    type: 'llm',
-                    input: traceData.input,
-                    output: traceData.output,
-                    startTime: new Date(traceData.start_time),
-                    endTime: traceData.end_time ? new Date(traceData.end_time) : undefined,
-                    usage: {
-                        completionTokens: traceData.usage.completion_tokens || 0,
-                        promptTokens: traceData.usage.prompt_tokens || 0,
-                        totalTokens: traceData.usage.total_tokens || 0
-                    },
-                    tags: traceData.tags,
-                    metadata: traceData.metadata
-                });
-                
-                // End the span
-                span.end();
-            }
-            
-            // End the trace
-            trace.end();
-        }
-        
-        // Flush all data to Opik
+        const client = await createClient(apiKey);
         console.log(`📤 Flushing ${traces.length} traces to Opik`);
-        await client.flush();
-        
+        const loggedTurns = await deliverTracesWithClient(client, traces);
         console.log(`🎉 All ${traces.length} traces processed successfully using Opik SDK!`);
-        
+
+        return loggedTurns;
     } catch (error) {
         captureException(error);
         console.error('Error processing traces with Opik SDK:', error);
@@ -83,3 +35,51 @@ export async function logTracesToOpik(apiKey: string, traces: TraceData[]): Prom
     }
 }
 
+/**
+ * Cursor reports inputTokens excluding cache, the same way Anthropic does, so
+ * prompt_tokens has to add the cache tokens back in. See the equivalent in the
+ * Python SDK, llm_usage/anthropic_usage.py get_billable_tokens(). Reporting the
+ * cache figures separately as well is the house convention, not double counting.
+ *
+ * Exported so that scripts/verify-usage.js asserts this exact mapping rather
+ * than a copy of it.
+ */
+export function toSpanUsage(usage: TurnUsage): Record<string, number> {
+    const promptTokens = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
+
+    return {
+        prompt_tokens: promptTokens,
+        completion_tokens: usage.outputTokens,
+        total_tokens: promptTokens + usage.outputTokens,
+        cache_read_input_tokens: usage.cacheReadTokens,
+        cache_creation_input_tokens: usage.cacheWriteTokens,
+    };
+}
+
+export async function applyTurnUsage(
+    apiKey: string,
+    pending: PendingUsage,
+    usage: TurnUsage
+): Promise<void> {
+    const client = await createClient(apiKey);
+
+    const spanUsage = toSpanUsage(usage);
+
+    await client.api.spans.updateSpan(pending.spanId, {
+        body: {
+            traceId: pending.traceId,
+            projectName: pending.projectName,
+            model: latestUsageModel(usage),
+            provider: 'cursor',
+            usage: spanUsage,
+            totalEstimatedCost: usage.chargedCents / 100,
+        },
+    });
+
+    console.log(
+        `💰 Patched span ${pending.spanId}: ${spanUsage.prompt_tokens} prompt ` +
+        `(${usage.inputTokens} fresh + ${usage.cacheReadTokens} cache read + ${usage.cacheWriteTokens} cache write) ` +
+        `/ ${usage.outputTokens} completion, ${usage.chargedCents.toFixed(4)}c ` +
+        `across ${usage.requestCount} request(s)`
+    );
+}

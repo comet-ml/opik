@@ -4,17 +4,14 @@ import { ListTree } from "lucide-react";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import {
-  useOutputLoadingByPromptDatasetItemId,
-  useOutputStaleStatusByPromptDatasetItemId,
-  useOutputValueByPromptDatasetItemId,
-  useSelectedRuleIdsByPromptDatasetItemId,
-  useTraceIdByPromptDatasetItemId,
+  useOutputByPromptDatasetItemId,
   useDatasetType,
   useExperimentIdByPromptId,
 } from "@/store/PlaygroundStore";
 import { DATASET_TYPE } from "@/types/datasets";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
+import PlaygroundOutputError from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputError";
 import PlaygroundOutputScoresContainer from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScoresContainer";
 import PlaygroundOutputAssertionStatus from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputAssertionStatus";
 import PlaygroundTestSuiteLastRunOutput from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundTestSuiteLastRunOutput";
@@ -46,30 +43,24 @@ const PlaygroundOutputCell: React.FunctionComponent<
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
-  const value = useOutputValueByPromptDatasetItemId(
+  // One store subscription per cell, not five. Each of the fields below used to
+  // come from its own hook, and every one of those hooks runs the *same*
+  // selector, so a single streaming token re-ran it (dataset items x prompts x 5)
+  // times. Reading the output object once and picking the fields off it is
+  // equivalent — the defaults below are the ones those hooks applied — while
+  // cutting the per-token selector work by 5x. The selector returns the stored
+  // object reference, which only changes when this cell's own output changes, so
+  // unrelated updates still don't re-render this cell.
+  const output = useOutputByPromptDatasetItemId(
     promptId,
     originalRow.dataItemId,
   );
-
-  const isLoading = useOutputLoadingByPromptDatasetItemId(
-    promptId,
-    originalRow.dataItemId,
-  );
-
-  const stale = useOutputStaleStatusByPromptDatasetItemId(
-    promptId,
-    originalRow.dataItemId,
-  );
-
-  const traceId = useTraceIdByPromptDatasetItemId(
-    promptId,
-    originalRow.dataItemId,
-  );
-
-  const selectedRuleIds = useSelectedRuleIdsByPromptDatasetItemId(
-    promptId,
-    originalRow.dataItemId,
-  );
+  const value = output?.value ?? null;
+  const isLoading = output?.isLoading ?? false;
+  const stale = output?.stale ?? false;
+  const traceId = output?.traceId ?? null;
+  const error = output?.error;
+  const selectedRuleIds = output?.selectedRuleIds;
 
   const datasetType = useDatasetType();
   const experimentId = useExperimentIdByPromptId(promptId);
@@ -117,7 +108,11 @@ const PlaygroundOutputCell: React.FunctionComponent<
   };
 
   const hasOutput =
-    !stale && (value !== null || isLoading || (isTestSuite && !!experimentId));
+    !stale &&
+    (value !== null ||
+      Boolean(error) ||
+      isLoading ||
+      (isTestSuite && !!experimentId));
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[
       (promptIndex ?? 0) % PLAYGROUND_PROMPT_COLORS.length
@@ -127,6 +122,10 @@ const PlaygroundOutputCell: React.FunctionComponent<
   const renderContent = () => {
     if (isLoading && !value) {
       return <PlaygroundOutputLoader />;
+    }
+
+    if (error) {
+      return null;
     }
 
     return <MarkdownPreview>{value}</MarkdownPreview>;
@@ -153,7 +152,9 @@ const PlaygroundOutputCell: React.FunctionComponent<
             </TooltipWrapper>
           )}
           <div className="mb-2 min-h-[var(--cell-top-height)]">
-            {isTestSuite ? (
+            {error ? (
+              <PlaygroundOutputError message={error} />
+            ) : isTestSuite ? (
               <PlaygroundOutputAssertionStatus
                 experimentId={experimentId}
                 datasetItemId={originalRow.dataItemId}

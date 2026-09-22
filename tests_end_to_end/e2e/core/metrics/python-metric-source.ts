@@ -1,0 +1,241 @@
+/**
+ * Python source for user-defined-metric rules used by online-evaluation specs.
+ *
+ * These are plain string builders, not fixtures: they own no state and need no
+ * per-test setup or teardown, so there is nothing for a fixture's `use()` to
+ * bracket. They live here rather than in one spec because more than one spec
+ * needs the same metric.
+ *
+ * Two constraints apply to every snippet, and both are easy to break by
+ * accident:
+ *
+ *   - **No extra `BaseMetric` imports.** The python evaluator's
+ *     `get_metric_class` walks module classes alphabetically and takes the first
+ *     `BaseMetric` subclass, so importing one of opik's own heuristics (Equals,
+ *     Moderation, …) can shadow the class defined here.
+ *   - **The `ScoreResult` name is what lands on the trace**, not the rule name —
+ *     the engine uses the score-result name verbatim. Hence `scoreName` is
+ *     interpolated into the source rather than left to the caller.
+ */
+
+/**
+ * A metric that returns a constant 1.0 for whatever it is handed.
+ *
+ * For specs asking *whether* an evaluation happened rather than what it
+ * concluded: a 0.0 would then mean "ran on unexpected input", which is a
+ * different failure from "was never evaluated".
+ *
+ * `scoreArgs` declares `score()`'s parameters. The default (`output`) suits a
+ * rule mapping one whole section. Pass explicit names when the rule maps
+ * sub-paths: an unresolvable sub-path is dropped from the argument map by
+ * `OnlineScoringEngine.toReplacements`, so every parameter must have a default
+ * or the call raises a TypeError that reads exactly like the bug under test.
+ */
+export function buildConstantScoreMetric(
+  scoreName: string,
+  scoreArgs: readonly string[] = ['output'],
+): string {
+  const params = scoreArgs.map((a) => `        ${a}: Any = None,`).join('\n');
+  return `from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+SCORE_NAME = ${JSON.stringify(scoreName)}
+
+class ConstantScore(base_metric.BaseMetric):
+    def __init__(self, name: str = SCORE_NAME):
+        self.name = name
+
+    def score(
+        self,
+${params}
+        **ignored_kwargs: Any,
+    ) -> score_result.ScoreResult:
+        return score_result.ScoreResult(value=1.0, name=self.name)`;
+}
+
+/**
+ * A thread-scope metric: a constant score for any conversation, except one that
+ * carries `poisonMarker` anywhere in it, which raises instead.
+ *
+ * Two choices here are load-bearing and both are easy to get wrong.
+ *
+ * **Plain `BaseMetric`, not `ConversationThreadMetric`.** For a `trace_thread`
+ * payload the runner calls `metric.score(data)` with the whole conversation as
+ * the first POSITIONAL argument, so the thread contract is a signature, not a
+ * base class. Subclassing `ConversationThreadMetric` would import a submodule
+ * the sandbox runner does not stub, which makes it drop its lightweight
+ * `BaseMetric` and load the real `opik` package — after which the user class no
+ * longer subclasses the `BaseMetric` the runner is still holding, and
+ * `get_metric_class` reports "no BaseMetric subclass" rather than scoring.
+ * Importing it also risks shadowing this class, per the header note above.
+ *
+ * **The marker is matched over the serialized conversation**, not over a
+ * hand-walked `message["content"]`. The engine sends `{role, content}` for a
+ * plain thread and nests a whole span tree under the assistant entries when it
+ * enriches one, so a metric that indexed into a fixed shape would stop raising —
+ * silently — the day a thread got big enough to change shape.
+ *
+ * The raise is a plain `ValueError`: what the spec asserts is that the failure
+ * is confined to its own thread, not how the evaluator classifies it.
+ */
+export function buildThreadScoreMetric(
+  scoreName: string,
+  scoreValue: number,
+  poisonMarker: string,
+): string {
+  return `import json
+from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+SCORE_NAME = ${JSON.stringify(scoreName)}
+SCORE_VALUE = ${JSON.stringify(scoreValue)}
+POISON_MARKER = ${JSON.stringify(poisonMarker)}
+
+class ThreadConstantScore(base_metric.BaseMetric):
+    def __init__(self, name: str = SCORE_NAME):
+        self.name = name
+
+    def score(
+        self,
+        conversation: Any = None,
+        **ignored_kwargs: Any,
+    ) -> score_result.ScoreResult:
+        if POISON_MARKER in json.dumps(conversation, default=str):
+            raise ValueError("refusing to score a conversation carrying " + POISON_MARKER)
+        return score_result.ScoreResult(value=SCORE_VALUE, name=self.name)`;
+}
+
+/**
+ * One score a metric is to return, as `buildScoreResultMetric` renders it.
+ *
+ * `value: null` and `scoringFailed: true` are the two shapes the backend drops
+ * for different stated reasons, and they are deliberately expressible
+ * independently — a caller has to be able to build the flagged-with-a-0.0 score
+ * the SDK actually emits, which is storable-looking and must still be dropped.
+ */
+export interface PythonScoreSpec {
+  /**
+   * The name this score lands under. It is the ScoreResult's own name, not the
+   * rule's — the engine uses it verbatim — so two scores from one metric need
+   * two names or one silently overwrites the other.
+   */
+  name: string;
+  /** `null` renders `value=None`: the "metric returned no value" drop. */
+  value: number | null;
+  /** Renders `scoring_failed=True`: the "metric reported the scoring as failed" drop. */
+  scoringFailed?: boolean;
+}
+
+/** A TS value as the Python literal it has to become inside the metric source. */
+function toPythonLiteral(value: number | string | boolean | null): string {
+  if (value === null) return 'None';
+  if (typeof value === 'boolean') return value ? 'True' : 'False';
+  // JSON.stringify renders NaN and ±Infinity as `null`, which would silently
+  // emit `value=null` — not Python's `None` but a name Python cannot resolve,
+  // so the metric would die on a NameError that looks nothing like the caller's
+  // mistake. Refuse here, where the bad value is still attributable.
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    throw new Error(
+      `buildScoreResultMetric: ${value} has no Python literal form. ` +
+        'Use a finite number, or `value: null` for the "metric returned no value" drop.',
+    );
+  }
+  // JSON's string and number grammars are both Python literal grammars for the
+  // ASCII names and finite values these specs use.
+  return JSON.stringify(value);
+}
+
+/**
+ * A metric that returns exactly the scores it is given — including the ones the
+ * backend is supposed to refuse to store.
+ *
+ * The three other builders here answer "did the evaluator run at all"; this one
+ * answers "which of a run's scores survived", which is a different question and
+ * needs a metric whose output is unusable on purpose. Every drop path is one
+ * `ScoreResult` field away from a storable score, so the shapes have to be
+ * constructed rather than provoked.
+ *
+ * **A single spec returns a bare `ScoreResult`, several return a list**, because
+ * the two take different paths and only one of them can produce a partial
+ * result: a single unusable score makes the whole response unusable and the
+ * python evaluator answers 400, while a list holding one usable score is passed
+ * through for the backend to split. Wrapping a single score in a list would
+ * quietly test the list path twice.
+ */
+export function buildScoreResultMetric(
+  metricName: string,
+  scores: readonly PythonScoreSpec[],
+): string {
+  const construct = (spec: PythonScoreSpec) =>
+    `score_result.ScoreResult(name=${toPythonLiteral(spec.name)}, ` +
+    `value=${toPythonLiteral(spec.value)}, ` +
+    `scoring_failed=${toPythonLiteral(spec.scoringFailed ?? false)})`;
+
+  const body =
+    scores.length === 1
+      ? `return ${construct(scores[0])}`
+      : `return [\n${scores.map((s) => `            ${construct(s)},`).join('\n')}\n        ]`;
+
+  return `from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+METRIC_NAME = ${JSON.stringify(metricName)}
+
+class ReportedScores(base_metric.BaseMetric):
+    def __init__(self, name: str = METRIC_NAME):
+        self.name = name
+
+    def score(self, output: Any = None, **ignored_kwargs: Any) -> Any:
+        ${body}`;
+}
+
+/**
+ * A metric that exits 0 without ever printing its result line.
+ *
+ * `os._exit` is deliberate: it ends the interpreter immediately, so the runner's
+ * own "print the ScoreResult" step never happens while the process still reports
+ * success. That is the shape the evaluator used to mis-handle —
+ * `parse_execution_result` indexed an empty output list, and the IndexError
+ * surfaced as an opaque 500 the backend then retried.
+ *
+ * A metric that merely raised would not reproduce it: a non-zero exit code takes
+ * a different branch.
+ */
+export function buildSilentMetric(scoreName: string): string {
+  return `import os
+from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+SCORE_NAME = ${JSON.stringify(scoreName)}
+
+class SilentMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = SCORE_NAME):
+        self.name = name
+
+    def score(self, output: Any = None, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        os._exit(0)`;
+}
+
+/**
+ * A metric that exits 0 having printed something that is not the result JSON.
+ *
+ * The sibling branch of the same fix: exit code 0 whose LAST line does not parse
+ * as JSON. `flush=True` matters — `os._exit` skips interpreter shutdown, so an
+ * unflushed buffer would be discarded and this would degenerate into
+ * `buildSilentMetric`, testing one branch twice.
+ */
+export function buildUnparseableMetric(scoreName: string): string {
+  return `import os
+from typing import Any
+from opik.evaluation.metrics import base_metric, score_result
+
+SCORE_NAME = ${JSON.stringify(scoreName)}
+
+class UnparseableMetric(base_metric.BaseMetric):
+    def __init__(self, name: str = SCORE_NAME):
+        self.name = name
+
+    def score(self, output: Any = None, **ignored_kwargs: Any) -> score_result.ScoreResult:
+        print("this line is not a score result", flush=True)
+        os._exit(0)`;
+}

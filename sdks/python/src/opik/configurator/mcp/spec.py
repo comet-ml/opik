@@ -70,6 +70,19 @@ class McpServerSpec(abc.ABC):
     def to_claude_add_args(self) -> List[str]:
         """Arguments appended after ``claude mcp add --scope user``."""
 
+    @abc.abstractmethod
+    def to_codex_add_args(self) -> List[str]:
+        """Arguments appended after ``codex mcp add``."""
+
+    @abc.abstractmethod
+    def to_opencode_block(self) -> Dict[str, Any]:
+        """The JSON block written under opencode's ``mcp`` key.
+
+        opencode uses its own vocabulary: ``type`` is ``local``/``remote`` rather
+        than ``stdio``/``http``, ``command`` is a single list holding the
+        executable and its arguments, and the environment key is ``environment``.
+        """
+
 
 @dataclasses.dataclass
 class RemoteServerSpec(McpServerSpec):
@@ -86,6 +99,12 @@ class RemoteServerSpec(McpServerSpec):
 
     def to_claude_add_args(self) -> List[str]:
         return ["--transport", "http", SERVER_NAME, self.url]
+
+    def to_codex_add_args(self) -> List[str]:
+        return [SERVER_NAME, "--url", self.url]
+
+    def to_opencode_block(self) -> Dict[str, Any]:
+        return {"type": "remote", "url": self.url, "enabled": True}
 
 
 @dataclasses.dataclass
@@ -110,3 +129,20 @@ class StdioServerSpec(McpServerSpec):
         cli_args.append(self.command)
         cli_args.extend(self.args)
         return cli_args
+
+    def to_codex_add_args(self) -> List[str]:
+        cli_args = [SERVER_NAME]
+        for key, value in self.env.items():
+            cli_args.extend(["--env", f"{key}={value}"])
+        cli_args.append("--")
+        cli_args.append(self.command)
+        cli_args.extend(self.args)
+        return cli_args
+
+    def to_opencode_block(self) -> Dict[str, Any]:
+        return {
+            "type": "local",
+            "command": [self.command, *self.args],
+            "environment": dict(self.env),
+            "enabled": True,
+        }

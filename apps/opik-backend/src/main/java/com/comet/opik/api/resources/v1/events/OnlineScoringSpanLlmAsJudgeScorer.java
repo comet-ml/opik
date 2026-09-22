@@ -9,6 +9,7 @@ import com.comet.opik.api.resources.v1.events.tools.EntityRef;
 import com.comet.opik.api.resources.v1.events.tools.EntityType;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
@@ -24,7 +25,6 @@ import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
 import lombok.Builder;
@@ -52,9 +52,9 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
  * evaluator's message templates with values from the Span and prepares the structured-output schema.
  *
  * <p>By default scoring is inline (template variables substituted, one LLM call). When a rule's prompt
- * references the {@code {{span}}} structure variable (and the {@code agentic_tools} toggle is on and the
- * provider supports tool-calling), the scorer instead injects a compact span structure (span id + the
- * span's own attachment {@code file_name}s) and runs the agentic tool loop, so the judge can call
+ * references the {@code {{span}}} structure variable (and the provider supports tool-calling), the
+ * scorer instead injects a compact span structure (span id + the span's own attachment
+ * {@code file_name}s) and runs the agentic tool loop, so the judge can call
  * {@code get_attachment(type=span, ...)} / {@code read} / {@code jq} to load and inspect the span's
  * attachments. Span-level analogue of the {@code {{trace}}} path in {@link OnlineScoringLlmAsJudgeScorer}.
  */
@@ -77,11 +77,13 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
+            @NonNull SpanService spanService,
             @NonNull LlmProviderFactory llmProviderFactory,
             @NonNull AgenticScoringService agenticScoringService,
             @NonNull AttachmentService attachmentService,
             @NonNull OnlineEvaluationRecorder onlineEvaluationRecorder) {
-        super(config, redisson, feedbackScoreService, traceService, SPAN_LLM_AS_JUDGE, Constants.SPAN_LLM_AS_JUDGE);
+        super(config, redisson, feedbackScoreService, traceService, spanService, SPAN_LLM_AS_JUDGE,
+                Constants.SPAN_LLM_AS_JUDGE);
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSpanLlmAsJudgeScorer.class);
@@ -118,18 +120,13 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 UserLog.SPAN_ID, span.id().toString(),
                 UserLog.RULE_ID, message.ruleId().toString());
 
-        // The {{span}} variable is the declarative agentic trigger. Detection is independent of the
-        // agentic-tools toggle so the variable is always substituted (never leaking the bare "span"
-        // sentinel as a literal):
-        //   - toggle ON  → build the real span structure (span id + attachment file_names); if the
-        //                  provider supports tools, run the agentic loop so the judge can get_attachment.
-        //   - toggle OFF → skip the attachment fetch and inject a null structure, so {{span}} renders as
-        //                  "{}" inline (handled by the inline branch in prepareEvaluation).
+        // The {{span}} variable is the declarative agentic trigger: it builds the real span structure
+        // (span id + attachment file_names) and, when the provider supports tools, runs the agentic loop
+        // so the judge can call get_attachment.
         boolean referencesSpan = OnlineScoringEngine.templateReferencesSpanStructure(
                 message.llmAsJudgeCode().messages(),
                 message.llmAsJudgeCode().variables(),
                 PromptType.MUSTACHE);
-        boolean agenticToolsEnabled = serviceTogglesConfig.isAgenticToolsEnabled();
 
         // Monitoring recorder (OPIK-6994): one hidden source=evaluator trace per span evaluation with an
         // llm span for the scoring call. NOOP when the toggle is off — no extra writes.
@@ -138,10 +135,10 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                         message.llmAsJudgeCode().model().name(), message.workspaceId(), message.userName())
                 : EvaluationRecorder.NOOP;
 
-        Mono<List<FeedbackScoreBatchItem>> scoresMono = (referencesSpan && agenticToolsEnabled)
+        Mono<List<FeedbackScoreBatchItem>> scoresMono = referencesSpan
                 ? buildSpanStructure(span, message)
                         .flatMap(structure -> evaluate(message, structure, true, mdc, recorder))
-                : evaluate(message, null, referencesSpan, mdc, recorder);
+                : evaluate(message, null, false, mdc, recorder);
 
         return recorder.monitor(scoresMono)
                 .flatMap(scores -> storeSpanScores(scores, span, message.userName(), message.workspaceId()))
@@ -239,14 +236,13 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             userFacingLogger.info("Evaluating spanId '{}' sampled by rule '{}'", span.id(), message.ruleName());
 
             String modelName = message.llmAsJudgeCode().model().name();
-            boolean agenticToolsEnabled = serviceTogglesConfig.isAgenticToolsEnabled();
             boolean providerSupportsTools = agenticScoringService.supportsToolCalling(
                     llmProviderFactory.getLlmProvider(modelName));
-            // Tools require the {{span}} trigger AND the agentic-tools toggle AND a tool-calling provider.
-            // The {{span}} substitution itself is independent of tools — see the inline branch below.
-            boolean useTools = referencesSpan && agenticToolsEnabled && providerSupportsTools;
+            // Tools require the {{span}} trigger AND a tool-calling provider. The {{span}} substitution
+            // itself is independent of tools — see the inline branch below.
+            boolean useTools = referencesSpan && providerSupportsTools;
 
-            if (referencesSpan && agenticToolsEnabled && !providerSupportsTools) {
+            if (referencesSpan && !providerSupportsTools) {
                 // Actionable misconfiguration: the prompt references {{span}} (so the user expects
                 // tool-driven inspection / attachment loading) but the chosen model's provider can't
                 // call tools. We still inject the structure inline so the judge at least sees the ids.
@@ -262,10 +258,8 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             try {
                 if (useTools) {
                     requests = buildToolCallingRequests(message, span, modelName, spanStructureJson);
-                } else if (referencesSpan && spanStructureJson != null) {
-                    requests = buildInlineStructureRequests(message, span, modelName, spanStructureJson);
                 } else if (referencesSpan) {
-                    requests = buildSentinelStructureRequests(message, span, modelName, spanStructureJson);
+                    requests = buildInlineStructureRequests(message, span, modelName, spanStructureJson);
                 } else {
                     requests = buildPlainRequests(message, span, modelName);
                 }
@@ -292,7 +286,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
     }
 
     /**
-     * {@code useTools}: {{span}} + agentic tools + tool-calling provider. The tool-loop request uses the
+     * {@code useTools}: {{span}} + a tool-calling provider. The tool-loop request uses the
      * soft InstructionStrategy; the wrap-up uses the provider-native structured-output strategy (same
      * asymmetry as the trace scorer — Anthropic in particular returns prose at the wrap-up turn under
      * InstructionStrategy).
@@ -311,14 +305,17 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 llmProviderFactory.getStructuredOutputStrategy(modelName),
                 onlineScoringConfig.getMaxPromptFieldChars(), drillDownHint, spanStructureJson);
         // REQUIRED on the first call only forces ≥1 tool call; follow-ups switch to AUTO in
-        // handleToolCalls so the model can decide when to stop investigating.
-        scoreRequest = agenticScoringService.addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
+        // handleToolCalls so the model can decide when to stop investigating. Providers that reject
+        // a forced choice outright get AUTO here too — see firstRoundToolChoice.
+        scoreRequest = agenticScoringService.addToolSpecs(scoreRequest,
+                agenticScoringService.firstRoundToolChoice(llmProviderFactory.getLlmProvider(modelName)));
         return LlmRequests.builder().score(scoreRequest).structured(structuredRequest).build();
     }
 
     /**
-     * Inline fallback: {{span}} on a non-tool-calling provider (toggle ON, real structure). No read/jq
-     * tools to drill in, so cap the substitutions to bound the context window — otherwise a large span
+     * Inline fallback: {{span}} on a non-tool-calling provider, so the real structure is injected
+     * inline. No read/jq tools to drill in, so cap the substitutions to bound the context window —
+     * otherwise a large span
      * would inject uncapped and could overflow the model's context. No drill-down hint: the model can't
      * act on one, so over-cap values are just truncated.
      */
@@ -328,19 +325,6 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 message.llmAsJudgeCode(), span,
                 llmProviderFactory.getStructuredOutputStrategy(modelName),
                 onlineScoringConfig.getMaxPromptFieldChars(), INLINE_TRUNCATION_HINT, spanStructureJson);
-        return LlmRequests.builder().score(scoreRequest).structured(scoreRequest).build();
-    }
-
-    /**
-     * Inline path that still injects the {{span}} structure so the variable renders rather than leaking
-     * the bare sentinel. Toggle OFF: spanStructureJson is null → renders "{}" (tiny, no cap needed; user
-     * variables stay uncapped as on the normal inline path).
-     */
-    private LlmRequests buildSentinelStructureRequests(SpanToScoreLlmAsJudge message, Span span,
-            String modelName, String spanStructureJson) {
-        ChatRequest scoreRequest = OnlineScoringEngine.prepareSpanLlmRequest(
-                message.llmAsJudgeCode(), span,
-                llmProviderFactory.getStructuredOutputStrategy(modelName), spanStructureJson);
         return LlmRequests.builder().score(scoreRequest).structured(scoreRequest).build();
     }
 
