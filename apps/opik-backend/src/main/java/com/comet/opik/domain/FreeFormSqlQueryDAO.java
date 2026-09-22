@@ -62,19 +62,19 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     private static final String SETTING_WORKSPACE_ID = "SQL_workspace_id";
     private static final String SETTING_PROJECT_ID = "SQL_project_id";
 
-    private final Client agentInsightsClient;
-    private final Client freeFormExtendedSqlClient;
+    private final Client readOnlyClient;
+    private final Client extendedReadOnlyClient;
 
     @Inject
     FreeFormSqlQueryDAOImpl(
-            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) @NonNull Client agentInsightsClient,
-            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT) @NonNull Client freeFormExtendedSqlClient) {
-        this.agentInsightsClient = agentInsightsClient;
-        this.freeFormExtendedSqlClient = freeFormExtendedSqlClient;
+            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_SQL_CLICKHOUSE_CLIENT) @NonNull Client readOnlyClient,
+            @Named(DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT) @NonNull Client extendedReadOnlyClient) {
+        this.readOnlyClient = readOnlyClient;
+        this.extendedReadOnlyClient = extendedReadOnlyClient;
     }
 
     private Client clientFor(FreeFormSqlAccount account) {
-        return account == FreeFormSqlAccount.EXTENDED ? freeFormExtendedSqlClient : agentInsightsClient;
+        return account == FreeFormSqlAccount.EXTENDED ? extendedReadOnlyClient : readOnlyClient;
     }
 
     @Override

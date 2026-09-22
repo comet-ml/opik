@@ -84,7 +84,7 @@ public class FreeFormSqlQueryService {
             CH_TOO_MANY_ROWS, CH_TIMEOUT_EXCEEDED, CH_MEMORY_LIMIT_EXCEEDED, CH_TOO_MANY_ROWS_OR_BYTES);
 
     private final FreeFormSqlQueryDAO freeFormSqlQueryDAO;
-    private final FreeFormSqlResultNameEnricher entityNameEnricher;
+    private final FreeFormSqlEntityNameEnricher entityNameEnricher;
 
     private final LongHistogram duration;
     private final LongHistogram resultRows;
@@ -92,7 +92,7 @@ public class FreeFormSqlQueryService {
 
     @Inject
     public FreeFormSqlQueryService(@NonNull FreeFormSqlQueryDAO freeFormSqlQueryDAO,
-            @NonNull FreeFormSqlResultNameEnricher entityNameEnricher) {
+            @NonNull FreeFormSqlEntityNameEnricher entityNameEnricher) {
         this.freeFormSqlQueryDAO = freeFormSqlQueryDAO;
         this.entityNameEnricher = entityNameEnricher;
 
