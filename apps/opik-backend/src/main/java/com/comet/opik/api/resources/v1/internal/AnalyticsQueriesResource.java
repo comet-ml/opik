@@ -116,13 +116,13 @@ public class AnalyticsQueriesResource {
 
         RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Custom Charts free-form SQL");
 
-        String projectScope = Optional.ofNullable(request.projectId())
+        String projectId = Optional.ofNullable(request.projectId())
                 .map(Object::toString)
-                .orElse(FreeFormSqlQueryDAO.PROJECT_SCOPE_ALL);
+                .orElse(FreeFormSqlQueryDAO.PROJECT_ID_ALL);
 
-        log.info("Executing Custom Charts SQL for workspace '{}', project scope '{}'", workspaceId, projectScope);
+        log.info("Executing Custom Charts SQL for workspace '{}', project '{}'", workspaceId, projectId);
 
-        return execute(FreeFormSqlAccount.EXTENDED, workspaceId, projectScope, request.query());
+        return execute(FreeFormSqlAccount.EXTENDED, workspaceId, projectId, request.query());
     }
 
     /**
@@ -130,10 +130,10 @@ public class AnalyticsQueriesResource {
      * is not reactive. join() wraps any failure in CompletionException — unwrap so the mapped WebApplicationException
      * (and its HTTP status) reaches the JAX-RS exception handling unchanged.
      */
-    private Response execute(FreeFormSqlAccount account, String workspaceId, String projectScope, String query) {
+    private Response execute(FreeFormSqlAccount account, String workspaceId, String projectId, String query) {
         try {
             AnalyticsQueryResponse response = freeFormSqlQueryService
-                    .executeQuery(account, workspaceId, projectScope, query)
+                    .executeQuery(account, workspaceId, projectId, query)
                     .join();
             return Response.ok(response).build();
         } catch (CompletionException e) {

@@ -36,17 +36,17 @@ public interface FreeFormSqlQueryDAO {
     CompletableFuture<List<String>> explainAst(FreeFormSqlAccount account, String query);
 
     /**
-     * The {@code SQL_project_id} value meaning "every project in that workspace". The row policies match it
+     * The reserved {@code SQL_project_id} value meaning "every project in that workspace". The row policies match it
      * explicitly, so an unset or empty setting matches no branch and returns nothing — a dropped setting fails
      * closed rather than silently widening the query to the workspace.
      */
-    String PROJECT_SCOPE_ALL = "*";
+    String PROJECT_ID_ALL = "*";
 
     /**
-     * Executes {@code query} bounded to the given workspace and project scope, reading the single {@code result}
-     * column. {@code projectScope} is a project id, or {@link #PROJECT_SCOPE_ALL}.
+     * Executes {@code query} bounded to the given workspace and project, reading the single {@code result}
+     * column. {@code projectId} is a single project's id, or {@link #PROJECT_ID_ALL}.
      */
-    CompletableFuture<FreeFormSqlResult> execute(FreeFormSqlAccount account, String workspaceId, String projectScope,
+    CompletableFuture<FreeFormSqlResult> execute(FreeFormSqlAccount account, String workspaceId, String projectId,
             String query);
 }
 
@@ -87,12 +87,12 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
     @Override
     @WithSpan
     public CompletableFuture<FreeFormSqlResult> execute(@NonNull FreeFormSqlAccount account,
-            @NonNull String workspaceId, @NonNull String projectScope, @NonNull String query) {
+            @NonNull String workspaceId, @NonNull String projectId, @NonNull String query) {
         // Only the SQL_ custom settings are sent: readonly=1 rejects any other per-query setting.
         // Execution/memory/row caps are pinned on the read-only user's server-side profile.
         var settings = new QuerySettings()
                 .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
-                .serverSetting(SETTING_PROJECT_ID, projectScope);
+                .serverSetting(SETTING_PROJECT_ID, projectId);
 
         return clientFor(account).queryRecords(query, settings)
                 .thenApply(FreeFormSqlQueryDAOImpl::readResult);

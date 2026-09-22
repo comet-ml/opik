@@ -117,12 +117,12 @@ public class FreeFormSqlQueryService {
     }
 
     public CompletableFuture<AnalyticsQueryResponse> executeQuery(@NonNull FreeFormSqlAccount account,
-            @NonNull String workspaceId, @NonNull String projectScope, @NonNull String query) {
+            @NonNull String workspaceId, @NonNull String projectId, @NonNull String query) {
         long startMillis = System.currentTimeMillis();
 
         return freeFormSqlQueryDAO.explainAst(account, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> runQuery(account, workspaceId, projectScope, query, startMillis));
+                .thenCompose(nodeLabels -> runQuery(account, workspaceId, projectId, query, startMillis));
     }
 
     /**
@@ -145,8 +145,8 @@ public class FreeFormSqlQueryService {
     }
 
     private CompletableFuture<AnalyticsQueryResponse> runQuery(FreeFormSqlAccount account, String workspaceId,
-            String projectScope, String query, long startMillis) {
-        return freeFormSqlQueryDAO.execute(account, workspaceId, projectScope, query)
+            String projectId, String query, long startMillis) {
+        return freeFormSqlQueryDAO.execute(account, workspaceId, projectId, query)
                 .handle((result, error) -> {
                     if (error != null) {
                         throw mapExecutionError(error, startMillis);
