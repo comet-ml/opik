@@ -20,7 +20,6 @@ from typing import Callable, Dict, List, Type
 
 import pytest
 
-import opik
 from opik.evaluation.metrics import JSDistance, JSDivergence, KLDivergence
 
 SKIP_DIRECTIVE = re.compile(r"[ \t]*#[ \t]*doctest:[ \t]*\+SKIP")
@@ -52,8 +51,8 @@ def _example_block(metric_class: Type[object]) -> str:
 @pytest.mark.parametrize(
     "metric_class", [JSDivergence, JSDistance, KLDivergence], ids=lambda c: c.__name__
 )
-def test_worked_example_runs_as_written(
-    metric_class: Type[object], monkeypatch
+def test_distribution_metric_docstring_example__run_as_written__matches_printed_value(
+    metric_class: Type[object],
 ) -> None:
     source = _example_block(metric_class) + "\n"
     parsed = doctest.DocTestParser().get_doctest(
@@ -64,11 +63,10 @@ def test_worked_example_runs_as_written(
         f"{metric_class.__name__} example prints no expected value, so nothing is pinned"
     )
 
-    # The examples leave ``track`` at its default, which can wrap ``score`` in the
-    # tracing decorator depending on local configuration.  The advertised number
-    # does not depend on that, and a unit test should not queue traces for whoever
-    # runs it.
-    monkeypatch.setattr(opik, "track", lambda *args, **kwargs: lambda fn: fn)
+    # ``track`` stays at the docstring's default on purpose: the example is what a user
+    # copies. The autouse ``fake_backend`` fixture in tests/unit/evaluation/conftest.py
+    # routes the spans that produces into the in-memory emulator, so no real client or
+    # streamer is built here.
 
     reported: List[str] = []
     runner = doctest.DocTestRunner()
@@ -145,7 +143,7 @@ DOCUMENTED_CASES = [
 @pytest.mark.parametrize(
     "metric_class,constructor_kwargs,output,reference", DOCUMENTED_CASES
 )
-def test_returned_value_matches_the_definition(
+def test_distribution_metric_score__documented_case__matches_the_definition(
     metric_class: Type[object],
     constructor_kwargs: Dict[str, object],
     output: str,
