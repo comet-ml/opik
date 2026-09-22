@@ -88,7 +88,7 @@ class RateLimitInterceptor implements MethodInterceptor {
         // Check events bucket
         if (rateLimit.shouldAffectUserGeneralLimit()) {
             LimitConfig generalLimit = rateLimitConfig.getGeneralLimit();
-            String key = KEY.formatted(RateLimited.GENERAL_EVENTS, requestContext.get().getApiKey());
+            String key = KEY.formatted(RateLimited.GENERAL_EVENTS, getRateLimitPrincipal());
             limits.put(key, generalLimit);
         }
 
@@ -128,6 +128,18 @@ class RateLimitInterceptor implements MethodInterceptor {
         } finally {
             setLimitHeaders(limits, null);
         }
+    }
+
+    /**
+     * Api key is not present in CIPX device token auth flow.
+     * Rate limiting should be bucketed by device id in that case.
+     */
+    private String getRateLimitPrincipal() {
+        String cipxDeviceId = requestContext.get().getCipxDeviceId();
+        if (StringUtils.isNoneBlank(cipxDeviceId)) {
+            return cipxDeviceId;
+        }
+        return requestContext.get().getApiKey();
     }
 
     private String replaceLimitVariables(String limit) {

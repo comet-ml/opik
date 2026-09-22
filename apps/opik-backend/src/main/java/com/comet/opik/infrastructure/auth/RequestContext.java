@@ -36,6 +36,7 @@ public class RequestContext {
     public static final String WORKSPACE_FALLBACK_MESSAGE_TEMPLATE = "%s '%s' was found via workspace-wide search. In a future version, you will need to specify the project explicitly.";
 
     public static final String PROJECT_NAME = "projectName";
+    public static final String CIPX_DEVICE_ID = "cipxDeviceId";
     // used by Optimization Studio to pass the Opik API key to the optimizer job, while keeping auth as is
     public static final String OPIK_API_KEY = "opikApiKey";
     public static final String SYSTEM_USER = "system";
@@ -48,6 +49,8 @@ public class RequestContext {
     private List<Quota> quotas;
     private Visibility visibility;
     private String workspaceFallbackMessage;
+
+    private String cipxDeviceId;
 
     /**
      * Whether this caller's response content must be redacted. Resolved once, after authentication, because

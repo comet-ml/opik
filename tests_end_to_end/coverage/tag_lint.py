@@ -181,10 +181,22 @@ def lint_spec(path: Path, rel: str, idx, retired: dict, *, visual: bool) -> list
 
 
 def lint_taxonomy(tax: dict, idx) -> list[Finding]:
-    """Rule 3: visual state values must be in the enum."""
+    """Rule 3: visual state values must be in the enum.
+    Rule 4: `specs:` lists stay sorted, so concurrent additions do not collide.
+    """
     _, _, _, states, _ = idx
     out = []
     for area, body in (tax.get("areas") or {}).items():
+        specs = (body or {}).get("specs") or []
+        if specs != sorted(specs):
+            # Appending puts every concurrent addition on the same last line, so
+            # two open spec PRs in one area always conflict here. Sorted
+            # insertion lands them on different lines and git merges them.
+            out.append(Finding(
+                "taxonomy.yaml", 1,
+                f"{area}.specs is not sorted — insert new specs in sorted "
+                f"position, not at the end (see the header)",
+            ))
         for vcap, spec in (body.get("visual") or {}).items():
             st = (spec or {}).get("state")
             if st is None:

@@ -5,6 +5,7 @@ import com.comet.opik.domain.RemoteWorkspacePermissionsService;
 import com.comet.opik.domain.WorkspacePermissionsService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.infrastructure.redaction.RedactionService;
 import com.google.common.base.Preconditions;
 import com.google.inject.Provides;
@@ -28,10 +29,11 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
     public AuthService authService(
             @Config("authentication") AuthenticationConfig config,
             @NonNull Provider<RequestContext> requestContext,
-            @NonNull RedissonReactiveClient redissonClient,
             @NonNull Client client,
+            @NonNull RetriableHttpClient retriableHttpClient,
             @NonNull RedactionService redactionService,
-            @NonNull WorkspacePermissionsService workspacePermissionsService) {
+            @NonNull WorkspacePermissionsService workspacePermissionsService,
+            @NonNull CacheService cacheService) {
 
         if (!config.isEnabled()) {
             if (redactionService.isEnabled()) {
@@ -53,15 +55,30 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         Preconditions.checkArgument(StringUtils.isNotBlank(config.getReactService().url()),
                 "The property authentication.reactService.url must not be blank when authentication is enabled");
 
-        var cacheService = config.getApiKeyResolutionCacheTTLInSec() > 0
-                ? new AuthCredentialsCacheService(redissonClient, config.getApiKeyResolutionCacheTTLInSec())
-                : new NoopCacheService();
-
         // Asking RedactionService rather than the raw config so the request and the thing that acts on the
         // answer cannot disagree: a deployment with the flag on but no rules redacts nothing, and must not pay
         // for permissions it will not use.
-        return new RemoteAuthService(client, config.getReactService(), requestContext, cacheService,
+        return new RemoteAuthService(client, retriableHttpClient, config.getReactService(),
+                requestContext, cacheService,
+                config.getRequestTimeout().toJavaDuration(), config.getRequestMaxRetries(),
+                config.getRequestRetryMinBackoff().toJavaDuration(),
+                config.getRequestRetryMaxBackoff().toJavaDuration(),
                 workspacePermissionsService, redactionService.isEnabled());
+    }
+
+    /**
+     * Shared by API-key authentication and CIPX device-token validation, so both honour the same TTL and a
+     * deployment has one place to tune it.
+     */
+    @Provides
+    @Singleton
+    public CacheService cacheService(
+            @Config("authentication") AuthenticationConfig config,
+            @NonNull RedissonReactiveClient redissonClient) {
+
+        return config.getApiKeyResolutionCacheTTLInSec() > 0
+                ? new AuthCredentialsCacheService(redissonClient, config.getApiKeyResolutionCacheTTLInSec())
+                : new NoopCacheService();
     }
 
     @Provides
@@ -82,4 +99,5 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
 
         return new RemoteWorkspacePermissionsService(client, config.getReactService());
     }
+
 }

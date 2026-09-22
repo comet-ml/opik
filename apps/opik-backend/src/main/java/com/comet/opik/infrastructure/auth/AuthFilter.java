@@ -33,6 +33,7 @@ public class AuthFilter implements ContainerRequestFilter {
 
     private final AuthService authService;
     private final McpOAuthService mcpOAuthService;
+    private final CipxTokenValidationService cipxTokenValidationService;
     private final OpikConfiguration opikConfig;
     private final Provider<RequestContext> requestContext;
 
@@ -62,6 +63,8 @@ public class AuthFilter implements ContainerRequestFilter {
                 ValidatedToken validatedToken = mcpOAuthService.validateAccessTokenForWorkspace(
                         token, context.getHeaderString(RequestContext.WORKSPACE_HEADER));
                 authService.authorizeOAuth(validatedToken, contextInfo);
+            } else if (opikConfig.getCipxTokenValidation().isEnabled() && CipxTokenUtils.isCipxToken(authHeader)) {
+                cipxTokenValidationService.authenticate(authHeader, contextInfo);
             } else {
                 authService.authenticate(headers, sessionToken, contextInfo);
             }

@@ -32,6 +32,7 @@ class AuthServiceImpl implements AuthService {
     private static final List<WorkspaceInfo> ELIGIBLE_WORKSPACES = List.of(WorkspaceInfo.builder()
             .id(ProjectService.DEFAULT_WORKSPACE_ID)
             .name(ProjectService.DEFAULT_WORKSPACE_NAME)
+            .isDefault(true)
             .build());
     private static final UserWorkspace AUTHORIZED_WORKSPACE = UserWorkspace.builder()
             .userName(ProjectService.DEFAULT_USER)

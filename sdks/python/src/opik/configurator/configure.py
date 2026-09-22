@@ -1,7 +1,7 @@
 import getpass
 import logging
 import os
-from typing import Final, Optional
+from typing import Any, Callable, Dict, Final, Optional
 
 import httpx
 import opik.config
@@ -10,15 +10,23 @@ from opik.api_objects.opik_client import get_current_client_raw
 from opik import config
 from opik.configurator.interactive_helpers import (
     ask_user_for_approval,
-    ask_user_for_approval_default_no,
     is_interactive,
 )
-from opik.configurator import mcp
 from opik.configurator import opik_rest_helpers
 from opik.exceptions import ConfigurationError
 import opik.url_helpers as url_helpers
 from opik.api_key import opik_api_key
 
+
+#: Runs the assistant setup on the caller's behalf. Takes the resolved connection
+#: block, the ``--install-mcp`` / ``--install-skills`` tri-states and whether ``-y``
+#: was passed. Injected by the CLI so the configurator itself never renders.
+AssistantSetup = Callable[[Dict[str, Any], Optional[bool], Optional[bool], bool], None]
+
+#: Shows a line pointing the user somewhere — where to find their API key, say.
+#: Injected by the CLI so it can colour the URL and make it clickable; the
+#: default keeps ``opik.configure()`` on the logger, where a library belongs.
+Announce = Callable[[str], None]
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +46,9 @@ class OpikConfigurator:
         automatic_approvals: bool = False,
         project_name: Optional[str] = None,
         install_mcp: Optional[bool] = None,
+        install_skills: Optional[bool] = None,
+        assistant_setup: Optional[AssistantSetup] = None,
+        announce: Optional[Announce] = None,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -48,6 +59,9 @@ class OpikConfigurator:
         self.automatic_approvals = automatic_approvals
         self.project_name = project_name
         self.install_mcp = install_mcp
+        self.install_skills = install_skills
+        self.assistant_setup = assistant_setup
+        self._announce: Announce = announce if announce is not None else LOGGER.info
 
         # Handle URL
         #
@@ -84,47 +98,38 @@ class OpikConfigurator:
             # LOCAL OPIK DEPLOYMENT
             self._configure_local()
 
-        self._maybe_setup_mcp_server()
+        self._setup_assistants()
 
-    def _maybe_setup_mcp_server(self) -> None:
-        if not self._should_setup_mcp_server():
+    def _setup_assistants(self) -> None:
+        """Hand the AI-client step to the caller's renderer, if there is one.
+
+        Only the CLI supplies one. ``opik.configure()`` does not do this step at
+        all: registering an MCP server and installing the skill pack write into
+        files owned by Cursor, Claude Code and friends, and a library call has no
+        business editing another tool's configuration on the strength of a
+        prompt the caller never asked to be shown. It had grown its own
+        plain-text prompts for both, which meant `opik.configure()` could write
+        to every detected client from a question that named none of them.
+
+        Anyone wanting the step from Python can call the CLI, which is where the
+        consent, the client picker and the reporting all live.
+        """
+        if self.assistant_setup is None:
             return
 
-        mcp.setup_mcp_server(
-            api_key=self.api_key,
-            workspace=self.workspace,
-            base_url=self.base_url,
-            api_url=self.api_url,
-            use_local=self.use_local,
-            self_hosted_comet=self.self_hosted_comet,
-            check_tls_certificate=self.current_config.check_tls_certificate,
-            force_local_server=False,
-        )
-
-    def _should_setup_mcp_server(self) -> bool:
-        """Decide whether to offer registering the Opik MCP server.
-
-        - ``install_mcp is False`` or a non-interactive session: skip.
-        - ``install_mcp is True``: proceed without asking.
-        - ``automatic_approvals`` (the ``-y`` / preflight path): skip, since this
-          mutates configuration files owned by external tools.
-        - Otherwise: ask the user, defaulting to "no".
-        """
-        if self.install_mcp is False:
-            return False
-
-        if not is_interactive():
-            return False
-
-        if self.install_mcp is True:
-            return True
-
-        if self.automatic_approvals:
-            return False
-
-        return ask_user_for_approval_default_no(
-            "Set up the Opik MCP server for an AI assistant "
-            "(Claude Code, Cursor, VS Code)? (y/N) "
+        self.assistant_setup(
+            {
+                "api_key": self.api_key,
+                "workspace": self.workspace,
+                "base_url": self.base_url,
+                "api_url": self.api_url,
+                "use_local": self.use_local,
+                "self_hosted_comet": self.self_hosted_comet,
+                "check_tls_certificate": self.current_config.check_tls_certificate,
+            },
+            self.install_mcp,
+            self.install_skills,
+            self.automatic_approvals,
         )
 
     def _configure_cloud(self) -> None:
@@ -304,18 +309,13 @@ class OpikConfigurator:
             url_helpers.get_base_url(self.base_url), "/api/my/settings/"
         )
 
-        url_was_not_passed = self.base_url == OPIK_BASE_URL_CLOUD
         if not self.self_hosted_comet:
-            if url_was_not_passed:
-                LOGGER.info(
-                    "Your Opik API key is available in your account settings, can be found at %s for Opik cloud",
-                    settings_url,
-                )
-            else:
-                LOGGER.info(
-                    "Your Opik API key is available in your account settings, can be found at %s",
-                    settings_url,
-                )
+            # Interpolated rather than left to the logger's `%s`: the renderer the
+            # CLI injects takes a finished line, and the URL has to be in it for
+            # the link styling to find it.
+            self._announce(
+                f"Your Opik API key is in your account settings: {settings_url}"
+            )
 
         if not is_interactive():
             raise ConfigurationError(
@@ -666,7 +666,6 @@ def configure(
     automatic_approvals: Optional[bool] = None,
     url_override: Optional[str] = None,
     project_name: Optional[str] = None,
-    install_mcp: Optional[bool] = None,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
@@ -683,8 +682,6 @@ def configure(
                without user confirmation if `automatic_approvals` is not set to `False`.
         automatic_approvals: if True, `yes` will automatically be answered whenever a user approval is required
         project_name: The name of the project to configure. If not provided, the default project will be used.
-        install_mcp: If True, register the Opik MCP server with detected AI hosts; if False, skip the step.
-            If None, the user is prompted in interactive sessions.
 
     Raises:
         ConfigurationError
@@ -706,6 +703,5 @@ def configure(
         if automatic_approvals is not None
         else force,
         project_name=project_name,
-        install_mcp=install_mcp,
     )
     client.configure()

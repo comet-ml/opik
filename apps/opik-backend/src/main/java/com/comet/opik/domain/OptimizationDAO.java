@@ -9,10 +9,10 @@ import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.infrastructure.FilterUtils;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
-import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
@@ -420,7 +420,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * {@code -- } with any character after the dashes is safe, but a trailing space is one formatter away
      * from vanishing. Documenting outside the query removes the hazard rather than tiptoeing around it.
      * <p>
-     * The tagged-cost CTEs ({@code optimization_tagged_trace_ids} onwards) are deliberately duplicated in
+     * The tagged-cost CTEs ({@code optimization_tagged_traces} onwards) are deliberately duplicated in
      * {@link #FIND_WITHOUT_EXPERIMENTS} rather than shared through one templated constant: sharing would need a
      * flag every call site must remember to set, and forgetting it silently double-counts trial spend. The two
      * copies are held in step by the {@code findAndGetById__*} tests in
@@ -461,35 +461,76 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * value, and a nullable map value would reintroduce exactly the swallowed-mapper-exception row loss
      * this javadoc is about. The {@code WHERE} already guarantees the value is non-null.
      *
-     * <p><b>{@code optimization_tagged_trace_ids}</b> is the candidate scan: every trace that has ever
-     * carried one of these optimization ids as a tag. Deliberately a superset, because the authoritative
-     * check runs in {@code optimization_tagged_traces} on the latest version of each trace, so a tag
-     * removed by a later update stops counting. There is deliberately no {@code created_at} bound: that
-     * column is not stable across re-writes of an optimization row, and a reset would silently drop
-     * optimizer-internal traces from the total. An optimization with no {@code project_id} predates that
-     * column, so its cost stays trial-only.
+     * <p><b>{@code optimization_tagged_traces}</b> is the whole tagged half, in one read of {@code traces}:
+     * the rows in scope, deduped to the latest version of each trace, then {@code ARRAY JOIN}ed and
+     * filtered on the tag. It selects traces tagged with the optimization id but linked to no experiment
+     * item: the optimizer-internal LLM calls (GEPA reflection, candidate generation) whose spend belongs to
+     * the run's total even though it belongs to no trial (OPIK-7521). A trial trace whose
+     * {@code experiment_item} row is not visible yet is counted through this branch rather than through
+     * {@code experiment_durations}, and moves over once the link lands; either way it is counted exactly
+     * once, so the ingestion race cannot double-charge a run.
      *
-     * <p>Two things it deliberately does <em>not</em> do, both measured on production rather than reasoned
-     * about. It does not {@code DISTINCT}: the CTE is consumed only as an {@code IN} set, which dedups on
-     * its own, so the distinct pass was pure overhead (list p50 1338 -> 1145 ms, CPU 2198 -> 1910 ms, peak
-     * memory flat). And it no longer bounds {@code project_id} to the optimizations in scope: at
-     * production shape that prune is free either way (534 vs 539 ms, same peak memory), so the
-     * {@code arrayExists} tag test is left as the single condition. Do not replace that test with
-     * {@code hasAny} against a {@code groupArray} of the ids, which measured 22x the latency and 38x the
-     * CPU.
+     * <p><b>The tag test sits after the dedup, and that is why this is one read rather than two</b>
+     * (OPIK-8333). {@code tags} is mutable, so a tag removed by a later write must stop counting, which a
+     * {@code LIMIT 1 BY} can only honour if it picks the latest version of the trace rather than the latest
+     * version that still carries the tag. A separate {@code optimization_tagged_trace_ids} candidate scan
+     * used to buy that, narrowing rows on {@code arrayExists} so that a second read of {@code traces} could
+     * re-fetch every version of those ids and dedup them. Both were workspace-wide and neither could prune,
+     * so on a weekly-partitioned table each opened parts in every partition. The two bounds below replace
+     * the prefilter as what keeps the deduped set small, and unlike it they prune.
      *
-     * <p>Note for anyone reasoning about the cost of naming a CTE more than once: ClickHouse evaluates it
-     * <em>per reference</em>, and {@code EXPLAIN} cannot show that, because an {@code IN (SELECT ... FROM
-     * cte)} set is built eagerly and appears only as {@code trace_id in N-element set}. Counting plan
-     * nodes therefore understates the repeats. An isolated probe differing only in reference count went
-     * 2.45 M -> 4.90 M rows and 214 -> 398 MiB.
+     * <p><b>{@code project_id} prunes on the primary key.</b> {@code (workspace_id, project_id, id)} is the
+     * sort key, so naming the projects of the optimizations in scope drops whole parts rather than granules.
+     * The set is the one {@code optimization_tagged_costs} already applies to its spans read, which is what
+     * makes it result-preserving: a tagged trace outside those projects has no span inside them, so the
+     * {@code INNER JOIN} below already contributed nothing for it. One shape escapes that reasoning - a
+     * trace id written under two projects and tagged only under the one out of scope, whose spans under the
+     * in-scope copy the unbounded form charged and this one does not. The optimizer does not produce it, and
+     * it is the same id-reuse exposure OPIK-7691 exists to settle. An optimization with no
+     * {@code project_id} predates that column and is absent from the set, so its cost stays trial-only,
+     * exactly as the spans read already had it. The bound was measured free (534 vs 539 ms) and dropped when
+     * {@code traces} was a single partition; it is not free now.
      *
-     * <p><b>{@code optimization_tagged_traces}</b> selects traces tagged with the optimization id but
-     * linked to no experiment item: the optimizer-internal LLM calls (GEPA reflection, candidate
-     * generation) whose spend belongs to the run's total even though it belongs to no trial (OPIK-7521).
-     * A trial trace whose {@code experiment_item} row is not visible yet is counted through this branch
-     * rather than through {@code experiment_durations}, and moves over once the link lands; either way it
-     * is counted exactly once, so the ingestion race cannot double-charge a run.
+     * <p><b>The week bound prunes partitions</b>, and is emitted only where {@code traces} is the
+     * partitioned successor ({@code <if(traces_partitioned)>}, see {@link #addTracesPartitionedFlag}). It is
+     * the partition key of migration 000114 verbatim on both operands, so ClickHouse matches it as the key's
+     * own expression instead of inferring monotonicity over {@code id_at}; {@code toMonday} would wrap a
+     * far-future {@code id_at} into a plausible recent week and turn the hint into a filter (OPIK-8241),
+     * which the {@code java-sql-narrow-datetime} semgrep rule fails the build on. The floor is the earliest
+     * week any optimization in scope belongs to, taken from its own UUIDv7 id rather than from
+     * {@code created_at}, which is not stable across re-writes of an optimization row - a reset would
+     * silently drop optimizer-internal traces from the total, while the id is immutable. It is a scalar
+     * subquery so ClickHouse computes it once and substitutes it as a constant, which is what lets it prune
+     * at all.
+     *
+     * <p><b>On the legacy table the same floor would be wrong</b>, not merely useless: that {@code id_at} is
+     * a 32-bit {@code DateTime} storing {@code epochSecond % 2^32}, so a far-future id is filed under a
+     * <em>wrapped</em> past week that a floor at the run's week excludes. Every install that has not run the
+     * cutover is in that state, so the gate is permanent rather than transitional. On the successor
+     * {@code id_at} is {@code DateTime64(0)} and honest to 2299, so the floor orders correctly against every
+     * id a client can mint and a far-future trace stays above it.
+     *
+     * <p><b>The week it subtracts is the fallback the invariant needs.</b> Every writer of these tags stamps
+     * the trace it is currently producing ({@code base_optimizer._tag_trace} and
+     * {@code llm_calls._prepare_model_params} in the optimizer SDK, Studio through that same code), so a
+     * tagged trace's id is minted during the run and the floor is a strict consequence for every trace this
+     * CTE means to attribute. What cannot be guaranteed is that both ids came from the same clock - Studio
+     * mints the optimization id in the backend and the trace ids in the worker - nor that nobody adds the
+     * tag afterwards through {@code PATCH /v1/private/traces/{id}}, which accepts any string. A week of
+     * slack absorbs a clock disagreement and a tag applied to a trace from the run's immediate past, for one
+     * extra partition. It deliberately does not absorb a months-old trace tagged by hand: that is not an
+     * optimizer-internal call of this run. An optimization id that is not a UUIDv7 degrades to no bound
+     * rather than a wrong one, since {@code UUIDv7ToDateTime} returns {@code 1970-01-01} for it and that
+     * week is below every row.
+     *
+     * <p>Do not replace the tag test with {@code hasAny} against a {@code groupArray} of the ids, which
+     * measured 22x the latency and 38x the CPU. And note, for anyone reasoning about the cost of naming a
+     * CTE more than once: ClickHouse evaluates it <em>per reference</em>, and {@code EXPLAIN} cannot show
+     * that, because an {@code IN (SELECT ... FROM cte)} set is built eagerly and appears only as
+     * {@code trace_id in N-element set}. Counting plan nodes therefore understates the repeats. An isolated
+     * probe differing only in reference count went 2.45 M -> 4.90 M rows and 214 -> 398 MiB. That is what
+     * the collapse saves twice over: {@code optimization_tagged_costs} names this CTE twice, so the pair of
+     * scans it replaced ran four times per query.
      *
      * <p>Its experiment-item exclusion is keyed on {@code (trace, owning optimization)}, not on the trace
      * alone. It exists to stop a trial trace that also carries its run's id as a tag from being charged
@@ -503,20 +544,22 @@ class OptimizationDAOImpl implements OptimizationDAO {
      *
      * <p>{@code project_id} is deliberately not projected out of that CTE: it would split one trace into
      * one row per project it was ever written to, and the cost join keys on {@code trace_id} alone, so
-     * that would charge the same spend twice. One scope-dependence is left in the candidate CTE as a
-     * result: it prunes to the projects of the optimizations in scope, so a trace tagged with run X but
-     * stored in another run's project is found by the list and not by {@code getById}. The optimizer does
-     * not produce that shape, and dropping the project bound would turn the candidate scan
-     * workspace-wide. A dedicated attribution column (OPIK-7691) is what settles it.
+     * that would charge the same spend twice. It is still read inside the subquery, where the
+     * {@code LIMIT 1 BY} needs it - a trace id reused across projects is two logical rows, and deduping on
+     * {@code id} alone would drop one of them. The scope-dependence the project bound carries is the one it
+     * always had on the spans side: the projects in scope differ between the list (every optimization
+     * matching the filters) and {@code getById} (one), so a trace tagged with run X but stored in another
+     * run's project is found by the list and not by {@code getById}. The optimizer does not produce that
+     * shape, and a dedicated attribution column (OPIK-7691) is what settles it.
      *
      * <p><b>{@code optimization_tagged_costs}</b> prunes the spans scan on {@code project_id} because
      * {@code trace_id} is only the third primary-key column. That project set comes from
-     * {@code optimization_final} rather than from either trace CTE: ClickHouse substitutes CTEs
-     * textually, so naming a trace CTE there would re-run its tags scan. Reading {@code optimizations} is
+     * {@code optimization_final} rather than from {@code optimization_tagged_traces}: ClickHouse substitutes
+     * CTEs textually, so naming the trace CTE there would re-run its scan. Reading {@code optimizations} is
      * cheap by comparison, and a superset of the candidate projects is all a prefix prune needs; the
      * authoritative filter is the {@code trace_id IN} beside it.
      *
-     * <p>In {@link #FIND_WITHOUT_EXPERIMENTS} the same two trace CTEs appear without the experiment-item
+     * <p>In {@link #FIND_WITHOUT_EXPERIMENTS} the same trace CTE appears without the experiment-item
      * exclusion, which is unnecessary there because that projection is only chosen when nothing in scope
      * has an experiment, and its final {@code ifNull} yields a non-nullable zero when nothing is
      * attributed, matching {@code FIND}, where {@code sum()} over an empty group returns 0 rather than
@@ -702,13 +745,50 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 WHERE ef.experiment_type NOT IN ('mini-batch', 'mutation')
             ), objective_scores_per_experiment AS (
                 SELECT
-                    ef.optimization_id,
-                    esp.experiment_id,
-                    esp.value AS objective_score
-                FROM experiment_scores_parsed esp
-                INNER JOIN experiments_final ef ON esp.experiment_id = ef.id
-                INNER JOIN optimization_final o ON ef.optimization_id = o.id
-                WHERE esp.name = o.objective_name
+                    optimization_id,
+                    experiment_id,
+                    /*
+                     * Mirrors the run page's precedence (getObjectiveScoreValue): the trace-derived feedback
+                     * score wins, the experiment-level score is the fallback.
+                     *
+                     * toNullable is load-bearing, not decoration. candidate_metrics LEFT JOINs this CTE and
+                     * guards the weighted average with isNotNull(objective_score); under join_use_nulls = 0
+                     * an unmatched non-Nullable Float64 arrives as 0, which makes that guard always true and
+                     * scores every unscored candidate a real 0. Every candidate then ties, the best_* rollups
+                     * fall through to their earliest-created tie-break, and "best" collapses onto the
+                     * baseline - so the runs list reported the baseline's latency and cost with a 0% delta
+                     * while the run page reported the genuine best trial (OPIK-8060). duration_p50 in
+                     * experiment_durations is Nullable for the same reason.
+                     */
+                    toNullable(argMin(objective_score, source_rank)) AS objective_score
+                FROM (
+                    /*
+                     * Dataset runs - Studio runs and every SDK optimizer. The objective is a per-trace
+                     * feedback score averaged per experiment, and leaving it out was the OPIK-8060 defect:
+                     * these runs populate no experiment_scores at all, so the CTE matched nothing for them.
+                     */
+                    SELECT
+                        ef.optimization_id AS optimization_id,
+                        ef.id AS experiment_id,
+                        fs.feedback_scores[o.objective_name] AS objective_score,
+                        0 AS source_rank
+                    FROM experiments_final ef
+                    INNER JOIN optimization_final o ON ef.optimization_id = o.id
+                    INNER JOIN feedback_scores_agg fs ON ef.id = fs.experiment_id
+                    WHERE mapContains(fs.feedback_scores, o.objective_name)
+                    UNION ALL
+                    -- Test-suite runs, where the objective is scored at the experiment level.
+                    SELECT
+                        ef.optimization_id AS optimization_id,
+                        esp.experiment_id AS experiment_id,
+                        esp.value AS objective_score,
+                        1 AS source_rank
+                    FROM experiment_scores_parsed esp
+                    INNER JOIN experiments_final ef ON esp.experiment_id = ef.id
+                    INNER JOIN optimization_final o ON ef.optimization_id = o.id
+                    WHERE esp.name = o.objective_name
+                )
+                GROUP BY optimization_id, experiment_id
             ), candidate_metrics AS (
                 SELECT
                     ec.optimization_id AS optim_id,
@@ -722,6 +802,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     sum(ed.total_estimated_cost)
                         / nullIf(sum(ed.trace_count), 0)
                         AS per_trace_cost,
+                    sum(ed.trace_count) AS evaluated_count,
                     min(ec.experiment_created_at) AS earliest_created_at
                 FROM experiment_candidates ec
                 LEFT JOIN objective_scores_per_experiment ospe
@@ -729,24 +810,58 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     AND ec.optimization_id = ospe.optimization_id
                 LEFT JOIN experiment_durations ed ON ec.experiment_id = ed.experiment_id
                 GROUP BY ec.optimization_id, ec.candidate_id
+            /*
+             * How many items a full evaluation covers in this run, taken from the baseline. Deliberately
+             * baseline-derived rather than a max() over all candidates, matching the run page's
+             * getExpectedItemCount: a candidate groups all of its experiments and sums their counts, so one
+             * double-counted candidate would inflate the threshold and prune every genuinely-complete trial.
+             */
+            ), candidate_expectations AS (
+                SELECT
+                    optim_id,
+                    argMin(evaluated_count, earliest_created_at) AS expected_count
+                FROM candidate_metrics
+                GROUP BY optim_id
+            /*
+             * Which candidates may win "best". A candidate that scored fewer items than a full evaluation
+             * covers holds a partial average, which is not a result and must not win - the same gate the run
+             * page applies (OPIK-7460, isStillEvaluating). Without it the two views disagree even once both
+             * read the same scores: an optimizer that evaluates most trials on a subset (GEPA and friends)
+             * leaves the runs list crowning a 5-of-12 trial while the run page reports the best fully
+             * evaluated one (OPIK-8060).
+             *
+             * A zero expectation means "unknown" and fails open, and when nothing is complete the whole set
+             * stays eligible, so a run never loses its best marker.
+             */
+            ), candidate_eligibility AS (
+                SELECT
+                    cm.*,
+                    ce.expected_count = 0 OR cm.evaluated_count >= ce.expected_count AS is_complete
+                FROM candidate_metrics cm
+                INNER JOIN candidate_expectations ce ON cm.optim_id = ce.optim_id
+            ), candidate_pools AS (
+                SELECT optim_id, max(is_complete) AS has_complete
+                FROM candidate_eligibility
+                GROUP BY optim_id
             ), candidate_rollup AS (
                 SELECT
-                    optim_id AS optimization_id,
-                    maxIf(weighted_score, isNotNull(weighted_score)) AS best_score,
+                    cel.optim_id AS optimization_id,
+                    maxIf(weighted_score, in_pool AND isNotNull(weighted_score)) AS best_score,
                     argMinIf(weighted_duration, tuple(-weighted_score, earliest_created_at),
-                        isNotNull(weighted_score)) AS best_duration,
+                        in_pool AND isNotNull(weighted_score)) AS best_duration,
                     argMinIf(per_trace_cost, tuple(-weighted_score, earliest_created_at),
-                        isNotNull(weighted_score)) AS best_cost,
+                        in_pool AND isNotNull(weighted_score)) AS best_cost,
                     argMin(weighted_score, earliest_created_at) AS baseline_score,
                     argMin(weighted_duration, earliest_created_at) AS baseline_duration,
                     argMin(per_trace_cost, earliest_created_at) AS baseline_cost
-                FROM candidate_metrics
-                GROUP BY optim_id
-            ), optimization_tagged_trace_ids AS (
-                SELECT id, project_id
-                FROM traces
-                WHERE workspace_id = :workspace_id
-                AND arrayExists(x -> x IN (SELECT toString(id) FROM optimization_final), tags)
+                FROM (
+                    -- The baseline defines the threshold, so it is complete by construction and the
+                    -- baseline_* rollups below stay an unfiltered argMin over every candidate.
+                    SELECT cel.*, if(cp.has_complete, cel.is_complete, 1) AS in_pool
+                    FROM candidate_eligibility cel
+                    INNER JOIN candidate_pools cp ON cel.optim_id = cp.optim_id
+                ) AS cel
+                GROUP BY cel.optim_id
             ), optimization_tagged_traces AS (
                 SELECT DISTINCT
                     tag AS optimization_id_str,
@@ -755,7 +870,15 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     SELECT id AS trace_id, project_id, tags
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT id FROM optimization_tagged_trace_ids)
+                    AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                    <if(traces_partitioned)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (
+                            SELECT subtractWeeks(
+                                min(toDate32(UUIDv7ToDateTime(toUUID(id), 'UTC'))
+                                    - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(id), 'UTC'), 1))),
+                                1)
+                            FROM optimization_final
+                        )<endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, id
                 )
@@ -825,6 +948,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             GROUP BY o.*
             ORDER BY o.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -860,14 +984,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
      * The {@link #FIND} projection for the case where no optimization in scope has an experiment. Every
      * aggregate in {@link #FIND} except {@code total_optimization_cost} is derived from
      * {@code experiments_final}, so with no experiments they all collapse to their empty-input values and the
-     * fifteen-CTE pipeline reads nothing useful. The literals below reproduce those values and their exact
+     * whole CTE pipeline reads nothing useful. The literals below reproduce those values and their exact
      * declared types.
      * <p>
      * {@code total_optimization_cost} is the exception and must be computed for real (OPIK-7521): it also sums
      * optimizer-internal traces attributed by tag, which exist without any experiment. A run that died during
      * candidate generation has zero experiments and non-zero spend, and hardcoding a zero here would make the
      * runs list disagree with the run page - {@link #getById(UUID)} always takes the {@link #FIND} path. The
-     * three CTEs below are {@link #FIND}'s tagged-cost pipeline minus the experiment-item exclusion, which is
+     * two CTEs below are {@link #FIND}'s tagged-cost pipeline minus the experiment-item exclusion, which is
      * unnecessary here because this projection is only chosen when no experiment exists to link a trace to.
      * Keep them in step with {@link #FIND} - see that field's note on why they are duplicated and which test
      * fails when they drift.
@@ -894,11 +1018,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
-            ), optimization_tagged_trace_ids AS (
-                SELECT id, project_id
-                FROM traces
-                WHERE workspace_id = :workspace_id
-                AND arrayExists(x -> x IN (SELECT toString(id) FROM optimization_final), tags)
             ), optimization_tagged_traces AS (
                 SELECT DISTINCT
                     tag AS optimization_id_str,
@@ -907,7 +1026,15 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     SELECT id AS trace_id, project_id, tags
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT id FROM optimization_tagged_trace_ids)
+                    AND project_id IN (SELECT project_id FROM optimization_final WHERE notEmpty(project_id))
+                    <if(traces_partitioned)>AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (
+                            SELECT subtractWeeks(
+                                min(toDate32(UUIDv7ToDateTime(toUUID(id), 'UTC'))
+                                    - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(id), 'UTC'), 1))),
+                                1)
+                            FROM optimization_final
+                        )<endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, project_id, id
                 )
@@ -1093,6 +1220,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
+    private final @NonNull OpikConfiguration configuration;
 
     @Override
     public Mono<Void> upsert(@NonNull Optimization optimization) {
@@ -1103,13 +1231,20 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     @Override
     public Mono<Optimization> getById(@NonNull UUID id) {
-        var template = TemplateUtils.newST(FIND);
-        template.add("id", id.toString());
-
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> get(
-                        template.render(), connection,
-                        statement -> statement.bind("id", id)))
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = FilterUtils.getSTWithLogComment(FIND, "get_optimization_by_id", workspaceId,
+                            userName, "optimization_id=%s".formatted(id));
+                    template.add("id", id.toString());
+                    addTracesPartitionedFlag(template);
+
+                    var statement = connection.createStatement(template.render())
+                            .bind("entity_type", EntityType.TRACE.getType())
+                            .bind("id", id)
+                            .bind("workspace_id", workspaceId);
+
+                    return Flux.from(statement.execute());
+                }))
                 .flatMap(this::mapToDto)
                 .singleOrEmpty();
     }
@@ -1263,12 +1398,16 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var details = "dataset_id=%s, page=%s, size=%s".formatted(searchCriteria.datasetId(), page,
+                            size);
                     var template = hasExperiments
-                            ? TemplateUtils.newST(FIND)
+                            ? FilterUtils.getSTWithLogComment(FIND, "find_optimizations", workspaceId, userName,
+                                    details)
                             : FilterUtils.getSTWithLogComment(FIND_WITHOUT_EXPERIMENTS,
-                                    "find_optimizations_without_experiments", workspaceId, userName, "");
+                                    "find_optimizations_without_experiments", workspaceId, userName, details);
 
                     bindTemplateParams(template, searchCriteria);
+                    addTracesPartitionedFlag(template);
 
                     template.add("limit", size);
                     template.add("offset", offset);
@@ -1328,6 +1467,19 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
         Optional.ofNullable(searchCriteria.entityType())
                 .ifPresent(entityType -> template.add("entity_type", EntityType.TRACE.getType()));
+    }
+
+    /**
+     * Enables the tagged-scan week bound, which is a pruning hint on the weekly-partitioned {@code traces} and a
+     * liability on the legacy one - see the {@link #FIND} javadoc. {@code traceColumnsNonNullable} is what says which
+     * is live: the EXCHANGE that makes those columns non-nullable is the same one that puts the partitioned successor
+     * behind the name, so {@code TraceDAO#deleteBatch} already reads it as "the target is weekly partitioned". The
+     * name says only its first duty and is deliberately not renamed - the env var is exposed.
+     */
+    private void addTracesPartitionedFlag(ST template) {
+        if (configuration.getDatabaseAnalyticsDataModel().traceColumnsNonNullable()) {
+            template.add("traces_partitioned", true);
+        }
     }
 
     private void bindScopeQueryParams(OptimizationSearchCriteria searchCriteria, Statement statement) {
@@ -1413,12 +1565,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .bind("workspace_id", workspaceId);
             return Flux.from(statement.execute());
         });
-    }
-
-    private Publisher<? extends Result> get(String query, Connection connection, Function<Statement, Statement> bind) {
-        var statement = connection.createStatement(query)
-                .bind("entity_type", EntityType.TRACE.getType());
-        return makeFluxContextAware(bindWorkspaceIdToFlux(bind.apply(statement)));
     }
 
     private Publisher<Optimization> mapToDto(Result result) {

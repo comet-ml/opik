@@ -97,13 +97,18 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
-import static com.comet.opik.api.resources.v1.priv.DatasetsResourceTest.IGNORED_FIELDS_DATA_ITEM;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItem;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItems;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsContain;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInAnyOrder;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItemsInOrder;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1077,9 +1082,7 @@ class DatasetVersionResourceTest {
             var v1ItemsAfter = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
             assertThat(v1ItemsAfter).hasSize(3);
-            assertThat(v1ItemsAfter)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .isEqualTo(v1Items);
+            assertDatasetItems(v1ItemsAfter, v1Items);
         }
 
         @Test
@@ -1267,7 +1270,7 @@ class DatasetVersionResourceTest {
 
             var addedItemId = v2Items.stream()
                     .filter(item -> !v1ItemIds.contains(item.datasetItemId()))
-                    .map(DatasetItem::datasetItemId)
+                    .map(DatasetItem::id)
                     .findFirst()
                     .orElseThrow(() -> new AssertionError("Added item not found in v2"));
 
@@ -1352,10 +1355,8 @@ class DatasetVersionResourceTest {
             assertThat(v2Items).hasSize(6);
 
             // Every v1 item must appear in v2 with the same fields. id changes per version, so
-            // we ignore it via IGNORED_FIELDS_DATA_ITEM and compare the rest of the entity.
-            assertThat(v2Items)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsAll(v1Items);
+            // the helper ignores it and compares the rest of the entity.
+            assertDatasetItemsContain(v2Items, v1Items);
         }
     }
 
@@ -1560,9 +1561,7 @@ class DatasetVersionResourceTest {
             assertThat(v2Items.stream().map(DatasetItem::datasetItemId))
                     .doesNotContain(itemToDelete.datasetItemId());
 
-            assertThat(v2Items)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsAll(expectedSurvivors);
+            assertDatasetItemsContain(v2Items, expectedSurvivors);
         }
 
         @Test
@@ -1665,6 +1664,10 @@ class DatasetVersionResourceTest {
             assertThat(latestVersion.id()).isEqualTo(version1.id()); // Same version ID
             assertThat(latestVersion.versionName()).isEqualTo("v1");
             assertThat(latestVersion.itemsTotal()).isEqualTo(4); // 5 - 1 = 4
+            // A delete moves total and deleted only; the added/modified counters from v1 stay put.
+            assertThat(latestVersion.itemsDeleted()).isEqualTo(1);
+            assertThat(latestVersion.itemsAdded()).isEqualTo(version1.itemsAdded());
+            assertThat(latestVersion.itemsModified()).isEqualTo(version1.itemsModified());
 
             // Verify only 4 items remain in the latest version
             var v1ItemsAfter = datasetResourceClient.getDatasetItems(
@@ -3608,18 +3611,14 @@ class DatasetVersionResourceTest {
                     datasetId, List.of(experimentId), null, null, sorting, API_KEY, TEST_WORKSPACE);
 
             // Compare the whole DatasetItem objects, in order - not just their ids.
-            assertThat(sorted.content())
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactlyElementsOf(expected);
+            assertDatasetItemsInOrder(sorted.content(), expected);
 
             // Page boundary: with size=2, page 2 returns only the trailing item in sort order, exercising the
             // push-top-limit OFFSET :top_offset + outer LIMIT path; total stays at the full matching count.
             var pageTwo = datasetResourceClient.getDatasetItemsWithExperimentItems(
                     datasetId, List.of(experimentId), null, null, sorting, 2, 2, API_KEY, TEST_WORKSPACE);
             assertThat(pageTwo.total()).isEqualTo(count);
-            assertThat(pageTwo.content())
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactly(expected.get(count - 1));
+            assertDatasetItemsInOrder(pageTwo.content(), List.of(expected.get(count - 1)));
         }
 
         @Test
@@ -3786,6 +3785,120 @@ class DatasetVersionResourceTest {
     class BatchVersioningTests {
 
         @Test
+        @DisplayName("Success: Duplicate stable id in the version-creating batch counts once (OPIK-7891)")
+        void putItems__whenCreatingBatchRepeatsStableId__thenCountedOnce() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // The SDK's parallel upload sends every batch under one batch_group_id. The batch that
+            // arrives first CREATES the version, and that path derives itemsTotal from insertItems.
+            // That used to return items.size() -- the raw list length, deliberately not a DB row count
+            // (ClickHouse async inserts report 0 before commit) -- so a stable id repeated inside the
+            // first batch was counted twice while ClickHouse collapsed it to one row. It now counts
+            // distinct dataset_item_ids, which is what this test pins.
+            var duplicatedId = TestIdGeneratorFactory.create().generateId();
+            var distinctId = TestIdGeneratorFactory.create().generateId();
+
+            var distinctItem = DatasetItem.builder()
+                    .id(distinctId)
+                    .datasetItemId(distinctId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"third\"")))
+                    .build();
+
+            var items = List.of(
+                    DatasetItem.builder()
+                            .id(duplicatedId)
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"first\"")))
+                            .build(),
+                    DatasetItem.builder()
+                            .id(duplicatedId)
+                            .source(DatasetItemSource.SDK)
+                            .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"second\"")))
+                            .build(),
+                    distinctItem);
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .batchGroupId(UUID.randomUUID())
+                    .items(items)
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version = getLatestVersion(datasetId);
+            var stored = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, version.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            // Which revision of the repeated id survives is deliberately NOT asserted: every row in a
+            // batch is written with the same now64(9), and the read dedupes with
+            // `ORDER BY dataset_item_id DESC, last_updated_at DESC LIMIT 1 BY dataset_item_id` -- no
+            // tie-breaker, so either payload may win. Pinning "second" would be asserting an accident.
+            // What is guaranteed, and what the fix is about: exactly one row per distinct id, and a
+            // counter that agrees with it.
+            assertThat(stored).extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(duplicatedId, distinctId);
+            var storedDistinctItems = stored.stream().filter(item -> distinctId.equals(item.id())).toList();
+            assertThat(storedDistinctItems).hasSize(1);
+            assertDatasetItem(storedDistinctItems.getFirst(), distinctItem);
+
+            // items_total must agree with what is actually stored.
+            assertThat(version.itemsTotal()).isEqualTo(stored.size());
+        }
+
+        @Test
+        @DisplayName("Success: Duplicate stable id across batches in one group counts once (OPIK-7891)")
+        void putItems__whenDuplicateStableIdSpansBatchesInGroup__thenCountedOnce() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var batchGroupId = UUID.randomUUID();
+
+            // Mirrors the SDK's parallel upload: several batches under one batch_group_id fold into
+            // one version. The first batch creates it, later batches append. A stable id present in
+            // both must contribute exactly one item to the total.
+            var sharedId = TestIdGeneratorFactory.create().generateId();
+            var otherId = TestIdGeneratorFactory.create().generateId();
+
+            var otherItem = DatasetItem.builder()
+                    .id(otherId)
+                    .datasetItemId(otherId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"other\"")))
+                    .build();
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .batchGroupId(batchGroupId)
+                    .items(List.of(
+                            DatasetItem.builder()
+                                    .id(sharedId)
+                                    .source(DatasetItemSource.SDK)
+                                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"first\"")))
+                                    .build(),
+                            otherItem))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            // The second batch re-sends the shared id with new content, so it is an update:
+            // one row, holding the later revision.
+            var updatedShared = DatasetItem.builder()
+                    .id(sharedId)
+                    .datasetItemId(sharedId)
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("value", JsonUtils.getJsonNodeFromString("\"updated\"")))
+                    .build();
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .batchGroupId(batchGroupId)
+                    .items(List.of(updatedShared))
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var version = getLatestVersion(datasetId);
+            var stored = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 100, version.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            assertDatasetItemsInAnyOrder(stored, updatedShared, otherItem);
+            assertThat(version.itemsTotal()).isEqualTo(stored.size());
+        }
+
+        @Test
         @DisplayName("Success: Multiple INSERT batches with same batch_group_id create single version")
         void putItems_whenSameBatchId_thenSingleVersion() {
             // Given - Create dataset
@@ -3828,6 +3941,9 @@ class DatasetVersionResourceTest {
             var version = getLatestVersion(datasetId);
             assertThat(version.itemsTotal()).isEqualTo(6);
             assertThat(version.itemsAdded()).isEqualTo(6);
+            // Appends of brand-new items move total and added only; nothing here is an update or a delete.
+            assertThat(version.itemsModified()).isZero();
+            assertThat(version.itemsDeleted()).isZero();
             assertThat(version.versionName()).isEqualTo("v1");
 
             // Verify items can be fetched
@@ -4674,9 +4790,7 @@ class DatasetVersionResourceTest {
                     .evaluators(newEvaluators)
                     .description(newDescription)
                     .build();
-            assertThat(v2Items)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .containsExactly(expectedItem);
+            assertDatasetItemsInOrder(v2Items, List.of(expectedItem));
         }
 
         @Test
@@ -5245,10 +5359,7 @@ class DatasetVersionResourceTest {
             var expectedItem = items.getFirst().toBuilder()
                     .id(returnedItem.id())
                     .build();
-            assertThat(returnedItem)
-                    .usingRecursiveComparison()
-                    .ignoringFields(IGNORED_FIELDS_DATA_ITEM)
-                    .isEqualTo(expectedItem);
+            assertDatasetItem(returnedItem, expectedItem);
         }
 
         @Test
@@ -5434,6 +5545,214 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
             assertThat(latestItems).hasSize(1);
             assertThat(latestItems.getFirst().description()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Atomic version count updates (OPIK-7707):")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class AtomicVersionCountUpdates {
+
+        private int incrementCounts(UUID versionId, int total, int added, int modified, int deleted) {
+            return mySqlTemplate.inTransaction(WRITE, handle -> handle.attach(DatasetVersionDAO.class)
+                    .incrementCounts(versionId, total, added, modified, deleted, WORKSPACE_ID, USER));
+        }
+
+        private void awaitBarrier(CyclicBarrier barrier) {
+            try {
+                barrier.await(30, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            } catch (BrokenBarrierException | TimeoutException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        @Test
+        @DisplayName("Success: single-batch append accumulates the full counter triple")
+        void insertItems__whenAppendingToExistingVersion__thenCountersAccumulate() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+
+            var seed = getLatestVersion(datasetId);
+            assertThat(seed.itemsTotal()).isEqualTo(3);
+            assertThat(seed.itemsAdded()).isEqualTo(3);
+            assertThat(seed.itemsModified()).isZero();
+
+            // 2 brand-new items plus a re-send of an existing one: only the new items move itemsTotal.
+            var existingItem = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, seed.versionHash(), API_KEY, TEST_WORKSPACE).content().getFirst();
+            var items = new ArrayList<>(generateDatasetItems(2));
+            items.add(existingItem);
+
+            datasetResourceClient.createDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build(), TEST_WORKSPACE, API_KEY);
+
+            var updated = getLatestVersion(datasetId);
+            assertThat(updated.id()).isEqualTo(seed.id());
+            assertThat(updated.itemsTotal()).isEqualTo(5); // 3 + 2 new (the update doesn't count)
+            assertThat(updated.itemsAdded()).isEqualTo(5);
+            assertThat(updated.itemsModified()).isEqualTo(1);
+            assertThat(updated.itemsDeleted()).isZero();
+        }
+
+        @Test
+        @DisplayName("Success: concurrent increments are exact without the per-dataset lock")
+        void incrementCounts__whenConcurrentWritersBypassTheLock__thenCountersAreExact() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // Hit the DAO directly so withDatasetVersionLock is out of the picture entirely: this is what
+            // proves the arithmetic itself is atomic rather than merely serialized by the lock. The old
+            // read-modify-write would lose updates here.
+            int writers = 8;
+            int incrementsPerWriter = 25;
+
+            ExecutorService executor = Executors.newFixedThreadPool(writers);
+            CyclicBarrier barrier = new CyclicBarrier(writers);
+            try {
+                IntStream.range(0, writers)
+                        .mapToObj(i -> CompletableFuture.runAsync(() -> {
+                            awaitBarrier(barrier);
+                            for (int n = 0; n < incrementsPerWriter; n++) {
+                                incrementCounts(versionId, 1, 1, 2, 0);
+                            }
+                        }, executor))
+                        .toList()
+                        .forEach(CompletableFuture::join);
+            } finally {
+                executor.shutdown();
+                try {
+                    executor.awaitTermination(30, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            int expectedIncrements = writers * incrementsPerWriter;
+            var version = getLatestVersion(datasetId);
+            assertThat(version.itemsTotal()).isEqualTo(1 + expectedIncrements);
+            assertThat(version.itemsAdded()).isEqualTo(1 + expectedIncrements);
+            assertThat(version.itemsModified()).isEqualTo(2 * expectedIncrements);
+        }
+
+        @Test
+        @DisplayName("Success: NULL counters are treated as zero rather than staying NULL")
+        void incrementCounts__whenCountersAreNull__thenTreatedAsZero() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // The counter columns are `INT DEFAULT 0` -- nullable, since DEFAULT only applies when the
+            // column is omitted on INSERT. A bare `col + :delta` would leave NULL as NULL, which then
+            // unboxes to an NPE on the Integer-typed record. The absolute update this replaced happened
+            // to repair a NULL by overwriting it, so the increment has to COALESCE explicitly.
+            int nulled = mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = NULL, items_added = NULL, items_modified = NULL, items_deleted = NULL
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+            assertThat(nulled).isOne();
+
+            assertThat(incrementCounts(versionId, 3, 3, 1, 0)).isOne();
+
+            var updated = getLatestVersion(datasetId);
+            assertThat(updated)
+                    .extracting(DatasetVersion::itemsTotal, DatasetVersion::itemsAdded,
+                            DatasetVersion::itemsModified, DatasetVersion::itemsDeleted)
+                    .containsExactly(3, 3, 1, 0);
+        }
+
+        @Test
+        @DisplayName("Success: increment against an unknown version affects no rows")
+        void incrementCounts__whenVersionDoesNotExist__thenNoRowsAffected() {
+            assertThat(incrementCounts(UUID.randomUUID(), 1, 1, 0, 0)).isZero();
+        }
+
+        @Test
+        @DisplayName("Success: increment scoped to another workspace affects no rows")
+        void incrementCounts__whenVersionBelongsToAnotherWorkspace__thenNoRowsAffected() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            var seed = getLatestVersion(datasetId);
+
+            // Real version id, wrong workspace: the workspace predicate must keep the update from matching, which is
+            // what lets both count-update helpers detect a missing/foreign version from the affected-row count alone.
+            int updated = mySqlTemplate.inTransaction(WRITE, handle -> handle.attach(DatasetVersionDAO.class)
+                    .incrementCounts(seed.id(), 1, 1, 0, 0, UUID.randomUUID().toString(), USER));
+
+            assertThat(updated).isZero();
+            assertThat(getLatestVersion(datasetId).itemsTotal()).isEqualTo(seed.itemsTotal());
+        }
+
+        @Test
+        @DisplayName("Success: a version left at the not-migrated sentinel is never incremented")
+        void incrementCounts__whenVersionHoldsNotMigratedSentinel__thenNoRowsAffected() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // Liquibase 000046 leaves pre-versioning datasets at items_total = -1 until the backfill runs, and
+            // findVersionsNeedingItemsTotalMigration selects on exactly that value. Adding a delta would both
+            // corrupt the counter and hide the row from the backfill forever, so the increment must skip it.
+            int sentinelled = mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = :sentinel
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("sentinel", DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+            assertThat(sentinelled).isOne();
+
+            assertThat(incrementCounts(versionId, 5, 5, 0, 0)).isZero();
+
+            // Still exactly the sentinel: untouched, so the backfill will still find it.
+            assertThat(getLatestVersion(datasetId).itemsTotal())
+                    .isEqualTo(DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED);
+        }
+
+        @Test
+        @DisplayName("Error: insert whose version is left at the sentinel surfaces 404, not a silent success")
+        void insertItems__whenCountUpdateMatchesNoRow__thenNotFound() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+            UUID versionId = getLatestVersion(datasetId).id();
+
+            // Reaching the `updated == 0` guard through the public API needs a version that still resolves as
+            // "latest" (so the insert appends rather than minting a new version) but that the count UPDATE
+            // refuses to match. The not-migrated sentinel is exactly that state: an un-backfilled version being
+            // written to before the migration job has reached it.
+            mySqlTemplate.inTransaction(WRITE, handle -> handle.createUpdate("""
+                    UPDATE dataset_versions
+                    SET items_total = :sentinel
+                    WHERE id = :version_id AND workspace_id = :workspace_id
+                    """)
+                    .bind("sentinel", DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED)
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", WORKSPACE_ID)
+                    .execute());
+
+            try (var response = datasetResourceClient.callCreateDatasetItems(DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(1))
+                    .build(), TEST_WORKSPACE, API_KEY)) {
+
+                // Surfacing this beats the alternatives: silently dropping the counter update, or corrupting the
+                // sentinel so the backfill never reconciles the row.
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+
+            assertThat(getLatestVersion(datasetId).itemsTotal())
+                    .isEqualTo(DatasetVersionDAO.ITEMS_TOTAL_NOT_MIGRATED);
         }
     }
 
@@ -5773,6 +6092,65 @@ class DatasetVersionResourceTest {
             // The winner created exactly one new version on top of the seed; its 3 rows landed in latest.
             assertThat(datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE).total()).isEqualTo(2L);
             assertThat(latestItemCount(datasetId)).isEqualTo(1L + 3L);
+        }
+
+        @Test
+        @DisplayName("Concurrent appends sharing a stable id: itemsTotal matches the rows actually stored")
+        void concurrentAppendsSharingStableId__thenItemsTotalMatchesStoredRows() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // Establish the group version and get a server-issued stable id to re-send. Seeding first
+            // means every racing batch below takes the unlocked append branch.
+            UUID sharedBatchGroupId = UUID.randomUUID();
+            var seedBatch = buildBatch(datasetId, sharedBatchGroupId, 1, "seed");
+            try (var response = datasetResourceClient.callCreateDatasetItems(seedBatch, TEST_WORKSPACE, API_KEY)) {
+                assertThat(response.getStatus()).isEqualTo(204);
+            }
+
+            var seeded = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE)
+                    .content();
+            UUID sharedItemId = seeded.stream()
+                    .filter(item -> "seed-input-0".equals(item.data().get("input").asText()))
+                    .map(DatasetItem::id)
+                    .findFirst()
+                    .orElseThrow();
+
+            long rowsBefore = latestItemCount(datasetId);
+
+            // Every writer re-sends the SAME stable id (the documented upsert key). This is the SDK-retry shape the
+            // reviewer flagged: with the append unlocked, each batch can classify the id as new
+            // (countExistingItemIds sees the pre-existing row, but concurrent siblings do not see each
+            // other) and each increments items_total, while ReplacingMergeTree keeps a single row.
+            int writers = 6;
+            List<DatasetItemBatch> batches = IntStream.range(0, writers)
+                    .mapToObj(i -> DatasetItemBatch.builder()
+                            .datasetId(datasetId)
+                            .batchGroupId(sharedBatchGroupId)
+                            .items(List.of(DatasetItem.builder()
+                                    .id(sharedItemId)
+                                    .source(DatasetItemSource.MANUAL)
+                                    .traceId(null)
+                                    .spanId(null)
+                                    .data(Map.of(
+                                            "input", JsonUtils.getJsonNodeFromString("\"retry-input\""),
+                                            "output", JsonUtils.getJsonNodeFromString("\"retry-output-" + i + "\"")))
+                                    .build()))
+                            .build())
+                    .toList();
+
+            List<Integer> statuses = runParallel(batches);
+            assertThat(statuses).allMatch(status -> status == 204);
+
+            // Re-sending an existing id is an update, not an insert, so the row count must not move.
+            long rowsAfter = latestItemCount(datasetId);
+            assertThat(rowsAfter).isEqualTo(rowsBefore);
+
+            // The stored rows are ground truth: itemsTotal on the group's version must agree with them.
+            DatasetVersion groupVersion = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE)
+                    .content().stream()
+                    .max(Comparator.comparing(DatasetVersion::createdAt))
+                    .orElseThrow();
+            assertThat(groupVersion.itemsTotal()).isEqualTo((int) rowsAfter);
         }
     }
 

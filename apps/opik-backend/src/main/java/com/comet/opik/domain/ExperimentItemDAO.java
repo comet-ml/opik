@@ -6,6 +6,7 @@ import com.comet.opik.domain.experiments.aggregations.AggregatedExperimentCounts
 import com.comet.opik.domain.experiments.aggregations.AggregationBranchCountsCriteria;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesDAO;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -31,6 +32,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -496,6 +498,14 @@ class ExperimentItemDAO {
             ;
             """;
 
+    /**
+     * The 'experiment_id IN (...)' predicate is what restricts the 'experiment_items' scan. Without it, the only
+     * predicate on the large table is 'workspace_id': 'experiment_items' has no 'dataset_id' column, so a
+     * 'dataset_id' filter on the joined side can only discard rows after they have been read, making the cost scale
+     * with total workspace experiment volume rather than with the requested datasets. 'experiment_id' is the second
+     * column of the sort key '(workspace_id, experiment_id, dataset_item_id, trace_id, id)', so filtering on it
+     * directly lets ClickHouse prune granules. The join is retained solely to project 'dataset_id' for the grouping.
+     */
     private static final String FIND_EXPERIMENT_SUMMARY_BY_DATASET_IDS = """
             SELECT
                 e.dataset_id,
@@ -503,8 +513,14 @@ class ExperimentItemDAO {
                 max(ei.last_updated_at) as most_recent_experiment_at
             FROM experiment_items ei
             JOIN experiments e ON ei.experiment_id = e.id AND e.workspace_id = ei.workspace_id
-            WHERE e.dataset_id in :dataset_ids
-            AND ei.workspace_id = :workspace_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.experiment_id IN (
+                SELECT id
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND dataset_id IN :dataset_ids
+            )
+            AND e.dataset_id in :dataset_ids
             GROUP BY
                 e.dataset_id
             SETTINGS log_comment = '<log_comment>'
@@ -583,9 +599,12 @@ class ExperimentItemDAO {
             ;
             """;
 
+    private static final String EXPERIMENT_ITEMS_TABLE = "experiment_items";
+
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @WithSpan
     public Flux<ExperimentSummary> findExperimentSummaryByDatasetIds(Set<UUID> datasetIds) {
@@ -619,8 +638,26 @@ class ExperimentItemDAO {
             return Mono.just(0L);
         }
 
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(experimentItems);
+        }
+
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> insert(experimentItems, connection));
+    }
+
+    /**
+     * Same rows as {@link #INSERT}, streamed as JSONEachRow through the v2 client instead of bound as
+     * ~9 named parameters per row. The {@code log_comment} is rendered by the same
+     * {@code FilterUtils#getLogComment}, so a benchmark can compare the two paths in
+     * {@code system.query_log} on equal terms.
+     */
+    private Mono<Long> insertJsonEachRow(Collection<ExperimentItem> experimentItems) {
+        return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
+                EXPERIMENT_ITEMS_TABLE,
+                getLogComment("insert_experiment_items", workspaceId, userName, experimentItems.size()),
+                experimentItems,
+                item -> ExperimentItemJsonRowMapper.toJsonRow(item, userName, workspaceId)));
     }
 
     private Mono<Long> insert(Collection<ExperimentItem> experimentItems, Connection connection) {

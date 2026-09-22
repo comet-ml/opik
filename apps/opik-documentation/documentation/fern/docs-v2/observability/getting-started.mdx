@@ -42,7 +42,7 @@ tracing manually with the SDK.
       <Step title="Run the integration">
         Ask your coding agent to instrument your code:
         ```
-        Instrument my agent with Opik using the /instrument command.
+        Instrument my agent with Opik using the /opik-instrument command.
         ```
 
         The agent will read your code, pick the right Opik integration, and add tracing.
@@ -168,10 +168,13 @@ full execution path of a request, including all nested spans, inputs, outputs, a
 </Frame>
 
 You can use [Ollie](/ollie) to analyze your traces, identify issues in your agent's
-behavior, and get actionable suggestions for improvement.
+behavior, and get actionable suggestions for improvement. To do the same from your own editor,
+connect your AI coding assistant with the [Opik MCP server](/mcp-server) — it reads these traces
+directly, so you can ask about them where you are already working.
 
 ## Next steps
 
 - [Concepts](/tracing/concepts) — Learn about traces, spans, threads, and feedback scores
 - [Log traces](/tracing/advanced/log_traces) — In-depth guide on customizing what gets logged
 - [Cost tracking](/tracing/advanced/cost_tracking) — Monitor token usage and spending
+- [MCP server](/mcp-server) — Ask your coding assistant about these traces from your editor
