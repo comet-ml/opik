@@ -94,9 +94,9 @@ class TraceJsonRowMapper {
 
         // Mirrors bindNanSentinel.
         if (nonNullableColumns) {
-            JsonRowValues.putDoubleExact(node, "ttft", nullToNaN(trace.ttft()));
+            JsonRowValues.putDouble(node, "ttft", nullToNaN(trace.ttft()));
         } else if (trace.ttft() != null) {
-            JsonRowValues.putDoubleExact(node, "ttft", trace.ttft());
+            JsonRowValues.putDouble(node, "ttft", trace.ttft());
         } else {
             node.putNull("ttft");
         }

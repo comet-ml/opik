@@ -86,9 +86,8 @@ class SpanJsonRowMapperTest {
     @Test
     @DisplayName("a ttft double survives serialization without losing a bit")
     void ttftIsSerializedLosslessly() {
-        // The value that surfaced a 1-ULP mismatch in the integration round trip when this was written
-        // as Jackson's shortest decimal. Asserted at the mapper so "does the JSON row change the
-        // double?" is answered independently of the HTTP layer and ClickHouse.
+        // Asserted at the mapper so "does the JSON row change the double?" is answered independently of
+        // the HTTP layer and ClickHouse.
         double ttft = 1.2583709557071319E9;
         var span = span().toBuilder().ttft(ttft).build();
 
@@ -97,8 +96,7 @@ class SpanJsonRowMapperTest {
         assertThat(row.get("ttft").asDouble()).isEqualTo(ttft);
         // Through the serialized text too, which is what actually reaches ClickHouse.
         assertThat(JsonUtils.getJsonNodeFromString(row.toString()).get("ttft").asDouble()).isEqualTo(ttft);
-        // The exact binary value expanded in decimal, not the shortest form that merely round-trips.
-        // This is what leaves ClickHouse's float parse no rounding decision to get wrong.
-        assertThat(row.get("ttft").asText()).isEqualTo(new BigDecimal(ttft).toString());
+        // Byte-identical to the R2DBC driver's own rendering, which is the parity requirement.
+        assertThat(row.get("ttft").asText()).isEqualTo(String.valueOf(ttft));
     }
 }

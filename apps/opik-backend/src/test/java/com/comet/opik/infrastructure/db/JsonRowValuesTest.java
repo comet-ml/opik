@@ -6,14 +6,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.math.BigDecimal;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Covers {@link JsonRowValues#putDoubleExact}, which decides how every {@code Float64} column on the
- * JSONEachRow write paths is spelled. The three branches -- exact expansion, signed zero, non-finite --
- * each exist for a different reason, so each is pinned separately.
+ * Covers {@link JsonRowValues#putDouble}, which decides how every {@code Float64} column on the
+ * JSONEachRow write paths is spelled. The contract is parity with the R2DBC driver's own rendering, so
+ * the finite case is pinned against {@code String.valueOf} rather than against a hand-picked literal.
  */
 class JsonRowValuesTest {
 
@@ -24,22 +22,24 @@ class JsonRowValuesTest {
     void finiteDoublesAreExact(double value) {
         var node = JsonUtils.createObjectNode();
 
-        JsonRowValues.putDoubleExact(node, "ttft", value);
+        JsonRowValues.putDouble(node, "ttft", value);
 
-        assertThat(node.get("ttft").asText()).isEqualTo(new BigDecimal(value).toString());
-        // Through the serialized text, which is what reaches ClickHouse.
+        // Byte-identical to what the R2DBC driver renders (ClickHouseDoubleValue#toSqlExpression is
+        // String.valueOf), which is the parity this write path has to hold.
+        assertThat(node.get("ttft").asText()).isEqualTo(String.valueOf(value));
+        // And it round-trips through the serialized text, which is what reaches ClickHouse.
         assertThat(JsonUtils.getJsonNodeFromString(node.toString()).get("ttft").asDouble()).isEqualTo(value);
     }
 
     @Test
-    @DisplayName("negative zero keeps its sign, which BigDecimal would have discarded")
+    @DisplayName("negative zero keeps its sign")
     void negativeZeroKeepsItsSign() {
         var node = JsonUtils.createObjectNode();
 
-        JsonRowValues.putDoubleExact(node, "ttft", -0.0);
+        JsonRowValues.putDouble(node, "ttft", -0.0);
 
-        // new BigDecimal(-0.0) is 0 -- BigDecimal has no signed zero -- so routing -0.0 through it would
-        // silently store +0.0. Asserted via the reciprocal, since -0.0 == 0.0 is true.
+        // Asserted via the reciprocal, since -0.0 == 0.0 is true. Routing this through BigDecimal would
+        // lose the sign -- BigDecimal has no signed zero -- which is one reason the plain form wins.
         double readBack = JsonUtils.getJsonNodeFromString(node.toString()).get("ttft").asDouble();
         assertThat(1 / readBack).isNegative();
         assertThat(node.get("ttft").asText()).isEqualTo("-0.0");
@@ -50,7 +50,7 @@ class JsonRowValuesTest {
     void positiveZeroStaysPositive() {
         var node = JsonUtils.createObjectNode();
 
-        JsonRowValues.putDoubleExact(node, "ttft", 0.0);
+        JsonRowValues.putDouble(node, "ttft", 0.0);
 
         assertThat(1 / JsonUtils.getJsonNodeFromString(node.toString()).get("ttft").asDouble()).isPositive();
     }
@@ -62,13 +62,12 @@ class JsonRowValuesTest {
         var positiveInfinity = JsonUtils.createObjectNode();
         var negativeInfinity = JsonUtils.createObjectNode();
 
-        JsonRowValues.putDoubleExact(nan, "ttft", Double.NaN);
-        JsonRowValues.putDoubleExact(positiveInfinity, "ttft", Double.POSITIVE_INFINITY);
-        JsonRowValues.putDoubleExact(negativeInfinity, "ttft", Double.NEGATIVE_INFINITY);
+        JsonRowValues.putDouble(nan, "ttft", Double.NaN);
+        JsonRowValues.putDouble(positiveInfinity, "ttft", Double.POSITIVE_INFINITY);
+        JsonRowValues.putDouble(negativeInfinity, "ttft", Double.NEGATIVE_INFINITY);
 
         // Jackson quotes non-finite numbers (QUOTE_NON_NUMERIC_NUMBERS, on by default), which is the
-        // form input_format_json_read_numbers_as_strings exists to accept. BigDecimal has no
-        // representation for any of the three, so they must not take the exact-expansion branch.
+        // form input_format_json_read_numbers_as_strings exists to accept.
         assertThat(nan.toString()).contains("\"ttft\":\"NaN\"");
         assertThat(positiveInfinity.toString()).contains("\"ttft\":\"Infinity\"");
         assertThat(negativeInfinity.toString()).contains("\"ttft\":\"-Infinity\"");
@@ -80,7 +79,7 @@ class JsonRowValuesTest {
         var node = JsonUtils.createObjectNode();
 
         org.assertj.core.api.Assertions
-                .assertThatThrownBy(() -> JsonRowValues.putDoubleExact(node, "  ", 1.0))
+                .assertThatThrownBy(() -> JsonRowValues.putDouble(node, "  ", 1.0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

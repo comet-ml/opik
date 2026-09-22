@@ -115,6 +115,13 @@ class BulkInsertV2ClientIntegrationTest {
      */
     private static final Duration CLOCK_SKEW = Duration.ofMinutes(2);
 
+    /**
+     * A double whose shortest round-tripping decimal needs all 17 significant digits. Most randomly
+     * generated doubles need only 16 and survive a lossy 16-digit conversion unchanged, so pinning this
+     * is what makes the precision assertions meaningful rather than luck.
+     */
+    private static final double TTFT_17_DIGITS = 1.2583709557071319E9;
+
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer mysqlContainer = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> zookeeperContainer = ClickHouseContainerUtils.newZookeeperContainer();
@@ -606,9 +613,12 @@ class BulkInsertV2ClientIntegrationTest {
                     // Half with both optional columns absent: they are Nullable here, so the mapper
                     // writes an explicit JSON null and the read must give null back rather than an
                     // epoch or a 0.0.
+                    // Pinned, as in spansRoundTrip: a random double usually needs only 16 significant
+                    // digits and would survive a lossy conversion unchanged, so it would not exercise
+                    // the precision the assertion below claims to check.
                     return i % 2 == 0
                             ? trace.toBuilder().endTime(null).ttft(null).build()
-                            : trace;
+                            : trace.toBuilder().ttft(TTFT_17_DIGITS).build();
                 })
                 .toList();
 
@@ -681,7 +691,12 @@ class BulkInsertV2ClientIntegrationTest {
                             .totalEstimatedCost(cost)
                             .usage(Map.of("prompt_tokens", 11, "completion_tokens", 22))
                             .build();
-                    return i % 2 == 0 ? span.toBuilder().endTime(null).ttft(null).build() : span;
+                    // Pinned rather than podam's: TTFT_17_DIGITS needs all 17 significant digits to
+                    // round-trip, so it is the value that actually exercises double precision. A random
+                    // one usually needs only 16 and passes either way.
+                    return i % 2 == 0
+                            ? span.toBuilder().endTime(null).ttft(null).build()
+                            : span.toBuilder().ttft(TTFT_17_DIGITS).build();
                 })
                 .toList();
 

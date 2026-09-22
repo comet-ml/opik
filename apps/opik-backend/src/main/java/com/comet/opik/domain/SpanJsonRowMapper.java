@@ -116,9 +116,9 @@ class SpanJsonRowMapper {
 
         // Mirrors bindNanSentinel.
         if (nonNullableColumns) {
-            JsonRowValues.putDoubleExact(node, "ttft", nullToNaN(span.ttft()));
+            JsonRowValues.putDouble(node, "ttft", nullToNaN(span.ttft()));
         } else if (span.ttft() != null) {
-            JsonRowValues.putDoubleExact(node, "ttft", span.ttft());
+            JsonRowValues.putDouble(node, "ttft", span.ttft());
         } else {
             node.putNull("ttft");
         }
