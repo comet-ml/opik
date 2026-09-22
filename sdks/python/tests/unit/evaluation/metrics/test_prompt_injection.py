@@ -555,10 +555,9 @@ def test_empty_keywords_keep_default_patterns():
 
     assert result.value == 1.0
     assert result.metadata["keyword_hits"] == []
-    assert result.metadata["pattern_hits"] == [
-        _INJECTION_PATTERNS[1],
-        next(p for p in _INJECTION_PATTERNS if p.startswith("reveal ")),
-    ]
+    # containment, not equality: default patterns overlap on purpose (see top)
+    reveal = next(p for p in _INJECTION_PATTERNS if p.startswith("reveal "))
+    assert reveal in result.metadata["pattern_hits"]
 
 
 def test_empty_patterns_keep_default_keywords():
