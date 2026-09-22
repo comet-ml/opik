@@ -23,7 +23,7 @@ class TraceJsonRowMapperTest {
     private static final String USER = "a-user";
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
 
-    private Trace traceWithout(Instant endTime, Double ttft) {
+    private Trace traceWith(Instant endTime, Double ttft) {
         return FACTORY.manufacturePojo(Trace.class).toBuilder()
                 .endTime(endTime)
                 .ttft(ttft)
@@ -33,7 +33,7 @@ class TraceJsonRowMapperTest {
     @Test
     @DisplayName("while the columns are Nullable, an absent end_time and ttft are explicit JSON nulls")
     void nullableColumnsWriteNulls() {
-        var row = TraceJsonRowMapper.toJsonRow(traceWithout(null, null), USER, WORKSPACE_ID, Instant.now(),
+        var row = TraceJsonRowMapper.toJsonRow(traceWith(null, null), USER, WORKSPACE_ID, Instant.now(),
                 false, 10001);
 
         assertThat(row.get("end_time").isNull()).isTrue();
@@ -43,7 +43,7 @@ class TraceJsonRowMapperTest {
     @Test
     @DisplayName("once the columns are non-nullable, the same absences become the epoch and NaN sentinels")
     void nonNullableColumnsWriteSentinels() {
-        var row = TraceJsonRowMapper.toJsonRow(traceWithout(null, null), USER, WORKSPACE_ID, Instant.now(),
+        var row = TraceJsonRowMapper.toJsonRow(traceWith(null, null), USER, WORKSPACE_ID, Instant.now(),
                 true, 10001);
 
         // Not merely non-null: the epoch is the value epochToNull translates back on read, so a
@@ -59,7 +59,7 @@ class TraceJsonRowMapperTest {
     @Test
     @DisplayName("a present end_time and ttft are written the same either side of the toggle")
     void presentValuesAreUnaffectedByTheToggle() {
-        var trace = traceWithout(Instant.parse("2026-09-22T10:11:12.123456789Z"), 12.5);
+        var trace = traceWith(Instant.parse("2026-09-22T10:11:12.123456789Z"), 12.5);
 
         var nullable = TraceJsonRowMapper.toJsonRow(trace, USER, WORKSPACE_ID, Instant.now(), false, 10001);
         var nonNullable = TraceJsonRowMapper.toJsonRow(trace, USER, WORKSPACE_ID, Instant.now(), true, 10001);
@@ -73,7 +73,7 @@ class TraceJsonRowMapperTest {
     @Test
     @DisplayName("a non-positive truncation size leaves the column out so its DDL default applies")
     void nonPositiveTruncationSizeOmitsTheColumn() {
-        var trace = traceWithout(null, null);
+        var trace = traceWith(null, null);
 
         assertThat(TraceJsonRowMapper.toJsonRow(trace, USER, WORKSPACE_ID, Instant.now(), false, 0)
                 .has("truncation_threshold")).isFalse();

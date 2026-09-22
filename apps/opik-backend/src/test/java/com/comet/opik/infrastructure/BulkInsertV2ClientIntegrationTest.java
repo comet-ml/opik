@@ -74,7 +74,6 @@ import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.withinPercentage;
 
 /**
  * Covers the {@code bulkInsert.v2ClientEnabled} write path — feedback scores streamed to ClickHouse as
@@ -650,6 +649,14 @@ class BulkInsertV2ClientIntegrationTest {
 
         // Not vacuous: three of the four carry tags, so a mapper that dropped them would fail above.
         assertThat(actualTraceTags.values().stream().filter(tags -> !tags.isEmpty())).hasSize(3);
+
+        // Same exactness requirement as spans: the trace mapper writes the decimal expansion, so the
+        // double comes back identical rather than 1 ULP away.
+        var expectedTraceTtft = traces.stream().filter(trace -> trace.ttft() != null)
+                .collect(toMap(Trace::id, Trace::ttft));
+        assertThat(expectedTraceTtft).isNotEmpty();
+        assertThat(actual).filteredOn(trace -> expectedTraceTtft.containsKey(trace.id()))
+                .allSatisfy(trace -> assertThat(trace.ttft()).isEqualTo(expectedTraceTtft.get(trace.id())));
     }
 
     @Test
@@ -689,12 +696,15 @@ class BulkInsertV2ClientIntegrationTest {
         // enrichment is independent of the write path, so comparing metadata verbatim would fail on the
         // R2DBC path too.
         // tags joins metadata in the exclusions for the ordering reason given in tracesRoundTrip.
-        // ttft is excluded and compared with a tolerance below. This path writes it as a JSON number and
-        // ClickHouse parses that text, which can land 1 ULP off the double the R2DBC driver transmits in
-        // binary. Verified rather than assumed: SpanJsonRowMapperTest shows the mapper's own text is
-        // exact, and this same test passes byte-for-byte with bulkInsert.v2ClientEnabled=false.
+        // ttft is NOT excluded: the mapper writes the exact decimal expansion of the double, so the
+        // stored Float64 is bit-for-bit what was handed in and plain equality is the right assertion.
+        // Writing Jackson's shortest form instead let ClickHouse's JSON parse land 1 ULP away.
+        //
+        // totalEstimatedCostVersion stays in the shared ignore list and is asserted separately below.
+        // It cannot be compared against the input: the version is the DAO's to decide, so podam's random
+        // value on the way in is meaningless -- the assertion worth making is what the DAO stored.
         var ignored = Stream
-                .concat(Arrays.stream(SpanAssertions.IGNORED_FIELDS), Stream.of("metadata", "tags", "ttft"))
+                .concat(Arrays.stream(SpanAssertions.IGNORED_FIELDS), Stream.of("metadata", "tags"))
                 .toArray(String[]::new);
 
         assertThat(actual)
@@ -727,14 +737,17 @@ class BulkInsertV2ClientIntegrationTest {
                 span -> new HashSet<>(Optional.ofNullable(span.tags()).orElseGet(Set::of))));
         assertThat(actualSpanTags).isEqualTo(expectedSpanTags);
 
-        // The 1-ULP note above: equal to within a relative 1e-12, which is far tighter than any
-        // meaningful ttft difference and far looser than one bit of Float64.
+        // Bit-for-bit, not approximately: isEqualTo on Double compares the exact value, so a mapper that
+        // went back to the shortest-decimal form would fail here rather than pass within a tolerance.
         var expectedTtft = spans.stream().filter(span -> span.ttft() != null)
                 .collect(toMap(Span::id, Span::ttft));
         assertThat(expectedTtft).isNotEmpty();
         assertThat(actual).filteredOn(span -> expectedTtft.containsKey(span.id()))
-                .allSatisfy(span -> assertThat(span.ttft())
-                        .isCloseTo(expectedTtft.get(span.id()), withinPercentage(1e-12)));
+                .allSatisfy(span -> assertThat(span.ttft()).isEqualTo(expectedTtft.get(span.id())));
+
+        // Supplied rather than DAO-derived, so no version is stamped. The stamping branch is
+        // deterministic and covered by SpanJsonRowMapperTest, which can set it directly.
+        assertThat(actual).allSatisfy(span -> assertThat(span.totalEstimatedCostVersion()).isNullOrEmpty());
 
         // spanColumnsNonNullable is false here, so an absent end_time/ttft must read back as null rather
         // than as the epoch or 0.0. The sentinel branch is covered by SpanJsonRowMapperTest.

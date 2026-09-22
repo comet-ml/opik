@@ -10,6 +10,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -91,14 +92,11 @@ class TraceJsonRowMapper {
         node.put("input_slim", TruncationUtils.createSlimJsonString(inputValue));
         node.put("output_slim", TruncationUtils.createSlimJsonString(outputValue));
 
-        // Mirrors bindNanSentinel. Written as a double, not stringified: Jackson quotes only the
-        // non-finite values (QUOTE_NON_NUMERIC_NUMBERS, on by default), so NaN serializes as "NaN"
-        // while a real ttft stays a JSON number. The insert enables
-        // input_format_json_read_numbers_as_strings so ClickHouse accepts that quoted form.
+        // Mirrors bindNanSentinel.
         if (nonNullableColumns) {
-            node.put("ttft", nullToNaN(trace.ttft()));
+            putTtft(node, nullToNaN(trace.ttft()));
         } else if (trace.ttft() != null) {
-            node.put("ttft", trace.ttft());
+            putTtft(node, trace.ttft());
         } else {
             node.putNull("ttft");
         }
@@ -118,5 +116,27 @@ class TraceJsonRowMapper {
         }
 
         return node;
+    }
+
+    /**
+     * Writes {@code ttft} so the stored {@code Float64} is bit-for-bit the double we were given.
+     *
+     * <p>The obvious {@code node.put(field, double)} writes Jackson's shortest round-tripping decimal.
+     * That is exact for a correctly-rounded reader, but ClickHouse's JSON float parse can land 1 ULP
+     * away, so the value read back is not the value handed in — a divergence the R2DBC path does not
+     * have, since its driver transmits the double in binary. Writing {@link BigDecimal#BigDecimal(double)},
+     * the exact binary value expanded in decimal, removes the rounding decision entirely: the only
+     * {@code Float64} that text can name is the one we started from.
+     *
+     * <p>NaN has no {@code BigDecimal}, so the sentinel keeps the plain double form. Jackson quotes
+     * non-finite numbers, so it serializes as {@code "NaN"} — which is what the insert's
+     * {@code input_format_json_read_numbers_as_strings} exists to accept.
+     */
+    private void putTtft(ObjectNode node, double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) {
+            node.put("ttft", value);
+        } else {
+            node.put("ttft", new BigDecimal(value));
+        }
     }
 }
