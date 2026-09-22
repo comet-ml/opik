@@ -18,13 +18,16 @@ import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.stream.StreamMessageId;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -99,6 +102,84 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
         }
         log.info("Stopping annotation queue routing subscriber");
         super.stop();
+    }
+
+    /**
+     * Folds the batch to one message per (workspace, scope, author), unioning the entity ids and the
+     * score names.
+     *
+     * <p>This is where repeated scoring on one entity stops costing repeated work. The producer publishes
+     * one message per score event and does no coalescing, because the stream is the buffer; the collapse
+     * happens here, in front of the expensive half — a merged message costs one score read, one automation
+     * lookup and one source filter however many events went into it.
+     *
+     * <p>The author is part of the key rather than something merged away: it is stamped on the queue item
+     * as {@code created_by}, so folding two reviewers' events together would attribute one of them to the
+     * other. Two authors scoring the same entity therefore still produce two evaluations, and
+     * {@code addItems} excludes what a queue already holds, so the second adds nothing.
+     *
+     * <p>Score names are unioned across the merged messages, which widens each entity's expected set to
+     * the group's. That is the same over-approximation a single message already carries — an event reports
+     * the names it wrote across its whole batch without attributing them per entity — and the freshness
+     * check treats names as best-effort, so a name that never lands costs one delayed re-read and nothing
+     * more.
+     *
+     * <p>Anything that did not decode into a routing message is passed through untouched, so the base
+     * class still sees it and can ack it as the non-retryable failure it is.
+     */
+    @Override
+    protected List<MessageGroup<AnnotationQueueRoutingMessage>> collapse(
+            Map<StreamMessageId, Map<String, AnnotationQueueRoutingMessage>> batch) {
+
+        Map<GroupKey, List<Map.Entry<StreamMessageId, Map<String, AnnotationQueueRoutingMessage>>>> mergeable = new LinkedHashMap<>();
+        List<MessageGroup<AnnotationQueueRoutingMessage>> passThrough = new ArrayList<>();
+
+        batch.entrySet().forEach(entry -> {
+            AnnotationQueueRoutingMessage message = entry.getValue() == null
+                    ? null
+                    : entry.getValue().get(AnnotationQueueRoutingConfig.PAYLOAD_FIELD);
+            if (message == null) {
+                passThrough.add(new MessageGroup<>(entry.getKey(), entry.getValue(), Set.of()));
+                return;
+            }
+            mergeable.computeIfAbsent(
+                    new GroupKey(message.workspaceId(), message.scope(), message.userName()),
+                    __ -> new ArrayList<>()).add(entry);
+        });
+
+        var collapsed = new ArrayList<>(passThrough);
+        mergeable.values().forEach(entries -> collapsed.add(merge(entries)));
+
+        if (collapsed.size() < batch.size()) {
+            AnnotationQueueRoutingMetrics.MESSAGES_COLLAPSED.add(batch.size() - collapsed.size());
+            log.debug("Collapsed '{}' routing messages into '{}'", batch.size(), collapsed.size());
+        }
+        return collapsed;
+    }
+
+    private MessageGroup<AnnotationQueueRoutingMessage> merge(
+            List<Map.Entry<StreamMessageId, Map<String, AnnotationQueueRoutingMessage>>> entries) {
+
+        var primary = entries.getFirst();
+        if (entries.size() == 1) {
+            return new MessageGroup<>(primary.getKey(), primary.getValue(), Set.of());
+        }
+
+        var messages = entries.stream()
+                .map(entry -> entry.getValue().get(AnnotationQueueRoutingConfig.PAYLOAD_FIELD))
+                .toList();
+        var merged = messages.getFirst().toBuilder()
+                .entityIds(messages.stream().flatMap(m -> m.entityIds().stream()).collect(Collectors.toSet()))
+                .scoreNames(messages.stream().flatMap(m -> m.scoreNames().stream()).collect(Collectors.toSet()))
+                .build();
+
+        return new MessageGroup<>(primary.getKey(),
+                Map.of(AnnotationQueueRoutingConfig.PAYLOAD_FIELD, merged),
+                entries.stream().skip(1).map(Map.Entry::getKey).collect(Collectors.toSet()));
+    }
+
+    /** Everything a merged message must agree on: the author because it is stamped on the queue item. */
+    private record GroupKey(String workspaceId, AnnotationQueue.AnnotationScope scope, String userName) {
     }
 
     @Override

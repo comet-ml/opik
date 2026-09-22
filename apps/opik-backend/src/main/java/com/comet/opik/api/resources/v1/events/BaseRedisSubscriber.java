@@ -397,9 +397,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         return readMessages();
                     }
                 })
-                .flatMapIterable(Map::entrySet)
+                .flatMapIterable(this::collapse)
                 // Concurrency for processing messages
-                .flatMap(this::processMessage, config.getConsumerBatchSize())
+                .flatMap(this::processGroup, config.getConsumerBatchSize())
                 // batch by time/size, then split outcomes
                 .bufferTimeout(config.getConsumerBatchSize(), config.getPoolingInterval().toJavaDuration().dividedBy(3))
                 .filter(CollectionUtils::isNotEmpty)
@@ -527,6 +527,42 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     return Mono.empty();
                 })
                 .thenReturn(Map.of());
+    }
+
+    /**
+     * One unit of work: the message to process, and the ids it stands in for.
+     *
+     * <p>The subsumed ids are acknowledged with this one. Their work is inside the merged payload, so if
+     * it succeeds they are all done, and if it fails they all stay pending together and are re-read.
+     */
+    protected record MessageGroup<M>(StreamMessageId messageId, Map<String, M> payload,
+            Set<StreamMessageId> subsumed) {
+    }
+
+    /**
+     * Folds a batch read from the stream before any of it is processed. The default keeps one unit of work
+     * per message, which is what every subscriber did before this hook existed.
+     *
+     * <p>Override it where messages are cheap to merge and expensive to process: the batch is already in
+     * hand, so merging here costs nothing and saves whatever {@link #processEvent(Object)} would have
+     * spent on the duplicates. An override must account for every id it was given, either as a group's
+     * own or among its subsumed ids, or the ones it drops are never acknowledged and are re-delivered
+     * until they exhaust their retries.
+     */
+    protected List<MessageGroup<M>> collapse(Map<StreamMessageId, Map<String, M>> batch) {
+        return batch.entrySet().stream()
+                .map(entry -> new MessageGroup<>(entry.getKey(), entry.getValue(), Set.<StreamMessageId>of()))
+                .toList();
+    }
+
+    private Flux<ProcessingResult> processGroup(MessageGroup<M> group) {
+        return processMessage(Map.entry(group.messageId(), group.payload()))
+                .flatMapMany(result -> Flux.concat(
+                        Flux.just(result),
+                        // The subsumed ids share the group's outcome: they were processed, inside it.
+                        Flux.fromIterable(group.subsumed())
+                                .map(id -> new ProcessingResult(id, result.status(), result.error(),
+                                        result.deliveryCount(), result.context()))));
     }
 
     private Mono<ProcessingResult> processMessage(Map.Entry<StreamMessageId, Map<String, M>> entry) {

@@ -23,16 +23,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.stream.StreamMessageId;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -332,4 +335,109 @@ class AnnotationQueueRoutingSubscriberTest {
                 .scores(scores)
                 .build());
     }
+
+    @Nested
+    @DisplayName("Collapsing a batch")
+    class Collapsing {
+
+        @Test
+        @DisplayName("Messages sharing workspace, scope and author become one, carrying both ids")
+        void mergesMessagesThatShareWorkspaceScopeAndAuthor() {
+            var first = UUID.randomUUID();
+            var second = UUID.randomUUID();
+
+            var groups = subscriber.collapse(batchOf(
+                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(first), Set.of("relevance")),
+                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(second), Set.of("toxicity"))));
+
+            assertThat(groups).hasSize(1);
+            var group = groups.getFirst();
+            assertThat(group.subsumed()).containsExactly(new StreamMessageId(2, 0));
+
+            var merged = group.payload().get(AnnotationQueueRoutingConfig.PAYLOAD_FIELD);
+            assertThat(merged.entityIds()).containsExactlyInAnyOrder(first, second);
+            assertThat(merged.scoreNames()).containsExactlyInAnyOrder("relevance", "toxicity");
+        }
+
+        @Test
+        @DisplayName("The same entity scored twice is one entity in the merged message")
+        void dedupesTheEntityItself() {
+            var entityId = UUID.randomUUID();
+
+            var groups = subscriber.collapse(batchOf(
+                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(entityId), Set.of("relevance")),
+                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(entityId), Set.of("toxicity"))));
+
+            assertThat(groups).hasSize(1);
+            assertThat(groups.getFirst().payload().get(AnnotationQueueRoutingConfig.PAYLOAD_FIELD).entityIds())
+                    .containsExactly(entityId);
+        }
+
+        /**
+         * The author is stamped on the queue item, so merging across authors would attribute one
+         * reviewer's work to the other.
+         */
+        @Test
+        @DisplayName("A different author is a different group")
+        void keepsAuthorsApart() {
+            var groups = subscriber.collapse(batchOf(
+                    message(AnnotationQueue.AnnotationScope.TRACE, "alice", Set.of(UUID.randomUUID()), Set.of()),
+                    message(AnnotationQueue.AnnotationScope.TRACE, "bob", Set.of(UUID.randomUUID()), Set.of())));
+
+            assertThat(groups).hasSize(2);
+            assertThat(groups).allSatisfy(group -> assertThat(group.subsumed()).isEmpty());
+        }
+
+        @Test
+        @DisplayName("A different scope is a different group")
+        void keepsScopesApart() {
+            var groups = subscriber.collapse(batchOf(
+                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(UUID.randomUUID()), Set.of()),
+                    message(AnnotationQueue.AnnotationScope.THREAD, USER_NAME, Set.of(UUID.randomUUID()), Set.of())));
+
+            assertThat(groups).hasSize(2);
+        }
+
+        /**
+         * Every id must come back, or the ones dropped are never acknowledged and are re-delivered until
+         * they exhaust their retries.
+         */
+        @Test
+        @DisplayName("A payload that did not decode passes through untouched and is still accounted for")
+        void passesUndecodablePayloadsThrough() {
+            var batch = batchOf(message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME,
+                    Set.of(UUID.randomUUID()), Set.of()));
+            batch.put(new StreamMessageId(9, 0), null);
+
+            var groups = subscriber.collapse(batch);
+
+            assertThat(groups.stream()
+                    .flatMap(group -> java.util.stream.Stream.concat(
+                            java.util.stream.Stream.of(group.messageId()), group.subsumed().stream()))
+                    .toList())
+                    .containsExactlyInAnyOrderElementsOf(batch.keySet());
+        }
+
+        private Map<StreamMessageId, Map<String, AnnotationQueueRoutingMessage>> batchOf(
+                AnnotationQueueRoutingMessage... messages) {
+            var batch = new LinkedHashMap<StreamMessageId, Map<String, AnnotationQueueRoutingMessage>>();
+            for (int i = 0; i < messages.length; i++) {
+                batch.put(new StreamMessageId(i + 1, 0),
+                        Map.of(AnnotationQueueRoutingConfig.PAYLOAD_FIELD, messages[i]));
+            }
+            return batch;
+        }
+
+        private AnnotationQueueRoutingMessage message(AnnotationQueue.AnnotationScope scope, String userName,
+                Set<UUID> entityIds, Set<String> scoreNames) {
+            return AnnotationQueueRoutingMessage.builder()
+                    .workspaceId(WORKSPACE_ID)
+                    .userName(userName)
+                    .scope(scope)
+                    .entityIds(entityIds)
+                    .scoreNames(scoreNames)
+                    .build();
+        }
+    }
+
 }

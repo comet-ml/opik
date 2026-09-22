@@ -48,4 +48,10 @@ public class AnnotationQueueRoutingMetrics {
             .setDescription("Scored entities dropped before evaluation because they were not logged by an "
                     + "SDK — playground, experiment, optimization or evaluator activity")
             .build();
+
+    public static final LongCounter MESSAGES_COLLAPSED = METER
+            .counterBuilder("messages_collapsed_total")
+            .setDescription("Stream messages folded into another before processing, because they shared a "
+                    + "workspace, scope and author - the work each one saved")
+            .build();
 }
