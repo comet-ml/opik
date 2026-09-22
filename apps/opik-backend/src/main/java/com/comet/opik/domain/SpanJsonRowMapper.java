@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Span;
 import com.comet.opik.infrastructure.db.JsonRowValues;
-import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.UsageUtils;
@@ -76,12 +75,12 @@ class SpanJsonRowMapper {
         node.put("parent_span_id", span.parentSpanId() != null ? span.parentSpanId().toString() : "");
         node.put("name", StringUtils.defaultIfBlank(span.name(), ""));
         node.put("type", Objects.toString(span.type(), SpanType.UNKNOWN_VALUE));
-        node.put("start_time", ClickHouseDateTimeFormat.formatNanos(span.startTime()));
+        node.put("start_time", span.startTime().toString());
 
         if (nonNullableColumns) {
-            node.put("end_time", ClickHouseDateTimeFormat.formatNanos(nullToEpoch(span.endTime())));
+            node.put("end_time", nullToEpoch(span.endTime()).toString());
         } else if (span.endTime() != null) {
-            node.put("end_time", ClickHouseDateTimeFormat.formatNanos(span.endTime()));
+            node.put("end_time", span.endTime().toString());
         } else {
             node.putNull("end_time");
         }
@@ -105,9 +104,10 @@ class SpanJsonRowMapper {
         var usage = node.putObject("usage");
         UsageUtils.sanitizeUsage(span.usage()).forEach(usage::put);
 
-        // formatMicros: last_updated_at is DateTime64(6) while start_time / end_time are DateTime64(9).
-        node.put("last_updated_at", ClickHouseDateTimeFormat.formatMicros(
-                span.lastUpdatedAt() != null ? span.lastUpdatedAt() : nowForBatch));
+        // Instant.toString(), as above: best_effort takes the ISO form and ClickHouse truncates to the
+        // column's scale -- last_updated_at is DateTime64(6) where start_time / end_time are (9).
+        node.put("last_updated_at",
+                (span.lastUpdatedAt() != null ? span.lastUpdatedAt() : nowForBatch).toString());
         node.put("error_info", span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "");
         node.put("created_by", userName);
         node.put("last_updated_by", userName);

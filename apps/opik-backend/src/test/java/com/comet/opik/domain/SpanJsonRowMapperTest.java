@@ -47,7 +47,8 @@ class SpanJsonRowMapperTest {
 
         var row = SpanJsonRowMapper.toJsonRow(span, USER, WORKSPACE_ID, Instant.now(), COST, "", true, 10001);
 
-        assertThat(row.get("end_time").asText()).isEqualTo("1970-01-01 00:00:00.000000000");
+        // The instant, not its spelling -- see TraceJsonRowMapperTest for why.
+        assertThat(Instant.parse(row.get("end_time").asText())).isEqualTo(Instant.EPOCH);
         assertThat(Double.isNaN(row.get("ttft").asDouble())).isTrue();
         // Jackson quotes non-finite numbers, which is the form
         // input_format_json_read_numbers_as_strings exists to accept.

@@ -3,7 +3,6 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.infrastructure.db.JsonRowValues;
-import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -59,14 +58,14 @@ class TraceJsonRowMapper {
         node.put("project_id", trace.projectId().toString());
         node.put("workspace_id", workspaceId);
         node.put("name", StringUtils.defaultIfBlank(trace.name(), ""));
-        node.put("start_time", ClickHouseDateTimeFormat.formatNanos(trace.startTime()));
+        node.put("start_time", trace.startTime().toString());
 
         // Mirrors bindEpochSentinel: the epoch sentinel once the column is non-nullable, an explicit
         // JSON null while it is still Nullable.
         if (nonNullableColumns) {
-            node.put("end_time", ClickHouseDateTimeFormat.formatNanos(nullToEpoch(trace.endTime())));
+            node.put("end_time", nullToEpoch(trace.endTime()).toString());
         } else if (trace.endTime() != null) {
-            node.put("end_time", ClickHouseDateTimeFormat.formatNanos(trace.endTime()));
+            node.put("end_time", trace.endTime().toString());
         } else {
             node.putNull("end_time");
         }
@@ -78,10 +77,11 @@ class TraceJsonRowMapper {
         var tags = node.putArray("tags");
         Optional.ofNullable(trace.tags()).ifPresent(values -> values.forEach(tags::add));
 
-        // formatMicros, not formatNanos: last_updated_at is DateTime64(6) here while start_time and
-        // end_time are DateTime64(9). The binder makes the same split.
-        node.put("last_updated_at", ClickHouseDateTimeFormat.formatMicros(
-                trace.lastUpdatedAt() != null ? trace.lastUpdatedAt() : nowForBatch));
+        // Instant.toString() like the rest: the insert sets date_time_input_format=best_effort, which
+        // takes the ISO form, and ClickHouse truncates to the column's own scale -- last_updated_at is
+        // DateTime64(6) where start_time and end_time are DateTime64(9).
+        node.put("last_updated_at",
+                (trace.lastUpdatedAt() != null ? trace.lastUpdatedAt() : nowForBatch).toString());
         node.put("error_info", trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "");
         node.put("created_by", userName);
         node.put("last_updated_by", userName);

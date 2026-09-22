@@ -46,9 +46,11 @@ class TraceJsonRowMapperTest {
         var row = TraceJsonRowMapper.toJsonRow(traceWith(null, null), USER, WORKSPACE_ID, Instant.now(),
                 true, 10001);
 
-        // Not merely non-null: the epoch is the value epochToNull translates back on read, so a
-        // different stamp here would read back as a real end_time rather than an absent one.
-        assertThat(row.get("end_time").asText()).isEqualTo("1970-01-01 00:00:00.000000000");
+        // The instant, not its spelling: date_time_input_format=best_effort accepts either form, so
+        // pinning the text would assert a formatting choice rather than the sentinel. Not merely
+        // non-null -- the epoch is what epochToNull translates back on read, so a different stamp would
+        // read back as a real end_time rather than an absent one.
+        assertThat(Instant.parse(row.get("end_time").asText())).isEqualTo(Instant.EPOCH);
         // Jackson quotes non-finite numbers, so this is the "NaN" text the insert's
         // input_format_json_read_numbers_as_strings exists to accept. Asserted because the whole
         // sentinel round-trip depends on it surviving serialization.
@@ -64,7 +66,8 @@ class TraceJsonRowMapperTest {
         var nullable = TraceJsonRowMapper.toJsonRow(trace, USER, WORKSPACE_ID, Instant.now(), false, 10001);
         var nonNullable = TraceJsonRowMapper.toJsonRow(trace, USER, WORKSPACE_ID, Instant.now(), true, 10001);
 
-        assertThat(nullable.get("end_time").asText()).isEqualTo("2026-09-22 10:11:12.123456789");
+        assertThat(Instant.parse(nullable.get("end_time").asText()))
+                .isEqualTo(Instant.parse("2026-09-22T10:11:12.123456789Z"));
         assertThat(nullable.get("end_time")).isEqualTo(nonNullable.get("end_time"));
         assertThat(nullable.get("ttft").asDouble()).isEqualTo(12.5);
         assertThat(nullable.get("ttft")).isEqualTo(nonNullable.get("ttft"));
