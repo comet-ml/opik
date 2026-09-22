@@ -664,18 +664,103 @@ enum CutoverSchemaParity {
     }
 
     /**
+     * The same positional guard {@link #assertBackfillInsertMatchesSelect()} makes for the backfill, extended to
+     * <b>every other shipped statement that copies rows</b>: the delta and both post-swap sweeps.
+     *
+     * <p><b>Why the backfill alone is not enough.</b> Four statements spell the column list out independently, and
+     * only one of them was read. The three unguarded ones are the ones that run <i>latest</i> — the delta immediately
+     * before the {@code EXCHANGE}, the sweeps after it, against the live table. A column added to the tables and to
+     * the backfill but not to the delta is carried by the bulk copy and dropped from every row written during the
+     * cutover window; the same omission in a sweep drops it from exactly the rows reconciliation exists to rescue.
+     * Both outcomes leave the two tables mutually consistent, so no table-to-table comparison — and no count — can
+     * see them.
+     *
+     * <p>Each statement is checked twice over, for the two ways a list drifts: against the backfill's list <b>in
+     * order</b>, since ClickHouse pairs {@code INSERT (...)} with {@code SELECT ...} by position; and against its own
+     * {@code SELECT} projection, since a list can agree with the backfill and still be wired to the wrong projection.
+     *
+     * <p><b>Both the files and the statements are discovered, never listed.</b> The whole directory is scanned, so a
+     * copy statement added to a new file — or a second one added to a file that already has some — is guarded the day
+     * it lands rather than on the day someone remembers to extend a list here. Every {@code INSERT} the cutover ships
+     * today copies rows into the cutover's own shape, so "all of them" and "the copy statements" are the same set; if
+     * that ever stops being true, this fails and the divergence has to be declared rather than assumed.
+     */
+    void assertCopyStatementsMatchTheBackfill() throws IOException {
+        var backfillColumns = backfillColumnList();
+        List<Path> shipped;
+        try (var entries = Files.list(backfillSql.getParent())) {
+            shipped = entries.filter(file -> file.getFileName().toString().endsWith(".sql")).sorted().toList();
+        }
+
+        assertThat(shipped)
+                .as("the scan must reach the backfill itself; not finding it means it is pointed at the wrong place")
+                .contains(backfillSql);
+
+        var checked = 0;
+        for (var file : shipped) {
+            var name = file.getFileName();
+            var statements = insertStatementsIn(readCutoverSql(file));
+
+            for (int i = 0; i < statements.size(); i++) {
+                var statement = statements.get(i);
+                var source = "%s (INSERT #%d)".formatted(name, i + 1);
+                checked++;
+
+                assertThat(columnListIn(statement, source))
+                        .as("""
+                                cutover copy parity: %s must name exactly the columns %s names, in the same order. \
+                                It copies the same rows into the same shape, so a list that drifts from the \
+                                backfill's drops or misplaces a column on the rows written during the cutover \
+                                window — invisibly, since both tables stay consistent with each other.\
+                                """, source, backfillSql.getFileName())
+                        .containsExactlyElementsOf(backfillColumns);
+
+                assertInsertMatchesSelectIn(statement, source);
+            }
+        }
+
+        assertThat(checked)
+                .as("""
+                        the scan must find the backfill and at least one other copy statement — the delta and the \
+                        post-swap sweeps are the ones this leg exists for, and a parse that silently matched nothing \
+                        would pass every assertion above\
+                        """)
+                .isGreaterThan(1);
+    }
+
+    /**
+     * One entry per {@code INSERT INTO} in a file, each sliced up to the next one so the single-statement parsers
+     * above see exactly one. Every shipped copy statement is a bare {@code INSERT ... SELECT} with no leading CTE,
+     * which is what lets the slice start at the keyword.
+     */
+    private List<String> insertStatementsIn(String sql) {
+        var statements = new ArrayList<String>();
+        for (int at = sql.indexOf("INSERT INTO"); at >= 0;) {
+            int next = sql.indexOf("INSERT INTO", at + 1);
+            statements.add(next < 0 ? sql.substring(at) : sql.substring(at, next));
+            at = next;
+        }
+        return statements;
+    }
+
+    /**
      * {@link #backfillColumnList()} over already-read SQL, so {@code CutoverBackfillParityTest} can exercise the parse
      * against crafted statements. The shipped backfill is append-only and correct, so the only way to prove these
      * assertions fire is to hand the parser SQL that breaks them.
      */
     List<String> columnListIn(String sql) {
+        return columnListIn(sql, backfillSql.getFileName());
+    }
+
+    /** {@link #columnListIn(String)} over one statement of a named file, so a failure says which one. */
+    private List<String> columnListIn(String sql, Object source) {
         int insertAt = sql.indexOf("INSERT INTO");
-        assertThat(insertAt).as("no INSERT INTO statement found in %s", backfillSql).isNotNegative();
+        assertThat(insertAt).as("no INSERT INTO statement found in %s", source).isNotNegative();
 
         int open = sql.indexOf('(', insertAt);
         int close = sql.indexOf(')', open);
-        assertThat(open).as("no column list found after INSERT INTO in %s", backfillSql).isNotNegative();
-        assertThat(close).as("unterminated column list in %s", backfillSql).isNotNegative();
+        assertThat(open).as("no column list found after INSERT INTO in %s", source).isNotNegative();
+        assertThat(close).as("unterminated column list in %s", source).isNotNegative();
 
         var columns = Arrays.stream(sql.substring(open + 1, close).split(","))
                 .map(String::trim)
@@ -718,8 +803,13 @@ enum CutoverSchemaParity {
 
     /** {@link #assertBackfillInsertMatchesSelect()} over already-read SQL; see {@link #columnListIn}. */
     void assertInsertMatchesSelectIn(String sql) {
-        var insertColumns = columnListIn(sql);
-        var selectTargets = selectTargetsIn(sql);
+        assertInsertMatchesSelectIn(sql, backfillSql.getFileName());
+    }
+
+    /** {@link #assertInsertMatchesSelectIn(String)} over one statement of a named file. */
+    private void assertInsertMatchesSelectIn(String sql, Object source) {
+        var insertColumns = columnListIn(sql, source);
+        var selectTargets = selectTargetsIn(sql, source);
 
         assertThat(selectTargets)
                 .as("""
@@ -728,7 +818,7 @@ enum CutoverSchemaParity {
                         mismatch here writes values into the wrong destination columns at cutover time, without any \
                         error.\
                         """,
-                        backfillSql.getFileName())
+                        source)
                 .containsExactlyElementsOf(insertColumns);
     }
 
@@ -736,12 +826,12 @@ enum CutoverSchemaParity {
      * The destination column each entry of the backfill's {@code SELECT} projection targets: the alias when the entry is
      * an expression, the column name when it is bare.
      */
-    private List<String> selectTargetsIn(String sql) {
+    private List<String> selectTargetsIn(String sql, Object source) {
         int selectAt = sql.indexOf("SELECT", sql.indexOf("INSERT INTO"));
-        assertThat(selectAt).as("no SELECT found after the INSERT column list in %s", backfillSql).isNotNegative();
+        assertThat(selectAt).as("no SELECT found after the INSERT column list in %s", source).isNotNegative();
 
         int fromAt = indexOfTopLevelFrom(sql, selectAt + "SELECT".length());
-        assertThat(fromAt).as("no top-level FROM found after SELECT in %s", backfillSql).isNotNegative();
+        assertThat(fromAt).as("no top-level FROM found after SELECT in %s", source).isNotNegative();
 
         return splitTopLevel(sql.substring(selectAt + "SELECT".length(), fromAt)).stream()
                 .map(this::destinationColumnOf)
@@ -816,17 +906,21 @@ enum CutoverSchemaParity {
     }
 
     private String readBackfillSql() throws IOException {
-        assertThat(backfillSql)
+        return readCutoverSql(backfillSql);
+    }
+
+    private String readCutoverSql(Path file) throws IOException {
+        assertThat(file)
                 .as("""
-                        the shipped cutover backfill must be readable at %s (relative to apps/opik-backend); if it \
-                        moved, update this guard rather than dropping the assertion. If it has not been written yet, \
-                        that is what backfillPendingTicket is for — %s.\
-                        """, backfillSql,
+                        the shipped cutover SQL must be readable at %s (relative to apps/opik-backend); if it \
+                        moved, update this guard rather than dropping the assertion. If the backfill has not been \
+                        written yet, that is what backfillPendingTicket is for — %s.\
+                        """, file,
                         backfillPendingTicket == null
                                 ? "this family declares none, so the file is expected to exist"
                                 : "this family names " + backfillPendingTicket)
                 .isRegularFile();
-        return stripLineComments(Files.readString(backfillSql));
+        return stripLineComments(Files.readString(file));
     }
 
     private String stripLineComments(String sql) {
