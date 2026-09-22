@@ -2,16 +2,14 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Project;
-import com.comet.opik.infrastructure.FreeFormSqlConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.annotations.VisibleForTesting;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.Handle;
-import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.HashMap;
@@ -35,15 +33,52 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  */
 @Singleton
 @Slf4j
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class FreeFormSqlEntityNameEnricher {
 
     private static final Map<String, String> ID_TO_NAME_COLUMNS = Map.of(
             DATASET_ID_QUERY_PARAM, "dataset_name",
             PROJECT_ID_QUERY_PARAM, "project_name");
 
-    private final @NonNull TransactionTemplate template;
-    private final @NonNull @Config("freeFormSql") FreeFormSqlConfig freeFormSqlConfig;
+    /**
+     * Beyond this many distinct ids in one result, the lookup is skipped and every row keeps its raw id, rather
+     * than labelling some rows and not others. Production p99 is 2 datasets and 11 projects per workspace against
+     * a worst case of 4,120, so the default guards a pathological result set rather than limiting anyone.
+     */
+    static final String MAX_NAME_LOOKUP_IDS_ENV = "FREE_FORM_SQL_MAX_NAME_LOOKUP_IDS";
+    private static final int DEFAULT_MAX_NAME_LOOKUP_IDS = 5_000;
+
+    private final TransactionTemplate template;
+    private final int maxNameLookupIds;
+
+    @Inject
+    public FreeFormSqlEntityNameEnricher(@NonNull TransactionTemplate template) {
+        this(template, System.getenv(MAX_NAME_LOOKUP_IDS_ENV));
+    }
+
+    /** Takes the raw value instead of reading the environment, which tests cannot set. */
+    @VisibleForTesting
+    FreeFormSqlEntityNameEnricher(@NonNull TransactionTemplate template, String rawMaxNameLookupIds) {
+        this.template = template;
+        this.maxNameLookupIds = parseMaxNameLookupIds(rawMaxNameLookupIds);
+    }
+
+    /** An unset, blank or unusable value falls back to the default rather than failing the enrichment. */
+    private static int parseMaxNameLookupIds(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return DEFAULT_MAX_NAME_LOOKUP_IDS;
+        }
+        try {
+            int parsed = Integer.parseInt(raw.strip());
+            if (parsed > 0) {
+                return parsed;
+            }
+            log.warn("{} must be positive, was '{}'; using {}", MAX_NAME_LOOKUP_IDS_ENV, raw,
+                    DEFAULT_MAX_NAME_LOOKUP_IDS);
+        } catch (NumberFormatException e) {
+            log.warn("{} is not a number: '{}'; using {}", MAX_NAME_LOOKUP_IDS_ENV, raw, DEFAULT_MAX_NAME_LOOKUP_IDS);
+        }
+        return DEFAULT_MAX_NAME_LOOKUP_IDS;
+    }
 
     public List<JsonNode> enrich(@NonNull List<JsonNode> rows, @NonNull String workspaceId) {
         Map<String, Map<UUID, String>> labelsByColumn = new HashMap<>();
@@ -72,9 +107,9 @@ public class FreeFormSqlEntityNameEnricher {
     }
 
     private Map<UUID, String> names(Handle connection, String idColumnType, Set<UUID> ids, String workspaceId) {
-        int maxIds = freeFormSqlConfig.getMaxNameLookupIds();
-        if (ids.size() > maxIds) {
-            log.info("Skipping '{}' name lookup: {} distinct ids exceeds the {} cap", idColumnType, ids.size(), maxIds);
+        if (ids.size() > maxNameLookupIds) {
+            log.info("Skipping '{}' name lookup: {} distinct ids exceeds the {} cap", idColumnType, ids.size(),
+                    maxNameLookupIds);
             return Map.of();
         }
         return switch (idColumnType) {

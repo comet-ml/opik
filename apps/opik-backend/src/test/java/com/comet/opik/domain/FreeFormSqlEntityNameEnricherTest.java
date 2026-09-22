@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
-import com.comet.opik.infrastructure.FreeFormSqlConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.jdbi.v3.core.Handle;
@@ -9,6 +8,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -26,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -61,7 +64,7 @@ class FreeFormSqlEntityNameEnricherTest {
         });
         when(projectDAO.findByIds(anySet(), anyString())).thenReturn(List.of());
 
-        enricher = new FreeFormSqlEntityNameEnricher(template, new FreeFormSqlConfig());
+        enricher = new FreeFormSqlEntityNameEnricher(template, null);
     }
 
     @Test
@@ -92,5 +95,30 @@ class FreeFormSqlEntityNameEnricherTest {
 
     private static JsonNode row(UUID datasetId) {
         return JsonUtils.getJsonNodeFromString("{\"dataset_id\":\"%s\"}".formatted(datasetId));
+    }
+
+    @ParameterizedTest
+    @DisplayName("an unusable cap falls back to the default rather than disabling the lookup")
+    @NullSource
+    @ValueSource(strings = {"", "   ", "not-a-number", "0", "-5"})
+    void unusableCapFallsBackToDefault(String rawCap) {
+        var dataset = UUID.randomUUID();
+        when(datasetDAO.findByIds(anySet(), anyString()))
+                .thenReturn(List.of(Dataset.builder().id(dataset).name("resolved").build()));
+
+        var rows = new FreeFormSqlEntityNameEnricher(template, rawCap).enrich(List.of(row(dataset)), CALLER_WORKSPACE);
+
+        assertThat(rows.get(0).get("dataset_name").asText()).isEqualTo("resolved");
+    }
+
+    @Test
+    @DisplayName("a cap below the id count skips the lookup and leaves raw ids")
+    void capBelowIdCountSkipsLookup() {
+        var rows = new FreeFormSqlEntityNameEnricher(template, "1")
+                .enrich(List.of(row(UUID.randomUUID()), row(UUID.randomUUID())), CALLER_WORKSPACE);
+
+        verify(datasetDAO, never()).findByIds(anySet(), anyString());
+        assertThat(rows).allSatisfy(
+                row -> assertThat(row.get("dataset_name").asText()).isEqualTo(row.get("dataset_id").asText()));
     }
 }
