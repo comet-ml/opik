@@ -52,6 +52,8 @@
             <max_rows_to_read>100000000</max_rows_to_read>
             <read_overflow_mode>throw</read_overflow_mode>
             <max_concurrent_queries_for_user>5</max_concurrent_queries_for_user>
+            <!-- Live on the production profile; kept here so FINAL queries run under the same settings. -->
+            <use_skip_indexes_if_final>1</use_skip_indexes_if_final>
             <!--
                 Production sets SQL_workspace_id = '' / SQL_project_id = '' as defaults, but
                 ClickHouse's XML profile loader rejects an empty Field for custom settings. The

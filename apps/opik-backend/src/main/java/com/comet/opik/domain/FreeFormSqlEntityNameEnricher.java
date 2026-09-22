@@ -74,7 +74,7 @@ public class FreeFormSqlEntityNameEnricher {
     private Map<UUID, String> names(Handle connection, String idColumnType, Set<UUID> ids, String workspaceId) {
         int maxIds = customChartsConfig.getMaxNameLookupIds();
         if (ids.size() > maxIds) {
-            log.info("Skipping '{}' name lookup: {} distinct ids exceeds the {} cap", idColumnType, ids.size(),
+            log.info("Skipping name lookup: column='{}' distinctIds='{}' maxIds='{}'", idColumnType, ids.size(),
                     maxIds);
             return Map.of();
         }

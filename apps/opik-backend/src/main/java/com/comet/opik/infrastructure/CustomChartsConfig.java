@@ -1,9 +1,13 @@
 package com.comet.opik.infrastructure;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 import java.util.Arrays;
 import java.util.Set;
@@ -31,13 +35,27 @@ public class CustomChartsConfig {
     @JsonProperty
     private @NotNull String enabledWorkspaces = "";
 
-    /** Derived: the parsed, stripped, blank-free set of allowlisted workspace ids. */
+    /**
+     * Derived: the parsed, stripped, blank-free set of allowlisted workspace ids. Parsed on first use and kept,
+     * since every chart request and every health probe reads it and the configuration does not change after
+     * binding. {@code volatile} because those readers are request threads, not the one that binds.
+     */
     public Set<String> getEnabledWorkspaces() {
-        return Arrays.stream(enabledWorkspaces.split(","))
-                .map(String::strip)
-                .filter(workspaceId -> !workspaceId.isEmpty())
-                .collect(Collectors.toUnmodifiableSet());
+        Set<String> parsed = parsedEnabledWorkspaces;
+        if (parsed == null) {
+            parsed = Arrays.stream(enabledWorkspaces.split(","))
+                    .map(String::strip)
+                    .filter(workspaceId -> !workspaceId.isEmpty())
+                    .collect(Collectors.toUnmodifiableSet());
+            parsedEnabledWorkspaces = parsed;
+        }
+        return parsed;
     }
+
+    @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private transient volatile Set<String> parsedEnabledWorkspaces;
 
     /**
      * Beyond this many distinct ids in one result, name enrichment resolves none and every row keeps its raw id,
@@ -45,5 +63,5 @@ public class CustomChartsConfig {
      * against a worst case of 4,120, so the default guards a pathological result set rather than limiting anyone.
      */
     @JsonProperty
-    private @Min(1) int maxNameLookupIds = 5_000;
+    private @Min(1) @Max(50_000) int maxNameLookupIds = 5_000;
 }

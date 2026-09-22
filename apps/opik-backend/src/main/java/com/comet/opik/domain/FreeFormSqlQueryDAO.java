@@ -33,7 +33,7 @@ public interface FreeFormSqlQueryDAO {
     /**
      * Parses {@code query} via {@code EXPLAIN AST} (without executing it) and returns the AST node labels, one per row.
      */
-    CompletableFuture<List<String>> explainAst(FreeFormSqlAccount account, String query);
+    CompletableFuture<List<String>> explainAst(@NonNull FreeFormSqlAccount account, @NonNull String query);
 
     /**
      * The reserved {@code SQL_project_id} value meaning "every project in that workspace". The row policies match it
@@ -46,8 +46,8 @@ public interface FreeFormSqlQueryDAO {
      * Executes {@code query} bounded to the given workspace and project, reading the single {@code result}
      * column. {@code projectId} is a single project's id, or {@link #PROJECT_ID_ALL}.
      */
-    CompletableFuture<FreeFormSqlResult> execute(FreeFormSqlAccount account, String workspaceId, String projectId,
-            String query);
+    CompletableFuture<FreeFormSqlResult> execute(@NonNull FreeFormSqlAccount account, @NonNull String workspaceId,
+            @NonNull String projectId, @NonNull String query);
 }
 
 @Singleton

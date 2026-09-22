@@ -10,6 +10,7 @@ import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongHistogram;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -25,6 +26,7 @@ import reactor.core.scheduler.Schedulers;
 import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -118,13 +120,19 @@ public class FreeFormSqlQueryService {
                 .build();
     }
 
+    /**
+     * Runs {@code query} for {@code account}, bounded to {@code workspaceId}. A null {@code projectId} means every
+     * project in that workspace; callers pass the id they have rather than the sentinel the row policies read,
+     * which stays inside this layer.
+     */
     public CompletableFuture<AnalyticsQueryResponse> executeQuery(@NonNull FreeFormSqlAccount account,
-            @NonNull String workspaceId, @NonNull String projectId, @NonNull String query) {
+            @NonNull String workspaceId, @Nullable UUID projectId, @NonNull String query) {
         long startMillis = System.currentTimeMillis();
+        String projectScope = projectId == null ? FreeFormSqlQueryDAO.PROJECT_ID_ALL : projectId.toString();
 
         return freeFormSqlQueryDAO.explainAst(account, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> runQuery(account, workspaceId, projectId, query, startMillis));
+                .thenCompose(nodeLabels -> runQuery(account, workspaceId, projectScope, query, startMillis));
     }
 
     /**
@@ -147,8 +155,8 @@ public class FreeFormSqlQueryService {
     }
 
     private CompletableFuture<AnalyticsQueryResponse> runQuery(FreeFormSqlAccount account, String workspaceId,
-            String projectId, String query, long startMillis) {
-        return freeFormSqlQueryDAO.execute(account, workspaceId, projectId, query)
+            String projectScope, String query, long startMillis) {
+        return freeFormSqlQueryDAO.execute(account, workspaceId, projectScope, query)
                 .handle((result, error) -> {
                     if (error != null) {
                         throw mapExecutionError(error, startMillis);

@@ -9,6 +9,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -20,13 +22,14 @@ import ru.vyarus.guicey.jdbi3.tx.TxAction;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -95,17 +98,26 @@ class FreeFormSqlEntityNameEnricherTest {
         return JsonUtils.getJsonNodeFromString("{\"dataset_id\":\"%s\"}".formatted(datasetId));
     }
 
-    @Test
-    @DisplayName("a cap below the id count skips the lookup and leaves raw ids")
-    void capBelowIdCountSkipsLookup() {
+    @ParameterizedTest(name = "{0} distinct ids under a cap of 2 → lookup runs: {1}")
+    @DisplayName("the cap skips the lookup only once the id count exceeds it")
+    @CsvSource({"1, true", "2, true", "3, false"})
+    void capAppliesOnlyAboveTheLimit(int idCount, boolean lookupExpected) {
         var config = new CustomChartsConfig();
-        config.setMaxNameLookupIds(1);
+        config.setMaxNameLookupIds(2);
+        var ids = IntStream.range(0, idCount).mapToObj(i -> UUID.randomUUID()).toList();
+        when(datasetDAO.findByIds(anySet(), anyString()))
+                .thenReturn(ids.stream().map(id -> Dataset.builder().id(id).name("name-" + id).build()).toList());
 
         var rows = new FreeFormSqlEntityNameEnricher(template, config)
-                .enrich(List.of(row(UUID.randomUUID()), row(UUID.randomUUID())), CALLER_WORKSPACE);
+                .enrich(ids.stream().map(FreeFormSqlEntityNameEnricherTest::row).toList(), CALLER_WORKSPACE);
 
-        verify(datasetDAO, never()).findByIds(anySet(), anyString());
-        assertThat(rows).allSatisfy(
-                row -> assertThat(row.get("dataset_name").asText()).isEqualTo(row.get("dataset_id").asText()));
+        verify(datasetDAO, times(lookupExpected ? 1 : 0)).findByIds(anySet(), anyString());
+        assertThat(rows).allSatisfy(row -> {
+            var label = row.get("dataset_name").asText();
+            // Resolved rows carry the name; skipped ones keep the id, so the two are never confusable.
+            assertThat(label).isEqualTo(lookupExpected
+                    ? "name-" + row.get("dataset_id").asText()
+                    : row.get("dataset_id").asText());
+        });
     }
 }

@@ -6,7 +6,6 @@ import com.comet.opik.api.AnalyticsQueryResponse;
 import com.comet.opik.api.ScopedAnalyticsQueryRequest;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.FreeFormSqlAccount;
-import com.comet.opik.domain.FreeFormSqlQueryDAO;
 import com.comet.opik.domain.FreeFormSqlQueryService;
 import com.comet.opik.infrastructure.CustomChartsConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -20,6 +19,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
@@ -36,7 +36,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
 
@@ -97,7 +96,7 @@ public class AnalyticsQueriesResource {
 
         log.info("Executing Agent Insights free-form SQL for workspace '{}', project '{}'", workspaceId, projectId);
 
-        return execute(FreeFormSqlAccount.STANDARD, workspaceId, projectId.toString(), request.query());
+        return execute(FreeFormSqlAccount.STANDARD, workspaceId, projectId, request.query());
     }
 
     @POST
@@ -118,13 +117,10 @@ public class AnalyticsQueriesResource {
 
         RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Custom Charts free-form SQL");
 
-        String projectId = Optional.ofNullable(request.projectId())
-                .map(Object::toString)
-                .orElse(FreeFormSqlQueryDAO.PROJECT_ID_ALL);
+        log.info("Executing Custom Charts SQL for workspace '{}', project '{}'", workspaceId,
+                request.projectId() == null ? "all" : request.projectId());
 
-        log.info("Executing Custom Charts SQL for workspace '{}', project '{}'", workspaceId, projectId);
-
-        return execute(FreeFormSqlAccount.EXTENDED, workspaceId, projectId, request.query());
+        return execute(FreeFormSqlAccount.EXTENDED, workspaceId, request.projectId(), request.query());
     }
 
     /**
@@ -132,7 +128,8 @@ public class AnalyticsQueriesResource {
      * is not reactive. join() wraps any failure in CompletionException — unwrap so the mapped WebApplicationException
      * (and its HTTP status) reaches the JAX-RS exception handling unchanged.
      */
-    private Response execute(FreeFormSqlAccount account, String workspaceId, String projectId, String query) {
+    private Response execute(FreeFormSqlAccount account, String workspaceId, @Nullable UUID projectId,
+            String query) {
         try {
             AnalyticsQueryResponse response = freeFormSqlQueryService
                     .executeQuery(account, workspaceId, projectId, query)
