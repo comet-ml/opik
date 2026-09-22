@@ -2156,7 +2156,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                         workspaceId, userName == null ? "" : userName, items.size()),
                 items,
                 item -> toJsonRow(workspaceId, projectId, item,
-                        tracesMap, spansMap, feedbackMap, commentsMap, assertionsMap)));
+                        tracesMap, spansMap, feedbackMap, commentsMap, assertionsMap))
+                // See ExperimentAggregatesInsertException: the subscriber retires its own
+                // NON_RETRYABLE_EXCEPTIONS on first delivery, and the client can raise one of those for
+                // a transient transport failure. The helper unwraps to the cause, so without this the
+                // aggregation message would be acked and lost rather than redelivered.
+                .onErrorMap(ExperimentAggregatesInsertException::new));
     }
 
     // Row mapping methods
