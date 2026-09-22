@@ -10,6 +10,7 @@ import pytest
 from opik.api_objects import constants
 from opik.api_objects.experiment import (
     experiment as experiment_module,
+    experiments_client as experiments_client_module,
     rest_operations,
 )
 
@@ -19,6 +20,7 @@ class _RecordingDatasetsClient:
 
     def __init__(self, total: int) -> None:
         self._total = total
+        self.reported_total = total
         self._lock = threading.Lock()
         self.requested_sizes: List[int] = []
         self.requested_pages: List[int] = []
@@ -41,7 +43,7 @@ class _RecordingDatasetsClient:
             _dataset_item(index)
             for index in range(start, min(start + size, self._total))
         ]
-        return types.SimpleNamespace(content=content, total=self._total)
+        return types.SimpleNamespace(content=content, total=self.reported_total)
 
 
 def _dataset_item(index: int) -> Any:
@@ -127,6 +129,64 @@ def test_find_experiment_items_for_dataset__stops_at_the_last_page():
 
     assert sorted(result["requested_pages"]) == [1, 2]
     assert len(result["items"]) == 150
+
+
+class _BarrierDatasetsClient(_RecordingDatasetsClient):
+    """Blocks every page until ``parties`` of them are in flight at once."""
+
+    def __init__(self, total: int, parties: int) -> None:
+        super().__init__(total)
+        self._barrier = threading.Barrier(parties, timeout=10)
+        self.barrier_broke = False
+
+    def find_dataset_items_with_experiment_items(self, **kwargs: Any) -> Any:
+        page = super().find_dataset_items_with_experiment_items(**kwargs)
+        if kwargs["page"] > 1:
+            try:
+                self._barrier.wait()
+            except threading.BrokenBarrierError:
+                self.barrier_broke = True
+        return page
+
+
+def test_find_experiment_items_for_dataset__pages_after_the_first_overlap():
+    # A sequential implementation cannot reach the barrier's party count, so it
+    # times out and this fails rather than silently passing.
+    datasets_client = _BarrierDatasetsClient(total=500, parties=4)
+    rest_client = types.SimpleNamespace(datasets=datasets_client)
+
+    items = rest_operations.find_experiment_items_for_dataset(
+        rest_client=rest_client,
+        dataset_id="some-dataset-id",
+        experiment_ids=["some-experiment-id"],
+        truncate=False,
+        max_results=500,
+        page_size=100,
+        num_threads=4,
+    )
+
+    assert not datasets_client.barrier_broke
+    assert [item.id for item in items] == [
+        f"experiment-item-{index}" for index in range(500)
+    ]
+
+
+@pytest.mark.parametrize("total", [None, "many", -1])
+def test_find_experiment_items_for_dataset__unusable_total_falls_back_to_walking(total):
+    datasets_client = _RecordingDatasetsClient(250)
+    datasets_client.reported_total = total
+    rest_client = types.SimpleNamespace(datasets=datasets_client)
+
+    items = rest_operations.find_experiment_items_for_dataset(
+        rest_client=rest_client,
+        dataset_id="some-dataset-id",
+        experiment_ids=["some-experiment-id"],
+        truncate=False,
+        max_results=10000,
+        page_size=100,
+    )
+
+    assert len(items) == 250
 
 
 def _experiment(experiments_client: Any) -> experiment_module.Experiment:
@@ -231,3 +291,26 @@ def test_get_items__defaults_to_the_page_size_and_thread_constants():
     kwargs = experiments_client.find_experiment_items_for_dataset.call_args.kwargs
     assert kwargs["page_size"] == constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE
     assert kwargs["num_threads"] == constants.DATASET_ITEMS_READ_NUM_THREADS
+
+
+@pytest.mark.parametrize(
+    "kwargs,message",
+    [
+        ({"page_size": 0}, "page_size must be a positive integer"),
+        ({"page_size": 10**9}, "page_size must not exceed"),
+        ({"num_threads": None}, "num_threads must be a positive integer"),
+        ({"num_threads": 10**9}, "num_threads must not exceed"),
+    ],
+)
+def test_experiments_client__validates_before_touching_the_rest_client(kwargs, message):
+    rest_client = Mock()
+    client = experiments_client_module.ExperimentsClient(rest_client)
+
+    with pytest.raises(ValueError, match=message):
+        client.find_experiment_items_for_dataset(
+            dataset_name="some-dataset",
+            experiment_ids=["some-experiment-id"],
+            **kwargs,
+        )
+
+    rest_client.datasets.get_dataset_by_identifier.assert_not_called()

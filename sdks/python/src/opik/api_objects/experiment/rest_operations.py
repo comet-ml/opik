@@ -88,9 +88,12 @@ def find_experiment_items_for_dataset(
     if not first_page.content:
         return collected_items
 
+    # A `total` the backend omits or sends malformed leaves the page count
+    # unknown, and the read falls back to walking until an empty page.
+    total = first_page.total
     last_page = (
-        max(1, math.ceil(first_page.total / page_size))
-        if first_page.total is not None
+        max(1, math.ceil(total / page_size))
+        if isinstance(total, int) and not isinstance(total, bool) and total >= 0
         else None
     )
 

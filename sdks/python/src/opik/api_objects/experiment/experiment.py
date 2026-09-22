@@ -22,7 +22,7 @@ from opik.message_processing import messages, streamer
 from opik.rest_api import client as rest_api_client
 from opik.rest_api import types as rest_api_types
 from . import bulk_converters, bulk_item, experiment_item, experiments_client
-from .. import constants, helpers, rest_helpers, streaming_upload
+from .. import constants, helpers, rest_helpers, streaming_upload, validation_helpers
 from ...api_objects.prompt import base_prompt
 from ...rest_api.core.api_error import ApiError
 from ...rest_client_configurator import retry_decorator
@@ -711,24 +711,12 @@ class Experiment:
                 ``num_threads`` is not a positive integer or exceeds
                 ``constants.DATASET_ITEMS_READ_MAX_THREADS``.
         """
-        if isinstance(page_size, bool) or not isinstance(page_size, int):
-            raise ValueError("page_size must be a positive integer")
-        if page_size < 1:
-            raise ValueError("page_size must be a positive integer")
-        if page_size > constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE:
-            raise ValueError(
-                "page_size must not exceed "
-                f"{constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE}, got {page_size}"
-            )
-        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
-            raise ValueError("num_threads must be a positive integer")
-        if num_threads < 1:
-            raise ValueError("num_threads must be a positive integer")
-        if num_threads > constants.DATASET_ITEMS_READ_MAX_THREADS:
-            raise ValueError(
-                "num_threads must not exceed "
-                f"{constants.DATASET_ITEMS_READ_MAX_THREADS}, got {num_threads}"
-            )
+        validation_helpers.validate_bounded_positive_int(
+            page_size, "page_size", constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE
+        )
+        validation_helpers.validate_bounded_positive_int(
+            num_threads, "num_threads", constants.DATASET_ITEMS_READ_MAX_THREADS
+        )
 
         if max_results is None:
             max_results = 10000  # TODO: remove this once we have a proper way to get all experiment items

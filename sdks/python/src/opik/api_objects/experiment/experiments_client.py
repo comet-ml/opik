@@ -2,7 +2,7 @@ import json
 from typing import List, Optional
 
 from . import rest_operations, experiment_item
-from .. import constants, opik_query_language
+from .. import constants, opik_query_language, validation_helpers
 from ...rest_api import client as rest_api_client
 
 
@@ -48,6 +48,13 @@ class ExperimentsClient:
         Returns:
             A list of experiment item content objects that match the criteria.
         """
+        validation_helpers.validate_bounded_positive_int(
+            page_size, "page_size", constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE
+        )
+        validation_helpers.validate_bounded_positive_int(
+            num_threads, "num_threads", constants.DATASET_ITEMS_READ_MAX_THREADS
+        )
+
         # prepare filter expression
         if filter_string is not None:
             filter_expression = json.dumps(
