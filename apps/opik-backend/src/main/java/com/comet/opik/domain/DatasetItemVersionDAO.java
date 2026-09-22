@@ -23,6 +23,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
 import com.comet.opik.utils.ErrorUtils;
@@ -61,6 +62,7 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -2736,6 +2738,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull OpikConfiguration config;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
     private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
     /**
      * v2 ClickHouse client used for {@code INSERT ... SELECT} on {@code dataset_item_versions},
@@ -3694,6 +3697,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .distinct()
                 .count();
 
+        if (config.getBulkInsert().v2ClientEnabled()) {
+            return insertItemsJsonEachRow(datasetId, newVersionId, items, workspaceId, userName)
+                    // itemCount, not the server's row count: the R2DBC path deliberately returns the
+                    // DISTINCT dataset_item_id count (OPIK-7891) because reads collapse a repeated
+                    // stable id via LIMIT 1 BY, so every version total derived from the raw row count
+                    // would be inflated. Both paths must answer the same number.
+                    .thenReturn(itemCount);
+        }
+
         return asyncTemplate.nonTransaction(connection -> {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
 
@@ -3961,7 +3973,37 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Formats an Instant for ClickHouse DateTime64(9, 'UTC').
      * ClickHouse doesn't accept the 'Z' suffix from ISO-8601 format.
      */
-    private static String formatTimestamp(Instant timestamp) {
+    /**
+     * Same rows as {@link #BATCH_INSERT_ITEMS}, streamed as JSONEachRow instead of bound as 17 named
+     * parameters per row plus 5 shared ones. See {@link DatasetItemVersionJsonRowMapper} for the
+     * per-column parity notes.
+     *
+     * <p>The R2DBC template carries no {@code log_comment}; one is supplied here because the helper
+     * requires it, which also makes the two paths comparable in {@code system.query_log}.
+     */
+    private Mono<Long> insertItemsJsonEachRow(UUID datasetId, UUID newVersionId, List<DatasetItem> items,
+            String workspaceId, String userName) {
+
+        // Resolved once for the whole batch, before serialization: the helper re-runs the mapper on
+        // every attempt, so a per-row Instant.now() would give a retried row different timestamp bytes
+        // under the same id.
+        Instant nowForBatch = Instant.now();
+        // The R2DBC path opens and closes this segment, so without it a v2 insert vanishes from the
+        // dataset-item instrumentation stream rather than showing as fast.
+        Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
+
+        return jsonBulkInsert.insert(
+                DATASET_ITEM_VERSIONS,
+                getLogComment("insert_delta_items", workspaceId, userName, items.size()),
+                items,
+                item -> DatasetItemVersionJsonRowMapper.toJsonRow(
+                        item, datasetId, newVersionId, workspaceId, userName, nowForBatch))
+                .doOnError(e -> log.error("Batch insert items failed for dataset '{}', version '{}'",
+                        datasetId, newVersionId, e))
+                .doFinally(signalType -> endSegment(segment));
+    }
+
+    static String formatTimestamp(Instant timestamp) {
         if (timestamp == null) {
             return Instant.now().toString().replace("Z", "");
         }
@@ -3972,14 +4014,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
     }
 
-    private static String serializeEvaluators(List<EvaluatorItem> evaluators) {
+    static String serializeEvaluators(List<EvaluatorItem> evaluators) {
         if (evaluators == null || evaluators.isEmpty()) {
             return EvaluatorItem.EMPTY_LIST_JSON;
         }
         return JsonUtils.writeValueAsString(evaluators);
     }
 
-    private static String serializeExecutionPolicy(ExecutionPolicy executionPolicy) {
+    static String serializeExecutionPolicy(ExecutionPolicy executionPolicy) {
         if (executionPolicy == null) {
             return "";
         }
