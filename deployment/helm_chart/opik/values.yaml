@@ -920,6 +920,26 @@ clickhouse:
         <yandex>
           <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
         </yandex>
+      # Merge/reclaim tuning for partitioned tables. Without these, partition
+      # pruning still works but lightweight-delete-bloated parts never self-merge,
+      # so masked rows are never physically reclaimed.
+      conf.d/merge_tree.xml: |
+        <clickhouse>
+          <merge_tree>
+            <!-- 400 GiB. The 150 GiB default leaves month-sized parts permanently
+                 above the merge ceiling once they mature. -->
+            <max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>
+            <!-- 7 days without mutation activity makes a part eligible for a forced
+                 self-merge, which is what actually reclaims LWD mass. -->
+            <min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>
+            <!-- Per-part (0) rather than per-partition (1): with 1, a partition only
+                 becomes eligible once every part in it is old enough, stalling
+                 reclaim on partitions still taking writes. -->
+            <min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>
+            <!-- Throttle concurrent big merges so they cannot starve the pool. -->
+            <number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+          </merge_tree>
+        </clickhouse>
       conf.d/profiles.xml: |
         <clickhouse>
           <profiles>
