@@ -74,7 +74,8 @@ Opik delivers each notification as an HTTP POST carrying the event data in the b
      - Example: `X-Custom-Auth: Bearer your-token-here`
 
 5. **Name the alert**
-   - **Name**: Opik suggests a name from your first trigger as soon as you add one — for example `Trace errors > 5 in 5 mins`, or `Trace feedback score: policy_compliance < 0.8`. Additional triggers are summarised as `+N more`.
+   - **Name**: the field sits at the top of the form, but you can leave it until last — Opik suggests a name from your first trigger as soon as you add one, for example `Trace errors > 5 in 5 mins`, or `Trace feedback score: policy_compliance < 0.8`. Additional triggers are summarised as `+N more`.
+   - If the project already has an alert with that name, the suggestion is numbered — `Trace errors > 5 in 5 mins (2)` — so two alerts built from the same trigger stay distinguishable
    - Type your own name at any point to override the suggestion; clear the field to go back to the suggested one
 
 6. **Create the alert**
@@ -940,7 +941,7 @@ Failed webhooks are automatically retried:
 - Send prompt changes to audit logs or Slack channels
 
 **Test thoroughly:**
-- Use the "Test connection" feature before enabling alerts
+- Use **Test connection** to check the endpoint, and **Test trigger** to check the payload a given event will send, before you save the alert
 - Monitor webhook delivery in your endpoint logs
 - Start with a small project scope and expand gradually
 
