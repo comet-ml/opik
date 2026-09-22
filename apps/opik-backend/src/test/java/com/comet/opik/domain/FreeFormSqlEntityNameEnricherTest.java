@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -108,7 +109,11 @@ class FreeFormSqlEntityNameEnricherTest {
 
         var rows = enricherWithCap(2).enrich(rowsFor(ids), CALLER_WORKSPACE);
 
-        verify(datasetDAO).findByIds(anySet(), anyString());
+        // Asserting the ids, not just that a lookup happened: a stub matching anySet() would resolve names even if
+        // the enricher asked for the wrong ones.
+        var requested = ArgumentCaptor.forClass(Set.class);
+        verify(datasetDAO).findByIds(requested.capture(), eq(CALLER_WORKSPACE));
+        assertThat(requested.getValue()).containsExactlyInAnyOrderElementsOf(ids);
         assertThat(rows).allSatisfy(row -> assertThat(row.get("dataset_name").asText())
                 .isEqualTo("name-" + row.get("dataset_id").asText()));
     }
