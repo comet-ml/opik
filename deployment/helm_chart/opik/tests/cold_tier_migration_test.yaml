@@ -28,8 +28,8 @@ tests:
       - hasDocuments:
           count: 0
 
-  # Without clickhouse there is nothing to migrate; rendering would create a Role
-  # granting namespace-wide pod delete and a Job that can only fail.
+  # Without clickhouse there is nothing to migrate; rendering would create RBAC
+  # for an operator that does not exist and a Job that can only fail.
   - it: renders nothing when clickhouse is disabled
     set:
       clickhouse.enabled: false
@@ -172,3 +172,61 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  # RBAC scope: the Role must never grant delete on pods (a namespace-wide pod
+  # delete would persist between syncs, since it uses before-hook-creation), and
+  # its only write verb must be patch on exactly the operator Deployment.
+  - it: grants no delete on pods and only patches the named operator Deployment
+    documentSelector:
+      path: kind
+      value: Role
+    asserts:
+      - notContains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["pods"]
+            verbs: ["get", "list", "watch", "delete"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["pods"]
+            verbs: ["get", "list", "watch"]
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["apps"]
+            resources: ["deployments"]
+            resourceNames: ["RELEASE-NAME-altinity-clickhouse-operator"]
+            verbs: ["get", "patch"]
+
+  # The Job must target the same Deployment the Role names, else the restart is
+  # rejected by RBAC at runtime.
+  - it: passes the operator Deployment name the Role scopes to
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[?(@.name=="OPERATOR_DEPLOY")].value
+          value: RELEASE-NAME-altinity-clickhouse-operator
+
+  # The subchart's fullname helper collapses "<release>-<chart>" to "<release>"
+  # when the chart name is already a substring of the release name. Naive
+  # concatenation would produce a name that does not exist, so the Role would
+  # scope to the wrong object and the restart would be forbidden.
+  - it: collapses the operator Deployment name when the release already contains it
+    release:
+      name: opik-altinity-clickhouse-operator
+    documentSelector:
+      path: kind
+      value: Role
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["apps"]
+            resources: ["deployments"]
+            resourceNames: ["opik-altinity-clickhouse-operator"]
+            verbs: ["get", "patch"]

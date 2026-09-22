@@ -1069,8 +1069,8 @@ clickhouse:
       # Kubernetes hard cap on the Job: pollTimeoutSeconds plus startup/kubectl
       # overhead. Must exceed pollTimeoutSeconds.
       activeDeadlineSeconds: 1320
-      # SA with get/list/watch on statefulsets and get/list/watch/delete on pods
-      # (falls back to the chart-created SA).
+      # SA with get/list/watch on statefulsets and pods, and get/patch on the
+      # altinity operator Deployment (falls back to the chart-created SA).
       serviceAccountName: ""
       nodeSelector: {}
       tolerations: []

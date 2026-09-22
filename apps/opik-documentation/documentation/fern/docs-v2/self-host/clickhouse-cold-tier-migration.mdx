@@ -49,6 +49,10 @@ clickhouse:
 ```
 
 <Note>
+<Note>
+Because `coldTierMigration.enabled` defaults to `true`, upgrading a release that **already** has `clickhouse.tieredStorage.enabled: true` activates this job on the next upgrade without any action on your part. It is a no-op when every replica already carries the cache volume, but it does add a post-upgrade hook to that release — set `coldTierMigration.enabled: false` to opt out.
+</Note>
+
 `coldTierMigration.enabled` defaults to `true`. It only does work when the cold tier is enabled, and is a no-op when every replica already has the cache volume — so it is safe to leave on across upgrades. Because it only bounces the operator (never deletes ClickHouse StatefulSets, pods, or data), it is safe on an existing release. To opt out **without** disabling the cold tier:
 
 ```yaml
@@ -74,7 +78,7 @@ The migration runs as a post-upgrade hook (or ArgoCD `PostSync` hook) and is **d
 Check whether any ClickHouse StatefulSet is still missing the cold-tier cache volume. If none are, the job exits as a no-op — replicas that are merely mid-roll do not count as missing, so a routine upgrade of an already-migrated release never bounces the operator.
 </Step>
 <Step title="Bounce the operator">
-Delete the altinity ClickHouse operator pod. A fresh operator re-reconciles from scratch.
+Restart the altinity ClickHouse operator Deployment (`kubectl rollout restart`). A fresh operator re-reconciles from scratch. No pod is ever deleted.
 </Step>
 <Step title="Rebuild with the cache volume">
 On its first reconcile pass, the fresh operator rebuilds every ClickHouse StatefulSet **with** the cache volume — the affected pod remounts and recovers.
@@ -96,10 +100,12 @@ All keys are under `clickhouse.tieredStorage.coldTierMigration`:
 | `clickhouse.tieredStorage.coldTierMigration.image` | `alpine/kubectl:1.35.0` | Image used by the migration job. |
 | `clickhouse.tieredStorage.coldTierMigration.pollTimeoutSeconds` | `1200` | Total budget for the run (bounce the operator, then wait for all replicas Ready). |
 | `clickhouse.tieredStorage.coldTierMigration.activeDeadlineSeconds` | `1320` | Kubernetes hard cap on the Job. Must be greater than `pollTimeoutSeconds`. |
-| `clickhouse.tieredStorage.coldTierMigration.serviceAccountName` | `""` | Use an externally-managed ServiceAccount instead of the chart-created one. When set, the account must already have `get/list/watch` on `statefulsets` and `get/list/watch/delete` on `pods`. |
+| `clickhouse.tieredStorage.coldTierMigration.serviceAccountName` | `""` | Use an externally-managed ServiceAccount instead of the chart-created one. When set, the account must already have `get/list/watch` on `statefulsets` and `pods`, and `get/patch` on the operator Deployment. |
 
 <Warning>
-The migration ServiceAccount is granted `delete` on pods (to bounce the operator). Leave `serviceAccountName` empty to use the chart-created, Job-scoped account. If you supply your own, use a dedicated, tightly-scoped ServiceAccount rather than a shared one.
+The migration ServiceAccount is granted `get`/`patch` on **only** the operator Deployment (by `resourceNames`) plus read-only access to StatefulSets and pods. It cannot delete any pod.
+
+Note that the Role and RoleBinding use `before-hook-creation` and so are **not** removed when you later set `coldTierMigration.enabled: false` — they persist on the cluster until deleted manually. Leave `serviceAccountName` empty to use the chart-created, Job-scoped account; if you supply your own, use a dedicated ServiceAccount rather than a shared one, since anything else using that account inherits this Role.
 </Warning>
 
 ## Single-Replica Clusters
