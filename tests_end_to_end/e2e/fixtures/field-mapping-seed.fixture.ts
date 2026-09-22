@@ -139,15 +139,30 @@ export const test = baseTest.extend<FieldMappingSeedFixtures>({
       // the mappings read from really landed. Without it a bridge that dropped
       // `metadata` would leave every spec comparing an absent section against
       // an absent section — coverage that cannot fail.
+      //
+      // Both checks compare VALUES, not shapes. `traceMetadata` and `traceTags`
+      // are handed to the specs as the oracle for the enriched `metadata` and
+      // `tags` fields, so a seed that stored `['wrong-tag']` would otherwise
+      // satisfy `item.data.tags === fieldMappingSeed.traceTags` against itself
+      // — a comparison of the bridge with the bridge, which no Opik defect can
+      // fail. Pinning them here is what keeps the exported oracle a statement
+      // about what was asked for.
       const stored = await backendClient.getTracePayload(trace.id);
       const traceMetadata = (stored?.metadata ?? {}) as Record<string, unknown>;
       const traceTags = stored?.tags ?? [];
-      if (!(Object.keys(FM_TRACE_METADATA)[0] in traceMetadata)) {
-        throw new Error(
-          `[fieldMappingSeed fixture] trace ${trace.id} stored no 'mkey' metadata: ${JSON.stringify(traceMetadata)}`,
-        );
+      for (const [key, expected] of Object.entries(FM_TRACE_METADATA)) {
+        if (traceMetadata[key] !== expected) {
+          throw new Error(
+            `[fieldMappingSeed fixture] trace ${trace.id} stored metadata.${key}=${JSON.stringify(traceMetadata[key])}, expected ${JSON.stringify(expected)}: ${JSON.stringify(traceMetadata)}`,
+          );
+        }
       }
-      if (traceTags.length !== FM_TRACE_TAGS.length) {
+      // Order included: the specs compare the enriched `tags` array with
+      // `toEqual`, which is order-sensitive, so the oracle has to be too.
+      if (
+        traceTags.length !== FM_TRACE_TAGS.length ||
+        traceTags.some((tag, i) => tag !== FM_TRACE_TAGS[i])
+      ) {
         throw new Error(
           `[fieldMappingSeed fixture] trace ${trace.id} stored tags ${JSON.stringify(traceTags)}, expected ${JSON.stringify(FM_TRACE_TAGS)}`,
         );

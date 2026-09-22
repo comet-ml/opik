@@ -9,7 +9,12 @@ import {
   FM_SPAN_MODEL,
 } from '@e2e/fixtures';
 import { LogsPage } from '@e2e/pom/logs.page';
-import type { BackendClient, DatasetItemRef, TraceEnrichment } from '@e2e/core/backend';
+import type {
+  BackendClient,
+  DatasetItemRef,
+  TraceEnrichmentOptions,
+  SpanEnrichmentOptions,
+} from '@e2e/core/backend';
 
 /**
  * `field_mappings` on create-dataset-items-from-{traces,spans} (OPIK-7791).
@@ -42,7 +47,7 @@ import type { BackendClient, DatasetItemRef, TraceEnrichment } from '@e2e/core/b
  */
 
 /** Everything enrichment can add, so the unmapped fields are visibly untouched. */
-const ALL_TRACE_ENRICHMENT: TraceEnrichment = {
+const ALL_TRACE_ENRICHMENT: TraceEnrichmentOptions = {
   includeSpans: true,
   includeTags: true,
   includeFeedbackScores: true,
@@ -58,7 +63,7 @@ const ALL_TRACE_ENRICHMENT: TraceEnrichment = {
  * states that rather than relying on it, so the expected key set is decided
  * here and not by what the seed happened to omit.
  */
-const NO_SPAN_ENRICHMENT = {
+const NO_SPAN_ENRICHMENT: SpanEnrichmentOptions = {
   includeTags: false,
   includeFeedbackScores: false,
   includeComments: false,

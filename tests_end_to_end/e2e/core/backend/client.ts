@@ -76,7 +76,7 @@ export interface DatasetItemWithTagsRef {
  * to ask for metadata and forgot would get a silently smaller item, which is
  * exactly the shape a field-mapping assertion compares against.
  */
-export interface TraceEnrichment {
+export interface TraceEnrichmentOptions {
   includeSpans: boolean;
   includeTags: boolean;
   includeFeedbackScores: boolean;
@@ -86,7 +86,7 @@ export interface TraceEnrichment {
 }
 
 /** `SpanEnrichmentOptions` — the same set minus `include_spans`, which a span has no notion of. */
-export type SpanEnrichment = Omit<TraceEnrichment, 'includeSpans'>;
+export type SpanEnrichmentOptions = Omit<TraceEnrichmentOptions, 'includeSpans'>;
 
 /** A raw REST answer, kept as status + message so a negative path can assert both. */
 export interface RawApiResult {
@@ -1572,7 +1572,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     async createDatasetItemsFromTraces(args: {
       datasetId: string;
       traceIds: string[];
-      enrichment: TraceEnrichment;
+      enrichment: TraceEnrichmentOptions;
       /** Omitted entirely when absent — a null would not exercise the same branch. */
       fieldMappings?: Record<string, string>;
     }): Promise<RawApiResult> {
@@ -1601,7 +1601,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     async createDatasetItemsFromSpans(args: {
       datasetId: string;
       spanIds: string[];
-      enrichment: SpanEnrichment;
+      enrichment: SpanEnrichmentOptions;
       fieldMappings?: Record<string, string>;
     }): Promise<RawApiResult> {
       const { status, message } = await rawFetch(
