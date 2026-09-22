@@ -52,6 +52,9 @@ class BaseBLEU(base_metric.BaseMetric):
                 "Install via `pip install nltk`."
             )
 
+        if n_grams < 1:
+            raise ValueError(f"n_grams must be at least 1, got {n_grams}.")
+
         self.n_grams = n_grams
         self.smoothing_method = smoothing_method
 
@@ -156,6 +159,10 @@ class SentenceBLEU(BaseBLEU):
             ref_lists = [reference.lower().split()]
         else:
             # List of reference strings
+            if not reference:
+                raise MetricComputationError(
+                    "Reference is empty (single-sentence BLEU)."
+                )
             ref_lists = []
             for ref_str in reference:
                 if not ref_str.strip():
@@ -255,6 +262,9 @@ class CorpusBLEU(BaseBLEU):
                 "Mismatch: number of candidates != number of references (corpus BLEU)."
             )
 
+        if not output:
+            raise MetricComputationError("Candidate list is empty (corpus BLEU).")
+
         all_candidates: List[List[str]] = []
         all_references: List[List[List[str]]] = []
 
@@ -271,6 +281,8 @@ class CorpusBLEU(BaseBLEU):
                 ref_lists = [ref_item.lower().split()]
             else:
                 # multiple references
+                if not ref_item:
+                    raise MetricComputationError("Reference is empty (corpus BLEU).")
                 ref_lists = []
                 for r_line in ref_item:
                     if not r_line.strip():

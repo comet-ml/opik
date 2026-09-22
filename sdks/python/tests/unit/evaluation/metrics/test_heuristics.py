@@ -278,6 +278,24 @@ def test_sentence_bleu_score_empty_inputs(candidate, reference):
     assert "empty" in str(exc_info.value).lower()
 
 
+def test_sentence_bleu__empty_reference_list__raises_metric_error():
+    # An empty list of references reached NLTK with no references at all and
+    # surfaced as `KeyError: ('the',)`, unlike the empty-string cases above.
+    metric = SentenceBLEU(track=False)
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score(output="The quick brown fox", reference=[])
+    assert "empty" in str(exc_info.value).lower()
+
+
+@pytest.mark.parametrize("metric_cls", [SentenceBLEU, CorpusBLEU])
+@pytest.mark.parametrize("n_grams", [0, -1])
+def test_bleu__non_positive_n_grams__raises_value_error(metric_cls, n_grams):
+    # n_grams=0 divided by zero while building the uniform weights, and a
+    # negative order produced an empty weight list that quietly scored 0.0.
+    with pytest.raises(ValueError, match="n_grams must be at least 1"):
+        metric_cls(n_grams=n_grams, track=False)
+
+
 @pytest.mark.parametrize(
     "candidate,reference,method",
     [
@@ -361,6 +379,23 @@ def test_corpus_bleu_score(outputs, references, expected_min, expected_max):
     ],
 )
 def test_corpus_bleu_score_empty_inputs(outputs, references):
+    metric = CorpusBLEU(track=False)
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score(output=outputs, reference=references)
+    assert "empty" in str(exc_info.value).lower()
+
+
+@pytest.mark.parametrize(
+    "outputs,references",
+    [
+        # No candidates at all: passed the length check, then `max()` on an
+        # empty sequence raised `ValueError: max() iterable argument is empty`.
+        ([], []),
+        # A candidate with an empty list of references raised `KeyError`.
+        (["The quick brown fox"], [[]]),
+    ],
+)
+def test_corpus_bleu__empty_sequences__raise_metric_error(outputs, references):
     metric = CorpusBLEU(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(output=outputs, reference=references)
