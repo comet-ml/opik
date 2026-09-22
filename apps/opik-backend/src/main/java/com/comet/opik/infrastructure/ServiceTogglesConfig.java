@@ -7,10 +7,6 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
-import java.util.Arrays;
-import java.util.Set;
-import java.util.stream.Collectors;
-
 @Data
 public class ServiceTogglesConfig {
 
@@ -63,27 +59,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean projectHomepageEnabled;
     @JsonProperty
     @NotNull boolean onlineScoringTracingEnabled;
-
-    /**
-     * Workspaces allowed to use Custom Charts, comma-separated. Empty (the default) disables the feature everywhere.
-     * Membership also routes the workspace's free-form SQL to the wider
-     * {@code databaseAnalyticsReadOnlyFreeFormExtendedSql} ClickHouse account, so its Agent Insights queries run
-     * under that account too — intended while the allowlist is internal-only, and the reason this is an allowlist
-     * rather than a plain boolean.
-     *
-     * <p>Held as a String because Dropwizard substitutes env vars as scalars, so a comma-separated value cannot bind
-     * to a collection; {@link #getCustomChartsEnabledWorkspaces()} splits, strips and drops blanks.
-     */
-    @JsonProperty
-    @NotNull String customChartsEnabledWorkspaces = "";
-
-    /** Derived: the parsed, stripped, blank-free set of allowlisted workspace ids. */
-    public Set<String> getCustomChartsEnabledWorkspaces() {
-        return Arrays.stream(customChartsEnabledWorkspaces.split(","))
-                .map(String::strip)
-                .filter(workspaceId -> !workspaceId.isEmpty())
-                .collect(Collectors.toUnmodifiableSet());
-    }
 
     @JsonProperty
     @Min(5) @Max(100) int defaultPageSize;

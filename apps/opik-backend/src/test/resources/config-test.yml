@@ -910,9 +910,6 @@ serviceToggles:
   #   freeform SQL path and the clickhouse-readonly-freeform-sql health check. Tests flip this on when exercising
   #   the read-only ClickHouse client.
   ollieEnabled: "false"
-  # Default: empty. Description: workspaces allowed to use Custom Charts; also routes their free-form SQL to the
-  #   Custom Charts ClickHouse account. Tests set this when exercising that path.
-  customChartsEnabledWorkspaces: ""
   # Default: true
   # Description: Whether the online-scoring (LLM-as-judge) evaluation loop is persisted as monitoring traces.
   onlineScoringTracingEnabled: "true"

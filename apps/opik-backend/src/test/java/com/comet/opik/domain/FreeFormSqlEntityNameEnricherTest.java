@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.infrastructure.CustomChartsConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.jdbi.v3.core.Handle;
@@ -8,9 +9,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -64,7 +62,7 @@ class FreeFormSqlEntityNameEnricherTest {
         });
         when(projectDAO.findByIds(anySet(), anyString())).thenReturn(List.of());
 
-        enricher = new FreeFormSqlEntityNameEnricher(template, null);
+        enricher = new FreeFormSqlEntityNameEnricher(template, new CustomChartsConfig());
     }
 
     @Test
@@ -97,24 +95,13 @@ class FreeFormSqlEntityNameEnricherTest {
         return JsonUtils.getJsonNodeFromString("{\"dataset_id\":\"%s\"}".formatted(datasetId));
     }
 
-    @ParameterizedTest
-    @DisplayName("an unusable cap falls back to the default rather than disabling the lookup")
-    @NullSource
-    @ValueSource(strings = {"", "   ", "not-a-number", "0", "-5"})
-    void unusableCapFallsBackToDefault(String rawCap) {
-        var dataset = UUID.randomUUID();
-        when(datasetDAO.findByIds(anySet(), anyString()))
-                .thenReturn(List.of(Dataset.builder().id(dataset).name("resolved").build()));
-
-        var rows = new FreeFormSqlEntityNameEnricher(template, rawCap).enrich(List.of(row(dataset)), CALLER_WORKSPACE);
-
-        assertThat(rows.get(0).get("dataset_name").asText()).isEqualTo("resolved");
-    }
-
     @Test
     @DisplayName("a cap below the id count skips the lookup and leaves raw ids")
     void capBelowIdCountSkipsLookup() {
-        var rows = new FreeFormSqlEntityNameEnricher(template, "1")
+        var config = new CustomChartsConfig();
+        config.setMaxNameLookupIds(1);
+
+        var rows = new FreeFormSqlEntityNameEnricher(template, config)
                 .enrich(List.of(row(UUID.randomUUID()), row(UUID.randomUUID())), CALLER_WORKSPACE);
 
         verify(datasetDAO, never()).findByIds(anySet(), anyString());

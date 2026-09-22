@@ -8,6 +8,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.FreeFormSqlAccount;
 import com.comet.opik.domain.FreeFormSqlQueryDAO;
 import com.comet.opik.domain.FreeFormSqlQueryService;
+import com.comet.opik.infrastructure.CustomChartsConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -50,7 +51,7 @@ import java.util.concurrent.CompletionException;
  * <ul>
  * <li>{@code POST /} — scope in the body. Eight tables; {@code traces} and {@code spans} are restricted to
  * {@code project_id} when supplied and cover the workspace when it is not. Gated on {@code ollieEnabled} and
- * {@code customChartsEnabledWorkspaces}.</li>
+ * {@code customCharts.enabledWorkspaces}.</li>
  * <li>{@code POST /projects/{projectId}} — scope in the path, and the older of the two. Three tables, every one
  * bound to workspace <em>and</em> project; its request body has no project field at all. Gated on
  * {@code ollieEnabled}. It is expected to be removed once its callers move to the endpoint above, which is why
@@ -71,6 +72,7 @@ public class AnalyticsQueriesResource {
     private final @NonNull FreeFormSqlQueryService freeFormSqlQueryService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles;
+    private final @NonNull @Config("customCharts") CustomChartsConfig customCharts;
 
     @POST
     @Path("/projects/{projectId}")
@@ -110,7 +112,7 @@ public class AnalyticsQueriesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         if (!serviceToggles.isOllieEnabled()
-                || !serviceToggles.getCustomChartsEnabledWorkspaces().contains(workspaceId)) {
+                || !customCharts.getEnabledWorkspaces().contains(workspaceId)) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
 

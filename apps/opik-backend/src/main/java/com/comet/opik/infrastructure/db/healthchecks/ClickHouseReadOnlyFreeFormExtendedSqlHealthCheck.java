@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.db.healthchecks;
 
 import com.clickhouse.client.api.Client;
 import com.clickhouse.client.api.query.QuerySettings;
+import com.comet.opik.infrastructure.CustomChartsConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import io.dropwizard.util.Duration;
 import jakarta.inject.Inject;
@@ -28,12 +29,13 @@ public class ClickHouseReadOnlyFreeFormExtendedSqlHealthCheck extends AbstractCl
     public ClickHouseReadOnlyFreeFormExtendedSqlHealthCheck(
             @NonNull @Named(READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT) Client freeFormExtendedSqlClient,
             @NonNull @Named(CLICKHOUSE_HEALTH_CHECK_TIMEOUT) Duration healthCheckTimeout,
-            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles) {
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
+            @NonNull @Config("customCharts") CustomChartsConfig customCharts) {
         super(freeFormExtendedSqlClient, healthCheckTimeout, "clickhouse-readonly-freeform-extended-sql");
         // Mirrors the endpoint's gate, and for the same reason: the account is provisioned under
         // TOGGLE_OLLIE_ENABLED, so probing it with Ollie off would fail against a user that was never created.
         this.enabled = serviceToggles.isOllieEnabled()
-                && !serviceToggles.getCustomChartsEnabledWorkspaces().isEmpty();
+                && !customCharts.getEnabledWorkspaces().isEmpty();
     }
 
     @Override

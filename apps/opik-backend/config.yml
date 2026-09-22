@@ -230,7 +230,7 @@ databaseAnalyticsReadOnlyFreeFormSql:
 # Credentials for the extended free-form SQL read-only ClickHouse user - the same free-form SQL path as the block
 # above, on an account whose row policies read the evaluation tables workspace-wide. Named for that reach rather
 # than for Custom Charts, its only consumer today. Same connection params as databaseAnalytics, same profile shape.
-# Only used for workspaces in serviceToggles.customChartsEnabledWorkspaces.
+# Only used for workspaces in customCharts.enabledWorkspaces.
 databaseAnalyticsReadOnlyFreeFormExtendedSql:
   #  Default: comet_readonly_freeform_extended_sql_user
   #  Description: The read-only username used to connect to the server
@@ -241,6 +241,20 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
   #  Default: 200s
   #  Description: Socket read timeout, kept above the profile's max_execution_time (180s) so the server cap fires first
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_SOCKET_TIMEOUT:-200s}
+
+# Custom Charts. The ClickHouse credentials it runs as are in databaseAnalyticsReadOnlyFreeFormExtendedSql instead:
+# those describe a database connection and keep the same shape as the account Agent Insights uses.
+customCharts:
+  #  Default: empty (feature off everywhere)
+  #  Description: Comma-separated workspace ids allowed to use Custom Charts. Membership also routes the
+  #   workspace's free-form SQL to the wider ClickHouse account. Requires serviceToggles.ollieEnabled, which
+  #   gates the endpoint and provisions the account.
+  enabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
+  #  Default: 5000
+  #  Description: Cap on distinct ids resolved to names in one result. Above it every row keeps its raw id rather
+  #   than labelling some and not others. Production p99 is 2 datasets / 11 projects per workspace, worst case
+  #   4120, so this guards a pathological result set rather than limiting anyone.
+  maxNameLookupIds: ${CUSTOM_CHARTS_MAX_NAME_LOOKUP_IDS:-5000}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -1639,11 +1653,6 @@ serviceToggles:
   #   freeform SQL path: the read-only ClickHouse client and the clickhouse-readonly-freeform-sql health check.
   #   When off, the read-only client is never queried.
   ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
-  # Default: empty (feature off everywhere)
-  # Description: Comma-separated workspace ids allowed to use Custom Charts. Membership also routes the workspace's
-  #   free-form SQL to the wider databaseAnalyticsReadOnlyFreeFormExtendedSql ClickHouse account. Requires
-  #   ollieEnabled, which gates the endpoint.
-  customChartsEnabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
   # Default: false
   # Description: Whether the project homepage is enabled. When false, the Ollie page is the default project page.
   projectHomepageEnabled: ${TOGGLE_PROJECT_HOMEPAGE_ENABLED:-"false"}

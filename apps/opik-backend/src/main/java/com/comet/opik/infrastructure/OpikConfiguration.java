@@ -34,6 +34,9 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormExtendedSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
+    private CustomChartsConfig customCharts = new CustomChartsConfig();
+
+    @Valid @NotNull @JsonProperty
     private UuidValidationConfig uuidValidation = UuidValidationConfig.builder().build();
 
     @Valid @NotNull @JsonProperty
