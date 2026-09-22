@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.infrastructure.db.JsonRowValues;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
@@ -10,7 +11,6 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -94,9 +94,9 @@ class TraceJsonRowMapper {
 
         // Mirrors bindNanSentinel.
         if (nonNullableColumns) {
-            putTtft(node, nullToNaN(trace.ttft()));
+            JsonRowValues.putDoubleExact(node, "ttft", nullToNaN(trace.ttft()));
         } else if (trace.ttft() != null) {
-            putTtft(node, trace.ttft());
+            JsonRowValues.putDoubleExact(node, "ttft", trace.ttft());
         } else {
             node.putNull("ttft");
         }
@@ -116,27 +116,5 @@ class TraceJsonRowMapper {
         }
 
         return node;
-    }
-
-    /**
-     * Writes {@code ttft} so the stored {@code Float64} is bit-for-bit the double we were given.
-     *
-     * <p>The obvious {@code node.put(field, double)} writes Jackson's shortest round-tripping decimal.
-     * That is exact for a correctly-rounded reader, but ClickHouse's JSON float parse can land 1 ULP
-     * away, so the value read back is not the value handed in — a divergence the R2DBC path does not
-     * have, since its driver transmits the double in binary. Writing {@link BigDecimal#BigDecimal(double)},
-     * the exact binary value expanded in decimal, removes the rounding decision entirely: the only
-     * {@code Float64} that text can name is the one we started from.
-     *
-     * <p>NaN has no {@code BigDecimal}, so the sentinel keeps the plain double form. Jackson quotes
-     * non-finite numbers, so it serializes as {@code "NaN"} — which is what the insert's
-     * {@code input_format_json_read_numbers_as_strings} exists to accept.
-     */
-    private void putTtft(ObjectNode node, double value) {
-        if (Double.isNaN(value) || Double.isInfinite(value)) {
-            node.put("ttft", value);
-        } else {
-            node.put("ttft", new BigDecimal(value));
-        }
     }
 }

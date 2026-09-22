@@ -7,6 +7,7 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.StringUtils;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.Map;
 
@@ -90,6 +91,36 @@ public class JsonRowValues {
         var object = node.putObject(field);
         if (values != null) {
             values.forEach(object::put);
+        }
+    }
+
+    /**
+     * Writes a {@code double} so the {@code Float64} ClickHouse stores is bit-for-bit the value given.
+     *
+     * <p>The obvious {@code node.put(field, value)} writes Jackson's shortest round-tripping decimal.
+     * That is exact for a correctly-rounded reader, but ClickHouse's JSON float parse can land 1 ULP
+     * away, so the value read back is not the value handed in — a divergence the R2DBC path does not
+     * have, since its driver transmits the double in binary. {@link BigDecimal#BigDecimal(double)} is
+     * the exact binary value expanded in decimal, which leaves the parser no rounding decision: the
+     * only {@code Float64} that text can name is the one we started from.
+     *
+     * <p>Two cases keep the plain double form instead, because {@code BigDecimal} cannot represent
+     * them:
+     * <ul>
+     * <li><b>Non-finite</b> — there is no {@code BigDecimal} for NaN or an infinity. Jackson quotes
+     * them, which is what the insert's {@code input_format_json_read_numbers_as_strings} accepts.</li>
+     * <li><b>Zero</b> — {@code BigDecimal} has no signed zero, so {@code new BigDecimal(-0.0)}
+     * canonicalizes to {@code 0} and the sign is lost. {@code value == 0.0} is true for both signs, so
+     * both take this branch and Jackson writes {@code -0.0} with its sign intact.</li>
+     * </ul>
+     */
+    public void putDoubleExact(@NonNull ObjectNode node, String field, double value) {
+        checkField(field);
+
+        if (!Double.isFinite(value) || value == 0.0) {
+            node.put(field, value);
+        } else {
+            node.put(field, new BigDecimal(value));
         }
     }
 }
