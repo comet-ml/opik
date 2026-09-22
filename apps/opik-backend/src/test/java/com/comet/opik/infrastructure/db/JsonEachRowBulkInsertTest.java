@@ -9,6 +9,8 @@ import com.clickhouse.client.api.metrics.OperationMetrics;
 import com.clickhouse.client.api.metrics.ServerMetrics;
 import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
@@ -46,8 +48,19 @@ import static org.mockito.Mockito.when;
  */
 class JsonEachRowBulkInsertTest {
 
+    /**
+     * Built here rather than taken from {@code MAPPER}: that is a static field the
+     * application replaces at startup and is being removed, and this suite depends on exactly one of its
+     * properties — {@code NON_NULL} inclusion, which {@code writesExplicitNulls} pins. Stating it locally
+     * makes the precondition visible instead of inherited.
+     */
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .setSerializationInclusion(JsonInclude.Include.NON_NULL);
+
+    // Length 32, close to a UUID, so a collision between fixtures is not a plausible explanation for a
+    // passing assertion.
     private static String randomValue() {
-        return RandomStringUtils.secure().nextAlphanumeric(12);
+        return RandomStringUtils.secure().nextAlphanumeric(32);
     }
 
     private static final Function<String, ObjectNode> ROW_MAPPER = value -> {
@@ -63,7 +76,7 @@ class JsonEachRowBulkInsertTest {
         var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
         var settingsCaptor = ArgumentCaptor.forClass(InsertSettings.class);
 
-        Long rows = new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+        Long rows = new JsonEachRowBulkInsert(client, MAPPER)
                 .insert("feedback_scores", "log-comment", items, ROW_MAPPER)
                 .block();
 
@@ -135,7 +148,7 @@ class JsonEachRowBulkInsertTest {
         var first0 = randomValue();
         var second0 = randomValue();
 
-        new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+        new JsonEachRowBulkInsert(client, MAPPER)
                 .insert("authored_feedback_scores", "log-comment", List.of(first0, second0), ROW_MAPPER).block();
 
         verify(client).insert(eq("authored_feedback_scores"), writerCaptor.capture(), any(ClickHouseFormat.class),
@@ -171,7 +184,7 @@ class JsonEachRowBulkInsertTest {
     void emptyBatchDoesNotCallTheClient() {
         var client = mock(Client.class);
 
-        Long rows = new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+        Long rows = new JsonEachRowBulkInsert(client, MAPPER)
                 .insert("feedback_scores", "log-comment", List.of(), ROW_MAPPER)
                 .block();
 
@@ -198,7 +211,7 @@ class JsonEachRowBulkInsertTest {
         var writerCaptor = ArgumentCaptor.forClass(DataStreamWriter.class);
         var value = randomValue();
 
-        new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+        new JsonEachRowBulkInsert(client, MAPPER)
                 .insert("feedback_scores", "log-comment", List.of(value), nullMapper).block();
 
         verify(client).insert(eq("feedback_scores"), writerCaptor.capture(), any(ClickHouseFormat.class),
@@ -224,7 +237,7 @@ class JsonEachRowBulkInsertTest {
         when(client.insert(any(String.class), any(DataStreamWriter.class), any(ClickHouseFormat.class),
                 any(InsertSettings.class))).thenReturn(CompletableFuture.completedFuture(response));
 
-        new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+        new JsonEachRowBulkInsert(client, MAPPER)
                 .insert("feedback_scores", "log-comment", List.of("a"), ROW_MAPPER).block();
 
         // try-with-resources should release it; an unclosed response holds its stream, which over a
@@ -243,7 +256,7 @@ class JsonEachRowBulkInsertTest {
         // RetryUtils.handleConnectionError matches on the throwable's own class, so a SocketException
         // still wrapped in the future's CompletionException would silently bypass the retry the R2DBC
         // path gets. Mono.fromFuture unwraps that wrapper; this pins the behaviour we depend on.
-        assertThatThrownBy(() -> new JsonEachRowBulkInsert(client, JsonUtils.getMapper())
+        assertThatThrownBy(() -> new JsonEachRowBulkInsert(client, MAPPER)
                 .insert("feedback_scores", "log-comment", List.of("a"), ROW_MAPPER)
                 .block())
                 .hasRootCauseInstanceOf(SocketException.class);
@@ -253,7 +266,7 @@ class JsonEachRowBulkInsertTest {
     @DisplayName("the row count comes from the server, not from items.size()")
     void returnsTheServerRowCount() {
         // Deduplication or truncation would make these differ; the caller must see the server's number.
-        Long rows = new JsonEachRowBulkInsert(clientReturning(2L), JsonUtils.getMapper())
+        Long rows = new JsonEachRowBulkInsert(clientReturning(2L), MAPPER)
                 .insert("feedback_scores", "log-comment", List.of("a", "b", "c"), ROW_MAPPER)
                 .block();
 
