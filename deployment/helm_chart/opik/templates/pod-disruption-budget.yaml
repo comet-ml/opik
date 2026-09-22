@@ -13,10 +13,22 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  {{- if hasKey $value.podDisruptionBudget "minAvailable" }}
-  minAvailable: {{ $value.podDisruptionBudget.minAvailable }}
-  {{- else if hasKey $value.podDisruptionBudget "maxUnavailable" }}
-  maxUnavailable: {{ $value.podDisruptionBudget.maxUnavailable }}
+  {{- /*
+    A configured value wins only when it is a number or a non-empty string:
+    that keeps an explicit 0 (falsy in Go templates, but a valid PDB value)
+    while ignoring null/""/false, which would render an invalid policy/v1 PDB.
+  */}}
+  {{- $min := $value.podDisruptionBudget.minAvailable }}
+  {{- $max := $value.podDisruptionBudget.maxUnavailable }}
+  {{- $hasMin := or (kindIs "float64" $min) (kindIs "int" $min) (and (kindIs "string" $min) (ne $min "")) }}
+  {{- $hasMax := or (kindIs "float64" $max) (kindIs "int" $max) (and (kindIs "string" $max) (ne $max "")) }}
+  {{- if and $hasMin $hasMax }}
+  {{- fail (printf "podDisruptionBudget for component %s sets both minAvailable (%v) and maxUnavailable (%v); a PodDisruptionBudget accepts only one" $key $min $max) }}
+  {{- end }}
+  {{- if $hasMin }}
+  minAvailable: {{ $min }}
+  {{- else if $hasMax }}
+  maxUnavailable: {{ $max }}
   {{- else }}
   minAvailable: 1
   {{- end }}
