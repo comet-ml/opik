@@ -87,9 +87,18 @@ public class EntityNameEnricher {
             log.info("Skipping '{}' name lookup: {} distinct ids exceeds the {} cap", idColumn, ids.size(), maxIds);
             return Map.of();
         }
-        return "dataset_id".equals(idColumn)
-                ? index(handle.attach(DatasetDAO.class).findByIds(ids, workspaceId), Dataset::id, Dataset::name)
-                : index(handle.attach(ProjectDAO.class).findByIds(ids, workspaceId), Project::id, Project::name);
+        // Exhaustive on purpose: an unrecognised column resolves nothing rather than falling through to whichever
+        // lookup happens to be last. Reaching the default means NAME_COLUMNS gained an entry this switch did not.
+        return switch (idColumn) {
+            case "dataset_id" ->
+                index(handle.attach(DatasetDAO.class).findByIds(ids, workspaceId), Dataset::id, Dataset::name);
+            case "project_id" ->
+                index(handle.attach(ProjectDAO.class).findByIds(ids, workspaceId), Project::id, Project::name);
+            default -> {
+                log.error("No name lookup defined for id column '{}'; rows keep their raw ids", idColumn);
+                yield Map.of();
+            }
+        };
     }
 
     private static <T> Map<UUID, String> index(List<T> entities, Function<T, UUID> id, Function<T, String> name) {
