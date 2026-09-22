@@ -10,6 +10,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ErrorUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,6 +40,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -1036,11 +1038,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ;
             """;
 
+    private static final String DATASET_ITEMS_TABLE = "dataset_items";
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @Override
     @WithSpan
@@ -1050,8 +1055,39 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Mono.empty();
         }
 
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(datasetId, items);
+        }
+
         return asyncTemplate.nonTransaction(connection -> mapAndInsert(
                 datasetId, items, connection, INSERT_DATASET_ITEM));
+    }
+
+    /**
+     * Same rows as {@link #INSERT_DATASET_ITEM}, streamed as JSONEachRow instead of bound as ~9 named
+     * parameters per row plus a shared workspace id.
+     *
+     * <p>Only {@code save} moves onto this path. {@code mapAndInsert} is also rendered with
+     * {@code BULK_UPDATE} by the bulk-update flow, which reads the pre-existing row to merge tags and
+     * so is not a plain row append.
+     *
+     * <p>{@code created_at} and {@code last_updated_at} stay absent from the row. The R2DBC template
+     * writes {@code now64(9)} for {@code created_at} and omits {@code last_updated_at}; both columns are
+     * declared {@code DEFAULT now64(9)}, so omitting them here produces the same server-stamped value --
+     * and {@code last_updated_at} is the ReplacingMergeTree version, so a client-supplied one would
+     * change which duplicate wins.
+     */
+    private Mono<Long> insertJsonEachRow(UUID datasetId, List<DatasetItem> items) {
+        // mapAndInsert opens and closes this segment, so without it a v2 save disappears from the
+        // dataset-item instrumentation stream instead of showing up as a fast insert.
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "insert_dataset_items");
+
+        return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
+                DATASET_ITEMS_TABLE,
+                getLogComment("save_dataset_items", workspaceId, userName, items.size()),
+                items,
+                item -> DatasetItemJsonRowMapper.toJsonRow(item, datasetId, userName, workspaceId)))
+                .doFinally(signalType -> endSegment(segment));
     }
 
     private Mono<Long> mapAndInsert(

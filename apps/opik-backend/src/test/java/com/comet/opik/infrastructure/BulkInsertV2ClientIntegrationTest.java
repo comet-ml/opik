@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.Trace;
@@ -13,6 +14,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppCon
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
@@ -56,6 +58,7 @@ import java.util.stream.IntStream;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItems;
 import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.assertExperimentResults;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -128,6 +131,7 @@ class BulkInsertV2ClientIntegrationTest {
     private FeedbackScoreDAO feedbackScoreDAO;
     private ProjectResourceClient projectResourceClient;
     private ExperimentResourceClient experimentResourceClient;
+    private DatasetResourceClient datasetResourceClient;
 
     @BeforeAll
     void beforeAll(ClientSupport clientSupport, FeedbackScoreDAO feedbackScoreDAO, Injector injector) {
@@ -141,6 +145,7 @@ class BulkInsertV2ClientIntegrationTest {
         traceResourceClient = new TraceResourceClient(clientSupport, baseUrl);
         projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         experimentResourceClient = new ExperimentResourceClient(clientSupport, baseUrl, factory);
+        datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
     }
 
     private <T> T queryOne(String sql, Function<Row, T> mapper) {
@@ -419,5 +424,50 @@ class BulkInsertV2ClientIntegrationTest {
         // ignored fields, so a column this path stops writing cannot slip through unnoticed. projectId is
         // not among the ignored fields, so both arms of the null branch are actually asserted.
         assertExperimentResults(actual, items, USER);
+    }
+
+    @Test
+    @DisplayName("dataset items round-trip their data map, tags, source and trace/span ids")
+    void datasetItemsRoundTrip() {
+        var datasetName = "v2-bulk-" + RandomStringUtils.secure().nextAlphanumeric(12);
+
+        // Two arms, because SourceValidator couples source to the ids: SPAN requires both trace_id and
+        // span_id, MANUAL requires both absent. That absent case is the one worth covering here --
+        // trace_id/span_id are String DEFAULT '' rather than Nullable, so an omitted id is "" on both
+        // write paths, which is what the mapper reuses the binder's getOrDefault for. Tags exercise
+        // Array(String) and data exercises Map(String, String).
+        var items = IntStream.range(0, 4)
+                .mapToObj(i -> {
+                    var item = DatasetResourceClient.buildDatasetItem(factory);
+                    return i % 2 == 0
+                            ? item.toBuilder()
+                                    .source(DatasetItemSource.SPAN)
+                                    // Set explicitly: podam leaves these null some of the time, and
+                                    // SourceValidator rejects a SPAN item without both.
+                                    .traceId(factory.manufacturePojo(Trace.class).id())
+                                    .spanId(factory.manufacturePojo(Trace.class).id())
+                                    .build()
+                            : item.toBuilder()
+                                    .source(DatasetItemSource.MANUAL)
+                                    .traceId(null)
+                                    .spanId(null)
+                                    .build();
+                })
+                .toList();
+
+        var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                .datasetName(datasetName)
+                .datasetId(null)
+                .items(items)
+                .build();
+        datasetResourceClient.createDatasetItems(batch, WORKSPACE_NAME, API_KEY);
+
+        var actual = items.stream()
+                .map(item -> datasetResourceClient.getDatasetItem(item.id(), API_KEY, WORKSPACE_NAME))
+                .toList();
+
+        // The shared helper rather than field by field: it compares whole objects and owns its list of
+        // ignored fields, so a column this path stops writing cannot slip through unnoticed.
+        assertDatasetItems(actual, items);
     }
 }
