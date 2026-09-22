@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset aadereiko:000119_add_cipx_call_attribution
+--changeset aadereiko:000125_add_cipx_call_attribution
 --comment: Add cipx call attribution columns
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.cipx_spends ON CLUSTER '{cluster}'
