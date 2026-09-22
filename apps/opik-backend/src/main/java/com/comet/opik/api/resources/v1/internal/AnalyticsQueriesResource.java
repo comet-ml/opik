@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.internal;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AnalyticsQueryRequest;
 import com.comet.opik.api.AnalyticsQueryResponse;
+import com.comet.opik.api.ScopedAnalyticsQueryRequest;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.FreeFormSqlAccount;
 import com.comet.opik.domain.FreeFormSqlQueryDAO;
@@ -22,7 +23,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -52,8 +52,9 @@ import java.util.concurrent.CompletionException;
  * {@code project_id} when supplied and cover the workspace when it is not. Gated on {@code ollieEnabled} and
  * {@code customChartsEnabledWorkspaces}.</li>
  * <li>{@code POST /projects/{projectId}} — scope in the path, and the older of the two. Three tables, every one
- * bound to workspace <em>and</em> project. Gated on {@code ollieEnabled}. It is expected to be removed once its
- * callers move to the endpoint above, which is why that one carries no qualifier in its path.</li>
+ * bound to workspace <em>and</em> project; its request body has no project field at all. Gated on
+ * {@code ollieEnabled}. It is expected to be removed once its callers move to the endpoint above, which is why
+ * that one carries no qualifier in its path.</li>
  * </ul>
  *
  * <p>Either gate returns {@code 501 Not Implemented} when closed, with no ClickHouse access.
@@ -90,13 +91,6 @@ public class AnalyticsQueriesResource {
         // through base64() or substring() matches no rule written against the plain text.
         RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Agent Insights free-form SQL");
 
-        // The project comes from the path here. Accepting one in the body too would leave which of the two wins
-        // undefined, so a caller that sets it is told plainly rather than having one silently ignored.
-        if (request.projectId() != null) {
-            throw new BadRequestException(
-                    "project_id is not accepted by this endpoint; the project comes from the path. Use POST /v1/internal/analytics-queries to choose the scope in the body.");
-        }
-
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Executing Agent Insights free-form SQL for workspace '{}', project '{}'", workspaceId, projectId);
@@ -112,7 +106,7 @@ public class AnalyticsQueriesResource {
             @ApiResponse(responseCode = "501", description = "Agent Insights is disabled, or Custom Charts is not enabled for this workspace")})
     @RateLimited
     public Response executeScopedQuery(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AnalyticsQueryRequest.class))) @NotNull @Valid AnalyticsQueryRequest request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = ScopedAnalyticsQueryRequest.class))) @NotNull @Valid ScopedAnalyticsQueryRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         // Both toggles, not just the allowlist: the ClickHouse account this endpoint runs as is provisioned under
