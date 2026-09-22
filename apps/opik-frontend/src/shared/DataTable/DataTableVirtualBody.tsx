@@ -7,6 +7,7 @@ import { TableBody } from "@/ui/table";
 import { DataTableBodyProps } from "@/shared/DataTable/DataTableBody";
 import usePageBodyScrollContainer from "@/contexts/usePageBodyScrollContainer";
 import { observeOwnAxisOffset } from "@/shared/DataTable/virtualizerOptions";
+import useTableRows from "@/shared/DataTable/useTableRows";
 import { cn } from "@/lib/utils";
 
 const ROW_BORDER_SIZE = 1;
@@ -25,7 +26,7 @@ export const DataTableVirtualBody = <TData,>({
   const { height } = table.options.meta?.rowHeightStyle ?? { height: "44" };
 
   const enabled = rowVirtualization?.enabled ?? true;
-  const rows = table.getRowModel().rows;
+  const rows = useTableRows(table);
   const virtualRowHeight = parseInt(height as string, 10) + ROW_BORDER_SIZE;
   const overscan = Math.max(
     MIN_OVER_SCAN_ROWS,
