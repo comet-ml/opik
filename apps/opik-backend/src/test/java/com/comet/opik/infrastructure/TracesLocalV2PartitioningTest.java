@@ -7,6 +7,7 @@ import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.WeeklyPartitions;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -61,6 +62,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   how it fails depends on the direction: a wrapped lower bound only widens, a wrapped <b>upper</b> bound drops every
  *   ordinary row, and a wrapped equality never matches. All three are pinned below, because a lower-bound case alone
  *   cannot detect a wrapped bound at all.</li>
+ *   <li><b>Pruning with a discrete week set.</b> The trace-id-list reads cannot derive a range from their inputs the way
+ *   a paginated scan can, so they carry the exact set of weeks their ids resolve to as an {@code IN} over the partition
+ *   key's own expression (OPIK-8332). Pinned the same way as the range bounds — an id list alone prunes nothing, the
+ *   set prunes below total — plus the comparison that justifies a set over a range at all: one far-future id in the
+ *   batch widens a range across centuries while the set still names two weeks.</li>
  *   <li><b>Honest far-future isolation.</b> A legitimate row whose UUIDv7 carries a far-future timestamp lands in its own
  *   distinct, honest weekly partition, never mixed with a real recent week.</li>
  *   <li><b>Week-expression correctness.</b> The {@code Date32} Monday equals {@code toMonday} across the in-range
@@ -180,6 +186,139 @@ class TracesLocalV2PartitioningTest {
         // ids 1..2 are the inner two of the four seeded weeks, so week 0 sits below the range and week 3 above; both
         // prune away, demonstrating pruning on each bound.
         assertThat(actualParts.selected()).isLessThan(actualParts.total());
+    }
+
+    @Test
+    void idListPredicateAloneDoesNotPrunePartitions() {
+        var seed = seedConsecutiveWeeklyPartitions();
+
+        var actualParts = prunedParts("""
+                SELECT
+                    id
+                FROM traces_local_v2
+                WHERE workspace_id = :workspace_id
+                    AND id IN :ids
+                """, statement -> statement
+                .bind("workspace_id", seed.workspaceId())
+                .bind("ids", new UUID[]{seed.ids().get(1), seed.ids().get(2)}));
+
+        // The control for idListWithWeekInSetPrunesPartitions, and the measured shape of OPIK-8332: an id LIST prunes
+        // no partition on its own, for the same reason an id RANGE does not (the planner doesn't infer id -> id_at
+        // monotonicity through UUIDv7ToDateTime) — so a workspace-plus-id-list read opened parts in every weekly
+        // partition. Stated separately from idRangePredicateAloneDoesNotPrunePartitions because IN and >=/<= reach
+        // different planner paths, and it is the IN shape these four read sites actually emit.
+        assertThat(actualParts.selected()).isEqualTo(actualParts.total());
+    }
+
+    @Test
+    void idListWithWeekInSetPrunesPartitions() {
+        var seed = seedConsecutiveWeeklyPartitions();
+
+        // The exact predicate the four trace-id-list read paths emit (OPIK-8332): the id list paired with the discrete
+        // set of weeks those ids resolve to, written as the partition key's own expression so ClickHouse matches it
+        // directly instead of inferring monotonicity over each part's id_at MinMax.
+        var actualParts = prunedParts("""
+                SELECT
+                    id
+                FROM traces_local_v2
+                WHERE workspace_id = :workspace_id
+                    AND id IN :ids
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks
+                """, statement -> statement
+                .bind("workspace_id", seed.workspaceId())
+                .bind("ids", new UUID[]{seed.ids().get(1), seed.ids().get(2)})
+                .bind("id_weeks", derivedWeeksOf(seed.ids().get(1), seed.ids().get(2))));
+
+        // Same two inner weeks as the control above, so the pair differs only in the added week set: weeks 0 and 3
+        // prune away and selected drops below total.
+        assertThat(actualParts.selected()).isLessThan(actualParts.total());
+    }
+
+    /**
+     * Why the read paths carry a discrete week set rather than the min/max week range
+     * {@code SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS_BOUNDED} uses — the design decision of OPIK-8332, which nothing else
+     * would catch being reverted.
+     *
+     * <p>A range brackets the id set's extremes, so one far-future id (a UUIDv7 minted with a bad clock) widens it to
+     * span centuries and re-admits every partition in between — including the far-future ones, which a table holding
+     * such ids accumulates one per week. Both forms are correct; only the set is tight. Asserted as a direct
+     * comparison of the two on one seeded table, rather than against an absolute part count, because this container
+     * is shared and its total drifts with what other suites inserted.
+     */
+    @Test
+    void weekInSetPrunesTighterThanAWeekRangeWhenTheIdSetReachesTheFarFuture() {
+        var seed = seedConsecutiveWeeklyPartitions();
+        var farFuture = ID_GENERATOR.generateId(FAR_FUTURE_INSTANT);
+        insert(List.of(farFuture), seed.workspaceId(), seed.projectId(), weekInstant(0));
+        // The id set the two forms are derived from: one ordinary id and one far-future one, which is what makes the
+        // range span from 2025 to 2201 while the set names exactly those two weeks.
+        var ids = new UUID[]{seed.ids().getFirst(), farFuture};
+
+        var rangeParts = prunedParts(
+                """
+                        SELECT
+                            id
+                        FROM traces_local_v2
+                        WHERE workspace_id = :workspace_id
+                            AND id IN :ids
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                >= (toDate32(UUIDv7ToDateTime(toUUID(:min_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:min_id), 'UTC'), 1)))
+                            AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                                <= (toDate32(UUIDv7ToDateTime(toUUID(:max_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:max_id), 'UTC'), 1)))
+                        """,
+                statement -> statement
+                        .bind("workspace_id", seed.workspaceId())
+                        .bind("ids", ids)
+                        .bind("min_id", seed.ids().getFirst())
+                        .bind("max_id", farFuture));
+
+        var inSetParts = prunedParts("""
+                SELECT
+                    id
+                FROM traces_local_v2
+                WHERE workspace_id = :workspace_id
+                    AND id IN :ids
+                    AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks
+                """, statement -> statement
+                .bind("workspace_id", seed.workspaceId())
+                .bind("ids", ids)
+                .bind("id_weeks", derivedWeeksOf(ids)));
+
+        assertThat(inSetParts.selected())
+                .as("the discrete week set selects fewer parts than the range across the same ids: set=%s, range=%s",
+                        inSetParts, rangeParts)
+                .isLessThan(rangeParts.selected());
+    }
+
+    /**
+     * The correctness half of the week set, and the direction it can fail in: the bound is documented as a strict
+     * consequence of {@code id IN :ids}, so it must never exclude a row that list admits. A set that named the wrong
+     * week for the far-future id — or that folded it into the ordinary one, as a 16-bit {@code toMonday} would —
+     * would drop the row from a result it belongs in, with no error.
+     *
+     * <p>This is also the one place the <b>production derivation</b> meets the <b>partitioned</b> table. The DAO-level
+     * suite runs against whatever estate the migrations produce, which is the unpartitioned original; here
+     * {@link WeeklyPartitions#weeksOf} supplies the bound and the successor answers it. The far-future id is what
+     * makes that bite: it resolves to two weeks, only one of which this schema files it under, so a derivation that
+     * named only the other would return nothing. Not circular — the oracle is the table, not a second computation,
+     * and {@code honestWeekExpressionStaysHonestWhereToMondayWraps} pins the Monday arithmetic independently.
+     */
+    @Test
+    void weekInSetKeepsFarFutureRowsThatTheIdListAdmits() {
+        var seed = seedPresentAndFarFuture();
+
+        var actualIds = idsMatching("""
+                SELECT id
+                FROM traces_local_v2
+                WHERE workspace_id = :workspace_id
+                AND id IN :ids
+                AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks
+                """, seed.workspaceId(), statement -> statement
+                .bind("ids", new UUID[]{seed.present(), seed.farFuture()})
+                .bind("id_weeks", derivedWeeksOf(seed.present(), seed.farFuture())));
+        var expectedIds = List.of(seed.present().toString(), seed.farFuture().toString());
+
+        assertThat(actualIds).containsExactlyInAnyOrderElementsOf(expectedIds);
     }
 
     @Test
@@ -558,6 +697,14 @@ class TracesLocalV2PartitioningTest {
 
     private Instant weekInstant(int weekOffset) {
         return ANCHOR_MONDAY.plusWeeks(weekOffset).atTime(12, 0).toInstant(ZoneOffset.UTC);
+    }
+
+    /**
+     * The week set the DAO would bind for these ids — {@link WeeklyPartitions#weeksOf}, not a value computed here, so
+     * the week-set cases run the predicate production emits rather than one that merely looks like it.
+     */
+    private Long[] derivedWeeksOf(UUID... ids) {
+        return WeeklyPartitions.weeksOf(List.of(ids)).orElseThrow().toArray(Long[]::new);
     }
 
     @Builder(toBuilder = true)
