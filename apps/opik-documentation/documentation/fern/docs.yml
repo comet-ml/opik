@@ -103,25 +103,26 @@ navigation:
             slug: /quickstart
             icon: fa-regular fa-bolt
           - section: MCP Server
-            skip-slug: true
+            path: ./docs-v2/prompt_engineering/mcp-server.mdx
+            slug: mcp-server
             collapsed: true
             icon: fa-regular fa-network-wired
             contents:
               - page: Overview
                 path: ./docs-v2/prompt_engineering/mcp-server.mdx
-                slug: mcp-server
+                slug: ""
               - page: Use cases
                 path: ./docs-v2/prompt_engineering/mcp-server/use-cases.mdx
-                slug: mcp-server/use-cases
+                slug: use-cases
               - page: MCP tools reference
                 path: ./docs-v2/prompt_engineering/mcp-server/tools.mdx
-                slug: mcp-server/tools
+                slug: tools
               - page: Advanced setup
                 path: ./docs-v2/prompt_engineering/mcp-server/advanced-setup.mdx
-                slug: mcp-server/advanced-setup
+                slug: advanced-setup
               - page: FAQ & troubleshooting
                 path: ./docs-v2/prompt_engineering/mcp-server/faq.mdx
-                slug: mcp-server/faq
+                slug: faq
           - page: Ollie Agent
             path: ./docs-v2/ollie.mdx
             slug: ollie
@@ -692,24 +693,25 @@ navigation:
             path: ./docs-v2/integrations/coding-agents.mdx
             slug: coding-agents
           - section: MCP Server
-            skip-slug: true
+            path: ./docs-v2/prompt_engineering/mcp-server.mdx
+            slug: mcp-server
             collapsed: true
             contents:
               - page: Overview
                 path: ./docs-v2/prompt_engineering/mcp-server.mdx
-                slug: mcp-server
+                slug: ""
               - page: Use cases
                 path: ./docs-v2/prompt_engineering/mcp-server/use-cases.mdx
-                slug: mcp-server/use-cases
+                slug: use-cases
               - page: MCP tools reference
                 path: ./docs-v2/prompt_engineering/mcp-server/tools.mdx
-                slug: mcp-server/tools
+                slug: tools
               - page: Advanced setup
                 path: ./docs-v2/prompt_engineering/mcp-server/advanced-setup.mdx
-                slug: mcp-server/advanced-setup
+                slug: advanced-setup
               - page: FAQ & troubleshooting
                 path: ./docs-v2/prompt_engineering/mcp-server/faq.mdx
-                slug: mcp-server/faq
+                slug: faq
           - page: Claude Code
             path: ./docs-v2/integrations/claude-code.mdx
             slug: claude-code
