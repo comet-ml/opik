@@ -682,16 +682,23 @@ areas:
       scores-reach-traces:     { covered: true,  tier: t2-cuj, note: "SDK-verified" }
       list-queues:             { covered: false }
       # create-queue and edit-queue are exercised by
-      # annotation-queue-automation-off.spec.ts, which FAILS on
-      # aliaksandrk/OPIK-6303-queue-automation-ui: the form serialises its empty
-      # default condition row whatever the automation toggle says, and the
-      # backend's @NotBlank scoreName answers 422. Left covered: false
-      # deliberately — coverage counts capabilities with a recent PASSING test,
-      # and marking these covered would report a gap as closed by a spec that is
-      # red. Flip both to covered: true, tier: t2-cuj once the form stops sending
-      # the empty row and that spec goes green.
-      create-queue:            { covered: false }
-      edit-queue:              { covered: false }
+      # annotation-queue-automation-off.spec.ts, which is RED on
+      # aliaksandrk/OPIK-6303-queue-automation-ui against a product defect, not a
+      # test defect: AddEditAnnotationQueueDialog.getQueue() serialises the
+      # `automation` block unconditionally, its default is one empty condition row
+      # (score_name: ""), and the schema's superRefine returns early while the
+      # toggle is off — so the empty row reaches a backend whose
+      # ScoreCondition.scoreName is @NotBlank, and every create/edit with
+      # automation off answers 422. Reproduced at the API independently of the
+      # form: same queue WITH that block 422s, WITHOUT it 201s.
+      #
+      # covered/tier are DERIVED (reconcile.py): a capability is covered when some
+      # spec carries its @cap: tag — pass/fail is never consulted. So these read
+      # true because the tags exist, exactly as delete-queue does below while one
+      # of its cases is a known failure. The note is where the red state is
+      # recorded. Drop the note once the form stops sending the empty row.
+      create-queue:            { covered: true,  tier: t2-cuj, note: "create form with automation off; RED against a product defect — the dialog posts an empty condition row whatever the toggle says and the backend 422s" }
+      edit-queue:              { covered: true,  tier: t2-cuj, note: "rename a queue that has no automation, asserting comments stay disabled; RED against the same empty-condition-row 422" }
       # Second case in this spec is a test.fail() known failure for OPIK-7903
       # (deleted-queue URL loads forever instead of showing a not-found state).
       # Fixing that bug turns the run red until the annotation is removed.

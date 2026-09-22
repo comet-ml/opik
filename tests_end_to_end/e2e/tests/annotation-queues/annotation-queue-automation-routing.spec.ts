@@ -94,7 +94,13 @@ test.describe(
                   nonMatching.id,
                   manual.id,
                 ]),
-              { message: 'automation routes the matching trace and only the matching trace' },
+              {
+                message:
+                  'automation routes the matching trace and only the matching trace. ' +
+                  'An answer carrying only the manual trace means nothing was routed at all — ' +
+                  'check ANNOTATION_QUEUE_ROUTING_ENABLED is true on the environment (see the ' +
+                  'NOTE above: this branch flips the default in a commit marked "revert before merge").',
+              },
             )
             .toEqual({
               [matching.id]: 'automated',
