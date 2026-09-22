@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RStreamReactive;
@@ -23,6 +24,7 @@ import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -38,9 +40,9 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -943,23 +945,48 @@ class BaseRedisSubscriberUnitTest {
          */
         @Test
         void shouldFallBackToOneGroupPerMessageWhenCollapseThrows() {
-            var subscriber = trackSubscriber(TestRedisSubscriber.collapsingSubscriber(CONFIG, redissonClient,
-                    batch -> {
-                        throw new IllegalStateException("collapse is broken");
-                    }));
+            assertEveryMessageProcessedAndAckedOnce(batch -> {
+                throw new IllegalStateException("collapse is broken");
+            });
+        }
+
+        /**
+         * Three messages in one batch through a broken {@code collapse}: each must reach {@code processEvent}
+         * exactly once and each id must be acked exactly once -- one group per message, none duplicated by
+         * the fallback and none left pending.
+         */
+        private void assertEveryMessageProcessedAndAckedOnce(
+                java.util.function.Function<Map<StreamMessageId, String>, List<BaseRedisSubscriber.MessageGroup<String>>> collapser) {
+            var ids = List.of(new StreamMessageId(2_000L, 0), new StreamMessageId(2_000L, 1),
+                    new StreamMessageId(2_000L, 2));
+            var processed = new CopyOnWriteArrayList<String>();
+            var subscriber = trackSubscriber(new TestRedisSubscriber(CONFIG, redissonClient, message -> {
+                processed.add(message);
+                return Mono.empty();
+            }, collapser));
             whenAutoClaimReturnEmpty(subscriber.getConsumerId());
-            whenReadGroupReturnMessages();
+            var readCount = new AtomicInteger();
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> readCount.incrementAndGet() == 1
+                            ? Mono.just(Map.of(
+                                    ids.get(0), Map.of(TestStreamConfiguration.PAYLOAD_FIELD, "m0"),
+                                    ids.get(1), Map.of(TestStreamConfiguration.PAYLOAD_FIELD, "m1"),
+                                    ids.get(2), Map.of(TestStreamConfiguration.PAYLOAD_FIELD, "m2")))
+                            : Mono.just(Map.of()));
             whenAckReturn();
             whenRemoveReturn();
 
             subscriber.start();
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> {
-                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(1);
-                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
-                    });
-            verify(stream, atLeastOnce()).ack(eq(CONFIG.getConsumerGroupName()), any(StreamMessageId[].class));
+                    .untilAsserted(() -> assertThat(processed).containsExactlyInAnyOrder("m0", "m1", "m2"));
+            assertThat(subscriber.getFailedMessageCount().get()).isZero();
+
+            var acked = ArgumentCaptor.forClass(StreamMessageId[].class);
+            verify(stream, timeout(AWAIT_TIMEOUT_SECONDS * 1_000L).atLeastOnce())
+                    .ack(eq(CONFIG.getConsumerGroupName()), acked.capture());
+            assertThat(acked.getAllValues().stream().flatMap(Arrays::stream).toList())
+                    .containsExactlyInAnyOrderElementsOf(ids);
         }
     }
 

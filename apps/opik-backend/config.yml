@@ -1204,9 +1204,9 @@ annotationQueueRouting:
   #   silently discards the oldest messages; consumerBatchSize is the lever to raise alongside it.
   poolingInterval: ${ANNOTATION_QUEUE_ROUTING_POOLING_INTERVAL:-1s}
   # Default: 500ms
-  # Description: Delay before re-reading scores for entities the event named but the first read found none
-  #   for - covers ClickHouse replication lag and the async-insert buffer window. Only paid when an
-  #   inconsistency is actually detected.
+  # Description: Delay before re-reading scores for the entities an event named, when the first read looks
+  #   stale: no scores at all for an entity, or none of the score names the event said it wrote. Covers
+  #   ClickHouse replication lag and the async-insert buffer window. Only paid when a stale read is detected.
   staleReadRetryDelay: ${ANNOTATION_QUEUE_ROUTING_STALE_READ_RETRY_DELAY:-500ms}
   # Default: 5s
   # Description: Timeout for blocking read operations on Redis streams (long polling)

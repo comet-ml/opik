@@ -7,6 +7,8 @@ import com.comet.opik.api.annotationqueue.ScoreConditionOperator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -42,6 +44,28 @@ class AnnotationQueueConditionEvaluatorTest {
     @Nested
     @DisplayName("Single condition")
     class SingleCondition {
+
+        @ParameterizedTest(name = "{0} 0.7, scored {1}: {2}")
+        @CsvSource({
+                "GREATER_THAN, 0.5, false", "GREATER_THAN, 0.7, false", "GREATER_THAN, 0.9, true",
+                "LESS_THAN, 0.5, true", "LESS_THAN, 0.7, false", "LESS_THAN, 0.9, false",
+                "EQUAL, 0.5, false", "EQUAL, 0.7, true", "EQUAL, 0.9, false"})
+        @DisplayName("every operator, below, at and above the threshold")
+        void everyOperatorAroundTheThreshold(ScoreConditionOperator operator, double actual, boolean expected) {
+            var conditions = groups(List.of(condition("hallucination", operator, 0.7)));
+
+            assertThat(evaluator.matches(conditions, scores("hallucination", actual))).isEqualTo(expected);
+        }
+
+        /** The effective score is a Decimal64(9), so 0.7 arrives as 0.700000000 and equals must not see scale. */
+        @Test
+        @DisplayName("equal: scale-insensitive")
+        void equalIsScaleInsensitive() {
+            var conditions = groups(List.of(condition("hallucination", ScoreConditionOperator.EQUAL, 0.7)));
+
+            assertThat(evaluator.matches(conditions, Map.of("hallucination", new BigDecimal("0.700000000"))))
+                    .isTrue();
+        }
 
         @Test
         @DisplayName("greater than: matches strictly above the threshold")

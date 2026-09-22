@@ -15,6 +15,7 @@ import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import io.dropwizard.util.Duration;
+import jakarta.ws.rs.NotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -285,6 +286,34 @@ class AnnotationQueueRoutingSubscriberTest {
 
             // The healthy queue still received its items - one bad queue cannot starve the rest.
             verify(annotationQueueService).addItems(eq(secondQueueId), any(), any());
+        }
+
+        /**
+         * {@code matchesByQueue} has no order, so the permanent failure may well be the one that happens first.
+         * The base classifies the primary alone: were that the 404, the message would be acked and the
+         * transient failure's work silently undone. Holds whichever queue fails first.
+         */
+        @Test
+        void reportsARetryableFailureAsPrimaryOverAPermanentOne() {
+            UUID traceId = UUID.randomUUID();
+            UUID secondQueueId = UUID.randomUUID();
+            givenScored(EntityType.TRACE, traceId);
+            when(automationService.findEnabledByProjects(WORKSPACE_ID, Set.of(projectId),
+                    AnnotationQueue.AnnotationScope.TRACE))
+                    .thenReturn(List.of(new QueueAutomation(queueId, projectId, null),
+                            new QueueAutomation(secondQueueId, projectId, null)));
+            givenConditionsMatch();
+            givenLoggingSource(traceId);
+            var permanent = new NotFoundException("queue deleted");
+            var transientFailure = new RuntimeException("clickhouse timeout");
+            when(annotationQueueService.addItems(eq(queueId), any(), any())).thenReturn(Mono.error(permanent));
+            when(annotationQueueService.addItems(eq(secondQueueId), any(), any()))
+                    .thenReturn(Mono.error(transientFailure));
+
+            assertThatThrownBy(() -> process(AnnotationQueue.AnnotationScope.TRACE, Set.of(traceId)))
+                    .isSameAs(transientFailure)
+                    // contains, not containsExactly: block() appends its own "#block terminated" marker.
+                    .satisfies(error -> assertThat(error.getSuppressed()).contains(permanent));
         }
     }
 

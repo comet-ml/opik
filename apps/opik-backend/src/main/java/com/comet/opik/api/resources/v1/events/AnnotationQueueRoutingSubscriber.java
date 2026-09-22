@@ -14,7 +14,9 @@ import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.HttpStatusRetryability;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.ClientErrorException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
@@ -391,12 +393,23 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
     }
 
     /**
-     * The first failure, with any others attached. Reported as-is rather than wrapped, so
-     * {@code BaseRedisSubscriber} can still tell a retryable failure from one that will never succeed.
+     * The failure to report, with the others attached. Reported as-is rather than wrapped, so
+     * {@code BaseRedisSubscriber} can still tell a retryable failure from one that will never succeed -- and a
+     * failure that will never succeed is not chosen as the primary while another might. The base classifies the
+     * primary alone, and {@code matchesByQueue} has no order, so reporting whichever failed first could let a
+     * permanent 404 on one queue ack the message while a transient failure on another still had work to redo.
+     * Only the HTTP-status case is told apart here; the base's own classification is not duplicated.
      */
     private Throwable routingFailure(ConcurrentLinkedQueue<Throwable> failures) {
-        Throwable first = failures.poll();
-        failures.forEach(first::addSuppressed);
-        return first;
+        var all = new ArrayList<>(failures);
+        Throwable primary = all.stream().filter(failure -> !permanentStatus(failure)).findFirst()
+                .orElse(all.getFirst());
+        all.stream().filter(other -> other != primary).forEach(primary::addSuppressed);
+        return primary;
+    }
+
+    private static boolean permanentStatus(Throwable failure) {
+        return failure instanceof ClientErrorException client
+                && HttpStatusRetryability.isPermanent(client.getResponse().getStatus());
     }
 }
