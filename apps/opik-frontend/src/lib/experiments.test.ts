@@ -3,12 +3,17 @@ import { describe, expect, it } from "vitest";
 import {
   buildExperimentName,
   EXPERIMENT_TAB,
+  formatExperimentPromptVersions,
   formatPromptVersionLabel,
   getAvailableExperimentTabs,
   isExperimentTabId,
   suggestNextExperimentName,
 } from "./experiments";
-import { EVALUATION_METHOD, Experiment } from "@/types/datasets";
+import {
+  EVALUATION_METHOD,
+  Experiment,
+  ExperimentPromptVersion,
+} from "@/types/datasets";
 
 const experiment = (overrides: Partial<Experiment> = {}) =>
   ({
@@ -110,6 +115,57 @@ describe("experiments utilities", () => {
           commit: "",
         }),
       ).toBe("My Prompt");
+    });
+  });
+
+  // The compare Configuration tab renders this as a table row, so an absent
+  // value has to stay undefined (rendered as "No value") rather than becoming
+  // an empty string that would compare equal to another experiment's prompt.
+  describe("formatExperimentPromptVersions", () => {
+    const promptVersion = (overrides: Partial<ExperimentPromptVersion> = {}) =>
+      ({
+        id: "pv1",
+        prompt_id: "p1",
+        prompt_name: "My Prompt",
+        commit: "c96aa875",
+        version_number: "v1",
+        ...overrides,
+      }) as ExperimentPromptVersion;
+
+    it("labels a single linked prompt version", () => {
+      expect(
+        formatExperimentPromptVersions(
+          experiment({ prompt_versions: [promptVersion()] }),
+        ),
+      ).toBe("My Prompt (v1)");
+    });
+
+    it("joins every linked prompt version", () => {
+      expect(
+        formatExperimentPromptVersions(
+          experiment({
+            prompt_versions: [
+              promptVersion(),
+              promptVersion({
+                id: "pv2",
+                prompt_name: "Guardrail",
+                version_number: "v4",
+              }),
+            ],
+          }),
+        ),
+      ).toBe("My Prompt (v1), Guardrail (v4)");
+    });
+
+    it("returns undefined when the experiment has no linked prompt", () => {
+      expect(formatExperimentPromptVersions(experiment())).toBeUndefined();
+      expect(
+        formatExperimentPromptVersions(experiment({ prompt_versions: [] })),
+      ).toBeUndefined();
+    });
+
+    it("returns undefined for a missing experiment", () => {
+      expect(formatExperimentPromptVersions(undefined)).toBeUndefined();
     });
   });
 });
