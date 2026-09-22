@@ -681,6 +681,7 @@ class Experiment:
         self,
         max_results: Optional[int] = 10000,
         truncate: bool = False,
+        page_size: int = constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE,
     ) -> List[experiment_item.ExperimentItemContent]:
         """
         Retrieves and returns a list of experiment items for this experiment.
@@ -688,10 +689,30 @@ class Experiment:
         Args:
             max_results: Maximum number of experiment items to retrieve. Defaults to 10000 if not specified.
             truncate: Whether to truncate the items returned by the backend. Defaults to False.
+            page_size: Number of dataset items requested per page. Must be a
+                positive integer not exceeding
+                ``constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE``. The read is
+                round-trip bound, so this mostly trades request count against
+                per-request size; lower it only if the backend struggles with
+                the default response size.
 
         Returns:
             List of ExperimentItemContent objects for this experiment.
+
+        Raises:
+            ValueError: If ``page_size`` is not a positive integer or exceeds
+                ``constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE``.
         """
+        if isinstance(page_size, bool) or not isinstance(page_size, int):
+            raise ValueError("page_size must be a positive integer")
+        if page_size < 1:
+            raise ValueError("page_size must be a positive integer")
+        if page_size > constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE:
+            raise ValueError(
+                "page_size must not exceed "
+                f"{constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE}, got {page_size}"
+            )
+
         if max_results is None:
             max_results = 10000  # TODO: remove this once we have a proper way to get all experiment items
 
@@ -701,6 +722,7 @@ class Experiment:
             truncate=truncate,
             max_results=max_results,
             project_name=self._project_name,
+            page_size=page_size,
         )
 
     def log_experiment_scores(

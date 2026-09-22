@@ -740,7 +740,8 @@ def _read_source_experiment_items(
     ``api_objects.experiment.rest_operations.find_experiment_items_for_dataset``
     helper, which paginates
     ``datasets.find_dataset_items_with_experiment_items`` internally
-    (PAGE_SIZE=100), flattens each page's per-dataset-item
+    (``constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE`` items per page),
+    flattens each page's per-dataset-item
     ``experiment_items`` list, and returns ``ExperimentItemContent``
     dataclasses with ``assertion_results`` already normalized to
     ``List[AssertionResultDict]``.

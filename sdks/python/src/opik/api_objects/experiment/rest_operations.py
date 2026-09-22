@@ -2,7 +2,7 @@ import json
 from typing import List, Optional
 
 from . import experiment_item
-from .. import rest_stream_parser
+from .. import constants, rest_stream_parser
 from ... import exceptions, rest_api
 from ...rest_api.types import experiment_public
 
@@ -59,9 +59,8 @@ def find_experiment_items_for_dataset(
     max_results: int,
     truncate: bool,
     filter_expression: Optional[str] = None,
+    page_size: int = constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE,
 ) -> List[experiment_item.ExperimentItemContent]:
-    PAGE_SIZE = 100
-
     collected_items: List[experiment_item.ExperimentItemContent] = []
     experiment_ids_json = json.dumps(experiment_ids)
 
@@ -71,7 +70,7 @@ def find_experiment_items_for_dataset(
             rest_client.datasets.find_dataset_items_with_experiment_items(
                 id=dataset_id,
                 page=page_number,
-                size=PAGE_SIZE,
+                size=page_size,
                 experiment_ids=experiment_ids_json,
                 truncate=truncate,
                 filters=filter_expression,

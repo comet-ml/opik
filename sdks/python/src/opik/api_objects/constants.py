@@ -47,6 +47,22 @@ DATASET_ITEMS_READ_MAX_THREADS = 32
 # per worker), so an unbounded value authorises an unbounded resident bound.
 DATASET_ITEMS_WRITE_MAX_THREADS = 32
 
+# Page size for the experiment Compare-view read behind Experiment.get_items().
+# The read is round-trip bound, not payload bound: single-page latency is flat
+# across sizes, so the page count is the whole cost. On a 100,000-item
+# experiment, 100 took 221s over 1,001 requests and 1,000 takes 28s over 101.
+# 5,000 is faster still (11s) but makes one response several times larger for a
+# diminishing return, and 1,000 is the size the backend endpoint and the UI
+# already work at. The endpoint declares @Min(1) with no @Max, so this is a
+# client-side choice rather than a server limit.
+EXPERIMENT_ITEMS_READ_PAGE_SIZE = 1000
+# Ceiling on that page size, matching the dataset read's own chunk ceiling so
+# one knob does not authorise a much larger response than the other. The
+# backend endpoint declares no @Max, so this exists to keep a single response
+# bounded rather than to mirror a server limit; 5,000 already doubles per-page
+# latency for a diminishing gain.
+EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE = DATASET_ITEMS_READ_MAX_CHUNK_SIZE
+
 # Parallel dataset insert requires a backend that serializes concurrent dataset
 # version writes. On backends older than this version, concurrent batches
 # sharing one batch_group_id raced and could 500 or silently drop rows; 2.2.8 is

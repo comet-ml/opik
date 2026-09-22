@@ -2,7 +2,7 @@ import json
 from typing import List, Optional
 
 from . import rest_operations, experiment_item
-from .. import opik_query_language
+from .. import constants, opik_query_language
 from ...rest_api import client as rest_api_client
 
 
@@ -20,6 +20,7 @@ class ExperimentsClient:
         max_results: int = 1000,
         filter_string: Optional[str] = None,
         project_name: Optional[str] = None,
+        page_size: int = constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE,
     ) -> List[experiment_item.ExperimentItemContent]:
         """
         Find experiment items associated with a specific dataset among a list of experiments.
@@ -37,6 +38,9 @@ class ExperimentsClient:
                 or metadata. Defaults to True.
             max_results: Maximum number of results to return. Defaults to 1000.
             project_name: Optional project name to associate with the query. If not provided, the default project will be used.
+            page_size: Number of dataset items requested per page. Trades request
+                count against per-request size; the read is round-trip bound, so
+                lowering it is slower.
 
         Returns:
             A list of experiment item content objects that match the criteria.
@@ -63,4 +67,5 @@ class ExperimentsClient:
             max_results=max_results,
             truncate=truncate,
             filter_expression=filter_expression,
+            page_size=page_size,
         )
