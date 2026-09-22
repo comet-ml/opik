@@ -840,7 +840,18 @@ if [[ "$SENTINEL_REPAIR_ONLY" == "1" ]]; then
     # moment it serves, which on a rolling restart is well before the roll completes — so an anchor taken after the
     # rollout leaves every sentinel from the roll outside the window, correctly untouched by the repair and still
     # damaged afterwards. Widening --sentinel-window-from is free, so prefer an anchor captured BEFORE the rollout.
-    if [[ "$all_end_time" =~ ^[0-9]+$ ]] && (( before_end_time > 0 && all_end_time > before_end_time )); then
+    #
+    # The guard is "the window matched SOMETHING", not "it matched an end_time". Keying it on end_time alone would go
+    # quiet on the ORDINARY shape rather than an exotic one: per the note above, the flag stamps ttft on nearly
+    # everything it touches while the epoch end_time arm catches only spans still in flight, so a window holding ttft
+    # matches and zero end_time matches is the common case — and it is exactly then that the operator needs telling
+    # that end_time sentinels sit outside the bounds. The zero-inside case is left to the WARNING below, which covers
+    # the same ground and says more.
+    #
+    # Deliberately NOT mirrored on ttft: the no-window ttft figure is enormous by construction, for the reason above,
+    # so an `all_ttft > before_ttft` arm would fire on healthy runs and teach the operator to skip this line.
+    if [[ "$all_end_time" =~ ^[0-9]+$ ]] && (( all_end_time > before_end_time )) \
+        && (( before_end_time > 0 || before_ttft > 0 )); then
         echo "NOTE: $(( all_end_time - before_end_time )) row(s) carry an epoch end_time OUTSIDE the window. If they sit just" >&2
         echo "      BEFORE --sentinel-window-from they too are flag-minted, written while the rollout was landing," >&2
         echo "      and this run will leave them damaged. Widening the lower bound is free — prefer an anchor captured" >&2
