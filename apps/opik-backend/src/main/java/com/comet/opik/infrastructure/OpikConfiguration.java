@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.jobs.JobConfiguration;
+import io.dropwizard.util.Duration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -31,10 +32,23 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
-    private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormExtendedSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
+    private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormExtendedSql = extendedSqlDefaults();
 
     @Valid @NotNull @JsonProperty
     private BulkInsertConfig bulkInsert = BulkInsertConfig.builder().build();
+
+    /**
+     * Defaults matching this block in {@code config.yml}, so a deployment maintaining its own configuration file
+     * does not have to declare the block to boot. Its fields are {@code @NotBlank}/{@code @NotNull}, so an
+     * unpopulated instance fails validation at startup even when Custom Charts is switched off entirely.
+     */
+    private static DatabaseAnalyticsReadOnlyFreeFormSqlConfig extendedSqlDefaults() {
+        var config = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
+        config.setUsername("comet_readonly_freeform_extended_sql_user");
+        config.setPassword("opik");
+        config.setSocketTimeout(Duration.seconds(200));
+        return config;
+    }
 
     @Valid @NotNull @JsonProperty
     private CustomChartsConfig customCharts = new CustomChartsConfig();

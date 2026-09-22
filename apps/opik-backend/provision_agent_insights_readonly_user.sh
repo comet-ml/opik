@@ -42,11 +42,32 @@ ro_ext_user="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_readonly
 ro_ext_pass="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}"
 ch_url="http://${ch_host}:${ch_port}/?user=${ch_admin_user}&password=${ch_admin_pass}"
 
+# Both names are interpolated into DDL as bare identifiers, where ClickHouse has no quoting we can rely on, so
+# anything outside this set is rejected rather than allowed to reshape the statement. Failing here also beats
+# failing midway: a partial run leaves some grants applied and some not.
+for name_var in ro_user ro_ext_user; do
+    eval "name=\$$name_var"
+    case "$name" in
+        *[!A-Za-z0-9_]* | "")
+            echo "Refusing to provision: ${name_var}='${name}' is not a bare identifier ([A-Za-z0-9_])." >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Passwords go into a single-quoted SQL literal, so a quote or backslash in one would terminate or escape out of
+# it. Escaped rather than rejected: a password is allowed to contain anything.
+sql_quote() {
+    printf '%s' "$1" | sed "s/\\\\/\\\\\\\\/g; s/'/\\\\'/g"
+}
+ro_pass_sql=$(sql_quote "$ro_pass")
+ro_ext_pass_sql=$(sql_quote "$ro_ext_pass")
+
 echo "Provisioning read-only ClickHouse users '${ro_user}' and '${ro_ext_user}' on ${ch_host}:${ch_port}/${ch_db}..."
 
 statements=(
-    "CREATE USER IF NOT EXISTS ${ro_user} IDENTIFIED BY '${ro_pass}'"
-    "CREATE USER IF NOT EXISTS ${ro_ext_user} IDENTIFIED BY '${ro_ext_pass}'"
+    "CREATE USER IF NOT EXISTS ${ro_user} IDENTIFIED BY '${ro_pass_sql}'"
+    "CREATE USER IF NOT EXISTS ${ro_ext_user} IDENTIFIED BY '${ro_ext_pass_sql}'"
     "CREATE SETTINGS PROFILE IF NOT EXISTS comet_llm_readonly_freeform_sql_profile SETTINGS readonly = 1, max_execution_time = 180, max_memory_usage = 8589934592, max_result_rows = 100000, result_overflow_mode = 'throw', max_rows_to_read = 100000000, read_overflow_mode = 'throw', max_concurrent_queries_for_user = 5, use_skip_indexes_if_final = 1, SQL_workspace_id = '' CHANGEABLE_IN_READONLY, SQL_project_id = '' CHANGEABLE_IN_READONLY TO ${ro_user}, ${ro_ext_user}"
 )
 

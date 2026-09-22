@@ -19,6 +19,8 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.UncheckedIOException;
 import java.util.List;
@@ -152,25 +154,40 @@ public class FreeFormSqlQueryService {
                         throw mapExecutionError(error, startMillis);
                     }
                     recordSuccess(result, startMillis);
-                    return AnalyticsQueryResponse.builder().results(resolveEntityNames(account, result, workspaceId))
-                            .build();
-                });
+                    return result;
+                })
+                .thenCompose(result -> resolveEntityNames(account, result, workspaceId));
     }
 
     /**
      * Resolves names by ids for datasets and projects.
+     *
+     * <p>Runs on {@code boundedElastic} rather than inline. The enclosing callback executes on a ClickHouse client
+     * completion thread, and this step is a blocking MySQL round trip — leaving it there would let a slow lookup
+     * hold a thread that other queries' completions are waiting on.
      */
-    private List<JsonNode> resolveEntityNames(FreeFormSqlAccount account, FreeFormSqlResult result,
-            String workspaceId) {
+    private CompletableFuture<AnalyticsQueryResponse> resolveEntityNames(FreeFormSqlAccount account,
+            FreeFormSqlResult result, String workspaceId) {
         if (account != FreeFormSqlAccount.EXTENDED) {
-            return result.rows();
+            return CompletableFuture.completedFuture(toResponse(result.rows()));
         }
+        return Mono.fromCallable(() -> toResponse(enrichOrKeepIds(result, workspaceId)))
+                .subscribeOn(Schedulers.boundedElastic())
+                .toFuture();
+    }
+
+    /** Enrichment is presentation: a failure leaves the ids in place rather than losing a result ClickHouse returned. */
+    private List<JsonNode> enrichOrKeepIds(FreeFormSqlResult result, String workspaceId) {
         try {
             return entityNameEnricher.enrich(result.rows(), workspaceId);
         } catch (Exception e) {
             log.warn("Name enrichment failed for workspace '{}'; returning unresolved ids", workspaceId, e);
             return result.rows();
         }
+    }
+
+    private static AnalyticsQueryResponse toResponse(List<JsonNode> rows) {
+        return AnalyticsQueryResponse.builder().results(rows).build();
     }
 
     private static boolean containsSetNode(List<String> nodeLabels) {
