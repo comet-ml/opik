@@ -14,11 +14,10 @@ import static com.comet.opik.infrastructure.db.DatabaseAnalyticsModule.CLICKHOUS
 import static com.comet.opik.infrastructure.db.DatabaseAnalyticsModule.READ_ONLY_FREE_FORM_EXTENDED_SQL_CLICKHOUSE_CLIENT;
 
 /**
- * Probes the extended free-form SQL read-only ClickHouse user via the v2 HTTP client. Custom Charts is its only
- * consumer today; the account is named for the reach it grants, not for that feature.
+ * Probes the extended free-form SQL read-only ClickHouse user via the v2 HTTP client.
  *
  * <p>Gated on {@code ollieEnabled} and a non-empty workspace allowlist — the same pair the endpoint checks. An
- * install that never enables the feature must not be held out of readiness for an account it has no use for.
+ * installation that never enables the feature must not be held out of readiness.
  */
 @Singleton
 public class ClickHouseReadOnlyFreeFormExtendedSqlHealthCheck extends AbstractClickHouseHealthCheck {

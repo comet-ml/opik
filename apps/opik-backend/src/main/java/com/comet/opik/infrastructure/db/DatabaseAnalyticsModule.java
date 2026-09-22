@@ -54,9 +54,8 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
             }
         });
 
-        // Extended free-form SQL account (Custom Charts is its only consumer today). Built unconditionally for the
-        // same reason as the one above — the v2 client connects lazily, so an unused account costs nothing;
-        // customChartsEnabledWorkspaces gates every use.
+        // Extended free-form SQL account (used for Custom Charts). Built unconditionally for the
+        // same reason as the one above — the client connects lazily, so an unused account costs nothing;
         readOnlyFreeFormExtendedSqlClickHouseClient = buildReadOnlyClient(
                 configuration().getDatabaseAnalyticsReadOnlyFreeFormExtendedSql());
         environment().lifecycle().manage(new Managed() {

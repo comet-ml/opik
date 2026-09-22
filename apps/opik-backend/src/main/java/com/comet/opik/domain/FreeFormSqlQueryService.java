@@ -152,19 +152,16 @@ public class FreeFormSqlQueryService {
                         throw mapExecutionError(error, startMillis);
                     }
                     recordSuccess(result, startMillis);
-                    return AnalyticsQueryResponse.builder().results(resolveNames(account, result, workspaceId))
+                    return AnalyticsQueryResponse.builder().results(resolveEntityNames(account, result, workspaceId))
                             .build();
                 });
     }
 
     /**
-     * Charts render as HTML for a person, so a bare {@code dataset_id} column is not a usable label. Agent Insights
-     * returns to a model that reads ids fine, and widening its response shape is not this change's business.
-     *
-     * <p>Enrichment is presentation, never correctness: a failure here leaves the ids in place rather than losing a
-     * result ClickHouse already returned.
+     * Resolves names by ids for datasets and projects.
      */
-    private List<JsonNode> resolveNames(FreeFormSqlAccount account, FreeFormSqlResult result, String workspaceId) {
+    private List<JsonNode> resolveEntityNames(FreeFormSqlAccount account, FreeFormSqlResult result,
+            String workspaceId) {
         if (account != FreeFormSqlAccount.EXTENDED) {
             return result.rows();
         }
