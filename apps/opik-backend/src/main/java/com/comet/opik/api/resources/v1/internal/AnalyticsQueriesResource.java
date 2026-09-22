@@ -3,9 +3,8 @@ package com.comet.opik.api.resources.v1.internal;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AnalyticsQueryRequest;
 import com.comet.opik.api.AnalyticsQueryResponse;
-import com.comet.opik.api.ChartQueryRequest;
 import com.comet.opik.api.error.ErrorMessage;
-import com.comet.opik.domain.AnalyticsConsumer;
+import com.comet.opik.domain.FreeFormSqlAccount;
 import com.comet.opik.domain.FreeFormSqlQueryDAO;
 import com.comet.opik.domain.FreeFormSqlQueryService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -23,6 +22,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -44,15 +44,16 @@ import java.util.concurrent.CompletionException;
  * caller's workspace. Authentication is required only to derive that bound. Every query must return exactly one
  * column named {@code result}, produced via {@code toJSONString(...)}.
  *
- * <p>Two consumers, deliberately kept apart because they run as <em>different</em> ClickHouse accounts whose row
- * policies differ — not merely whose grants do:
+ * <p>Two endpoints, running as <em>different</em> ClickHouse accounts whose row policies differ — not merely
+ * whose grants do:
  *
  * <ul>
- * <li>{@code POST /projects/{projectId}} — Agent Insights. Three tables, every one bound to workspace <em>and</em>
- * project. Gated on {@code ollieEnabled}.</li>
- * <li>{@code POST /charts} — Custom Charts. Eight tables; only {@code traces} and {@code spans} keep a project
- * bound, and that bound is optional. Gated on {@code ollieEnabled} <em>and</em>
- * {@code customChartsEnabledWorkspaces} — it shares the former's provisioning.</li>
+ * <li>{@code POST /} — scope in the body. Eight tables; {@code traces} and {@code spans} are restricted to
+ * {@code project_id} when supplied and cover the workspace when it is not. Gated on {@code ollieEnabled} and
+ * {@code customChartsEnabledWorkspaces}.</li>
+ * <li>{@code POST /projects/{projectId}} — scope in the path, and the older of the two. Three tables, every one
+ * bound to workspace <em>and</em> project. Gated on {@code ollieEnabled}. It is expected to be removed once its
+ * callers move to the endpoint above, which is why that one carries no qualifier in its path.</li>
  * </ul>
  *
  * <p>Either gate returns {@code 501 Not Implemented} when closed, with no ClickHouse access.
@@ -89,23 +90,29 @@ public class AnalyticsQueriesResource {
         // through base64() or substring() matches no rule written against the plain text.
         RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Agent Insights free-form SQL");
 
+        // The project comes from the path here. Accepting one in the body too would leave which of the two wins
+        // undefined, so a caller that sets it is told plainly rather than having one silently ignored.
+        if (request.projectId() != null) {
+            throw new BadRequestException(
+                    "project_id is not accepted by this endpoint; the project comes from the path. Use POST /v1/internal/analytics-queries to choose the scope in the body.");
+        }
+
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Executing Agent Insights free-form SQL for workspace '{}', project '{}'", workspaceId, projectId);
 
-        return execute(AnalyticsConsumer.AGENT_INSIGHTS, workspaceId, projectId.toString(), request.query());
+        return execute(FreeFormSqlAccount.STANDARD, workspaceId, projectId.toString(), request.query());
     }
 
     @POST
-    @Path("/charts")
-    @Operation(operationId = "executeChartQuery", summary = "Execute Custom Charts free-form SQL", description = "Runs read-only SQL for a workspace allowlisted for Custom Charts. Omit project_id to query the whole workspace. Returns 501 unless Agent Insights is enabled and the workspace is allowlisted.", responses = {
+    @Operation(operationId = "executeScopedAnalyticsQuery", summary = "Execute free-form analytics SQL", description = "Runs read-only SQL bounded to the caller's workspace. Supply project_id to restrict traces and spans to one project, or omit it to cover the whole workspace. Returns 501 unless Agent Insights is enabled and the workspace is allowlisted.", responses = {
             @ApiResponse(responseCode = "200", description = "Query results", content = @Content(schema = @Schema(implementation = AnalyticsQueryResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "501", description = "Agent Insights is disabled, or Custom Charts is not enabled for this workspace")})
     @RateLimited
-    public Response executeChartQuery(
-            @RequestBody(content = @Content(schema = @Schema(implementation = ChartQueryRequest.class))) @NotNull @Valid ChartQueryRequest request) {
+    public Response executeScopedQuery(
+            @RequestBody(content = @Content(schema = @Schema(implementation = AnalyticsQueryRequest.class))) @NotNull @Valid AnalyticsQueryRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         // Both toggles, not just the allowlist: the ClickHouse account this endpoint runs as is provisioned under
@@ -126,7 +133,7 @@ public class AnalyticsQueriesResource {
 
         log.info("Executing Custom Charts SQL for workspace '{}', project scope '{}'", workspaceId, projectScope);
 
-        return execute(AnalyticsConsumer.CUSTOM_DASHBOARD_CHARTS, workspaceId, projectScope, request.query());
+        return execute(FreeFormSqlAccount.EXTENDED, workspaceId, projectScope, request.query());
     }
 
     /**
@@ -134,10 +141,10 @@ public class AnalyticsQueriesResource {
      * is not reactive. join() wraps any failure in CompletionException — unwrap so the mapped WebApplicationException
      * (and its HTTP status) reaches the JAX-RS exception handling unchanged.
      */
-    private Response execute(AnalyticsConsumer consumer, String workspaceId, String projectScope, String query) {
+    private Response execute(FreeFormSqlAccount account, String workspaceId, String projectScope, String query) {
         try {
             AnalyticsQueryResponse response = freeFormSqlQueryService
-                    .executeQuery(consumer, workspaceId, projectScope, query)
+                    .executeQuery(account, workspaceId, projectScope, query)
                     .join();
             return Response.ok(response).build();
         } catch (CompletionException e) {

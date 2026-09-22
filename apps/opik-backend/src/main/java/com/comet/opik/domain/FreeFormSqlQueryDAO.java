@@ -20,7 +20,7 @@ import java.util.stream.StreamSupport;
 
 /**
  * Read-only ClickHouse access for caller-supplied free-form SQL. Queries run on one of two dedicated accounts,
- * chosen per call by {@link AnalyticsConsumer}; the workspace/project bounds are passed as server settings
+ * chosen per call by {@link FreeFormSqlAccount}; the workspace/project bounds are passed as server settings
  * (URL params) so the SQL text is never modified. Higher-level validation, metrics and error mapping live in
  * {@link FreeFormSqlQueryService}.
  *
@@ -33,7 +33,7 @@ public interface FreeFormSqlQueryDAO {
     /**
      * Parses {@code query} via {@code EXPLAIN AST} (without executing it) and returns the AST node labels, one per row.
      */
-    CompletableFuture<List<String>> explainAst(AnalyticsConsumer consumer, String query);
+    CompletableFuture<List<String>> explainAst(FreeFormSqlAccount account, String query);
 
     /**
      * The {@code SQL_project_id} value meaning "every project in the workspace". The row policies match it
@@ -46,7 +46,7 @@ public interface FreeFormSqlQueryDAO {
      * Executes {@code query} bounded to the given workspace and project scope, reading the single {@code result}
      * column. {@code projectScope} is a project id, or {@link #PROJECT_SCOPE_ALL}.
      */
-    CompletableFuture<FreeFormSqlResult> execute(AnalyticsConsumer consumer, String workspaceId, String projectScope,
+    CompletableFuture<FreeFormSqlResult> execute(FreeFormSqlAccount account, String workspaceId, String projectScope,
             String query);
 }
 
@@ -73,20 +73,20 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
         this.freeFormExtendedSqlClient = freeFormExtendedSqlClient;
     }
 
-    private Client clientFor(AnalyticsConsumer consumer) {
-        return consumer == AnalyticsConsumer.CUSTOM_DASHBOARD_CHARTS ? freeFormExtendedSqlClient : agentInsightsClient;
+    private Client clientFor(FreeFormSqlAccount account) {
+        return account == FreeFormSqlAccount.EXTENDED ? freeFormExtendedSqlClient : agentInsightsClient;
     }
 
     @Override
     @WithSpan
-    public CompletableFuture<List<String>> explainAst(@NonNull AnalyticsConsumer consumer, @NonNull String query) {
-        return clientFor(consumer).queryRecords(EXPLAIN_AST_PREFIX + query)
+    public CompletableFuture<List<String>> explainAst(@NonNull FreeFormSqlAccount account, @NonNull String query) {
+        return clientFor(account).queryRecords(EXPLAIN_AST_PREFIX + query)
                 .thenApply(FreeFormSqlQueryDAOImpl::readNodeLabels);
     }
 
     @Override
     @WithSpan
-    public CompletableFuture<FreeFormSqlResult> execute(@NonNull AnalyticsConsumer consumer,
+    public CompletableFuture<FreeFormSqlResult> execute(@NonNull FreeFormSqlAccount account,
             @NonNull String workspaceId, @NonNull String projectScope, @NonNull String query) {
         // Only the SQL_ custom settings are sent: readonly=1 rejects any other per-query setting.
         // Execution/memory/row caps are pinned on the read-only user's server-side profile.
@@ -94,7 +94,7 @@ class FreeFormSqlQueryDAOImpl implements FreeFormSqlQueryDAO {
                 .serverSetting(SETTING_WORKSPACE_ID, workspaceId)
                 .serverSetting(SETTING_PROJECT_ID, projectScope);
 
-        return clientFor(consumer).queryRecords(query, settings)
+        return clientFor(account).queryRecords(query, settings)
                 .thenApply(FreeFormSqlQueryDAOImpl::readResult);
     }
 

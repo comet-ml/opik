@@ -28,7 +28,7 @@ import java.util.concurrent.CompletableFuture;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 /**
- * Orchestrates caller-supplied, read-only free-form SQL bounded to a single workspace/project. First consumer is the
+ * Orchestrates caller-supplied, read-only free-form SQL bounded to a single workspace/project. First account is the
  * Agent Insights subagent, but the service is intentionally feature-agnostic.
  *
  * <p>Every query is pre-flighted through {@code EXPLAIN AST} (see {@link FreeFormSqlQueryDAO}); if any node is a
@@ -116,13 +116,13 @@ public class FreeFormSqlQueryService {
                 .build();
     }
 
-    public CompletableFuture<AnalyticsQueryResponse> executeQuery(@NonNull AnalyticsConsumer consumer,
+    public CompletableFuture<AnalyticsQueryResponse> executeQuery(@NonNull FreeFormSqlAccount account,
             @NonNull String workspaceId, @NonNull String projectScope, @NonNull String query) {
         long startMillis = System.currentTimeMillis();
 
-        return freeFormSqlQueryDAO.explainAst(consumer, query)
+        return freeFormSqlQueryDAO.explainAst(account, query)
                 .handle((nodeLabels, error) -> validateAst(nodeLabels, error, startMillis))
-                .thenCompose(nodeLabels -> runQuery(consumer, workspaceId, projectScope, query, startMillis));
+                .thenCompose(nodeLabels -> runQuery(account, workspaceId, projectScope, query, startMillis));
     }
 
     /**
@@ -144,15 +144,15 @@ public class FreeFormSqlQueryService {
         return nodeLabels;
     }
 
-    private CompletableFuture<AnalyticsQueryResponse> runQuery(AnalyticsConsumer consumer, String workspaceId,
+    private CompletableFuture<AnalyticsQueryResponse> runQuery(FreeFormSqlAccount account, String workspaceId,
             String projectScope, String query, long startMillis) {
-        return freeFormSqlQueryDAO.execute(consumer, workspaceId, projectScope, query)
+        return freeFormSqlQueryDAO.execute(account, workspaceId, projectScope, query)
                 .handle((result, error) -> {
                     if (error != null) {
                         throw mapExecutionError(error, startMillis);
                     }
                     recordSuccess(result, startMillis);
-                    return AnalyticsQueryResponse.builder().results(resolveNames(consumer, result, workspaceId))
+                    return AnalyticsQueryResponse.builder().results(resolveNames(account, result, workspaceId))
                             .build();
                 });
     }
@@ -164,8 +164,8 @@ public class FreeFormSqlQueryService {
      * <p>Enrichment is presentation, never correctness: a failure here leaves the ids in place rather than losing a
      * result ClickHouse already returned.
      */
-    private List<JsonNode> resolveNames(AnalyticsConsumer consumer, FreeFormSqlResult result, String workspaceId) {
-        if (consumer != AnalyticsConsumer.CUSTOM_DASHBOARD_CHARTS) {
+    private List<JsonNode> resolveNames(FreeFormSqlAccount account, FreeFormSqlResult result, String workspaceId) {
+        if (account != FreeFormSqlAccount.EXTENDED) {
             return result.rows();
         }
         try {
