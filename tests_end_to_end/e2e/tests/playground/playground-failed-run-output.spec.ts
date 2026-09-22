@@ -31,6 +31,13 @@ test.describe('Playground — a failed run is not rendered as output', { tag: ['
     'A failed free-mode run renders the failure tag and no answer',
     { tag: ['@cap:playground.compose-run-prompt'] },
     async ({ page, project, providerKeys, testNamespace }) => {
+      // The failure itself is instant — it is thrown client-side before any request — but
+      // the setup ahead of it is not: a project, a REST-seeded provider key and a cold
+      // Playground load. Every other spec in this directory budgets 120s or more for that
+      // same preamble; the 90s default is the odd one out, and the one that would fail here
+      // for a reason that has nothing to do with OPIK-8468.
+      test.setTimeout(120_000);
+
       const modelId = await test.step('Seed an unreachable custom provider', async () => {
         return providerKeys.createUnreachable({
           providerName: `${testNamespace}-unreachable`,

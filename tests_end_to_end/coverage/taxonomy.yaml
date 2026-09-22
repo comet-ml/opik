@@ -440,6 +440,7 @@ areas:
     spec_dir: playground
     specs:
       - playground/playground-experiment-name.spec.ts
+      - playground/playground-failed-run-output.spec.ts
       - playground/playground-metric-selection.spec.ts
       - playground/playground-model-parameters.spec.ts
       - playground/playground-providers.spec.ts
