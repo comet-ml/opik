@@ -342,7 +342,7 @@ repos:
   # comments inline in the Dockerfiles, so no repo-level config file is needed.
   # ---------------------------------------------------------------------------
   - repo: https://github.com/hadolint/hadolint
-    rev: v2.14.0
+    rev: v2.15.1
     hooks:
       - id: hadolint-docker
         name: 🐳 hadolint — dockerfiles
