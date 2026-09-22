@@ -9,9 +9,37 @@ from opik.evaluation.metrics.score_result import ScoreResult
 from opik.exceptions import MetricComputationError
 
 try:  # pragma: no cover - optional dependency
+    import nltk
     from nltk.sentiment import SentimentIntensityAnalyzer
 except ImportError:  # pragma: no cover - optional dependency
+    nltk = None  # type: ignore
     SentimentIntensityAnalyzer = None  # type: ignore
+
+
+def _build_analyzer() -> Any:
+    """Return a ``SentimentIntensityAnalyzer``, fetching its lexicon if needed.
+
+    ``SentimentIntensityAnalyzer()`` reads the ``vader_lexicon`` corpus at
+    construction time and raises a bare :class:`LookupError` when it is absent,
+    which is what a fresh ``pip install nltk`` gives. Download it once, as the
+    METEOR metric does for WordNet, and fall back to an :class:`ImportError`
+    naming the manual command when that is not possible (for example offline).
+    """
+    try:
+        return SentimentIntensityAnalyzer()
+    except LookupError:
+        pass
+
+    try:
+        if nltk is not None:
+            nltk.download("vader_lexicon", quiet=True)
+        return SentimentIntensityAnalyzer()
+    except Exception as error:
+        raise ImportError(
+            "VADER sentiment metric requires the NLTK corpus 'vader_lexicon'. "
+            "Install manually via `python -m nltk.downloader vader_lexicon`, "
+            "or provide a custom analyzer."
+        ) from error
 
 
 class VADERSentiment(BaseMetric):
@@ -38,7 +66,7 @@ class VADERSentiment(BaseMetric):
         >>> metric = VADERSentiment()
         >>> result = metric.score("I absolutely love this experience!")  # doctest: +SKIP
         >>> round(result.value, 2)  # doctest: +SKIP
-        0.94
+        0.85
     """
 
     def __init__(
@@ -60,7 +88,7 @@ class VADERSentiment(BaseMetric):
                     "VADER sentiment metric requires the optional 'nltk' package. Install via"
                     " `pip install nltk` or provide a custom analyzer."
                 )
-            self._analyzer = SentimentIntensityAnalyzer()
+            self._analyzer = _build_analyzer()
 
     def score(self, output: str, **ignored_kwargs: Any) -> ScoreResult:
         if not output or not output.strip():

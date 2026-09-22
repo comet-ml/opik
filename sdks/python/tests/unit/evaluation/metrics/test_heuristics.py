@@ -600,6 +600,63 @@ def test_vader_sentiment_metric_uses_custom_analyzer():
     assert result.metadata["vader"]["compound"] == -0.4
 
 
+def test_vader_sentiment__missing_lexicon_downloads_it(monkeypatch):
+    # SentimentIntensityAnalyzer reads the vader_lexicon corpus at construction
+    # and raises a bare LookupError when it is absent, which is what a fresh
+    # `pip install nltk` gives. The corpus is fetched once instead.
+    from opik.evaluation.metrics.heuristics import vader_sentiment
+
+    attempts = {"analyzer": 0, "download": []}
+
+    class StubAnalyzer:
+        def __init__(self) -> None:
+            attempts["analyzer"] += 1
+            if not attempts["download"]:
+                raise LookupError("Resource 'vader_lexicon' not found.")
+
+        def polarity_scores(self, text: str) -> dict:
+            return {"compound": 0.5}
+
+    class StubNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            attempts["download"].append(name)
+
+    monkeypatch.setattr(vader_sentiment, "SentimentIntensityAnalyzer", StubAnalyzer)
+    monkeypatch.setattr(vader_sentiment, "nltk", StubNLTK)
+
+    metric = vader_sentiment.VADERSentiment(track=False)
+
+    assert attempts["download"] == ["vader_lexicon"]
+    assert attempts["analyzer"] == 2
+    assert metric.score(output="hello").value == pytest.approx(0.75)
+
+
+def test_vader_sentiment__lexicon_unavailable_raises_actionable_import_error(
+    monkeypatch,
+):
+    # When the corpus cannot be fetched (for example offline), the bare
+    # LookupError is replaced by an ImportError naming the manual command.
+    from opik.evaluation.metrics.heuristics import vader_sentiment
+
+    class AlwaysMissingAnalyzer:
+        def __init__(self) -> None:
+            raise LookupError("Resource 'vader_lexicon' not found.")
+
+    class OfflineNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            raise OSError("network unreachable")
+
+    monkeypatch.setattr(
+        vader_sentiment, "SentimentIntensityAnalyzer", AlwaysMissingAnalyzer
+    )
+    monkeypatch.setattr(vader_sentiment, "nltk", OfflineNLTK)
+
+    with pytest.raises(ImportError, match="nltk.downloader vader_lexicon"):
+        vader_sentiment.VADERSentiment(track=False)
+
+
 def test_readability_metric_and_guard_behaviour():
     class StubTextStat:
         def sentence_count(self, text: str) -> int:
