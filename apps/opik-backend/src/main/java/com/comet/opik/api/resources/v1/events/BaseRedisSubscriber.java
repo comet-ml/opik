@@ -37,6 +37,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -175,7 +177,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         this.meter = GlobalOpenTelemetry.getMeter(metricNamespace);
         this.messageProcessingTime = meter
                 .histogramBuilder("%s_%s_processing_time".formatted(metricNamespace, metricsBaseName))
-                .setDescription("Time taken to process a message")
+                .setDescription("Time taken to process one unit of work. One sample per processEvent call, "
+                        + "so with a collapse override in play its count is a count of groups, not of "
+                        + "messages -- queue_delay and processing_errors stay per message")
                 .setUnit("ms")
                 .ofLongs()
                 .build();
@@ -397,9 +401,9 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         return readMessages();
                     }
                 })
-                .flatMapIterable(this::collapse)
+                .flatMapIterable(this::prepare)
                 // Concurrency for processing messages
-                .flatMap(this::processGroup, config.getConsumerBatchSize())
+                .flatMap(this::processItem, config.getConsumerBatchSize())
                 // batch by time/size, then split outcomes
                 .bufferTimeout(config.getConsumerBatchSize(), config.getPoolingInterval().toJavaDuration().dividedBy(3))
                 .filter(CollectionUtils::isNotEmpty)
@@ -532,54 +536,165 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     /**
      * One unit of work: the message to process, and the ids it stands in for.
      *
-     * <p>The subsumed ids are acknowledged with this one. Their work is inside the merged payload, so if
+     * <p>The subsumed ids are acknowledged with this one. Their work is inside the merged message, so if
      * it succeeds they are all done, and if it fails they all stay pending together and are re-read.
      */
-    protected record MessageGroup<M>(StreamMessageId messageId, Map<String, M> payload,
-            Set<StreamMessageId> subsumed) {
+    protected record MessageGroup<M>(StreamMessageId messageId, M message, Set<StreamMessageId> subsumed) {
     }
 
     /**
-     * Folds a batch read from the stream before any of it is processed. The default keeps one unit of work
-     * per message, which is what every subscriber did before this hook existed.
+     * Either the decoded message, or the failure that retires the entry. Exactly one is set.
+     */
+    private record DecodeOutcome<M>(M message, ProcessingResult failure) {
+
+        static <M> DecodeOutcome<M> decoded(M message) {
+            return new DecodeOutcome<>(message, null);
+        }
+
+        static <M> DecodeOutcome<M> failed(ProcessingResult failure) {
+            return new DecodeOutcome<>(null, failure);
+        }
+    }
+
+    /**
+     * One item off a prepared batch: a group to process, or an entry that failed before
+     * {@link #processEvent(Object)} could be reached. Exactly one is set.
+     */
+    private record WorkItem<M>(MessageGroup<M> group, ProcessingResult preflightFailure) {
+    }
+
+    /**
+     * Decodes and vets a batch, then folds whatever survived through {@link #collapse(Map)}.
+     *
+     * <p>The order is the whole point. Every entry that cannot reach {@link #processEvent(Object)} -- an
+     * undecodable payload, an undecodable field name, no payload at all, a value that is not even a map --
+     * becomes its own failure result in {@link #decode} and bypasses {@code collapse} entirely. So an
+     * override is only ever handed messages that decoded, and can never be handed the sentinels this class
+     * exists to retire.
+     *
+     * <p>Folding above these guards instead would put subclass code upstream of every defence in
+     * OPIK-5647, OPIK-8164 and OPIK-8192, on the one path where a throw belongs to no single entry: it
+     * would take the whole batch with it, and a batch that produces no {@link ProcessingResult} is never
+     * acked, never removed, and never counted towards {@code maxRetries} -- it is simply re-claimed and
+     * re-thrown, which is the permanent wedge those three tickets each closed.
+     */
+    private List<WorkItem<M>> prepare(Map<StreamMessageId, Map<String, M>> batch) {
+        var items = new ArrayList<WorkItem<M>>();
+        var decoded = new LinkedHashMap<StreamMessageId, M>();
+
+        for (var entry : batch.entrySet()) {
+            // Read as Object: see the fields parameter of decode for why the declared type is not used.
+            Object fields = entry.getValue();
+            var outcome = decode(entry.getKey(), fields);
+            if (outcome.failure() != null) {
+                items.add(new WorkItem<>(null, outcome.failure()));
+            } else {
+                decoded.put(entry.getKey(), outcome.message());
+            }
+        }
+
+        if (!decoded.isEmpty()) {
+            fold(decoded).forEach(group -> items.add(new WorkItem<>(group, null)));
+        }
+        return items;
+    }
+
+    /**
+     * {@link #collapse(Map)}, with a failing override contained.
+     *
+     * <p>Collapsing is an optimisation, so a broken override must cost the optimisation and nothing else.
+     * Left to propagate, the throw would escape inside {@code flatMapIterable} where it belongs to no one
+     * entry, and the batch would cycle forever for the reasons {@link #prepare} gives. Falling back to one
+     * group per message keeps the batch moving and lets any real failure surface per message, attributable
+     * and retryable, through the normal path.
+     */
+    private List<MessageGroup<M>> fold(Map<StreamMessageId, M> decoded) {
+        try {
+            return collapse(decoded);
+        } catch (RuntimeException collapseFailure) {
+            log.error("Collapse failed for a batch of '{}' messages on stream '{}', processing individually",
+                    decoded.size(), config.getStreamName(), collapseFailure);
+            return identityGroups(decoded);
+        }
+    }
+
+    /**
+     * Folds a decoded batch before any of it is processed. The default keeps one unit of work per message,
+     * which is what every subscriber did before this hook existed.
      *
      * <p>Override it where messages are cheap to merge and expensive to process: the batch is already in
      * hand, so merging here costs nothing and saves whatever {@link #processEvent(Object)} would have
      * spent on the duplicates. An override must account for every id it was given, either as a group's
      * own or among its subsumed ids, or the ones it drops are never acknowledged and are re-delivered
      * until they exhaust their retries.
+     *
+     * <p>Two consequences of merging are worth weighing before overriding. A group shares one outcome, so
+     * a <em>non-retryable</em> failure retires every id in it on first delivery, not just the one whose
+     * data caused it -- the blast radius of a bug in {@code processEvent} grows from one message to a
+     * group. And {@code *_processing_time} is recorded once per group rather than once per message, so its
+     * count is a count of units of work; {@code *_queue_delay} and {@code *_processing_errors_total} stay
+     * per message.
      */
-    protected List<MessageGroup<M>> collapse(Map<StreamMessageId, Map<String, M>> batch) {
+    protected List<MessageGroup<M>> collapse(Map<StreamMessageId, M> batch) {
+        return identityGroups(batch);
+    }
+
+    private List<MessageGroup<M>> identityGroups(Map<StreamMessageId, M> batch) {
         return batch.entrySet().stream()
                 .map(entry -> new MessageGroup<>(entry.getKey(), entry.getValue(), Set.<StreamMessageId>of()))
                 .toList();
     }
 
-    private Flux<ProcessingResult> processGroup(MessageGroup<M> group) {
-        return processMessage(Map.entry(group.messageId(), group.payload()))
-                .flatMapMany(result -> Flux.concat(
-                        Flux.just(result),
-                        // The subsumed ids share the group's outcome: they were processed, inside it.
-                        Flux.fromIterable(group.subsumed())
-                                .map(id -> new ProcessingResult(id, result.status(), result.error(),
-                                        result.deliveryCount(), result.context()))));
+    private Flux<ProcessingResult> processItem(WorkItem<M> item) {
+        return item.preflightFailure() != null
+                ? Flux.just(item.preflightFailure())
+                : processGroup(item.group());
     }
 
-    private Mono<ProcessingResult> processMessage(Map.Entry<StreamMessageId, Map<String, M>> entry) {
-        var messageId = entry.getKey();
+    private Flux<ProcessingResult> processGroup(MessageGroup<M> group) {
+        return processMessage(group.messageId(), group.message())
+                .flatMapMany(result -> Flux.concat(
+                        Flux.just(result),
+                        // The subsumed ids share the group's outcome: they were processed, inside it. The
+                        // queue delay is not shared, though -- each entry really did wait from its own
+                        // XADD until now, and that age is how a growing PEL becomes visible, so recording
+                        // only the group's own would hide every message but one per group.
+                        Flux.fromIterable(group.subsumed())
+                                .doOnNext(this::recordQueueDelay)
+                                .map(id -> result.toBuilder()
+                                        .messageId(id)
+                                        .subsumedInto(group.messageId())
+                                        .build())));
+    }
+
+    /**
+     * Turns one raw stream entry into the message to process, or into the failure that retires it.
+     *
+     * <p>Split out of {@link #processMessage} so that this whole cascade runs before
+     * {@link #collapse(Map)} and no subclass code can precede it. Every guard below is a production
+     * incident -- OPIK-5647, OPIK-8164, OPIK-8192 -- and each shares one property: the entry cannot
+     * reach {@link #processEvent}, but its id is known, so it can still be counted, logged and retired.
+     *
+     * @param fields the entry's field map exactly as Redisson handed it over, taken as {@code Object} on
+     *               purpose. Reading it at its declared {@code Map<String, M>} type would insert the very
+     *               cast the first guard exists to catch, one frame above the {@code try}.
+     */
+    private DecodeOutcome<M> decode(StreamMessageId messageId, Object fields) {
         log.info("Message received with messageId '{}'", messageId);
+        Map<String, M> valueMap;
         M message;
         try {
-            message = Optional.ofNullable(entry.getValue())
-                    .map(valueMap -> valueMap.get(payloadField))
-                    .orElse(null);
+            @SuppressWarnings("unchecked")
+            var typed = (Map<String, M>) fields;
+            valueMap = typed;
+            message = valueMap == null ? null : valueMap.get(payloadField);
         } catch (ClassCastException classCastException) {
             // Fix for OPIK-5647: received Collections.emptyList() as the entry value for empty/malformed stream
             // entries, which the generic Map<String, M> type erasure hides at compile time.
             // ClassCastException is already in NON_RETRYABLE_EXCEPTIONS,
             // so the failure path will ack and remove the message without retry.
             // Not logging here — postProcessFailureMessages logs non-retryable errors with full context.
-            return Mono.just(ProcessingResult.builder()
+            return DecodeOutcome.failed(ProcessingResult.builder()
                     .messageId(messageId)
                     .status(MessageStatus.FAILURE)
                     .error(classCastException)
@@ -599,7 +714,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             // removed, which is the event worth waking someone for.
             log.warn("Undecodable message: messageId '{}', stream '{}', encodedBytes '{}'",
                     messageId, config.getStreamName(), undecodable.encodedBytes(), undecodable.cause());
-            return Mono.just(ProcessingResult.builder()
+            return DecodeOutcome.failed(ProcessingResult.builder()
                     .messageId(messageId)
                     .status(MessageStatus.FAILURE)
                     // Retryable on purpose: "this pod cannot decode it" is not "nobody can". maxRetries
@@ -619,12 +734,12 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         //     the inevitable; keep the pre-existing non-retryable, remove-on-first-delivery behaviour
         //     (it used to arrive as a NullPointerException out of processEvent).
         if (message == null) {
-            var keyFailure = undecodableKeyCause(entry.getValue());
+            var keyFailure = undecodableKeyCause(valueMap);
             if (keyFailure != null) {
                 recordUndecodable(messageId, keyFailure, "undecodable_field_name");
                 log.warn("Message field name could not be decoded, payload unreachable: messageId '{}', "
                         + "stream '{}'", messageId, config.getStreamName(), keyFailure);
-                return Mono.just(ProcessingResult.builder()
+                return DecodeOutcome.failed(ProcessingResult.builder()
                         .messageId(messageId)
                         .status(MessageStatus.FAILURE)
                         .error(new UndecodablePayloadException(
@@ -640,7 +755,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
             recordQueueDelay(messageId);
             log.warn("Message has no payload under field '{}': messageId '{}', stream '{}'",
                     payloadField, messageId, config.getStreamName());
-            return Mono.just(ProcessingResult.builder()
+            return DecodeOutcome.failed(ProcessingResult.builder()
                     .messageId(messageId)
                     .status(MessageStatus.FAILURE)
                     // IllegalStateException is non-retryable: removed on first delivery, as before.
@@ -649,6 +764,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                     .context(MessageContext.UNKNOWN)
                     .build());
         }
+        return DecodeOutcome.decoded(message);
+    }
+
+    private Mono<ProcessingResult> processMessage(StreamMessageId messageId, M message) {
         var startMillis = System.currentTimeMillis();
         // Resolve the workspace/user once: the processing-time histogram is tagged with it for every
         // message that reaches processEvent (success or failure), and the failure path reuses it for
@@ -665,7 +784,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                         .messageId(messageId)
                         .status(MessageStatus.SUCCESS)
                         .build())
-                .doOnSuccess(r -> log.info("Successfully processed message messageId '{}'", entry.getKey()))
+                .doOnSuccess(r -> log.info("Successfully processed message messageId '{}'", messageId))
                 .onErrorResume(throwable -> Mono.just(ProcessingResult.builder()
                         .messageId(messageId)
                         .status(MessageStatus.FAILURE)
@@ -760,8 +879,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         var nonRetryable = failures.stream()
                 .filter(failure -> !isRetryableException(failure.error()))
                 .map(failure -> {
-                    log.warn("Non-retryable error for messageId '{}', removing from stream",
-                            failure.messageId(), failure.error());
+                    log.warn("Non-retryable error for messageId '{}'{}, removing from stream",
+                            failure.messageId(), origin(failure), failure.error());
                     return failure.messageId();
                 })
                 .toList();
@@ -786,8 +905,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private boolean maxRetriesReached(ProcessingResult failure) {
         // Filter out if max limit not reached, these are claimed and retried, so no ack and remove
         if (failure.deliveryCount() < config.getMaxRetries()) {
-            log.warn("Retryable error for messageId '{}', deliveryCount '{}', will retry",
-                    failure.messageId(), failure.deliveryCount(), failure.error());
+            log.warn("Retryable error for messageId '{}'{}, deliveryCount '{}', will retry",
+                    failure.messageId(), origin(failure), failure.deliveryCount(), failure.error());
             return false;
         }
         // Max retries reached, will ack and remove
@@ -796,8 +915,8 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     private StreamMessageId handleMaxRetriesReached(ProcessingResult maxRetriesFailure) {
         // TODO: Send to the dead letter queue (DLQ) for further analysis
-        log.error("Max retries reached for messageId '{}', removing from stream",
-                maxRetriesFailure.messageId(), maxRetriesFailure.error());
+        log.error("Max retries reached for messageId '{}'{}, removing from stream",
+                maxRetriesFailure.messageId(), origin(maxRetriesFailure), maxRetriesFailure.error());
         return maxRetriesFailure.messageId();
     }
 
@@ -923,10 +1042,24 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .doFinally(signalType -> listPendingTime.record(System.currentTimeMillis() - startMillis));
     }
 
+    /**
+     * @param subsumedInto the group's own message id when this result was fanned out to a subsumed entry,
+     *                     {@code null} otherwise. Purely for the logs: a merged group is judged once, so
+     *                     without it a single failure prints as N unrelated removals with no way to tell
+     *                     they share one cause, or that one {@code processEvent} call is answerable for
+     *                     all of them.
+     */
     @Builder(toBuilder = true)
     private record ProcessingResult(
             StreamMessageId messageId, MessageStatus status, Throwable error, long deliveryCount,
-            MessageContext context) {
+            MessageContext context, StreamMessageId subsumedInto) {
+    }
+
+    /** Renders {@link ProcessingResult#subsumedInto} for a log line, or nothing when the result stands alone. */
+    private static String origin(ProcessingResult result) {
+        return result.subsumedInto() == null
+                ? ""
+                : " (subsumed into '%s')".formatted(result.subsumedInto());
     }
 
     /**

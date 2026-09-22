@@ -354,7 +354,7 @@ class AnnotationQueueRoutingSubscriberTest {
             var group = groups.getFirst();
             assertThat(group.subsumed()).containsExactly(new StreamMessageId(2, 0));
 
-            var merged = group.payload().get(AnnotationQueueRoutingConfig.PAYLOAD_FIELD);
+            var merged = group.message();
             assertThat(merged.entityIds()).containsExactlyInAnyOrder(first, second);
             assertThat(merged.scoreNames()).containsExactlyInAnyOrder("relevance", "toxicity");
         }
@@ -369,8 +369,7 @@ class AnnotationQueueRoutingSubscriberTest {
                     message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(entityId), Set.of("toxicity"))));
 
             assertThat(groups).hasSize(1);
-            assertThat(groups.getFirst().payload().get(AnnotationQueueRoutingConfig.PAYLOAD_FIELD).entityIds())
-                    .containsExactly(entityId);
+            assertThat(groups.getFirst().message().entityIds()).containsExactly(entityId);
         }
 
         /**
@@ -400,14 +399,17 @@ class AnnotationQueueRoutingSubscriberTest {
 
         /**
          * Every id must come back, or the ones dropped are never acknowledged and are re-delivered until
-         * they exhaust their retries.
+         * they exhaust their retries. Undecodable entries are not covered here on purpose: the base class
+         * retires them in its own pre-flight pass and never offers them to this method - asserted by
+         * {@code BaseRedisSubscriberUnitTest.CollapseTests.shouldNotOfferUndecodableEntriesToCollapse}.
          */
         @Test
-        @DisplayName("A payload that did not decode passes through untouched and is still accounted for")
-        void passesUndecodablePayloadsThrough() {
-            var batch = batchOf(message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME,
-                    Set.of(UUID.randomUUID()), Set.of()));
-            batch.put(new StreamMessageId(9, 0), null);
+        @DisplayName("Every id handed in comes back, whether merged away or not")
+        void accountsForEveryId() {
+            var batch = batchOf(
+                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(UUID.randomUUID()), Set.of()),
+                    message(AnnotationQueue.AnnotationScope.TRACE, USER_NAME, Set.of(UUID.randomUUID()), Set.of()),
+                    message(AnnotationQueue.AnnotationScope.THREAD, "other", Set.of(UUID.randomUUID()), Set.of()));
 
             var groups = subscriber.collapse(batch);
 
@@ -418,12 +420,11 @@ class AnnotationQueueRoutingSubscriberTest {
                     .containsExactlyInAnyOrderElementsOf(batch.keySet());
         }
 
-        private Map<StreamMessageId, Map<String, AnnotationQueueRoutingMessage>> batchOf(
+        private Map<StreamMessageId, AnnotationQueueRoutingMessage> batchOf(
                 AnnotationQueueRoutingMessage... messages) {
-            var batch = new LinkedHashMap<StreamMessageId, Map<String, AnnotationQueueRoutingMessage>>();
+            var batch = new LinkedHashMap<StreamMessageId, AnnotationQueueRoutingMessage>();
             for (int i = 0; i < messages.length; i++) {
-                batch.put(new StreamMessageId(i + 1, 0),
-                        Map.of(AnnotationQueueRoutingConfig.PAYLOAD_FIELD, messages[i]));
+                batch.put(new StreamMessageId(i + 1, 0), messages[i]);
             }
             return batch;
         }

@@ -95,11 +95,11 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
         super.start();
     }
 
+    // No isEnabled() guard here, unlike start(): every branch of super.stop() is null-guarded, so
+    // stopping something that never started is already a no-op. Guarding on config instead would make
+    // shutdown depend on a value read at a different time from the one start() read.
     @Override
     public void stop() {
-        if (!config.isEnabled()) {
-            return;
-        }
         log.info("Stopping annotation queue routing subscriber");
         super.stop();
     }
@@ -124,31 +124,23 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
      * check treats names as best-effort, so a name that never lands costs one delayed re-read and nothing
      * more.
      *
-     * <p>Anything that did not decode into a routing message is passed through untouched, so the base
-     * class still sees it and can ack it as the non-retryable failure it is.
+     * <p>Only decoded messages arrive here: the base class retires undecodable and malformed entries in
+     * its own pre-flight pass, so there is nothing to pass through.
      */
     @Override
     protected List<MessageGroup<AnnotationQueueRoutingMessage>> collapse(
-            Map<StreamMessageId, Map<String, AnnotationQueueRoutingMessage>> batch) {
+            Map<StreamMessageId, AnnotationQueueRoutingMessage> batch) {
 
-        Map<GroupKey, List<Map.Entry<StreamMessageId, Map<String, AnnotationQueueRoutingMessage>>>> mergeable = new LinkedHashMap<>();
-        List<MessageGroup<AnnotationQueueRoutingMessage>> passThrough = new ArrayList<>();
+        Map<GroupKey, List<Map.Entry<StreamMessageId, AnnotationQueueRoutingMessage>>> mergeable = new LinkedHashMap<>();
 
         batch.entrySet().forEach(entry -> {
-            AnnotationQueueRoutingMessage message = entry.getValue() == null
-                    ? null
-                    : entry.getValue().get(AnnotationQueueRoutingConfig.PAYLOAD_FIELD);
-            if (message == null) {
-                passThrough.add(new MessageGroup<>(entry.getKey(), entry.getValue(), Set.of()));
-                return;
-            }
+            AnnotationQueueRoutingMessage message = entry.getValue();
             mergeable.computeIfAbsent(
                     new GroupKey(message.workspaceId(), message.scope(), message.userName()),
                     __ -> new ArrayList<>()).add(entry);
         });
 
-        var collapsed = new ArrayList<>(passThrough);
-        mergeable.values().forEach(entries -> collapsed.add(merge(entries)));
+        var collapsed = mergeable.values().stream().map(this::merge).toList();
 
         if (collapsed.size() < batch.size()) {
             AnnotationQueueRoutingMetrics.MESSAGES_COLLAPSED.add(batch.size() - collapsed.size());
@@ -158,23 +150,20 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
     }
 
     private MessageGroup<AnnotationQueueRoutingMessage> merge(
-            List<Map.Entry<StreamMessageId, Map<String, AnnotationQueueRoutingMessage>>> entries) {
+            List<Map.Entry<StreamMessageId, AnnotationQueueRoutingMessage>> entries) {
 
         var primary = entries.getFirst();
         if (entries.size() == 1) {
             return new MessageGroup<>(primary.getKey(), primary.getValue(), Set.of());
         }
 
-        var messages = entries.stream()
-                .map(entry -> entry.getValue().get(AnnotationQueueRoutingConfig.PAYLOAD_FIELD))
-                .toList();
+        var messages = entries.stream().map(Map.Entry::getValue).toList();
         var merged = messages.getFirst().toBuilder()
                 .entityIds(messages.stream().flatMap(m -> m.entityIds().stream()).collect(Collectors.toSet()))
                 .scoreNames(messages.stream().flatMap(m -> m.scoreNames().stream()).collect(Collectors.toSet()))
                 .build();
 
-        return new MessageGroup<>(primary.getKey(),
-                Map.of(AnnotationQueueRoutingConfig.PAYLOAD_FIELD, merged),
+        return new MessageGroup<>(primary.getKey(), merged,
                 entries.stream().skip(1).map(Map.Entry::getKey).collect(Collectors.toSet()));
     }
 

@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -37,6 +38,7 @@ import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -873,6 +875,91 @@ class BaseRedisSubscriberUnitTest {
 
             assertThat(starts.get(1)).isEqualTo(new StreamMessageId(700L, 0));
             assertThat(starts.get(2)).isEqualTo(new StreamMessageId(700L, 0));
+        }
+    }
+
+    @Nested
+    class CollapseTests {
+
+        @BeforeEach
+        void setUp() {
+            whenCreateGroupReturnEmpty();
+            whenRemoveConsumerReturn();
+        }
+
+        /**
+         * Where OPIK-8164's sentinel and the collapse hook meet. The hook folds <em>decoded</em> messages,
+         * so it must never be handed an entry that failed to decode: an override reads the batch at its own
+         * message type, and a sentinel there is a {@code ClassCastException}. That throw would happen inside
+         * {@code flatMapIterable}, where it belongs to no single id, so the entire batch would produce no
+         * result -- never acked, never removed, never counted towards maxRetries -- and would simply be
+         * re-claimed and re-thrown forever. Which is the wedge the sentinel was introduced to prevent.
+         */
+        @Test
+        void shouldNotOfferUndecodableEntriesToCollapse() {
+            var undecodableId = new StreamMessageId(1_000L, 0);
+            var healthyId = new StreamMessageId(1_000L, 1);
+            var offered = new CopyOnWriteArrayList<StreamMessageId>();
+
+            var subscriber = trackSubscriber(TestRedisSubscriber.collapsingSubscriber(CONFIG, redissonClient,
+                    batch -> {
+                        offered.addAll(batch.keySet());
+                        return batch.entrySet().stream()
+                                .map(entry -> new BaseRedisSubscriber.MessageGroup<>(
+                                        entry.getKey(), entry.getValue(), Set.<StreamMessageId>of()))
+                                .toList();
+                    }));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            var readCount = new AtomicInteger();
+            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
+                    .thenAnswer(invocation -> readCount.incrementAndGet() == 1
+                            ? Mono.just(Map.of(
+                                    undecodableId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
+                                            UndecodableStreamMessage.builder()
+                                                    .encodedBytes(20_054_016)
+                                                    .cause(new IllegalStateException("exceeds the maximum allowed"))
+                                                    .build()),
+                                    healthyId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, "healthy")))
+                            : Mono.just(Map.of()));
+            lenient().when(stream.listPending(any(StreamPendingRangeArgs.class)))
+                    .thenReturn(Mono.just(List.of()));
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(1));
+            // The healthy entry behind it collapsed and processed as usual; the sentinel never got there.
+            assertThat(offered).containsExactly(healthyId);
+            // And it is retired by the retry path, not deleted on sight: another pod may decode it.
+            verify(stream, never()).remove(eq(new StreamMessageId[]{undecodableId}));
+        }
+
+        /**
+         * Collapsing is an optimisation, so a broken override must cost the optimisation and nothing else.
+         * Without the fallback the throw escapes into {@code flatMapIterable} and wedges the batch exactly
+         * as an undecodable entry used to.
+         */
+        @Test
+        void shouldFallBackToOneGroupPerMessageWhenCollapseThrows() {
+            var subscriber = trackSubscriber(TestRedisSubscriber.collapsingSubscriber(CONFIG, redissonClient,
+                    batch -> {
+                        throw new IllegalStateException("collapse is broken");
+                    }));
+            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
+            whenReadGroupReturnMessages();
+            whenAckReturn();
+            whenRemoveReturn();
+
+            subscriber.start();
+
+            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(subscriber.getSuccessMessageCount().get()).isGreaterThan(1);
+                        assertThat(subscriber.getFailedMessageCount().get()).isEqualTo(0);
+                    });
+            verify(stream, atLeastOnce()).ack(eq(CONFIG.getConsumerGroupName()), any(StreamMessageId[].class));
         }
     }
 
