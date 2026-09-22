@@ -262,6 +262,51 @@ def test_aggregate__unindexed_call_then_sent_index_zero__keeps_both() -> None:
     ], calls
 
 
+def test_aggregate__unindexed_call_then_same_id_with_sent_index__stays_one_call() -> (
+    None
+):
+    """The mirror image of the case above: the id is seen first, the index later.
+
+    The first piece opens ``call_a`` on an invented slot because no index was
+    sent. The piece that continues it does send one, and reading that index first
+    moved the rest of the arguments into a second recorded call.
+    """
+    stream = [
+        _event(
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "call_a",
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": PART_ARGS},
+                    }
+                ],
+            }
+        ),
+        _event(
+            {
+                "tool_calls": [
+                    {
+                        "id": "call_a",
+                        "type": "function",
+                        "index": 0,
+                        "function": {"name": "get_weather", "arguments": TAIL_ARGS},
+                    }
+                ]
+            }
+        ),
+        _event({}, finish_reason="tool_calls"),
+    ]
+
+    aggregated = chat_completion_chunks_aggregator.aggregate(stream)
+
+    assert aggregated is not None
+    calls = _message(aggregated)["tool_calls"]
+    assert [call["id"] for call in calls] == ["call_a"], calls
+    assert [call["function"]["arguments"] for call in calls] == [FIRST_ARGS], calls
+
+
 def test_aggregate__explicit_null_index__keeps_both_calls() -> None:
     """``index: null`` is the one shape the old ``is not None`` test did catch."""
     stream = [

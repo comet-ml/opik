@@ -22,11 +22,14 @@ def _tool_call_key(
 ) -> int:
     """Which reassembled call a streamed fragment belongs to.
 
-    ``index`` identifies a call only when the stream sent one: the model type
-    declares ``index: Optional[int] = 0`` (``mistralai/models/toolcall.py:29``),
+    A fragment that repeats a known ``id`` continues that call, even when it also
+    sends an ``index``: the id is already mapped to a slot, and taking the index
+    at face value moves the rest of the call into a second one.
+
+    Otherwise ``index`` identifies a call only when the stream sent one: the model
+    type declares ``index: Optional[int] = 0`` (``mistralai/models/toolcall.py``),
     so a payload that omits it parses as ``0`` and every call in the stream would
-    be merged into that one slot. Without a sent index, a fragment repeating a
-    known ``id`` continues that call and any other fragment opens a new one --
+    be merged into that one slot. Any remaining fragment opens a new call --
     ``function.name`` and ``function.arguments`` are required by the model, so
     every fragment the SDK accepts is a complete call.
 
@@ -35,14 +38,14 @@ def _tool_call_key(
     fragments and omits it for others cannot land a provider index on a slot this
     function invented, which would merge two different calls into one.
     """
-    sent_index = tool_call.index
-    if "index" in tool_call.model_fields_set and isinstance(sent_index, int):
-        return sent_index
-
     if "id" in tool_call.model_fields_set and tool_call.id:
         known_key = keys_by_call_id.get(tool_call.id)
         if known_key is not None:
             return known_key
+
+    sent_index = tool_call.index
+    if "index" in tool_call.model_fields_set and isinstance(sent_index, int):
+        return sent_index
 
     return min((key for key in tool_calls_by_index if key < 0), default=0) - 1
 
