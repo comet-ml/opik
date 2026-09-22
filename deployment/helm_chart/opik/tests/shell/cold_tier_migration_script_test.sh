@@ -64,8 +64,26 @@ sh -n "$WORK/script.sh" || { echo "rendered script is not valid POSIX sh"; exit 
 mkdir -p "$WORK/bin"
 cat > "$WORK/bin/kubectl" <<'MOCK'
 #!/bin/sh
+# Records every invocation as one line of argv in $CALL_LOG, and rejects any call
+# that does not match the exact contract the script is supposed to use. A wrong
+# namespace, a wrong Deployment, or a probe that forgot --ignore-not-found is a
+# test failure rather than a silently accepted call.
+printf '%s\n' "$*" >> "$CALL_LOG"
+
+want_deploy="deployment/opik-altinity-clickhouse-operator"
+
 case "$1" in
   get)
+    # Expected: get deployment/<op> -n default -o name --ignore-not-found
+    [ "$2" = "$want_deploy" ] || { echo "mock: probe targeted '$2', want '$want_deploy'" >&2; exit 64; }
+    case " $* " in
+      *" -n default "*) ;;
+      *) echo "mock: probe missing '-n default': $*" >&2; exit 64 ;;
+    esac
+    case " $* " in
+      *" --ignore-not-found"*) ;;
+      *) echo "mock: probe missing --ignore-not-found: $*" >&2; exit 64 ;;
+    esac
     case "${MOCK_MODE:-ok}" in
       absent)    exit 0 ;;                                                   # --ignore-not-found: empty, rc 0
       forbidden) echo 'Error from server (Forbidden): deployments.apps is forbidden' >&2; exit 1 ;;
@@ -74,8 +92,17 @@ case "$1" in
       *)         echo 'deployment.apps/opik-altinity-clickhouse-operator' ;;
     esac ;;
   rollout)
+    # Expected: rollout restart deployment/<op> -n default
+    [ "$2" = restart ] || { echo "mock: unexpected rollout subcommand '$2'" >&2; exit 64; }
+    [ "$3" = "$want_deploy" ] || { echo "mock: restart targeted '$3', want '$want_deploy'" >&2; exit 64; }
+    case " $* " in
+      *" -n default "*) ;;
+      *) echo "mock: restart missing '-n default': $*" >&2; exit 64 ;;
+    esac
     [ "${MOCK_MODE:-ok}" = refused ] && { echo 'Error from server (Forbidden)' >&2; exit 1; }
     echo 'deployment.apps/opik-altinity-clickhouse-operator restarted' ;;
+  *)
+    echo "mock: unexpected kubectl verb '$1'" >&2; exit 64 ;;
 esac
 exit 0
 MOCK
@@ -84,6 +111,8 @@ chmod +x "$WORK/bin/kubectl"
 # Run the bounce section with a short budget and the helpers the full script defines
 # above the extracted region.
 run_bounce() { # $1=MOCK_MODE  $2=seconds of budget
+  CALL_LOG="$WORK/calls"; export CALL_LOG
+  : > "$CALL_LOG"
   (
     PATH="$WORK/bin:$PATH"
     export PATH
@@ -174,6 +203,38 @@ if grep -qE '^\s+sleep [0-9]+' "$WORK/script.sh"; then
   fail "all retry sleeps are deadline-capped" "found a bare 'sleep' outside nap()"
 else
   pass "all retry sleeps are deadline-capped"
+fi
+
+# A confirmed absence must not go on to restart anything: the whole point of the
+# early exit is that there is no operator here to bounce.
+run_bounce absent 5 || true
+if grep -q '^rollout' "$WORK/calls"; then
+  fail "confirmed absence does not attempt a restart" "rollout was called after an absent probe"
+else
+  pass "confirmed absence does not attempt a restart"
+fi
+
+# The healthy path must probe first, then restart exactly once, in that order.
+run_bounce ok 5 || true
+seq=$(cut -d' ' -f1 "$WORK/calls" | tr '\n' ',')
+[ "$seq" = "get,rollout," ] \
+  && pass "healthy path calls get then rollout, once each" \
+  || fail "healthy path calls get then rollout, once each" "call sequence was '$seq'"
+
+# The mock rejects a malformed call with rc 64; prove that guard is live, so a
+# future change that drops --ignore-not-found or targets the wrong object fails
+# here instead of passing silently.
+CALL_LOG="$WORK/probe-guard"; export CALL_LOG; : > "$CALL_LOG"
+if PATH="$WORK/bin:$PATH" MOCK_MODE=ok kubectl get deployment/wrong-name -n default -o name --ignore-not-found >/dev/null 2>&1; then
+  fail "mock rejects a probe against the wrong Deployment" "call was accepted"
+else
+  pass "mock rejects a probe against the wrong Deployment"
+fi
+CALL_LOG="$WORK/probe-guard2"; export CALL_LOG; : > "$CALL_LOG"
+if PATH="$WORK/bin:$PATH" MOCK_MODE=ok kubectl get deployment/opik-altinity-clickhouse-operator -n default -o name >/dev/null 2>&1; then
+  fail "mock rejects a probe without --ignore-not-found" "call was accepted"
+else
+  pass "mock rejects a probe without --ignore-not-found"
 fi
 
 echo

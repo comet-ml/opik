@@ -97,6 +97,11 @@ jobs:
     steps:
         - name: Checkout
           uses: actions/checkout@v7
+          with:
+            # This job executes a script from the checked-out tree, which on a
+            # pull_request is PR-controlled. Do not leave github.token in
+            # .git/config where that script could read it.
+            persist-credentials: false
 
         - name: Install Helm
           uses: azure/setup-helm@v5.0.1
