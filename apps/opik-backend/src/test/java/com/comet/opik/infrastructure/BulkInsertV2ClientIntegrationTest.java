@@ -579,4 +579,54 @@ class BulkInsertV2ClientIntegrationTest {
         // Written as "" unconditionally, matching the binder -- not carried from the item.
         assertThat(stamped[3]).isEqualTo("");
     }
+
+    @Test
+    @DisplayName("traces round-trip their tags, and an absent end_time and ttft stay null")
+    void tracesRoundTrip() {
+        // traceColumnsNonNullable is false in config-test.yml, so this covers the Nullable branch of
+        // end_time / ttft -- the state every install is in until that migration flips. The sentinel
+        // branch is not reachable from here (it needs a different app config), so it is covered by
+        // TraceJsonRowMapperTest instead.
+        var projectName = "v2-traces-" + RandomStringUtils.secure().nextAlphanumeric(12);
+
+        var traces = IntStream.range(0, 4)
+                .mapToObj(i -> {
+                    var trace = newTraceBuilder()
+                            .projectName(projectName)
+                            .tags(i == 3 ? null : Set.of("tag-" + i, "shared"))
+                            .build();
+                    // Half with both optional columns absent: they are Nullable here, so the mapper
+                    // writes an explicit JSON null and the read must give null back rather than an
+                    // epoch or a 0.0.
+                    return i % 2 == 0
+                            ? trace.toBuilder().endTime(null).ttft(null).build()
+                            : trace;
+                })
+                .toList();
+
+        traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+        var actual = traces.stream()
+                .map(trace -> traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY))
+                .toList();
+
+        assertThat(actual)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(TraceAssertions.IGNORED_FIELDS_TRACES)
+                .containsExactlyInAnyOrderElementsOf(traces);
+
+        // Asserted separately because the two are what the Nullable branch is about, and a mapper that
+        // wrote the sentinel instead would still satisfy the comparison above on every other field.
+        assertThat(actual).filteredOn(trace -> traces.stream()
+                .anyMatch(expected -> expected.id().equals(trace.id()) && expected.endTime() == null))
+                .isNotEmpty()
+                .allSatisfy(trace -> {
+                    assertThat(trace.endTime()).isNull();
+                    assertThat(trace.ttft()).isNull();
+                });
+
+        // tags is not in IGNORED_FIELDS_TRACES, so the comparison above covers it -- including the
+        // tag-less trace, where Array(String) must read back as null or empty rather than failing.
+        assertThat(actual.stream().filter(trace -> trace.tags() != null && !trace.tags().isEmpty()))
+                .hasSize(3);
+    }
 }
