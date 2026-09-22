@@ -92,8 +92,25 @@ export async function dropUnusableProviderKeys(): Promise<void> {
   // an assignment survives that copy where a deleted key may not. Every
   // consumer tests truthiness, so '' reads exactly like unset.
   process.env.ANTHROPIC_API_KEY = '';
+  // The SDK driver was spawned before this ran and still holds the dead key,
+  // so mark the verdict for anything that asks after the fact.
+  process.env.OPIK_ANTHROPIC_KEY_UNUSABLE = '1';
   console.warn(
     `[llm-key-preflight] ANTHROPIC_API_KEY is set but unusable (${reason}) — unset for this run. ` +
       'Specs needing an LLM provider will fall back to OpenAI/OpenRouter, or skip if none remains.',
   );
+}
+
+/**
+ * Whether an Anthropic key is present *and* passed the preflight probe.
+ *
+ * Specs must use this rather than testing `process.env.ANTHROPIC_API_KEY`
+ * directly: the SDK driver is a Playwright `webServer`, spawned before
+ * globalSetup with its own copy of the environment, so a key blanked in
+ * globalSetup still reaches the driver. Choosing the judge model from this
+ * helper keeps the spec-side choice and the driver's actual credential in
+ * agreement — an Anthropic judge is only ever requested when the key works.
+ */
+export function anthropicKeyUsable(): boolean {
+  return !!process.env.ANTHROPIC_API_KEY && process.env.OPIK_ANTHROPIC_KEY_UNUSABLE !== '1';
 }

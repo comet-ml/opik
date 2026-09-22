@@ -2,6 +2,7 @@ import { test, expect } from '@e2e/fixtures';
 import { TestSuitesPage } from '@e2e/pom/test-suites.page';
 import { TestSuiteItemsPage } from '@e2e/pom/test-suite-items.page';
 import { ensureModelAvailable } from '@e2e/pom/model-availability';
+import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
 
 test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@area:test-suites'] }, () => {
   /**
@@ -32,7 +33,11 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@area:test-suites']
     const experimentName = `${testSuite.name}-sdk-run`;
     // Match the judge model to whichever provider key the bridge has (Anthropic
     // preferred, OpenAI fallback) so the LiteLLM judge can authenticate.
-    const judgeModel = process.env.ANTHROPIC_API_KEY
+    // anthropicKeyUsable(), not process.env: the driver is a Playwright
+    // webServer spawned before globalSetup, so it still holds a key the
+    // preflight found dead. Asking the helper keeps the model we request and
+    // the credential the driver actually has in agreement.
+    const judgeModel = anthropicKeyUsable()
       ? 'anthropic/claude-haiku-4-5'
       : 'openai/gpt-4o-mini';
 

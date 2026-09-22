@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test } from '@e2e/fixtures';
 import { ConfigurationPage } from '@e2e/pom/configuration.page';
+import { anthropicKeyUsable } from '@e2e/core/llm-key-preflight';
 
 /**
  * Provision an LLM provider for tests that drive the Playground / LLM-judge UI,
@@ -16,7 +17,10 @@ import { ConfigurationPage } from '@e2e/pom/configuration.page';
  * the final fallback for environments that block the built-ins entirely.
  */
 export async function ensureModelAvailable(page: Page): Promise<string> {
-  const anthropic = process.env.ANTHROPIC_API_KEY;
+  // anthropicKeyUsable(), not the raw env var: the preflight blanks a key it
+  // proved dead, and this keeps the UI-configured provider consistent with
+  // the credential the SDK driver actually holds.
+  const anthropic = anthropicKeyUsable() ? process.env.ANTHROPIC_API_KEY : undefined;
   const openai = process.env.OPENAI_API_KEY;
   const openrouter = process.env.OPENROUTER_API_KEY;
 
