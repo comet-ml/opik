@@ -1149,3 +1149,20 @@ optimizationStalledReaper:
 environment:
   # Low ceiling for tests so cap-related scenarios don't need to insert many environments.
   maxPerWorkspace: 5
+
+annotationQueueRouting:
+  # Default: false
+  # Description: When false, score events are never published and nothing is routed automatically.
+  #   Off here too, matching production: no test reads this block. The routing tests build their own
+  #   config, so leaving it on only made the listener run an automation lookup for every feedback score
+  #   written by every other integration test in the suite.
+  enabled: false
+  # Default: annotation-queue-routing
+  # Description: Redis stream name for queued annotation queue routing work
+  streamName: 'annotation-queue-routing'
+  # Default: 100000
+  # Description: Maximum stream length before old entries are trimmed
+  streamMaxLen: 100000
+  # Default: 1000
+  # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+  streamTrimLimit: 1000
