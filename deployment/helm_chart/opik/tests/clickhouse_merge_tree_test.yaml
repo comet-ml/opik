@@ -49,7 +49,10 @@ tests:
     asserts:
       - matchRegex:
           path: spec.configuration.files["conf.d/merge_tree.xml"]
-          pattern: "<merge_tree>"
+          pattern: "<min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>"
 
   - it: applies on every variant, independent of the tiered-storage gate
     set:
