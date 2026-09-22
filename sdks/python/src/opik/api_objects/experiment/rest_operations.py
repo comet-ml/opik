@@ -1,10 +1,12 @@
 import json
+import math
+from concurrent import futures
 from typing import List, Optional
 
 from . import experiment_item
 from .. import constants, rest_stream_parser
 from ... import exceptions, rest_api
-from ...rest_api.types import experiment_public
+from ...rest_api.types import dataset_item_page_compare, experiment_public
 
 
 def get_experiment_data_by_name(
@@ -60,51 +62,96 @@ def find_experiment_items_for_dataset(
     truncate: bool,
     filter_expression: Optional[str] = None,
     page_size: int = constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE,
+    num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
 ) -> List[experiment_item.ExperimentItemContent]:
-    collected_items: List[experiment_item.ExperimentItemContent] = []
     experiment_ids_json = json.dumps(experiment_ids)
 
-    page_number = 1
-    while len(collected_items) < max_results:
-        page_dataset_items = (
-            rest_client.datasets.find_dataset_items_with_experiment_items(
-                id=dataset_id,
-                page=page_number,
-                size=page_size,
-                experiment_ids=experiment_ids_json,
-                truncate=truncate,
-                filters=filter_expression,
-            )
+    def fetch_page(
+        page_number: int,
+    ) -> dataset_item_page_compare.DatasetItemPageCompare:
+        return rest_client.datasets.find_dataset_items_with_experiment_items(
+            id=dataset_id,
+            page=page_number,
+            size=page_size,
+            experiment_ids=experiment_ids_json,
+            truncate=truncate,
+            filters=filter_expression,
         )
 
-        if not page_dataset_items.content:
+    collected_items: List[experiment_item.ExperimentItemContent] = []
+
+    # The first page is read on its own because its `total` is what bounds every
+    # wave after it.
+    first_page = fetch_page(1)
+    _collect_page(first_page, collected_items, max_results)
+
+    if not first_page.content:
+        return collected_items
+
+    last_page = (
+        max(1, math.ceil(first_page.total / page_size))
+        if first_page.total is not None
+        else None
+    )
+
+    next_page = 2
+    while len(collected_items) < max_results:
+        if last_page is not None and next_page > last_page:
             break
 
-        # Build a flat list of experiment-item compares for this page in a readable way
-        experiment_items = []
-        for dataset_item in page_dataset_items.content:
-            # Guard if dataset_item.experiment_items might be None
-            if dataset_item.experiment_items is not None:
-                for experiment_item_compare in dataset_item.experiment_items:
-                    # Convert to domain objects
-                    dataset_item_data = dataset_item.data
-                    if dataset_item_data is not None:
-                        dataset_item_data.update({"id": dataset_item.id})
-                    experiment_item_content = experiment_item.ExperimentItemContent.from_rest_experiment_item_compare(
-                        value=experiment_item_compare,
-                        dataset_item_data=dataset_item_data,
-                    )
+        # A dataset item almost always carries one experiment item, so this is
+        # the page count the rest of the read needs; a sparser page only costs
+        # another wave rather than a wrong result.
+        wave_size = math.ceil((max_results - len(collected_items)) / page_size)
+        if last_page is not None:
+            wave_size = min(wave_size, last_page - next_page + 1)
+        wave_size = min(wave_size, num_threads)
 
-                    experiment_items.append(experiment_item_content)
+        page_numbers = list(range(next_page, next_page + wave_size))
+        next_page += wave_size
 
-        if not experiment_items:
-            page_number += 1
-            continue
+        if wave_size == 1:
+            pages = [fetch_page(page_numbers[0])]
+        else:
+            with futures.ThreadPoolExecutor(
+                max_workers=wave_size,
+                thread_name_prefix="opik_experiment_items_read",
+            ) as pool:
+                pages = list(pool.map(fetch_page, page_numbers))
 
-        remaining = max_results - len(collected_items)
-
-        collected_items.extend(experiment_items[:remaining])
-
-        page_number += 1
+        for page in pages:
+            # Pages are consumed in order, so an empty one ends the read exactly
+            # where a sequential walk would have stopped.
+            if not page.content:
+                return collected_items
+            _collect_page(page, collected_items, max_results)
 
     return collected_items
+
+
+def _collect_page(
+    page: dataset_item_page_compare.DatasetItemPageCompare,
+    collected_items: List[experiment_item.ExperimentItemContent],
+    max_results: int,
+) -> None:
+    """Append one page's experiment items, stopping at ``max_results``."""
+    headroom = max_results - len(collected_items)
+    if headroom <= 0 or not page.content:
+        return
+
+    page_items = []
+    for dataset_item in page.content:
+        if dataset_item.experiment_items is None:
+            continue
+        for experiment_item_compare in dataset_item.experiment_items:
+            dataset_item_data = dataset_item.data
+            if dataset_item_data is not None:
+                dataset_item_data.update({"id": dataset_item.id})
+            page_items.append(
+                experiment_item.ExperimentItemContent.from_rest_experiment_item_compare(
+                    value=experiment_item_compare,
+                    dataset_item_data=dataset_item_data,
+                )
+            )
+
+    collected_items.extend(page_items[:headroom])

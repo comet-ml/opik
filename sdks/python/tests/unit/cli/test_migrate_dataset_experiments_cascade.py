@@ -257,7 +257,7 @@ def _cascade_rest_client(
         # in particular) the test attached.
         requested_exp_ids = set(json.loads(experiment_ids))
         if page != 1:
-            return MagicMock(content=[])
+            return MagicMock(content=[], total=0)
         # Find all items across the experiments this call requested. Each
         # dataset item carries one experiment_item per matching experiment.
         dataset_items: List[Any] = []
@@ -291,7 +291,7 @@ def _cascade_rest_client(
                     setattr(exp_item, key, value)
                 ds_item = MagicMock(experiment_items=[exp_item])
                 dataset_items.append(ds_item)
-        return MagicMock(content=dataset_items)
+        return MagicMock(content=dataset_items, total=len(dataset_items))
 
     rest_client.datasets.find_dataset_items_with_experiment_items.side_effect = (
         _find_dataset_items_with_exp_items

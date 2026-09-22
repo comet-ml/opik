@@ -21,6 +21,7 @@ class ExperimentsClient:
         filter_string: Optional[str] = None,
         project_name: Optional[str] = None,
         page_size: int = constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE,
+        num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
     ) -> List[experiment_item.ExperimentItemContent]:
         """
         Find experiment items associated with a specific dataset among a list of experiments.
@@ -41,6 +42,8 @@ class ExperimentsClient:
             page_size: Number of dataset items requested per page. Trades request
                 count against per-request size; the read is round-trip bound, so
                 lowering it is slower.
+            num_threads: Number of pages fetched concurrently after the first
+                one. Pass ``1`` to read sequentially.
 
         Returns:
             A list of experiment item content objects that match the criteria.
@@ -68,4 +71,5 @@ class ExperimentsClient:
             truncate=truncate,
             filter_expression=filter_expression,
             page_size=page_size,
+            num_threads=num_threads,
         )

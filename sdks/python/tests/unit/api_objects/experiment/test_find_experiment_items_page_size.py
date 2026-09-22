@@ -1,5 +1,6 @@
-"""Tests for the page size the experiment Compare-view read uses."""
+"""Tests for the page size and concurrency of the experiment Compare-view read."""
 
+import threading
 import types
 from typing import Any, Dict, List, Optional
 from unittest.mock import Mock
@@ -18,7 +19,9 @@ class _RecordingDatasetsClient:
 
     def __init__(self, total: int) -> None:
         self._total = total
+        self._lock = threading.Lock()
         self.requested_sizes: List[int] = []
+        self.requested_pages: List[int] = []
 
     def find_dataset_items_with_experiment_items(
         self,
@@ -30,13 +33,15 @@ class _RecordingDatasetsClient:
         truncate: bool,
         filters: Optional[str],
     ) -> Any:
-        self.requested_sizes.append(size)
+        with self._lock:
+            self.requested_sizes.append(size)
+            self.requested_pages.append(page)
         start = (page - 1) * size
         content = [
             _dataset_item(index)
             for index in range(start, min(start + size, self._total))
         ]
-        return types.SimpleNamespace(content=content)
+        return types.SimpleNamespace(content=content, total=self._total)
 
 
 def _dataset_item(index: int) -> Any:
@@ -67,7 +72,11 @@ def _read(total: int, **kwargs: Any) -> Dict[str, Any]:
         truncate=False,
         **kwargs,
     )
-    return {"items": items, "requested_sizes": datasets_client.requested_sizes}
+    return {
+        "items": items,
+        "requested_sizes": datasets_client.requested_sizes,
+        "requested_pages": datasets_client.requested_pages,
+    }
 
 
 def test_find_experiment_items_for_dataset__default_page_size_is_the_constant():
@@ -89,6 +98,35 @@ def test_find_experiment_items_for_dataset__max_results_still_truncates():
 
     ids = [item.id for item in result["items"]]
     assert ids == [f"experiment-item-{index}" for index in range(1500)]
+
+
+def test_find_experiment_items_for_dataset__pages_are_assembled_in_page_order():
+    result = _read(total=1000, max_results=1000, page_size=100, num_threads=8)
+
+    ids = [item.id for item in result["items"]]
+    assert ids == [f"experiment-item-{index}" for index in range(1000)]
+    assert sorted(result["requested_pages"]) == list(range(1, 11))
+
+
+def test_find_experiment_items_for_dataset__single_thread_reads_pages_in_order():
+    result = _read(total=1000, max_results=1000, page_size=100, num_threads=1)
+
+    assert result["requested_pages"] == list(range(1, 11))
+    assert len(result["items"]) == 1000
+
+
+def test_find_experiment_items_for_dataset__does_not_fetch_pages_it_does_not_need():
+    result = _read(total=10000, max_results=250, page_size=100, num_threads=8)
+
+    assert sorted(result["requested_pages"]) == [1, 2, 3]
+    assert len(result["items"]) == 250
+
+
+def test_find_experiment_items_for_dataset__stops_at_the_last_page():
+    result = _read(total=150, max_results=10000, page_size=100, num_threads=8)
+
+    assert sorted(result["requested_pages"]) == [1, 2]
+    assert len(result["items"]) == 150
 
 
 def _experiment(experiments_client: Any) -> experiment_module.Experiment:
@@ -143,15 +181,53 @@ def test_get_items__accepts_a_page_size_at_the_cap():
     )
 
 
-def test_get_items__defaults_to_the_page_size_constant():
+@pytest.mark.parametrize(
+    "num_threads",
+    [0, -1, 1.5, True, None],
+)
+def test_get_items__rejects_a_num_threads_that_is_not_a_positive_integer(num_threads):
+    experiment = _experiment(Mock())
+
+    with pytest.raises(ValueError, match="num_threads must be a positive integer"):
+        experiment.get_items(num_threads=num_threads)
+
+
+def test_get_items__rejects_a_num_threads_above_the_cap():
+    experiment = _experiment(Mock())
+    over_cap = constants.DATASET_ITEMS_READ_MAX_THREADS + 1
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            f"num_threads must not exceed "
+            f"{constants.DATASET_ITEMS_READ_MAX_THREADS}, got {over_cap}"
+        ),
+    ):
+        experiment.get_items(num_threads=over_cap)
+
+
+def test_get_items__accepts_a_num_threads_at_the_cap():
+    experiments_client = Mock()
+    experiments_client.find_experiment_items_for_dataset.return_value = []
+
+    _experiment(experiments_client).get_items(
+        num_threads=constants.DATASET_ITEMS_READ_MAX_THREADS
+    )
+
+    assert (
+        experiments_client.find_experiment_items_for_dataset.call_args.kwargs[
+            "num_threads"
+        ]
+        == constants.DATASET_ITEMS_READ_MAX_THREADS
+    )
+
+
+def test_get_items__defaults_to_the_page_size_and_thread_constants():
     experiments_client = Mock()
     experiments_client.find_experiment_items_for_dataset.return_value = []
 
     _experiment(experiments_client).get_items()
 
-    assert (
-        experiments_client.find_experiment_items_for_dataset.call_args.kwargs[
-            "page_size"
-        ]
-        == constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE
-    )
+    kwargs = experiments_client.find_experiment_items_for_dataset.call_args.kwargs
+    assert kwargs["page_size"] == constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE
+    assert kwargs["num_threads"] == constants.DATASET_ITEMS_READ_NUM_THREADS

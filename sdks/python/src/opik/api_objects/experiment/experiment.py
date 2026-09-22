@@ -682,6 +682,7 @@ class Experiment:
         max_results: Optional[int] = 10000,
         truncate: bool = False,
         page_size: int = constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE,
+        num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
     ) -> List[experiment_item.ExperimentItemContent]:
         """
         Retrieves and returns a list of experiment items for this experiment.
@@ -695,13 +696,20 @@ class Experiment:
                 round-trip bound, so this mostly trades request count against
                 per-request size; lower it only if the backend struggles with
                 the default response size.
+            num_threads: Number of pages fetched concurrently after the first
+                one, which is read on its own to learn how many pages there are.
+                Must be a positive integer not exceeding
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``. Pass ``1`` to read
+                sequentially.
 
         Returns:
             List of ExperimentItemContent objects for this experiment.
 
         Raises:
             ValueError: If ``page_size`` is not a positive integer or exceeds
-                ``constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE``.
+                ``constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE``, or if
+                ``num_threads`` is not a positive integer or exceeds
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``.
         """
         if isinstance(page_size, bool) or not isinstance(page_size, int):
             raise ValueError("page_size must be a positive integer")
@@ -711,6 +719,15 @@ class Experiment:
             raise ValueError(
                 "page_size must not exceed "
                 f"{constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE}, got {page_size}"
+            )
+        if isinstance(num_threads, bool) or not isinstance(num_threads, int):
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads < 1:
+            raise ValueError("num_threads must be a positive integer")
+        if num_threads > constants.DATASET_ITEMS_READ_MAX_THREADS:
+            raise ValueError(
+                "num_threads must not exceed "
+                f"{constants.DATASET_ITEMS_READ_MAX_THREADS}, got {num_threads}"
             )
 
         if max_results is None:
@@ -723,6 +740,7 @@ class Experiment:
             max_results=max_results,
             project_name=self._project_name,
             page_size=page_size,
+            num_threads=num_threads,
         )
 
     def log_experiment_scores(
