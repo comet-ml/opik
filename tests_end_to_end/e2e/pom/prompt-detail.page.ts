@@ -124,6 +124,11 @@ export class PromptDetailPage {
     });
   }
 
+  /** The experiments table's "Showing 1-10 of 12" pagination label. */
+  private paginationSummary(): Locator {
+    return this.page.getByText(/^Showing [\d,]+-[\d,]+ of [\d,]+$/);
+  }
+
   /**
    * Page the experiments table forward or back.
    *
@@ -133,11 +138,19 @@ export class PromptDetailPage {
    * `data-testid` would be better, but these specs run against a deployed
    * Opik, so one added alongside them would not exist in the version under
    * test.
+   *
+   * Scoped to the element holding the "Showing …" label, the same way
+   * `LogsPage.nextPageButton` is: a page-wide chevron lookup matches any other
+   * chevron button the page happens to render and fails on strict mode rather
+   * than on behaviour.
    */
   async goToPage(direction: 'next' | 'previous'): Promise<void> {
     return test.step(`go to the ${direction} page`, async () => {
       const icon = direction === 'next' ? 'lucide-chevron-right' : 'lucide-chevron-left';
-      await this.page.locator(`button:has(svg.${icon})`).click();
+      await this.paginationSummary()
+        .locator('xpath=..')
+        .locator(`button:has(svg.${icon})`)
+        .click();
     });
   }
 

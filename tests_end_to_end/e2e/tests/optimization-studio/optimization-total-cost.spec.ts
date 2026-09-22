@@ -31,6 +31,16 @@ import { OptimizationStudioPage } from '@e2e/pom/optimization-studio.page';
  * unreachable through the public API here. A spec for it could not run.
  */
 
+/** What one sample of the aggregate looks like, from both projections. */
+interface CostReading {
+  /** How many rows the project's runs list holds for the seeded run. */
+  listedCount: number;
+  /** `total_optimization_cost` from the list read, or null when absent. */
+  fromList: number | null;
+  /** `total_optimization_cost` from the by-id read, or null when absent. */
+  fromById: number | null;
+}
+
 /**
  * The cost the aggregate reports for the seeded run, from both projections.
  *
@@ -40,30 +50,26 @@ import { OptimizationStudioPage } from '@e2e/pom/optimization-studio.page';
  * spec that trusts one of them would miss the case where only the other is
  * wrong. Both are returned and both get asserted.
  *
- * Presence is asserted before the value: `totalOptimizationCost` is optional
- * on the wire, and an aggregate that never ran would otherwise read as a
- * missing number that a comparison quietly turns into a pass.
+ * Deliberately assertion-FREE: this runs inside `expect.poll`, and Playwright
+ * evaluates the polled function OUTSIDE its own try/catch, so a throw here is
+ * a hard failure rather than another interval. Absence is therefore returned
+ * as `null` and left for the matcher to reject — `totalOptimizationCost` is
+ * optional on the wire and genuinely absent while the roll-up lags, which is
+ * exactly the state the poll exists to wait out.
  */
 async function readCosts(
   backendClient: BackendClient,
   seed: OptimizationCostRef,
-): Promise<{ fromList: number; fromById: number }> {
+): Promise<CostReading> {
   const runs = await backendClient.listOptimizations({ projectId: seed.projectId });
   const listed = runs.filter((r) => r.id === seed.optimizationId);
-  expect(listed, 'the seeded run appears exactly once in the project list').toHaveLength(1);
-  expect(
-    listed[0].totalOptimizationCost,
-    'the list read reports a total_optimization_cost',
-  ).not.toBeNull();
-
   const byId = await backendClient.getOptimization(seed.optimizationId);
-  expect(byId, 'the seeded run is readable by id').not.toBeNull();
-  expect(
-    byId!.totalOptimizationCost,
-    'the by-id read reports a total_optimization_cost',
-  ).not.toBeNull();
 
-  return { fromList: listed[0].totalOptimizationCost!, fromById: byId!.totalOptimizationCost! };
+  return {
+    listedCount: listed.length,
+    fromList: listed.length === 1 ? listed[0].totalOptimizationCost : null,
+    fromById: byId?.totalOptimizationCost ?? null,
+  };
 }
 
 /**
@@ -71,9 +77,12 @@ async function readCosts(
  *
  * Polling is the only honest way to read this: the cost rolls up through
  * ClickHouse aggregates that a PATCH does not update synchronously, so reading
- * once after a write would fail on lag rather than on behaviour. The poll ends
- * in real assertions so a timeout reports the two numbers it actually saw
- * instead of a bare predicate that went false.
+ * once after a write would fail on lag rather than on behaviour.
+ *
+ * The whole reading is polled against the whole expectation, rather than a
+ * boolean predicate, so a timeout reports the two numbers it actually saw as a
+ * diff instead of "expected true, received false". A null on either side fails
+ * the same comparison, so an aggregate that never ran can never read as a pass.
  */
 async function expectCostToSettle(
   backendClient: BackendClient,
@@ -81,18 +90,12 @@ async function expectCostToSettle(
   expected: number,
 ): Promise<void> {
   await expect
-    .poll(
-      async () => {
-        const { fromList, fromById } = await readCosts(backendClient, seed);
-        return fromList === expected && fromById === expected;
-      },
-      { timeout: 120_000, intervals: [2_000, 3_000, 5_000] },
-    )
-    .toBe(true);
-
-  const { fromList, fromById } = await readCosts(backendClient, seed);
-  expect(fromList, 'the runs list reports the expected total').toBe(expected);
-  expect(fromById, 'the by-id read agrees with the list').toBe(expected);
+    .poll(() => readCosts(backendClient, seed), {
+      timeout: 120_000,
+      intervals: [2_000, 3_000, 5_000],
+      message: `both reads report a total_optimization_cost of ${expected}`,
+    })
+    .toEqual({ listedCount: 1, fromList: expected, fromById: expected } satisfies CostReading);
 }
 
 test.describe(
