@@ -51,7 +51,7 @@ describe("PlaygroundPromptOutput", () => {
 
     renderOutput();
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    expect(screen.getByTestId("playground-output-error")).toHaveTextContent(
       "Run failed: ratings not defined",
     );
     expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
@@ -63,7 +63,9 @@ describe("PlaygroundPromptOutput", () => {
     renderOutput();
 
     expect(screen.getByTestId("markdown")).toHaveTextContent("the answer");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("playground-output-error"),
+    ).not.toBeInTheDocument();
   });
 
   // Editing the prompt marks the previous output stale. The reason is most wanted
@@ -79,9 +81,9 @@ describe("PlaygroundPromptOutput", () => {
 
     renderOutput();
 
-    const alert = screen.getByRole("alert");
-    expect(alert).toHaveTextContent("Run failed: ratings not defined");
-    expect(alert).toHaveClass("opacity-50");
+    const tag = screen.getByTestId("playground-output-error");
+    expect(tag).toHaveTextContent("Run failed: ratings not defined");
+    expect(tag).toHaveClass("opacity-50");
   });
 
   it("should not dim the error of the current run", () => {
@@ -94,7 +96,9 @@ describe("PlaygroundPromptOutput", () => {
 
     renderOutput();
 
-    expect(screen.getByRole("alert")).not.toHaveClass("opacity-50");
+    expect(screen.getByTestId("playground-output-error")).not.toHaveClass(
+      "opacity-50",
+    );
   });
 
   it("should keep showing stale output from a run that succeeded", () => {

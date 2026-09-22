@@ -16,7 +16,7 @@ const PlaygroundOutputError: React.FC<PlaygroundOutputErrorProps> = ({
 }) => (
   <TooltipWrapper content={message}>
     <span
-      role="alert"
+      data-testid="playground-output-error"
       className={cn(
         "inline-flex max-w-full cursor-default items-center gap-1 rounded-md border border-transparent bg-[var(--tag-red-bg)] px-1.5 py-0.5 text-sm text-[var(--tag-red-text)]",
         stale && "opacity-50",

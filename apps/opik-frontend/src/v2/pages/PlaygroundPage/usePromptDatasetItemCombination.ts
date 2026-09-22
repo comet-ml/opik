@@ -305,7 +305,7 @@ const usePromptDatasetItemCombination = ({
 
         updateOutput(prompt.id, datasetItemId, {
           isLoading: false,
-          ...(stopped ? {} : { error: typedError.message }),
+          ...(stopped ? {} : { error: typedError.message || "Unknown error" }),
         });
       } finally {
         deleteAbortController(key);

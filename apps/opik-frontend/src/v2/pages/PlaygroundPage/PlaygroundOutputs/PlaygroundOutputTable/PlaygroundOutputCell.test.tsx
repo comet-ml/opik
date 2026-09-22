@@ -83,7 +83,7 @@ describe("PlaygroundOutputCell", () => {
     it("should show the failure as an error rather than as the model's answer", () => {
       renderCell();
 
-      expect(screen.getByRole("alert")).toHaveTextContent(
+      expect(screen.getByTestId("playground-output-error")).toHaveTextContent(
         "Run failed: ratings not defined",
       );
       expect(screen.queryByTestId("markdown")).not.toBeInTheDocument();
@@ -111,7 +111,9 @@ describe("PlaygroundOutputCell", () => {
       renderCell();
 
       expect(screen.getByTestId("markdown")).toHaveTextContent("the answer");
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId("playground-output-error"),
+      ).not.toBeInTheDocument();
     });
 
     it("should keep its metric chips", () => {
