@@ -161,9 +161,7 @@ describe("provider key detection", () => {
       expect(hasAnthropicApiKey()).toBe(false);
     });
 
-    // A GitHub secret that does not exist expands to "" rather than being
-    // absent, so this is the shape a missing repo secret actually takes, and
-    // the reason the workflow fails the job before the suite can skip.
+    // A GitHub secret that does not resolve expands to "", not to absence.
     it("reports no key when set to an empty string", () => {
       process.env.ANTHROPIC_API_KEY = "";
 

@@ -81,16 +81,14 @@ jobs:
       matrix:
         node_version: ${{ fromJSON(needs.select-matrix.outputs.node_versions) }}
 
-    # Job level rather than the workflow env block: select-matrix runs a
-    # composite action checked out from the PR's own branch, so a
-    # workflow-level credential sits in its environment for a same-repo PR
-    # to read, and matrix selection never needs it.
+    # Job level, not the workflow env block: select-matrix runs a composite
+    # action checked out from the PR's own branch and never needs the key.
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_TYPESCRIPT_SDK_TESTS }}
 
     steps:
-      # hasAnthropicApiKey() reads absence as "skip", so without this the
-      # suite goes green having run no live Anthropic case at all.
+      # hasAnthropicApiKey() reads absence as "skip", so a missing key would
+      # pass the suite with no Anthropic coverage at all.
       - name: Verify the Anthropic key reached this job
         run: |
           if [ -z "${ANTHROPIC_API_KEY}" ]; then
