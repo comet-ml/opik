@@ -55,8 +55,10 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     @Valid @NotBlank @JsonProperty
     private String consumerGroupName;
 
-    // Each message fans out to one MySQL read, one ClickHouse read and up to one write per matching queue,
-    // so this is the main lever on concurrent database work when scores arrive in bursts.
+    // A batch is folded to one unit of work per (workspace, scope, author) before processing, and each unit
+    // is one MySQL read, two ClickHouse reads and up to one write per matching queue, so this caps concurrent
+    // database work by distinct groups rather than by message. 100 is what the other database-only consumers
+    // use; the 5-10 elsewhere caps slow external calls this consumer does not make.
     @Valid @JsonProperty
     @Min(1) @Max(100) private int consumerBatchSize;
 
@@ -64,8 +66,8 @@ public class AnnotationQueueRoutingConfig implements StreamConfiguration {
     // new messages per second per replica is roughly
     //     (consumerBatchSize / poolingInterval) x (1 - 1 / claimIntervalRatio)
     // because the read loop is driven by a fixed interval and every claimIntervalRatio-th tick spends its
-    // turn on autoClaim, which fetches only already-pending work. At the shipped 10 per tick, one tick a
-    // second and nine ticks in ten reading, that is about 9/s per replica. Under-provisioning here is not
+    // turn on autoClaim, which fetches only already-pending work. At the shipped 100 per tick, one tick a
+    // second and nine ticks in ten reading, that is about 90/s per replica. Under-provisioning here is not
     // merely slow: the backlog grows until streamMaxLen trimming starts discarding the oldest messages,
     // which is silent. Raise consumerBatchSize before lowering poolingInterval.
     @Valid @JsonProperty
