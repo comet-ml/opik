@@ -30,9 +30,6 @@ public class OpikConfiguration extends JobConfiguration {
     @Valid @NotNull @JsonProperty
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
-    // Same shape as the block above, different ClickHouse account: named for the reach it grants rather than for
-    // Custom Charts, its only consumer today. That consumer needs a workspace-only policy on
-    // authored_feedback_scores, which Agent Insights binds to a project too.
     @Valid @NotNull @JsonProperty
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormExtendedSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
