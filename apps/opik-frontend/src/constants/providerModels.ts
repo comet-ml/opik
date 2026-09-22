@@ -170,6 +170,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_FABLE_5_1,
       label: "Claude Fable 5.1",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5,
+      label: "Claude Mythos 5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_5_1,
+      label: "Claude Mythos 5.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_MYTHOS_PREVIEW,
+      label: "Claude Mythos Preview",
+    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -2273,6 +2285,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "prime-intellect/intellect-3",
     },
     {
+      value: PROVIDER_MODEL_TYPE.PRISM_ML_TERNARY_BONSAI_2_27B,
+      label: "prism-ml/ternary-bonsai-2-27b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN_2_5_72B_INSTRUCT,
       label: "qwen/qwen-2.5-72b-instruct",
     },
@@ -2849,6 +2865,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "x-ai/grok-4.6",
     },
     {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_7,
+      label: "x-ai/grok-4.7",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_BUILD_0_1,
       label: "x-ai/grok-build-0.1",
     },
@@ -2875,6 +2895,18 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5_PRO,
       label: "xiaomi/mimo-v2.5-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_6_FLASH,
+      label: "xiaomi/mimo-v2.6-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_6_PRO,
+      label: "xiaomi/mimo-v2.6-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_6_PRO_ULTRASPEED,
+      label: "xiaomi/mimo-v2.6-pro-ultraspeed",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_32B,
@@ -2951,6 +2983,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_FLASH_BATCH,
       label: "z-ai/glm-5.3-flash:batch",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_FLASHX,
+      label: "z-ai/glm-5.3-flashx",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_3_BATCH,
