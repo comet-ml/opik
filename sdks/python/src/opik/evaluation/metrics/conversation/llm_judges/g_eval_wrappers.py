@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 import opik.exceptions as exceptions
 
@@ -19,19 +19,58 @@ from opik.evaluation.metrics.llm_judges.g_eval_presets import (
 )
 
 
+def _bad_content(value: Any) -> exceptions.MetricComputationError:
+    return exceptions.MetricComputationError(
+        "Assistant turn content must be text or a list of content parts, "
+        f"got {type(value).__name__}."
+    )
+
+
+def _text_from_parts(parts: Any) -> str:
+    """The text of a multimodal content list, or ``""`` when it carries none.
+
+    A part that is neither a string nor a mapping with string ``text`` is a shape this
+    adapter cannot read, so it is reported rather than counted as an empty turn --
+    counting it as empty would grade an older turn and report success.
+    """
+    texts: List[str] = []
+    for part in parts:
+        if isinstance(part, str):
+            texts.append(part)
+        elif isinstance(part, dict):
+            text = part.get("text")
+            if isinstance(text, str):
+                texts.append(text)
+        else:
+            raise _bad_content(part)
+
+    return "\n".join(text for text in texts if text.strip())
+
+
 def _latest_assistant_text(conversation: conversation_types.Conversation) -> str:
     """The most recent assistant message that carries text, or ``""`` when there is none.
 
     ``create_conversation_from_traces`` skips an assistant message only when the output
     transform returns ``None``, so a turn whose text is empty -- an agent call that only
     issued tool calls, or an empty completion -- does reach conversation-level metrics.
-    It must not hide the answer before it.
+    It must not hide the answer before it. The same holds for a content list whose parts
+    are all non-text, whose text parts are joined here.
+
+    A content value that is neither text nor a readable content list is reported by
+    raising, because skipping it would fall back to grading an older turn.
     """
     for turn in reversed(conversation):
         if turn.get("role") != "assistant":
             continue
         content = turn.get("content")
-        if isinstance(content, str) and content.strip():
+        if isinstance(content, (list, tuple)):
+            content = _text_from_parts(content)
+        elif content is None or isinstance(content, str):
+            pass
+        else:
+            raise _bad_content(content)
+
+        if content.strip():
             return content
 
     return ""
@@ -58,7 +97,8 @@ class GEvalConversationMetric(ConversationThreadMetric):
 
     Returns:
         ScoreResult: Mirrors the wrapped judge's score/value/metadata fields. When
-        the judge fails, ``scoring_failed`` is set and ``value`` is ``0.0``.
+        the judge fails, ``scoring_failed`` is set and ``value`` is ``0.0`` -- the
+        same as when no assistant turn carries text, or one cannot be read.
 
     Example:
         >>> from opik.evaluation.metrics.conversation.llm_judges.g_eval_wrappers import (
@@ -108,18 +148,29 @@ class GEvalConversationMetric(ConversationThreadMetric):
         **_: Any,
     ) -> score_result.ScoreResult:
         """
-        Evaluate the final assistant turn in a conversation.
+        Evaluate the latest assistant turn that carries text.
 
         Args:
             conversation: Sequence of dict-like turns containing ``role`` and
-                ``content`` keys. Only assistant turns with non-empty ``content``
-                are considered.
+                ``content`` keys. Assistant turns are graded newest-first, skipping
+                those without text; a turn whose content is neither text nor a
+                content list is reported as a failed score.
 
         Returns:
             ScoreResult: Normalised output from the wrapped judge. If no assistant
-            message carries text, the result is marked as failed with ``value=0.0``.
+            message carries text, or a turn's content cannot be read, the result is
+            marked as failed with ``value=0.0``.
         """
-        last_assistant_text = _latest_assistant_text(conversation)
+        try:
+            last_assistant_text = _latest_assistant_text(conversation)
+        except exceptions.MetricComputationError as error:
+            return score_result.ScoreResult(
+                name=self.name,
+                value=0.0,
+                reason=str(error),
+                scoring_failed=True,
+            )
+
         if not last_assistant_text:
             return score_result.ScoreResult(
                 name=self.name,
@@ -158,7 +209,7 @@ class ConversationComplianceRiskMetric(GEvalConversationMetric):
     """
     Evaluate the latest assistant response for compliance and risk exposure.
 
-    This metric forwards the final assistant turn to
+    This metric forwards the latest assistant turn that carries text to
     :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.compliance_risk.ComplianceRiskJudge`
     and returns its assessment as a conversation-level ``ScoreResult``.
 
@@ -204,12 +255,12 @@ class ConversationComplianceRiskMetric(GEvalConversationMetric):
 
 class ConversationDialogueHelpfulnessMetric(GEvalConversationMetric):
     """
-    Score how helpful the closing assistant message is within the dialogue.
+    Score how helpful the latest assistant answer is within the dialogue.
 
     The metric expects the same conversation shape as
     :class:`ConversationThreadMetric`. It uses
     :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite.DialogueHelpfulnessJudge`
-    to evaluate usefulness and responsiveness of the final assistant turn.
+    to evaluate usefulness and responsiveness of the assistant turn that carries text.
 
     Args:
         model: Optional model name passed to the judge.
@@ -252,12 +303,13 @@ class ConversationDialogueHelpfulnessMetric(GEvalConversationMetric):
 
 class ConversationQARelevanceMetric(GEvalConversationMetric):
     """
-    Quantify how relevant the assistant's final answer is to the preceding query.
+    Quantify how relevant the assistant's latest answer is to the preceding query.
 
     This metric expects a conversation sequence compatible with
     :class:`ConversationThreadMetric` and wraps
     :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.qa_suite.QARelevanceJudge`
-    and is useful when the conversation emulates a Q&A exchange.
+    and is useful when the conversation emulates a Q&A exchange. It grades the latest
+    assistant turn that carries text.
 
     Args:
         model: Optional model name used by the judge backend.
@@ -399,7 +451,7 @@ class ConversationPromptUncertaintyMetric(GEvalConversationMetric):
     Measure how uncertain the assistant appears about executing the prompt.
 
     The metric expects the standard conversation schema and pipes the latest
-    assistant reply into
+    assistant reply that carries text into
     :class:`~opik.evaluation.metrics.llm_judges.g_eval_presets.prompt_diagnostics.PromptUncertaintyJudge`
     and returns the judge's score in a conversation-friendly format.
 
