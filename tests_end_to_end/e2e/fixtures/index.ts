@@ -1,4 +1,4 @@
-export { test, expect } from './export-comparison.fixture';
+export { test, expect } from './bulk-tag-traces.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -166,4 +166,5 @@ export type {
   ExportComparisonRef,
   ExportComparisonFixtures,
 } from './export-comparison.fixture';
+export type { BulkTagTraceRef, BulkTagTracesFixtures } from './bulk-tag-traces.fixture';
 export type { ProjectRef } from '../core/backend';
