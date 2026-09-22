@@ -11,6 +11,7 @@ env:
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_ANALYTICS_ENABLE: False
 on:
   workflow_call:
 
@@ -31,15 +32,15 @@ jobs:
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Python ${{matrix.python_version}}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{matrix.python_version}}
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Install opik
         run: uv pip install --system .

@@ -22,6 +22,15 @@ const colorIndicatorVariants = cva("bg-[var(--bg-color)]", {
   },
 });
 
+/**
+ * The dot is 6px, which is too small to find or aim at, so customers reported the colour override as
+ * missing entirely (OPIK_7840). A transparent pseudo-element enlarges the pointer target without
+ * changing how the indicator looks. Horizontal growth is kept to 6px because in a chart legend the
+ * dot sits immediately left of the label, and the label has its own click action to drill down.
+ */
+const HIT_AREA =
+  "before:absolute before:-inset-y-2 before:-inset-x-1.5 before:content-['']";
+
 type ColorIndicatorProps = VariantProps<typeof colorIndicatorVariants> & {
   label: string;
   colorKey?: string;
@@ -83,11 +92,14 @@ const ColorIndicator: React.FC<ColorIndicatorProps> = ({
 
   return (
     <Popover open={popoverOpen} onOpenChange={handleOpenChange} modal>
-      <Tooltip open={popoverOpen ? false : undefined}>
+      {/* No hover delay: the affordance is small, so the hint has to arrive the moment it is found. */}
+      <Tooltip open={popoverOpen ? false : undefined} delayDuration={0}>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
             <div
-              className={classes}
+              // `relative` comes first so a caller that positions the dot absolutely still wins the
+              // merge; either way the pseudo-element anchors to the indicator, not to an ancestor.
+              className={cn("relative", classes, HIT_AREA)}
               style={{ ...colorStyle, cursor: "pointer" }}
               onClick={(e) => e.stopPropagation()}
             />

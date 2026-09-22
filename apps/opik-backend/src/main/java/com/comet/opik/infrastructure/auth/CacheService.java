@@ -1,6 +1,5 @@
 package com.comet.opik.infrastructure.auth;
 
-import com.comet.opik.api.OpikVersion;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import lombok.Builder;
 
@@ -15,7 +14,8 @@ interface CacheService {
             String workspaceId,
             String workspaceName,
             List<Quota> quotas,
-            OpikVersion opikVersion) {
+            List<String> permissions,
+            String deviceId) {
     }
 
     void cache(

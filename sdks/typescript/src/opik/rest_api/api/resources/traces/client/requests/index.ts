@@ -1,6 +1,7 @@
 export type { AddThreadCommentRequest } from "./AddThreadCommentRequest.js";
 export type { AddTraceCommentRequest } from "./AddTraceCommentRequest.js";
 export type { AddTraceFeedbackScoreRequest } from "./AddTraceFeedbackScoreRequest.js";
+export type { BatchDeleteByProject } from "./BatchDeleteByProject.js";
 export type { DeleteThreadFeedbackScores } from "./DeleteThreadFeedbackScores.js";
 export type { DeleteTraceByIdRequest } from "./DeleteTraceByIdRequest.js";
 export type { DeleteTraceFeedbackScoreRequest } from "./DeleteTraceFeedbackScoreRequest.js";

@@ -49,8 +49,14 @@ from .alert_write import AlertWrite
 from .alert_write_alert_type import AlertWriteAlertType
 from .analytics_query_response import AnalyticsQueryResponse
 from .annotation_queue import AnnotationQueue
+from .annotation_queue_automation import AnnotationQueueAutomation
+from .annotation_queue_automation_public import AnnotationQueueAutomationPublic
+from .annotation_queue_automation_write import AnnotationQueueAutomationWrite
 from .annotation_queue_batch import AnnotationQueueBatch
 from .annotation_queue_item_ids import AnnotationQueueItemIds
+from .annotation_queue_item_public import AnnotationQueueItemPublic
+from .annotation_queue_item_public_source import AnnotationQueueItemPublicSource
+from .annotation_queue_items_public import AnnotationQueueItemsPublic
 from .annotation_queue_page_public import AnnotationQueuePagePublic
 from .annotation_queue_public import AnnotationQueuePublic
 from .annotation_queue_public_scope import AnnotationQueuePublicScope
@@ -99,6 +105,9 @@ from .automation_rule_evaluator_object_object_public import (
     AutomationRuleEvaluatorObjectObjectPublic_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_object_object_public_action import AutomationRuleEvaluatorObjectObjectPublicAction
+from .automation_rule_evaluator_object_object_public_trigger_scope import (
+    AutomationRuleEvaluatorObjectObjectPublicTriggerScope,
+)
 from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
 from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic,
@@ -110,6 +119,7 @@ from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_public_action import AutomationRuleEvaluatorPublicAction
+from .automation_rule_evaluator_public_trigger_scope import AutomationRuleEvaluatorPublicTriggerScope
 from .automation_rule_evaluator_span_llm_as_judge import AutomationRuleEvaluatorSpanLlmAsJudge
 from .automation_rule_evaluator_span_llm_as_judge_public import AutomationRuleEvaluatorSpanLlmAsJudgePublic
 from .automation_rule_evaluator_span_llm_as_judge_write import AutomationRuleEvaluatorSpanLlmAsJudgeWrite
@@ -136,6 +146,7 @@ from .automation_rule_evaluator_trace_thread_user_defined_metric_python_public i
 from .automation_rule_evaluator_trace_thread_user_defined_metric_python_write import (
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite,
 )
+from .automation_rule_evaluator_trigger_scope import AutomationRuleEvaluatorTriggerScope
 from .automation_rule_evaluator_update import (
     AutomationRuleEvaluatorUpdate,
     AutomationRuleEvaluatorUpdate_LlmAsJudge,
@@ -157,6 +168,7 @@ from .automation_rule_evaluator_update_trace_thread_llm_as_judge import (
 from .automation_rule_evaluator_update_trace_thread_user_defined_metric_python import (
     AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython,
 )
+from .automation_rule_evaluator_update_trigger_scope import AutomationRuleEvaluatorUpdateTriggerScope
 from .automation_rule_evaluator_update_user_defined_metric_python import (
     AutomationRuleEvaluatorUpdateUserDefinedMetricPython,
 )
@@ -177,9 +189,9 @@ from .automation_rule_evaluator_write import (
     AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_write_action import AutomationRuleEvaluatorWriteAction
+from .automation_rule_evaluator_write_trigger_scope import AutomationRuleEvaluatorWriteTriggerScope
 from .avg_value_stat_public import AvgValueStatPublic
 from .batch_delete import BatchDelete
-from .batch_delete_by_project import BatchDeleteByProject
 from .bi_information import BiInformation
 from .bi_information_response import BiInformationResponse
 from .blueprint_page_history import BlueprintPageHistory
@@ -235,9 +247,18 @@ from .comment_public import CommentPublic
 from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
+from .condition_group import ConditionGroup
+from .condition_group_public import ConditionGroupPublic
+from .condition_group_write import ConditionGroupWrite
+from .conditions import Conditions
+from .conditions_public import ConditionsPublic
+from .conditions_write import ConditionsWrite
 from .consent_response import ConsentResponse
 from .count_value_stat_public import CountValueStatPublic
 from .create_session_response import CreateSessionResponse
+from .credential import Credential
+from .credential_public import CredentialPublic
+from .credential_write import CredentialWrite
 from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
 from .dashboard_public_scope import DashboardPublicScope
@@ -565,6 +586,12 @@ from .provider_api_key_page_public import ProviderApiKeyPagePublic
 from .provider_api_key_provider import ProviderApiKeyProvider
 from .provider_api_key_public import ProviderApiKeyPublic
 from .provider_api_key_public_provider import ProviderApiKeyPublicProvider
+from .provider_auth_config import ProviderAuthConfig
+from .provider_auth_config_public import ProviderAuthConfigPublic
+from .provider_auth_config_public_send_as import ProviderAuthConfigPublicSendAs
+from .provider_auth_config_send_as import ProviderAuthConfigSendAs
+from .provider_auth_config_write import ProviderAuthConfigWrite
+from .provider_auth_config_write_send_as import ProviderAuthConfigWriteSendAs
 from .recent_activity_item_public import RecentActivityItemPublic
 from .recent_activity_item_public_type import RecentActivityItemPublicType
 from .recent_activity_page_public import RecentActivityPagePublic
@@ -582,6 +609,12 @@ from .retention_rule_page_public import RetentionRulePagePublic
 from .retention_rule_public import RetentionRulePublic
 from .retention_rule_public_level import RetentionRulePublicLevel
 from .retention_rule_public_retention import RetentionRulePublicRetention
+from .score_condition import ScoreCondition
+from .score_condition_operator import ScoreConditionOperator
+from .score_condition_public import ScoreConditionPublic
+from .score_condition_public_operator import ScoreConditionPublicOperator
+from .score_condition_write import ScoreConditionWrite
+from .score_condition_write_operator import ScoreConditionWriteOperator
 from .score_name import ScoreName
 from .score_name_public import ScoreNamePublic
 from .service_toggles_config import ServiceTogglesConfig
@@ -716,8 +749,6 @@ from .workspace_project_user_count import WorkspaceProjectUserCount
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 from .workspace_user_permissions import WorkspaceUserPermissions
-from .workspace_version import WorkspaceVersion
-from .workspace_version_opik_version import WorkspaceVersionOpikVersion
 
 __all__ = [
     "Agent",
@@ -767,8 +798,14 @@ __all__ = [
     "AlertWriteAlertType",
     "AnalyticsQueryResponse",
     "AnnotationQueue",
+    "AnnotationQueueAutomation",
+    "AnnotationQueueAutomationPublic",
+    "AnnotationQueueAutomationWrite",
     "AnnotationQueueBatch",
     "AnnotationQueueItemIds",
+    "AnnotationQueueItemPublic",
+    "AnnotationQueueItemPublicSource",
+    "AnnotationQueueItemsPublic",
     "AnnotationQueuePagePublic",
     "AnnotationQueuePublic",
     "AnnotationQueuePublicScope",
@@ -801,6 +838,7 @@ __all__ = [
     "AutomationRuleEvaluatorLlmAsJudgeWrite",
     "AutomationRuleEvaluatorObjectObjectPublic",
     "AutomationRuleEvaluatorObjectObjectPublicAction",
+    "AutomationRuleEvaluatorObjectObjectPublicTriggerScope",
     "AutomationRuleEvaluatorObjectObjectPublic_LlmAsJudge",
     "AutomationRuleEvaluatorObjectObjectPublic_SpanLlmAsJudge",
     "AutomationRuleEvaluatorObjectObjectPublic_SpanUserDefinedMetricPython",
@@ -810,6 +848,7 @@ __all__ = [
     "AutomationRuleEvaluatorPagePublic",
     "AutomationRuleEvaluatorPublic",
     "AutomationRuleEvaluatorPublicAction",
+    "AutomationRuleEvaluatorPublicTriggerScope",
     "AutomationRuleEvaluatorPublic_LlmAsJudge",
     "AutomationRuleEvaluatorPublic_SpanLlmAsJudge",
     "AutomationRuleEvaluatorPublic_SpanUserDefinedMetricPython",
@@ -828,6 +867,7 @@ __all__ = [
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonPublic",
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite",
+    "AutomationRuleEvaluatorTriggerScope",
     "AutomationRuleEvaluatorUpdate",
     "AutomationRuleEvaluatorUpdateAction",
     "AutomationRuleEvaluatorUpdateLlmAsJudge",
@@ -835,6 +875,7 @@ __all__ = [
     "AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython",
+    "AutomationRuleEvaluatorUpdateTriggerScope",
     "AutomationRuleEvaluatorUpdateUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_LlmAsJudge",
     "AutomationRuleEvaluatorUpdate_SpanLlmAsJudge",
@@ -847,6 +888,7 @@ __all__ = [
     "AutomationRuleEvaluatorUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorWrite",
     "AutomationRuleEvaluatorWriteAction",
+    "AutomationRuleEvaluatorWriteTriggerScope",
     "AutomationRuleEvaluatorWrite_LlmAsJudge",
     "AutomationRuleEvaluatorWrite_SpanLlmAsJudge",
     "AutomationRuleEvaluatorWrite_SpanUserDefinedMetricPython",
@@ -861,7 +903,6 @@ __all__ = [
     "AutomationRuleEvaluator_UserDefinedMetricPython",
     "AvgValueStatPublic",
     "BatchDelete",
-    "BatchDeleteByProject",
     "BiInformation",
     "BiInformationResponse",
     "BlueprintPageHistory",
@@ -917,9 +958,18 @@ __all__ = [
     "CompleteMultipartUploadRequest",
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
+    "ConditionGroup",
+    "ConditionGroupPublic",
+    "ConditionGroupWrite",
+    "Conditions",
+    "ConditionsPublic",
+    "ConditionsWrite",
     "ConsentResponse",
     "CountValueStatPublic",
     "CreateSessionResponse",
+    "Credential",
+    "CredentialPublic",
+    "CredentialWrite",
     "DashboardPagePublic",
     "DashboardPublic",
     "DashboardPublicScope",
@@ -1238,6 +1288,12 @@ __all__ = [
     "ProviderApiKeyProvider",
     "ProviderApiKeyPublic",
     "ProviderApiKeyPublicProvider",
+    "ProviderAuthConfig",
+    "ProviderAuthConfigPublic",
+    "ProviderAuthConfigPublicSendAs",
+    "ProviderAuthConfigSendAs",
+    "ProviderAuthConfigWrite",
+    "ProviderAuthConfigWriteSendAs",
     "RecentActivityItemPublic",
     "RecentActivityItemPublicType",
     "RecentActivityPagePublic",
@@ -1255,6 +1311,12 @@ __all__ = [
     "RetentionRulePublic",
     "RetentionRulePublicLevel",
     "RetentionRulePublicRetention",
+    "ScoreCondition",
+    "ScoreConditionOperator",
+    "ScoreConditionPublic",
+    "ScoreConditionPublicOperator",
+    "ScoreConditionWrite",
+    "ScoreConditionWriteOperator",
     "ScoreName",
     "ScoreNamePublic",
     "ServiceTogglesConfig",
@@ -1389,6 +1451,4 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
-    "WorkspaceVersion",
-    "WorkspaceVersionOpikVersion",
 ]

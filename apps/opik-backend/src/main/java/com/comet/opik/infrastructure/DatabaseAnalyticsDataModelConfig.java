@@ -15,11 +15,24 @@ import lombok.Builder;
  * epoch end time round-trips unchanged rather than being read as {@code null}. Flip this in lockstep with the EXCHANGE
  * step of the cutover.</p>
  *
+ * <p>It also gates partition-scoped deletes (OPIK-8230): the EXCHANGE that makes these columns non-nullable is the
+ * same one that puts the weekly-partitioned successor behind the name mutations target, so this flag being
+ * {@code true} is equally what says a delete may scope itself with {@code IN PARTITION}. One flag for two facts
+ * because they have only ever flipped together; a second would have to be threaded through the cutover runbook and
+ * tooling to track no independent state. The name says only the first duty and is deliberately not renamed - the env
+ * var is exposed.</p>
+ *
  * <p>{@code spanColumnsNonNullable}: the {@code spans} sibling of {@code traceColumnsNonNullable}, gating the same
  * sentinel wiring for {@code spans.end_time}→epoch and {@code spans.duration}/{@code spans.ttft}→{@code NaN}. Default
  * {@code false} while the {@code spans} table still has {@code Nullable(...)} columns; set {@code true} in lockstep with
  * the Slice 3 EXCHANGE once those columns are replaced with sentinel-defaulted non-nullable columns. Independent of the
  * trace flag so the two cutovers can flip separately.</p>
+ *
+ * <p>It carries the second duty its trace sibling does (OPIK-8364): the same EXCHANGE puts the weekly-partitioned
+ * successor behind the name span mutations target, so {@code true} is equally what says the cascade delete may scope
+ * itself with {@code IN PARTITION}. Reading the wrap flag for that would leave deletes unpruned for the whole window
+ * between the EXCHANGE and the wrap. The spans <b>retention</b> sweeps are not scoped either way — see
+ * {@code SpanDAO.DELETE_FOR_RETENTION}.</p>
  *
  * <p>{@code traceDeletionEventsCaptureEnabled}: when {@code true}, trace deletes also record the deleted ids in the
  * {@code deletion_events_local} bridge so they survive the table copy. Left {@code false} at deploy time and turned on
@@ -35,6 +48,43 @@ import lombok.Builder;
  * far more ids than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split
  * into chunks of this size. Bounded to a positive value so a misconfiguration fails startup rather than silently
  * disabling capture, and to a sensible ceiling that keeps the per-statement bind count in the safe range.</p>
+ *
+ * <p>{@code tracesDistributedWrapEnabled}: the final sharding-readiness step of the traces cutover wraps {@code traces}
+ * as a {@code Distributed} table over the {@code traces_local} shard. A {@code Distributed} table supports
+ * {@code SELECT} and {@code INSERT} but <b>not</b> mutations ({@code DELETE FROM <distributed>} → code 36;
+ * {@code ALTER ... DELETE} → code 48), so once the wrap is live every mutation path must target the local shard.
+ * Left {@code false} at deploy time (and while {@code traces} is still a {@code MergeTree}, where deletes work
+ * directly); set {@code true} in lockstep with applying the {@code Distributed} wrap
+ * ({@code exchange_and_wrap.sh --with-wrap} / {@code --wrap-only}). While {@code true}, {@code TraceDAO} routes its
+ * delete/retention mutations to {@code traces_local} while reads and inserts continue through the Distributed
+ * {@code traces}. <b>General rule, by kind of change:</b> row mutations ({@code DELETE}) and
+ * {@code MATERIALIZE COLUMN} / {@code ADD INDEX} / {@code MODIFY TTL} target {@code traces_local} only — the
+ * {@code Distributed} {@code traces} rejects them (code 36/48), so a slip fails loudly; {@code ADD}/{@code DROP}/
+ * {@code MODIFY COLUMN} must be applied to <b>both</b> {@code traces_local} and the {@code Distributed} {@code traces}
+ * (the wrapper accepts them as metadata-only, and targeting only {@code traces_local} leaves the wrapper without the
+ * column, so reads fail with code 47).</p>
+ *
+ * <p>This flag is asserted against the live topology at readiness by
+ * {@code ClickHouseTracesTopologyHealthCheck}: either direction of mismatch fails the
+ * {@code clickhouse-traces-topology} probe with a message naming the flag and the observed engine, so an install whose
+ * flag and database disagree is pulled from rotation instead of discovering it on its first trace delete. The flag
+ * stays the source of truth — the probe only reports, it never re-routes.</p>
+ *
+ * <p>{@code spansDistributedWrapEnabled}: the {@code spans} sibling of {@code tracesDistributedWrapEnabled}. The
+ * Slice 3 cutover wraps {@code spans} as a {@code Distributed} table over the {@code spans_local} shard, co-located
+ * with traces on {@code sipHash64(project_id)}. Left {@code false} at deploy time (and while {@code spans} is still a
+ * {@code MergeTree}, where deletes work directly); set {@code true} in lockstep with applying the spans wrap. While
+ * {@code true}, {@code SpanDAO} routes its cascade and retention deletes to {@code spans_local} while reads and
+ * inserts continue through the Distributed {@code spans}. The same split by kind applies as for traces: row mutations
+ * ({@code DELETE}) and {@code MATERIALIZE COLUMN} / {@code ADD INDEX} / {@code MODIFY TTL} target {@code spans_local}
+ * only, while {@code ADD}/{@code DROP}/{@code MODIFY COLUMN} must be applied to <b>both</b> {@code spans_local} and
+ * the {@code Distributed} {@code spans}. Independent of the trace flag so the two cutovers can flip separately.</p>
+ *
+ * <p>It is asserted against the live topology at readiness by {@code ClickHouseSpansTopologyHealthCheck}: either
+ * direction of mismatch fails the {@code clickhouse-spans-topology} probe with a message naming the flag and the
+ * observed engine. A separate probe from the traces one — they share an implementation — because the two cutovers flip
+ * independently, so an operator has to see which of the two disagrees with its table. The same source-of-truth rule
+ * holds: the probe only reports, it never re-routes.</p>
  */
 @Builder(toBuilder = true)
 public record DatabaseAnalyticsDataModelConfig(
@@ -42,5 +92,7 @@ public record DatabaseAnalyticsDataModelConfig(
         boolean spanColumnsNonNullable,
         boolean traceDeletionEventsCaptureEnabled,
         boolean spanDeletionEventsCaptureEnabled,
-        @Min(1) @Max(2_000) int deletionEventsInsertBatchSize) {
+        @Min(1) @Max(2_000) int deletionEventsInsertBatchSize,
+        boolean tracesDistributedWrapEnabled,
+        boolean spansDistributedWrapEnabled) {
 }

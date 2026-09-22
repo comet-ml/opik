@@ -10,6 +10,7 @@ import { AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite } from "./AutomationR
 import { AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite } from "./AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite.js";
 import { AutomationRuleEvaluatorUserDefinedMetricPythonWrite } from "./AutomationRuleEvaluatorUserDefinedMetricPythonWrite.js";
 import { AutomationRuleEvaluatorWriteAction } from "./AutomationRuleEvaluatorWriteAction.js";
+import { AutomationRuleEvaluatorWriteTriggerScope } from "./AutomationRuleEvaluatorWriteTriggerScope.js";
 
 const _Base = core.serialization.object({
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
@@ -20,6 +21,7 @@ const _Base = core.serialization.object({
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
     enabled: core.serialization.boolean().optional(),
+    triggerScope: core.serialization.property("trigger_scope", AutomationRuleEvaluatorWriteTriggerScope.optional()),
     action: AutomationRuleEvaluatorWriteAction,
 });
 export const AutomationRuleEvaluatorWrite: core.serialization.Schema<
@@ -83,6 +85,7 @@ export declare namespace AutomationRuleEvaluatorWrite {
         name: string;
         sampling_rate?: number | null;
         enabled?: boolean | null;
+        trigger_scope?: AutomationRuleEvaluatorWriteTriggerScope.Raw | null;
         action: AutomationRuleEvaluatorWriteAction.Raw;
     }
 }

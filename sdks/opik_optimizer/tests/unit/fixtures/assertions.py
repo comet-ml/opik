@@ -27,8 +27,12 @@ def assert_baseline_early_stop(
     Assert the standard BaseOptimizer early-stop contract when baseline >= perfect_score.
     """
     assert result.details["stopped_early"] is True
+    assert result.details["finish_reason"] == "perfect_score"
     assert result.details["stop_reason"] == "baseline_score_met_threshold"
     assert result.details["perfect_score"] == perfect_score
+    # Every completion path must carry scoring_health — the worker forwards it
+    # to metadata and the UI's "No usable scores" heuristic reads it.
+    assert "failed_count" in result.details["scoring_health"]
     assert result.initial_score == result.score
     if trials_completed is not None:
         assert result.details["trials_completed"] == trials_completed

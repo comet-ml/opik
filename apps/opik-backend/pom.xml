@@ -19,20 +19,20 @@
         <dropwizard.version>5.0.2</dropwizard.version>
         <swagger.version>2.2.33</swagger.version>
         <lombok.version>1.18.46</lombok.version>
-        <mysql.version>9.7.0</mysql.version>
+        <mysql.version>26.7.0</mysql.version>
         <dropwizard-guicey.version>8.0.0</dropwizard-guicey.version>
         <stringtemplate.version>3.54.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
-        <clickhouse-java.version>0.9.8</clickhouse-java.version>
-        <google-protobuf.version>4.35.0</google-protobuf.version>
+        <clickhouse-java.version>0.10.0</clickhouse-java.version>
+        <google-protobuf.version>4.36.0</google-protobuf.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
         <testcontainers.version>2.0.2</testcontainers.version>
         <uuid.java.generator.version>5.2.0</uuid.java.generator.version>
         <wiremock.version>3.13.1</wiremock.version>
-        <redisson.version>4.6.1</redisson.version>
-        <opentelmetry.version>2.29.0</opentelmetry.version>
-        <aws.java.sdk.version>2.48.3</aws.java.sdk.version>
+        <redisson.version>4.7.0</redisson.version>
+        <opentelmetry.version>2.31.1</opentelmetry.version>
+        <aws.java.sdk.version>2.54.2</aws.java.sdk.version>
         <json-path.version>3.0.0</json-path.version>
         <jackson-jq.version>1.6.1</jackson-jq.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
@@ -64,7 +64,7 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-bom</artifactId>
-                <version>1.18.0</version>
+                <version>1.20.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -143,7 +143,7 @@
         <dependency>
             <groupId>software.amazon.jdbc</groupId>
             <artifactId>aws-advanced-jdbc-wrapper</artifactId>
-            <version>4.2.0</version>
+            <version>4.4.0</version>
         </dependency>
         <dependency>
             <groupId>io.dropwizard</groupId>
@@ -232,9 +232,20 @@
             <version>${stringtemplate.version}</version>
         </dependency>
 
+        <!--
+            Vertex AI goes through the Gen AI SDK rather than google-cloud-vertexai: only its ThinkingConfig
+            carries thinking_level, which is how Gemini 3 and later take their thinking setting. The older
+            SDK stopped at thinking_budget and is no longer released.
+        -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-vertex-ai-gemini</artifactId>
+            <artifactId>langchain4j-google-genai</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.api</groupId>
+            <artifactId>gax</artifactId>
+            <version>2.85.0</version>
         </dependency>
 
         <dependency>
@@ -355,12 +366,12 @@
         <dependency>
             <groupId>io.opentelemetry.proto</groupId>
             <artifactId>opentelemetry-proto</artifactId>
-            <version>1.10.0-alpha</version>
+            <version>1.11.0-alpha</version>
         </dependency>
         <dependency>
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-core</artifactId>
-            <version>3.3.0</version>
+            <version>4.0.0</version>
         </dependency>
         <dependency>
             <groupId>io.vavr</groupId>
@@ -454,7 +465,7 @@
         <dependency>
             <groupId>com.tngtech.archunit</groupId>
             <artifactId>archunit-junit5</artifactId>
-            <version>1.4.2</version>
+            <version>1.5.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -486,12 +497,12 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.15.0</version>
+                    <version>3.16.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.2</version>
+                    <version>3.6.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -519,7 +530,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
-                <version>3.8.0</version>
+                <version>3.10.1</version>
                 <executions>
                     <execution>
                         <phase>validate</phase>

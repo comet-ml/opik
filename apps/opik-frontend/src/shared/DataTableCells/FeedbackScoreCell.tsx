@@ -19,27 +19,24 @@ import { BaseTraceData } from "@/types/traces";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 import { isObjectSpan, isObjectThread } from "@/lib/traces";
 import { ROW_HEIGHT } from "@/types/shared";
+import { USER_FEEDBACK_NAME } from "@/constants/shared";
 
-const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
-  const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
+type FeedbackScoreCellContentProps = {
+  context: CellContext<unknown, unknown>;
+  feedbackScore?: TraceFeedbackScore;
+  isUserFeedbackColumn?: boolean;
+  onValueChange?: (name: string, value: number) => void;
+};
+
+const FeedbackScoreCellContent = ({
+  context,
+  feedbackScore,
+  isUserFeedbackColumn = false,
+  onValueChange,
+}: FeedbackScoreCellContentProps) => {
   const reason = feedbackScore?.reason;
-  const row = context.row.original as BaseTraceData | Thread | Span;
-
-  const {
-    projectId,
-    projectName,
-    rowHeight = ROW_HEIGHT.small,
-    enableUserFeedbackEditing = false,
-  } = (context.table.options.meta ?? {}) as TableMeta<unknown>;
-
-  const { handleValueChange } = useFeedbackScoreInlineEdit({
-    id: row.id,
-    isThread: isObjectThread(row),
-    isSpan: isObjectSpan(row),
-    feedbackScore,
-    projectId,
-    projectName,
-  });
+  const { rowHeight = ROW_HEIGHT.small } = (context.table.options.meta ??
+    {}) as TableMeta<unknown>;
 
   const reasons = useMemo(() => {
     if (getIsMultiValueFeedbackScore(feedbackScore?.value_by_author)) {
@@ -62,11 +59,6 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     feedbackScore?.last_updated_at,
   ]);
 
-  // Editing is now enabled for all threads regardless of status
-  const isEditingEnabled = enableUserFeedbackEditing;
-
-  const isUserFeedbackColumn =
-    isEditingEnabled && context.column.id === "feedback_scores_User feedback";
   const isCompact =
     rowHeight === ROW_HEIGHT.small || rowHeight === ROW_HEIGHT.medium;
 
@@ -85,7 +77,7 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       <FeedbackScoreCellValue
         feedbackScore={feedbackScore}
         isUserFeedbackColumn={isUserFeedbackColumn}
-        onValueChange={handleValueChange}
+        onValueChange={onValueChange}
         size={isCompact ? "sm" : "md"}
       />
 
@@ -104,6 +96,48 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     </CellWrapper>
   );
 };
+
+// The default cell is read-only, so a table only pays for the inline-edit
+// hooks on the one column that can actually be edited (see
+// EditableFeedbackScoreCell and resolveFeedbackScoreCell).
+const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => (
+  <FeedbackScoreCellContent
+    context={context}
+    feedbackScore={context.getValue() as TraceFeedbackScore | undefined}
+  />
+);
+
+export const EditableFeedbackScoreCell = (
+  context: CellContext<unknown, unknown>,
+) => {
+  const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
+  const row = context.row.original as BaseTraceData | Thread | Span;
+  const { projectId, projectName } = (context.table.options.meta ??
+    {}) as TableMeta<unknown>;
+
+  const { handleValueChange } = useFeedbackScoreInlineEdit({
+    id: row.id,
+    isThread: isObjectThread(row),
+    isSpan: isObjectSpan(row),
+    feedbackScore,
+    projectId,
+    projectName,
+  });
+
+  return (
+    <FeedbackScoreCellContent
+      context={context}
+      feedbackScore={feedbackScore}
+      isUserFeedbackColumn
+      onValueChange={handleValueChange}
+    />
+  );
+};
+
+export const resolveFeedbackScoreCell = (scoreName: string) =>
+  scoreName === USER_FEEDBACK_NAME
+    ? EditableFeedbackScoreCell
+    : FeedbackScoreCell;
 
 type CustomMeta = {
   accessorFn?: string;

@@ -105,6 +105,7 @@ const SliderInputControl = ({
           )}
           <Input
             id={inputId}
+            data-testid={inputId}
             className="box-content w-[var(--input-width)] max-w-[5ch] border px-2 py-0 text-right [&:not(:focus)]:border-transparent [&:not(:focus)]:px-0.5"
             style={
               {

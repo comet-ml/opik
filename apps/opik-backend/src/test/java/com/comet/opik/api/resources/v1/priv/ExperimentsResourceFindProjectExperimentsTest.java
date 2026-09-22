@@ -34,7 +34,9 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.FeedbackScoreMapper;
+import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.TestIdGeneratorFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -110,6 +112,7 @@ class ExperimentsResourceFindProjectExperimentsTest {
     private final TestDropwizardAppExtension APP = setup.APP;
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+    private static final IdGenerator idGenerator = TestIdGeneratorFactory.create();
 
     private String baseURI;
     private ExperimentResourceClient experimentResourceClient;
@@ -1120,7 +1123,7 @@ class ExperimentsResourceFindProjectExperimentsTest {
         var project = factory.manufacturePojo(Project.class);
         var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
-        UUID optimizationId = UUID.randomUUID();
+        UUID optimizationId = idGenerator.generateId();
 
         var experiments = experimentResourceClient.generateExperimentList()
                 .stream()

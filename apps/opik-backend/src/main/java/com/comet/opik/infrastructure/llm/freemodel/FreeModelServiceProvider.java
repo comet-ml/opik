@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
+import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import com.comet.opik.infrastructure.llm.openai.OpenAIClientGenerator;
 import com.comet.opik.infrastructure.llm.openai.QuotaAwareHttpClient;
 import dev.langchain4j.model.chat.ChatModel;
@@ -84,7 +85,7 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .map(OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(builder::baseUrl);
 

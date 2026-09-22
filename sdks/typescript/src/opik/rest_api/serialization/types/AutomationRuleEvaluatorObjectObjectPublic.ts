@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { AutomationRuleEvaluatorLlmAsJudgePublic } from "./AutomationRuleEvaluatorLlmAsJudgePublic.js";
 import { AutomationRuleEvaluatorObjectObjectPublicAction } from "./AutomationRuleEvaluatorObjectObjectPublicAction.js";
+import { AutomationRuleEvaluatorObjectObjectPublicTriggerScope } from "./AutomationRuleEvaluatorObjectObjectPublicTriggerScope.js";
 import { AutomationRuleEvaluatorSpanLlmAsJudgePublic } from "./AutomationRuleEvaluatorSpanLlmAsJudgePublic.js";
 import { AutomationRuleEvaluatorSpanUserDefinedMetricPythonPublic } from "./AutomationRuleEvaluatorSpanUserDefinedMetricPythonPublic.js";
 import { AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic } from "./AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic.js";
@@ -20,6 +21,10 @@ const _Base = core.serialization.object({
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
     enabled: core.serialization.boolean().optional(),
+    triggerScope: core.serialization.property(
+        "trigger_scope",
+        AutomationRuleEvaluatorObjectObjectPublicTriggerScope.optional(),
+    ),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
@@ -89,6 +94,7 @@ export declare namespace AutomationRuleEvaluatorObjectObjectPublic {
         name: string;
         sampling_rate?: number | null;
         enabled?: boolean | null;
+        trigger_scope?: AutomationRuleEvaluatorObjectObjectPublicTriggerScope.Raw | null;
         created_at?: string | null;
         created_by?: string | null;
         last_updated_at?: string | null;

@@ -57,8 +57,7 @@ const PlaygroundOutputTable = ({
     string | number
   >(LEFT_PANEL_WIDTH_KEY, { defaultValue: DEFAULT_LEFT_WIDTH });
 
-  const { hydratedItems: hydratedDatasetItems } =
-    useIncrementalDatasetHydration(datasetItems);
+  const hydratedDatasetItems = useIncrementalDatasetHydration(datasetItems);
 
   const noDataMessage = isLoadingDatasetItems
     ? "Loading..."
@@ -214,6 +213,7 @@ const PlaygroundOutputTable = ({
               resizeConfig={resizeConfig}
               noData={<DataTableNoData title={noDataMessage} />}
               showLoadingOverlay={isFetchingData}
+              testId="playground-variables-table"
             />
           </div>
         </Resizable>
@@ -228,6 +228,7 @@ const PlaygroundOutputTable = ({
             resizeConfig={resizeConfig}
             noData={<DataTableNoData title={noDataMessage} />}
             showLoadingOverlay={isFetchingData}
+            testId="playground-outputs-table"
           />
         </div>
       )}

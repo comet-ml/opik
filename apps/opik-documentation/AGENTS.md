@@ -8,14 +8,14 @@
 `apps/opik-documentation` contains two documentation pipelines:
 
 - `documentation/` (primary Fern docs site)
-  - `fern/docs/` for documentation pages and navigation content
+  - `fern/docs-v2/` for documentation pages
+  - `fern/docs.yml` for site config, navigation, and redirects
   - `docs/cookbook/` for source Jupyter notebooks
   - `static/` and `fern/img/` for assets (use only `fern/img` for new images)
-  - `update_cookbooks.sh` to regenerate cookbook markdown from notebooks
 - `python-sdk-docs/` (Python SDK reference docs)
   - `source/` for `.rst` content
   - `Makefile` and `requirements.txt` for doc builds
-- `README.md` is present in this folder; follow `documentation/fern/docs/contributing/*` for contribution process details and conventions.
+- `README.md` is present in this folder; follow `documentation/fern/docs-v2/contributing/*` for contribution process details and conventions.
 
 ## Build, Test, and Development Commands
 See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo commands.
@@ -24,8 +24,6 @@ See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo
   - Install Fern docs dependencies (run once or after dependency updates).
 - `cd documentation && npm run dev`
   - Run docs website locally with live reload.
-- `cd documentation && ./update_cookbooks.sh`
-  - Regenerates `fern/docs/cookbook/*.mdx` from `docs/cookbook/*.ipynb`.
 - `cd python-sdk-docs && pip install -r requirements.txt`
   - Install Sphinx tooling for SDK references.
 - `cd python-sdk-docs && make dev`
@@ -35,7 +33,7 @@ See also `../../AGENTS.md#build-test-and-development-commands` for full monorepo
 
 ## Coding Style & Naming Conventions
 - Write concise, user-oriented docs (avoid internal implementation detail unless needed).
-- Use existing Markdown/MDX style in `documentation/fern/docs/**` and reStructuredText style in `python-sdk-docs/source/**`.
+- Use existing Markdown/MDX style in `documentation/fern/docs-v2/**` and reStructuredText style in `python-sdk-docs/source/**`.
 - Keep file names descriptive and kebab-case (`quickstart.mdx`, `api-reference.mdx`).
 - Keep 2-space indentation in YAML/JSON snippets and frontmatter.
 - Treat `documentation/fern/docs.yml` (or `docs.yaml` where used) as the routing source of truth; do not infer URL paths from folder layout alone.

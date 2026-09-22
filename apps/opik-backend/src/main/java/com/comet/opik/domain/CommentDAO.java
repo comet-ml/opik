@@ -49,7 +49,7 @@ public interface CommentDAO {
 
     Mono<Long> deleteByEntityId(EntityType entityType, UUID entityId);
 
-    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds);
+    Mono<Long> deleteByEntityIds(EntityType entityType, Set<UUID> entityIds, UUID projectId);
 
     Flux<CommentEntityRef> getEntityRefsByCommentIds(Set<UUID> commentIds);
 }
@@ -133,6 +133,7 @@ class CommentDAOImpl implements CommentDAO {
             WHERE entity_id IN :entity_ids
             AND entity_type = :entity_type
             AND workspace_id = :workspace_id
+            <if(project_id)>AND project_id = :project_id<endif>
             ;
             """;
 
@@ -211,21 +212,30 @@ class CommentDAOImpl implements CommentDAO {
 
     @Override
     public Mono<Long> deleteByEntityId(@NonNull EntityType entityType, @NonNull UUID entityId) {
-        return deleteByEntityIds(entityType, Set.of(entityId));
+        return deleteByEntityIds(entityType, Set.of(entityId), null);
     }
 
     @Override
-    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds) {
-        log.info("Deleting comments for entityType '{}', entityIds count '{}'", entityType, entityIds.size());
+    public Mono<Long> deleteByEntityIds(@NonNull EntityType entityType, @NonNull Set<UUID> entityIds, UUID projectId) {
+        log.info("Deleting comments for entityType '{}', entityIds count '{}', project id '{}'", entityType,
+                entityIds.size(), projectId);
         if (entityIds.isEmpty()) {
             return Mono.just(0L);
         }
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            var statement = connection.createStatement(DELETE_COMMENT_BY_ENTITY_IDS)
+            var template = TemplateUtils.newST(DELETE_COMMENT_BY_ENTITY_IDS);
+            if (projectId != null) {
+                template.add("project_id", projectId);
+            }
+
+            var statement = connection.createStatement(template.render())
                     .bind("entity_ids", entityIds)
                     .bind("entity_type", entityType.getType());
+            if (projectId != null) {
+                statement.bind("project_id", projectId);
+            }
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
                     .flatMapMany(Result::getRowsUpdated)

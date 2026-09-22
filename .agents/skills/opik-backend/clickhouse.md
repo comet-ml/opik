@@ -97,6 +97,34 @@ WHERE id \\<= :uuid_to_time
 <if(project_id)> AND project_id = :project_id <endif>
 ```
 
+### Shared query fragments
+
+Query text is shared between DAOs by extracting the **template**, not by leaving `%s` slots for
+callers to fill (see `SKILL.md` → SQL Query Construction). When two DAOs need the same CTE with
+a different scope predicate, put both predicates in the template and let each caller enable its
+own:
+
+```sql
+WHERE workspace_id = :workspace_id
+<if(project_id)> AND project_id = :project_id <endif>
+<if(project_ids)> AND project_id IN :project_ids <endif>
+```
+
+```java
+// per-project caller (ProjectMetricsDAO)
+template.add("project_id", true);
+statement.bind("project_id", projectId.toString());
+```
+
+```java
+// workspace-level caller (WorkspaceMetricsDAO)
+template.add("project_ids", true);
+statement.bind("project_ids", projectIds.toArray(new UUID[0]));
+```
+
+This keeps the scan shape visible at the template: the predicate is what prunes on the `spans` /
+`traces` primary key, and a spliced-in string hides whether that pruning still happens.
+
 ## Parameter Binding
 
 ```java

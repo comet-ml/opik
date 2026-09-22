@@ -107,7 +107,8 @@ public class AgentInsightsJobService {
                                     error);
                             // Publisher-side failure: the run never reaches Ollie (which would otherwise report
                             // its own failure), so record it here too, or the UI spins until the client timeout.
-                            markRunFailed(workspaceId, projectId, "did_not_start",
+                            markRunFailed(workspaceId, projectId,
+                                    AgentInsightsJob.FailureReason.DID_NOT_START,
                                     "Failed to enqueue diagnostics run");
                         });
     }

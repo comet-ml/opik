@@ -15,6 +15,7 @@ import pydantic
 import pytest
 import tenacity
 
+from opik.message_processing import data_loss
 from opik.message_processing import messages
 from opik.message_processing.processors import online_message_processor
 from opik.message_processing.processors.online_message_processor import (
@@ -114,6 +115,7 @@ def processor(
         file_upload_manager=mock_file_uploader,
         fallback_replay_manager=mock_replay,
         unauthorized_message_types_registry=mock.Mock(),
+        data_loss_tracker=data_loss.DataLossTracker(),
     )
 
 
@@ -129,8 +131,8 @@ class TestRegisterMessage:
         mock_replay.register_message.side_effect = lambda m: call_order.append(
             "register"
         )
-        mock_rest_client.traces.create_trace.side_effect = (
-            lambda **kw: call_order.append("handler")
+        mock_rest_client.traces.create_trace.side_effect = lambda **kw: (
+            call_order.append("handler")
         )
 
         msg = _create_trace_message()
@@ -178,6 +180,7 @@ class TestRegisterMessage:
             fallback_replay_manager=mock_replay,
             active=False,
             unauthorized_message_types_registry=mock.Mock(),
+            data_loss_tracker=data_loss.DataLossTracker(),
         )
 
         msg = _create_trace_message()
@@ -208,6 +211,7 @@ class TestNoServerConnection:
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=offline_replay,
             unauthorized_message_types_registry=mock.Mock(),
+            data_loss_tracker=data_loss.DataLossTracker(),
         )
 
     def test_process__no_connection__registers_message_as_failed(
@@ -284,8 +288,8 @@ class TestUnregisterMessage:
     ):
         """unregister_message must be called after the handler completes."""
         call_order = []
-        mock_rest_client.traces.create_trace.side_effect = (
-            lambda **kw: call_order.append("handler")
+        mock_rest_client.traces.create_trace.side_effect = lambda **kw: (
+            call_order.append("handler")
         )
         mock_replay.unregister_message.side_effect = lambda mid: call_order.append(
             "unregister"
@@ -756,6 +760,36 @@ class TestAttachmentUploadCallbacks:
             72, failure_reason=str(error)
         )
 
+    def test_process__attachment__failed_callback_s3_remote_disconnect__retains_for_replay(
+        self,
+        processor: OpikMessageProcessor,
+        mock_replay: mock.MagicMock,
+        mock_file_uploader: mock.MagicMock,
+    ):
+        msg = _create_attachment_message(message_id=74)
+        remote_error = httpx.RemoteProtocolError(
+            "Server disconnected without sending a response"
+        )
+        error = s3_upload_error.S3UploadFileError(
+            file="attachment.bin",
+            reason=str(remote_error),
+            connection_error=True,
+        )
+        error.__cause__ = remote_error
+
+        def fake_upload(message, on_upload_success=None, on_upload_failed=None):
+            on_upload_failed(error)
+
+        mock_file_uploader.upload.side_effect = fake_upload
+        mock_replay.reset_mock()
+
+        processor.process(msg)
+
+        mock_replay.message_sent_failed.assert_called_once_with(
+            74, failure_reason=str(error)
+        )
+        mock_replay.unregister_message.assert_not_called()
+
     def test_process__attachment__failed_callback_s3_non_connection_error__no_failed_mark(
         self,
         processor: OpikMessageProcessor,
@@ -816,6 +850,7 @@ class TestAttachmentUploadCallbacks:
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=offline_replay,
             unauthorized_message_types_registry=mock.Mock(),
+            data_loss_tracker=data_loss.DataLossTracker(),
         )
 
         msg = _create_attachment_message(message_id=80)
@@ -883,6 +918,7 @@ class TestIgnoredMessageTypes:
             file_upload_manager=mock_file_uploader,
             fallback_replay_manager=offline_replay,
             unauthorized_message_types_registry=mock.Mock(),
+            data_loss_tracker=data_loss.DataLossTracker(),
         )
 
         noop_handler = mock.MagicMock(

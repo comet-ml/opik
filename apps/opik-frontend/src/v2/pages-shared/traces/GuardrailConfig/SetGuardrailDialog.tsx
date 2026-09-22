@@ -10,6 +10,7 @@ import { guardrailsMap } from "./guardrailsConfig";
 import { useGuardrailConfigState } from "./useGuardrailConfigState";
 import { GuardrailTypes } from "@/types/guardrails";
 import { buildDocsUrl } from "@/v2/lib/utils";
+import useAppStore from "@/store/AppStore";
 
 const GUARDRAIL_DOCS_LINK = buildDocsUrl(
   "/production/gateway-guardrails/guardrails",
@@ -26,30 +27,42 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
   setOpen,
   projectName,
 }) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const {
     state: guardrailsState,
-    updateThreshold,
-    updateEntities,
+    updateField,
     toggleEnabled,
     getEnabledGuardrailTypes,
   } = useGuardrailConfigState();
 
-  const enabledGuardrailsKeys = getEnabledGuardrailTypes() as GuardrailTypes[];
+  const enabledGuardrailsKeys = getEnabledGuardrailTypes();
   const importCodeNames = enabledGuardrailsKeys.map(
     (key) => guardrailsMap[key].codeImportName,
   );
   const codeList = enabledGuardrailsKeys.map((key) =>
-    guardrailsMap[key].codeBuilder(
-      guardrailsState[key].entities.map((v) => v.trim()).filter((v) => v),
-      guardrailsState[key].threshold,
-    ),
+    guardrailsMap[key].codeBuilder({
+      ...guardrailsState[key],
+      entities: guardrailsState[key].entities
+        .map((v) => v.trim())
+        .filter((v) => v),
+    }),
   );
 
-  const TOPIC_GUARDRAIL_CONFIG = guardrailsMap[GuardrailTypes.TOPIC];
-  const PII_GUARDRAIL_CONFIG = guardrailsMap[GuardrailTypes.PII];
+  const TOPIC_CONFIG = guardrailsMap[GuardrailTypes.TOPIC];
+  const PII_CONFIG = guardrailsMap[GuardrailTypes.PII];
+  const PROMPT_INJECTION_CONFIG =
+    guardrailsMap[GuardrailTypes.PROMPT_INJECTION];
+  const CUSTOM_CLASSIFIER_CONFIG =
+    guardrailsMap[GuardrailTypes.CUSTOM_CLASSIFIER];
+  const LLM_JUDGE_CONFIG = guardrailsMap[GuardrailTypes.LLM_JUDGE];
 
-  const TOPIC_GUARDRAIL_STATE = guardrailsState[GuardrailTypes.TOPIC];
-  const PII_GUARDRAIL_STATE = guardrailsState[GuardrailTypes.PII];
+  const TOPIC_STATE = guardrailsState[GuardrailTypes.TOPIC];
+  const PII_STATE = guardrailsState[GuardrailTypes.PII];
+  const PROMPT_INJECTION_STATE =
+    guardrailsState[GuardrailTypes.PROMPT_INJECTION];
+  const CUSTOM_CLASSIFIER_STATE =
+    guardrailsState[GuardrailTypes.CUSTOM_CLASSIFIER];
+  const LLM_JUDGE_STATE = guardrailsState[GuardrailTypes.LLM_JUDGE];
 
   return (
     <SideDialog
@@ -66,37 +79,117 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
         <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
           <div className="flex w-[250px] shrink-0 flex-col">
             <GuardrailConfig
-              title={TOPIC_GUARDRAIL_CONFIG.title}
-              hintText={TOPIC_GUARDRAIL_CONFIG.hintText}
-              enabled={TOPIC_GUARDRAIL_STATE.enabled}
+              title={TOPIC_CONFIG.title}
+              hintText={TOPIC_CONFIG.hintText}
+              enabled={TOPIC_STATE.enabled}
               toggleEnabled={() => toggleEnabled(GuardrailTypes.TOPIC)}
             >
               <GuardrailConfig.Threshold
-                id={`${TOPIC_GUARDRAIL_CONFIG.id}-threshold`}
-                value={TOPIC_GUARDRAIL_STATE.threshold}
-                onChange={(v) => updateThreshold(GuardrailTypes.TOPIC, v)}
+                id={`${TOPIC_CONFIG.id}-threshold`}
+                value={TOPIC_STATE.threshold}
+                onChange={(v) =>
+                  updateField(GuardrailTypes.TOPIC, "threshold", v)
+                }
               />
               <GuardrailConfig.TopicsList
-                id={`${TOPIC_GUARDRAIL_CONFIG.id}-list`}
-                onChange={(v) => updateEntities(GuardrailTypes.TOPIC, v)}
-                value={TOPIC_GUARDRAIL_STATE.entities}
+                id={`${TOPIC_CONFIG.id}-list`}
+                onChange={(v) =>
+                  updateField(GuardrailTypes.TOPIC, "entities", v)
+                }
+                value={TOPIC_STATE.entities}
               />
             </GuardrailConfig>
             <Separator className="my-1" />
             <GuardrailConfig
-              title={PII_GUARDRAIL_CONFIG.title}
-              hintText={PII_GUARDRAIL_CONFIG.hintText}
-              enabled={PII_GUARDRAIL_STATE.enabled}
+              title={PII_CONFIG.title}
+              hintText={PII_CONFIG.hintText}
+              enabled={PII_STATE.enabled}
               toggleEnabled={() => toggleEnabled(GuardrailTypes.PII)}
             >
               <GuardrailConfig.Threshold
-                id={`${PII_GUARDRAIL_CONFIG.id}-threshold`}
-                value={PII_GUARDRAIL_STATE.threshold}
-                onChange={(v) => updateThreshold(GuardrailTypes.PII, v)}
+                id={`${PII_CONFIG.id}-threshold`}
+                value={PII_STATE.threshold}
+                onChange={(v) =>
+                  updateField(GuardrailTypes.PII, "threshold", v)
+                }
               />
               <GuardrailConfig.RestrictedList
-                value={PII_GUARDRAIL_STATE.entities}
-                onChange={(v) => updateEntities(GuardrailTypes.PII, v)}
+                value={PII_STATE.entities}
+                onChange={(v) => updateField(GuardrailTypes.PII, "entities", v)}
+              />
+            </GuardrailConfig>
+            <Separator className="my-1" />
+            <GuardrailConfig
+              title={PROMPT_INJECTION_CONFIG.title}
+              hintText={PROMPT_INJECTION_CONFIG.hintText}
+              enabled={PROMPT_INJECTION_STATE.enabled}
+              toggleEnabled={() =>
+                toggleEnabled(GuardrailTypes.PROMPT_INJECTION)
+              }
+            >
+              <GuardrailConfig.Threshold
+                id={`${PROMPT_INJECTION_CONFIG.id}-threshold`}
+                value={PROMPT_INJECTION_STATE.threshold}
+                onChange={(v) =>
+                  updateField(GuardrailTypes.PROMPT_INJECTION, "threshold", v)
+                }
+              />
+            </GuardrailConfig>
+            <Separator className="my-1" />
+            <GuardrailConfig
+              title={CUSTOM_CLASSIFIER_CONFIG.title}
+              hintText={CUSTOM_CLASSIFIER_CONFIG.hintText}
+              enabled={CUSTOM_CLASSIFIER_STATE.enabled}
+              toggleEnabled={() =>
+                toggleEnabled(GuardrailTypes.CUSTOM_CLASSIFIER)
+              }
+            >
+              <GuardrailConfig.TextInput
+                id={`${CUSTOM_CLASSIFIER_CONFIG.id}-model-name`}
+                label="Model name"
+                placeholder="my-trained-model"
+                value={CUSTOM_CLASSIFIER_STATE.modelName}
+                onChange={(v) =>
+                  updateField(GuardrailTypes.CUSTOM_CLASSIFIER, "modelName", v)
+                }
+              />
+              <GuardrailConfig.Threshold
+                id={`${CUSTOM_CLASSIFIER_CONFIG.id}-threshold`}
+                value={CUSTOM_CLASSIFIER_STATE.threshold}
+                onChange={(v) =>
+                  updateField(GuardrailTypes.CUSTOM_CLASSIFIER, "threshold", v)
+                }
+              />
+            </GuardrailConfig>
+            <Separator className="my-1" />
+            <GuardrailConfig
+              title={LLM_JUDGE_CONFIG.title}
+              hintText={LLM_JUDGE_CONFIG.hintText}
+              enabled={LLM_JUDGE_STATE.enabled}
+              toggleEnabled={() => toggleEnabled(GuardrailTypes.LLM_JUDGE)}
+            >
+              <GuardrailConfig.TextInput
+                id={`${LLM_JUDGE_CONFIG.id}-name`}
+                label="Check name"
+                placeholder="my-policy-check"
+                value={LLM_JUDGE_STATE.name}
+                onChange={(v) =>
+                  updateField(GuardrailTypes.LLM_JUDGE, "name", v)
+                }
+              />
+              <GuardrailConfig.Instructions
+                id={`${LLM_JUDGE_CONFIG.id}-instructions`}
+                value={LLM_JUDGE_STATE.instructions}
+                onChange={(v) =>
+                  updateField(GuardrailTypes.LLM_JUDGE, "instructions", v)
+                }
+              />
+              <GuardrailConfig.ModelSelect
+                value={LLM_JUDGE_STATE.model}
+                workspaceName={workspaceName}
+                onChange={(v) =>
+                  updateField(GuardrailTypes.LLM_JUDGE, "model", v)
+                }
               />
             </GuardrailConfig>
             <Separator className="my-1" />

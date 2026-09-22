@@ -206,4 +206,21 @@ class InstantToUUIDMapperTest {
         // This ensures any UUID with this timestamp falls between them
         assertThat(lower).isLessThan(upper);
     }
+
+    @Test
+    void shouldClampPreEpochBoundsToEpochFloor() {
+        // A pre-1970 instant: its negative epoch millis would otherwise overflow the unsigned 48-bit timestamp
+        // and wrap into a UUID that sorts above every real id (making `id >= bound` match nothing). Both bounds
+        // must clamp to the epoch floor. Expected values are the known epoch-floor bit layout, constructed
+        // independently of the mapper so a broken clamp cannot satisfy the assertion by symmetry.
+        Instant preEpoch = Instant.parse("1969-01-01T00:00:00Z");
+        UUID epochLower = UUID.fromString("00000000-0000-7000-8000-000000000000");
+        UUID epochUpper = UUID.fromString("00000000-0000-7fff-bfff-ffffffffffff");
+
+        assertThat(mapper.toLowerBound(preEpoch)).isEqualTo(epochLower);
+        assertThat(mapper.toUpperBound(preEpoch)).isEqualTo(epochUpper);
+        // And it sorts below a normal id, so `id >= lowerBound` still matches real rows.
+        assertThat(mapper.toLowerBound(preEpoch))
+                .isLessThan(mapper.toLowerBound(Instant.parse("2025-01-15T10:30:00Z")));
+    }
 }

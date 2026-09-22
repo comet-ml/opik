@@ -67,14 +67,16 @@ public class TraceDeletedListener {
      * This method handles the deletion in the correct order to maintain referential integrity.
      *
      * @param traceIds the set of trace IDs whose related entities should be deleted
+     * @param projectId the owning project the event resolved; required, so the span cascade is never workspace-wide
      * @return a Mono that completes when all related entities have been deleted
      */
-    private Mono<Void> processTraceDeletion(Set<UUID> traceIds, UUID projectId) {
+    private Mono<Void> processTraceDeletion(Set<UUID> traceIds, @NonNull UUID projectId) {
         log.info("Starting deletion of related entities for traces, count '{}'", traceIds.size());
 
         return feedbackScoreService.deleteByTraceIds(traceIds, projectId)
-                .then(Mono.defer(() -> commentService.deleteByEntityIds(CommentDAO.EntityType.TRACE, traceIds)))
-                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, traceIds)))
+                .then(Mono.defer(() -> commentService.deleteByEntityIds(CommentDAO.EntityType.TRACE, traceIds,
+                        projectId)))
+                .then(Mono.defer(() -> attachmentService.deleteByEntityIds(TRACE, traceIds, projectId)))
                 .then(Mono.defer(() -> spanService.deleteByTraceIds(traceIds, projectId)));
     }
 }

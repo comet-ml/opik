@@ -1,11 +1,11 @@
 import { test, expect } from '@e2e/fixtures';
 import { DatasetsPage } from '@e2e/pom/datasets.page';
 
-test.describe('Dataset CRUD — smoke', { tag: ['@t1-smoke', '@datasets'] }, () => {
+test.describe('Dataset CRUD — smoke', { tag: ['@t1-smoke', '@area:datasets'] }, () => {
   /** Items toolbar collapses to icon-only (no accessible name) below ~850px container width. */
   test.use({ viewport: { width: 1600, height: 900 } });
 
-  test('SDK-seeded dataset renders in list and items page; UI add and delete commit as new versions', async ({
+  test('SDK-seeded dataset renders in list and items page; UI add and delete commit as new versions', { tag: ['@cap:datasets.list-datasets', '@cap:datasets.create-dataset-sdk', '@cap:datasets.view-items', '@cap:datasets.add-item-ui'] }, async ({
     dataset,
     project,
     page,
@@ -40,7 +40,7 @@ test.describe('Dataset CRUD — smoke', { tag: ['@t1-smoke', '@datasets'] }, () 
     expect(await items.countItems()).toBe(3);
   });
 
-  test('UI-created dataset and UI-added first item round-trip to the SDK', async ({
+  test('UI-created dataset and UI-added first item round-trip to the SDK', { tag: ['@cap:datasets.create-dataset-ui', '@cap:datasets.sdk-round-trip'] }, async ({
     project,
     backendClient,
     testNamespace,

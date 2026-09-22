@@ -1,9 +1,11 @@
 package com.comet.opik.infrastructure.llm.openai;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import com.comet.opik.infrastructure.llm.OpenAiClientConfig;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -50,7 +52,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .map(OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(openAiClientBuilder::baseUrl);
 
@@ -122,7 +124,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .map(OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(builder::baseUrl);
 
@@ -134,7 +136,12 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .filter(MapUtils::isNotEmpty)
                 .ifPresent(builder::customHeaders);
 
-        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+        // This generator also serves OPEN_ROUTER, whose catalog includes the Claude models that take
+        // no sampling params. The judge path never reaches ChatCompletionService, so the capability
+        // gate has to be here too, or an evaluator rule on one fails every scoring run with a 400.
+        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name())) {
+            Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+        }
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
         return builder.build();
@@ -173,7 +180,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .map(OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(builder::baseUrl);
 
@@ -185,7 +192,9 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .filter(MapUtils::isNotEmpty)
                 .ifPresent(builder::customHeaders);
 
-        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name())) {
+            Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+        }
 
         return builder.build();
     }
@@ -208,7 +217,7 @@ public class OpenAIClientGenerator implements LlmProviderClientGenerator<OpenAiC
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
 
         Optional.ofNullable(llmProviderClientConfig.getOpenAiClient())
-                .map(LlmProviderClientConfig.OpenAiClientConfig::url)
+                .map(OpenAiClientConfig::url)
                 .filter(StringUtils::isNotBlank)
                 .ifPresent(builder::baseUrl);
 

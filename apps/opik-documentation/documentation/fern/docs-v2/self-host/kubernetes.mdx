@@ -1,5 +1,5 @@
 ---
-headline: Kubernetes deployment | Opik Documentation
+headline: Kubernetes deployment
 og:description: Learn to configure and deploy Opik on Kubernetes using our Helm chart
   for robust, production-ready environments.
 og:site_name: Opik Documentation
@@ -41,6 +41,15 @@ helm upgrade --install opik -n opik --create-namespace opik/opik \
     --set component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_TAG="$VERSION" \
     --set component.frontend.image.tag=$VERSION
 ```
+
+<Tip>
+  We recommend that you always install the latest version of the Opik helm chart. You can list the available chart
+  versions by running:
+
+  ```bash
+  helm search repo opik/opik --versions
+  ```
+</Tip>
 
 You can port-forward any service you need to your local machine:
 
@@ -112,6 +121,15 @@ clickhouse:
 
 ## Configure additional ClickHouse users and profiles
 
+<Warning>
+`clickhouse.additionalProfiles` is a list, and Helm replaces lists wholesale instead of merging
+them. Declaring your own list therefore drops the chart's `default` profile entry unless you repeat
+it, which would silently remove the Distributed insert-queue settings. The examples below keep it.
+
+`prefer_localhost_replica` is in that same `default` entry, so it is dropped by list replacement
+too. Keep the whole entry, not just the batching settings.
+</Warning>
+
 You can create read-only ClickHouse users with custom settings profiles.
 
 ### Using inline passwords
@@ -119,6 +137,14 @@ You can create read-only ClickHouse users with custom settings profiles.
 ```yaml
 clickhouse:
   additionalProfiles:
+    # Keep this `default` entry. Helm replaces lists rather than merging them, so a values file
+    # that declares its own `additionalProfiles` drops the chart's default one — taking the
+    # Distributed insert-queue settings with it, silently.
+    - name: default
+      settings:
+        distributed_background_insert_batch: 1
+        distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
     - name: readonly_profile
       settings:
         readonly: 1
@@ -143,6 +169,14 @@ clickhouse:
       enabled: true
     secretname: clickhouse-admin-pass
   additionalProfiles:
+    # Keep this `default` entry. Helm replaces lists rather than merging them, so a values file
+    # that declares its own `additionalProfiles` drops the chart's default one — taking the
+    # Distributed insert-queue settings with it, silently.
+    - name: default
+      settings:
+        distributed_background_insert_batch: 1
+        distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
     - name: readonly_profile
       settings:
         readonly: 1
@@ -286,7 +320,7 @@ Make sure both versions match. If they don't match:
 
 # Troubleshooting
 
-If you get this error when running helm
+If you get an error similar to the following when running helm (the ClickHouse version in the message depends on your installation):
 
 ```bash
 ERROR: Exception Primary Reason:  Code: 225. DB::Exception: Can't create replicated table without ZooKeeper. (NO_ZOOKEEPER) (version 24.3.5.47.altinitystable (altinity build))

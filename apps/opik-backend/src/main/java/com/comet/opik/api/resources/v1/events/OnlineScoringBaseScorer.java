@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.FeedbackScoreItem;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.RedisSubscriberMessage;
@@ -8,6 +9,7 @@ import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
@@ -26,12 +28,14 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
  * Base online scorer for all particular implementations to extend. It listens to a Redis stream for
@@ -61,12 +65,14 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
     protected final OnlineScoringConfig onlineScoringConfig;
     protected final FeedbackScoreService feedbackScoreService;
     protected final TraceService traceService;
+    protected final SpanService spanService;
     protected final AutomationRuleEvaluatorType type;
 
     protected OnlineScoringBaseScorer(@NonNull @Config OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
+            @NonNull SpanService spanService,
             @NonNull AutomationRuleEvaluatorType type,
             @NonNull String metricsBaseName) {
         super(OnlineScoringStreamConfigurationAdapter.create(config, type),
@@ -77,7 +83,70 @@ public abstract class OnlineScoringBaseScorer<M extends RedisSubscriberMessage> 
         this.onlineScoringConfig = config;
         this.feedbackScoreService = feedbackScoreService;
         this.traceService = traceService;
+        this.spanService = spanService;
         this.type = type;
+    }
+
+    /**
+     * Sentinel emitted by {@link #spansSizeOrUnavailable} when the span-size aggregate could not be
+     * computed. Deliberately distinct from a genuine {@code 0} bytes so callers can skip the bounded
+     * preload on this path: without a size there is no way to tell a small thread from one that would
+     * blow the heap, and an aggregate that just failed is itself a reason not to follow it with a bulk
+     * fetch. See OPIK-7454.
+     */
+    protected static final long SPAN_SIZE_UNAVAILABLE = -1L;
+
+    /**
+     * The thread's span size from the cheap ClickHouse aggregate, with sizing treated as <em>advisory</em>
+     * rather than a prerequisite. Letting a failure propagate would abort the caller's chain, and
+     * {@link BaseRedisSubscriber} would retry {@code maxRetries} times and then acknowledge the message —
+     * permanently dropping the evaluation. On failure this emits {@link #SPAN_SIZE_UNAVAILABLE} instead, so
+     * the caller can route conservatively and still score.
+     *
+     * <p>Shared by both trace-thread scorers so the sentinel semantics and the recovery boundary cannot
+     * drift apart between them.
+     */
+    protected Mono<Long> spansSizeOrUnavailable(Set<UUID> traceIds, String workspaceId, String userName,
+            String threadId) {
+        return spanService.getSpansSizeByTraceIds(traceIds)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .onErrorResume(error -> {
+                    log.warn("Span-size aggregate failed for workspace '{}' and thread '{}'; scoring without"
+                            + " span enrichment", workspaceId, threadId, error);
+                    return Mono.just(SPAN_SIZE_UNAVAILABLE);
+                });
+    }
+
+    /**
+     * The trace-thread span-preload cap in bytes. Single place that converts the MB-denominated config
+     * ({@code onlineScoring.agenticToolsMaxPreloadMb}) so the trace-thread scorers pass a consistent value
+     * to both the size gate and the bounded preload. See OPIK-7454.
+     */
+    protected long agenticToolsMaxPreloadBytes() {
+        return (long) onlineScoringConfig.getAgenticToolsMaxPreloadMb() * 1024 * 1024;
+    }
+
+    /**
+     * Returns the buffered spans from a bounded preload and, as a side effect, emits a user-facing warning
+     * when the preload {@link ThreadSpanPreload#overflowed()} the byte cap even though the size estimate had
+     * routed the thread to the enriched path — i.e. the cheap size aggregate under-counted the real
+     * serialized size. The overflow is already handled safely upstream (the buffer was dropped, so the
+     * returned list is empty and the thread scores with the unenriched context); the warning just makes the
+     * otherwise-silent fallback visible. See OPIK-7454.
+     */
+    protected List<Span> getSpansFromPreloadAndLogOverflow(@NonNull ThreadSpanPreload preload,
+            @NonNull Logger userFacingLogger, String threadId, Map<String, String> mdc) {
+        if (preload.overflowed()) {
+            try (var logContext = wrapWithMdc(mdc)) {
+                userFacingLogger.warn("""
+                        Thread span preload exceeded the enrichment cap despite a fitting size estimate; \
+                        scoring with the unenriched context. threadId='{}', approxBytes='{}', capBytes='{}'""",
+                        threadId, preload.approxBytes(), agenticToolsMaxPreloadBytes());
+            }
+        }
+        return preload.spans();
     }
 
     /**

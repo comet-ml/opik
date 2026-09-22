@@ -6,6 +6,46 @@ import {
   TestSuiteExperiment,
 } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
+import { getAlphabetLetter } from "@/lib/utils";
+
+export const generateCompareExperimentsURL = (
+  workspace: string,
+  projectId: string,
+  datasetId: string,
+  experimentIds: string[],
+): string => {
+  const basePath = import.meta.env.VITE_BASE_URL || "/";
+  const search = new URLSearchParams({
+    experiments: JSON.stringify(experimentIds),
+  }).toString();
+  const relativePath = `${workspace}/projects/${projectId}/experiments/${datasetId}/compare?${search}`;
+
+  const normalizedBasePath =
+    basePath === "/" ? "" : basePath.replace(/\/$/, "");
+  const fullPath = `${normalizedBasePath}/${relativePath}`;
+  return new URL(fullPath, window.location.origin).toString();
+};
+
+const RUN_SUFFIX_RE = /_(\d+)$/;
+
+export const buildExperimentName = (name: string, promptIndex: number) =>
+  `${name.trim()}_${getAlphabetLetter(promptIndex).toLowerCase()}`;
+
+export const suggestNextExperimentName = (
+  name: string,
+  lastSuggested: string | null,
+) => {
+  const trimmed = name.trim();
+  const match =
+    lastSuggested && trimmed === lastSuggested.trim()
+      ? trimmed.match(RUN_SUFFIX_RE)
+      : null;
+
+  if (!match) return `${trimmed}_02`;
+
+  const next = String(Number(match[1]) + 1).padStart(match[1].length, "0");
+  return trimmed.replace(RUN_SUFFIX_RE, `_${next}`);
+};
 
 /**
  * Human-readable label for a prompt version linked to an experiment: the
@@ -39,6 +79,44 @@ export function isTestSuiteExperiment(
 ): experiment is TestSuiteExperiment {
   return experiment?.evaluation_method === EVALUATION_METHOD.TEST_SUITE;
 }
+
+export const EXPERIMENT_TAB = {
+  items: "items",
+  insights: "insights",
+  config: "config",
+  scores: "scores",
+  logs: "logs",
+} as const;
+
+export type ExperimentTabId =
+  (typeof EXPERIMENT_TAB)[keyof typeof EXPERIMENT_TAB];
+
+const EXPERIMENT_TAB_IDS: readonly string[] = Object.values(EXPERIMENT_TAB);
+
+/** Narrows an arbitrary URL value to a known tab id, so the page can fall back when it isn't one. */
+export const isExperimentTabId = (value: unknown): value is ExperimentTabId =>
+  typeof value === "string" && EXPERIMENT_TAB_IDS.includes(value);
+
+/**
+ * Which tabs the experiment page exposes, in display order.
+ *
+ * Insights and feedback scores don't apply to test-suite experiments; feedback scores also need at
+ * least one loaded experiment. Logs is always available — every experiment run produces traces, and
+ * comparisons show the traces of all compared experiments (OPIK-6739).
+ */
+export const getAvailableExperimentTabs = (
+  experiments: Experiment[],
+): ExperimentTabId[] => {
+  const isTestSuite = isTestSuiteExperiment(experiments[0]);
+
+  return [
+    EXPERIMENT_TAB.items,
+    ...(!isTestSuite ? [EXPERIMENT_TAB.insights] : []),
+    EXPERIMENT_TAB.config,
+    ...(experiments.length > 0 && !isTestSuite ? [EXPERIMENT_TAB.scores] : []),
+    EXPERIMENT_TAB.logs,
+  ];
+};
 
 export const calculateLineHeight = (
   height: ROW_HEIGHT,

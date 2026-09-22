@@ -434,6 +434,7 @@ class TestSuite:
         json_array: str,
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
+        deduplication: bool = True,
     ) -> None:
         """
         Insert test suite items from a JSON string.
@@ -452,17 +453,23 @@ class TestSuite:
             keys_mapping: Maps JSON keys to the target keys listed above.
                 Example: ``{"test_data": "data", "checks": "assertions"}``
             ignore_keys: Keys in the JSON dicts to skip during import.
+            deduplication: Whether to skip items whose content already exists in
+                the suite. See :meth:`insert` for details.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
 
-        self.insert(converters.from_json(json_array, keys_mapping, ignore_keys))
+        self.insert(
+            converters.from_json(json_array, keys_mapping, ignore_keys),
+            deduplication=deduplication,
+        )
 
     def insert_from_pandas(
         self,
         dataframe: "pd.DataFrame",
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
+        deduplication: bool = True,
     ) -> None:
         """
         Insert test suite items from a pandas DataFrame.
@@ -483,17 +490,23 @@ class TestSuite:
             keys_mapping: Maps column names to the target keys listed above.
                 Example: ``{"test_data": "data", "checks": "assertions"}``
             ignore_keys: Column names in the DataFrame to skip during import.
+            deduplication: Whether to skip items whose content already exists in
+                the suite. See :meth:`insert` for details.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
 
-        self.insert(converters.from_pandas(dataframe, keys_mapping, ignore_keys))
+        self.insert(
+            converters.from_pandas(dataframe, keys_mapping, ignore_keys),
+            deduplication=deduplication,
+        )
 
     def insert_from_jsonl_file(
         self,
         file_path: str,
         keys_mapping: Optional[Dict[str, str]] = None,
         ignore_keys: Optional[List[str]] = None,
+        deduplication: bool = True,
     ) -> None:
         """
         Read JSONL from a file and insert items into the test suite.
@@ -512,11 +525,16 @@ class TestSuite:
             keys_mapping: Maps JSON keys to the target keys listed above.
                 Example: ``{"test_data": "data", "checks": "assertions"}``
             ignore_keys: Keys in the JSON objects to skip during import.
+            deduplication: Whether to skip items whose content already exists in
+                the suite. See :meth:`insert` for details.
         """
         keys_mapping = {} if keys_mapping is None else keys_mapping
         ignore_keys = [] if ignore_keys is None else ignore_keys
 
-        self.insert(converters.from_jsonl_file(file_path, keys_mapping, ignore_keys))
+        self.insert(
+            converters.from_jsonl_file(file_path, keys_mapping, ignore_keys),
+            deduplication=deduplication,
+        )
 
     def update_test_settings(
         self,
@@ -643,6 +661,7 @@ class TestSuite:
     def update(
         self,
         items: List[suite_types.TestSuiteItem],
+        deduplication: bool = True,
     ) -> None:
         """
         Update existing items in the test suite.
@@ -653,6 +672,8 @@ class TestSuite:
 
         Args:
             items: List of item dicts to update. Each must contain ``"id"``.
+            deduplication: Whether to skip items whose content already exists in
+                the suite. See :meth:`insert` for details.
 
         Raises:
             DatasetItemUpdateOperationRequiresItemId: If any item is missing
@@ -664,17 +685,22 @@ class TestSuite:
                     "Missing id for test suite item to update: %s", item
                 )
 
-        self.insert(items)
+        self.insert(items, deduplication=deduplication)
 
     def insert(
         self,
         items: List[suite_types.TestSuiteItem],
+        deduplication: bool = True,
     ) -> None:
         """
         Insert test cases into the test suite.
 
         Args:
             items: List of test case items to add.
+            deduplication: Whether to skip items whose content already exists
+                in the suite. Pass ``False`` to insert every item as-is
+                without any duplicate checking, which is significantly faster
+                on large suites.
 
         Example:
             >>> suite.insert([
@@ -689,7 +715,9 @@ class TestSuite:
         validators.validate_suite_items(items)
 
         ds_items = [converters.suite_item_dict_to_dataset_item(item) for item in items]
-        self._dataset.__internal_api__insert_items_as_dataclasses__(ds_items)
+        self._dataset.__internal_api__insert_items_as_dataclasses__(
+            ds_items, deduplication=deduplication
+        )
 
     def __internal_api__run_optimization_suite__(
         self,

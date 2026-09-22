@@ -42,7 +42,7 @@ import AnnotationQueuesPage from "@/v2/pages/AnnotationQueuesPage/AnnotationQueu
 import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueuePage";
 import AgentPlaygroundPageGuard from "@/v2/layout/AgentPlaygroundPageGuard";
 import PairingPage from "@/v2/pages/PairingPage/PairingPage";
-import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
+import PairRouteWorkspaceGuard from "@/shared/PairRouteWorkspaceGuard/PairRouteWorkspaceGuard";
 import { createOAuthConsentRoute } from "@/shared/OAuthConsentPage/createOAuthConsentRoute";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
@@ -122,9 +122,9 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
 // TODO: make the Python SDK build basepath-aware pairing URLs and drop
 // this alias once shipped CLI versions roll over.
 const PairRouteComponent = () => (
-  <PairRouteVersionGuard>
+  <PairRouteWorkspaceGuard>
     <PairingPage />
-  </PairRouteVersionGuard>
+  </PairRouteWorkspaceGuard>
 );
 const pairingRoute = createRoute({
   getParentRoute: () => rootRoute,

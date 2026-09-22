@@ -1,5 +1,5 @@
 ---
-headline: Cost tracking | Opik Documentation
+headline: Cost tracking
 og:description: Monitor and analyze cost patterns in your LLM apps using Opik's dashboard
   to identify anomalies and optimize spending.
 og:site_name: Opik Documentation
@@ -251,7 +251,7 @@ Opik currently calculates costs automatically for all LLM calls in the following
 
 ### Supported Providers
 
-Cost tracking is supported for the following LLM providers (as defined in `opik.LLMProvider` enum):
+Cost tracking is supported for the following LLM providers (pass the name in parentheses as the span `provider`; the most common ones are also available in the `opik.LLMProvider` enum):
 
 - **OpenAI** (`openai`) - Models hosted by OpenAI (https://platform.openai.com)
 - **Anthropic** (`anthropic`) - Models hosted by Anthropic (https://www.anthropic.com)
@@ -260,6 +260,7 @@ Cost tracking is supported for the following LLM providers (as defined in `opik.
 - **Google Vertex AI** (`google_vertexai`) - Gemini models hosted in Google Vertex AI (https://cloud.google.com/vertex-ai)
 - **AWS Bedrock** (`bedrock`) - Models hosted by AWS Bedrock (https://aws.amazon.com/bedrock)
 - **Groq** (`groq`) - Models hosted by Groq (https://groq.com)
+- **TypeSafe AI** (`typesafe`) - Jev System One models hosted by TypeSafe AI (https://typesafe.ai)
 
 You can find a complete list of supported models for these providers in the
 [model_prices_and_context_window.json file](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/src/main/resources/model_prices_and_context_window.json).

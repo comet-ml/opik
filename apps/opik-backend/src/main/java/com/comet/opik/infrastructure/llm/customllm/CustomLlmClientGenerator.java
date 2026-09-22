@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.ModelCapabilities;
 import com.comet.opik.domain.llm.langchain4j.OpikOpenAiChatModel;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
@@ -19,12 +20,14 @@ import org.apache.commons.lang3.StringUtils;
 import java.net.http.HttpClient;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 @RequiredArgsConstructor
 @Slf4j
 public class CustomLlmClientGenerator implements LlmProviderClientGenerator<OpenAiClient> {
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
+    private final @NonNull AuthTokenProvider authTokenProvider;
 
     public OpenAiClient newCustomLlmClient(@NonNull LlmProviderClientApiConfig config) {
         var baseUrl = Optional.ofNullable(config.baseUrl())
@@ -85,7 +88,13 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .filter(MapUtils::isNotEmpty)
                 .ifPresent(builder::customHeaders);
 
-        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+        // The judge path never reaches ChatCompletionService, so the capability gate has to be here
+        // too: this generator serves CUSTOM_LLM and BEDROCK, which is how a Claude model that takes
+        // no sampling params arrives without the Anthropic provider's own gate. An evaluator rule on
+        // one of those otherwise fails every scoring run with a 400.
+        if (!ModelCapabilities.rejectsSamplingParams(modelParameters.name())) {
+            Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
+        }
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
         // Pass custom parameters directly to constructor since builder inheritance
@@ -126,7 +135,28 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         if (!requiresInterceptingBuilder(config)) {
             return jdkHttpClientBuilder;
         }
-        return new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(), config.apiKey());
+        return new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(), config.apiKey(),
+                bearerSupplier(config), tokenInvalidator(config));
+    }
+
+    /**
+     * Per-request bearer source for token-auth providers. The supplier form matters: clients are
+     * rebuilt per call but requests are what carry auth, so the interceptor asks the shared cache
+     * on every request and refresh/rotation need no client rebuild.
+     */
+    private Supplier<String> bearerSupplier(LlmProviderClientApiConfig config) {
+        if (config.authConfig() == null) {
+            return null;
+        }
+        return () -> authTokenProvider.bearer(config.workspaceId(), config.providerId(), config.authConfig());
+    }
+
+    private Runnable tokenInvalidator(LlmProviderClientApiConfig config) {
+        if (config.authConfig() == null) {
+            return null;
+        }
+        return () -> authTokenProvider.invalidateAfterGatewayRejection(config.workspaceId(), config.providerId(),
+                config.authConfig());
     }
 
     /**
@@ -144,6 +174,6 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                                         configuration.get(InterceptingHttpClient.SUPPRESS_DEFAULT_AUTH_CONFIG_KEY))));
         boolean hasModelPlaceholder = config.baseUrl() != null
                 && config.baseUrl().contains(InterceptingHttpClient.MODEL_PLACEHOLDER);
-        return hasNewConfigKeys || hasModelPlaceholder;
+        return hasNewConfigKeys || hasModelPlaceholder || config.authConfig() != null;
     }
 }

@@ -31,7 +31,7 @@ import SearchInput from "@/shared/SearchInput/SearchInput";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import AutodetectCell from "@/shared/DataTableCells/AutodetectCell";
 import CompareExperimentsOutputCell from "@/v2/pages-shared/experiments/CompareExperimentsOutputCell/CompareExperimentsOutputCell";
-import CompareExperimentsFeedbackScoreCell from "@/v2/pages-shared/experiments/CompareExperimentsFeedbackScoreCell/CompareExperimentsFeedbackScoreCell";
+import { resolveCompareExperimentsFeedbackScoreCell } from "@/v2/pages-shared/experiments/CompareExperimentsFeedbackScoreCell/CompareExperimentsFeedbackScoreCell";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import CompareExperimentsPanel from "@/v2/pages/CompareExperimentsPage/CompareExperimentsPanel/CompareExperimentsPanel";
 import CompareExperimentsActionsPanel from "@/v2/pages/CompareExperimentsPage/CompareExperimentsActionsPanel";
@@ -69,6 +69,7 @@ import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import useExperimentItemsState from "@/v2/pages-shared/experiments/useExperimentItemsState";
 import useExperimentItemsData from "@/v2/pages-shared/experiments/useExperimentItemsData";
+import getAllCompareExperimentsItems from "@/api/datasets/getAllCompareExperimentsItems";
 import useExperimentItemsSidebar from "@/v2/pages-shared/experiments/useExperimentItemsSidebar";
 import PassedCell from "@/v2/pages-shared/experiments/TestSuiteExperiment/PassedCell";
 import TestSuiteExperimentPanel from "@/v2/pages-shared/experiments/TestSuiteExperiment/ExperimentItemSidebar/TestSuiteExperimentPanel";
@@ -366,7 +367,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           label,
           type: columnType,
           header: FeedbackScoreHeader as never,
-          cell: CompareExperimentsFeedbackScoreCell as never,
+          cell: resolveCompareExperimentsFeedbackScoreCell(label) as never,
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
           statisticDataFormater: formatScoreDisplay,
           supportsPercentiles: true,
@@ -382,9 +383,22 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
+  // With rows selected, export just those - they are already on screen, so one refetch of this page is enough.
+  // With nothing selected, export the whole result set behind the current filters, which needs every page.
   const getDataForExport = useCallback(async (): Promise<
     ExperimentsCompare[]
   > => {
+    if (!selectedRows.length) {
+      return getAllCompareExperimentsItems({
+        workspaceName,
+        datasetId,
+        experimentsIds,
+        filters,
+        sorting,
+        search: search as string,
+      });
+    }
+
     const result = await refetchExportData();
 
     if (result.error) {
@@ -399,7 +413,17 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     const selectedIds = Object.keys(rowSelection);
 
     return allRows.filter((row) => selectedIds.includes(row.id));
-  }, [refetchExportData, rowSelection]);
+  }, [
+    selectedRows.length,
+    workspaceName,
+    datasetId,
+    experimentsIds,
+    filters,
+    sorting,
+    search,
+    refetchExportData,
+    rowSelection,
+  ]);
 
   const columns = useMemo(() => {
     const retVal = [
@@ -617,7 +641,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         setExpandedCommentSections([String(idx)]);
       },
       columnsStatistic,
-      enableUserFeedbackEditing: true,
     }),
     [handleRowClick, setExpandedCommentSections, columnsStatistic],
   );
@@ -654,7 +677,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   return (
     <>
       <PageBodyStickyContainer
-        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-6 pt-4"
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
       >
@@ -665,8 +688,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             placeholder={
               isTestSuite ? "Search test suite items" : "Search dataset items"
             }
-            className="w-[320px]"
-            dimension="sm"
+            className="w-[200px] shrink-0"
+            dimension="xs"
           />
           <FiltersButton
             columns={filterColumns}
@@ -674,6 +697,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             filters={filters}
             onChange={setFilters}
             layout="icon"
+            size="icon-2xs"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -682,11 +706,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             selectedRows={selectedRows}
             columnsToExport={columnsToExport}
             experiments={experiments}
+            totalRows={total}
           />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          <Separator orientation="vertical" className="mx-[2px] h-4" />
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
+            size="icon-2xs"
           />
           <ColumnsButton
             columns={datasetColumnsData}
@@ -695,6 +721,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
             sections={columnSections}
+            layout="labeled"
+            size="2xs"
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>
@@ -720,6 +748,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
+        columnVirtualization={{ enabled: true }}
         stickyHeader
         meta={meta}
         showSkeleton={isTableLoading}

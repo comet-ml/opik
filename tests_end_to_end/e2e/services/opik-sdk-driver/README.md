@@ -28,10 +28,15 @@ Then:
 - `GET http://localhost:5175/docs` → Swagger UI (auto-generated)
 - `GET http://localhost:5175/openapi.json` → OpenAPI 3 spec
 
-`uv.lock` is intentionally not checked in — the bridge's job is to surface
-Opik SDK regressions, so every `uv sync` resolves against PyPI for the
-newest matching version of `opik`. Run `uv sync --upgrade` if you want to
-refresh an existing `.venv/` to the latest SDK.
+`uv.lock` is intentionally not checked in. `opik` itself resolves from this
+repo (`sdks/python`, editable) via `[tool.uv.sources]` rather than from PyPI:
+the bridge's job is to surface Opik SDK regressions, and the released wheel
+cannot show a regression in code that has not shipped yet — so any spec
+covering an in-flight SDK change would be unrunnable against PyPI by
+construction. The repo's Python SDK E2E job makes the same choice
+(`uv pip install --system .` from `sdks/python`). A `uv sync` therefore
+tracks your working tree; re-run it after changing SDK sources if the
+editable install drifts.
 
 If `uv run uvicorn` raises `ModuleNotFoundError: No module named 'opik_sdk_driver'`,
 the editable install drifted. Run `uv sync --reinstall` and retry.

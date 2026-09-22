@@ -17,6 +17,7 @@ export enum ALERT_TRIGGER_CONFIG_TYPE {
   "threshold:cost" = "threshold:cost",
   "threshold:latency" = "threshold:latency",
   "threshold:errors" = "threshold:errors",
+  "filter:guardrail_type" = "filter:guardrail_type",
 }
 
 export enum ALERT_TYPE {

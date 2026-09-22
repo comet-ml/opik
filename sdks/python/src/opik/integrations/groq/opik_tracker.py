@@ -6,6 +6,7 @@ import groq
 from opik.types import LLMProvider
 
 from . import chat_completion_chunks_aggregator, groq_chat_completions_decorator
+from ... import analytics
 
 GroqClient = TypeVar("GroqClient", groq.Groq, groq.AsyncGroq)
 
@@ -33,6 +34,7 @@ def track_groq(
     Returns:
         The Groq client with integrated Opik tracking.
     """
+    analytics.track_event("integration", "groq")
     if hasattr(groq_client, "opik_tracked"):
         return groq_client
 

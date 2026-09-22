@@ -1,0 +1,88 @@
+# SQL-in-Java string-formatting rules for apps/opik-backend/src/main/java.
+#
+# Two tiers, because widening this to every `%s` in a SQL literal surfaces 108 findings in
+# production code that predate the rule. Blocking on all of them would either stall the
+# gate or force a baseline file; reporting them keeps the signal without holding up work.
+#
+#   ERROR   sql-query-clause-splice   — blocks CI. The injection-shaped form: a `%s`
+#                                       standing in for a whole clause, where caller data
+#                                       reaches the query text. Currently 0 findings.
+#   WARNING sql-query-format-slot     — reports only, never blocks. Any other `%s` in a
+#                                       SQL literal: value positions, projections, CTE
+#                                       prefixes. Currently 108 findings, tracked as tech
+#                                       debt in OPIK 7727.
+#
+# The pre-commit hook passes `--severity ERROR`, so only the blocking tier can fail a
+# commit or a CI leg. To see the reporting tier locally, drop that flag:
+#   semgrep --config .semgrep $(git ls-files 'apps/opik-backend/src/main/java/**/*.java')
+#
+# Scope is production code only. Test sources are excluded at the hook's `files:` regex:
+# string formatting in a test fixture is building a fixture, not accepting user input.
+#
+# Fixtures for every case live in java-sql-string-formatting.java next to this file. Run
+# them after any edit here:
+#   semgrep test --config .semgrep/java-sql-string-formatting.yaml \
+#                       .semgrep/java-sql-string-formatting.java
+#
+# VERIFICATION TRAP — read before measuring coverage. Semgrep's built-in semgrepignore
+# excludes `test`/`tests` directories at any depth, so passing a directory that contains
+# one scans zero files there while still reporting a reassuring "0 findings". The
+# pre-commit hook passes explicit FILENAMES, which bypasses that exclusion. Always verify
+# the way the hook runs, via `git ls-files`, not by handing semgrep a directory.
+#
+# Both rules match where the query is DECLARED, not where it executes. Opik holds SQL in
+# `static final` text blocks rendered through StringTemplate and passed to
+# `connection.createStatement(template.render())`, so the literal and the execution are
+# connected only through a template object — call-site patterns match nothing here.
+# `pattern: $X` binds every expression node; `metavariable-regex` then inspects the string
+# literal's own contents, text blocks included.
+#
+# Both rules deliberately match `%s` only, never `%d`: MetadataDAO contains the real SQL
+# literal `STR_TO_DATE(value, '%Y-%m-%d')`, which pattern matching cannot distinguish from
+# an integer format slot.
+rules:
+  # ---------------------------------------------------------------------------
+  # TIER 1 — blocking. Clause-position splice.
+  # ---------------------------------------------------------------------------
+  - id: sql-query-clause-splice
+    languages: [java]
+    severity: ERROR
+    message: >-
+      This SQL query splices a `%s` into CLAUSE position, so caller-supplied text becomes
+      part of the query itself — the shape SQL injection takes. Bind values with `:named`
+      parameters, and use a StringTemplate `<if(flag)>` conditional for fragments that vary
+      structurally (see ProjectMetricsDAO / WorkspaceMetricsDAO for the established
+      pattern). If this is a genuinely dynamic query builder that binds its values
+      separately, add `// nosemgrep: sql-query-clause-splice` with a comment explaining why.
+    # The `%s` must be the entire right-hand side of a clause keyword, on a line carrying no
+    # single quote. That anchoring is what separates a spliced predicate from a value slot
+    # (`WHERE name = '%s'`) or a projection (`SELECT %s AS value`) — those are real concerns
+    # but not injection ones, so they belong to the reporting tier below.
+    #
+    # Not caught: a splice that is not the whole right-hand side (`AND %s AND deleted = 0`,
+    # or `AND (%s)`), and a query written entirely on one line. Broadening either
+    # reintroduces false positives on prompt templates and log messages; every real query in
+    # this codebase is a multi-line text block.
+    patterns:
+      - pattern: $X
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?sm)^"(?=.*^\s*(?i:SELECT|WITH|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE)\b)(?=.*^[^\n']*\b(?i:AND|OR|WHERE|ON|HAVING)\s+%s\s*$).*"$
+
+  # ---------------------------------------------------------------------------
+  # TIER 2 — reporting only. Any other format slot in a SQL literal.
+  # ---------------------------------------------------------------------------
+  - id: sql-query-format-slot
+    languages: [java]
+    severity: WARNING
+    message: >-
+      This SQL literal is assembled with a `%s` format slot. Even where the value is a
+      compile-time constant, prefer a bound `:named` parameter, or a StringTemplate
+      attribute for a fragment that varies structurally — the query text should be a
+      constant. Reported, not blocking: the existing occurrences are tracked as tech debt
+      in OPIK 7727. New code should not add to them.
+    patterns:
+      - pattern: $X
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?sm)^"(?=.*^\s*(?i:SELECT|WITH|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE)\b)(?=.*%s).*"$

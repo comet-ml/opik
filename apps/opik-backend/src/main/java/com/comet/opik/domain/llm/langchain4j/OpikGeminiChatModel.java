@@ -4,7 +4,6 @@ import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
-import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.ChatModel;
@@ -13,6 +12,7 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -79,23 +79,32 @@ public class OpikGeminiChatModel implements ChatModel {
         // Has video - convert VideoContent to ImageContent
         List<Content> convertedContents = new ArrayList<>();
         for (Content content : userMessage.contents()) {
-            if (content instanceof TextContent) {
-                convertedContents.add(content);
-            } else if (content instanceof ImageContent) {
-                convertedContents.add(content);
-            } else if (content instanceof VideoContent videoContent) {
-                // Convert VideoContent to ImageContent (Gemini treats videos as images)
-                // Preserve mimeType if available
-                String videoUrlString = videoContent.video().url().toString();
-                log.debug("Converting VideoContent to ImageContent for Gemini: {}",
-                        videoUrlString.substring(0, Math.min(50, videoUrlString.length())));
-                var imageBuilder = Image.builder().url(videoContent.video().url());
-                if (videoContent.video().mimeType() != null) {
-                    imageBuilder.mimeType(videoContent.video().mimeType());
+            if (content instanceof VideoContent videoContent) {
+                // Gemini treats videos as images. A Video carries either a url or inline base64, never
+                // both: MinIO-staged attachments arrive as base64, so reading url() here would throw.
+                var video = videoContent.video();
+                var imageBuilder = Image.builder();
+                if (video.url() != null) {
+                    var url = video.url().toString();
+                    log.debug("Converting VideoContent to ImageContent for Gemini: {}",
+                            url.substring(0, Math.min(50, url.length())));
+                    imageBuilder.url(video.url());
+                } else if (StringUtils.isNotEmpty(video.base64Data())) {
+                    log.debug("Converting inline VideoContent to ImageContent for Gemini");
+                    imageBuilder.base64Data(video.base64Data());
+                } else {
+                    // Nothing convertible; pass it through rather than build an empty image.
+                    convertedContents.add(content);
+                    continue;
+                }
+                if (video.mimeType() != null) {
+                    imageBuilder.mimeType(video.mimeType());
                 }
                 convertedContents.add(ImageContent.from(imageBuilder.build()));
+            } else {
+                // Audio, files and text are left untouched — dropping them would silently lose input
+                convertedContents.add(content);
             }
-            // Other content types are passed through as-is
         }
 
         return UserMessage.from(convertedContents);

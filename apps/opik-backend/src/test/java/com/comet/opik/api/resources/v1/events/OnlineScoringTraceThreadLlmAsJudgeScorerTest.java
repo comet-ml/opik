@@ -1,12 +1,16 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluation.EvaluatedSubject;
@@ -53,6 +57,7 @@ import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,7 +76,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -147,6 +151,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
         // override these per-case.
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsCharsPerToken()).thenReturn(4);
         Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(50_000);
+        Mockito.lenient().when(onlineScoringConfig.getAgenticToolsMaxPreloadMb()).thenReturn(64);
 
         Mockito.lenient().when(onlineEvaluationRecorder.begin(
                 any(EvaluatedSubject.class), any(), any(), any(), any(), any()))
@@ -190,33 +195,28 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     class RoutingGateTests {
 
         // Threads don't have an experimentId-driven branch (no test-suite-assertion equivalent),
-        // so the truth table is toggle × tokens-vs-threshold × provider-supports-tools × hasAttachments.
+        // so the truth table is tokens-vs-threshold × provider-supports-tools × hasAttachments.
         // Rows mirror the trace-side gate's design for symmetry.
-        @org.junit.jupiter.params.ParameterizedTest(name = "toggle={0}, tokens={1}, threshold={2}, provider={3}, hasAttachments={4} → expected useTools={5}")
+        @org.junit.jupiter.params.ParameterizedTest(name = "tokens={0}, threshold={1}, provider={2}, hasAttachments={3} → expected useTools={4}")
         @org.junit.jupiter.params.provider.CsvSource({
-                // size-based path — all three preconditions must hold
-                "true,  60000, 50000, OPEN_AI, false, true",
-                "true,  50000, 50000, OPEN_AI, false, true",
+                // size-based path — both preconditions must hold
+                "60000, 50000, OPEN_AI, false, true",
+                "50000, 50000, OPEN_AI, false, true",
                 // below threshold → inline
-                "true,  49999, 50000, OPEN_AI, false, false",
-                // toggle off → inline even on huge contexts
-                "false, 60000, 50000, OPEN_AI, false, false",
+                "49999, 50000, OPEN_AI, false, false",
                 // provider doesn't support tool calling → inline + warn
-                "true,  60000, 50000, OLLAMA,  false, false",
+                "60000, 50000, OLLAMA,  false, false",
                 // no preconditions met
-                "false, 0,     50000, OPEN_AI, false, false",
-                // attachment-driven path (OPIK-6555): toggle on + attachments + below size threshold → tools
-                "true,  0,     50000, OPEN_AI, true,  true",
-                // attachments but toggle off → inline (whole agentic feature is gated by the toggle)
-                "false, 0,     50000, OPEN_AI, true,  false",
+                "0,     50000, OPEN_AI, false, false",
+                // attachment-driven path (OPIK-6555): attachments + below size threshold → tools
+                "0,     50000, OPEN_AI, true,  true",
                 // attachments but provider can't do tools → inline + warn
-                "true,  0,     50000, OLLAMA,  true,  false",
+                "0,     50000, OLLAMA,  true,  false",
         })
         void gateMatchesTruthTable(
-                boolean toggleEnabled, int estimatedTokens, int thresholdTokens,
+                int estimatedTokens, int thresholdTokens,
                 com.comet.opik.api.LlmProvider provider, boolean hasAttachments, boolean expectedUseTools) {
             String modelName = "gpt-test";
-            Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(toggleEnabled);
             Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens())
                     .thenReturn(thresholdTokens);
             Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
@@ -229,12 +229,11 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
         @org.junit.jupiter.api.Test
         void multimodalTemplateForcesInlineFallbackEvenWhenAllOtherPreconditionsHold() {
-            // Every other gate is satisfied (toggle on, over threshold, provider supports tools)
-            // but the template carries a non-string-content message. The agentic-tools render
-            // path can't substitute into multimodal templates, so we must downgrade to inline
-            // rather than letting renderThreadMessagesWithReplacement throw downstream.
+            // Every other gate is satisfied (over threshold, provider supports tools) but the template
+            // carries a non-string-content message. The agentic-tools render path can't substitute into
+            // multimodal templates, so we must downgrade to inline rather than letting
+            // renderThreadMessagesWithReplacement throw downstream.
             String modelName = "gpt-test";
-            Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
             Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens())
                     .thenReturn(50_000);
             Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName))
@@ -531,74 +530,185 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 }
                 """;
 
+        // Common happy-path stubs shared by the scoring tests: everything except the agentic toggle and
+        // the SpanService size/fetch, which each test drives itself. All stubs are exercised on every
+        // path that reaches scoring (inline, toggle on or off), so strict stubbing stays satisfied.
+        private void stubThreadScoringHappyPath(Trace trace, Project project,
+                AutomationRuleEvaluatorTraceThreadLlmAsJudge rule, TraceThreadLlmAsJudgeCode code) {
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId)).thenReturn(rule);
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            when(llmProviderFactory.getStructuredOutputStrategy("gpt-4o")).thenReturn(new ToolCallingStrategy());
+            when(aiProxyService.scoreTrace(any(ChatRequest.class), eq(code.model()), eq(workspaceId)))
+                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            // The scorer always probes span size and attachments before routing, so every scoring test
+            // reaches both services. These lenient defaults describe a small, attachment-free thread —
+            // i.e. the inline path; the routing tests below re-stub them with real sizes/attachments.
+            Mockito.lenient().when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
+                    .thenReturn(Mono.just(0L));
+            Mockito.lenient().when(spanService.getByTraceIds(Set.of(trace.id()))).thenReturn(Flux.empty());
+            Mockito.lenient()
+                    .when(attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, Set.of(trace.id())))
+                    .thenReturn(Mono.just(false));
+        }
+
         @Test
         void scoresThreadAndPersistsScores() {
             var code = JsonUtils.readValue(EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
             var message = sampleMessage().toBuilder().code(code).build();
             var trace = sampleTrace();
             var project = Project.builder().id(projectId).name("test-project").build();
-            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder()
-                    .name(ruleName)
-                    .code(code)
-                    .build();
-
-            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
-                    .thenReturn(Flux.just(trace), Flux.empty());
-            when(traceThreadService.getThreadModelId(projectId, threadId))
-                    .thenReturn(Mono.just(threadModelId));
-            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
-                    .thenReturn(rule);
-            when(projectService.get(projectId, workspaceId)).thenReturn(project);
-            when(llmProviderFactory.getStructuredOutputStrategy("gpt-4o"))
-                    .thenReturn(new ToolCallingStrategy());
-            when(aiProxyService.scoreTrace(any(ChatRequest.class), eq(code.model()), eq(workspaceId)))
-                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
-            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
+            stubThreadScoringHappyPath(trace, project, rule, code);
 
             scorer.score(message).block();
 
             var captor = ArgumentCaptor.forClass(List.class);
             verify(feedbackScoreService).scoreBatchOfThreads(captor.capture());
-
             assertThat(captor.getValue()).usingRecursiveComparison().isEqualTo(List.of(
                     threadScore("Relevance", BigDecimal.valueOf(4), "on-topic", project),
                     threadScore("Conciseness", new BigDecimal("3.5"), "could be tighter", project)));
         }
 
         @Test
-        void skipsSpanFetchWhenAgenticToolsDisabled() {
-            // Locks in the toggle gate: when isAgenticToolsEnabled=false, the scorer must NOT
-            // call spanService.getByTraceIds — that's how thread-scope evaluations preserve
-            // today's wire shape exactly (the enriched serializer omits the `spans` field on
-            // an empty list, falling back to [{role, content}, ...]).
+        void sizesLargeThreadAndSkipsBulkSpanFetch() {
+            // OPIK-7454: toggle on + an over-threshold size estimate. The scorer sizes the thread with the
+            // cheap aggregate and must NOT bulk-fetch spans (the heap-OOM path). A provider that can't do
+            // tools even forces the inline fallback, yet the key guarantee holds: getByTraceIds never runs.
             var code = JsonUtils.readValue(EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
             var message = sampleMessage().toBuilder().code(code).build();
             var trace = sampleTrace();
             var project = Project.builder().id(projectId).name("test-project").build();
-            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder()
-                    .name(ruleName)
-                    .code(code)
-                    .build();
-
-            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
-                    .thenReturn(Flux.just(trace), Flux.empty());
-            when(traceThreadService.getThreadModelId(projectId, threadId))
-                    .thenReturn(Mono.just(threadModelId));
-            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
-                    .thenReturn(rule);
-            when(projectService.get(projectId, workspaceId)).thenReturn(project);
-            when(llmProviderFactory.getStructuredOutputStrategy("gpt-4o"))
-                    .thenReturn(new ToolCallingStrategy());
-            when(aiProxyService.scoreTrace(any(ChatRequest.class), eq(code.model()), eq(workspaceId)))
-                    .thenReturn(ChatResponse.builder().aiMessage(AiMessage.aiMessage(LLM_RESPONSE)).build());
-            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
-            // Toggle off — the scorer should not even ask the SpanService.
-            Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(false);
+            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
+            stubThreadScoringHappyPath(trace, project, rule, code);
+            when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(10_000_000L));
+            when(attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, Set.of(trace.id())))
+                    .thenReturn(Mono.just(false));
+            when(llmProviderFactory.getLlmProvider("gpt-4o")).thenReturn(LlmProvider.OLLAMA);
 
             scorer.score(message).block();
 
-            verifyNoInteractions(spanService);
-            verifyNoInteractions(attachmentService);
+            verify(spanService).getSpansSizeByTraceIds(Set.of(trace.id()));
+            verify(spanService, never()).getByTraceIds(any());
+            verify(feedbackScoreService).scoreBatchOfThreads(any());
+        }
+
+        @Test
+        void fetchesSpansForSmallThreadOnInlinePath() {
+            // Toggle on + an under-threshold size and no attachments → inline path; the scorer fetches the
+            // (bounded) spans to enrich the inline prompt.
+            var code = JsonUtils.readValue(EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
+            var message = sampleMessage().toBuilder().code(code).build();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
+            var span = Span.builder()
+                    .id(UUID.randomUUID()).name("fetch_weather").type(SpanType.tool)
+                    .startTime(Instant.now()).traceId(trace.id()).projectId(projectId)
+                    .build();
+            stubThreadScoringHappyPath(trace, project, rule, code);
+            when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(10L));
+            when(attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, Set.of(trace.id())))
+                    .thenReturn(Mono.just(false));
+            when(spanService.getByTraceIds(Set.of(trace.id()))).thenReturn(Flux.just(span));
+
+            scorer.score(message).block();
+
+            verify(spanService).getSpansSizeByTraceIds(Set.of(trace.id()));
+            verify(spanService).getByTraceIds(Set.of(trace.id()));
+            verify(feedbackScoreService).scoreBatchOfThreads(any());
+        }
+
+        @Test
+        void skipsBulkFetchWhenSmallThreadHasAttachments() {
+            // OPIK-7454: even an under-threshold thread must NOT bulk-fetch spans when it has attachments —
+            // attachments force the agentic-tools path, which drills per-trace on demand. Same setup as the
+            // small-thread inline case but with attachments, isolating the `!hasAttachments` fetch term; the
+            // non-tool provider keeps it on the simple inline fallback rather than the tool loop.
+            var code = JsonUtils.readValue(EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
+            var message = sampleMessage().toBuilder().code(code).build();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
+            stubThreadScoringHappyPath(trace, project, rule, code);
+            when(spanService.getSpansSizeByTraceIds(Set.of(trace.id()))).thenReturn(Mono.just(10L));
+            when(attachmentService.hasAnyAttachmentByEntityIds(EntityType.TRACE, Set.of(trace.id())))
+                    .thenReturn(Mono.just(true));
+            when(llmProviderFactory.getLlmProvider("gpt-4o")).thenReturn(LlmProvider.OLLAMA);
+
+            scorer.score(message).block();
+
+            verify(spanService).getSpansSizeByTraceIds(Set.of(trace.id()));
+            verify(spanService, never()).getByTraceIds(any());
+            verify(feedbackScoreService).scoreBatchOfThreads(any());
+        }
+
+        @Test
+        void stillScoresInlineWhenSpanSizeAggregateFails() {
+            // Sizing is advisory: a failed aggregate must not abort the evaluation, because
+            // BaseRedisSubscriber would retry maxRetries times and then acknowledge the message,
+            // permanently dropping the thread. Degrade to the unenriched inline route and still persist.
+            var code = JsonUtils.readValue(EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
+            var message = sampleMessage().toBuilder().code(code).build();
+            var trace = sampleTrace();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
+            stubThreadScoringHappyPath(trace, project, rule, code);
+            Mockito.when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
+                    .thenReturn(Mono.error(new IllegalStateException("clickhouse unavailable")));
+
+            scorer.score(message).block();
+
+            // No bulk fetch follows a failed aggregate — without a size we can't bound the heap cost.
+            verify(spanService, never()).getByTraceIds(any());
+            verify(feedbackScoreService).scoreBatchOfThreads(any());
+            // Assert the ROUTE, not just that something scored: both routes return the stubbed response
+            // and persist, so without this the test passes even if the fallback took the tools path.
+            // No tool was ever executed => the inline branch ran.
+            Mockito.verifyNoInteractions(toolRegistry);
+            // And the rendered context carries no spans (unenriched).
+            var requests = ArgumentCaptor.forClass(ChatRequest.class);
+            verify(aiProxyService).scoreTrace(requests.capture(), any(), any());
+            var prompt = requests.getValue().messages().stream().map(Object::toString)
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            org.assertj.core.api.Assertions.assertThat(prompt).doesNotContain("\"spans\"");
+        }
+
+        @Test
+        void traceBodiesAloneStillRouteToToolsWhenAggregateUnavailable() {
+            // Regression lock for the sizing fallback: estimating a flat 0 tokens when the aggregate fails
+            // would send a thread whose trace bodies alone clear the threshold full inline and overflow
+            // the context window. The bodies are already in heap, so they stay measurable with
+            // spanBytes 0 — which is what the fallback passes.
+            //
+            // Asserted end-to-end on the outgoing prompt rather than on the gate: the two routes differ
+            // observably in what they send (tools get a skeleton, inline gets the full bodies), so a
+            // regression back to a flat 0 fails here. A gate-only assertion would not catch it.
+            var body = "x".repeat(400_000);
+            var code = JsonUtils.readValue(EVALUATOR_JSON, TraceThreadLlmAsJudgeCode.class);
+            var message = sampleMessage().toBuilder().code(code).build();
+            var trace = sampleTrace().toBuilder()
+                    .input(JsonUtils.getJsonNodeFromString("{\"q\":\"" + body + "\"}"))
+                    .build();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var rule = AutomationRuleEvaluatorTraceThreadLlmAsJudge.builder().name(ruleName).code(code).build();
+            stubThreadScoringHappyPath(trace, project, rule, code);
+            Mockito.when(spanService.getSpansSizeByTraceIds(Set.of(trace.id())))
+                    .thenReturn(Mono.error(new IllegalStateException("clickhouse unavailable")));
+            Mockito.when(llmProviderFactory.getLlmProvider("gpt-4o"))
+                    .thenReturn(com.comet.opik.api.LlmProvider.OPEN_AI);
+
+            scorer.score(message).block();
+
+            var requests = ArgumentCaptor.forClass(ChatRequest.class);
+            verify(aiProxyService, Mockito.atLeastOnce()).scoreTrace(requests.capture(), any(), any());
+            var prompt = requests.getAllValues().get(0).messages().stream().map(Object::toString)
+                    .collect(java.util.stream.Collectors.joining("\n"));
+            // The tools route sends a skeleton; inlining the oversized body is the bug being locked out.
+            org.assertj.core.api.Assertions.assertThat(prompt).doesNotContain(body);
         }
 
         @Test

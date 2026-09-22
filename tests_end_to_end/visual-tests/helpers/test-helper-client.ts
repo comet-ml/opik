@@ -67,6 +67,16 @@ export interface Experiment {
   dataset_name?: string;
 }
 
+export interface Environment {
+  id: string;
+  name: string;
+}
+
+export interface ProviderApiKey {
+  id: string;
+  provider: string;
+}
+
 export interface Prompt {
   name: string;
   prompt: string;
@@ -568,6 +578,45 @@ export class TestHelperClient {
     }
   }
 
+  async createRichTraceForSidebar(
+    projectName: string,
+    traceName: string,
+    promptName: string,
+    attachmentPath: string
+  ): Promise<{ attachmentName: string; promptName: string }> {
+    try {
+      const response = await this.client.post('/api/traces/create-rich-trace-for-sidebar', {
+        project_name: projectName,
+        trace_name: traceName,
+        prompt_name: promptName,
+        attachment_path: attachmentPath,
+      });
+
+      return {
+        attachmentName: response.data.attachment_name,
+        promptName: response.data.prompt_name,
+      };
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create rich trace for sidebar');
+    }
+  }
+
+  async createTraceWithAgentGraphSpan(
+    projectName: string,
+    traceName: string
+  ): Promise<{ spanName: string }> {
+    try {
+      const response = await this.client.post('/api/traces/create-trace-with-agent-graph-span', {
+        project_name: projectName,
+        trace_name: traceName,
+      });
+
+      return { spanName: response.data.span_name };
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create trace with agent graph span');
+    }
+  }
+
   async searchTraces(
     projectName: string,
     options?: {
@@ -617,6 +666,21 @@ export class TestHelperClient {
       return response.data.spans;
     } catch (error) {
       throw this.handleError(error, 'Failed to search spans');
+    }
+  }
+
+  async deleteSpansByProject(projectName: string, maxResults: number = 1000): Promise<number> {
+    try {
+      const response = await this.client.delete('/api/spans/delete-by-project', {
+        data: {
+          project_name: projectName,
+          max_results: maxResults,
+        },
+      });
+
+      return response.data.deleted_count;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete spans by project');
     }
   }
 
@@ -764,6 +828,80 @@ export class TestHelperClient {
     }
   }
 
+  // Environment methods
+  async createEnvironment(
+    name: string,
+    options?: { description?: string; color?: string }
+  ): Promise<Environment> {
+    try {
+      const response = await this.client.post('/api/environments/create-environment', {
+        name,
+        ...options,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create environment');
+    }
+  }
+
+  async findEnvironments(): Promise<Environment[]> {
+    try {
+      const response = await this.client.get('/api/environments/find-environments');
+      return response.data.environments;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to find environments');
+    }
+  }
+
+  async deleteEnvironment(id: string): Promise<void> {
+    try {
+      await this.client.delete('/api/environments/delete-environment', {
+        data: { id },
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete environment');
+    }
+  }
+
+  // AI provider methods
+  async createProviderApiKey(
+    provider: string,
+    apiKey: string,
+    options?: { name?: string; provider_name?: string }
+  ): Promise<ProviderApiKey> {
+    try {
+      const response = await this.client.post('/api/ai-providers/create-provider-api-key', {
+        provider,
+        api_key: apiKey,
+        ...options,
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to create provider API key');
+    }
+  }
+
+  async findProviderApiKeys(): Promise<ProviderApiKey[]> {
+    try {
+      const response = await this.client.get('/api/ai-providers/find-provider-api-keys');
+      return response.data.providers;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to find provider API keys');
+    }
+  }
+
+  async deleteProviderApiKey(id: string): Promise<void> {
+    try {
+      await this.client.delete('/api/ai-providers/delete-provider-api-key', {
+        data: { id },
+      });
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete provider API key');
+    }
+  }
+
   // Experiment methods
   async createExperiment(experimentName: string, datasetName: string): Promise<Experiment> {
     try {
@@ -825,6 +963,18 @@ export class TestHelperClient {
       });
     } catch (error) {
       throw this.handleError(error, 'Failed to delete experiment');
+    }
+  }
+
+  async deleteExperimentsByName(name: string): Promise<number> {
+    try {
+      const response = await this.client.delete('/api/experiments/delete-by-name', {
+        data: { name },
+      });
+
+      return response.data.deleted_count;
+    } catch (error) {
+      throw this.handleError(error, 'Failed to delete experiments by name');
     }
   }
 

@@ -36,7 +36,7 @@ public interface CommentService {
 
     Mono<Void> delete(BatchDelete batchDelete);
 
-    Mono<Long> deleteByEntityIds(CommentDAO.EntityType entityType, Set<UUID> entityIds);
+    Mono<Long> deleteByEntityIds(CommentDAO.EntityType entityType, Set<UUID> entityIds, UUID projectId);
 }
 
 @Slf4j
@@ -53,6 +53,7 @@ class CommentServiceImpl implements CommentService {
 
     @Override
     public Mono<UUID> create(@NonNull UUID entityId, @NonNull Comment comment, CommentDAO.EntityType entityType) {
+        idGenerator.validateIdNotInFuture(entityId, entityType.getType());
         UUID id = idGenerator.generateId();
         var monoProjectId = resolveProjectId(entityType, entityId);
 
@@ -152,15 +153,16 @@ class CommentServiceImpl implements CommentService {
     }
 
     @Override
-    public Mono<Long> deleteByEntityIds(CommentDAO.EntityType entityType, Set<UUID> entityIds) {
-        if (entityIds.isEmpty()) {
+    public Mono<Long> deleteByEntityIds(@NonNull CommentDAO.EntityType entityType, Set<UUID> entityIds,
+            UUID projectId) {
+        if (CollectionUtils.isEmpty(entityIds)) {
             return Mono.just(0L);
         }
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return commentDAO.deleteByEntityIds(entityType, entityIds)
+            return commentDAO.deleteByEntityIds(entityType, entityIds, projectId)
                     .doOnSuccess(__ -> eventBus.post(
                             new CommentsDeleted(entityIds, toEntityType(entityType), workspaceId, userName)));
         });

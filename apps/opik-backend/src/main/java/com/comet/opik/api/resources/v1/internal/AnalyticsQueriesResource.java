@@ -8,6 +8,7 @@ import com.comet.opik.domain.FreeFormSqlQueryService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
+import com.comet.opik.infrastructure.redaction.RedactionGuard;
 import com.google.common.base.Throwables;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -37,7 +38,7 @@ import java.util.concurrent.CompletionException;
 /**
  * Internal, authenticated endpoint that runs Ollie-generated read-only SQL against ClickHouse, bounded to the
  * caller's workspace and the requested project. Authentication is required only to derive the bounding
- * {@code workspace_id} ({@code project_id} comes from the body). Gated behind the {@code agentInsightsEnabled}
+ * {@code workspace_id} ({@code project_id} comes from the body). Gated behind the {@code ollieEnabled}
  * toggle: when off it returns {@code 501 Not Implemented} and performs no ClickHouse access.
  *
  * <p>The caller's final query must return exactly one column named {@code result}, produced via
@@ -67,9 +68,13 @@ public class AnalyticsQueriesResource {
     public Response executeQuery(@PathParam("projectId") @NotNull UUID projectId,
             @RequestBody(content = @Content(schema = @Schema(implementation = AnalyticsQueryRequest.class))) @NotNull @Valid AnalyticsQueryRequest request) {
 
-        if (!serviceToggles.isAgentInsightsEnabled()) {
+        if (!serviceToggles.isOllieEnabled()) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
+
+        // The caller chooses the projection, so rewriting the result is not enforceable: a value returned
+        // through base64() or substring() matches no rule written against the plain text.
+        RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Agent Insights free-form SQL");
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

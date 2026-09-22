@@ -40,7 +40,9 @@ public class InstantToUUIDMapper {
             return null;
         }
 
-        long epochMilli = timestamp.toEpochMilli();
+        // UUIDv7's 48-bit timestamp is unsigned ms-since-epoch; a negative (pre-1970) value would overflow it
+        // and wrap into a UUID that sorts above every real id, so clamp to the epoch floor.
+        long epochMilli = Math.max(0L, timestamp.toEpochMilli());
 
         // Most significant bits: [timestamp: 48 bits][version: 4 bits][random: 12 bits]
         // For lower bound, set the 12 random bits to 0
@@ -79,7 +81,8 @@ public class InstantToUUIDMapper {
             return null;
         }
 
-        long epochMilli = timestamp.toEpochMilli();
+        // Clamp to the epoch floor: negative (pre-1970) values overflow the unsigned 48-bit timestamp.
+        long epochMilli = Math.max(0L, timestamp.toEpochMilli());
 
         // Most significant bits: [timestamp: 48 bits][version: 4 bits][random: 12 bits]
         // For upper bound, set the 12 random bits to 1

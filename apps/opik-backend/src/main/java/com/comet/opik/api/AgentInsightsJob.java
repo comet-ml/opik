@@ -32,6 +32,13 @@ public record AgentInsightsJob(
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
 
+    public static class FailureReason {
+        // The trigger was rejected because the organization can't afford the run. No pod was allocated.
+        public static final String OUT_OF_CREDITS = "out_of_credits";
+        // The trigger never reached Ollie, so Ollie cannot report this itself.
+        public static final String DID_NOT_START = "did_not_start";
+    }
+
     @RequiredArgsConstructor
     @Getter
     public enum Status {

@@ -52,6 +52,7 @@ export const OAUTH_AUTHORIZE_CONTEXT_KEY = "oauth-authorize-context";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";
+export const SPAN_KEY = "span";
 export const TRACES_KEY = "traces";
 export const TRACE_KEY = "trace";
 export const THREADS_KEY = "threads";

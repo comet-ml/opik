@@ -1,13 +1,14 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRule;
+import com.comet.opik.api.evaluators.EvalTriggerScope;
 
 import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
 public sealed interface AutomationRuleModel
-        permits AutomationRuleEvaluatorModel {
+        permits AutomationRuleEvaluatorModel, AutomationRuleAnnotationQueueRouterModel {
 
     UUID id();
     UUID projectId(); // Legacy single project field for backward compatibility (derived from projectIds)
@@ -16,6 +17,7 @@ public sealed interface AutomationRuleModel
 
     Float samplingRate();
     boolean enabled();
+    EvalTriggerScope triggerScope();
     String filters();
 
     Instant createdAt();

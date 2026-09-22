@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Provision the Agent Insights read-only free-form SQL ClickHouse user, settings profile, grants and row policies.
 #
-# Opt-in: only runs when TOGGLE_AGENT_INSIGHTS_ENABLED=true; otherwise it's a no-op so default installs are untouched.
+# Opt-in: only runs when TOGGLE_OLLIE_ENABLED=true; otherwise it's a no-op so default installs are untouched.
 # This is the single local copy of the DDL, shared by docker-compose (backend container, between run_db_migrations.sh
 # and entrypoint.sh) and scripts/dev-runner.sh. It mirrors the prod provisioning owned by OPIK-6846 — keep them in
 # sync. Must run AFTER the analytics migrations (the GRANT/ROW POLICY statements reference the opik tables) and BEFORE
@@ -16,7 +16,7 @@ set -euo pipefail
 # "true"/"True"/"TRUE" to boolean true — a strict `[ "$VAR" != "true" ]` would silently skip
 # provisioning while the backend boots with the feature armed. `tr` rather than bash 4 `${var,,}`
 # keeps this runnable on macOS bash 3.2 for scripts/dev-runner.sh.
-toggle="${TOGGLE_AGENT_INSIGHTS_ENABLED:-false}"
+toggle="${TOGGLE_OLLIE_ENABLED:-false}"
 toggle="${toggle#\"}"
 toggle="${toggle%\"}"
 toggle=$(printf '%s' "$toggle" | tr '[:upper:]' '[:lower:]')

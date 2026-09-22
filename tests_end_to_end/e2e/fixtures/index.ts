@@ -1,5 +1,16 @@
-export { test, expect } from './annotation-queue.fixture';
+export { test, expect } from './export-comparison.fixture';
+export type {
+  OauthProviderSeed,
+  UnreachableProviderSeed,
+  ProviderKeysFixture,
+  ProviderKeyFixtures,
+} from './provider-key.fixture';
 export type { ProjectFixtures } from './project.fixture';
+export type {
+  BystanderExperimentRef,
+  BystanderTestSuiteRef,
+  BystanderFixtures,
+} from './bystander.fixture';
 export type { ScratchDir, ScratchDirFixtures } from './scratch-dir.fixture';
 export type {
   ArtifactSource,
@@ -45,4 +56,114 @@ export type {
   AnnotationQueueTraceRef,
   AnnotationQueueFixtures,
 } from './annotation-queue.fixture';
+export type { ExplainTraceRef, ExplainTracesFixtures } from './explain-traces.fixture';
+export type {
+  FilterableTraceRef,
+  FilterableTracesFixtures,
+} from './filterable-traces.fixture';
+export type {
+  OptimizationRunRef,
+  OptimizationTrialRef,
+  OptimizationRunFixtures,
+} from './optimization-run.fixture';
+export type {
+  AgedExperimentRef,
+  AgedExperimentFixtures,
+} from './aged-experiment.fixture';
+export type {
+  EvaluatedThreadRef,
+  EvaluatedThreadTurnRef,
+  ThreadEvaluationRunRef,
+  EvaluatedThreadFixtures,
+} from './evaluated-thread.fixture';
+export type {
+  JsonOutputExperimentRef,
+  JsonOutputExperimentFixtures,
+  JsonSortKey,
+  JsonSortPrefix,
+} from './json-output-experiment.fixture';
+export {
+  JSON_SORT_KEYS,
+  JSON_SORT_PREFIXES,
+  LABEL_COLUMN,
+} from './json-output-experiment.fixture';
+export type { GroupedDatasetRef, GroupedDatasetFixtures } from './grouped-dataset.fixture';
+export { GROUP_COLUMN, TARGET_GROUP } from './grouped-dataset.fixture';
+export type {
+  TokenUsageSpanSeed,
+  TokenUsageSpansRef,
+  TokenUsageSpansFixtures,
+} from './token-usage-spans.fixture';
+export type { AutomationRulesCleanupFixtures } from './automation-rules.fixture';
+export type {
+  ProjectMetricHourSeed,
+  ProjectMetricSpansRef,
+  ProjectMetricSpansFixtures,
+} from './project-metric-spans.fixture';
+export type {
+  AttachedFileSeed,
+  TraceAttachmentsRef,
+  TraceAttachmentsFixtures,
+} from './trace-attachments.fixture';
+export type { DashboardCleanupFixtures } from './dashboard-cleanup.fixture';
+export type { IdAgedTraceRef, IdAgedTracesFixtures } from './id-aged-traces.fixture';
+export type {
+  AlertSeed,
+  AlertRef,
+  AlertEventType,
+  AlertFixtures,
+} from './alert.fixture';
+export { ALERT_EVENT_TYPE, ALERT_EVENT_TITLE } from './alert.fixture';
+export type {
+  ModelCostSpanSeed,
+  ModelCostSpansRef,
+  ModelCostSpansFixtures,
+} from './model-cost-spans.fixture';
+export type {
+  SummarisedDatasetShape,
+  SummarisedDatasetRef,
+  SummarisedDatasetsRef,
+  SummarisedDatasetsFixtures,
+} from './summarised-datasets.fixture';
+export { SUMMARISED_DATASET_SHAPES } from './summarised-datasets.fixture';
+export type {
+  TimedThreadRef,
+  DurationThreadsRef,
+  TimedThreadsFixtures,
+} from './timed-threads.fixture';
+export type {
+  PagedSpansRef,
+  FarFuturePagedSpanRef,
+  PagedSpansFixtures,
+} from './paged-spans.fixture';
+export type {
+  SpanKpiPeriodExpectation,
+  SpanKpiSpansRef,
+  SpanKpiSpansFixtures,
+} from './span-kpi-cards.fixture';
+export type {
+  FarFutureErrorTracesRef,
+  FarFutureErrorTracesFixtures,
+} from './far-future-error-traces.fixture';
+export type {
+  WeeklyMetricDaySeed,
+  WeeklyMetricSpansRef,
+  WeeklyMetricSpansFixtures,
+} from './weekly-metric-spans.fixture';
+export type {
+  CachedTokenSpanSeed,
+  CachedTokenSpansRef,
+  CachedTokenSpansFixtures,
+} from './cached-token-spans.fixture';
+export { CACHED_TOKENS_KEY } from './cached-token-spans.fixture';
+export type {
+  ProjectScopedDashboardRef,
+  ProjectScopedDashboardFixtures,
+} from './project-scoped-dashboard.fixture';
+export type {
+  ExportComparisonItem,
+  ExportComparisonExperiment,
+  ExportComparisonRef,
+  ExportComparisonFixtures,
+} from './export-comparison.fixture';
 export type { ProjectRef } from '../core/backend';

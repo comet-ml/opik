@@ -18,6 +18,7 @@ import {
 } from "@/ui/card";
 import { Button } from "@/ui/button";
 import { formatNumericData, toString } from "@/lib/utils";
+import { restorePromptVariableFormat } from "@/lib/optimizations";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import ColoredTagNew from "@/shared/ColoredTag/ColoredTagNew";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -76,8 +77,12 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
     return scoreObject?.score;
   }, [baselineExperiment, scoreMap]);
 
+  // Restore the user's {{variable}} syntax for display — the stored prompt uses
+  // the optimizer's single-brace form (see restorePromptVariableFormat).
   const promptData = useMemo(() => {
-    return get(experiment.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-");
+    return restorePromptVariableFormat(
+      get(experiment.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-"),
+    );
   }, [experiment]);
 
   const extractedPrompt = useMemo((): ExtractedPromptData | null => {
@@ -95,12 +100,13 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
 
   const baselinePrompt = useMemo(() => {
     if (!baselineExperiment) return null;
-    const val = get(
+    const raw = get(
       baselineExperiment.metadata ?? {},
       OPTIMIZATION_PROMPT_KEY,
       null,
     );
-    if (!val) return null;
+    if (!raw) return null;
+    const val = restorePromptVariableFormat(raw);
 
     const extracted = extractPromptData(val);
     if (extracted) {

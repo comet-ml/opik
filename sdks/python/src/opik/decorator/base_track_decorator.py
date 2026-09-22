@@ -14,7 +14,7 @@ from typing import (
     NamedTuple,
 )
 
-from .. import context_storage, logging_messages, tracing_runtime_config
+from .. import analytics, context_storage, logging_messages, tracing_runtime_config
 from ..api_objects import opik_client, span, trace
 from ..runner import registry
 from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType, TraceSource
@@ -92,6 +92,11 @@ class BaseTrackDecorator(abc.ABC):
             project_name: The name of the project to log data.
             create_duplicate_root_span: Whether to create a root span duplicating the root trace data.
             source: The source of the trace.
+            entrypoint: Whether the decorated function is an entrypoint. Marked
+                agents are collected for the Opik UI's agent view, which currently
+                renders the first registered entrypoint only.
+            environment: The environment in which the trace was created, e.g. 'production'
+                or 'development'. Defaults to the configured environment when not set.
 
         Returns:
             Callable: The decorated function(if used without parentheses)
@@ -109,6 +114,8 @@ class BaseTrackDecorator(abc.ABC):
             began while tracing was enabled will still be logged even if
             tracing is disabled before it returns.
         """
+        analytics.track_event("client", "track")
+
         track_options = arguments_helpers.TrackOptions(
             name=None,
             type=type,

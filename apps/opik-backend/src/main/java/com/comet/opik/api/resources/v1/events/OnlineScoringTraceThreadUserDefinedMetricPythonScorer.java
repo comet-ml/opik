@@ -61,7 +61,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     private final Logger userFacingLogger;
     private final ProjectService projectService;
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
-    private final SpanService spanService;
+    private final AgenticScoringService agenticScoringService;
 
     @Inject
     public OnlineScoringTraceThreadUserDefinedMetricPythonScorer(
@@ -74,15 +74,17 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             @NonNull TraceThreadService traceThreadService,
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
-            @NonNull SpanService spanService) {
-        super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
+            @NonNull SpanService spanService,
+            @NonNull AgenticScoringService agenticScoringService) {
+        super(config, redisson, feedbackScoreService, traceService, spanService,
+                TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
                 Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.traceThreadService = traceThreadService;
         this.projectService = projectService;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
-        this.spanService = spanService;
+        this.agenticScoringService = agenticScoringService;
         this.userFacingLogger = UserFacingLoggingFactory
                 .getLogger(OnlineScoringTraceThreadUserDefinedMetricPythonScorer.class);
     }
@@ -208,30 +210,47 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
      */
     private Mono<Void> scoreThread(TraceThreadToScoreUserDefinedMetricPython message, List<Trace> traces,
             UUID threadModelId, String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
-        // Fetch every span across every trace in the thread when the agentic-tools feature
-        // flag is on — same gate as the LLM-as-judge thread scorer. Spans get nested under
-        // their trace's assistant ChatMessage via fromTraceToThreadEnriched, so the user's
-        // Python `score(...)` method sees the full call tree (tool inputs/outputs + LLM
-        // calls) instead of the legacy {role, content}-only shape. When the toggle is off,
-        // empty spans → ChatMessage's `spans` field omitted via @JsonInclude(NON_NULL) →
-        // wire-identical to today's [{role, content}, ...].
-        Mono<List<Span>> spansMono = serviceTogglesConfig.isAgenticToolsEnabled()
-                ? spanService.getByTraceIds(traces.stream().map(Trace::id).collect(Collectors.toSet()))
-                        .collectList()
-                        .contextWrite(ctx -> ctx
-                                .put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                                .put(RequestContext.USER_NAME, message.userName()))
-                : Mono.just(List.of());
-        return spansMono
-                // boundedElastic so the blocking JDBC call inside prepareScoring
-                // (projectService.get) doesn't pin the upstream thread — could be the consumer
-                // loop when spansMono is Mono.just(empty), or the spanService DB thread when
-                // spansMono is the getByTraceIds fetch. Either way, blocking on those threads
-                // is bad; boundedElastic is the standard pick for wrapping blocking calls in a
-                // reactive chain.
-                .flatMap(spans -> Mono.fromCallable(
-                        () -> prepareScoring(message, traces, spans, threadId, rule, mdc))
-                        .subscribeOn(Schedulers.boundedElastic()))
+        // OPIK-7454 — route before fetch. Size the whole thread with a cheap ClickHouse aggregate (no
+        // spans materialized), then fetch spans for enrichment only if the thread fits under the heap
+        // cap. This Python path has no inline-vs-tools routing, so a thread over the cap degrades to the
+        // unenriched {role, content} context instead of being buffered in full. When enriched, spans nest
+        // under each trace's assistant ChatMessage via fromTraceToThreadEnriched so the user's Python
+        // score(...) sees the full call tree.
+        var traceIds = traces.stream().map(Trace::id).collect(Collectors.toSet());
+        var maxPreloadBytes = agenticToolsMaxPreloadBytes();
+        // Sizing is advisory, not a prerequisite — see spansSizeOrUnavailable. Degrading keeps the
+        // evaluation alive with the unenriched context.
+        var spansSizeMono = spansSizeOrUnavailable(traceIds, message.workspaceId(), message.userName(),
+                threadId);
+        return spansSizeMono
+                .flatMap(sizeBytes -> {
+                    // Without a size we can't tell a small thread from one that would blow the heap, so
+                    // an unavailable aggregate skips enrichment rather than risking the bulk fetch.
+                    var enrich = sizeBytes != SPAN_SIZE_UNAVAILABLE && sizeBytes <= maxPreloadBytes;
+                    if (sizeBytes > maxPreloadBytes) {
+                        try (var logContext = wrapWithMdc(mdc)) {
+                            userFacingLogger.warn("""
+                                    Thread span size estimate exceeds the enrichment cap; scoring with the \
+                                    unenriched context. threadId='{}', sizeBytes='{}', capBytes='{}'""",
+                                    threadId, sizeBytes, maxPreloadBytes);
+                        }
+                    }
+                    // Fetch spans (streaming byte-cap backstop) only when enriching a small-enough thread.
+                    var spansMono = enrich
+                            ? agenticScoringService.preloadThreadSpansBounded(
+                                    spanService.getByTraceIds(traceIds), maxPreloadBytes)
+                                    .map(preload -> getSpansFromPreloadAndLogOverflow(preload, userFacingLogger,
+                                            threadId, mdc))
+                                    .contextWrite(ctx -> ctx
+                                            .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                                            .put(RequestContext.USER_NAME, message.userName()))
+                            : Mono.just(List.<Span>of());
+                    // boundedElastic so the blocking JDBC call inside prepareScoring (projectService.get)
+                    // doesn't pin the upstream reactive thread.
+                    return spansMono.flatMap(spans -> Mono.fromCallable(
+                            () -> prepareScoring(message, traces, spans, threadId, rule, mdc))
+                            .subscribeOn(Schedulers.boundedElastic()));
+                })
                 .flatMap(context -> evaluateAndStore(message, threadModelId, threadId, context, mdc))
                 .doOnError(withMdc(mdc, error -> userFacingLogger
                         .error("Unexpected error while scoring threadId '{}' with rule '{}': \n\n{}",
@@ -253,8 +272,8 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
 
             Project project = projectService.get(message.projectId(), message.workspaceId());
 
-            // Always use the enriched helper — when `spans` is empty (toggle off, see
-            // scoreThread), it emits the legacy [{role, content}, ...] shape via
+            // Always use the enriched helper — when `spans` is empty (thread over the enrichment
+            // cap, see scoreThread), it emits the legacy [{role, content}, ...] shape via
             // @JsonInclude(NON_NULL) on ChatMessage.spans. When non-empty, the assistant
             // entry for each trace carries the nested span tree.
             List<ChatMessage> context;
@@ -282,7 +301,10 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for threadId '{}':\n\n{}", threadId, scoreResults)))
                 .flatMap(scoreResults -> {
-                    List<FeedbackScoreBatchItemThread> scores = scoreResults.stream()
+                    var pythonScores = OnlineScoringEngine.splitPythonScores(scoreResults);
+                    OnlineScoringEngine.logDroppedPythonScores(userFacingLogger, mdc, pythonScores, "threadId",
+                            threadId);
+                    List<FeedbackScoreBatchItemThread> scores = pythonScores.storable().stream()
                             .map(scoreResult -> FeedbackScoresMapper.INSTANCE.map(
                                     scoreResult,
                                     threadModelId,

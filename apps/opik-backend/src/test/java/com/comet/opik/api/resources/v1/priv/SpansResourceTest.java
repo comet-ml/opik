@@ -51,7 +51,9 @@ import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.db.TestUuidV7TimestampValidatorFactory;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.db.UuidV7TimestampValidator;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AttachmentPayloadUtilsTest;
@@ -66,9 +68,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -80,6 +84,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.awaitility.Awaitility;
+import org.glassfish.jersey.client.ClientConfig;
+import org.glassfish.jersey.client.ClientProperties;
+import org.glassfish.jersey.client.RequestEntityProcessing;
+import org.glassfish.jersey.grizzly.connector.GrizzlyConnectorProvider;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -171,6 +179,19 @@ class SpansResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
+    /**
+     * A second workspace, allow-listed for the UUIDv7 bypass window by the validator bound below
+     * (OPIK-7794). No other test in this class uses it, so they all keep the default window.
+     */
+    private static final String BYPASS_API_KEY = UUID.randomUUID().toString();
+    private static final String BYPASS_WORKSPACE_ID = UUID.randomUUID().toString();
+    private static final String BYPASS_TEST_WORKSPACE = UUID.randomUUID().toString();
+    /**
+     * Offsets either side of the config-test bypass window, both outside the default window.
+     */
+    private static final int WITHIN_BYPASS_WINDOW_DAYS = 10;
+    private static final int BEYOND_BYPASS_WINDOW_DAYS = 40;
+
     private static final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
@@ -206,6 +227,15 @@ class SpansResourceTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .isMinIO(true)
                         .minioUrl(minioUrl)
+                        // The allow-list is read from the environment, which a test cannot set, so the
+                        // validator is bound with an explicit one instead.
+                        .modules(List.of(new AbstractModule() {
+                            @Override
+                            protected void configure() {
+                                bind(UuidV7TimestampValidator.class).toInstance(
+                                        TestUuidV7TimestampValidatorFactory.create(BYPASS_WORKSPACE_ID));
+                            }
+                        }))
                         .build());
     }
 
@@ -226,6 +256,7 @@ class SpansResourceTest {
         ClientSupportUtils.config(client);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+        mockTargetWorkspace(BYPASS_API_KEY, BYPASS_TEST_WORKSPACE, BYPASS_WORKSPACE_ID);
 
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, podamFactory);
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
@@ -342,6 +373,105 @@ class SpansResourceTest {
                         expectedDetails.formatted(
                                 Instant.ofEpochMilli(future), expectedWindow, Reason.TOO_FAR_FUTURE.getValue()),
                         "UUID after window"));
+    }
+
+    // Referenced ids (traceId, parentSpanId) use the not-in-future policy: non-v7 and future-dated are
+    // rejected, but past ids are allowed (spans are commonly attached to older traces), so unlike
+    // invalidIds() there is no TOO_OLD case here. Each argument sets exactly one referenced id to an
+    // invalid value on the span builder and pairs it with the expected validation message, so trace and
+    // parent cases share a single test body.
+    static Stream<Arguments> invalidReferencedIds() {
+        var future = Instant.now().plus(Duration.ofHours(25)).toEpochMilli();
+        var expectedDetails = "id with timestamp '%s' must be in the allowed ingestion window of '%s' around now, reason '%s'";
+        var expectedWindow = Duration.ofHours(24);
+        return Stream.of(
+                arguments(
+                        (Function<Span.SpanBuilder, Span.SpanBuilder>) builder -> builder.traceId(UUID.randomUUID()),
+                        "Span trace id must be a version 7 UUID",
+                        "traceId not v7"),
+                arguments(
+                        (Function<Span.SpanBuilder, Span.SpanBuilder>) builder -> builder
+                                .traceId(generator.construct(future)),
+                        expectedDetails.formatted(
+                                Instant.ofEpochMilli(future), expectedWindow, Reason.TOO_FAR_FUTURE.getValue()),
+                        "traceId after window"),
+                arguments(
+                        (Function<Span.SpanBuilder, Span.SpanBuilder>) builder -> builder
+                                .parentSpanId(UUID.randomUUID()),
+                        "Span parent id must be a version 7 UUID",
+                        "parentSpanId not v7"));
+    }
+
+    /**
+     * Workspace-scoped bypass (OPIK-7794) end to end over HTTP, covering that the request workspace
+     * reaches the validator through auth, {@code RequestContext} and the reactive context.
+     *
+     * <p>Both endpoints are exercised because they resolve that workspace differently: the single-span
+     * path through the {@code IdGenerator} async overloads and
+     * {@code SpanService.validateSpanReferencesAsync}, the batch path by reading it once and passing it
+     * down.
+     */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UuidV7WorkspaceBypass {
+
+        Stream<Arguments> createSpanHonoursTheWorkspaceBypassWindow() {
+            return bypassWindowCases(HttpStatus.SC_CREATED);
+        }
+
+        @MethodSource
+        @ParameterizedTest(name = "Create span out of the default window: {4}")
+        void createSpanHonoursTheWorkspaceBypassWindow(
+                int daysFromNow, String apiKey, String workspaceName, int expectedStatus, String testName) {
+            var span = outOfWindowSpan(daysFromNow);
+
+            try (var response = spanResourceClient.callCreateSpan(span, apiKey, workspaceName)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            }
+        }
+
+        Stream<Arguments> batchCreateSpansHonoursTheWorkspaceBypassWindow() {
+            return bypassWindowCases(HttpStatus.SC_NO_CONTENT);
+        }
+
+        @MethodSource
+        @ParameterizedTest(name = "Batch create span out of the default window: {4}")
+        void batchCreateSpansHonoursTheWorkspaceBypassWindow(
+                int daysFromNow, String apiKey, String workspaceName, int expectedStatus, String testName) {
+            var span = outOfWindowSpan(daysFromNow);
+
+            try (var response = spanResourceClient.callBatchCreateSpans(List.of(span), apiKey, workspaceName)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            }
+        }
+
+        /**
+         * The three cases that discriminate the bypass, shared by every endpoint since only the accepted
+         * status differs between them.
+         */
+        private Stream<Arguments> bypassWindowCases(int acceptedStatus) {
+            return Stream.of(
+                    arguments(WITHIN_BYPASS_WINDOW_DAYS, BYPASS_API_KEY, BYPASS_TEST_WORKSPACE, acceptedStatus,
+                            "allow-listed workspace, inside the bypass window"),
+                    arguments(WITHIN_BYPASS_WINDOW_DAYS, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST,
+                            "other workspace, same id"),
+                    arguments(BEYOND_BYPASS_WINDOW_DAYS, BYPASS_API_KEY, BYPASS_TEST_WORKSPACE,
+                            HttpStatus.SC_BAD_REQUEST, "allow-listed workspace, beyond the bypass window"));
+        }
+
+        /**
+         * A span whose own id and whose referenced trace and parent ids are all dated {@code daysFromNow}
+         * away, so the write only succeeds when the creation check and both reference checks honour the
+         * bypass.
+         */
+        private Span outOfWindowSpan(int daysFromNow) {
+            var outOfWindow = Instant.now().plus(daysFromNow, ChronoUnit.DAYS).toEpochMilli();
+            return podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(generator.construct(outOfWindow))
+                    .traceId(generator.construct(outOfWindow))
+                    .parentSpanId(generator.construct(outOfWindow))
+                    .build();
+        }
     }
 
     @Nested
@@ -1474,6 +1604,13 @@ class SpansResourceTest {
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "claude-haiku-4-5", "anthropic",
                             null, null),
+                    // TypeSafe AI (Jev): served version name as logged by track_typesafe; input-only billing
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "jev-1.13.0", "typesafe",
+                            JsonUtils.getJsonNodeFromString(
+                                    "{\"created_from\":\"typesafe\",\"type\":\"typesafe_system_one\"}"),
+                            null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "claude-sonnet-4-5", "anthropic_vertexai",
@@ -1798,6 +1935,40 @@ class SpansResourceTest {
                 var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                 assertThat(actualEntity).isEqualTo(expectedEntity);
             }
+        }
+
+        @MethodSource("com.comet.opik.api.resources.v1.priv.SpansResourceTest#invalidReferencedIds")
+        @ParameterizedTest(name = "Create span with invalid referenced id throws bad request: {2}")
+        void createWithInvalidReferencedIdThrowsBadRequest(
+                Function<Span.SpanBuilder, Span.SpanBuilder> spanCustomizer, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var span = spanCustomizer.apply(podamFactory.manufacturePojo(Span.class).toBuilder()).build();
+            try (var response = spanResourceClient.createSpan(
+                    span, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST)) {
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
+            }
+        }
+
+        @Test
+        @DisplayName("Create span with an old (past) v7 traceId succeeds — late spans on old traces are valid")
+        void createWithOldTraceIdSucceeds() {
+            var old = Instant.now().minus(Duration.ofDays(30)).toEpochMilli();
+            var oldTraceId = generator.construct(old);
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(oldTraceId)
+                    .parentSpanId(null)
+                    .build();
+
+            var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            assertThat(id).isNotNull();
+
+            // Round-trip: the old traceId must be persisted verbatim (not rewritten) and parentSpanId stays null.
+            var retrievedSpan = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(retrievedSpan.traceId()).isEqualTo(oldTraceId);
+            assertThat(retrievedSpan.parentSpanId()).isNull();
         }
 
         @Test
@@ -2284,6 +2455,21 @@ class SpansResourceTest {
             var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
                     HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
             var span = podamFactory.manufacturePojo(Span.class).toBuilder().id(id).build();
+            try (var response = spanResourceClient.callBatchCreateSpans(
+                    List.of(span), API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                var actualEntity = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(actualEntity).isEqualTo(expectedEntity);
+            }
+        }
+
+        @MethodSource("com.comet.opik.api.resources.v1.priv.SpansResourceTest#invalidReferencedIds")
+        @ParameterizedTest(name = "Batch create span with invalid referenced id throws bad request: {2}")
+        void batchCreateWithInvalidReferencedIdThrowsBadRequest(
+                Function<Span.SpanBuilder, Span.SpanBuilder> spanCustomizer, String expectedDetails, String testName) {
+            var expectedEntity = new io.dropwizard.jersey.errors.ErrorMessage(
+                    HttpStatus.SC_BAD_REQUEST, "Invalid UUID for id", expectedDetails);
+            var span = spanCustomizer.apply(podamFactory.manufacturePojo(Span.class).toBuilder()).build();
             try (var response = spanResourceClient.callBatchCreateSpans(
                     List.of(span), API_KEY, TEST_WORKSPACE)) {
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
@@ -4361,7 +4547,7 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("Create span with attachment exceeding limit - should return 400 Bad Request")
+        @DisplayName("Create span with attachment exceeding limit - should return 413 Request Entity Too Large")
         void createSpan__whenSingleAttachmentExceedsLimit__thenReject() throws Exception {
             // Given: Create a single attachment that exceeds the 250MB test limit
             // In test environment: maxStringLength = 250MB (262,144,000 bytes)
@@ -4387,24 +4573,26 @@ class SpansResourceTest {
                     .build();
 
             // When: Attempt to create the span
-            // Then: Should fail with 400 Bad Request
-            try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE, 400)) {
+            // Then: Should fail with 413 Request Entity Too Large (single value exceeds maxStringLength)
+            try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_REQUEST_TOO_LONG)) {
                 // Assert error message mentions the limit
                 var errorResponse = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
                 assertThat(errorResponse).isNotNull();
+                // Stable generic message; the raw parser detail is logged server-side, not returned.
                 assertThat(errorResponse.getMessage())
-                        .containsIgnoringCase("String value length")
-                        .containsIgnoringCase("exceeds the maximum allowed")
-                        .containsIgnoringCase("StreamReadConstraints");
+                        .isEqualTo("Request payload exceeds the maximum allowed size.");
             }
         }
 
         @Test
-        @DisplayName("Create span with multiple large attachments under individual limit - should succeed")
-        void createSpan__whenMultipleLargeAttachmentsUnderIndividualLimit__thenSucceed() throws Exception {
-            // Given: Create THREE 70MB attachments (each ~93MB as base64)
-            // Total payload: ~280MB, but each individual string is under 250MB limit
-            // This verifies the limit is per-string, not per total payload
+        @DisplayName("Create span whose total document exceeds maxDocumentLength - should return 413 Request Entity Too Large")
+        void createSpan__whenTotalDocumentExceedsMaxDocumentLength__thenReject() throws Exception {
+            // Given: THREE 70MB attachments (~93MB base64 each). Each individual string is under the
+            // 250MB maxStringLength, but the whole document (~280MB) exceeds maxDocumentLength.
+            // Verifies the per-document guard (OPIK-7334) rejects an oversized batch even when every
+            // single value is within the per-string limit - i.e. there is now a per-total cap, not
+            // only a per-string one.
             int videoSizeBytes = 70 * 1024 * 1024; // 70MB each -> ~93MB base64 each
             String base64Video1 = AttachmentPayloadUtilsTest.createValidPngBase64(videoSizeBytes);
             String base64Video2 = AttachmentPayloadUtilsTest.createValidJpegBase64(videoSizeBytes);
@@ -4428,33 +4616,52 @@ class SpansResourceTest {
                     .feedbackScores(null)
                     .build();
 
-            // When: Create the span
-            UUID spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+            // When: Attempt to create the span
+            // The default Grizzly client streams CHUNKED (no Content-Length), so this bypasses the
+            // RequestSizeLimitFilter and reaches the maxDocumentLength parse guard - the chunked transport
+            // (not the response body, which is a generic 413 message) is what selects this guard.
+            // Then: rejected mid-parse before a multi-GB node tree is materialized - no attachment
+            // stripping / S3 upload happens.
+            try (Response response = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_REQUEST_TOO_LONG)) {
+                var errorResponse = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
+                assertThat(errorResponse).isNotNull();
+                assertThat(errorResponse.getMessage())
+                        .isEqualTo("Request payload exceeds the maximum allowed size.");
+            }
+        }
 
-            // Then: Should succeed and attachments should be stripped
-            assertThat(spanId).isNotNull();
+        @Test
+        @DisplayName("Create span request whose Content-Length exceeds maxRequestSizeBytes - should return 413")
+        void createSpan__whenRequestContentLengthExceedsLimit__thenReject413() {
+            // The default test client (GrizzlyConnectorProvider) streams chunked and never sends a
+            // Content-Length, so it bypasses RequestSizeLimitFilter. A BUFFERED client sets
+            // Content-Length, exercising the pre-parse 413 guard (OPIK-7333) end-to-end.
+            String oversizedJson = "\"" + "a".repeat(51 * 1024 * 1024) + "\""; // 51MB, over the request cap; valid JSON
 
-            // Verify attachments were stripped
-            Awaitility.await()
-                    .pollInterval(500, TimeUnit.MILLISECONDS)
-                    .atMost(30, TimeUnit.SECONDS)
-                    .untilAsserted(() -> {
-                        Span retrievedSpan = spanResourceClient.getById(spanId, TEST_WORKSPACE, API_KEY, true);
-                        assertThat(retrievedSpan).isNotNull();
+            // Grizzly connector + Expect: 100-continue so the server can reject on the Content-Length
+            // header before the body is sent. (BUFFERED makes a real Content-Length be sent; without
+            // Expect-continue the JDK connector throws "error writing to server" when the server 413s
+            // mid-upload.)
+            var config = new ClientConfig();
+            config.connectorProvider(new GrizzlyConnectorProvider());
+            config.property(ClientProperties.REQUEST_ENTITY_PROCESSING, RequestEntityProcessing.BUFFERED);
+            config.property(ClientProperties.EXPECT_100_CONTINUE, true);
 
-                        String inputString = retrievedSpan.input().toString();
-                        String outputString = retrievedSpan.output().toString();
+            try (var bufferedClient = ClientBuilder.newClient(config)) {
+                try (Response response = bufferedClient.target("%s/v1/private/spans".formatted(baseURI))
+                        .request()
+                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                        .post(Entity.json(oversizedJson))) {
 
-                        // All three videos should be stripped
-                        assertThat(inputString).doesNotContain(base64Video1);
-                        assertThat(inputString).doesNotContain(base64Video2);
-                        assertThat(outputString).doesNotContain(base64Video3);
-
-                        // Should have attachment references
-                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.png\\]");
-                        assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.(jpg|jpeg)\\]");
-                        assertThat(outputString).containsPattern("\\[output-attachment-\\d+-\\d+\\.png\\]");
-                    });
+                    assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_REQUEST_TOO_LONG); // 413
+                    var body = response.readEntity(JsonNode.class);
+                    assertThat(body.path("code").asInt()).isEqualTo(HttpStatus.SC_REQUEST_TOO_LONG);
+                    assertThat(body.path("message").asText())
+                            .containsIgnoringCase("exceeds the maximum allowed size");
+                }
+            }
         }
     }
 

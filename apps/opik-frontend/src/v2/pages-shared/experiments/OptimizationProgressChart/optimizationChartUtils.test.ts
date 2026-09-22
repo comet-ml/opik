@@ -2,12 +2,14 @@ import { describe, it, expect } from "vitest";
 import {
   computeCandidateStatuses,
   buildCandidateChartData,
+  buildTrialLegendItems,
+  selectBestCandidate,
   buildTrendLineEdges,
   buildTrialCardModel,
   buildEdgePath,
+  buildStepTickLabels,
   getUniqueSteps,
   findNearestDot,
-  getTrialStatusLabel,
   getTrialDotColor,
   STATUS_VARIANT_MAP,
   TRIAL_STATUS_COLORS,
@@ -26,6 +28,7 @@ const makePoint = (
   },
 ): CandidateDataPoint => ({
   parentCandidateIds: [],
+  trialNumber: 1,
   value: null,
   status: "passed",
   name: "test",
@@ -304,6 +307,303 @@ describe("computeCandidateStatuses", () => {
     });
   });
 
+  // OPIK-7460: mid-evaluation, an experiment's feedback score is a partial
+  // average over the items scored so far, so an unfinished trial shows a low
+  // provisional score. It must not read as "Discarded" on that basis. The
+  // denominator is the step-0 baseline's item count — the counts the API reports
+  // are completed-only, so there is no planned count to compare against.
+  describe("in-progress item-completion gate", () => {
+    it("should not prune a trial that is still mid-evaluation with a partial score below best", () => {
+      const candidates = [
+        // Baseline: full evaluation over all 30 dataset items.
+        makeCandidate({
+          candidateId: "a",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 30,
+        }),
+        // c is still evaluating: 5 of 30 items scored, provisional score below best.
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.3,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 5,
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("c")).toBe("evaluating");
+    });
+
+    it("should still prune a finished trial whose score is below best", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "a",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 30,
+        }),
+        // c covered every item and genuinely lost — the gate must not fire.
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.3,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 30,
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("c")).toBe("pruned");
+    });
+
+    it("should not prune an unfinished trial whose sibling has children", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "a",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 30,
+        }),
+        // Same score as best, so the sibling-progress branch is what would
+        // prune c — the gate has to sit ahead of that branch too.
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 12,
+        }),
+        makeCandidate({
+          candidateId: "d",
+          stepIndex: 2,
+          score: 0.9,
+          parentCandidateIds: ["b"],
+          totalDatasetItemCount: 30,
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("c")).toBe("evaluating");
+    });
+
+    it("should keep a trial with children passed even when its item count is short", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "a",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.6,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 20,
+        }),
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 2,
+          score: 0.9,
+          parentCandidateIds: ["b"],
+          totalDatasetItemCount: 30,
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("b")).toBe("passed");
+    });
+
+    it("should fall back to the previous behaviour when no item counts are reported", () => {
+      const candidates = [
+        makeCandidate({ candidateId: "a", stepIndex: 0, score: 0.5 }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+        }),
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.3,
+          parentCandidateIds: ["a"],
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("c")).toBe("pruned");
+    });
+
+    it("should fall back to the previous behaviour when there is no baseline candidate", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.3,
+          parentCandidateIds: ["b"],
+          totalDatasetItemCount: 5,
+        }),
+      ];
+      const result = computeCandidateStatuses(candidates, true, true);
+      expect(result.get("c")).toBe("pruned");
+    });
+
+    it("should not leave a short-count trial evaluating once the run is terminal", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "a",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "b",
+          stepIndex: 1,
+          score: 0.8,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 30,
+        }),
+        makeCandidate({
+          candidateId: "c",
+          stepIndex: 1,
+          score: 0.3,
+          parentCandidateIds: ["a"],
+          totalDatasetItemCount: 5,
+        }),
+      ];
+      // isInProgress = false → the gate is not consulted, statuses are final.
+      const result = computeCandidateStatuses(candidates, true, false);
+      expect(result.get("c")).toBe("pruned");
+    });
+  });
+
+  // OPIK-7460 follow-up: the gate alone stopped an unfinished trial being
+  // pruned, but a partial average could still WIN — taking "Best trial" and
+  // becoming the bestScore threshold that prunes the genuinely-best finished
+  // trial to "Discarded". Same defect, opposite direction.
+  describe("in-progress candidates never win the run", () => {
+    // baseline 30/30 @ 0.50 · candA 30/30 @ 0.60 (real winner)
+    // candB 3/30 @ 0.95 (three easy items, still evaluating)
+    const partialLeaderRun = () => [
+      makeCandidate({
+        candidateId: "baseline",
+        stepIndex: 0,
+        score: 0.5,
+        totalDatasetItemCount: 30,
+        created_at: "2025-01-01T00:00:00Z",
+      }),
+      makeCandidate({
+        candidateId: "cand-a",
+        stepIndex: 1,
+        score: 0.6,
+        parentCandidateIds: ["baseline"],
+        totalDatasetItemCount: 30,
+        created_at: "2025-01-01T00:01:00Z",
+      }),
+      makeCandidate({
+        candidateId: "cand-b",
+        stepIndex: 1,
+        score: 0.95,
+        parentCandidateIds: ["baseline"],
+        totalDatasetItemCount: 3,
+        created_at: "2025-01-01T00:02:00Z",
+      }),
+    ];
+
+    it("does not let a partial average take the best-trial slot", () => {
+      expect(selectBestCandidate(partialLeaderRun())?.candidateId).toBe(
+        "cand-a",
+      );
+    });
+
+    it("does not prune the finished winner against a partial average", () => {
+      const result = computeCandidateStatuses(partialLeaderRun(), true, true);
+      // Without the completion filter cand-b's 0.95 became bestScore and
+      // cand-a's real 0.60 was pruned against it.
+      expect(result.get("cand-a")).toBe("passed");
+      expect(result.get("cand-b")).toBe("evaluating");
+    });
+
+    it("falls back to the unfiltered set when nothing has completed", () => {
+      // No baseline → expectedItemCount 0 → every candidate stays eligible,
+      // preserving the previous behaviour rather than losing the best marker.
+      const candidates = [
+        makeCandidate({
+          candidateId: "x",
+          stepIndex: 1,
+          score: 0.4,
+          totalDatasetItemCount: 4,
+        }),
+        makeCandidate({
+          candidateId: "y",
+          stepIndex: 1,
+          score: 0.7,
+          totalDatasetItemCount: 6,
+        }),
+      ];
+      expect(selectBestCandidate(candidates)?.candidateId).toBe("y");
+    });
+
+    it("still picks the earliest candidate on a tie", () => {
+      const candidates = [
+        makeCandidate({
+          candidateId: "baseline",
+          stepIndex: 0,
+          score: 0.5,
+          totalDatasetItemCount: 10,
+        }),
+        makeCandidate({
+          candidateId: "late",
+          stepIndex: 1,
+          score: 0.8,
+          totalDatasetItemCount: 10,
+          created_at: "2025-01-03T00:00:00Z",
+        }),
+        makeCandidate({
+          candidateId: "early",
+          stepIndex: 1,
+          score: 0.8,
+          totalDatasetItemCount: 10,
+          created_at: "2025-01-02T00:00:00Z",
+        }),
+      ];
+      expect(selectBestCandidate(candidates)?.candidateId).toBe("early");
+    });
+
+    it("returns undefined when no candidate has a score", () => {
+      expect(
+        selectBestCandidate([
+          makeCandidate({ candidateId: "a", stepIndex: 0 }),
+        ]),
+      ).toBeUndefined();
+    });
+  });
+
   describe("completed test suite", () => {
     it("should mark candidate with descendants as passed", () => {
       const candidates = [
@@ -411,16 +711,138 @@ describe("buildCandidateChartData", () => {
     const data = buildCandidateChartData(candidates);
     expect(data[0].status).toBe("baseline");
   });
+
+  it("should carry the trial number through to the data point", () => {
+    const candidates = [
+      makeCandidate({
+        candidateId: "a",
+        stepIndex: 0,
+        score: 0.5,
+        trialNumber: 7,
+      }),
+    ];
+    expect(buildCandidateChartData(candidates)[0].trialNumber).toBe(7);
+  });
 });
 
-describe("getTrialStatusLabel", () => {
-  it("labels baseline without a step suffix", () => {
-    expect(getTrialStatusLabel("baseline", 0)).toBe("Baseline");
+// OPIK-7589: the axis is positioned by step but labelled by trial number, the
+// identity the trials table / sidebar / cards use. A "Step 3" tick under a
+// "Trial #4" card read as an off-by-one bug. The baseline is not a trial —
+// it carries no number (null), so candidates count 1..N and the last trial
+// number matches the configured max_trials.
+describe("buildStepTickLabels", () => {
+  it("labels step 0 Baseline and single-trial steps by their trial number", () => {
+    const labels = buildStepTickLabels([
+      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+      makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
+      makePoint({ candidateId: "t2", stepIndex: 2, trialNumber: 2 }),
+    ]);
+    expect(labels.get(0)).toBe("Baseline");
+    expect(labels.get(1)).toBe("Trial 1");
+    expect(labels.get(2)).toBe("Trial 2");
   });
 
-  it("labels passed and pruned trials with their step", () => {
-    expect(getTrialStatusLabel("passed", 1)).toBe("Passed step 1");
-    expect(getTrialStatusLabel("pruned", 2)).toBe("Discarded in step 2");
+  it("labels the unnumbered baseline's step even when it is the only dot", () => {
+    const labels = buildStepTickLabels([
+      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+    ]);
+    expect(labels.get(0)).toBe("Baseline");
+  });
+
+  it("labels the third candidate Trial 3, agreeing with its card", () => {
+    // Rodrigo's OPIK-7589 screenshot: with the baseline counted as Trial #1
+    // the dot on the third candidate step said "Step 3" on the axis and
+    // "Trial #4" in the card. Axis and card must both say 3 now.
+    const third = makeCandidate({
+      candidateId: "t3",
+      stepIndex: 3,
+      score: 0.5,
+      trialNumber: 3,
+    });
+    const labels = buildStepTickLabels([
+      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+      makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
+      makePoint({ candidateId: "t2", stepIndex: 2, trialNumber: 2 }),
+      makePoint({ candidateId: "t3", stepIndex: 3, trialNumber: 3 }),
+    ]);
+    expect(labels.get(3)).toBe("Trial 3");
+    expect(
+      buildTrialCardModel({ candidate: third, status: "passed" }).title,
+    ).toBe("Trial #3");
+  });
+
+  it("labels a fan-out step with the range of its trials", () => {
+    const labels = buildStepTickLabels([
+      makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+      makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
+      makePoint({ candidateId: "t2", stepIndex: 1, trialNumber: 2 }),
+      makePoint({ candidateId: "t3", stepIndex: 1, trialNumber: 3 }),
+    ]);
+    expect(labels.get(1)).toBe("Trials 1–3");
+  });
+
+  // The real caller always plots the evaluating candidate: buildCandidateChartData
+  // maps every candidate (scored or not) and inProgressInfo is derived from that
+  // same list. So the ghost's step is numbered from its own trialNumber, and must
+  // not additionally be counted as "one more trial".
+  it("uses the evaluating candidate's own number for its tick", () => {
+    const labels = buildStepTickLabels(
+      [
+        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+        makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
+        makePoint({ candidateId: "t2", stepIndex: 2, trialNumber: 2 }),
+        // Evaluating: plotted with no value, but already numbered.
+        makePoint({
+          candidateId: "t3",
+          stepIndex: 3,
+          trialNumber: 3,
+          value: null,
+        }),
+      ],
+      3,
+    );
+    expect(labels.get(3)).toBe("Trial 3");
+  });
+
+  it("keeps a fan-out step's range exact while one of its trials evaluates", () => {
+    const labels = buildStepTickLabels(
+      [
+        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+        makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
+        makePoint({ candidateId: "t2", stepIndex: 1, trialNumber: 2 }),
+        makePoint({
+          candidateId: "t3",
+          stepIndex: 1,
+          trialNumber: 3,
+          value: null,
+        }),
+      ],
+      1,
+    );
+    expect(labels.get(1)).toBe("Trials 1–3");
+  });
+
+  it("synthesises a number only for a ghost step with no numbered trial", () => {
+    const labels = buildStepTickLabels(
+      [
+        makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null }),
+        makePoint({ candidateId: "t1", stepIndex: 1, trialNumber: 1 }),
+      ],
+      2,
+    );
+    expect(labels.get(2)).toBe("Trial 2");
+  });
+
+  it("numbers a ghost evaluating right after the baseline Trial 1", () => {
+    const labels = buildStepTickLabels(
+      [makePoint({ candidateId: "base", stepIndex: 0, trialNumber: null })],
+      1,
+    );
+    expect(labels.get(1)).toBe("Trial 1");
+  });
+
+  it("labels a ghost-only chart Trial 1", () => {
+    expect(buildStepTickLabels([], 1).get(1)).toBe("Trial 1");
   });
 });
 
@@ -447,17 +869,53 @@ describe("getTrialDotColor", () => {
     ).toBe(TRIAL_STATUS_COLORS.pruned);
   });
 
-  it("collapses dataset runs to discarded vs passed", () => {
+  it("collapses dataset-run outcomes to discarded vs passed", () => {
     expect(
       getTrialDotColor({ status: "pruned", isBest: false, isTestSuite: false }),
     ).toBe(TRIAL_STATUS_COLORS.pruned);
+    expect(
+      getTrialDotColor({ status: "passed", isBest: false, isTestSuite: false }),
+    ).toBe(TRIAL_STATUS_COLORS.passed);
+    expect(
+      getTrialDotColor({
+        status: "baseline",
+        isBest: false,
+        isTestSuite: false,
+      }),
+    ).toBe(TRIAL_STATUS_COLORS.passed);
+  });
+
+  // OPIK-7460: an in-progress trial is not an outcome. Collapsing it into the
+  // solid "passed" fuchsia made the chart assert a pass for the very trial the
+  // trials table labelled "Evaluating".
+  it("keeps in-progress trials out of the passed colour on dataset runs", () => {
     expect(
       getTrialDotColor({
         status: "evaluating",
         isBest: false,
         isTestSuite: false,
       }),
-    ).toBe(TRIAL_STATUS_COLORS.passed);
+    ).toBe(TRIAL_STATUS_COLORS.evaluating);
+    expect(
+      getTrialDotColor({
+        status: "running",
+        isBest: false,
+        isTestSuite: false,
+      }),
+    ).toBe(TRIAL_STATUS_COLORS.running);
+    // Neither may equal the passed colour, or the chart claims a result.
+    expect(TRIAL_STATUS_COLORS.evaluating).not.toBe(TRIAL_STATUS_COLORS.passed);
+    expect(TRIAL_STATUS_COLORS.running).not.toBe(TRIAL_STATUS_COLORS.passed);
+  });
+
+  it("still lets the best trial win over an in-progress status", () => {
+    expect(
+      getTrialDotColor({
+        status: "evaluating",
+        isBest: true,
+        isTestSuite: false,
+      }),
+    ).toBe(TRIAL_BEST_COLOR);
   });
 
   it("keeps a failed trial red on dataset runs (never collapsed to passed)", () => {
@@ -476,10 +934,6 @@ describe("failed trial-status maps", () => {
     expect(STATUS_VARIANT_MAP.failed).toBe("red");
     expect(TRIAL_STATUS_COLORS.failed).toBe("var(--color-red)");
     expect(TRIAL_STATUS_ORDER).toContain("failed");
-  });
-
-  it("gives the failed trial a stepped tooltip label", () => {
-    expect(getTrialStatusLabel("failed", 2)).toBe("Failed step 2");
   });
 });
 
@@ -589,11 +1043,12 @@ describe("buildTrialCardModel", () => {
     const model = buildTrialCardModel({
       candidate,
       status: "passed",
-      stepIndex: 3,
     });
 
     expect(model.title).toBe("Trial #20");
-    expect(model.statusLabel).toBe("Passed step 3");
+    // No step reference — trial numbers are the chart's one user-facing
+    // numbering (OPIK-7589).
+    expect(model.statusLabel).toBe("Passed");
     expect(model.dotColor).toBe(TRIAL_STATUS_COLORS.passed);
     expect(model.dotRingColor).toBeUndefined();
     expect(model.rows.map((r) => r.label)).toEqual([
@@ -601,6 +1056,23 @@ describe("buildTrialCardModel", () => {
       "Latency",
       "Runtime cost",
     ]);
+  });
+
+  it("titles the unnumbered baseline card Baseline, not Trial #N", () => {
+    const candidate = makeCandidate({
+      candidateId: "base",
+      stepIndex: 0,
+      trialNumber: null,
+      score: 0.4,
+    });
+
+    const model = buildTrialCardModel({
+      candidate,
+      status: "baseline",
+    });
+
+    expect(model.title).toBe("Baseline");
+    expect(model.statusLabel).toBe("Baseline");
   });
 
   it("labels and colours the best trial, with a ring around the dot", () => {
@@ -613,7 +1085,6 @@ describe("buildTrialCardModel", () => {
     const model = buildTrialCardModel({
       candidate,
       status: "passed",
-      stepIndex: 5,
       isBest: true,
     });
 
@@ -634,7 +1105,6 @@ describe("buildTrialCardModel", () => {
     const model = buildTrialCardModel({
       candidate,
       status: "passed",
-      stepIndex: 1,
       isTestSuite: true,
     });
 
@@ -655,12 +1125,11 @@ describe("buildTrialCardModel", () => {
     const model = buildTrialCardModel({
       candidate,
       status: "pruned",
-      stepIndex: 2,
     });
 
     expect(model.rows).toHaveLength(1);
     expect(model.rows[0]).toEqual({ label: "Score", value: "-" });
-    expect(model.statusLabel).toBe("Discarded in step 2");
+    expect(model.statusLabel).toBe("Discarded");
   });
 });
 
@@ -694,5 +1163,65 @@ describe("findNearestDot", () => {
       ["over", { cx: 0, cy: 0 }],
     ];
     expect(findNearestDot(tie, 0, 0, 22)?.candidateId).toBe("over");
+  });
+});
+
+describe("buildTrialLegendItems", () => {
+  const points = (...statuses: CandidateDataPoint["status"][]) =>
+    statuses.map((status, i) =>
+      makePoint({ candidateId: `c${i}`, stepIndex: i, status }),
+    );
+
+  it("mirrors the status order for test-suite runs, listing only what is plotted", () => {
+    const items = buildTrialLegendItems(points("baseline", "pruned"), true);
+    expect(items.map((i) => i.label)).toEqual(["Baseline", "Discarded"]);
+  });
+
+  it("always lists both outcomes on a dataset run", () => {
+    const items = buildTrialLegendItems(points("passed", "pruned"), false);
+    expect(items.map((i) => i.label)).toEqual([
+      "Passed trial",
+      "Discarded trial",
+    ]);
+  });
+
+  it("adds an Evaluating entry once such a trial is on the chart", () => {
+    const items = buildTrialLegendItems(points("passed", "evaluating"), false);
+    expect(items.map((i) => i.label)).toContain("Evaluating trial");
+    expect(items.find((i) => i.label === "Evaluating trial")?.color).toBe(
+      TRIAL_STATUS_COLORS.evaluating,
+    );
+  });
+
+  // getTrialDotColor keeps a failed trial red on dataset runs, so the legend
+  // has to explain that colour too — it did not before (OPIK-7460).
+  it("adds a Failed entry so the red dot is not unlabelled", () => {
+    const items = buildTrialLegendItems(points("passed", "failed"), false);
+    expect(items.map((i) => i.label)).toContain("Failed trial");
+    expect(items.find((i) => i.label === "Failed trial")?.color).toBe(
+      TRIAL_STATUS_COLORS.failed,
+    );
+  });
+
+  it("every dataset-run colour the chart can paint has a legend entry", () => {
+    const all = points(
+      "baseline",
+      "passed",
+      "pruned",
+      "evaluating",
+      "running",
+      "failed",
+    );
+    const legendColors = new Set(
+      buildTrialLegendItems(all, false).map((i) => i.color),
+    );
+    for (const p of all) {
+      const dot = getTrialDotColor({
+        status: p.status,
+        isBest: false,
+        isTestSuite: false,
+      });
+      expect(legendColors.has(dot)).toBe(true);
+    }
   });
 });

@@ -14,6 +14,7 @@ import { Switch } from "@/ui/switch";
 import { PROVIDERS } from "@/constants/providers";
 import { PROVIDER_TYPE } from "@/types/providers";
 import CustomHeadersField from "./CustomHeadersField";
+import AuthConfigSection from "./AuthConfigSection";
 
 type CustomProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
@@ -95,50 +96,6 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
 
       <FormField
         control={form.control}
-        name="apiKey"
-        render={({ field, formState }) => {
-          const validationErrors = get(formState.errors, ["apiKey"]);
-
-          return (
-            <FormItem>
-              <Label htmlFor="apiKey">API key</Label>
-              <FormControl>
-                <EyeInput
-                  id="apiKey"
-                  placeholder="API key"
-                  value={field.value}
-                  onChange={(e) => field.onChange(e.target.value)}
-                  className={cn({
-                    "border-destructive": Boolean(validationErrors?.message),
-                  })}
-                />
-              </FormControl>
-              <FormMessage />
-              <Description>
-                Custom providers may not require an API key, depending on your
-                server setup. Learn more in the{" "}
-                <Button
-                  variant="link"
-                  size="sm"
-                  asChild
-                  className="inline px-0"
-                >
-                  <a
-                    href={buildDocsUrl("/development/playground")}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    documentation
-                  </a>
-                </Button>
-                .
-              </Description>
-            </FormItem>
-          );
-        }}
-      />
-      <FormField
-        control={form.control}
         name="models"
         render={({ field, formState }) => {
           const validationErrors = get(formState.errors, ["models"]);
@@ -179,60 +136,118 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
         description="Appended to every outgoing request URL. Some gateways require a version parameter such as api-version=2024-08-01-preview."
       />
 
-      <FormField
-        control={form.control}
-        name="authHeaderName"
-        render={({ field, formState }) => {
-          const validationErrors = get(formState.errors, ["authHeaderName"]);
+      <AuthConfigSection
+        form={form}
+        staticModeFields={
+          <>
+            <FormField
+              control={form.control}
+              name="apiKey"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, ["apiKey"]);
 
-          return (
-            <FormItem>
-              <Label htmlFor="authHeaderName">
-                Auth header name (optional)
-              </Label>
-              <FormControl>
-                <Input
-                  id="authHeaderName"
-                  placeholder="api-key"
-                  value={field.value ?? ""}
-                  onChange={(e) => field.onChange(e.target.value)}
-                  className={cn({
-                    "border-destructive": Boolean(validationErrors?.message),
-                  })}
-                />
-              </FormControl>
-              <FormMessage />
-              <Description>
-                If set, the API key is sent as <code>{"{name}: <key>"}</code> in
-                addition to the default <code>Authorization: Bearer</code>{" "}
-                header.
-              </Description>
-            </FormItem>
-          );
-        }}
-      />
+                return (
+                  <FormItem>
+                    <Label htmlFor="apiKey">API key</Label>
+                    <FormControl>
+                      <EyeInput
+                        id="apiKey"
+                        placeholder="API key"
+                        value={field.value}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        className={cn({
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                    <Description>
+                      Custom providers may not require an API key, depending on
+                      your server setup. Learn more in the{" "}
+                      <Button
+                        variant="link"
+                        size="sm"
+                        asChild
+                        className="inline px-0"
+                      >
+                        <a
+                          href={buildDocsUrl("/development/playground")}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          documentation
+                        </a>
+                      </Button>
+                      .
+                    </Description>
+                  </FormItem>
+                );
+              }}
+            />
 
-      <FormField
-        control={form.control}
-        name="suppressDefaultAuth"
-        render={({ field }) => (
-          <FormItem>
-            <div className="flex items-center gap-3">
-              <Switch
-                id="suppressDefaultAuth"
-                checked={Boolean(field.value)}
-                onCheckedChange={field.onChange}
-              />
-              <Label htmlFor="suppressDefaultAuth">
-                Suppress default Authorization header
-              </Label>
-            </div>
-            <Description>
-              Turn on only if your gateway rejects requests that include{" "}
-              <code>Authorization: Bearer</code>.
-            </Description>
-          </FormItem>
-        )}
+            <FormField
+              control={form.control}
+              name="authHeaderName"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, [
+                  "authHeaderName",
+                ]);
+
+                return (
+                  <FormItem>
+                    <Label htmlFor="authHeaderName">
+                      Auth header name (optional)
+                    </Label>
+                    <FormControl>
+                      <Input
+                        id="authHeaderName"
+                        placeholder="api-key"
+                        value={field.value ?? ""}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        className={cn({
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                    <Description>
+                      If set, the API key is sent as{" "}
+                      <code>{"{name}: <key>"}</code> in addition to the default{" "}
+                      <code>Authorization: Bearer</code> header.
+                    </Description>
+                  </FormItem>
+                );
+              }}
+            />
+
+            <FormField
+              control={form.control}
+              name="suppressDefaultAuth"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      id="suppressDefaultAuth"
+                      checked={Boolean(field.value)}
+                      onCheckedChange={field.onChange}
+                    />
+                    <Label htmlFor="suppressDefaultAuth">
+                      Suppress default Authorization header
+                    </Label>
+                  </div>
+                  <Description>
+                    Turn on only if your gateway rejects requests that include{" "}
+                    <code>Authorization: Bearer</code>.
+                  </Description>
+                </FormItem>
+              )}
+            />
+          </>
+        }
       />
     </div>
   );

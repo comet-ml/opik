@@ -31,8 +31,12 @@ from .tools import read, registry as tool_registry, scan, search
 LOGGER = logging.getLogger(__name__)
 
 
+# Mirrors the one-shot judge: an empty provider response is transient, so it
+# retries alongside parse errors. Permanent BaseLLMError failures propagate.
 _RETRY_POLICY = tenacity.retry(
-    retry=tenacity.retry_if_exception_type(exceptions.LLMJudgeParseError),
+    retry=tenacity.retry_if_exception_type(
+        (exceptions.LLMJudgeParseError, exceptions.EmptyLLMResponseError)
+    ),
     stop=tenacity.stop_after_attempt(3),
     before_sleep=tenacity.before_sleep_log(LOGGER, logging.WARNING),
     reraise=True,

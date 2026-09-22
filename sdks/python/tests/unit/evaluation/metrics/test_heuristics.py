@@ -1,3 +1,4 @@
+import math
 import re
 
 import pytest
@@ -411,6 +412,40 @@ def test_kl_divergence_avg_direction():
     assert result.value >= 0.0
 
 
+@pytest.mark.parametrize(
+    "direction,output,reference,missing_token",
+    [
+        ("pq", "cat dog", "cat", "dog"),
+        ("qp", "cat", "cat dog", "dog"),
+        ("avg", "cat dog", "cat bird", "dog"),
+    ],
+)
+def test_kl_divergence__zero_smoothing_and_missing_token__raises_metric_error(
+    direction, output, reference, missing_token
+):
+    metric = KLDivergence(direction=direction, smoothing=0.0, track=False)
+
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score(output=output, reference=reference)
+
+    assert (
+        str(exc_info.value)
+        == f"Token '{missing_token}' is absent from the other text, so the KL "
+        "divergence is infinite with smoothing=0.0. Pass a positive smoothing "
+        "value (KL divergence metric)."
+    )
+
+
+def test_kl_divergence__zero_smoothing_and_shared_support__computes_exact_value():
+    metric = KLDivergence(direction="pq", smoothing=0.0, track=False)
+
+    result = metric.score(output="cat cat dog", reference="cat dog dog")
+
+    # p = {cat: 2/3, dog: 1/3}, q = {cat: 1/3, dog: 2/3}
+    expected = (2 / 3) * math.log(2) + (1 / 3) * math.log(0.5)
+    assert result.value == pytest.approx(expected)
+
+
 def test_meteor_metric_with_custom_fn():
     captured = []
 
@@ -531,6 +566,25 @@ def test_spearman_ranking_metric():
 
     assert result.metadata["rho"] == pytest.approx(0.5)
     assert result.value == pytest.approx((0.5 + 1) / 2)
+
+
+@pytest.mark.parametrize(
+    "output,reference",
+    [
+        # Each case has equal-length, equal-set output/reference despite
+        # the repeats, so before this fix they reached the correlation
+        # formula and returned a score (0.625, 0.875, and -0.125) instead
+        # of raising.
+        (["a", "b", "a"], ["a", "a", "b"]),
+        (["a", "a", "b"], ["a", "b", "b"]),
+        # This one drove rho to -1.25, outside the documented [-1, 1] range.
+        (["a", "a", "b"], ["b", "a", "a"]),
+    ],
+)
+def test_spearman_ranking_rejects_duplicate_items(output, reference):
+    metric = SpearmanRanking(track=False)
+    with pytest.raises(MetricComputationError):
+        metric.score(output=output, reference=reference)
 
 
 def test_vader_sentiment_metric_uses_custom_analyzer():

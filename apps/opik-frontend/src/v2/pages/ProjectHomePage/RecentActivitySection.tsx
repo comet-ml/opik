@@ -1,4 +1,4 @@
-import { Link, useParams } from "@tanstack/react-router";
+import { Link, LinkProps, useParams } from "@tanstack/react-router";
 import {
   FlaskConical,
   Database,
@@ -17,11 +17,18 @@ import { Skeleton } from "@/ui/skeleton";
 import useRecentActivity from "@/api/projects/useRecentActivity";
 import { ActivityType, RecentActivityItem } from "@/types/recent-activity";
 
+type LinkParams = { workspaceName: string; projectId: string };
+
+// The workspace and project are passed as router params rather than
+// concatenated into `to`. TanStack strips the router basepath from `to` with an
+// unbounded `pathname.replace(basepath, "")` (no boundary), so a literal
+// `to: "/opik-testing/..."` under basepath `/opik` gets mangled to
+// `/opik/-testing/...`. Deferring substitution to params runs after the strip.
 type ActivityConfigEntry = {
   label: string | ((item: RecentActivityItem) => string);
   icon: LucideIcon;
   color: string;
-  getLink: (item: RecentActivityItem, base: string) => string;
+  getLink: (item: RecentActivityItem, params: LinkParams) => LinkProps;
 };
 
 const ACTIVITY_CONFIG: Record<ActivityType, ActivityConfigEntry> = {
@@ -32,44 +39,66 @@ const ACTIVITY_CONFIG: Record<ActivityType, ActivityConfigEntry> = {
       )}`,
     icon: ListTree,
     color: "text-chart-teal",
-    getLink: (_item, base) => `${base}/logs?logsType=traces`,
+    getLink: (_item, params) => ({
+      to: "/$workspaceName/projects/$projectId/logs",
+      params,
+      search: { logsType: "traces" },
+    }),
   },
   [ActivityType.OPTIMIZATION]: {
     label: "Optimization run created",
     icon: Sparkles,
     color: "text-chart-burgundy",
-    getLink: (item, base) => `${base}/optimizations/${item.id}`,
+    getLink: (item, params) => ({
+      to: "/$workspaceName/projects/$projectId/optimizations/$optimizationId",
+      params: { ...params, optimizationId: item.id },
+    }),
   },
   [ActivityType.EXPERIMENT]: {
     label: "Experiment created",
     icon: FlaskConical,
     color: "text-chart-green",
-    getLink: (item, base) =>
-      `${base}/experiments/${item.resource_id}/compare?experiments=["${item.id}"]`,
+    getLink: (item, params) => ({
+      to: "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
+      params: { ...params, datasetId: item.resource_id },
+      search: { experiments: [item.id] },
+    }),
   },
   [ActivityType.DATASET_VERSION]: {
     label: "Dataset updated",
     icon: Database,
     color: "text-chart-purple",
-    getLink: (item, base) => `${base}/datasets/${item.id}/items`,
+    getLink: (item, params) => ({
+      to: "/$workspaceName/projects/$projectId/datasets/$datasetId/items",
+      params: { ...params, datasetId: item.id },
+    }),
   },
   [ActivityType.TEST_SUITE_VERSION]: {
     label: "Test suite updated",
     icon: ListChecks,
     color: "text-chart-purple",
-    getLink: (item, base) => `${base}/test-suites/${item.id}/items`,
+    getLink: (item, params) => ({
+      to: "/$workspaceName/projects/$projectId/test-suites/$suiteId/items",
+      params: { ...params, suiteId: item.id },
+    }),
   },
   [ActivityType.PROMPT_VERSION]: {
     label: "Prompt created",
     icon: FileTerminal,
     color: "text-chart-blue",
-    getLink: (item, base) => `${base}/prompts/${item.id}`,
+    getLink: (item, params) => ({
+      to: "/$workspaceName/projects/$projectId/prompts/$promptId",
+      params: { ...params, promptId: item.id },
+    }),
   },
   [ActivityType.ALERT_EVENT]: {
     label: "Alert triggered",
     icon: AlertTriangle,
     color: "text-chart-red",
-    getLink: (item, base) => `${base}/alerts/${item.id}`,
+    getLink: (item, params) => ({
+      to: "/$workspaceName/projects/$projectId/alerts/$alertId",
+      params: { ...params, alertId: item.id },
+    }),
   },
 };
 
@@ -81,11 +110,10 @@ function ActivityItem({ item }: { item: RecentActivityItem }) {
 
   const config = ACTIVITY_CONFIG[item.type];
   const Icon = config.icon;
-  const base = `/${workspaceName}/projects/${projectId}`;
 
   return (
     <Link
-      to={config.getLink(item, base)}
+      {...config.getLink(item, { workspaceName, projectId })}
       className="group flex w-full items-center gap-3 rounded-md border px-3 py-2 text-left hover:border-primary hover:bg-primary/5"
     >
       <Icon className={`size-4 shrink-0 ${config.color}`} />

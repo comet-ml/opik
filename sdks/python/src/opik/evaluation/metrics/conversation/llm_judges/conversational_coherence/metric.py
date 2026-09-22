@@ -31,9 +31,23 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
     the final `assistant` message within each window is relevant and coherent in
     relation to the preceding conversational context.
 
+    Only windows that end with an `assistant` message are graded: a window whose last
+    message is from the `user` has no answer to assess, so it neither costs a model
+    call nor counts towards the score. A conversation with no assistant reply at all
+    therefore has nothing to grade, and raises rather than scoring it as incoherent.
+
     It supports both synchronous and asynchronous operations to
     accommodate the model's operation type. It returns a score between `0.0` and `1.0`,
     where `0.0` indicates a low coherence score and `1.0` indicates a high coherence score.
+
+    The metric is **context aware**: when an agent message carries the documents it was
+    generated from - the ``context`` key, populated by the ``trace_context_transform``
+    argument of :func:`opik.evaluation.evaluate_threads` - those documents are rendered
+    next to that message, so the judge sees each answer alongside what the agent had
+    available when it wrote it. What the metric measures does not change: every window
+    is still judged on whether its final `assistant` message is relevant to the turns
+    preceding it, and a window in which no message carries documents is evaluated with
+    the original prompt, unchanged.
 
     Args:
         model: The model to use for
@@ -129,15 +143,15 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
-            turns_windows = (
+            windows_to_grade = _windows_to_grade(
                 conversation_helpers.extract_turns_windows_from_conversation(
                     conversation=conversation, window_size=self._window_size
                 )
             )
 
             verdicts = [
-                self._evaluate_conversation(conversation_sliding_window=window)
-                for window in turns_windows
+                self._evaluate_window(conversation_sliding_window=window)
+                for window in windows_to_grade
             ]
 
             score = _score_from_verdicts(verdicts=verdicts)
@@ -146,11 +160,7 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
                 if self._include_reason
                 else None
             )
-            return score_result.ScoreResult(
-                name=self.name,
-                value=score,
-                reason=reason,
-            )
+            return score_result.ScoreResult(name=self.name, value=score, reason=reason)
         except Exception as e:
             LOGGER.error(f"Failed to calculate conversational coherence score: {e}")
             raise exceptions.MetricComputationError(
@@ -162,17 +172,19 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         conversation: conversation_types.Conversation,
     ) -> score_result.ScoreResult:
         try:
-            turns_windows = (
+            windows_to_grade = _windows_to_grade(
                 conversation_helpers.extract_turns_windows_from_conversation(
                     conversation=conversation, window_size=self._window_size
                 )
             )
 
-            verdicts = await asyncio.gather(
-                *[
-                    self._a_evaluate_conversation(conversation_sliding_window=window)
-                    for window in turns_windows
-                ]
+            verdicts = list(
+                await asyncio.gather(
+                    *[
+                        self._a_evaluate_window(conversation_sliding_window=window)
+                        for window in windows_to_grade
+                    ]
+                )
             )
 
             score = _score_from_verdicts(verdicts=verdicts)
@@ -181,16 +193,34 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
                 if self._include_reason
                 else None
             )
-            return score_result.ScoreResult(
-                name=self.name,
-                value=score,
-                reason=reason,
-            )
+            return score_result.ScoreResult(name=self.name, value=score, reason=reason)
         except Exception as e:
             LOGGER.error(f"Failed to calculate conversational coherence score: {e}")
             raise exceptions.MetricComputationError(
                 f"Failed to calculate conversational coherence score: {e}"
             )
+
+    def _evaluate_window(
+        self, conversation_sliding_window: conversation_types.Conversation
+    ) -> schema.EvaluateConversationCoherenceResponse:
+        if not _has_retrieved_documents(conversation_sliding_window):
+            return self._evaluate_conversation(
+                conversation_sliding_window=conversation_sliding_window
+            )
+        return self._evaluate_conversation_with_documents(
+            conversation_sliding_window=conversation_sliding_window
+        )
+
+    async def _a_evaluate_window(
+        self, conversation_sliding_window: conversation_types.Conversation
+    ) -> schema.EvaluateConversationCoherenceResponse:
+        if not _has_retrieved_documents(conversation_sliding_window):
+            return await self._a_evaluate_conversation(
+                conversation_sliding_window=conversation_sliding_window
+            )
+        return await self._a_evaluate_conversation_with_documents(
+            conversation_sliding_window=conversation_sliding_window
+        )
 
     def _reason_from_verdicts(
         self, score: float, verdicts: List[schema.EvaluateConversationCoherenceResponse]
@@ -246,6 +276,32 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         )
         return _evaluate_conversation_from_model_output(model_output=message["content"])
 
+    def _evaluate_conversation_with_documents(
+        self,
+        conversation_sliding_window: conversation_types.Conversation,
+    ) -> schema.EvaluateConversationCoherenceResponse:
+        messages = templates.build_evaluate_conversation_with_documents_messages(
+            sliding_window=conversation_sliding_window
+        )
+        message = self._model.generate_chat_completion(
+            messages=messages,
+            response_format=schema.EvaluateConversationCoherenceResponse,
+        )
+        return _evaluate_conversation_from_model_output(model_output=message["content"])
+
+    async def _a_evaluate_conversation_with_documents(
+        self,
+        conversation_sliding_window: conversation_types.Conversation,
+    ) -> schema.EvaluateConversationCoherenceResponse:
+        messages = templates.build_evaluate_conversation_with_documents_messages(
+            sliding_window=conversation_sliding_window
+        )
+        message = await self._model.agenerate_chat_completion(
+            messages=messages,
+            response_format=schema.EvaluateConversationCoherenceResponse,
+        )
+        return _evaluate_conversation_from_model_output(model_output=message["content"])
+
 
 def _generate_reason_from_model_output(model_output: str) -> str:
     try:
@@ -286,8 +342,29 @@ def _evaluate_conversation_from_model_output(
 def _score_from_verdicts(
     verdicts: List[schema.EvaluateConversationCoherenceResponse],
 ) -> float:
-    if len(verdicts) == 0:
-        return 0.0
-
     relevant_count = sum(v.verdict.strip().lower() != "no" for v in verdicts)
     return relevant_count / len(verdicts)
+
+
+def _windows_to_grade(
+    turns_windows: List[conversation_types.Conversation],
+) -> List[conversation_types.Conversation]:
+    """Keeps only the windows that end with an assistant reply.
+
+    The judge is asked whether the last `assistant` message of a window is relevant to
+    the turns preceding it. A window that ends with a `user` message - a thread that
+    was never answered, or a user message no assistant message answered - has no such
+    message, so grading it would score the user's own words as the agent's answer and
+    would count as a window in the denominator of the score.
+    """
+    graded = [window for window in turns_windows if window[-1]["role"] == "assistant"]
+    if not graded:
+        raise ValueError("Conversation contains no assistant messages")
+    return graded
+
+
+def _has_retrieved_documents(
+    conversation_sliding_window: conversation_types.Conversation,
+) -> bool:
+    """Whether any message in the window carries the documents it was generated from."""
+    return any(message.get("context") for message in conversation_sliding_window)

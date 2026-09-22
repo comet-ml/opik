@@ -40,6 +40,7 @@ from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import FeedbackScoreDict, SpanType
 
 from . import experiment_service
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -335,6 +336,7 @@ def track_harbor(
         >>> tracked_job = track_harbor(job)
         >>> result = await tracked_job.run()
     """
+    analytics.track_event("integration", "harbor")
     _enable_harbor_tracking(project_name=project_name)
     return job
 

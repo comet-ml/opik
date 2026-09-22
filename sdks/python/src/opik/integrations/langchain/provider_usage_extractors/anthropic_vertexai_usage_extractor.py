@@ -2,7 +2,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import opik
-from opik import llm_usage
+from opik import llm_usage, logging_messages, _logging as opik_logging
 from . import provider_usage_extractor_protocol
 from . import langchain_run_helpers
 
@@ -22,7 +22,9 @@ class AnthropicVertexAIUsageExtractor(
             if run_dict.get("serialized") is None:
                 return False
 
-            invocation_params = run_dict["extra"].get("invocation_params", {})
+            invocation_params = (run_dict.get("extra") or {}).get("invocation_params")
+            if not isinstance(invocation_params, dict):
+                return False
             provider = invocation_params.get("_type", "").lower()
             is_anthropic_vertexai = (
                 "vertexai" in provider.lower() and "anthropic" in provider.lower()
@@ -49,6 +51,14 @@ class AnthropicVertexAIUsageExtractor(
 def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
     try:
         langchain_usage = langchain_run_helpers.try_get_token_usage(run_dict)
+        if langchain_usage is None:
+            opik_logging.log_once_at_level(
+                logging_level=logging.WARNING,
+                message=logging_messages.WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE,
+                logger=LOGGER,
+            )
+            return None
+
         anthropic_usage_dict = langchain_usage.map_to_anthropic_usage()
 
         opik_usage = llm_usage.OpikUsage.from_anthropic_dict(anthropic_usage_dict)
@@ -62,6 +72,6 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
 
 
 def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
-    if invocation_params := run_dict["extra"].get("invocation_params"):
+    if invocation_params := (run_dict.get("extra") or {}).get("invocation_params"):
         return invocation_params.get("model_name")
     return None

@@ -9,8 +9,27 @@ LOGGER = logging.getLogger(__name__)
 
 def _get_expected_payload_size_MB(item: T) -> float:
     encoded_for_json = jsonable_encoder.encode(item)
-    size = _get_json_size(encoded_for_json)
-    return size / (1024 * 1024)
+    return get_encoded_payload_size_MB(encoded_for_json)
+
+
+def get_encoded_payload_size_MB(encoded_for_json: Any) -> float:
+    """Size an object that has already been through ``jsonable_encoder``.
+
+    Split out so a caller that must guard the encoding step -- which ends in
+    ``str(obj)`` and so runs arbitrary caller code -- can put its ``try`` around that
+    call alone, instead of around this one too. Nothing here executes caller code, so
+    anything raising below this line is a defect in the SDK and should say so.
+    """
+    return _get_json_size(encoded_for_json) / (1024 * 1024)
+
+
+def get_payload_size_MB(item: T) -> float:
+    """Estimate the JSON-serialized size of ``item`` in megabytes.
+
+    Public wrapper around the internal size estimator, reused by span-truncation
+    so the size measured for truncation matches the batching size estimate.
+    """
+    return _get_expected_payload_size_MB(item)
 
 
 def _get_json_size(obj: Any) -> Any:

@@ -44,36 +44,34 @@ def wrap_invoke_model_response(
             error_info = error_info_collector.collect(exception)
             raise exception
         finally:
-            if not hasattr(self, "opik_tracked_instance"):
-                return None
+            if hasattr(self, "opik_tracked_instance"):
+                delattr(self, "opik_tracked_instance")
 
-            delattr(self, "opik_tracked_instance")
-
-            if error_info is None and result is not None:
-                try:
-                    parsed_body = json.loads(result)
-                    output = {
-                        "body": parsed_body,
-                        "ResponseMetadata": response_metadata,
-                    }
-                    LOGGER.debug(
-                        "Successfully parsed response body with keys: %s",
-                        list(parsed_body.keys()),
-                    )
-                except (json.JSONDecodeError, TypeError) as e:
-                    LOGGER.debug("Failed to parse response body as JSON: %s", e)
+                if error_info is None and result is not None:
+                    try:
+                        parsed_body = json.loads(result)
+                        output = {
+                            "body": parsed_body,
+                            "ResponseMetadata": response_metadata,
+                        }
+                        LOGGER.debug(
+                            "Successfully parsed response body with keys: %s",
+                            list(parsed_body.keys()),
+                        )
+                    except (json.JSONDecodeError, TypeError) as e:
+                        LOGGER.debug("Failed to parse response body as JSON: %s", e)
+                        output = {"body": {}, "ResponseMetadata": response_metadata}
+                else:
+                    LOGGER.debug("Error occurred or result is None, using empty body")
                     output = {"body": {}, "ResponseMetadata": response_metadata}
-            else:
-                LOGGER.debug("Error occurred or result is None, using empty body")
-                output = {"body": {}, "ResponseMetadata": response_metadata}
 
-            finally_callback(
-                output=output,
-                error_info=error_info,
-                generators_span_to_end=span_to_end,
-                generators_trace_to_end=trace_to_end,
-                capture_output=True,
-            )
+                finally_callback(
+                    output=output,
+                    error_info=error_info,
+                    generators_span_to_end=span_to_end,
+                    generators_trace_to_end=trace_to_end,
+                    capture_output=True,
+                )
 
     botocore.response.StreamingBody.read = wrapped_read
     streaming_body.opik_tracked_instance = True

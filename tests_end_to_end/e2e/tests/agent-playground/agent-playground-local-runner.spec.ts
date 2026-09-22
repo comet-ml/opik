@@ -5,7 +5,7 @@ import { startEndpointRunner, type EndpointRunner } from '@e2e/core/local-runner
 
 const AGENTS_DIR = path.resolve(__dirname, '../../agents');
 
-test.describe('Agent Playground — Local Runner', { tag: ['@t3-nightly', '@agent-playground'] }, () => {
+test.describe('Agent Playground — Local Runner', { tag: ['@t3-nightly', '@area:agent-playground', '@cap:agent-playground.drive-connected-agent'] }, () => {
   test('drives a connected entrypoint agent from the Agent Playground', async ({
     project,
     scratchDir,
@@ -33,6 +33,7 @@ test.describe('Agent Playground — Local Runner', { tag: ['@t3-nightly', '@agen
           apiKey,
           cwd: scratchDir.path,
           command: ['python', path.join(scratchDir.path, 'agent.py')],
+          apiUrl: envConfig.apiBaseUrl,
           apiBaseUrl: envConfig.apiBaseUrl,
         }));
 

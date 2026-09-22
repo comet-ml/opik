@@ -1,5 +1,5 @@
 ---
-headline: Export Data | Opik Documentation
+headline: Export Data
 og:description: Export traces, spans, threads, datasets, and experiments from Opik
   using the SDK, REST API, UI, or command-line tools
 og:site_name: Opik Documentation
@@ -237,6 +237,33 @@ opik import src-workspace my-project all --to-workspace dest-workspace --to-proj
 The project name is matched against the `name` recorded in each exported `project.json`. Import uses the same `--path` as export (both resolve `<path>/<workspace>/projects/<id>/`), so no path juggling is needed. Use `--to-project <NAME>` to import into a different destination project, or `--to-workspace <NAME>` to import into a different workspace (the source `WORKSPACE` argument is still used to locate the files on disk).
 
 Imports are automatically resumable — if interrupted, re-run the same command and it picks up where it left off using a local `migration_manifest.db`.
+
+#### Imported trace and span IDs
+
+Imported traces and spans are created under **new IDs**. The same export can therefore be imported repeatedly, and into any project or workspace, without colliding with the originals — IDs are expected to be unique across an Opik deployment, and much of Opik's behaviour, aggregation included, relies on that.
+
+Nothing else about the trace changes. `start_time` and `end_time` keep their original values, span hierarchies and feedback scores are remapped onto the new IDs, and each imported trace records the ID it came from in its metadata as `_import_id`, so you can map an imported trace back to the source one. Traces are imported in the order the source project listed them, so the destination trace list and thread view keep that order.
+
+A new ID also carries the current time in its UUIDv7 prefix. That matters because Opik validates that an ingested ID's embedded timestamp falls inside an **ingestion window** around now — 24 hours by default on Opik Cloud — which is what keeps its storage layer partitioned correctly. Minting IDs at import time is what lets you import exported data of any age.
+
+One consequence is worth knowing before a large import: the time-bucketed project metrics key off the ID timestamp, so imported traces are counted at the time of the import rather than when they originally ran. The traces themselves are unaffected — `start_time` still holds the original time, and filtering or sorting on it behaves as you would expect.
+
+<Warning>
+If an import fails with an error like this one:
+
+```
+status_code: 400, body: {'code': 400, 'message': 'Invalid UUID for id',
+ 'details': "id with timestamp '2026-01-15T09:30:00.000Z' must be in the allowed
+ ingestion window of 'PT24H' around now, reason 'too_old'"}
+```
+
+you are running an older SDK, which derived the new trace ID from the exported trace's original timestamp. Check your version and upgrade:
+
+```bash
+opik --version
+pip install --upgrade opik
+```
+</Warning>
 
 ### Migrating between environments
 

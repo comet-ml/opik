@@ -1185,7 +1185,7 @@ export class PromptsClient {
     }
 
     /**
-     * Retrieve prompt version
+     * Retrieve prompt version. When project_name is supplied the lookup is scoped to that project: a prompt belonging to a different project is never matched, and an unknown project name returns 404. Legacy prompts with no project are still resolved as a deprecated fallback, signalled by the X-Opik-Deprecation response header.
      *
      * @param {OpikApi.PromptVersionRetrieveDetail} request
      * @param {PromptsClient.RequestOptions} requestOptions - Request-specific configuration.

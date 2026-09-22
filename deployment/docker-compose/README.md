@@ -51,6 +51,23 @@ docker compose --profile opik-otel up -d
 
 **Note**: Infrastructure services (databases, caches, storage etc.) always start by default, as that's the expected behaviour for services with no profile, see [Using profiles with Compose](https://docs.docker.com/compose/how-tos/profiles/). Any profile such as Backend, full Opik suite etc. always automatically include the infrastructure.
 
+## The `opik.sh` installation script
+
+Instead of running `docker compose` directly, you can use the `opik.sh` script (or `opik.ps1` on Windows) from the root of the repository. The script supports the following options:
+
+| Option         | Description                                                                             |
+| -------------- | --------------------------------------------------------------------------------------- |
+| `--infra`      | Start only the infrastructure services (MySQL, Redis, ClickHouse, ZooKeeper, MinIO etc.) |
+| `--backend`    | Start the infrastructure and backend services                                            |
+| `--guardrails` | Enable guardrails, can be combined with the other start options                          |
+| `--build`      | Build the containers from source before starting                                         |
+| `--verify`     | Check that all containers are healthy                                                    |
+| `--stop`       | Stop all containers                                                                      |
+| `--clean`      | Stop all containers and remove all Opik data volumes (WARNING: ALL OPIK DATA WILL BE LOST) |
+| `--help`       | Show all available options                                                               |
+
+Run `./opik.sh --help` to see the full list of options.
+
 ## Run `docker compose` using the images
 
 If you want to use a specific version, set Opik version like:

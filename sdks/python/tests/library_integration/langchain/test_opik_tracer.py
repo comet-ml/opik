@@ -1,56 +1,181 @@
 import copy
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 import pytest
+from langchain_core.language_models import fake, llms
+from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import tool
 from langchain_core.tracers import BaseTracer
 from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
+import opik
 from opik import exceptions
-from opik.api_objects import span as span_module, trace as trace_module
 from opik.integrations import langchain
 from opik.integrations.langchain.opik_tracer import OpikTracer
 from opik.integrations.langchain import run_parse_helpers
 
 
-def test_opik_tracer__attach_span_to_parent_span__stream_restart_root(fake_backend):
-    """When a parent run is a stream-restart root (in _span_data_map but NOT in
-    _created_traces_data_map), trace data should be propagated to the child via
-    a trace_id fallback lookup rather than raising a KeyError."""
-    tracer = OpikTracer(opik_context_read_only_mode=True)
+def test_opik_tracer__reused_across_invocations__each_call_logs_a_complete_trace(
+    fake_backend,
+):
+    """A long-lived tracer reused across invocations must log a complete, correct
+    trace for every call, with no state bleeding between runs. (The deterministic
+    proof that per-run state is released is in the RunStateStore unit tests.)"""
+    llm = fake.FakeListLLM(responses=["ok"] * 6)
+    prompt = PromptTemplate(input_variables=["n"], template="Say something about {n}.")
+    chain = prompt | llm
 
-    # Simulate an original root run that created a trace
-    trace_data = trace_module.TraceData(name="test-trace")
-    trace_id = trace_data.id
-    root_run_id = uuid4()
-    tracer._created_traces_data_map[root_run_id] = trace_data
+    tracer = OpikTracer()
 
-    # Simulate a stream-restart root: has a span with the same trace_id but is
-    # NOT in _created_traces_data_map (the scenario that previously caused a KeyError)
-    stream_restart_run_id = uuid4()
-    parent_span = span_module.SpanData(trace_id=trace_id, name="stream-restart-span")
-    tracer._span_data_map[stream_restart_run_id] = parent_span
+    for n in range(5):
+        chain.invoke({"n": str(n)}, config={"callbacks": [tracer]})
 
-    child_run_id = uuid4()
-    run_dict = {
-        "inputs": {"input": "hello"},
-        "name": "child-span",
-        "run_type": "general",
-        "extra": {},
+    tracer.flush()
+
+    assert len(fake_backend.trace_trees) == 5
+    assert len(tracer.created_traces()) == 5
+
+    # Each invocation is logged as its own complete trace - inputs are not shared
+    # or overwritten across runs, and every trace keeps its full span structure.
+    assert {tree.input["n"] for tree in fake_backend.trace_trees} == {
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
     }
+    for trace_tree in fake_backend.trace_trees:
+        assert trace_tree.name == "RunnableSequence"
+        assert trace_tree.output is not None
+        assert trace_tree.end_time is not None
+        assert {span.name for span in trace_tree.spans} == {
+            "PromptTemplate",
+            "FakeListLLM",
+        }
 
-    # Should not raise KeyError
-    tracer._attach_span_to_parent_span(
-        run_id=child_run_id,
-        parent_run_id=stream_restart_run_id,
-        run_dict=run_dict,
-    )
 
-    # Child should inherit the trace data via trace_id fallback lookup
-    assert child_run_id in tracer._created_traces_data_map
-    assert tracer._created_traces_data_map[child_run_id] is trace_data
+def test_opik_tracer__nested_under_tracked_function__spans_logged(fake_backend):
+    """When the tracer runs under an externally created trace/span (an @track
+    function), the LangChain root run is a real span whose own end callback fires
+    after _persist_run. Its state must be released only after that span's output
+    has been recorded, so the nested spans are logged intact on every invocation."""
+    llm = fake.FakeListLLM(responses=["ok"] * 6)
+    prompt = PromptTemplate(input_variables=["n"], template="Say something about {n}.")
+    chain = prompt | llm
+
+    tracer = OpikTracer()
+
+    @opik.track
+    def run_chain(n: int) -> str:
+        chain.invoke({"n": str(n)}, config={"callbacks": [tracer]})
+        return "done"
+
+    for n in range(3):
+        run_chain(n)
+
+    opik.flush_tracker()
+
+    # The chain's spans were attached to each tracked-function trace, not dropped.
+    assert len(fake_backend.trace_trees) == 3
+    for trace_tree in fake_backend.trace_trees:
+        chain_span = trace_tree.spans[0].spans[0]
+        assert chain_span.name == "RunnableSequence"
+        assert chain_span.output is not None
+        assert chain_span.end_time is not None
+        assert {span.name for span in chain_span.spans} == {
+            "PromptTemplate",
+            "FakeListLLM",
+        }
+
+
+class _RaisingLLM(llms.LLM):
+    """An LLM that always raises, to drive the tracer's run-error callbacks."""
+
+    @property
+    def _llm_type(self) -> str:
+        return "raising"
+
+    def _call(
+        self, prompt: str, stop: Optional[List[str]] = None, **kwargs: Any
+    ) -> str:
+        raise RuntimeError("llm failed")
+
+
+def test_opik_tracer__invocation_succeeds__per_run_state_is_released(fake_backend):
+    """A long-lived tracer must hold no per-run state once its runs have ended.
+
+    RunStateStore.is_empty() is asserted in test_run_state.py against hand-built
+    runs, which fixes the store's own behaviour but not the tracer's: whether
+    release_run_tree is reached at all depends on _release_ended_span_state and
+    its `run.parent_run_id is None` guard, which no hand-built run exercises.
+    This is that assertion through the tracer, on the documented "build once,
+    pass on every invoke" pattern the state used to grow under."""
+    llm = fake.FakeListLLM(responses=["ok"] * 6)
+    chain = PromptTemplate(input_variables=["n"], template="About {n}.") | llm
+
+    tracer = OpikTracer()
+
+    for n in range(5):
+        chain.invoke({"n": str(n)}, config={"callbacks": [tracer]})
+
+    tracer.flush()
+
+    assert len(fake_backend.trace_trees) == 5
+    assert tracer._run_state.is_empty()
+
+
+def test_opik_tracer__invocation_raises__per_run_state_is_released(fake_backend):
+    """The error path releases state too.
+
+    A failing run ends through _process_end_span_with_error rather than
+    _process_end_span - a separate callback chain with its own release call - so
+    a tracer serving requests that fail must not accumulate their state either."""
+    chain = PromptTemplate(input_variables=["n"], template="About {n}.") | _RaisingLLM()
+
+    tracer = OpikTracer()
+
+    for n in range(5):
+        with pytest.raises(RuntimeError):
+            chain.invoke({"n": str(n)}, config={"callbacks": [tracer]})
+
+    tracer.flush()
+
+    assert len(fake_backend.trace_trees) == 5
+    assert tracer._run_state.is_empty()
+
+
+def test_opik_tracer__stream_abandoned_after_first_chunk__per_run_state_is_released(
+    fake_backend,
+):
+    """An abandoned stream releases state as well.
+
+    Abandoning the generator after one chunk is what a cancelled request looks
+    like from the tracer's side, and it is the shape where a root run could
+    plausibly never reach its end callback and pin its whole subtree.
+
+    The generator is closed explicitly rather than dropped: `del` would end the
+    run only as a side effect of CPython's refcounting, which would make the
+    assertions below depend on the garbage collector rather than on the
+    tracer."""
+    llm = fake.FakeListLLM(responses=["ok"] * 6)
+    chain = PromptTemplate(input_variables=["n"], template="About {n}.") | llm
+
+    tracer = OpikTracer()
+
+    for n in range(5):
+        stream = chain.stream({"n": str(n)}, config={"callbacks": [tracer]})
+        next(stream, None)
+        stream.close()
+
+    tracer.flush()
+
+    # The run does finish: dropping the generator closes it, LangChain fires the
+    # root run's end callback, and the trace is logged like any other. So this
+    # is not a run that vanishes - it is one whose end arrives by a different
+    # route, and the state has to be released on that route too.
+    assert len(fake_backend.trace_trees) == 5
+    assert tracer._run_state.is_empty()
 
 
 def test_opik_tracer__init_validation():

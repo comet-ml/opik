@@ -303,6 +303,62 @@ def test_evaluate_prompt_on_dict_items_strips_ids(
     assert all("id" not in item for item in captured_items[0])
 
 
+def test_evaluate_prompt_inside_optimization_ignores_dict_items_branch(
+    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
+) -> None:
+    """Inside an optimization run the dict-item branch must not be taken.
+
+    ``opik.evaluate_on_dict_items`` has no ``optimization_id`` parameter, so taking that branch
+    would silently produce no trial experiment and no experiment items. Besides losing the run's
+    trial list and scores, those two row streams are the backend stall reaper's liveness signal
+    (OPIK-7459) — without them a healthy run is marked ERROR once its status stops changing.
+    """
+    optimizer = ConcreteOptimizer(model="gpt-4")
+    optimizer.current_optimization_id = "opt-123"
+    dataset = make_mock_dataset([{"id": "item-1", "input": "a"}])
+    metric = MagicMock()
+    metric.__name__ = "custom_metric"
+
+    def fail_on_dict_items(**kwargs: Any):
+        raise AssertionError(
+            "dict-item evaluation must not be used inside an optimization run: "
+            "it drops the trial rows the platform and the stall reaper depend on"
+        )
+
+    captured_optimization_id: list[str | None] = []
+
+    def fake_run_evaluator(*, optimization_id: str | None, **kwargs: Any):
+        _ = kwargs
+        captured_optimization_id.append(optimization_id)
+        score = score_result.ScoreResult(name="custom_metric", value=1.0, reason="ok")
+        test_result = MagicMock()
+        test_result.score_results = [score]
+        result = MagicMock()
+        result.test_results = [test_result]
+        return result
+
+    monkeypatch.setattr(
+        "opik_optimizer.core.evaluation._evaluate_on_dict_items",
+        fail_on_dict_items,
+    )
+    monkeypatch.setattr(
+        "opik_optimizer.core.evaluation._run_evaluator",
+        fake_run_evaluator,
+    )
+
+    optimizer.evaluate_prompt(
+        prompt=simple_chat_prompt,
+        dataset=dataset,
+        metric=metric,
+        agent=MagicMock(),
+        n_threads=1,
+        verbose=0,
+        use_evaluate_on_dict_items=True,
+    )
+
+    assert captured_optimization_id == ["opt-123"]
+
+
 def test_evaluate_prompt_on_dict_items_forwards_experiment_config(
     monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
 ) -> None:

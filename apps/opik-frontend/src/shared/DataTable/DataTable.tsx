@@ -13,6 +13,7 @@ import {
   GroupingState,
   Row,
   RowData,
+  RowPinningState,
   RowSelectionState,
   TableMeta,
   useReactTable,
@@ -28,6 +29,7 @@ import DataTableWrapper, {
 } from "@/shared/DataTable/DataTableWrapper";
 import DataTableBody, {
   DataTableBodyProps,
+  RowVirtualizationConfig,
 } from "@/shared/DataTable/DataTableBody";
 import DataTableSkeletonBody from "@/shared/DataTable/DataTableSkeletonBody";
 import {
@@ -54,6 +56,13 @@ import {
 } from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import useCustomRowClick from "@/shared/DataTable/useCustomRowClick";
+import useColumnVirtualization, {
+  ColumnVirtualizationConfig,
+  ColumnSpacerCell,
+  isColumnSpacer,
+  sliceColumnWindow,
+  sliceColumnWindowHeaders,
+} from "@/shared/DataTable/columnVirtualization";
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -63,7 +72,6 @@ declare module "@tanstack/react-table" {
     rowHeightStyle: React.CSSProperties;
     onCommentsReply?: (row: TData, idx?: number) => void;
     aggregationMap?: Record<string, unknown>;
-    enableUserFeedbackEditing?: boolean;
     projectId?: string;
     projectName?: string;
   }
@@ -102,6 +110,11 @@ interface SelectionConfig {
   setRowSelection?: OnChangeFn<RowSelectionState>;
 }
 
+export interface PinningConfig {
+  rowPinning: RowPinningState;
+  setRowPinning: OnChangeFn<RowPinningState>;
+}
+
 interface GroupingConfig {
   groupedColumnMode: false | "reorder" | "remove";
   grouping: GroupingState;
@@ -127,6 +140,7 @@ interface DataTableProps<TData, TValue> {
   sortConfig?: SortConfig;
   resizeConfig?: ResizeConfig;
   selectionConfig?: SelectionConfig;
+  pinningConfig?: PinningConfig;
   groupingConfig?: GroupingConfig;
   expandingConfig?: ExpandingConfig;
   getRowId?: (row: TData) => string;
@@ -140,6 +154,8 @@ interface DataTableProps<TData, TValue> {
   stickyHeader?: boolean;
   TableWrapper?: React.FC<DataTableWrapperProps>;
   TableBody?: React.FC<DataTableBodyProps<TData>>;
+  columnVirtualization?: ColumnVirtualizationConfig;
+  rowVirtualization?: RowVirtualizationConfig;
   meta?: Omit<
     TableMeta<TData>,
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
@@ -161,6 +177,7 @@ const DataTable = <TData, TValue>({
   sortConfig,
   resizeConfig,
   selectionConfig,
+  pinningConfig,
   groupingConfig,
   expandingConfig,
   getRowId,
@@ -172,6 +189,8 @@ const DataTable = <TData, TValue>({
   autoWidth = false,
   TableWrapper = DataTableWrapper,
   TableBody = DataTableBody,
+  columnVirtualization,
+  rowVirtualization,
   stickyHeader = false,
   meta,
   getSubRows,
@@ -199,6 +218,7 @@ const DataTable = <TData, TValue>({
         }
       : {}),
     enableSorting: sortConfig?.enabled ?? false,
+    keepPinnedRows: false,
     enableMultiSort: sortConfig?.enabledMultiSorting ?? false,
     enableSortingRemoval: false,
     onSortingChange: sortConfig?.setSorting,
@@ -206,6 +226,7 @@ const DataTable = <TData, TValue>({
     getExpandedRowModel: getExpandedRowModel(),
     getGroupedRowModel: getGroupedRowModel(),
     onRowSelectionChange: selectionConfig?.setRowSelection,
+    onRowPinningChange: pinningConfig?.setRowPinning,
     onGroupingChange: groupingConfig?.setGrouping,
     onExpandedChange: expandingConfig?.setExpanded,
     onColumnSizingChange: resizeConfig?.onColumnResize,
@@ -213,6 +234,9 @@ const DataTable = <TData, TValue>({
       ...(sortConfig?.sorting && { sorting: sortConfig.sorting }),
       ...(selectionConfig?.rowSelection && {
         rowSelection: selectionConfig.rowSelection,
+      }),
+      ...(pinningConfig?.rowPinning && {
+        rowPinning: pinningConfig.rowPinning,
       }),
       ...(groupingConfig?.grouping && { grouping: groupingConfig.grouping }),
       ...(expandingConfig?.expanded && { expanded: expandingConfig.expanded }),
@@ -254,6 +278,10 @@ const DataTable = <TData, TValue>({
     // we need columnSizing here to rebuild the cols array
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers, columnSizing]);
+
+  const columnWindow = useColumnVirtualization(table, columnVirtualization, {
+    supported: !isFunction(renderCustomRow),
+  });
 
   const [tableHeight, setTableHeight] = useState(0);
   const [hasHorizontalScroll, setHasHorizontalScroll] = useState(false);
@@ -312,7 +340,13 @@ const DataTable = <TData, TValue>({
             }
           : {})}
       >
-        {cells.map((cell) => renderCell(row, cell))}
+        {sliceColumnWindow(cells, columnWindow).map((cell) =>
+          isColumnSpacer(cell) ? (
+            <ColumnSpacerCell key={cell.id} spacer={cell} />
+          ) : (
+            renderCell(row, cell)
+          ),
+        )}
       </TableRow>
     );
   };
@@ -421,7 +455,7 @@ const DataTable = <TData, TValue>({
             }}
           >
             <colgroup>
-              {cols.map((i) => (
+              {sliceColumnWindow(cols, columnWindow).map((i) => (
                 <col key={i.id} style={{ width: `${i.size}px` }} />
               ))}
             </colgroup>
@@ -442,10 +476,25 @@ const DataTable = <TData, TValue>({
                       !isLastRow && "!border-b-0",
                     )}
                   >
-                    {headerGroup.headers.map((header) => {
+                    {sliceColumnWindowHeaders(
+                      headerGroup.headers,
+                      columnWindow,
+                    ).map((entry) => {
+                      if (isColumnSpacer(entry)) {
+                        return (
+                          <ColumnSpacerCell
+                            key={entry.id}
+                            spacer={entry}
+                            isHeader
+                          />
+                        );
+                      }
+
+                      const { header, colSpan, key } = entry;
+
                       return (
                         <TableHead
-                          key={header.id}
+                          key={key ?? header.id}
                           data-header-id={header.id}
                           style={{
                             zIndex: TABLE_HEADER_Z_INDEX + (isLastRow ? 0 : 1),
@@ -461,7 +510,7 @@ const DataTable = <TData, TValue>({
                             isHeader: true,
                             lastLeftPinnedColumnId,
                           })}
-                          colSpan={header.colSpan}
+                          colSpan={colSpan}
                         >
                           {header.isPlaceholder
                             ? ""
@@ -480,13 +529,17 @@ const DataTable = <TData, TValue>({
               })}
             </TableHeader>
             {showSkeleton ? (
-              <DataTableSkeletonBody table={table} />
+              <DataTableSkeletonBody
+                table={table}
+                columnWindow={columnWindow}
+              />
             ) : (
               <TableBody
                 table={table}
                 renderRow={renderRow}
                 renderNoData={renderNoData}
                 showLoadingOverlay={showLoadingOverlay}
+                rowVirtualization={rowVirtualization}
               />
             )}
           </Table>

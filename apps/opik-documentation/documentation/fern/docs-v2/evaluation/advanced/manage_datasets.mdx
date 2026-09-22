@@ -1,5 +1,5 @@
 ---
-headline: Manage datasets | Opik Documentation
+headline: Manage datasets
 og:description: Evaluate your LLM using datasets. Learn to create and manage them
   via Python SDK, TypeScript SDK, or the Traces table.
 og:site_name: Opik Documentation
@@ -277,12 +277,32 @@ dataset.insert([
 <Tip>
   Opik automatically deduplicates items that are inserted into a dataset when using the Python SDK. This means that you
   can insert the same item multiple times without duplicating it in the dataset. This combined with the `get or create
-  dataset` methods means that you can use the SDK to manage your datasets in a "fire and forget" manner.
+  dataset` methods means that you can use the SDK to manage your datasets in a "fire and forget" manner. It can be
+  turned off with `deduplication=False`, see [Disabling deduplication](#disabling-deduplication).
 </Tip>
+
+#### Disabling deduplication
+
+Deduplication requires the Python SDK to download the dataset's existing items once so it can compare their
+content hashes against the items you are inserting. On large datasets that download dominates the insert. If you
+already know your items are unique — for example when populating a fresh dataset, or when you generate ids
+yourself — pass `deduplication=False` to skip that work entirely: nothing is downloaded, no hashes are computed,
+and every item you pass is sent as-is.
+
+```python title="Python" language="python"
+dataset.insert(items, deduplication=False)
+```
+
+The flag is available on every Python SDK method that writes items — `insert`, `update`, `insert_from_json`,
+`insert_from_pandas` and `read_jsonl_from_file` — as well as on the equivalent `TestSuite` methods. With
+deduplication disabled, inserting the same content twice produces two separate dataset items.
 
 <Note>
   When using the SDK to insert items, a new dataset version is automatically created.
   If you insert items in multiple batches within a single `insert()` call, they are grouped into one version.
+  The Python SDK uploads those batches on 8 worker threads by default; use `num_threads=1` to upload them
+  sequentially instead. See [Tuning SDK throughput](#tuning-sdk-throughput). Parallel upload requires a recent
+  Opik backend — against older ones the SDK falls back to a sequential upload and logs a warning.
 </Note>
 
 Once the items have been inserted, you can view them in the Opik UI:
@@ -394,6 +414,131 @@ You can download a dataset from Opik using the `get_dataset` method:
   dataset.to_json()
   ```
 </CodeBlocks>
+
+### Downloading large datasets faster
+
+Dataset items are fetched a page at a time, and those pages are downloaded concurrently. The default is
+8 threads; pass `num_threads` to read with more or fewer (see [Tuning SDK throughput](#tuning-sdk-throughput)):
+
+```python title="Python" language="python"
+from opik import Opik
+
+client = Opik()
+dataset = client.get_dataset(name="My dataset")
+
+# The whole dataset as one list, downloaded over 16 threads
+items = dataset.get_items(num_threads=16)
+```
+
+The thread count never changes the result, only how quickly it arrives.
+
+`get_items()` returns the whole dataset as a single list, so the call does not return until every
+item has been downloaded and the full result is held in memory. `stream_items()` reads the same
+items in chunks instead, yielding each chunk as soon as it arrives. Use it when you want to start
+processing before the download finishes, or when the dataset is too large to hold in memory all at
+once:
+
+```python title="Python" language="python"
+from opik import Opik
+
+client = Opik()
+dataset = client.get_dataset(name="My dataset")
+
+# One chunk at a time, instead of the whole dataset at once
+for chunk in dataset.stream_items(chunk_size=5000):
+    process(chunk)  # a list of dicts, exactly as get_items() returns them
+```
+
+Chunks arrive in dataset order; only the last one may be shorter than `chunk_size`. Both methods
+accept the same `filter_string`, and `nb_samples` to read only the first N items:
+
+```python title="Python" language="python"
+for chunk in dataset.stream_items(
+    filter_string='data.category = "geography"',
+    nb_samples=10_000,
+):
+    process(chunk)
+```
+
+`nb_samples` must be a positive integer — omit it or pass `None` to read everything. Passing `0`
+or a negative value raises `ValueError` rather than being treated as a limit.
+
+<Note>
+  `chunk_size` controls how many items each request fetches. It defaults to 2000, which is also
+  the maximum — a larger value raises `ValueError`, so that peak memory stays bounded. Fetching a
+  chunk costs a fixed overhead whatever its size, so lowering it makes the whole read slower;
+  lower it only when individual items are large, since up to `2 * num_threads` chunks are held in
+  memory at once.
+</Note>
+
+## Tuning SDK throughput
+
+The Python SDK moves dataset and experiment items on a pool of worker threads. Every one of these
+paths defaults to **8 threads**, which is what we benchmark against and what we recommend for
+customer-scale datasets — you should not need to pass `num_threads` at all:
+
+| Operation | Call | Default |
+| --- | --- | --- |
+| Dataset read | `dataset.get_items()`, `dataset.stream_items()` | 8 |
+| Dataset write | `dataset.insert()` | 8 |
+| Experiment write | `experiment.batch_upload_items()` | 8 |
+
+Each of those takes a `num_threads` argument if you do want to change it:
+
+```python title="Python" language="python"
+items = dataset.get_items(num_threads=4)       # read more gently
+dataset.insert(items, num_threads=16)          # more concurrency, if the client has CPU headroom
+experiment.batch_upload_items(records, num_threads=1)  # upload sequentially
+```
+
+**Raise it** when the client is idle waiting on the network — a big upload over a high-latency link
+is the usual case. Do not expect much: on a 119,903-item upload we measured 16 threads running
+slightly *slower* than 8, because the SDK saturates a CPU core serializing and compressing payloads
+long before thread count becomes the limit. Past 8, extra workers mostly add scheduling overhead.
+
+**Lower it** when you are sharing a rate limit with other jobs, when the client machine is small, or
+when individual items are large enough that memory matters. On the dataset paths, `num_threads`
+bounds memory as well as concurrency: a read holds up to `2 * num_threads` chunks and an upload up
+to `2 * num_threads` request bodies, whatever the dataset's size. `experiment.batch_upload_items()`
+does not work that way — it builds every batch up front and queues them all, so its peak memory
+tracks the total number of items and lowering `num_threads` will not contain it. Split the records
+across calls if an experiment upload is too large to hold.
+
+`num_threads=1` makes the operation fully sequential, which is the only setting that guarantees
+batches arrive in order.
+
+<Note>
+  `num_threads` must be a positive integer. Dataset reads and experiment uploads cap it at 32, since
+  the SDK's HTTP client pools a limited number of connections and extra threads would queue behind it
+  rather than speed anything up. Thread count never changes the result of an operation that succeeds,
+  only how fast it arrives. It does change what a *failure* leaves behind — see below.
+</Note>
+
+<Note>
+  `update()`, `insert_from_json()`, `insert_from_pandas()` and `read_jsonl_from_file()` all upload
+  through `insert()`, so they get the same 8-thread default — but they do not take a `num_threads`
+  argument of their own, and passing one raises `TypeError`. Convert to items and call `insert()`
+  directly when you need to tune one of those uploads.
+</Note>
+
+<Warning>
+  On a failed upload, the worker count decides what was already written, and the two write paths
+  differ. With `num_threads=1` both stop cleanly: nothing after the failed batch is sent.
+
+  In parallel, `dataset.insert()` still **sends everything it has already queued** — the call drains
+  the in-flight work and waits for it before re-raising, so the exception surfaces after those
+  batches have landed, not before. `experiment.batch_upload_items()` does the opposite: batches that
+  have not started are dropped and the ones already running are not waited for, so a few batches
+  after the failed one may or may not have landed.
+
+  Neither path rolls back what already succeeded. Use `num_threads=1` when you need a failure to
+  stop at a predictable point.
+</Warning>
+
+<Warning>
+  Parallel dataset upload also requires an Opik backend of 2.2.8 or newer. Against an older backend
+  the SDK falls back to a sequential upload and logs a warning, whatever `num_threads` you pass.
+</Warning>
 
 ## Filtering datasets programmatically
 
@@ -786,4 +931,16 @@ For large bulk operations:
 <Tip>
   For very large datasets, bulk operations are processed in batches. The UI remains
   responsive during processing, and you'll see progress indicators for long-running operations.
+</Tip>
+<Tip>
+  **Recommended if you build with an AI coding assistant.** Assembling a dataset by hand is the
+  slowest part of setting up an evaluation. One command — `opik configure` — installs both the
+  [MCP server](/mcp-server) and the Opik skills, and your assistant can then create the dataset and
+  fill it in for you — writing the first cases from scratch, or, if you are already logging traces,
+  pulling them from the ones that scored badly.
+
+  An example prompt:
+
+  *"Build an Opik dataset from the traces scored below 0.7 on answer relevance, fill in the expected
+  answers, then evaluate my agent against it."*
 </Tip>

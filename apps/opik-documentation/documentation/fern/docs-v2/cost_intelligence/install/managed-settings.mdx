@@ -1,0 +1,152 @@
+---
+headline: Install with managed settings
+og:description: Roll out Cost Intelligence to your whole team from the Claude
+  admin console with one JSON configuration, delivered to every authenticated
+  user, no device management required.
+og:site_name: Opik Documentation
+og:title: Install with managed settings - Opik
+title: Plugin with managed settings
+---
+
+Claude Code's **server-managed settings** let you deliver configuration from Anthropic's admin console to every authenticated user in your organization, with no MDM and no per-device work, and it follows the user to whatever machine they sign in on.
+
+This is the fastest path to a working rollout. The trade-off is that it has **no targeting**: the configuration applies to every authenticated user in the organization as soon as you save it, so you can't pilot with a single team first.
+
+<Note>
+  Requires **Claude for Teams or Enterprise**.
+
+  If you want to stage the rollout (one team first, then widen), use
+  [MDM](/cost-intelligence/install/mdm) instead. That's our general
+  recommendation, and it's also the path to use if your developers are on
+  personal Claude accounts or you need to cover machines whose accounts you
+  don't control.
+</Note>
+
+## Generate the configuration
+
+The managed settings you deliver here are the **bootstrap**: they register the plugin and point it at your Opik workspace. This is a deploy-once artifact — you won't edit it again to change spend behavior.
+
+Your [cost policies](/cost-intelligence/roll-out-cost-policies) are **not** part of this file. Once the plugin is running, policies sync to devices on their own — the same way whether you install with managed settings, [MDM](/cost-intelligence/install/mdm), or the [macOS app](/cost-intelligence/install/macos-app). You choose an install method for the bootstrap; policy delivery is identical either way, managed live from the dashboard.
+
+Start from the template in the next step, or grab a pre-filled bootstrap snippet from Cost Intelligence's **Home** page before data is flowing (replace the API-key placeholder with a workspace-scoped key).
+
+
+## Apply it in the admin console
+
+<Steps>
+
+### Open the managed settings editor
+
+In [Claude.ai](https://claude.ai), go to **Admin Settings → Claude Code → Managed settings**.
+
+### Paste your configuration
+
+Paste the bootstrap snippet from Cost Intelligence, or start from this template:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "opik-enterprise": {
+      "source": { "source": "github", "repo": "comet-ml/cost-intelligence-proxy" },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": {
+    "opik-cipx@opik-enterprise": true
+  },
+  "env": {
+    "OPIK_CIPX_BASE_URL": "https://www.comet.com/opik/api",
+    "OPIK_CIPX_WORKSPACE": "your-org-cc-workspace",
+    "OPIK_CIPX_API_KEY": "<workspace-scoped API key>",
+    "OPIK_CIPX_PROJECT": "claude-code"
+  },
+  "forceRemoteSettingsRefresh": true
+}
+```
+
+### Save
+
+Clients pick the configuration up at their next startup, or within the hourly
+poll for sessions already running.
+
+</Steps>
+
+## What each part does
+
+| Key | Effect |
+| --- | --- |
+| `extraKnownMarketplaces` | Registers the Comet plugin marketplace. `autoUpdate: true` keeps the plugin current without another admin action. |
+| `enabledPlugins` | Force-enables the plugin for every user. It appears to them as **managed** and cannot be disabled. |
+| `OPIK_CIPX_BASE_URL` | The Opik installation traces are shipped to. |
+| `OPIK_CIPX_WORKSPACE` | Target workspace. Keeps fleet traffic isolated from developers' personal Opik projects. |
+| `OPIK_CIPX_API_KEY` | Workspace-scoped service-account key. |
+| `OPIK_CIPX_PROJECT` | Opik project the traces land in. |
+| `forceRemoteSettingsRefresh` | Makes clients re-read settings promptly rather than waiting out the cache. |
+
+<Warning>
+  Use a **service-account** API key scoped to ingest, never a personal token.
+  Managed settings are readable by the Claude Code process on each device, so
+  treat the key as distributed the moment you save. Rotate it by updating this
+  configuration.
+</Warning>
+
+## What happens on a developer's machine
+
+Nothing they have to do. On the next Claude Code launch:
+
+1. The plugin installs and registers a `SessionStart` hook.
+2. The hook runs `opik-cipx sync`, which is idempotent: it installs an OS supervisor (launchd on macOS, systemd on Linux) so the daemon restarts on crash, starts the daemon if it isn't running, and points Claude Code at the local proxy by setting `ANTHROPIC_BASE_URL` in `~/.claude/settings.json`.
+3. Capture begins. Every subsequent session is picked up automatically.
+4. The daemon also applies your org's [cost policies](/cost-intelligence/roll-out-cost-policies) — Claude Code and Codex alike, with no per-change push.
+
+The proxy binds loopback only and Claude Code talks plain HTTP to it, so no certificate is installed and no TLS is intercepted.
+
+<Tip>
+  The hook tolerates a missing binary: if anything about the install is
+  incomplete it prints a hint and lets the session continue. Cost Intelligence
+  is designed never to be the reason a developer can't work.
+</Tip>
+
+## Verify
+
+On a developer machine, in a **fresh** Claude Code session:
+
+```bash
+claude plugin list        # opik-cipx@opik-enterprise -> enabled / managed
+opik-cipx status          # daemon up, config resolved, spans shipped
+```
+
+Then confirm traces are landing in the target Opik workspace. That's the check that actually proves the rollout worked.
+
+## Using your own gateway
+
+If your traffic goes through a corporate LLM gateway, LiteLLM, or an AWS Bedrock access gateway rather than straight to the provider, add its origin:
+
+```json
+{
+  "env": {
+    "OPIK_CIPX_UPSTREAM_BASE_URL": "https://gateway.internal.example.com"
+  }
+}
+```
+
+The gateway must expose the Anthropic Messages API. Because a gateway bills under its own account, sessions are reported as API-priced with no subscription plan, and user identity comes from the environment channel rather than an OAuth profile. Set `OPIK_CIPX_USER_EMAIL` and `OPIK_CIPX_USERNAME` alongside it if git and OS identity aren't reliable on your fleet.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Reduce coding agent spend"
+    icon="fa-regular fa-arrow-trend-down"
+    href="/cost-intelligence/reduce-agent-spend"
+  >
+    Now that data is flowing, find and cut the waste.
+  </Card>
+  <Card
+    title="Install with MDM"
+    icon="fa-regular fa-laptop-mobile"
+    href="/cost-intelligence/install/mdm"
+  >
+    Cover machines whose Claude accounts you don't centrally manage.
+  </Card>
+</CardGroup>

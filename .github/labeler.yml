@@ -42,7 +42,6 @@ tests:
       - 'apps/opik-backend/src/test/**/*'
       - 'apps/opik-guardrails-backend/tests/**/*'
       - 'apps/opik-python-backend/tests/**/*'
-      - 'apps/opik-frontend/e2e/**/*'
       - 'sdks/python/tests/**/*'
       - 'sdks/opik_optimizer/tests/**/*'
       - 'sdks/typescript/tests/**/*'

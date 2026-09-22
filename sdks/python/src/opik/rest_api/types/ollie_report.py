@@ -16,6 +16,7 @@ class OllieReport(UniversalBaseModel):
     content: typing.Optional[str] = None
     recommended_actions: typing.Optional[JsonNode] = None
     status: typing.Optional[OllieReportStatus] = None
+    failure_reason: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
     last_updated_at: typing.Optional[dt.datetime] = None
 

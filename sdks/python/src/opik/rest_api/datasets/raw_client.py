@@ -583,6 +583,7 @@ class RawDatasetsClient:
         enrichment_options: SpanEnrichmentOptions,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
+        field_mappings: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -601,6 +602,9 @@ class RawDatasetsClient:
             Optional evaluators to apply to the created items
 
         execution_policy : typing.Optional[ExecutionPolicy]
+
+        field_mappings : typing.Optional[typing.Dict[str, str]]
+            Optional mapping of dataset item field name to a path into the span, e.g. 'input.input_text'. Takes precedence over the fields produced by enrichment_options. Ignored for test suite datasets.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -623,6 +627,7 @@ class RawDatasetsClient:
                 "execution_policy": convert_and_respect_annotation_metadata(
                     object_=execution_policy, annotation=ExecutionPolicy, direction="write"
                 ),
+                "field_mappings": field_mappings,
             },
             headers={
                 "content-type": "application/json",
@@ -646,6 +651,7 @@ class RawDatasetsClient:
         enrichment_options: TraceEnrichmentOptions,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
+        field_mappings: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -664,6 +670,9 @@ class RawDatasetsClient:
             Optional evaluators to apply to the created items
 
         execution_policy : typing.Optional[ExecutionPolicy]
+
+        field_mappings : typing.Optional[typing.Dict[str, str]]
+            Optional mapping of dataset item field name to a path into the trace, e.g. 'input.input_text'. Takes precedence over the fields produced by enrichment_options. Ignored for test suite datasets.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -686,6 +695,7 @@ class RawDatasetsClient:
                 "execution_policy": convert_and_respect_annotation_metadata(
                     object_=execution_policy, annotation=ExecutionPolicy, direction="write"
                 ),
+                "field_mappings": field_mappings,
             },
             headers={
                 "content-type": "application/json",
@@ -2042,6 +2052,17 @@ class RawDatasetsClient:
                         ),
                     ),
                 )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -2747,6 +2768,7 @@ class AsyncRawDatasetsClient:
         enrichment_options: SpanEnrichmentOptions,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
+        field_mappings: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2765,6 +2787,9 @@ class AsyncRawDatasetsClient:
             Optional evaluators to apply to the created items
 
         execution_policy : typing.Optional[ExecutionPolicy]
+
+        field_mappings : typing.Optional[typing.Dict[str, str]]
+            Optional mapping of dataset item field name to a path into the span, e.g. 'input.input_text'. Takes precedence over the fields produced by enrichment_options. Ignored for test suite datasets.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2787,6 +2812,7 @@ class AsyncRawDatasetsClient:
                 "execution_policy": convert_and_respect_annotation_metadata(
                     object_=execution_policy, annotation=ExecutionPolicy, direction="write"
                 ),
+                "field_mappings": field_mappings,
             },
             headers={
                 "content-type": "application/json",
@@ -2810,6 +2836,7 @@ class AsyncRawDatasetsClient:
         enrichment_options: TraceEnrichmentOptions,
         evaluators: typing.Optional[typing.Sequence[EvaluatorItem]] = OMIT,
         execution_policy: typing.Optional[ExecutionPolicy] = OMIT,
+        field_mappings: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2828,6 +2855,9 @@ class AsyncRawDatasetsClient:
             Optional evaluators to apply to the created items
 
         execution_policy : typing.Optional[ExecutionPolicy]
+
+        field_mappings : typing.Optional[typing.Dict[str, str]]
+            Optional mapping of dataset item field name to a path into the trace, e.g. 'input.input_text'. Takes precedence over the fields produced by enrichment_options. Ignored for test suite datasets.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2850,6 +2880,7 @@ class AsyncRawDatasetsClient:
                 "execution_policy": convert_and_respect_annotation_metadata(
                     object_=execution_policy, annotation=ExecutionPolicy, direction="write"
                 ),
+                "field_mappings": field_mappings,
             },
             headers={
                 "content-type": "application/json",
@@ -4201,6 +4232,17 @@ class AsyncRawDatasetsClient:
                 return AsyncHttpResponse(response=_response, data=_data)
             if _response.status_code == 404:
                 raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],

@@ -8,7 +8,7 @@ import React, {
 import { keepPreviousData } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 
-import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import LoadableSelectBox from "@/v2/components/LoadableSelectBox/LoadableSelectBox";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import { DropdownOption } from "@/types/shared";
 import {
@@ -131,8 +131,8 @@ const FeedbackDefinitionsSelectBox: React.FC<
   const actionPanel = useMemo(
     () => (
       <>
-        <Separator className="my-1" />
-        <ListAction onClick={handleAddNewClick}>
+        <Separator className="-mx-px my-1 bg-muted" />
+        <ListAction variant="default" size="sm" onClick={handleAddNewClick}>
           <Plus className="size-3.5 shrink-0" />
           Add new
         </ListAction>

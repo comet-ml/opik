@@ -26,6 +26,7 @@ from .patchers import (
     llm_response_wrapper,
 )
 from .graph import mermaid_graph_builder
+from ... import analytics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class LegacyOpikTracer:
         project_name: Optional[str] = None,
         distributed_headers: Optional[DistributedTraceHeadersDict] = None,
     ):
+        analytics.track_event("integration", "adk")
         LOGGER.warning(
             "Legacy OpikTracer for google-adk < 1.3.0 is being used. We recommend upgrading to the recent version to automatically get the best experience from Opik integration."
         )
@@ -263,6 +265,7 @@ class LegacyOpikTracer:
         model = None
         usage = None
         output = None
+        total_cost = None
 
         # Final (non-partial) response for this call: clear any output cached for
         # this invocation up front, so a missing span or failed conversion below
@@ -282,15 +285,21 @@ class LegacyOpikTracer:
                 output = adk_helpers.convert_adk_base_model_to_dict(llm_response)
                 self._last_model_output.set(callback_context.invocation_id, output)
 
+                # Before the usage parsing below, which can raise - the cost must not
+                # be lost to a usage problem it has nothing to do with.
+                total_cost = llm_response_wrapper.pop_response_cost(output)
                 usage_data = llm_response_wrapper.pop_llm_usage_data(
                     output, span_data.provider
                 )
                 if usage_data is not None:
                     model = usage_data.model
                     usage = usage_data.opik_usage
-            except Exception as e:
-                LOGGER.debug(
-                    f"Error converting LlmResponse to dict or extracting usage data, reason: {e}",
+            except Exception:
+                # Not debug: this is silent data loss. The span is still logged, but
+                # without output or usage, and nothing else reports that.
+                LOGGER.error(
+                    "Error converting LlmResponse to dict or extracting usage data, "
+                    "the LLM span will be logged without output and usage",
                     exc_info=True,
                 )
 
@@ -300,6 +309,7 @@ class LegacyOpikTracer:
                     output=output,
                     usage=usage,
                     model=model,
+                    total_cost=total_cost,
                 )
                 self._end_current_span()
                 self._opik_created_spans.discard(span_data.id)

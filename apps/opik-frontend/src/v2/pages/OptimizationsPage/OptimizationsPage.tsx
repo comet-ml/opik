@@ -218,29 +218,21 @@ const OptimizationsPage: React.FunctionComponent = () => {
     projectId: activeProjectId ?? undefined,
   });
 
-  const hasOldTypeOptimizations = useMemo(
-    () =>
-      optimizations.some(
-        (opt) => !opt.experiment_scores || opt.experiment_scores.length === 0,
-      ),
-    [optimizations],
-  );
-
-  const visibleColumns = useMemo(
-    () =>
-      hasOldTypeOptimizations
-        ? DEFAULT_COLUMNS
-        : DEFAULT_COLUMNS.filter((c) => c.id !== "accuracy"),
-    [hasOldTypeOptimizations],
-  );
-
+  // The objective-score column used to be a mutually-exclusive pair ("Pass rate"
+  // for test-suite runs, "Accuracy" for dataset runs), and this list dropped
+  // "accuracy" whenever the page held no dataset run so its all-"-" cells would
+  // not show. That was only ever half a fix — the reverse case (a Studio-only
+  // workspace showing a permanently empty "Pass rate") is the bug this change
+  // addresses. Now that the pair is merged into one column that renders for both
+  // run types, no run-type-dependent column filtering is needed at all: dropping
+  // it here would strip the only score column from a pure test-suite page.
   const defaultColumns = useMemo(
     () =>
-      convertColumnDataToColumn(visibleColumns, {
+      convertColumnDataToColumn(DEFAULT_COLUMNS, {
         columnsOrder,
         selectedColumns,
       }),
-    [visibleColumns, columnsOrder, selectedColumns],
+    [columnsOrder, selectedColumns],
   );
 
   const columns = useMemo(() => {
@@ -349,7 +341,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
               selectedRows={selectedRows}
               isFetching={isFetching}
               onRefresh={() => refetch()}
-              columns={visibleColumns}
+              columns={DEFAULT_COLUMNS}
               selectedColumns={selectedColumns}
               onSelectedColumnsChange={setSelectedColumns}
               columnsOrder={columnsOrder}

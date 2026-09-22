@@ -7,7 +7,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/ui/hover-card";
 import { Separator } from "@/ui/separator";
 import { Spinner } from "@/ui/spinner";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import NoOptions from "@/shared/LoadableSelectBox/NoOptions";
+import NoOptions from "@/v2/components/LoadableSelectBox/NoOptions";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import StageTag from "@/v2/pages-shared/version-history/StageTag";
 import EnvironmentBadgeList from "@/shared/EnvironmentLabel/EnvironmentBadgeList";
@@ -241,7 +241,6 @@ const PromptVersionsList: React.FC<PromptVersionsListProps> = ({
   );
 
   const versions = data?.content ?? [];
-  const total = data?.total ?? versions.length;
 
   if (isLoading) {
     return (
@@ -259,8 +258,8 @@ const PromptVersionsList: React.FC<PromptVersionsListProps> = ({
 
   return (
     <div className="max-h-[40vh] overflow-y-auto">
-      {versions.map((version, idx) => {
-        const label = `v${total - idx}`;
+      {versions.map((version) => {
+        const label = version.version_number ?? version.commit;
         const isActive = version.id === activeVersionId;
         const stage = pickHighestStage(version.tags);
         return (

@@ -4,7 +4,10 @@ import {
   CodeMetricParamsSchema,
   OptimizationConfigSchema,
   OptimizationConfigFormType,
+  convertFormDataToStudioConfig,
+  convertOptimizationStudioToFormData,
 } from "./schema";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { METRIC_TYPE, OPTIMIZER_TYPE } from "@/types/optimizations";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 
@@ -138,5 +141,134 @@ describe("OptimizationConfigSchema — code metric syntax-error submission block
       metricParams: { code: SYNTAX_ERROR_CODE_METRIC },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("convertOptimizationStudioToFormData — seeded prompt shape", () => {
+  // A new run must start as system + user: the system message holds the
+  // instructions (the only role a Studio run optimizes) and the user message
+  // holds the template variables, so the optimizer cannot rewrite the message
+  // carrying them (OPIK-7510). Seeding a lone user message did the opposite.
+  it("seeds a system and a user message for a new run", () => {
+    const { messages } = convertOptimizationStudioToFormData(undefined, [
+      "gpt-4o-mini",
+    ]);
+
+    expect(messages.map((m) => m.role)).toEqual([
+      LLM_MESSAGE_ROLE.system,
+      LLM_MESSAGE_ROLE.user,
+    ]);
+    expect(messages.every((m) => m.content === "")).toBe(true);
+    expect(new Set(messages.map((m) => m.id)).size).toBe(2);
+  });
+
+  it("keeps an existing run's messages untouched", () => {
+    const { messages } = convertOptimizationStudioToFormData(
+      {
+        studio_config: {
+          prompt: {
+            messages: [{ role: "user", content: "Answer {question}" }],
+          },
+          // optimizer/evaluation are read unconditionally by the converter, so
+          // a rerun payload always carries them.
+          optimizer: { type: OPTIMIZER_TYPE.GEPA },
+          evaluation: { metrics: [{ type: METRIC_TYPE.EQUALS }] },
+        },
+      } as never,
+      ["gpt-4o-mini"],
+    );
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe(LLM_MESSAGE_ROLE.user);
+    expect(messages[0].content).toBe("Answer {question}");
+  });
+});
+
+describe("convertFormDataToStudioConfig — Gemini thinking level", () => {
+  const formData = (modelConfig: Record<string, unknown>) =>
+    ({
+      name: "run",
+      datasetId: "d",
+      optimizerType: OPTIMIZER_TYPE.GEPA,
+      optimizerParams: {},
+      metricType: METRIC_TYPE.EQUALS,
+      metricParams: {},
+      messages: [{ id: "1", role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      modelName: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
+      modelConfig,
+    }) as unknown as OptimizationConfigFormType;
+
+  // The optimizer renders the same Gemini config panel as the playground, so a level picked
+  // there has to survive serialization instead of being dropped as a flat field.
+  it("nests a selected thinking level under custom_parameters", () => {
+    const config = convertFormDataToStudioConfig(
+      formData({ temperature: 0.5, thinkingLevel: "off" }),
+      "my-dataset",
+    );
+
+    expect(config.llm_model.parameters).toMatchObject({
+      temperature: 0.5,
+      custom_parameters: { thinking: { level: "off" } },
+    });
+    expect(
+      (config.llm_model.parameters as Record<string, unknown>).thinkingLevel,
+    ).toBeUndefined();
+  });
+
+  // The control shows the model's default even when the config holds no level, so the request has
+  // to carry that same default rather than silently falling back to the provider's own.
+  it("sends the model's default when the config holds no level", () => {
+    const config = convertFormDataToStudioConfig(
+      formData({ temperature: 0.5 }),
+      "my-dataset",
+    );
+
+    expect(config.llm_model.parameters).toMatchObject({
+      custom_parameters: { thinking: { level: "off" } },
+    });
+  });
+
+  it("adds nothing for a model without thinking support", () => {
+    const config = convertFormDataToStudioConfig(
+      {
+        ...formData({ temperature: 0.5 }),
+        modelName: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
+      } as unknown as OptimizationConfigFormType,
+      "my-dataset",
+    );
+
+    expect(
+      (config.llm_model.parameters as Record<string, unknown>)
+        .custom_parameters,
+    ).toBeUndefined();
+  });
+});
+
+describe("convertFormDataToStudioConfig — controls the optimizer does not offer", () => {
+  const formData = (modelConfig: Record<string, unknown>) =>
+    ({
+      name: "run",
+      datasetId: "d",
+      optimizerType: OPTIMIZER_TYPE.GEPA,
+      optimizerParams: {},
+      metricType: METRIC_TYPE.EQUALS,
+      metricParams: {},
+      messages: [{ id: "1", role: LLM_MESSAGE_ROLE.user, content: "hi" }],
+      modelName: PROVIDER_MODEL_TYPE.GPT_4O,
+      modelConfig,
+    }) as unknown as OptimizationConfigFormType;
+
+  // Throttling and max concurrency drive the playground's batch runner, so the optimizer panel
+  // does not offer them. Reloading a run saved before that leaves the values in the form, and
+  // serializing them forwards a parameter nobody can see to the provider.
+  it("drops the playground runner parameters it no longer shows", () => {
+    const parameters = convertFormDataToStudioConfig(
+      formData({ temperature: 0.5, throttling: 3, maxConcurrentRequests: 8 }),
+      "my-dataset",
+    ).llm_model.parameters as Record<string, unknown>;
+
+    expect(parameters.temperature).toBe(0.5);
+    expect(parameters.throttling).toBeUndefined();
+    expect(parameters.maxConcurrentRequests).toBeUndefined();
   });
 });

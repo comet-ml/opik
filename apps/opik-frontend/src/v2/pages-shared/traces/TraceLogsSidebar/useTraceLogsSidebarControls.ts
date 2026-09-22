@@ -7,7 +7,7 @@ import {
 } from "use-query-params";
 
 import { Filter } from "@/types/filters";
-import { TLS_QUERY_PREFIX } from "./TraceLogsSidebar";
+import { TLS_QUERY_PREFIX } from "@/v2/pages-shared/traces/TraceLogsView/constants";
 
 /**
  * Open/close + filter wiring for the trace-logs sidebar, backed by the shared `tls_*` query params.
@@ -44,6 +44,13 @@ export const useTraceLogsSidebarControls = () => {
   const [, setTlsSpan] = useQueryParam(`${TLS_QUERY_PREFIX}span`, StringParam, {
     updateType: "replaceIn",
   });
+  const [, setTlsThread] = useQueryParam(
+    `${TLS_QUERY_PREFIX}thread`,
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const openSidebar = useCallback(
     (
@@ -74,6 +81,7 @@ export const useTraceLogsSidebarControls = () => {
     setTlsScopeLabel(undefined);
     setTlsTrace(undefined);
     setTlsSpan(undefined);
+    setTlsThread(undefined);
   }, [
     setOpen,
     setTlsFilters,
@@ -81,6 +89,7 @@ export const useTraceLogsSidebarControls = () => {
     setTlsScopeLabel,
     setTlsTrace,
     setTlsSpan,
+    setTlsThread,
   ]);
 
   return { open: Boolean(open), openSidebar, closeSidebar };

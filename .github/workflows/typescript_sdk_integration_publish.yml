@@ -10,6 +10,12 @@ on:
     paths:
       - "sdks/typescript/src/opik/integrations/**"
       - ".github/workflows/typescript_sdk_integration_publish.yml"
+  # NOTE: `is_release` is intentionally NOT a workflow_dispatch input. See
+  # typescript_sdk_publish.yml — npm validates the *entry-point* workflow filename
+  # and a package can have only one trusted publisher, so
+  # `release-wrapper-release-n-deploy.yml` is the registered publisher for these
+  # packages. A direct dispatch of this workflow builds and tests only; to publish,
+  # go through the release wrapper.
   workflow_dispatch:
     inputs:
       version:
@@ -17,11 +23,6 @@ on:
         required: true
         description: Version
         default: ""
-      is_release:
-        type: boolean
-        required: false
-        description: Whether this is a release (publishes to NPM)
-        default: false
       skip_commit_push:
         type: boolean
         required: false
@@ -50,6 +51,11 @@ jobs:
   build-and-publish:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      # See typescript_sdk_publish.yml — `id-token: write` is required for npm
+      # trusted publishing (OIDC) on both this workflow and its caller.
+      contents: write
+      id-token: write
     strategy:
       matrix:
         integration:
@@ -80,7 +86,7 @@ jobs:
         # be a workflow's first step — the repo isn't checked out yet, so the
         # composite's action.yml is not on the runner's filesystem. Keep the
         # checkout inline.
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.IS_RELEASE == 'true' && format('refs/tags/{0}', inputs.version) || github.ref }}
           fetch-depth: 0
@@ -106,7 +112,6 @@ jobs:
           enable_cache: "true"
           cache_dependency_path: ${{ env.WORKING_DIR }}/package-lock.json
           test_package_installation: "true"
-          npm_token: ${{ secrets.NPM_TOKEN }}
           github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API || github.token }}
           skip_commit_push: ${{ inputs.skip_commit_push }}
 

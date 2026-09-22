@@ -1767,6 +1767,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/annotation-queues/{id}/items/search:
+    post:
+      tags:
+      - Annotation Queues
+      summary: Search annotation queue items
+      description: "Returns queue membership metadata — how each item got into the\
+        \ queue — for the given item ids. A lookup rather than a listing: the caller\
+        \ renders the items table from the traces or threads API with its own sort\
+        \ and filters, so it asks for exactly the ids it is displaying. Ids that are\
+        \ not in the queue are omitted."
+      operationId: searchAnnotationQueueItems
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnotationQueueItemIds_Public"
+      responses:
+        "200":
+          description: Annotation queue items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnotationQueueItems_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/assertion-results:
     put:
       tags:
@@ -3445,6 +3481,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+        "409":
+          description: Concurrent modification - the latest version changed during
+            the restore; retry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/{id}/versions/retrieve:
     post:
       tags:
@@ -4588,7 +4631,10 @@ paths:
       tags:
       - LlmProviderKey
       summary: Update LLM Provider's ApiKey
-      description: Update LLM Provider's ApiKey
+      description: "Update LLM Provider's ApiKey. api_key and auth_config are mutually\
+        \ exclusive: setting a valid auth_config on a provider that holds a static\
+        \ api_key clears the stored key; send auth_config as an empty object to clear\
+        \ the recipe and switch back to a static key"
       operationId: updateLlmProviderApiKey
       parameters:
       - name: id
@@ -4607,6 +4653,54 @@ paths:
           description: No Content
         "401":
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "403":
+          description: Access forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/llm-provider-key/auth-config/test:
+    post:
+      tags:
+      - LlmProviderKey
+      summary: Test a provider's dynamic token auth
+      description: "Runs the token fetch once, backend-side, and reports the token\
+        \ lifetime. The token itself is never returned. Send provider_id to test the\
+        \ stored config, auth_config to test submitted values, or both to resolve\
+        \ secret sentinels against the stored config."
+      operationId: testLlmProviderAuthConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderAuthCheck"
+      responses:
+        "200":
+          description: Token fetched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Result"
+        "400":
+          description: "Bad Request — the token fetch itself failed (unreachable URL,\
+            \ rejected credentials, malformed reply)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: "Unprocessable Content — the request is invalid (neither provider_id\
+            \ nor auth_config, or an invalid auth_config)"
           content:
             application/json:
               schema:
@@ -5510,6 +5604,7 @@ paths:
           application/x-protobuf:
             schema:
               $ref: "#/components/schemas/JsonNode"
+        required: true
       responses:
         default:
           description: default response
@@ -6461,6 +6556,20 @@ paths:
         in: query
         schema:
           type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: "When set, scope the project metrics from this time (ISO-8601\
+            \ format); omitted keeps the all-time aggregates"
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: Scope the project metrics up to this time (ISO-8601 format).
+            Must be after 'from_time'.
+          format: date-time
       - name: sorting
         in: query
         schema:
@@ -7011,7 +7120,11 @@ paths:
       tags:
       - Prompts
       summary: Retrieve prompt version
-      description: Retrieve prompt version
+      description: "Retrieve prompt version. When project_name is supplied the lookup\
+        \ is scoped to that project: a prompt belonging to a different project is\
+        \ never matched, and an unknown project name returns 404. Legacy prompts with\
+        \ no project are still resolved as a deprecated fallback, signalled by the\
+        \ X-Opik-Deprecation response header."
       operationId: retrievePromptVersion
       requestBody:
         content:
@@ -7021,6 +7134,14 @@ paths:
       responses:
         "200":
           description: OK
+          headers:
+            X-Opik-Deprecation:
+              description: "Present only when the prompt was resolved through the\
+                \ deprecated workspace-wide fallback, i.e. it has no project. Absent\
+                \ for project-scoped prompts."
+              style: simple
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -7266,9 +7387,12 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/ReportCompleteRequest"
+        required: true
       responses:
         "204":
           description: Report updated
+        "400":
+          description: Status is not terminal
         "404":
           description: Report not found
   /v1/private/projects/{projectId}/reports/generate:
@@ -8470,10 +8594,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/BatchDelete"
+              $ref: "#/components/schemas/BatchDeleteByProject"
       responses:
         "204":
           description: No Content
+        "422":
+          description: Unprocessable Content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces/feedback-scores/names:
     get:
       tags:
@@ -9228,33 +9358,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/workspaces/versions:
-    get:
+  /v1/private/workspaces/token-usage/names:
+    post:
       tags:
       - Workspaces
-      summary: Get workspace version
-      description: |-
-        Determines whether the workspace should use Opik V1 (legacy workspace-scoped)
-        or Opik V2 (project-first) navigation. The backend is the single authority for this
-        determination, clients must never derive the version themselves.
-
-        Determination logic (priority order):
-        1) V2 workspace allowlist (TOGGLE_V2_WORKSPACE_ALLOWLIST)
-        2) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-        3) Auth one-way V2 gate (authenticated mode only)
-        4) Version 1 entity check (entities without project_id)
-        5) Fallback on failure
-
-        In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
-        Called by the frontend on workspace load.
-      operationId: getWorkspaceVersion
+      summary: Get workspace token usage names
+      description: "Gets the distinct span token usage key names aggregated across\
+        \ the workspace. When project_ids is empty, all projects in the workspace\
+        \ are included; otherwise only the given projects."
+      operationId: getWorkspaceTokenUsageNames
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceTokenUsageNamesRequest"
       responses:
         "200":
-          description: Workspace version
+          description: Token Usage names resource
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/WorkspaceVersion"
+                $ref: "#/components/schemas/TokenUsageNames"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/workspaces/metrics/summaries:
     post:
       tags:
@@ -9521,6 +9651,8 @@ components:
           type: string
         name:
           type: string
+        is_default:
+          type: boolean
     AuthorizationServerMetadata:
       type: object
       properties:
@@ -9562,6 +9694,12 @@ components:
           type: string
         logo_uri:
           type: string
+        software_id:
+          type: string
+        software_version:
+          type: string
+        client_uri:
+          type: string
         redirect_uris:
           uniqueItems: true
           type: array
@@ -9597,8 +9735,12 @@ components:
             minLength: 0
             type: string
         logo_uri:
-          maxLength: 2048
-          minLength: 0
+          type: string
+        software_id:
+          type: string
+        software_version:
+          type: string
+        client_uri:
           type: string
     TokenResponse:
       type: object
@@ -9634,6 +9776,9 @@ components:
           type: string
         resource:
           type: string
+        expires_at:
+          type: string
+          format: date-time
     AnalyticsQueryResponse:
       type: object
       properties:
@@ -10452,6 +10597,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -10528,6 +10674,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -10676,6 +10823,7 @@ components:
           - threshold:cost
           - threshold:latency
           - threshold:errors
+          - filter:guardrail_type
         config_value:
           type: object
           additionalProperties:
@@ -10903,6 +11051,8 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation"
         reviewers:
           type: array
           readOnly: true
@@ -10932,6 +11082,16 @@ components:
           type: string
           readOnly: true
       description: List of annotation queues to create
+    AnnotationQueueAutomation:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        conditions:
+          $ref: "#/components/schemas/Conditions"
+        max_items_in_queue:
+          type: integer
+          format: int32
     AnnotationQueueReviewer:
       type: object
       properties:
@@ -10941,6 +11101,28 @@ components:
           type: integer
           format: int64
       readOnly: true
+    ConditionGroup:
+      required:
+      - conditions
+      type: object
+      properties:
+        conditions:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreCondition"
+    Conditions:
+      required:
+      - groups
+      type: object
+      properties:
+        groups:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionGroup"
     FeedbackScoreAverage:
       required:
       - name
@@ -10952,6 +11134,36 @@ components:
           type: string
         value:
           type: number
+    ScoreCondition:
+      required:
+      - operator
+      - score_name
+      - value
+      type: object
+      properties:
+        score_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        operator:
+          type: string
+          enum:
+          - '>'
+          - <
+          - =
+        value:
+          type: number
+          format: double
+    AnnotationQueueAutomation_Write:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        conditions:
+          $ref: "#/components/schemas/Conditions_Write"
+        max_items_in_queue:
+          type: integer
+          format: int32
     AnnotationQueue_Write:
       required:
       - name
@@ -10993,7 +11205,51 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation_Write"
       description: List of annotation queues to create
+    ConditionGroup_Write:
+      required:
+      - conditions
+      type: object
+      properties:
+        conditions:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreCondition_Write"
+    Conditions_Write:
+      required:
+      - groups
+      type: object
+      properties:
+        groups:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionGroup_Write"
+    ScoreCondition_Write:
+      required:
+      - operator
+      - score_name
+      - value
+      type: object
+      properties:
+        score_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        operator:
+          type: string
+          enum:
+          - '>'
+          - <
+          - =
+        value:
+          type: number
+          format: double
     AnnotationQueueBatch:
       required:
       - annotation_queues
@@ -11022,6 +11278,16 @@ components:
           items:
             $ref: "#/components/schemas/AnnotationQueue_Write"
       description: Batch of annotation queues to create
+    AnnotationQueueAutomation_Public:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        conditions:
+          $ref: "#/components/schemas/Conditions_Public"
+        max_items_in_queue:
+          type: integer
+          format: int32
     AnnotationQueuePage_Public:
       type: object
       properties:
@@ -11095,6 +11361,8 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation_Public"
         reviewers:
           type: array
           readOnly: true
@@ -11123,6 +11391,28 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    ConditionGroup_Public:
+      required:
+      - conditions
+      type: object
+      properties:
+        conditions:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreCondition_Public"
+    Conditions_Public:
+      required:
+      - groups
+      type: object
+      properties:
+        groups:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionGroup_Public"
     FeedbackScoreAverage_Public:
       required:
       - name
@@ -11135,6 +11425,26 @@ components:
         value:
           type: number
       readOnly: true
+    ScoreCondition_Public:
+      required:
+      - operator
+      - score_name
+      - value
+      type: object
+      properties:
+        score_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        operator:
+          type: string
+          enum:
+          - '>'
+          - <
+          - =
+        value:
+          type: number
+          format: double
     ItemLockInfo:
       type: object
       properties:
@@ -11165,6 +11475,37 @@ components:
         expires_at:
           type: string
           format: date-time
+    AnnotationQueueItem_Public:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+          - manual
+          - automated
+    AnnotationQueueItems_Public:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnnotationQueueItem_Public"
+    AnnotationQueueItemIds_Public:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
     AnnotationQueueUpdate:
       type: object
       properties:
@@ -11192,6 +11533,8 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation"
     AssertionResultBatch:
       required:
       - assertion_results
@@ -11458,13 +11801,30 @@ components:
               rules)
             format: uuid
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
+          maximum: 1
+          exclusiveMaximum: false
+          minimum: 0
+          exclusiveMinimum: false
           type: number
+          description: "Fraction of production (SDK-logged) items this rule scores,\
+            \ from 0 to 1. Trace rules ignore this value for experiment, playground\
+            \ and optimization traces and score them in full; span and thread rules\
+            \ only ever evaluate SDK-logged data."
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         created_at:
           type: string
           format: date-time
@@ -11492,6 +11852,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -12011,13 +12372,30 @@ components:
               rules)
             format: uuid
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
+          maximum: 1
+          exclusiveMaximum: false
+          minimum: 0
+          exclusiveMinimum: false
           type: number
+          description: "Fraction of production (SDK-logged) items this rule scores,\
+            \ from 0 to 1. Trace rules ignore this value for experiment, playground\
+            \ and optimization traces and score them in full; span and thread rules\
+            \ only ever evaluate SDK-logged data."
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         type:
           type: string
           enum:
@@ -12031,6 +12409,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -12356,13 +12735,30 @@ components:
           items:
             $ref: "#/components/schemas/ProjectReference_Public"
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
+          maximum: 1
+          exclusiveMaximum: false
+          minimum: 0
+          exclusiveMinimum: false
           type: number
+          description: "Fraction of production (SDK-logged) items this rule scores,\
+            \ from 0 to 1. Trace rules ignore this value for experiment, playground\
+            \ and optimization traces and score them in full; span and thread rules\
+            \ only ever evaluate SDK-logged data."
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         created_at:
           type: string
           format: date-time
@@ -12390,6 +12786,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -12811,13 +13208,30 @@ components:
           items:
             $ref: "#/components/schemas/ProjectReference_Public"
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
+          maximum: 1
+          exclusiveMaximum: false
+          minimum: 0
+          exclusiveMinimum: false
           type: number
+          description: "Fraction of production (SDK-logged) items this rule scores,\
+            \ from 0 to 1. Trace rules ignore this value for experiment, playground\
+            \ and optimization traces and score them in full; span and thread rules\
+            \ only ever evaluate SDK-logged data."
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          description: "Controls whether the rule fires on production traces, experiment\
+            \ traces, or both. Defaults to 'production' if omitted."
+          enum:
+          - production
+          - experiment
+          - both
         created_at:
           type: string
           format: date-time
@@ -12845,6 +13259,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -12906,13 +13321,28 @@ components:
       type: object
       properties:
         name:
-          minLength: 1
+          maxLength: 150
+          minLength: 0
           type: string
         sampling_rate:
+          maximum: 1
+          exclusiveMaximum: false
+          minimum: 0
+          exclusiveMinimum: false
           type: number
+          description: "Fraction of production (SDK-logged) items this rule scores,\
+            \ from 0 to 1. Trace rules ignore this value for experiment, playground\
+            \ and optimization traces and score them in full; span and thread rules\
+            \ only ever evaluate SDK-logged data."
           format: float
         enabled:
           type: boolean
+        trigger_scope:
+          type: string
+          enum:
+          - production
+          - experiment
+          - both
         project_id:
           type: string
           description: "Primary project ID (legacy field, maintained for backwards\
@@ -12939,6 +13369,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -13057,17 +13488,17 @@ components:
           - function
         content:
           type: string
-        reasoning_content:
+        reasoningContent:
           type: string
         name:
           type: string
-        tool_calls:
+        toolCalls:
           type: array
           items:
             $ref: "#/components/schemas/ToolCall"
         refusal:
           type: string
-        function_call:
+        functionCall:
           $ref: "#/components/schemas/FunctionCall"
     ChatCompletionChoice:
       type: object
@@ -13079,7 +13510,7 @@ components:
           $ref: "#/components/schemas/AssistantMessage"
         delta:
           $ref: "#/components/schemas/Delta"
-        finish_reason:
+        finishReason:
           type: string
         logprobs:
           $ref: "#/components/schemas/LogProbs"
@@ -13099,14 +13530,14 @@ components:
             $ref: "#/components/schemas/ChatCompletionChoice"
         usage:
           $ref: "#/components/schemas/Usage"
-        system_fingerprint:
+        systemFingerprint:
           type: string
-        service_tier:
+        serviceTier:
           type: string
     CompletionTokensDetails:
       type: object
       properties:
-        reasoning_tokens:
+        reasoningTokens:
           type: integer
           format: int32
     Delta:
@@ -13116,13 +13547,13 @@ components:
           type: string
         content:
           type: string
-        reasoning_content:
+        reasoningContent:
           type: string
-        tool_calls:
+        toolCalls:
           type: array
           items:
             $ref: "#/components/schemas/ToolCall"
-        function_call:
+        functionCall:
           $ref: "#/components/schemas/FunctionCall"
     FunctionCall:
       type: object
@@ -13154,7 +13585,7 @@ components:
     PromptTokensDetails:
       type: object
       properties:
-        cached_tokens:
+        cachedTokens:
           type: integer
           format: int32
     ToolCall:
@@ -13174,18 +13605,18 @@ components:
     Usage:
       type: object
       properties:
-        total_tokens:
+        totalTokens:
           type: integer
           format: int32
-        prompt_tokens:
+        promptTokens:
           type: integer
           format: int32
-        prompt_tokens_details:
+        promptTokensDetails:
           $ref: "#/components/schemas/PromptTokensDetails"
-        completion_tokens:
+        completionTokens:
           type: integer
           format: int32
-        completion_tokens_details:
+        completionTokensDetails:
           $ref: "#/components/schemas/CompletionTokensDetails"
     ChatCompletionRequest:
       type: object
@@ -13199,7 +13630,7 @@ components:
         temperature:
           type: number
           format: double
-        top_p:
+        topP:
           type: number
           format: double
         "n":
@@ -13207,32 +13638,32 @@ components:
           format: int32
         stream:
           type: boolean
-        stream_options:
+        streamOptions:
           $ref: "#/components/schemas/StreamOptions"
         stop:
           type: array
           items:
             type: string
-        max_tokens:
+        maxTokens:
           type: integer
           format: int32
-        max_completion_tokens:
+        maxCompletionTokens:
           type: integer
           format: int32
-        presence_penalty:
+        presencePenalty:
           type: number
           format: double
-        frequency_penalty:
+        frequencyPenalty:
           type: number
           format: double
-        logit_bias:
+        logitBias:
           type: object
           additionalProperties:
             type: integer
             format: int32
         user:
           type: string
-        response_format:
+        responseFormat:
           $ref: "#/components/schemas/ResponseFormat"
         seed:
           type: integer
@@ -13241,9 +13672,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Tool"
-        tool_choice:
+        toolChoice:
           type: object
-        parallel_tool_calls:
+        parallelToolCalls:
           type: boolean
         store:
           type: boolean
@@ -13251,20 +13682,20 @@ components:
           type: object
           additionalProperties:
             type: string
-        reasoning_effort:
+        reasoningEffort:
           type: string
-        service_tier:
+        serviceTier:
           type: string
         logprobs:
           type: boolean
-        top_logprobs:
+        topLogprobs:
           type: integer
           format: int32
         functions:
           type: array
           items:
             $ref: "#/components/schemas/Function"
-        function_call:
+        functionCall:
           $ref: "#/components/schemas/FunctionCall"
     Function:
       type: object
@@ -13310,12 +13741,12 @@ components:
           - text
           - json_object
           - json_schema
-        json_schema:
+        jsonSchema:
           $ref: "#/components/schemas/JsonSchema"
     StreamOptions:
       type: object
       properties:
-        include_usage:
+        includeUsage:
           type: boolean
     Tool:
       type: object
@@ -14387,6 +14818,16 @@ components:
             $ref: "#/components/schemas/EvaluatorItem"
         execution_policy:
           $ref: "#/components/schemas/ExecutionPolicy"
+        field_mappings:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional mapping of dataset item field name to a path into\
+              \ the span, e.g. 'input.input_text'. Takes precedence over the fields\
+              \ produced by enrichment_options. Ignored for test suite datasets."
+          description: "Optional mapping of dataset item field name to a path into\
+            \ the span, e.g. 'input.input_text'. Takes precedence over the fields\
+            \ produced by enrichment_options. Ignored for test suite datasets."
     SpanEnrichmentOptions:
       type: object
       properties:
@@ -14425,6 +14866,16 @@ components:
             $ref: "#/components/schemas/EvaluatorItem"
         execution_policy:
           $ref: "#/components/schemas/ExecutionPolicy"
+        field_mappings:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional mapping of dataset item field name to a path into\
+              \ the trace, e.g. 'input.input_text'. Takes precedence over the fields\
+              \ produced by enrichment_options. Ignored for test suite datasets."
+          description: "Optional mapping of dataset item field name to a path into\
+            \ the trace, e.g. 'input.input_text'. Takes precedence over the fields\
+            \ produced by enrichment_options. Ignored for test suite datasets."
     TraceEnrichmentOptions:
       type: object
       properties:
@@ -16228,6 +16679,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
+        experiment_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
     Check:
       type: object
       properties:
@@ -16236,6 +16690,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -17891,6 +18348,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -17950,6 +18410,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -17959,6 +18422,25 @@ components:
           $ref: "#/components/schemas/JsonNode"
         details:
           $ref: "#/components/schemas/JsonNode"
+    Credential_Public:
+      required:
+      - key
+      type: object
+      properties:
+        key:
+          maxLength: 250
+          minLength: 0
+          type: string
+        value:
+          maxLength: 2000
+          minLength: 0
+          type: string
+        secret:
+          type: boolean
+          description: Secret values are encrypted at rest and never read back; once
+            true it cannot be unset
+      description: "Fields sent to the token URL. Values flagged as secret are write-only:\
+        \ they read back as the '__SECRET__' sentinel"
     ProviderApiKeyPage_Public:
       type: object
       properties:
@@ -18024,6 +18506,8 @@ components:
         base_url:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        auth_config:
+          $ref: "#/components/schemas/ProviderAuthConfig_Public"
         created_at:
           type: string
           format: date-time
@@ -18043,6 +18527,74 @@ components:
           description: "If true, this provider is system-managed and cannot be edited\
             \ or deleted"
           readOnly: true
+    ProviderAuthConfig_Public:
+      type: object
+      properties:
+        token_url:
+          type: string
+          description: Auth service URL the credentials are sent to
+          example: https://developer.api.example.com/authentication/v1/token
+        send_as:
+          type: string
+          description: "How credentials are sent: form body (default), JSON body,\
+            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
+            \ the form body)"
+          enum:
+          - form
+          - json
+          - basic
+        credentials:
+          maxItems: 20
+          minItems: 0
+          type: array
+          description: "Fields sent to the token URL. Values flagged as secret are\
+            \ write-only: they read back as the '__SECRET__' sentinel"
+          items:
+            $ref: "#/components/schemas/Credential_Public"
+        token_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token in the reply; dot-path for nested replies
+          example: access_token
+        expires_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token lifetime in seconds in the reply; dot-path
+            for nested replies
+          example: expires_in
+        fallback_ttl_seconds:
+          maximum: 31536000
+          minimum: 0
+          type: integer
+          description: "Lifetime in seconds assumed when the reply doesn't state one,\
+            \ capped at one year; 0 disables caching for such replies. A reply-stated\
+            \ lifetime always wins"
+          format: int64
+      description: "Dynamic token auth recipe. When set, Opik fetches a short-lived\
+        \ bearer from the configured auth service instead of using a static api_key.\
+        \ Only supported for custom providers. Secret credential values read back\
+        \ masked."
+    Credential:
+      required:
+      - key
+      type: object
+      properties:
+        key:
+          maxLength: 250
+          minLength: 0
+          type: string
+        value:
+          maxLength: 2000
+          minLength: 0
+          type: string
+        secret:
+          type: boolean
+          description: Secret values are encrypted at rest and never read back; once
+            true it cannot be unset
+      description: "Fields sent to the token URL. Values flagged as secret are write-only:\
+        \ they read back as the '__SECRET__' sentinel"
     ProviderApiKey:
       required:
       - provider
@@ -18091,6 +18643,8 @@ components:
         base_url:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        auth_config:
+          $ref: "#/components/schemas/ProviderAuthConfig"
         created_at:
           type: string
           format: date-time
@@ -18110,6 +18664,73 @@ components:
           description: "If true, this provider is system-managed and cannot be edited\
             \ or deleted"
           readOnly: true
+    ProviderAuthConfig:
+      type: object
+      properties:
+        token_url:
+          type: string
+          description: Auth service URL the credentials are sent to
+          example: https://developer.api.example.com/authentication/v1/token
+        send_as:
+          type: string
+          description: "How credentials are sent: form body (default), JSON body,\
+            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
+            \ the form body)"
+          enum:
+          - form
+          - json
+          - basic
+        credentials:
+          maxItems: 20
+          minItems: 0
+          type: array
+          description: "Fields sent to the token URL. Values flagged as secret are\
+            \ write-only: they read back as the '__SECRET__' sentinel"
+          items:
+            $ref: "#/components/schemas/Credential"
+        token_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token in the reply; dot-path for nested replies
+          example: access_token
+        expires_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token lifetime in seconds in the reply; dot-path
+            for nested replies
+          example: expires_in
+        fallback_ttl_seconds:
+          maximum: 31536000
+          minimum: 0
+          type: integer
+          description: "Lifetime in seconds assumed when the reply doesn't state one,\
+            \ capped at one year; 0 disables caching for such replies. A reply-stated\
+            \ lifetime always wins"
+          format: int64
+      description: Dynamic token auth recipe. Send the '__SECRET__' sentinel as a
+        credential value to keep the stored secret; send an empty object to clear
+        the auth config.
+    Credential_Write:
+      required:
+      - key
+      type: object
+      properties:
+        key:
+          maxLength: 250
+          minLength: 0
+          type: string
+        value:
+          maxLength: 2000
+          minLength: 0
+          type: string
+        secret:
+          type: boolean
+          description: Secret values are encrypted at rest and never read back; once
+            true it cannot be unset
+      description: "Fields sent to the token URL. Values flagged as secret are write-only:\
+        \ they read back as the '__SECRET__' sentinel"
     ProviderApiKey_Write:
       required:
       - provider
@@ -18154,6 +18775,78 @@ components:
         base_url:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        auth_config:
+          $ref: "#/components/schemas/ProviderAuthConfig_Write"
+    ProviderAuthConfig_Write:
+      type: object
+      properties:
+        token_url:
+          type: string
+          description: Auth service URL the credentials are sent to
+          example: https://developer.api.example.com/authentication/v1/token
+        send_as:
+          type: string
+          description: "How credentials are sent: form body (default), JSON body,\
+            \ or basic auth (id/secret in an HTTP Basic header, remaining fields in\
+            \ the form body)"
+          enum:
+          - form
+          - json
+          - basic
+        credentials:
+          maxItems: 20
+          minItems: 0
+          type: array
+          description: "Fields sent to the token URL. Values flagged as secret are\
+            \ write-only: they read back as the '__SECRET__' sentinel"
+          items:
+            $ref: "#/components/schemas/Credential_Write"
+        token_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token in the reply; dot-path for nested replies
+          example: access_token
+        expires_field:
+          maxLength: 250
+          minLength: 0
+          type: string
+          description: Field holding the token lifetime in seconds in the reply; dot-path
+            for nested replies
+          example: expires_in
+        fallback_ttl_seconds:
+          maximum: 31536000
+          minimum: 0
+          type: integer
+          description: "Lifetime in seconds assumed when the reply doesn't state one,\
+            \ capped at one year; 0 disables caching for such replies. A reply-stated\
+            \ lifetime always wins"
+          format: int64
+      description: "Dynamic token auth recipe. When set, Opik fetches a short-lived\
+        \ bearer from the configured auth service instead of using a static api_key.\
+        \ Only supported for custom providers. Secret credential values read back\
+        \ masked."
+    Result:
+      type: object
+      properties:
+        name:
+          type: string
+        current:
+          type: number
+          format: double
+        previous:
+          type: number
+          format: double
+    ProviderAuthCheck:
+      type: object
+      properties:
+        provider_id:
+          type: string
+          description: Test the stored auth config of this provider; also the sentinel-resolution
+            target when auth_config is sent
+          format: uuid
+        auth_config:
+          $ref: "#/components/schemas/ProviderAuthConfig"
     ProviderApiKeyUpdate:
       type: object
       properties:
@@ -18181,6 +18874,8 @@ components:
             type: string
         base_url:
           type: string
+        auth_config:
+          $ref: "#/components/schemas/ProviderAuthConfig"
     LocalRunnerLogEntry:
       required:
       - stream
@@ -19659,6 +20354,7 @@ components:
           - model
           - provider
           - type
+          - guardrail_name
         metadata_key:
           type: string
         sub_metric:
@@ -20431,7 +21127,11 @@ components:
         project_name:
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
-          description: "If provided, scopes the search to the specified project"
+          description: "If provided, scopes the search to the specified project; prompts\
+            \ belonging to other projects are never matched, and an unknown project\
+            \ name returns 404. Legacy prompts that are not scoped to any project\
+            \ are still matched as a deprecated fallback, signalled by the X-Opik-Deprecation\
+            \ response header."
     PromptVersionIdsRequest_Detail:
       required:
       - ids
@@ -20653,6 +21353,12 @@ components:
           type: string
         recommended_actions:
           $ref: "#/components/schemas/JsonNode"
+        failure_reason:
+          maxLength: 64
+          minLength: 0
+          type: string
+          description: Why the report failed. Only 'out_of_credits' is acted on; any
+            other value is recorded but renders as a generic failure.
     GenerateReportResponse:
       type: object
       properties:
@@ -20704,6 +21410,8 @@ components:
           - pending
           - completed
           - failed
+        failure_reason:
+          type: string
         created_at:
           type: string
           format: date-time
@@ -20825,8 +21533,6 @@ components:
           format: int64
     ServiceTogglesConfig:
       required:
-      - agentInsightsEnabled
-      - agenticToolsEnabled
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
@@ -20836,7 +21542,6 @@ components:
       - datasetVersioningEnabled
       - demoDataEnabled
       - exportEnabled
-      - forceWorkspaceVersion
       - geminiProviderEnabled
       - guardrailsEnabled
       - ollamaProviderEnabled
@@ -20850,8 +21555,6 @@ components:
       - spanLlmAsJudgeEnabled
       - spanUserDefinedMetricPythonEnabled
       - traceThreadPythonEvaluatorEnabled
-      - v1WorkspaceAllowlistIds
-      - v2WorkspaceAllowlistIds
       - vertexaiProviderEnabled
       - welcomeWizardEnabled
       type: object
@@ -20902,38 +21605,13 @@ components:
           type: boolean
         projectHomepageEnabled:
           type: boolean
-        agenticToolsEnabled:
-          type: boolean
-        agentInsightsEnabled:
-          type: boolean
         onlineScoringTracingEnabled:
           type: boolean
-        v2WorkspaceAllowlistIds:
-          uniqueItems: true
-          type: array
-          items:
-            minLength: 1
-            type: string
-        v1WorkspaceAllowlistIds:
-          uniqueItems: true
-          type: array
-          items:
-            minLength: 1
-            type: string
-        forceWorkspaceVersion:
-          minLength: 1
-          type: string
         defaultPageSize:
           maximum: 100
           minimum: 5
           type: integer
           format: int32
-        v2WorkspaceAllowlist:
-          type: string
-          writeOnly: true
-        v1WorkspaceAllowlist:
-          type: string
-          writeOnly: true
     SpanBatchUpdate:
       required:
       - ids
@@ -21818,11 +22496,17 @@ components:
           minItems: 1
           uniqueItems: true
           type: array
+          description: Ids of the traces to delete
           items:
             type: string
+            description: Ids of the traces to delete
             format: uuid
         project_id:
           type: string
+          description: "Optional. Scopes the deletion to this project. When omitted,\
+            \ each trace's owning project is resolved automatically and the trace\
+            \ is deleted under its full key, so a trace can be deleted without knowing\
+            \ its project."
           format: uuid
     Check_Public:
       type: object
@@ -21832,6 +22516,9 @@ components:
           enum:
           - TOPIC
           - PII
+          - LLM_JUDGE
+          - PROMPT_INJECTION
+          - CUSTOM_CLASSIFIER
         result:
           type: string
           enum:
@@ -22340,17 +23027,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Permission"
-    Result:
-      type: object
-      properties:
-        name:
-          type: string
-        current:
-          type: number
-          format: double
-        previous:
-          type: number
-          format: double
     WorkspaceMetricsSummaryRequest:
       required:
       - interval_end
@@ -22449,6 +23125,7 @@ components:
           - model
           - provider
           - type
+          - guardrail_name
         metadata_key:
           type: string
         sub_metric:
@@ -22508,22 +23185,15 @@ components:
           format: date-time
         start_before_end:
           type: boolean
-    WorkspaceVersion:
+    WorkspaceTokenUsageNamesRequest:
       type: object
       properties:
-        opik_version:
-          type: string
-          description: |-
-            The determined Opik navigation version for this workspace.
-            'version_1' = legacy workspace-scoped navigation,
-            'version_2' = new project-first navigation.
-          enum:
-          - version_1
-          - version_2
-      description: |-
-        Workspace version response.
-        The opik_version field indicates which navigation mode the frontend should render:
-        'version_1' (legacy workspace-scoped) or 'version_2' (project-first).
+        project_ids:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

@@ -19,6 +19,7 @@ import reactor.core.scheduler.Schedulers;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 @RequiredArgsConstructor
@@ -30,8 +31,10 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        ChatResponse response = llmProviderClientGenerator.generate(config, request).chat(getChatMessages(request));
-        return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
+        try (var client = llmProviderClientGenerator.newVertexAIClient(config, request)) {
+            ChatResponse response = client.chat(getChatMessages(request));
+            return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
+        }
     }
 
     @Override
@@ -41,18 +44,68 @@ public class LlmProviderVertexAI implements LlmProviderService {
 
         Schedulers.boundedElastic()
                 .schedule(() -> {
+                    CloseableVertexAiStreamingChatModel client;
                     try {
-                        var streamingChatLanguageModel = llmProviderClientGenerator.newVertexAIStreamingClient(config,
-                                request);
-
-                        List<ChatMessage> chatMessages = getChatMessages(request);
-                        streamingChatLanguageModel
-                                .chat(chatMessages,
-                                        new ChunkedResponseHandler(handleMessage, handleClose, handleError,
-                                                request.model()));
+                        client = llmProviderClientGenerator.newVertexAIStreamingClient(config, request);
                     } catch (Exception e) {
                         handleError.accept(e);
                         handleClose.run();
+                        return;
+                    }
+
+                    // Release the client's GAX threads exactly once, once the stream terminates
+                    // (onComplete/onError) — never when this task returns, which is before the first token.
+                    var closed = new AtomicBoolean(false);
+                    Runnable closeOnce = () -> {
+                        if (closed.compareAndSet(false, true)) {
+                            client.close();
+                        }
+                    };
+                    // The consumer gets exactly one terminal; a handler that throws is logged, not propagated.
+                    var terminalReached = new AtomicBoolean(false);
+                    Runnable handleCloseAndRelease = () -> {
+                        terminalReached.set(true);
+                        try {
+                            handleClose.run();
+                        } catch (Exception e) {
+                            log.warn("Vertex AI stream close handler failed", e);
+                        } finally {
+                            closeOnce.run();
+                        }
+                    };
+                    Consumer<Throwable> handleErrorAndRelease = throwable -> {
+                        terminalReached.set(true);
+                        try {
+                            handleError.accept(throwable);
+                        } catch (Exception e) {
+                            log.warn("Vertex AI stream error handler failed", e);
+                        } finally {
+                            closeOnce.run();
+                        }
+                    };
+
+                    try {
+                        List<ChatMessage> chatMessages = getChatMessages(request);
+                        client.chat(chatMessages,
+                                new ChunkedResponseHandler(handleMessage, handleCloseAndRelease, handleErrorAndRelease,
+                                        request.model()));
+                    } catch (Exception e) {
+                        if (terminalReached.compareAndSet(false, true)) {
+                            // Synchronous failure before any terminal — deliver the error and close the stream.
+                            try {
+                                handleError.accept(e);
+                            } catch (Exception ex) {
+                                log.warn("Vertex AI stream error handler failed", ex);
+                            }
+                            try {
+                                handleClose.run();
+                            } catch (Exception ex) {
+                                log.warn("Vertex AI stream close handler failed", ex);
+                            }
+                        } else {
+                            log.warn("Vertex AI stream failed after a terminal callback had already run", e);
+                        }
+                        closeOnce.run();
                     }
                 });
     }

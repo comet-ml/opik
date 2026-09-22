@@ -15,6 +15,7 @@ export enum BREAKDOWN_FIELD {
   MODEL = "model",
   PROVIDER = "provider",
   TYPE = "type",
+  GUARDRAIL_NAME = "guardrail_name",
 }
 
 export interface DashboardRuntimeConfig {
@@ -209,6 +210,7 @@ export interface Dashboard {
   name: string;
   description?: string;
   workspace_id: string;
+  project_id?: string;
   config: DashboardState;
   type: DASHBOARD_TYPE;
   scope: DASHBOARD_SCOPE;

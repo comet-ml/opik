@@ -162,6 +162,16 @@
   }
 }
 
+/* Wrapping a step's content in this class replays its staggered entrance
+   animations backwards — elements cascade out (visible → hidden) — used for
+   the outgoing panel when navigating between onboarding steps. */
+.comet-onboarding-anim-reverse .onboarding-fade-in,
+.comet-onboarding-anim-reverse .slide-fade-subtle,
+.comet-onboarding-anim-reverse .slide-fade-left,
+.comet-onboarding-anim-reverse .slide-fade-right {
+  animation-direction: reverse;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .onboarding-fade-in,
   .slide-fade-subtle,

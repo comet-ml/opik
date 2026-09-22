@@ -1,10 +1,6 @@
 package com.comet.opik.domain.experiments.aggregations;
 
 import com.clickhouse.client.api.Client;
-import com.clickhouse.client.api.insert.InsertResponse;
-import com.clickhouse.client.api.insert.InsertSettings;
-import com.clickhouse.client.api.metrics.ServerMetrics;
-import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.api.AssertionScoreAverage;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.EvaluationMethod;
@@ -38,10 +34,12 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -60,11 +58,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
-import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -123,6 +118,27 @@ public interface ExperimentAggregatesDAO {
     Mono<ProjectStats> getExperimentItemsStatsFromAggregates(UUID datasetId, UUID versionId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
 
+    /**
+     * Counts aggregated and non-aggregated experiments so callers can drop query branches that cannot contribute
+     * rows.
+     * <p>
+     * When {@link AggregationBranchCountsCriteria#projectId()} is set, the non-aggregated count is restricted to
+     * experiments reachable from that project. Reachability follows the project of the experiment itself and the
+     * projects of the traces its items reference.
+     * <p>
+     * The restriction applies to the non-aggregated count only, and must not be hoisted into the outer filter. The
+     * two branches decide project membership differently: the raw branch from traces and {@code project_id}, the
+     * aggregated branch from {@code experiment_aggregates.project_id}. Aggregated experiments exist whose stored
+     * project is no longer reachable from their traces, because those traces were deleted after aggregation.
+     * Filtering every row by the raw branch's notion of reachability would drop such experiments from the
+     * aggregated count, and with it the aggregated branch that returns them.
+     * <p>
+     * The trace lookup is deliberately restricted to trace ids that appear in {@code experiment_items}. A project
+     * can hold tens of millions of traces while a workspace holds under a million experiment items, so driving the
+     * lookup from the project alone builds an enormous set: measured against a seven-million-trace project it read
+     * 7.19M rows using 1.4 GiB, versus 197K rows and 12 MiB with the restriction, for an identical result. Without
+     * it this count can cost more than the branch it is meant to eliminate.
+     */
     Mono<AggregatedExperimentCounts> getAggregationBranchCounts(AggregationBranchCountsCriteria criteria);
 
     Mono<Long> deleteByExperimentIds(Set<UUID> experimentIds);
@@ -135,6 +151,8 @@ public interface ExperimentAggregatesDAO {
 @Slf4j
 class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
+    private static final String EXPERIMENT_ITEM_AGGREGATES_TABLE = "experiment_item_aggregates";
+
     private static final TypeReference<List<ExperimentScore>> TYPE_REFERENCE = new TypeReference<>() {
     };
 
@@ -144,6 +162,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
     private final @NonNull Client clickHouseClient;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     /**
      * Filter strategies used for experiment aggregates search binding.
@@ -338,7 +357,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND trace_id IN (SELECT trace_id FROM experiment_items)
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 by id
             ), spans_agg AS (
                 SELECT
@@ -679,6 +698,19 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      * stable id) to the stable {@code dataset_item_id} at aggregation time. Compare reads still
      * resolve at read time too (see {@code DatasetItemVersionDAO}), so this is best-effort
      * hygiene — over time it phases out legacy values from EIA without a backfill migration.
+     *
+     * <p>The {@code lookup_div} join is bounded by {@code dataset_id} so the right side can be
+     * pruned by the primary key. ClickHouse builds a join's right side in full before it can join,
+     * and {@code dataset_item_versions} is sorted by
+     * {@code (workspace_id, dataset_id, dataset_version_id, id)}. Bounding on {@code workspace_id}
+     * alone leaves every dataset in the workspace in range; adding {@code dataset_id}, the second
+     * key column, narrows that to one contiguous range and prunes at part selection. Matching on
+     * {@code lookup_div.id} cannot do this — {@code id} is the fourth key column, so it only
+     * filters granules that have already been read.
+     *
+     * <p>{@code IN} rather than {@code =}: {@code experiments} is a ReplacingMergeTree whose
+     * replacing key includes {@code dataset_id}, so one id can carry more than one row and {@code =}
+     * would drop the others' items from the join.
      */
     private static final String GET_EXPERIMENT_ITEMS = """
             SELECT
@@ -694,6 +726,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             FROM experiment_items AS ei
             LEFT JOIN dataset_item_versions AS lookup_div FINAL
                 ON lookup_div.workspace_id = ei.workspace_id
+                AND lookup_div.dataset_id IN (
+                    SELECT dataset_id
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    AND id = :experiment_id
+                )
                 AND lookup_div.id = ei.dataset_item_id
             WHERE ei.workspace_id = :workspace_id
             AND ei.experiment_id = :experiment_id
@@ -746,8 +784,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 AND trace_id IN :trace_ids
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, id
             )
             GROUP BY trace_id
             SETTINGS log_comment = '<log_comment>'
@@ -1434,13 +1472,42 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
 
     private static final String SELECT_EXPERIMENT_AGGREGATION_COUNTS = """
             SELECT
-                count() AS total,
                 countIf(has_aggregated) AS aggregated,
-                countIf(NOT has_aggregated) AS not_aggregated
+                countIf(NOT has_aggregated AND in_project_scope) AS not_aggregated
             FROM (
                 SELECT
                     e.id,
-                    notEmpty(agg.id) AS has_aggregated
+                    notEmpty(agg.id) AS has_aggregated,
+                    <if(project_id)>
+                    (e.project_id = :project_id
+                        OR e.id IN (
+                            SELECT experiment_id
+                            FROM experiment_items
+                            WHERE workspace_id = :workspace_id
+                              AND trace_id IN (
+                                  SELECT id
+                                  FROM traces
+                                  WHERE workspace_id = :workspace_id
+                                    AND project_id = :project_id
+                                    AND id IN (
+                                        SELECT trace_id
+                                        FROM experiment_items
+                                        WHERE workspace_id = :workspace_id
+                                          AND experiment_id NOT IN (
+                                              SELECT id
+                                              FROM experiment_aggregates
+                                              WHERE workspace_id = :workspace_id
+                                              <if(experiment_ids)> AND id IN :experiment_ids <endif>
+                                              <if(dataset_id)> AND dataset_id = :dataset_id <endif>
+                                              <if(id)> AND id = :id <endif>
+                                              <if(ids_list)> AND id IN :ids_list <endif>
+                                          )
+                                    )
+                              )
+                        )) AS in_project_scope
+                    <else>
+                    true AS in_project_scope
+                    <endif>
                 FROM experiments e FINAL
                 LEFT JOIN (
                     SELECT DISTINCT
@@ -1926,14 +1993,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     /**
-     * Serialize a single experiment-item row as a JSONEachRow object and append it to {@code out},
-     * terminated by {@code '\n'} — the format expected by ClickHouse v2 bulk insert
+     * Serialize a single experiment-item row as a JSONEachRow object
      * (see {@link #insertExperimentItemAggregates(UUID, List, List, List, List, List, List)}).
      *
-     * <p>Why a shared {@link StringBuilder}: the v2 {@link com.clickhouse.client.api.Client#insert} call
-     * takes an {@link java.io.InputStream} over the whole batch; concatenating rows into one buffer
-     * then handing off a single {@link java.io.ByteArrayInputStream} avoids per-row stream plumbing
-     * and lets ClickHouse's HTTP layer compress + send the payload in one shot.
+     * <p>Returns the node rather than appending to a shared buffer: {@code JsonEachRowBulkInsert} owns
+     * the framing, the newline separator and the encoding, so this only has to describe one row.
      *
      * <p>Why {@link com.comet.opik.utils.JsonUtils#createObjectNode()}: keeps JSON serialization on the
      * same Jackson {@code ObjectMapper} the rest of the backend uses (snake_case naming, BigDecimal
@@ -1950,8 +2014,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
      * defaults ({@code ""}, {@code 0}, {@code EMPTY_ARRAY_STR}) rather than emitted as JSON {@code null},
      * because ClickHouse's non-nullable columns would reject nulls and fail the whole batch.
      */
-    private void appendJsonRow(StringBuilder out,
-            String workspaceId,
+    private ObjectNode toJsonRow(String workspaceId,
             UUID projectId,
             ExperimentItemData item,
             Map<UUID, TraceData> tracesMap,
@@ -2010,7 +2073,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 Optional.ofNullable(assertionsMap.get(item.traceId())).map(AssertionData::assertionsArray)
                         .orElse(EMPTY_ARRAY_STR));
 
-        out.append(node).append('\n');
+        return node;
     }
 
     private Mono<Long> insertExperimentItemAggregates(
@@ -2038,44 +2101,42 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     /**
-     * Bulk-insert {@code items} into {@code experiment_item_aggregates} via the ClickHouse v2 HTTP
-     * client using {@link ClickHouseFormat#JSONEachRow}.
+     * Bulk-insert {@code items} into {@code experiment_item_aggregates} as {@code JSONEachRow}, through
+     * the shared {@code JsonEachRowBulkInsert}.
      *
-     * <p>Why the v2 client + JSONEachRow (vs. the R2DBC path used elsewhere): this is the ONLY path
-     * in the backend that uses the v2 client — we specifically chose it for this bulk-insert flow
-     * because {@code EXPERIMENT_AGGREGATES_BATCH_SIZE} can be configured above 1k (e.g. {@code 10000}
-     * for workspaces with experiments of 1M+ items). R2DBC's bind-parameter serialization scales
-     * super-linearly once a single statement carries more than ~1k rows (per-row parameter map,
-     * driver-side escaping, per-row round-trips), so at that batch size it becomes the dominant
-     * cost of the aggregation job. The JSONEachRow bulk path is ~500× faster end-to-end on those
-     * batches because (1) the payload is a single HTTP body, (2) compression is applied once by the
-     * v2 client, and (3) parsing happens server-side in ClickHouse's fast path. For smaller-batch
-     * inserts elsewhere in the codebase R2DBC remains the right choice and is unchanged. The v2
-     * client is shared and managed as a Dropwizard {@code Managed} (see
-     * {@code DatabaseAnalyticsModule.getClickHouseClient}); this method does not close it.
+     * <p>Why JSONEachRow rather than the R2DBC path: {@code EXPERIMENT_AGGREGATES_BATCH_SIZE} can be
+     * configured above 1k (e.g. {@code 10000} for workspaces with experiments of 1M+ items), and R2DBC
+     * binds one named parameter per column per row, resolving each with a linear scan over the
+     * statement's parameter names — so binding is O(n²) and dominates the aggregation job at that batch
+     * size. This path was the first to move, measured at ~500× end-to-end on large batches; it has
+     * since become the shared helper that the feedback score, experiment item and dataset item writers
+     * use behind {@code bulkInsert.v2ClientEnabled}.
      *
-     * <p>Flow:
-     * <ol>
-     *   <li>Materialize every item into a shared {@link StringBuilder} via
-     *       {@link #appendJsonRow} (one JSON object + newline per row).</li>
-     *   <li>Convert to UTF-8 bytes and wrap in a {@link ByteArrayInputStream}.</li>
-     *   <li>Attach a {@code log_comment} identifying the workspace / user / batch size so the query
-     *       can be correlated in {@code system.query_log} / ClickHouse traces.</li>
-     *   <li>Set {@code date_time_input_format=best_effort} per-request (NOT on the global
-     *       {@code Client.Builder}). Scoping it to the insert keeps the global client configuration
-     *       free of format-specific tolerances that would affect unrelated queries — if a future
-     *       caller needs a different format, it passes its own {@link InsertSettings}.</li>
-     *   <li>Run the blocking HTTP call on {@link Schedulers#boundedElastic()} so the reactive
-     *       chain is not pinned to the event loop.</li>
-     *   <li>Return the authoritative {@code NUM_ROWS_WRITTEN} metric from the server response
-     *       rather than {@code items.size()}, so the caller sees the count ClickHouse actually
-     *       accepted (truncation, deduplication, or engine-specific merges would otherwise be
-     *       invisible).</li>
-     * </ol>
+     * <p>This one is <b>not</b> behind that toggle. It has always been JSONEachRow, so there is no
+     * second writer to fall back to and nothing to compare against — the flag exists to A/B paths that
+     * have an R2DBC equivalent, and this does not.
      *
-     * <p>Error handling: the {@code try-with-resources} ensures the response is always released,
-     * even on partial read failure. Exceptions propagate up the reactive chain; we only log the
-     * item count (no payload) to avoid dumping PII into the logs.
+     * <p>What moving onto the helper changes, beyond removing the duplicate transport:
+     * <ul>
+     *   <li>The payload is no longer held three times over (a {@code StringBuilder} in UTF-16, its
+     *       {@code toString()}, then {@code getBytes()}). Rows are written into one buffer and handed to
+     *       the client with {@code writeTo}, which does not copy it again. This path has the widest
+     *       batches in the backend, so it is where that mattered most.</li>
+     *   <li>Row building runs on {@code boundedElastic} and the HTTP round trip on the client's own
+     *       pool, rather than one thread doing the work while another blocks on {@code Future.get()}.</li>
+     *   <li>Two further per-request server settings come with it —
+     *       {@code input_format_defaults_for_omitted_fields} and
+     *       {@code input_format_json_read_numbers_as_strings}. Both are inert here, since every column
+     *       is written explicitly with nulls already coalesced, and the second only widens what the
+     *       server accepts.</li>
+     * </ul>
+     *
+     * <p>The {@code log_comment} is kept verbatim rather than moved onto {@code FilterUtils}: it is what
+     * {@code system.query_log} is filtered on for this path, and its null-user branch is load bearing,
+     * since the aggregation runs from a subscriber whose context may carry no {@code USER_NAME}.
+     *
+     * <p>The row count returned is the server's {@code NUM_ROWS_WRITTEN} rather than
+     * {@code items.size()}, so truncation or engine-side deduplication stays visible to the caller.
      */
     private Mono<Long> insertExperimentItems(UUID projectId,
             List<ExperimentItemData> items,
@@ -2085,30 +2146,22 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             Map<UUID, CommentsData> commentsMap,
             Map<UUID, AssertionData> assertionsMap) {
 
-        return makeMonoContextAware((userName, workspaceId) -> Mono.fromCallable(() -> {
-            StringBuilder body = new StringBuilder();
-            items.forEach(item -> appendJsonRow(body, workspaceId, projectId, item,
-                    tracesMap, spansMap, feedbackMap, commentsMap, assertionsMap));
-            byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
-
-            String logComment = "insert_experiment_item_aggregate:%s:%s:%d".formatted(
-                    workspaceId, userName == null ? "" : userName, items.size());
-
-            var settings = new InsertSettings()
-                    .logComment(logComment)
-                    .serverSetting("date_time_input_format", "best_effort");
-
-            try (InsertResponse response = clickHouseClient.insert(
-                    "experiment_item_aggregates",
-                    new ByteArrayInputStream(payload),
-                    ClickHouseFormat.JSONEachRow,
-                    settings).get()) {
-                return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
-            }
-        }).subscribeOn(Schedulers.boundedElastic())
-                .doOnError(err -> log.error(
-                        "Failed to insert experiment item aggregates: items='{}'",
-                        items.size(), err)));
+        return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
+                EXPERIMENT_ITEM_AGGREGATES_TABLE,
+                // Kept verbatim rather than moved onto FilterUtils#getLogComment: this string is what
+                // system.query_log is filtered on for this path, and the null-user branch is load
+                // bearing -- the aggregation runs from a subscriber, where the context may carry no
+                // USER_NAME.
+                "insert_experiment_item_aggregate:%s:%s:%d".formatted(
+                        workspaceId, userName == null ? "" : userName, items.size()),
+                items,
+                item -> toJsonRow(workspaceId, projectId, item,
+                        tracesMap, spansMap, feedbackMap, commentsMap, assertionsMap))
+                // See ExperimentAggregatesInsertException: the subscriber retires its own
+                // NON_RETRYABLE_EXCEPTIONS on first delivery, and the client can raise one of those for
+                // a transient transport failure. The helper unwraps to the cause, so without this the
+                // aggregation message would be acked and lost rather than redelivered.
+                .onErrorMap(ExperimentAggregatesInsertException::new));
     }
 
     // Row mapping methods
@@ -2803,6 +2856,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             Optional.ofNullable(criteria.idsList())
                     .filter(CollectionUtils::isNotEmpty)
                     .ifPresent(idsList -> template.add("ids_list", idsList));
+            Optional.ofNullable(criteria.projectId())
+                    .ifPresent(projectId -> template.add("project_id", projectId));
 
             var statement = connection.createStatement(template.render());
 
@@ -2817,12 +2872,15 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             Optional.ofNullable(criteria.idsList())
                     .filter(CollectionUtils::isNotEmpty)
                     .ifPresent(idsList -> statement.bind("ids_list", idsList.toArray(UUID[]::new)));
+            Optional.ofNullable(criteria.projectId())
+                    .ifPresent(projectId -> statement.bind("project_id", projectId));
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(result -> result
-                            .map((row, metadata) -> new AggregatedExperimentCounts(
-                                    row.get("aggregated", Long.class),
-                                    row.get("not_aggregated", Long.class))))
+                            .map((row, metadata) -> AggregatedExperimentCounts.builder()
+                                    .aggregated(row.get("aggregated", Long.class))
+                                    .notAggregated(row.get("not_aggregated", Long.class))
+                                    .build()))
                     .next()
                     .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
         }));

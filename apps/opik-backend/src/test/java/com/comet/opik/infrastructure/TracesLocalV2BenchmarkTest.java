@@ -1139,7 +1139,7 @@ class TracesLocalV2BenchmarkTest {
 
     @Test
     void compressionIsInvariantToWeeklyPartitioning() {
-        // PARTITION BY toMonday(id_at) is a data-lifecycle mechanism (retention + tiering) validated by
+        // The honest Date32 weekly partition is a data-lifecycle mechanism (retention + tiering) validated by
         // TracesLocalV2PartitioningTest, not a codec — and it is required regardless of size. It splits data into weekly
         // parts that each compress independently, so it can only add minor per-part overhead (e.g. one LowCardinality
         // dictionary per part), not change per-column compression. Confirmed here so the benchmark's sizes (measured
@@ -1150,17 +1150,17 @@ class TracesLocalV2BenchmarkTest {
         for (var table : List.of(flatTable, weeklyTable)) {
             execute("DROP TABLE IF EXISTS %s.%s".formatted(DATABASE_NAME, table));
         }
-        var columns = "(id_at DateTime('UTC') CODEC(Delta, ZSTD(1)), body String CODEC(ZSTD(3)), "
+        var columns = "(id_at DateTime64(0, 'UTC') CODEC(Delta, ZSTD(1)), body String CODEC(ZSTD(3)), "
                 + "env LowCardinality(String))";
         execute("CREATE TABLE %s.%s %s ENGINE = MergeTree ORDER BY tuple()"
                 .formatted(DATABASE_NAME, flatTable, columns));
-        execute("CREATE TABLE %s.%s %s ENGINE = MergeTree PARTITION BY toMonday(id_at) ORDER BY tuple()"
+        execute("CREATE TABLE %s.%s %s ENGINE = MergeTree PARTITION BY toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) ORDER BY tuple()"
                 .formatted(DATABASE_NAME, weeklyTable, columns));
 
         // id_at spread over ~8 weeks so weekly partitioning yields several parts; env is LowCardinality (per-part
         // dictionary), the column most likely to show partitioning overhead.
         var insert = ("INSERT INTO %s.%s SELECT "
-                + "toDateTime('2026-01-05 00:00:00', 'UTC') + toIntervalSecond(number * 250) AS id_at, "
+                + "toDateTime64('2026-01-05 00:00:00', 0, 'UTC') + toIntervalSecond(number * 250) AS id_at, "
                 + "%s AS body, "
                 + "['production', 'staging', 'development', ''][(cityHash64(number, 'env') %% 4) + 1] AS env "
                 + "FROM numbers(%d) SETTINGS max_insert_threads = 1, max_threads = 1");

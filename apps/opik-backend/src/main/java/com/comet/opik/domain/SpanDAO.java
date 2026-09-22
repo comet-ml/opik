@@ -1,12 +1,10 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanUpdate;
-import com.comet.opik.api.SpansCountResponse;
-import com.comet.opik.api.UsageByWorkspaceProjectUserResponse;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.api.sorting.SpanSortingFactory;
@@ -17,16 +15,20 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.stats.StatsMerger;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
+import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.UsageUtils;
+import com.comet.opik.utils.WeeklyPartitions;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
@@ -49,6 +51,7 @@ import reactor.core.publisher.Mono;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -64,8 +67,8 @@ import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.infrastructure.FilterUtils.addSortNeedsWideFlag;
-import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -83,6 +86,16 @@ import static java.util.function.Predicate.not;
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 public class SpanDAO {
+
+    /**
+     * The read/insert-facing span table, and the mutation target while the sharding-readiness wrap is off. Only
+     * {@link #selectSpansMutationTable} may use these two constants to name a mutation's table — see its Javadoc
+     * and {@code SpanMutationRoutingArchTest}.
+     */
+    private static final String SPANS_TABLE = "spans";
+
+    /** The {@code MergeTree} shard beneath the {@code Distributed} wrapper, and the mutation target once it is live. */
+    private static final String SPANS_LOCAL_TABLE = "spans_local";
 
     private static final String SPAN_SEARCH_CLAUSE = """
             (ilike(id, :search_text)
@@ -342,7 +355,7 @@ public class SpanDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND id = :id
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
@@ -417,7 +430,7 @@ public class SpanDAO {
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -596,7 +609,7 @@ public class SpanDAO {
                 FROM spans
                 WHERE id = :id
                 AND workspace_id = :workspace_id
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1
             ) as old_span
             ON new_span.id = old_span.id
@@ -720,8 +733,8 @@ public class SpanDAO {
                 WHERE id IN :ids
                 AND workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+                <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
             ) AS s
             LEFT JOIN (
                 SELECT
@@ -738,7 +751,7 @@ public class SpanDAO {
                 AND entity_id IN :ids
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                <if(has_target_projects)>LIMIT 1 BY workspace_id, project_id, id<else>LIMIT 1 BY id<endif>
             ) AS c ON s.id = c.entity_id
             LEFT JOIN (
                 SELECT
@@ -774,7 +787,7 @@ public class SpanDAO {
             WHERE id = :id
             AND project_id = :project_id
             AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -786,7 +799,7 @@ public class SpanDAO {
             FROM spans
             WHERE workspace_id = :workspace_id
             AND id = :id
-            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -806,8 +819,37 @@ public class SpanDAO {
             WHERE workspace_id = :workspace_id
             AND project_id IN (SELECT project_id FROM target_projects)
             AND trace_id IN :trace_ids
-            ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
+            ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY workspace_id, project_id, id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    /**
+     * Cheap size estimate for all spans across a set of trace ids, used only to route trace-thread online
+     * scoring between the inline and agentic-tools paths without materializing spans. Sums the
+     * pre-computed {@code *_length} materialized columns, so ClickHouse reads only small numeric columns
+     * instead of the (potentially large) {@code input}/{@code output}/{@code metadata} text. The latest
+     * version of each span is taken with {@code argMax(..., last_updated_at)} grouped by {@code id} —
+     * a hash aggregation that dedups the {@code ReplacingMergeTree} versions without the full-row
+     * {@code ORDER BY} + {@code LIMIT 1 BY workspace_id, project_id, id} sort that {@link #SELECT_BY_TRACE_IDS} pays. See OPIK-7454.
+     */
+    private static final String SELECT_SPANS_SIZE_BY_TRACE_IDS = """
+            WITH target_projects AS (
+                SELECT DISTINCT project_id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND trace_id IN :trace_ids
+            )
+            SELECT sum(span_size) AS size_bytes
+            FROM (
+                SELECT argMax(input_length + output_length + metadata_length, last_updated_at) AS span_size
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id IN (SELECT project_id FROM target_projects)
+                AND trace_id IN :trace_ids
+                GROUP BY id
+            )
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -823,10 +865,34 @@ public class SpanDAO {
      * immaterial since it is id-bounded and {@code LIMIT 1 BY id}. Field exclusion ({@code exclude_fields}) and
      * truncation are layered on top without dropping the sort key.
      * <p>
-     * Each {@code spans} id-range bound carries a parallel {@code toMonday(id_at)} bound: a strict consequence of the
+     * Each {@code spans} id-range bound carries a parallel week-start bound: a strict consequence of the
      * id-range — and, unlike a {@code created_at} predicate, safe against late-arriving rows since it derives from
      * {@code id} — that lets the planner prune partitions once {@code spans} is partitioned. The {@code page_wide}
      * re-read carries the same week bounds via the window it re-reads.
+     * <p>
+     * <b>Both</b> operands are the partition expression of 000115, {@code toDate32(E) -
+     * toIntervalDay(toDayOfWeek(E, 1))}, and never {@code toMonday(E)} (OPIK-8241): {@code toMonday} returns a 16-bit
+     * {@code Date} that wraps past 2149, folding a far-future week into a past one, so the bound would filter rather
+     * than prune. {@code Date32} saturates, and still prunes, being the key's own expression.
+     * <p>
+     * The <em>bound</em> side is what makes this reachable before the spans cutover, while {@code spans.id_at} is
+     * still a 32-bit {@code DateTime} (migration 000105): it reads the id directly, so it is honest on either schema.
+     * {@code :last_received_span_id} is a cursor lifted from a row this query returned, and far-future spans sort
+     * first under {@code ORDER BY id DESC}, so page two's cursor can be one. The <em>upper</em> bound is the damaging
+     * direction: every ordinary row has a later week, fails {@code <=}, and the page comes back empty.
+     * <p>
+     * <b>The column side is only honest on the partitioned successor, which leaves one accepted residual</b> — the
+     * same one traces carries (see {@code TraceDAO.SELECT_BY_PROJECT_ID}). On the pre-cutover table {@code id_at} has
+     * already truncated a far-future timestamp into a plausible year, and no read predicate can recover the honest
+     * week from it, so a far-future <em>lower</em> bound admits nothing there. {@code toMonday} passed that case only
+     * incidentally, both sides having wrapped into agreement.
+     * <p>
+     * It is accepted rather than fixed. Reaching it needs a caller supplying a {@code startTime} beyond 2106, which
+     * the UI cannot produce, and it is not the cursor shape — a cursor is an upper bound, where this form is the
+     * better one. It changes only whether far-future rows are visible, never ordinary ones, and it resolves at the
+     * cutover, when {@code id_at} becomes honest. Deriving each bound as a union over both {@code id_at} widths
+     * instead — what {@code WeeklyPartitions} does for mutations — was rejected as disproportionate: it would touch
+     * every predicate here to buy a case no real client reaches.
      * <p>
      * When aggregates are enrichment-only ({@code page_keyed_aggregates}, see
      * {@code shouldPageKeyAggregates}), the feedback-score and comment CTEs are keyed on
@@ -842,11 +908,14 @@ public class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(last_received_span_id)> AND id \\< :last_received_span_id
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC'), 1))) <endif>
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1020,11 +1089,14 @@ public class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(last_received_span_id)> AND id \\< :last_received_span_id
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC'), 1))) <endif>
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1044,7 +1116,7 @@ public class SpanDAO {
                 <if(stream)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 <else>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT 1 BY id
             ), page_ids AS (
@@ -1056,7 +1128,7 @@ public class SpanDAO {
                 <if(stream)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 <else>
-                ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
             ), page_wide AS (
@@ -1070,13 +1142,16 @@ public class SpanDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND id IN (SELECT id FROM page_ids)
-                <if(uuid_from_time)> AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
-                <if(uuid_to_time)> AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
-                <if(last_received_span_id)> AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) <endif>
+                <if(uuid_from_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
+                <if(uuid_to_time)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
+                <if(last_received_span_id)> AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                    \\<= (toDate32(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:last_received_span_id), 'UTC'), 1))) <endif>
                 <if(stream)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 <else>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 <endif>
                 LIMIT 1 BY id
             )
@@ -1098,7 +1173,7 @@ public class SpanDAO {
             <if(stream)>
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             <else>
-            ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+            ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
             <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1128,9 +1203,11 @@ public class SpanDAO {
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1213,9 +1290,11 @@ public class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1232,18 +1311,36 @@ public class SpanDAO {
                 <if(feedback_scores_empty_filters)>
                 AND fsc.feedback_scores_count = 0
                 <endif>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS latest_rows
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
+    /**
+     * Cascade delete of the spans belonging to deleted traces, scoped to the {@code (workspace_id, project_id, id)}
+     * prefix of the sort key.
+     * <p>
+     * {@code project_id} is mandatory rather than an optional branch: a project-less {@code (workspace_id, id)} delete
+     * would scan every project's spans in the workspace, and post-wrap would reach the shard without the column
+     * {@code spans} is distributed on. The sole caller is {@code SpanService.deleteByTraceIds}, which always carries
+     * the owning project the trace delete resolved (OPIK-7483).
+     * <p>
+     * {@code <if(partition)>} adds {@code IN PARTITION}, which scopes which <b>parts</b> the mutation is registered
+     * against — a {@code WHERE} clause cannot, since parts are selected before it is considered, which is why an
+     * unscoped delete of a few rows rewrites every part of the table and times out (OPIK-8230). Omitted for the
+     * unbounded fallback.
+     * <p>
+     * {@code <partition>} is interpolated, not bound: {@code IN PARTITION {p:UInt32}} is a ClickHouse syntax error. Safe
+     * because the value is always a {@code long} from {@link WeeklyPartitions}.
+     */
     private static final String DELETE_BY_IDS = """
-            DELETE FROM spans
+            DELETE FROM <spans_mutation_table>
+            <if(partition)>IN PARTITION <partition><endif>
             WHERE id IN :ids
             AND workspace_id = :workspace_id
-            <if(project_id)>AND project_id = :project_id<endif>
+            AND project_id = :project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1254,12 +1351,42 @@ public class SpanDAO {
      * <p>
      * Filters on {@code trace_id} only. Unlike {@code TraceDAO}, the spans retention range is keyed on
      * {@code trace_id} while the future partition column {@code id_at} is MATERIALIZED from the span's own UUIDv7 id
-     * (migration 000105). A span's id can land in a later week than its {@code trace_id}, so a {@code toMonday(id_at)}
-     * bound derived from the trace-id range would wrongly exclude valid candidates. No partition-pruning predicate is
-     * applied here until {@code spans} can be pruned by a column aligned with {@code trace_id}.
+     * (migration 000105). A span's id can land in a later week than its {@code trace_id}, so a week bound on
+     * {@code id_at} derived from the trace-id range would wrongly exclude valid candidates — whatever the
+     * expression's width, since the objection is which column the range keys on.
+     *
+     * <h2>Decision (OPIK-8364): this sweep stays unbounded</h2>
+     *
+     * <p>{@link #deleteByIds(Set, UUID)} scopes itself per partition because it is keyed on the span's own id. This
+     * sweep cannot borrow that, and the alternatives were measured on OPIK-8364 and rejected:</p>
+     * <ul>
+     *     <li><b>A margin over the span-after-trace lag.</b> The distribution is bimodal — a margin of a few weeks
+     *     covers the bulk and then gains nothing however far it is widened, because the residual sits centuries beyond
+     *     its trace. Any margin small enough to prune is small enough to under-delete, which for retention is a
+     *     compliance failure, not a latency one.</li>
+     *     <li><b>A column aligned with {@code trace_id}</b> (OPIK-8241's suggestion). It prunes nothing unless it
+     *     becomes the partition key, a separate DDL decision, and a trace-week key measured no better overall.</li>
+     *     <li><b>Per-workspace treatment</b> — an exact window where a workspace's lag is clean, unbounded where it is
+     *     not. Viable, and the upgrade path if the timing below disappoints; not taken now because it narrows the
+     *     blast radius without removing the failure mode.</li>
+     * </ul>
+     *
+     * <p>{@code IN PARTITION} would not rescue it either: {@code parts_to_do} counts every part that has not yet
+     * advanced to the mutation's version, not the parts holding matching data, so scoping bounds the work per part
+     * rather than the number of parts visited — nothing, for a range spanning every partition.</p>
+     *
+     * <p><b>One question is left open.</b> Partition pruning is also what lets a lightweight delete reclaim storage:
+     * unpruned parts stay version-stamped, never go quiet, and never reach the force-merge that drops masked rows
+     * (OPIK-5295), so an unprunable sweep may mask rows without releasing bytes. The measurements do not settle it —
+     * {@code IN PARTITION} did not reduce {@code parts_to_do} either — and the condition below is what will.</p>
+     *
+     * <p>Accepted on one condition, binding the pair rather than either step, so that neither ordering slips past it:
+     * <b>retention and a cut-over {@code spans} must not both be live until one sweep has been measured</b> —
+     * {@code parts_to_do} and wall time from {@code system.mutations}, <em>and</em> whether the bytes come back. The
+     * cost scales with the table's partition count rather than with the rows the window matches.</p>
      */
     private static final String DELETE_FOR_RETENTION = """
-            DELETE FROM spans
+            DELETE FROM <spans_mutation_table>
             WHERE workspace_id IN :workspace_ids
             AND trace_id >= :lower_bound
             AND trace_id \\< :cutoff_id
@@ -1267,6 +1394,38 @@ public class SpanDAO {
                 SELECT trace_id FROM experiment_items
                 WHERE workspace_id IN :workspace_ids
                 AND trace_id >= :lower_bound
+                AND trace_id \\< :cutoff_id
+            )
+            SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
+            ;
+            """;
+
+    /**
+     * The per-workspace bounded counterpart of {@link #DELETE_FOR_RETENTION} (applyToPast=false): each workspace
+     * carries its own {@code trace_id} floor, so the windows are OR-ed rather than sharing one {@code :lower_bound}.
+     * <p>
+     * The OR-ed predicates are a template loop over {@code getQueryItemPlaceHolder}, matching {@code BULK_INSERT} and
+     * the other variable-arity queries in this DAO, so the query text is declared once and every value is bound.
+     * Declaring it rather than assembling it at runtime is also what puts it in reach of the routing guard, which
+     * reads these constants.
+     * <p>
+     * As in {@link #DELETE_FOR_RETENTION}, no partition-pruning predicate is applied: the range keys on
+     * {@code trace_id} while the partition column {@code id_at} derives from the span's own id. That statement's
+     * Javadoc carries the decision and the measurements behind it (OPIK-8364, half B), which govern this sweep
+     * identically — its per-workspace floors narrow which rows match, never which partitions the mutation visits.
+     */
+    private static final String DELETE_FOR_RETENTION_BOUNDED = """
+            DELETE FROM <spans_mutation_table>
+            WHERE (
+                <items:{item |
+                    (workspace_id = :ws_<item.index> AND trace_id >= :lb_<item.index> AND trace_id \\< :cutoff_id)
+                    <if(item.hasNext)>OR<endif>
+                }>
+            )
+            AND trace_id NOT IN (
+                SELECT trace_id FROM experiment_items
+                WHERE workspace_id IN :workspace_ids_flat
+                AND trace_id >= :min_lower_bound
                 AND trace_id \\< :cutoff_id
             )
             SETTINGS log_comment = '<log_comment>', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1
@@ -1434,9 +1593,11 @@ public class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1578,9 +1739,11 @@ public class SpanDAO {
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time
-                    AND toMonday(id_at) >= toMonday(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        >= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_from_time), 'UTC'), 1))) <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time
-                    AND toMonday(id_at) \\<= toMonday(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) <endif>
+                    AND (toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1)))
+                        \\<= (toDate32(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC')) - toIntervalDay(toDayOfWeek(UUIDv7ToDateTime(toUUID(:uuid_to_time), 'UTC'), 1))) <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
                 <if(type)> AND type = :type <endif>
                 <if(filters)> AND <filters> <endif>
@@ -1642,40 +1805,59 @@ public class SpanDAO {
             FROM spans
             WHERE trace_id IN :trace_ids
             AND workspace_id = :workspace_id
-            <if(project_id)>AND project_id = :project_id<endif>
+            AND project_id = :project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
-    private static final String SPAN_COUNT_BY_WORKSPACE_ID = """
+    /**
+     * Previous-day span counts per workspace, at project granularity so that
+     * {@link DemoDataExclusionUtils#foldByWorkspace} can drop demo projects and re-aggregate in Java.
+     *
+     * <p><b>The demo-project exclusion must not render into this query text.</b> It used to, as an inline
+     * {@code project_id NOT IN [...]} literal holding one UUID per demo project across all workspaces. One demo
+     * project is created per signup, so that literal grows without bound, and a {@code Distributed} table re-parses
+     * the query text per shard — on {@code traces} that is what eventually pushed the equivalent queries past
+     * {@code max_execution_time}, after which the daily counts silently stopped being produced, because the callers
+     * consuming them cannot tell an empty result from a failed one. Keeping the text constant is what makes growth
+     * in the demo set unable to reintroduce that; see {@link DemoDataExclusionUtils}.
+     *
+     * <p><b>No {@code id_at} week bound, deliberately.</b> See {@link #SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER}.
+     */
+    private static final String SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT = """
             SELECT
                  workspace_id,
-                 COUNT(DISTINCT id) as span_count
+                 project_id,
+                 COUNT(DISTINCT id) AS span_count
              FROM spans
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)>AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-            <endif>
-             GROUP BY workspace_id
+             GROUP BY workspace_id, project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
-    private static final String SPAN_DAILY_BI_INFORMATION = """
-            SELECT
-                    workspace_id,
-                    created_by AS user,
-                    COUNT(DISTINCT id) AS span_count
-            FROM spans
-            WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-            <if(excluded_project_ids)>AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-            <endif>
-            GROUP BY workspace_id, created_by
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
+    /**
+     * Previous-day span counts per workspace, project and user. Serves both the BI events — which
+     * {@link DemoDataExclusionUtils#foldByWorkspaceAndUser} re-aggregates by workspace and user — and the
+     * per-project usage breakdown, which reports the rows as they come back and only drops the demo projects. One
+     * text, two log comments, so the two consumers stay distinguishable in {@code system.query_log}. Same constraint
+     * on the query text as {@link #SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT}.
+     *
+     * <p><b>No {@code id_at} week bound, by decision rather than omission (OPIK-8375).</b> Once {@code spans} is
+     * partitioned weekly on {@code id_at} this opens parts in every partition, which is expensive, and a bound is
+     * derivable in principle: the window is on {@code created_at}, so with UUIDv7 ingestion validation enforcing
+     * that every id's embedded timestamp sits within {@link com.comet.opik.infrastructure.UuidValidationConfig}'s
+     * window of ingest, {@code id_at} would fall within that window of {@code created_at} too.
+     *
+     * <p>It is rejected because that premise is a runtime setting, not an invariant, and this is a billing count —
+     * a bound that drops rows under-bills silently, the exact failure this query set exists to avoid. Validation has
+     * a kill-switch and an audit mode that deliberately admits out-of-window ids; its window is operator-tunable up
+     * to 45 days, with a wider per-workspace bypass on top; and none of it applies to rows already written. A bound
+     * would therefore have to be correct for whatever configuration was in force when each row was ingested, which
+     * nothing in a query over a past day can know. Widening it to the maximum does not rescue it, since the
+     * kill-switch and audit mode void it at any width. The partition cost is answered by reducing the partition
+     * count instead.
+     */
     private static final String SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER = """
             SELECT
                  workspace_id,
@@ -1684,9 +1866,6 @@ public class SpanDAO {
                  COUNT(DISTINCT id) AS span_count
              FROM spans
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)>AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-            <endif>
              GROUP BY workspace_id, project_id, created_by
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1757,7 +1936,7 @@ public class SpanDAO {
                         <if(environment)> :environment <else> s.environment <endif> as environment
                     FROM spans s
                     WHERE s.id IN :ids AND s.workspace_id = :workspace_id
-                    ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
+                    ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.id) DESC, s.last_updated_at DESC
                     LIMIT 1 BY s.id
                     SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
                     ;
@@ -1965,6 +2144,38 @@ public class SpanDAO {
 
     private boolean spanColumnsNonNullable() {
         return configuration.getDatabaseAnalyticsDataModel().spanColumnsNonNullable();
+    }
+
+    /**
+     * Binds the physical table a span <b>mutation</b> must target, and the <b>only</b> place that name is decided.
+     * <p>
+     * While the sharding-readiness wrap is live, {@code spans} is a {@code Distributed} table that rejects mutations
+     * (code 36 / 48), so every {@code DELETE} / {@code ALTER} / {@code OPTIMIZE} must target the {@code spans_local}
+     * shard instead; while it is off, {@code spans} is still a {@code MergeTree} where deletes work directly.
+     * Resolving here keeps the mutation templates topology-agnostic
+     * ({@code DELETE FROM <spans_mutation_table>}) and leaves exactly one line to audit, rather than a two-branch
+     * conditional repeated in every template where a correct new mutation would be a matter of remembering to copy the
+     * branch. {@code SpanMutationRoutingArchTest} enforces both halves: no other code unit may read the wrap flag, and
+     * no mutation SQL may spell either table name out.
+     * <p>
+     * Reads and inserts are deliberately not routed through this: they always go to {@code spans}, which is the
+     * {@code Distributed} wrapper post-cutover and the {@code MergeTree} before it, and is correct either way.
+     * <p>
+     * Liquibase migrations split by kind instead: {@code DELETE} / {@code MATERIALIZE COLUMN} / {@code ADD INDEX} /
+     * {@code MODIFY TTL} target {@code spans_local} only, but {@code ADD}/{@code DROP}/{@code MODIFY COLUMN} must
+     * target <b>both</b> {@code spans_local} and {@code spans} — the wrapper takes them as metadata-only, and skipping
+     * it leaves reads unable to see the column (code 47).
+     * <p>
+     * The cluster is single-shard today and {@code spans_local} is a {@code ReplicatedMergeTree}, so a lightweight
+     * delete fans out to every replica via the replication log and reaches every matching row — no {@code ON CLUSTER}
+     * needed (no DAO uses it). Only activating sharding, a separate and deferred effort, makes a delete issued on one
+     * shard miss rows on the others.
+     */
+    private void selectSpansMutationTable(ST template) {
+        template.add("spans_mutation_table",
+                configuration.getDatabaseAnalyticsDataModel().spansDistributedWrapEnabled()
+                        ? SPANS_LOCAL_TABLE
+                        : SPANS_TABLE);
     }
 
     /**
@@ -2278,6 +2489,38 @@ public class SpanDAO {
                 .flatMap(this::mapToDto);
     }
 
+    /**
+     * Cheap approximate size (bytes) of all spans across the given trace ids, used to route trace-thread
+     * online scoring without materializing spans. Streaming aggregate — see
+     * {@link #SELECT_SPANS_SIZE_BY_TRACE_IDS}. Returns 0 for an empty input or when no spans match.
+     */
+    public Mono<Long> getSpansSizeByTraceIds(Set<UUID> traceIds) {
+        if (CollectionUtils.isEmpty(traceIds)) {
+            return Mono.just(0L);
+        }
+
+        log.info("Getting spans size estimate for '{}' traces", traceIds.size());
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
+                    var template = getSTWithLogComment(SELECT_SPANS_SIZE_BY_TRACE_IDS, "get_spans_size_by_trace_ids",
+                            workspaceId, userName, "traces_size=%s".formatted(traceIds.size()));
+                    var statement = connection.createStatement(template.render())
+                            .bind("trace_ids", traceIds.toArray(new UUID[0]))
+                            .bind("workspace_id", workspaceId);
+
+                    Segment segment = startSegment("spans", "Clickhouse", "get_spans_size_by_trace_ids");
+
+                    return Flux.from(statement.execute())
+                            .doFinally(signalType -> endSegment(segment));
+                }))
+                .flatMap(result -> result.map((row, rowMetadata) -> {
+                    var size = row.get("size_bytes", Long.class);
+                    return size == null ? 0L : size;
+                }))
+                .reduce(0L, Long::sum);
+    }
+
     private Mono<List<UUID>> getTargetProjectIdsForSpans(Set<UUID> ids) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -2337,33 +2580,110 @@ public class SpanDAO {
                 .flatMap(this::mapToDto);
     }
 
+    /**
+     * Deletes the given spans within {@code projectId}, which is required: the delete is always scoped to the full
+     * {@code (workspace_id, project_id, id)} sort-key prefix, never to {@code (workspace_id, id)} alone.
+     * <p>
+     * Chunked at {@code ANALYTICS_DELETE_BATCH_SIZE}, each chunk split into one {@code IN PARTITION} statement per
+     * partition its ids resolve to (OPIK-8230) — possible here, unlike the retention sweeps, because the statement is
+     * keyed on the span's <b>own</b> id, so {@link WeeklyPartitions} derives its partitions exactly.
+     * <p>
+     * <b>Ordering the ids before chunking is what keeps the statement count a sum rather than a product.</b> They
+     * arrive in hash order, so chunking them directly puts every week the delete spans into every chunk, and each
+     * chunk re-groups the same weeks: W weeks in C chunks would register W×C mutations where W would do, breaching
+     * ClickHouse's {@code number_of_mutations_to_delay}/{@code number_of_mutations_to_throw} ceilings, which fail a
+     * cascade rather than slow it. Ordered, each week is contiguous, so only a week split by a chunk boundary costs a
+     * second statement. It also confines the unbounded fallback to the final chunk, since underivable ids sort last.
+     * <p>
+     * Returns the driver's update count, which is {@code 0} — ClickHouse reports no row count for a lightweight
+     * delete — not a count of deleted rows, and no caller reads it. Each statement does wait for its mutation
+     * ({@code lightweight_deletes_sync} defaults to {@code 2}), so a wide cascade's wall time is the sum of those
+     * waits; lowering it would trade that for a window where a replica still serves deleted rows, and is not decided
+     * here.
+     * <p>
+     * A statement failing part-way does not roll back the ones before it, and no {@code SpansDeleted} follows. The
+     * deletion-events bridge is unaffected, since {@code SpanService.captureDeletions} runs first, and a durable retry
+     * belongs with the trace-delete cascade, whose steps already strand each other the same way.
+     */
     @WithSpan
-    public Mono<Long> deleteByIds(@NonNull Set<UUID> spanIds, UUID projectId) {
+    public Mono<Long> deleteByIds(Set<UUID> spanIds, @NonNull UUID projectId) {
         Preconditions.checkArgument(
                 CollectionUtils.isNotEmpty(spanIds), "Argument 'spanIds' must not be empty");
+        // Checked before the ids are stringified, so it holds whichever branch deleteBatch takes: the partitioned path
+        // would otherwise read a null as "underivable", silently take the unbounded fallback, and only then NPE.
+        Preconditions.checkArgument(spanIds.stream().noneMatch(Objects::isNull),
+                "Argument 'spanIds' must not contain null ids");
         var segment = startSegment("spans", "Clickhouse", "delete_by_span_ids");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                    var template = getSTWithLogComment(DELETE_BY_IDS, "delete_spans_by_ids", workspaceId, userName,
-                            spanIds.size());
-
-                    Optional.ofNullable(projectId)
-                            .ifPresent(id -> template.add("project_id", id));
-
-                    var statement = connection.createStatement(template.render())
-                            .bind("ids", spanIds.toArray(UUID[]::new))
-                            .bind("workspace_id", workspaceId);
-
-                    if (projectId != null) {
-                        statement.bind("project_id", projectId);
-                    }
-
-                    return Flux.from(statement.execute());
-                }))
-                .flatMap(Result::getRowsUpdated)
+                .flatMapMany(connection -> Flux
+                        .fromIterable(Lists.partition(orderedByIdAt(spanIds), ANALYTICS_DELETE_BATCH_SIZE))
+                        .concatMap(batch -> deleteBatch(batch, projectId, connection)))
                 .reduce(0L, Long::sum)
-                .doFinally(signalType -> endSegment(segment));
+                .doFinally(_ -> endSegment(segment));
+    }
+
+    /**
+     * The ids ordered by the timestamp their UUIDv7 embeds — the value {@link WeeklyPartitions} derives a partition
+     * from, so one week's ids come out contiguous; see {@link #deleteByIds(Set, UUID)} for why that matters before
+     * chunking. A non-UUIDv7 id sorts arbitrarily, which costs nothing: its chunk is rejected by the derivation and
+     * takes the unbounded form whatever the order.
+     */
+    private static List<UUID> orderedByIdAt(Set<UUID> spanIds) {
+        return spanIds.stream()
+                .sorted(Comparator.comparingLong(id -> id.getMostSignificantBits() >>> 16))
+                .toList();
+    }
+
+    /**
+     * Deletes one chunk: one {@code IN PARTITION} statement per partition its ids resolve to, or a single unbounded
+     * statement when they cannot all be derived, or when the target is not partitioned.
+     * <p>
+     * Sequential on purpose: bounded concurrency was measured and deferred (OPIK-8230).
+     */
+    private Flux<Long> deleteBatch(List<UUID> batch, UUID projectId, Connection connection) {
+        // spanColumnsNonNullable doubles as "the mutation target is weekly-partitioned": the same cutover EXCHANGE
+        // drops the Nullable(...) columns and puts the partitioned successor behind the name mutations target. Not the
+        // wrap flag, which governs routing and is still false between the EXCHANGE and the wrap - reading that one
+        // leaves production's deletes unpruned.
+        var grouped = spanColumnsNonNullable()
+                ? WeeklyPartitions.groupByPartition(batch)
+                : Optional.<Map<Long, Set<UUID>>>empty();
+
+        // For a far-future id the derivation also names the week a 32-bit id_at would wrap it to - load-bearing for
+        // traces, whose successor carried a 32-bit id_at between 000101 and 000114, and dead weight here: legacy
+        // `spans` is unpartitioned and spans_local_v2 was created DateTime64(0) at 000115. One no-op statement per
+        // far-future id, kept rather than adding a per-family mode to a derivation shared with traces.
+        return grouped
+                .map(idsByPartition -> Flux.fromIterable(idsByPartition.entrySet())
+                        .concatMap(entry -> executeDelete(List.copyOf(entry.getValue()), entry.getKey(), projectId,
+                                connection)))
+                .orElseGet(() -> executeDelete(batch, null, projectId, connection));
+    }
+
+    /**
+     * Renders and executes one delete statement - unbounded when {@code partition} is null, scoped to it otherwise -
+     * emitting the driver's update count, which is {@code 0}; see {@link #deleteByIds(Set, UUID)} for why.
+     */
+    private Flux<Long> executeDelete(List<UUID> ids, Long partition, UUID projectId, Connection connection) {
+        return makeFluxContextAware((userName, workspaceId) -> {
+            // project_id is in the log comment as well as in the statement: the statement's own copy sits after the
+            // inlined id list, past where ClickHouse truncates query_log.query for a full chunk, so without this a
+            // delete's largest statements are the ones that cannot be attributed.
+            var template = getSTWithLogComment(DELETE_BY_IDS, "delete_spans_by_ids", workspaceId, userName,
+                    "project_id=%s, ids_size=%s".formatted(projectId, ids.size()));
+            selectSpansMutationTable(template);
+            if (partition != null) {
+                template.add("partition", partition);
+            }
+
+            var statement = connection.createStatement(template.render())
+                    .bind("ids", ids.toArray(UUID[]::new))
+                    .bind("workspace_id", workspaceId)
+                    .bind("project_id", projectId);
+
+            return Flux.from(statement.execute());
+        }).flatMap(Result::getRowsUpdated);
     }
 
     private Publisher<Span> mapToDto(Result result) {
@@ -2472,7 +2792,9 @@ public class SpanDAO {
     @WithSpan
     public Mono<SpanPage> find(int page, int size, @NonNull SpanSearchCriteria spanSearchCriteria) {
         log.info("Finding span by '{}'", spanSearchCriteria);
-        return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, total));
+        return countTotal(spanSearchCriteria).flatMap(total -> find(page, size, spanSearchCriteria, total))
+                .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e,
+                        SpanPage.empty(page, sortingFactory.getSortableFields())));
     }
 
     @WithSpan
@@ -2527,7 +2849,8 @@ public class SpanDAO {
                 .buffer(limit > 100 ? limit / 2 : limit)
                 .concatWith(Mono.just(List.of()))
                 .filter(CollectionUtils::isNotEmpty)
-                .flatMap(Flux::fromIterable);
+                .flatMap(Flux::fromIterable)
+                .onErrorResume(ErrorUtils::isMalformedJsonPath, e -> Flux.empty());
     }
 
     private BigDecimal calculateCost(Span span) {
@@ -2908,7 +3231,8 @@ public class SpanDAO {
                             .singleOrEmpty();
 
                     return StatsMerger.zipAndMerge(spansMono, feedbackMono);
-                }));
+                }))
+                .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e, ProjectStats.empty()));
     }
 
     @SuppressWarnings("unchecked")
@@ -2926,8 +3250,13 @@ public class SpanDAO {
                 || template.getAttribute("feedback_scores_empty_filters") != null;
     }
 
+    /**
+     * The ids of the spans belonging to {@code traceIds} within {@code projectId}, the first step of the trace-delete
+     * cascade. The project is required for the same reason {@link #deleteByIds(Set, UUID)} requires it: an unscoped
+     * lookup would collect spans from every project in the workspace sharing a trace id, and those ids feed the delete.
+     */
     @WithSpan
-    public Mono<Set<UUID>> getSpanIdsForTraces(@NonNull Set<UUID> traceIds, UUID projectId) {
+    public Mono<Set<UUID>> getSpanIdsForTraces(@NonNull Set<UUID> traceIds, @NonNull UUID projectId) {
         if (traceIds.isEmpty()) {
             return Mono.just(Set.of());
         }
@@ -2937,15 +3266,10 @@ public class SpanDAO {
                     var template = getSTWithLogComment(SELECT_SPAN_IDS_BY_TRACE_ID, "get_span_ids_by_trace_ids",
                             workspaceId, userName, traceIds.size());
 
-                    Optional.ofNullable(projectId)
-                            .ifPresent(id -> template.add("project_id", id));
-
                     var statement = connection.createStatement(template.render())
                             .bind("trace_ids", traceIds)
-                            .bind("workspace_id", workspaceId);
-
-                    Optional.ofNullable(projectId)
-                            .ifPresent(id -> statement.bind("project_id", id));
+                            .bind("workspace_id", workspaceId)
+                            .bind("project_id", projectId);
 
                     return Flux.from(statement.execute());
                 }))
@@ -2953,116 +3277,52 @@ public class SpanDAO {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Previous-day span counts per workspace and project, for {@link SpanService} to drop demo projects from and
+     * fold by workspace. Returns per-project rows rather than the workspace totals the endpoint reports, because the
+     * exclusion cannot be expressed in the query text — see {@link #SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT}.
+     */
     @WithSpan
-    public Flux<SpansCountResponse.WorkspaceSpansCount> countSpansPerWorkspace(
-            @NonNull Map<UUID, Instant> excludedProjectIds) {
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(SPAN_COUNT_BY_WORKSPACE_ID, "count_spans_per_workspace", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
+    public Flux<WorkspaceProjectCount> countSpansPerWorkspaceProject() {
+        var template = getSTWithLogComment(SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT, "count_spans_per_workspace", "", "",
+                "");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(template.render());
-
-                    if (!excludedProjectIds.isEmpty()) {
-                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-                    }
-
-                    if (demoDataCreatedAt.isPresent()) {
-                        statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-                    }
-
-                    return statement.execute();
-                })
-                .flatMap(result -> result.map((row, rowMetadata) -> SpansCountResponse.WorkspaceSpansCount.builder()
-                        .workspace(row.get("workspace_id", String.class))
-                        .spanCount(row.get("span_count", Integer.class))
-                        .build()));
-    }
-
-    @WithSpan
-    public Flux<BiInformationResponse.BiInformation> getSpanBIInformation(
-            @NonNull Map<UUID, Instant> excludedProjectIds) {
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(SPAN_DAILY_BI_INFORMATION, "get_span_bi_information", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
-
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-
-                    var statement = connection.createStatement(template.render());
-
-                    if (!excludedProjectIds.isEmpty()) {
-                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-                    }
-
-                    if (demoDataCreatedAt.isPresent()) {
-                        statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-                    }
-
-                    return statement.execute();
-                })
-                .flatMap(result -> result.map((row, rowMetadata) -> BiInformationResponse.BiInformation.builder()
+                .flatMapMany(connection -> connection.createStatement(template.render()).execute())
+                .flatMap(result -> result.map((row, _) -> WorkspaceProjectCount.builder()
                         .workspaceId(row.get("workspace_id", String.class))
-                        .user(row.get("user", String.class))
+                        .projectId(row.get("project_id", UUID.class))
                         .count(row.get("span_count", Long.class))
                         .build()));
     }
 
+    /** Same as {@link #countSpansPerWorkspaceProject()}, broken down by user for the BI events. */
+    @WithSpan
+    public Flux<WorkspaceProjectUserCount> getSpanBIInformationPerProject() {
+        return countSpansPerWorkspaceProjectUser("get_span_bi_information");
+    }
+
     /**
-     * Counts previous-day spans grouped by workspace, project and user.
+     * The same previous-day count as {@link #getSpanBIInformationPerProject()}, for the per-project usage breakdown,
+     * which reports these rows as they are rather than folding them. Its own method so that the two consumers carry
+     * different log comments.
      */
     @WithSpan
-    public Flux<UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount> countSpansBreakdownPerWorkspace(
-            @NonNull Map<UUID, Instant> excludedProjectIds) {
+    public Flux<WorkspaceProjectUserCount> countSpansBreakdownPerWorkspace() {
+        return countSpansPerWorkspaceProjectUser("count_spans_by_workspace_project_user");
+    }
 
-        var template = getSTWithLogComment(SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER,
-                "count_spans_by_workspace_project_user", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-        demoDataCreatedAt.ifPresent(instant -> template.add("demo_data_created_at", instant.toString()));
+    private Flux<WorkspaceProjectUserCount> countSpansPerWorkspaceProjectUser(String logComment) {
+        var template = getSTWithLogComment(SPAN_DAILY_COUNT_BY_WORKSPACE_PROJECT_USER, logComment, "", "", "");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> {
-                    var statement = connection.createStatement(template.render());
-
-                    if (!excludedProjectIds.isEmpty()) {
-                        statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-                    }
-
-                    demoDataCreatedAt.ifPresent(instant -> statement.bind("demo_data_created_at", instant.toString()));
-
-                    return statement.execute();
-                })
-                .flatMap(result -> result.map(
-                        (row, rowMetadata) -> UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount.builder()
-                                .workspaceId(row.get("workspace_id", String.class))
-                                .projectId(row.get("project_id", UUID.class))
-                                .user(row.get("user", String.class))
-                                .count(row.get("span_count", Long.class))
-                                .build()));
+                .flatMapMany(connection -> connection.createStatement(template.render()).execute())
+                .flatMap(result -> result.map((row, _) -> WorkspaceProjectUserCount.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .projectId(row.get("project_id", UUID.class))
+                        .user(row.get("user", String.class))
+                        .count(row.get("span_count", Long.class))
+                        .build()));
     }
 
     private boolean isManualCost(Span span) {
@@ -3236,7 +3496,9 @@ public class SpanDAO {
                 workspaceIds.size(), cutoffId, lowerBound);
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_spans", null, "",
-                workspaceIds.size());
+                "workspaces_size=%s, cutoff_id=%s, lower_bound=%s".formatted(workspaceIds.size(), cutoffId,
+                        lowerBound));
+        selectSpansMutationTable(template);
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
@@ -3287,29 +3549,17 @@ public class SpanDAO {
 
         log.info("Retention delete spans (bounded): workspaces='{}', cutoffId='{}'", workspaceMinIds.size(), cutoffId);
 
-        var logComment = getLogComment("retention_delete_spans_bounded", null, "", workspaceMinIds.size());
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
-        var sb = new StringBuilder("DELETE FROM spans WHERE (");
-        for (int i = 0; i < entries.size(); i++) {
-            if (i > 0) sb.append(" OR ");
-            sb.append("(workspace_id = :ws_").append(i)
-                    .append(" AND trace_id >= :lb_").append(i)
-                    .append(" AND trace_id < :cutoff_id)");
-        }
-        sb.append(") AND trace_id NOT IN (")
-                .append("SELECT trace_id FROM experiment_items")
-                .append(" WHERE workspace_id IN :workspace_ids_flat")
-                .append(" AND trace_id >= :min_lower_bound")
-                .append(" AND trace_id < :cutoff_id")
-                .append(") SETTINGS log_comment = '").append(logComment)
-                .append("', lightweight_deletes_sync = 1, allow_nondeterministic_mutations = 1");
-
-        var sql = sb.toString();
+        var template = getSTWithLogComment(DELETE_FOR_RETENTION_BOUNDED, "retention_delete_spans_bounded", null, "",
+                "workspaces_size=%s, cutoff_id=%s, min_lower_bound=%s".formatted(workspaceMinIds.size(), cutoffId,
+                        lowerBound));
+        selectSpansMutationTable(template);
+        template.add("items", getQueryItemPlaceHolder(entries.size()));
 
         return Mono.from(connectionFactory.create())
                 .flatMap(connection -> {
-                    var statement = connection.createStatement(sql)
+                    var statement = connection.createStatement(template.render())
                             .bind("cutoff_id", cutoffId)
                             .bind("workspace_ids_flat", workspaceMinIds.keySet().toArray(String[]::new))
                             .bind("min_lower_bound", lowerBound);

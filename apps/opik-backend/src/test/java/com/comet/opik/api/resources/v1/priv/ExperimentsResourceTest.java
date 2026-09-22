@@ -35,6 +35,7 @@ import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.RunStatus;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.events.ExperimentCreated;
@@ -1495,7 +1496,7 @@ class ExperimentsResourceTest {
             var apiKey = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-            UUID optimizationId = UUID.randomUUID();
+            UUID optimizationId = GENERATOR.generate();
 
             var experiments = experimentResourceClient.generateExperimentList()
                     .stream()
@@ -2403,11 +2404,9 @@ class ExperimentsResourceTest {
             assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
             assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
 
-            traceDeletedListener.onTracesDeleted(TracesDeleted.builder()
-                    .traceIds(Set.of(trace6.id()))
-                    .workspaceId(workspaceId)
-                    .userName(USER)
-                    .build());
+            // Replay the captured event rather than rebuilding it: a hand-assembled copy silently drifts from what
+            // production actually posts, which is how this lost the project id the real event has always carried.
+            traceDeletedListener.onTracesDeleted(experimentCaptor.getValue());
 
             List<ExperimentItem> experimentExpected = experimentItems
                     .stream()
@@ -2631,6 +2630,84 @@ class ExperimentsResourceTest {
                     .totalEstimatedCost(getTotalEstimatedCost(spans))
                     .totalEstimatedCostAvg(getTotalEstimatedCostAvg(spans))
                     .usage(getUsage(spans))
+                    .build();
+
+            findAndAssert(workspaceName, 1, 1, null, null, List.of(expectedExperiment), 1,
+                    List.of(), apiKey, false, Map.of(), null);
+        }
+
+        @Test
+        void find__whenSpanParentSpanIdChangedAcrossVersions__thenCountsSpanCostOnce() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var dataset = buildDataset();
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .usage(null)
+                    .build();
+
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name())
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            var cost = BigDecimal.valueOf(PodamUtils.getIntegerInRange(1, 10));
+            var usage = Map.of("completion_tokens", 100, "prompt_tokens", 200, "total_tokens", 300);
+            var spanId = GENERATOR.generate();
+
+            // Patch-before-post stores an empty parent_span_id, then the post supplies a real one. The upsert's
+            // parent guard only fires when the stored parent is already non-empty, so this writes a second physical
+            // row that differs only by parent_span_id — a column in the live sorting key, so the two never merge.
+            var spanUpdate = podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .projectId(null)
+                    .projectName(project.name())
+                    .traceId(trace.id())
+                    .parentSpanId(null)
+                    .totalEstimatedCost(cost)
+                    .usage(usage)
+                    .build();
+            spanResourceClient.updateSpan(spanId, spanUpdate, apiKey, workspaceName);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(spanId)
+                    .traceId(trace.id())
+                    .projectName(project.name())
+                    .parentSpanId(GENERATOR.generate())
+                    .type(SpanType.llm)
+                    .totalEstimatedCost(cost)
+                    .usage(usage)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .usage(null)
+                    .traceId(trace.id())
+                    .feedbackScores(null)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
+
+            List<BigDecimal> quantiles = getQuantities(Stream.of(trace));
+
+            // The span must be rolled up once, not once per distinct parent_span_id it has been written with.
+            var expectedExperiment = experiment.toBuilder()
+                    .projectId(projectId)
+                    .duration(new PercentageValues(quantiles.get(0), quantiles.get(1), quantiles.get(2)))
+                    .totalEstimatedCost(getTotalEstimatedCost(List.of(span)))
+                    .totalEstimatedCostAvg(getTotalEstimatedCostAvg(List.of(span)))
+                    .usage(getUsage(List.of(span)))
                     .build();
 
             findAndAssert(workspaceName, 1, 1, null, null, List.of(expectedExperiment), 1,
@@ -4785,7 +4862,7 @@ class ExperimentsResourceTest {
         void createWithOptimizationIdTypeAndGet(ExperimentType type) {
             var expectedExperiment = experimentResourceClient.createPartialExperiment()
                     .type(type)
-                    .optimizationId(UUID.randomUUID())
+                    .optimizationId(GENERATOR.generate())
                     .build();
             var expectedId = createAndAssert(expectedExperiment, API_KEY, TEST_WORKSPACE);
 
@@ -4980,11 +5057,9 @@ class ExperimentsResourceTest {
             assertThat(experimentCaptor.getValue().traceIds()).isEqualTo(Set.of(trace6.id()));
             assertThat(experimentCaptor.getValue().workspaceId()).isEqualTo(workspaceId);
 
-            traceDeletedListener.onTracesDeleted(TracesDeleted.builder()
-                    .traceIds(Set.of(trace6.id()))
-                    .workspaceId(workspaceId)
-                    .userName(USER)
-                    .build());
+            // Replay the captured event rather than rebuilding it: a hand-assembled copy silently drifts from what
+            // production actually posts, which is how this lost the project id the real event has always carried.
+            traceDeletedListener.onTracesDeleted(experimentCaptor.getValue());
 
             List<BigDecimal> quantities = getQuantities(Stream.of(trace1, trace2, trace3, trace4, trace5));
 

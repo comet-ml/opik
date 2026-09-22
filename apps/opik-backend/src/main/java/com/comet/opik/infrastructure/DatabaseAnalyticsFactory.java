@@ -25,6 +25,8 @@ public class DatabaseAnalyticsFactory {
     private static final String URL_TEMPLATE = "r2dbc:clickhouse:%s://%s:%s@%s:%d/%s%s";
     private static final String CUSTOM_HTTP_PARAMS_KEY = "custom_http_params";
     private static final String ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS = "async_insert_busy_timeout_max_ms";
+    private static final String ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS = "async_insert_busy_timeout_min_ms";
+    private static final String ASYNC_INSERT_MAX_DATA_SIZE = "async_insert_max_data_size";
     private static final String KEY_VALUE_FORMAT = "%s=%s";
 
     // Split each `&`/`,`-chunk on the FIRST `=` only — values may themselves contain `=`,
@@ -44,12 +46,25 @@ public class DatabaseAnalyticsFactory {
     private String queryParameters;
 
     /**
-     * Optional override (ms) for {@code async_insert_busy_timeout_max_ms} in the {@link #queryParameters}
-     * {@code custom_http_params} chain; when unset the value carried by {@code queryParameters} is left untouched.
-     * With {@code async_insert_use_adaptive_busy_timeout=1} this is a ceiling on the buffer window — the adaptive
-     * scheduler widens it only while rows are queued.
+     * Optional override (ms) for {@code async_insert_busy_timeout_max_ms}. When set it is applied to the
+     * {@code custom_http_params} chain — overriding a present value, or added when absent; when unset the
+     * {@code queryParameters} / ClickHouse-server value is left untouched. With
+     * {@code async_insert_use_adaptive_busy_timeout=1} this is the ceiling of the adaptive buffer window.
      */
     private @Min(1) Integer asyncInsertBusyTimeoutMaxMs;
+
+    /**
+     * Optional override (ms) for {@code async_insert_busy_timeout_min_ms} — the floor of the adaptive buffer window.
+     * Same semantics as {@link #asyncInsertBusyTimeoutMaxMs}.
+     */
+    private @Min(1) Integer asyncInsertBusyTimeoutMinMs;
+
+    /**
+     * Optional override (bytes) for {@code async_insert_max_data_size} — the buffered size that forces an async-insert
+     * flush. Same semantics as {@link #asyncInsertBusyTimeoutMaxMs}. Larger values yield fewer, larger parts under high
+     * ingestion at the cost of more buffer memory.
+     */
+    private @Min(1) Long asyncInsertMaxDataSize;
 
     private Duration healthCheckTimeout = Duration.seconds(1);
 
@@ -122,35 +137,38 @@ public class DatabaseAnalyticsFactory {
     }
 
     /**
-     * Returns {@code queryParameters} with each {@link #configurableQueryParameters() configurable server setting}
-     * present in {@code custom_http_params} replaced by its config-field value; unchanged when none are present.
+     * Returns {@code queryParameters} with every set {@link #configurableServerSettings() override} applied to
+     * {@code custom_http_params} — overriding a present value, or added when absent (including when
+     * {@code queryParameters} is blank). Returned unchanged when no override field is set.
      */
     private String getQueryParametersOverrides(String queryParameters) {
-        if (StringUtils.isBlank(queryParameters)) {
-            return queryParameters;
-        }
-        var parsed = parseQueryParameters(queryParameters);
-        var overrides = configurableQueryParameters().entrySet().stream()
-                .filter(override -> parsed.serverSettings().containsKey(override.getKey()))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        var overrides = configurableServerSettings();
         if (overrides.isEmpty()) {
             return queryParameters;
         }
+        var parsed = parseQueryParameters(queryParameters);
         var serverSettings = new LinkedHashMap<>(parsed.serverSettings());
         serverSettings.putAll(overrides);
         return serialize(parsed.driverOptions(), serverSettings);
     }
 
     /**
-     * Server settings whose values come from dedicated config fields, included only when the field is set. Applied
-     * only when already present in {@code custom_http_params}, so settings absent from {@link #queryParameters} are
-     * never injected.
+     * Server settings from dedicated config fields, included when the field is set. Each is applied to
+     * {@code custom_http_params} by {@link #getQueryParametersOverrides(String)} — overriding a present value, or
+     * added when absent — so an unset field leaves the {@code queryParameters} / ClickHouse-server value untouched.
      */
-    private Map<String, String> configurableQueryParameters() {
-        if (asyncInsertBusyTimeoutMaxMs == null) {
-            return Map.of();
+    private Map<String, String> configurableServerSettings() {
+        var overrides = new LinkedHashMap<String, String>();
+        if (asyncInsertBusyTimeoutMaxMs != null) {
+            overrides.put(ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS, String.valueOf(asyncInsertBusyTimeoutMaxMs));
         }
-        return Map.of(ASYNC_INSERT_BUSY_TIMEOUT_MAX_MS, String.valueOf(asyncInsertBusyTimeoutMaxMs));
+        if (asyncInsertBusyTimeoutMinMs != null) {
+            overrides.put(ASYNC_INSERT_BUSY_TIMEOUT_MIN_MS, String.valueOf(asyncInsertBusyTimeoutMinMs));
+        }
+        if (asyncInsertMaxDataSize != null) {
+            overrides.put(ASYNC_INSERT_MAX_DATA_SIZE, String.valueOf(asyncInsertMaxDataSize));
+        }
+        return overrides;
     }
 
     private String serialize(Map<String, String> driverOptions, Map<String, String> serverSettings) {
@@ -185,7 +203,7 @@ public class DatabaseAnalyticsFactory {
      * </ul>
      */
     static ParsedQueryParameters parseQueryParameters(String queryParameters) {
-        if (queryParameters == null || queryParameters.isBlank()) {
+        if (StringUtils.isBlank(queryParameters)) {
             return new ParsedQueryParameters(Map.of(), Map.of());
         }
         Map<String, String> driverOptions = new LinkedHashMap<>();

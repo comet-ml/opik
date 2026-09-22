@@ -34,6 +34,8 @@ OPIK_WORKSPACE_DEFAULT_NAME: Final[str] = "default"
 
 CONFIG_FILE_PATH_DEFAULT: Final[str] = "~/.opik.config"
 
+ANALYTICS_URL_DEFAULT: Final[str] = "https://stats.comet.com/notify/event/"
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -198,6 +200,20 @@ class OpikConfig(pydantic_settings.BaseSettings):
     instead of the old one.
     """
 
+    analytics_enable: bool = True
+    """
+    If set to True, Opik reports product analytics (BI) events describing which SDK
+    features are used - never their payloads. Setting it to False is the way to switch
+    reporting off. See `opik.analytics`.
+    """
+
+    analytics_url: str = ANALYTICS_URL_DEFAULT
+    """
+    Where usage analytics are sent. Comet's stats collector, which forwards them to the
+    same pipeline the Opik backend reports through. It takes no credentials. Set this to
+    an empty value to stop analytics being reported at all.
+    """
+
     enable_litellm_models_monitoring: bool = True
     """
     If set to True - Opik will create llm spans for LiteLLMChatModel calls.
@@ -208,6 +224,48 @@ class OpikConfig(pydantic_settings.BaseSettings):
     enable_json_request_compression: bool = True
     """
     If set to True - Opik will compress the JSON request body.
+    """
+
+    request_compression_level: int = pydantic.Field(default=6, ge=0, le=9)
+    """
+    zlib level used when compressing JSON request bodies, 0-9.
+
+    Python's `gzip.compress` defaults to 9, which on Opik payloads costs several times the
+    CPU of level 6 for well under 1% fewer bytes. Level 1 is cheaper again but puts
+    noticeably more bytes on the wire, so it suits a client that is CPU-bound rather than
+    bandwidth-bound.
+    """
+
+    dataset_upload_compression_level: int = pydantic.Field(default=1, ge=0, le=9)
+    """
+    zlib level used when compressing dataset item uploads, 0-9.
+
+    Lower than `request_compression_level` because a bulk upload is large enough that
+    compression, not the network, sets the wall time: on a 1,500-item upload of 206.1 MiB,
+    level 1 moved 283.40 items/s against 121.67 at level 6, for 77.6 MiB on the wire
+    against 67.9 MiB. Paying 14.2% more bytes for 2.33x the throughput only pays off at
+    that size, which is why ordinary requests keep the higher level.
+
+    Applies to every dataset upload: a `Dataset` prepares its own request bodies whichever
+    client it was built from, so this level is the one they are compressed at. Ordinary
+    requests still go through the shared HTTP client at `request_compression_level`.
+    """
+
+    experiment_upload_compression_level: int = pydantic.Field(default=1, ge=0, le=9)
+    """
+    zlib level used when compressing experiment item bulk uploads, 0-9.
+
+    A setting of its own rather than a share of `dataset_upload_compression_level`,
+    because that one names the upload it governs: an operator tuning dataset uploads
+    must not silently retune experiment ones. The value is the same and for the same
+    reason -- a bulk upload is large enough that compression, not the network, sets the
+    wall time. On an 8,000-record experiment fixture level 1 costs 5.7x less CPU than
+    level 6 for 16.5% more bytes, and this path is CPU-bound.
+
+    Applies to every experiment bulk upload: `batch_upload_items` prepares its own
+    request bodies whichever client it was built from, so this level is the one they are
+    compressed at. Ordinary requests still go through the shared HTTP client at
+    `request_compression_level`.
     """
 
     guardrail_timeout: int = 30
@@ -245,6 +303,18 @@ class OpikConfig(pydantic_settings.BaseSettings):
     is_attachment_extraction_active: bool = True
     """
     If set to True, attachments larger than `min_base64_embedded_attachment_size` will be extracted from spans/traces and uploaded to the Opik backend.
+    """
+
+    max_payload_size_mb: int = 20
+    """
+    Per-object size limit (in MB) for the truncatable fields (``input``/``output``) of every span
+    **and trace**, applied right before it is sent to the backend (after attachments have been
+    extracted). An ``input`` or ``output`` over this limit - or the two together over it - is
+    replaced with a truncation marker and a warning is logged. ``metadata`` is never truncated (it
+    holds small routing/cost fields the backend relies on, e.g. ``thread_id`` and ``model``) and is
+    not counted toward this limit; an oversized ``metadata`` is left to the server-side
+    request/document guards (413/400) rather than trimmed. Set to ``0`` (or any value ``<= 0``) to
+    disable truncation entirely. Log large payloads as attachments instead to avoid truncation.
     """
 
     connection_monitor_ping_interval: float = 10

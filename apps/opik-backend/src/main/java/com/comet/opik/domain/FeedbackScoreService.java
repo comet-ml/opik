@@ -5,6 +5,7 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ScoreDestination;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.api.events.FeedbackScoresDeleted;
@@ -89,6 +90,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private final @NonNull TraceThreadService traceThreadService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull EventBus eventBus;
+    private final @NonNull IdGenerator idGenerator;
 
     @Builder(toBuilder = true)
     record ProjectDto<T extends FeedbackScoreItem>(Project project, List<T> scores) {
@@ -100,6 +102,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
+            idGenerator.validateIdNotInFuture(traceId, EntityType.TRACE.getType());
+            idGenerator.validateIdNotInFutureIfPresent(score.sourceQueueId(), "annotation queue");
             return traceDAO.getProjectIdFromTrace(traceId)
                     .switchIfEmpty(Mono.error(failWithNotFound("Trace", traceId)))
                     .flatMap(projectId -> getAuthor()
@@ -107,7 +111,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                                     author.orElse(null)))
                             .doOnSuccess(__ -> eventBus.post(
                                     new FeedbackScoresCreated(Set.of(traceId), EntityType.TRACE, workspaceId, userName,
-                                            projectId))))
+                                            projectId, Set.of(score.name())))))
                     .then();
         });
     }
@@ -118,6 +122,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
+            idGenerator.validateIdNotInFuture(spanId, EntityType.SPAN.getType());
+            idGenerator.validateIdNotInFutureIfPresent(score.sourceQueueId(), "annotation queue");
             return spanDAO.getProjectIdFromSpan(spanId)
                     .switchIfEmpty(Mono.error(failWithNotFound("Span", spanId)))
                     .flatMap(projectId -> getAuthor()
@@ -153,11 +159,13 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
             String userName = ctx.get(RequestContext.USER_NAME);
             Set<UUID> entityIds = scores.stream().map(FeedbackScoreBatchItem::id).collect(Collectors.toSet());
 
+            Set<String> scoreNames = feedbackScoreNames(scores);
+
             return processScoreBatch(EntityType.TRACE, scores)
                     .doOnSuccess(__ -> {
                         if (!entityIds.isEmpty()) {
-                            eventBus.post(
-                                    new FeedbackScoresCreated(entityIds, EntityType.TRACE, workspaceId, userName));
+                            eventBus.post(new FeedbackScoresCreated(entityIds, EntityType.TRACE, workspaceId,
+                                    userName, null, scoreNames));
                         }
                     });
         });
@@ -173,7 +181,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         Map<String, List<FeedbackScoreItem>> scoresPerProject = scores
                 .stream()
                 .map(score -> {
-                    IdGenerator.validateVersion(score.id(), entityType.getType()); // validate span/trace id
+                    idGenerator.validateIdNotInFuture(score.id(), entityType.getType()); // validate span/trace id
+                    idGenerator.validateIdNotInFutureIfPresent(score.sourceQueueId(), "annotation queue");
 
                     return score.toBuilder()
                             .projectName(WorkspaceUtils.getProjectName(score.projectName()))
@@ -186,6 +195,20 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                 .map(projectMap -> mergeProjectsAndScores(projectMap, scoresPerProject))
                 .flatMap(projects -> saveScoreBatch(entityType, projects)) // score all scores
                 .then();
+    }
+
+    /**
+     * Names of the scores that will be visible in {@code feedback_scores}, for the routing freshness check.
+     *
+     * <p>Assertion-destined items are excluded: they are written to {@code assertion_results} instead, so a
+     * consumer told to expect one would re-read for a score that is never going to appear there, and give
+     * up only after exhausting its retries.
+     */
+    private Set<String> feedbackScoreNames(List<? extends FeedbackScoreItem> scores) {
+        return scores.stream()
+                .filter(score -> score.scoreDestination() == ScoreDestination.FEEDBACK_SCORES)
+                .map(FeedbackScoreItem::name)
+                .collect(Collectors.toSet());
     }
 
     private <T extends FeedbackScoreItem> Mono<Long> saveScoreBatch(
@@ -480,10 +503,34 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                             // regardless of their active/inactive status. The status concept is kept only
                             // for online scoring cooling period.
                             .flatMap(
-                                    validatedProjectDto -> dao.scoreBatchOfThreads(validatedProjectDto.scores(),
-                                            author));
+                                    validatedProjectDto -> dao
+                                            .scoreBatchOfThreads(validatedProjectDto.scores(), author)
+                                            .flatMap(count -> postThreadScoresCreated(validatedProjectDto)
+                                                    .thenReturn(count)));
                 })
                 .reduce(0L, Long::sum);
+    }
+
+    /**
+     * Posted per project rather than per batch: the event carries a project id, and one batch may span
+     * several projects. The entity ids are the resolved thread <em>model</em> ids, which is what
+     * {@code feedback_scores.entity_id} holds for threads, so a consumer can read the scores back by them.
+     */
+    private Mono<Void> postThreadScoresCreated(ProjectDto<FeedbackScoreBatchItemThread> projectDto) {
+        return Mono.deferContextual(ctx -> {
+            Set<UUID> threadModelIds = projectDto.scores()
+                    .stream()
+                    .map(FeedbackScoreItem::id)
+                    .collect(Collectors.toSet());
+
+            Set<String> scoreNames = feedbackScoreNames(projectDto.scores());
+
+            eventBus.post(new FeedbackScoresCreated(threadModelIds, EntityType.THREAD,
+                    ctx.get(RequestContext.WORKSPACE_ID), ctx.get(RequestContext.USER_NAME),
+                    projectDto.project().id(), scoreNames));
+
+            return Mono.empty();
+        });
     }
 
     private ProjectDto<FeedbackScoreBatchItemThread> bindThreadModelId(

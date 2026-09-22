@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -28,6 +29,7 @@ public record OllieReport(
         @JsonView(View.Public.class) String content,
         @JsonView(View.Public.class) JsonNode recommendedActions,
         @JsonView(View.Public.class) @NonNull ReportStatus status,
+        @JsonView(View.Public.class) String failureReason,
         @JsonView(View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView(View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt) {
 
@@ -72,7 +74,19 @@ public record OllieReport(
             @JsonView(View.Write.class) String content,
             @JsonView(View.Write.class) @NotNull ReportStatus status,
             @JsonView(View.Write.class) String sessionId,
-            @JsonView(View.Write.class) JsonNode recommendedActions) {
+            @JsonView(View.Write.class) JsonNode recommendedActions,
+            @JsonView(View.Write.class) @Size(max = 64) @Schema(description = "Why the report failed. Only "
+                    + "'out_of_credits' is acted on; any other value is recorded but renders as a generic "
+                    + "failure.") String failureReason) {
+    }
+
+    public static class FailureReason {
+        // Pre-check (or a runtime 402) found the org can't afford the report. No pod was spun up.
+        public static final String OUT_OF_CREDITS = "out_of_credits";
+        // The two below are recorded by opik itself, never reported by a caller — hence absent from the request
+        // schema above. They name a cause the metric leaves to its stage label, which the row has no room for.
+        public static final String TRIGGER_FAILED = "trigger_failed";
+        public static final String STALE_TIMEOUT = "stale_timeout";
     }
 
     public static class View {

@@ -7,6 +7,7 @@ import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Statement;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Builder;
@@ -53,16 +54,28 @@ public class CipxSpendDAO {
             long uInput,
             long uCacheRead,
             long uCacheCreation,
+            long uCacheCreation5m,
+            long uCacheCreation1h,
             long uOutput,
             @NonNull String effort,
             @NonNull String thinkingType,
             long maxTokens,
-            @NonNull String contextManagement) {
+            @NonNull String contextManagement,
+            @NonNull String speed,
+            /** Provider-reported usage units for the call; null when the span reports none. */
+            @Nullable Long aiuNano,
+            @NonNull String trigger,
+            @NonNull String triggerDetail,
+            @NonNull String turnKey,
+            @NonNull String parentToolUseId,
+            @NonNull String linkFailureReason) {
 
         public static SpanRow from(UUID spanId, UUID traceId, UUID projectId, JsonNode metadata, Instant startTime) {
             JsonNode call = metadata.path("cipx").path("call");
             JsonNode usage = call.path("usage");
+            JsonNode cacheCreation = usage.path("cache_creation");
             JsonNode config = call.path("config");
+            JsonNode copilotUsage = CipxMetadata.copilotUsage(metadata);
             return SpanRow.builder()
                     .spanId(spanId.toString())
                     .traceId(traceId.toString())
@@ -72,11 +85,20 @@ public class CipxSpendDAO {
                     .uInput(usage.path("input_tokens").asLong(0))
                     .uCacheRead(usage.path("cache_read_input_tokens").asLong(0))
                     .uCacheCreation(usage.path("cache_creation_input_tokens").asLong(0))
+                    .uCacheCreation5m(cacheCreation.path("ephemeral_5m_input_tokens").asLong(0))
+                    .uCacheCreation1h(cacheCreation.path("ephemeral_1h_input_tokens").asLong(0))
                     .uOutput(usage.path("output_tokens").asLong(0))
                     .effort(config.path("effort").asText(""))
                     .thinkingType(config.path("thinking_type").asText(""))
                     .maxTokens(config.path("max_tokens").asLong(0))
                     .contextManagement(config.path("context_management").asText(""))
+                    .speed(config.path("speed").asText(""))
+                    .aiuNano(copilotUsage.isObject() ? copilotUsage.path("total_nano_aiu").asLong(0) : null)
+                    .trigger(call.path("trigger").asText(""))
+                    .triggerDetail(call.path("trigger_detail").asText(""))
+                    .turnKey(call.path("turn_key").asText(""))
+                    .parentToolUseId(call.path("parent_tool_use_id").asText(""))
+                    .linkFailureReason(call.path("link_failure_reason").asText(""))
                     .build();
         }
     }
@@ -86,8 +108,9 @@ public class CipxSpendDAO {
     private static final String INSERT = """
             INSERT INTO cipx_spends
                 (workspace_id, project_id, trace_id, span_id, start_time, model,
-                 u_input, u_cache_read, u_cache_creation, u_output,
-                 effort, thinking_type, max_tokens, context_management)
+                 u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
+                 effort, thinking_type, max_tokens, context_management, speed, aiu_nano,
+                 `trigger`, trigger_detail, turn_key, parent_tool_use_id, link_failure_reason)
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
                 <items:{item |
@@ -101,11 +124,20 @@ public class CipxSpendDAO {
                         :u_input<item.index>,
                         :u_cache_read<item.index>,
                         :u_cache_creation<item.index>,
+                        :u_cache_creation_5m<item.index>,
+                        :u_cache_creation_1h<item.index>,
                         :u_output<item.index>,
                         :effort<item.index>,
                         :thinking_type<item.index>,
                         :max_tokens<item.index>,
-                        :context_management<item.index>
+                        :context_management<item.index>,
+                        :speed<item.index>,
+                        :aiu_nano<item.index>,
+                        :trigger<item.index>,
+                        :trigger_detail<item.index>,
+                        :turn_key<item.index>,
+                        :parent_tool_use_id<item.index>,
+                        :link_failure_reason<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -134,7 +166,7 @@ public class CipxSpendDAO {
         // Positional binds: the driver resolves named binds with a linear indexOf over the statement's
         // parameter list (quadratic per statement), while bind(int) is a direct array write. Indices
         // follow the placeholders' first-appearance order in the rendered SQL: workspace_id once at 0
-        // (repeats dedup), then 13 parameters per row tuple in template order.
+        // (repeats dedup), then 22 parameters per row tuple in template order.
         statement.bind(0, workspaceId);
         int index = 1;
         for (SpanRow row : rows) {
@@ -146,11 +178,24 @@ public class CipxSpendDAO {
                     .bind(index++, row.uInput())
                     .bind(index++, row.uCacheRead())
                     .bind(index++, row.uCacheCreation())
+                    .bind(index++, row.uCacheCreation5m())
+                    .bind(index++, row.uCacheCreation1h())
                     .bind(index++, row.uOutput())
                     .bind(index++, row.effort())
                     .bind(index++, row.thinkingType())
                     .bind(index++, row.maxTokens())
-                    .bind(index++, row.contextManagement());
+                    .bind(index++, row.contextManagement())
+                    .bind(index++, row.speed());
+            if (row.aiuNano() != null) {
+                statement.bind(index++, row.aiuNano());
+            } else {
+                statement.bindNull(index++, Long.class);
+            }
+            statement.bind(index++, row.trigger())
+                    .bind(index++, row.triggerDetail())
+                    .bind(index++, row.turnKey())
+                    .bind(index++, row.parentToolUseId())
+                    .bind(index++, row.linkFailureReason());
         }
 
         return statement.execute();

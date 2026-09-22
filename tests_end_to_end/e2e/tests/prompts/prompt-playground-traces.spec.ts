@@ -28,7 +28,7 @@ const PROMPT_VARIANTS: PromptVariant[] = [
   },
 ];
 
-test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@prompts', '@playground'] }, () => {
+test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@area:playground', '@cap:playground.verify-trace-from-run', '@cap:playground.playground-logs-sidebar', '@cap:playground.trace-messages-tab'] }, () => {
   test.use({ viewport: { width: 1600, height: 900 } });
 
   for (const variant of PROMPT_VARIANTS) {
@@ -112,6 +112,19 @@ test.describe('Prompt → Playground → Traces', { tag: ['@t2-cuj', '@prompts',
 
       await test.step('Verify trace detail panel shows the prompt message', async () => {
         await expect(sidebar.traceDetailPanel().getByText(messageContent).first()).toBeVisible();
+      });
+
+      await test.step('Verify Messages tab renders the run as conversation turns', async () => {
+        await expect(sidebar.messagesTab()).toBeVisible();
+        await sidebar.expectMessagesTabSelectedByDefault();
+        await sidebar.clickMessagesTab();
+        await expect(sidebar.messageRole('User')).toBeVisible();
+        await expect(sidebar.messageBody('User')).toContainText(messageContent);
+        await expect(sidebar.messageRole('Assistant')).toBeVisible();
+        // The completion is whatever the live model answered, so the claim is that the
+        // assistant turn carries the model's own text rather than an echo of the prompt.
+        await expect(sidebar.messageBody('Assistant')).not.toBeEmpty();
+        await expect(sidebar.messageBody('Assistant')).not.toContainText(messageContent);
       });
 
       await test.step('Open Prompts tab and verify prompt is linked', async () => {

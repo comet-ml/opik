@@ -1,7 +1,7 @@
 import { test, expect } from '@e2e/fixtures';
 import { AnnotationQueuePage } from '@e2e/pom/annotation-queue.page';
 
-test.describe('Annotation queue — UI scoring, SDK verify', { tag: ['@t2-cuj', '@annotation-queue'] }, () => {
+test.describe('Annotation queue — UI scoring, SDK verify', { tag: ['@t2-cuj', '@area:annotation-queues', '@cap:annotation-queues.score-queue-item', '@cap:annotation-queues.score-with-reason', '@cap:annotation-queues.skip-item', '@cap:annotation-queues.scores-reach-traces'] }, () => {
   test('Scoring two items and skipping a third reflects on the source traces', async ({
     annotationQueue,
     backendClient,
@@ -42,13 +42,20 @@ test.describe('Annotation queue — UI scoring, SDK verify', { tag: ['@t2-cuj', 
     });
 
     await test.step('Verify the first item scored correctly, reason included', async () => {
-      const score = await backendClient.pollTraceForFeedbackScore(firstItem.id, scoreName);
+      // Wait on the reason, not just the score: the reason is a second write
+      // against a score row that already exists, so a poll that stops at "a
+      // score named this is present" returns before it lands.
+      const score = await backendClient.pollTraceForFeedbackScore(firstItem.id, scoreName, {
+        until: (s) => s.reason !== null,
+      });
       expect(score.value).toBe(1);
       expect(score.reason).toBe('Looks correct');
     });
 
     await test.step('Verify the second item scored correctly, reason included', async () => {
-      const score = await backendClient.pollTraceForFeedbackScore(secondItem.id, scoreName);
+      const score = await backendClient.pollTraceForFeedbackScore(secondItem.id, scoreName, {
+        until: (s) => s.reason !== null,
+      });
       expect(score.value).toBe(0);
       expect(score.reason).toBe('Missed a key detail');
     });

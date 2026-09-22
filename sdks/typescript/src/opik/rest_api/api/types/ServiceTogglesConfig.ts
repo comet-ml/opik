@@ -24,13 +24,6 @@ export interface ServiceTogglesConfig {
     ollamaProviderEnabled: boolean;
     ollieEnabled: boolean;
     projectHomepageEnabled: boolean;
-    agenticToolsEnabled: boolean;
-    agentInsightsEnabled: boolean;
     onlineScoringTracingEnabled: boolean;
-    v2WorkspaceAllowlistIds: string[];
-    v1WorkspaceAllowlistIds: string[];
-    forceWorkspaceVersion: string;
     defaultPageSize?: number;
-    v2WorkspaceAllowlist?: string;
-    v1WorkspaceAllowlist?: string;
 }

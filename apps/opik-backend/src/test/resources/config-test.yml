@@ -70,12 +70,20 @@ databaseAnalytics:
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
   queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=60,async_insert_busy_timeout_min_ms=50,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1,optimize_skip_unused_shards=1,do_not_merge_across_partitions_select_final=1,distributed_product_mode=local
-  #  Default: unset (inherits the async_insert_busy_timeout_max_ms=60 carried by queryParameters above)
-  #  Description: Optional override (ms) for async_insert_busy_timeout_max_ms in the custom_http_params chain of
-  #   queryParameters above; only applied when that setting is already present there, otherwise it is not injected.
-  #   Leave unset to keep the queryParameters value untouched. With async_insert_use_adaptive_busy_timeout=1 this is
-  #   a ceiling: the adaptive scheduler widens the buffer only while rows are queued.
+  #  Default: unset (the async_insert_busy_timeout_max_ms=60 carried by queryParameters above applies)
+  #  Description: Optional override (ms) for async_insert_busy_timeout_max_ms. When set it is applied to the
+  #   custom_http_params chain (overriding the value there, or added if absent); when unset the queryParameters value
+  #   is left untouched. With async_insert_use_adaptive_busy_timeout=1 this is the ceiling of the adaptive buffer window.
   asyncInsertBusyTimeoutMaxMs: # Empty - inherits the queryParameters value above
+  #  Default: unset (the async_insert_busy_timeout_min_ms=50 carried by queryParameters above applies)
+  #  Description: Optional override (ms) for async_insert_busy_timeout_min_ms, the floor of the adaptive buffer window;
+  #   same override semantics as asyncInsertBusyTimeoutMaxMs above.
+  asyncInsertBusyTimeoutMinMs: # Empty - inherits the queryParameters value above
+  #  Default: unset (async_insert_max_data_size is not carried by queryParameters above, so the ClickHouse/server value applies)
+  #  Description: Optional override (bytes) for async_insert_max_data_size, the buffered size that forces an
+  #   async-insert flush; same override semantics as asyncInsertBusyTimeoutMaxMs above. Larger values yield fewer,
+  #   larger parts at the cost of more buffer memory.
+  asyncInsertMaxDataSize: # Empty - ClickHouse/server-side value applies
   #  Default: 1s
   #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
   healthCheckTimeout: 1s
@@ -88,12 +96,26 @@ databaseAnalyticsDataModel:
   #   non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates reads too, so
   #   while false a legitimate epoch end time round-trips unchanged instead of reading as null.
   #   Flip in lockstep with the cutover EXCHANGE.
+  #   Also gates partition-scoped trace deletes: that same EXCHANGE puts the weekly-partitioned successor behind the
+  #   name mutations target, so true additionally means a delete may scope itself with IN PARTITION instead of being
+  #   registered against every part of the table. The two facts have only ever flipped together, which is why this
+  #   gates both rather than there being a second flag. IN PARTITION against an unpartitioned table is a hard error
+  #   (code 248), not a lost optimisation, so setting this true ahead of the EXCHANGE breaks deletes - as it already
+  #   breaks writes, which bind sentinels a Nullable column has no use for. Off falls back to the unbounded delete:
+  #   correct, merely slower.
   traceColumnsNonNullable: false
   #  Default: false
   #  Description: Spans sibling of traceColumnsNonNullable. Leave false while the spans table still has Nullable
   #   end_time/duration/ttft columns; span writes bind null for absent end_time/ttft. Set true once replaced with
   #   sentinel-defaulted non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates
   #   reads too. Flip in lockstep with the Slice 3 cutover EXCHANGE, independently of the trace flag.
+  #   Also gates partition-scoped span cascade deletes, as the trace flag does for traces: that same EXCHANGE puts the
+  #   weekly-partitioned successor behind the name span mutations target, so true additionally means the trace-delete
+  #   cascade may scope itself with IN PARTITION instead of being registered against every part of the table.
+  #   IN PARTITION against an unpartitioned table is a hard error (code 248), not a lost optimisation, so setting this
+  #   true ahead of the EXCHANGE breaks deletes. Off falls back to the unbounded delete: correct, merely slower. The
+  #   spans retention sweeps are not scoped either way: retention and a cut-over `spans` must not both be live until
+  #   a sweep has been measured there - see SpanDAO.DELETE_FOR_RETENTION.
   spanColumnsNonNullable: false
   #  Default: false
   #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also
@@ -110,6 +132,39 @@ databaseAnalyticsDataModel:
   #   than the ClickHouse driver binds reliably in one statement (5 columns per row), so the insert is split into
   #   chunks of this size.
   deletionEventsInsertBatchSize: 1000
+  #  Default: false
+  #  Description: The final sharding-readiness step wraps `traces` as a Distributed table over the `traces_local`
+  #   shard. A Distributed table supports SELECT and INSERT but NOT mutations, so once the wrap is live every trace
+  #   mutation must target the local shard. Leave false at deploy time and while `traces` is still a MergeTree (deletes
+  #   work directly); set true in lockstep with applying the wrap (exchange_and_wrap.sh --with-wrap / --wrap-only). While
+  #   true, TraceDAO routes delete/retention mutations to `traces_local`; reads and inserts stay on the Distributed
+  #   `traces`. Post-wrap, changes to `traces` split by kind: row mutations (DELETE) + MATERIALIZE COLUMN/ADD INDEX/
+  #   MODIFY TTL target `traces_local` only (the Distributed `traces` rejects them); ADD/DROP/MODIFY COLUMN must target
+  #   both `traces_local` and `traces`, else reads can't see the column (code 47).
+  #   This value is asserted against the live topology by the `clickhouse-traces-topology` readiness check below: set it
+  #   wrong in either direction and the backend fails readiness at startup with a message naming the flag and the
+  #   observed engine, rather than serving traffic whose trace deletes are guaranteed to fail.
+  tracesDistributedWrapEnabled: false
+  #  Default: false
+  #  Description: Spans sibling of tracesDistributedWrapEnabled. The Slice 3 cutover wraps `spans` as a Distributed
+  #   table over the `spans_local` shard, co-located with traces on sipHash64(project_id). Leave false at deploy time
+  #   and while `spans` is still a MergeTree (deletes work directly); set true in lockstep with applying the spans wrap.
+  #   While true, SpanDAO routes its cascade and retention deletes to `spans_local`; reads and inserts stay on the
+  #   Distributed `spans`. Post-wrap, changes to `spans` split by kind exactly as for traces: row mutations (DELETE) +
+  #   MATERIALIZE COLUMN/ADD INDEX/MODIFY TTL target `spans_local` only (the Distributed `spans` rejects them);
+  #   ADD/DROP/MODIFY COLUMN must target both `spans_local` and `spans`, else reads can't see the column (code 47).
+  #   Independent of the trace flag, and asserted against the live database by its own `clickhouse-spans-topology`
+  #   readiness check below (the `clickhouse-traces-topology` one asserts the trace flag only): set it wrong in either
+  #   direction and the backend fails readiness at startup with a message naming the flag and the observed engine,
+  #   rather than serving traffic whose span deletes are guaranteed to fail.
+  spansDistributedWrapEnabled: false
+
+bulkInsert:
+  # false: the R2DBC bulk path (one named parameter per column per row). true: rows streamed as
+  # JSONEachRow through the ClickHouse Java client v2, with no parameter binding. Both write identical
+  # cells, so this is safe to flip either way on a running install. Default false so an upgrade does not
+  # silently change the write path.
+  v2ClientEnabled: false
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -118,15 +173,25 @@ uuidValidation:
   #  Description: Operational kill-switch. When false, ids are not checked against the window (the
   #   window is still validated to be a sane value).
   enabled: true
+  #  Default: false for tests
+  #  Description: Audit (shadow / log-only) mode. When true, out-of-window ids are counted and logged
+  #   but not rejected. Tests default to false so the validator rejects.
+  auditOnly: false
   #  Default: 24h
   #  Description: Validation window (between 12h and 45d). Writes whose `id` is a UUIDv7 with an
   #   embedded timestamp more than this far in the past or future are rejected.
   window: 24h
+  #  Default: 30d
+  #  Description: Wider override of `window` (between 12h and 45d) for a centrally managed set of
+  #   workspaces. That set is empty by default, which leaves this setting inert; the workspaces in it are
+  #   still rejected beyond this override. A value at or below `window` is ignored, since the override
+  #   only ever widens.
+  bypassWindow: 30d
 
 # Description: credentials for the Agent Insights read-only free-form SQL user. The connection params are reused
 #   from databaseAnalytics (overridden to the test container). The username/password match the production-shape user
 #   provisioned globally on the test ClickHouse container via src/test/resources/users.xml (mirrors
-#   provision_agent_insights_readonly_user.sh) — so any test enabling serviceToggles.agentInsightsEnabled exercises
+#   provision_agent_insights_readonly_user.sh) — so any test enabling serviceToggles.ollieEnabled exercises
 #   the real readonly=1 profile (max_execution_time pinned, only SQL_workspace_id/SQL_project_id changeable in readonly).
 databaseAnalyticsReadOnlyFreeFormSql:
   username: comet_readonly_freeform_sql_user
@@ -186,6 +251,16 @@ health:
       type: ready
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: clickhouse-traces-topology
+      critical: true
+      type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: clickhouse-spans-topology
+      critical: true
+      type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: mysql
       critical: true
       type: ready
@@ -232,6 +307,14 @@ authentication:
   reactService:
     url: ''
 
+  # Per-call read timeout for auth requests to the React service (overrides jerseyClient.timeout for this hop).
+  requestTimeout: 3s
+  # Maximum retry attempts for a failed auth request. Transport failures only; HTTP error statuses are not retried.
+  requestMaxRetries: 1
+  # Minimum backoff between auth request attempts.
+  requestRetryMinBackoff: 250ms
+  # Upper bound on the backoff between auth request attempts.
+  requestRetryMaxBackoff: 1s
 sharedHttpClientHealthCheck:
   timeout: 1s
 
@@ -250,14 +333,23 @@ mcpOAuth:
   # Description: Access token lifetime
   accessTokenTtl: PT1H
   # Default: P7D
-  # Description: Refresh token absolute lifetime (not sliding)
+  # Description: Refresh token idle lifetime. Sliding: every rotation issues the new refresh token with this much lifetime from now, so an actively used connector stays connected; one left unused for this long has to re-authorize. At most 365 days
   refreshTokenTtl: P7D
+  # Default: P30D
+  # Description: Absolute lifetime of a token family, measured from the authorization that created it. Caps the sliding refresh lifetime: no matter how actively a connector is used, it has to re-authorize once this has elapsed. Never effectively shorter than refreshTokenTtl; at most 365 days
+  refreshTokenAbsoluteTtl: P30D
   # Default: PT60S
   # Description: Authorization code lifetime
   codeTtl: PT60S
-  # Default: PT30S
-  # Description: Grace window during which a just-rotated refresh token is still accepted
-  refreshRotationGrace: PT30S
+  # Default: PT2M
+  # Description: Grace window after a refresh-token rotation during which re-presenting the rotated token still mints a token pair (MCP hosts refresh from several parallel tool calls at once); after it, re-presentation is treated as reuse and revokes the whole token family
+  refreshRotationGrace: PT2M
+  # Default: 10
+  # Description: How many extra token pairs a single rotated refresh token may still mint inside the grace window (one per parallel host request that lost the rotation race). Requests beyond it are refused with invalid_grant one by one; the family and the pairs already handed out stay valid, since hitting the cap is oversubscription, not reuse
+  refreshRotationMaxRetries: 10
+  # Default: PT10S
+  # Description: Lease of the per-family Redis lock under which refresh-token rotation, in-grace retries and revocation run. Must outlast the MySQL transaction that rotates a token; if it lapses mid-rotation a concurrent refresh with the same token may be refused instead of served
+  refreshLockLease: PT10S
   # Default: PT5M
   # Description: TTL of the Redis lock held by the scrub job. The lock is held until expiry (not released after the scrub), so keeping it close to the 5-minute schedule prevents staggered replicas from re-scrubbing within the same cycle.
   scrubLockTimeout: PT5M
@@ -303,6 +395,21 @@ jacksonConfig:
   #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
   #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
   maxStringLength: 262144000
+  # Test-only caps, deliberately small so the LargePayloadTests below trip the guards on modest
+  # payloads (253MB string, 280MB doc, 51MB request) rather than production-sized bodies. They
+  # exercise the 413 rejection mechanism; JacksonConfigTest verifies the real shipped defaults.
+  # Description: Maximum size of an entire JSON document (the whole decompressed batch). Unlike
+  #   maxStringLength (a single string value), this caps the whole document, so it catches an
+  #   oversized batch built from many small values. Aborts mid-parse with a 413 before a multi-GB
+  #   node tree is materialized. Must stay above maxStringLength so a single max-size string parses.
+  maxDocumentLength: 268435456
+  # Intentionally BELOW maxDocumentLength so the ~51MB LargePayloadTests request trips the 413
+  #   pre-parse guard cheaply. Request size (compressed) and document length (decompressed) are
+  #   independent axes -- do NOT raise this to match maxDocumentLength.
+  # Description: Maximum incoming request body size, checked against the Content-Length header and
+  #   rejected with 413 before the body is read. Requests without a Content-Length (e.g. chunked)
+  #   fall through and are bounded by maxDocumentLength during parsing.
+  maxRequestSizeBytes: 52428800
 
 # Configuration for batch operations
 batchOperations:
@@ -363,6 +470,17 @@ cors:
   # Description: Whether or not to allow cross site scripting
   enabled: false
 
+# Read-time redaction configuration
+redaction:
+  # Default: false
+  # Description: Master switch. Off here so the suite exercises the shipped default; the tests that need it on
+  # override redaction.enabled and redaction.rules per application, which is what keeps this file honest about
+  # the keys existing.
+  enabled: false
+  # Default: [] - valid only while enabled=false, since an empty set with enabled=true fails startup.
+  # Description: JSON array of {"regex", "replace"} applied to every string in a response.
+  rules: '[]'
+
 # Encryption related configuration
 encryption:
   # Default: GiTHubiLoVeYouAA
@@ -409,6 +527,12 @@ onlineScoring:
   # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
   agenticToolsCharsPerToken: 4
   agenticToolsMaxInjectedBytes: 52428800
+  # Default: 32
+  # Description: Hard heap cap (in MB) on the trace-thread span preload used to size the
+  #   inline-vs-agentic-tools routing decision. Spans stream under this cap; once crossed, the thread
+  #   routes to the agentic-tools path (which drills per-trace on demand) instead of being buffered in
+  #   full. Lower on memory-constrained deployments. See OPIK-7454.
+  agenticToolsMaxPreloadMb: 32
   agenticToolsS3PresignTtlSeconds: 120
   # Per-variable substitution cap (chars) for the {{trace}}/{{span}} structure-injection / agentic paths.
   maxPromptFieldChars: 4000
@@ -511,6 +635,10 @@ datasetExport:
   cleanupLockWaitTime: 1s
   cleanupBatchSize: 100
 
+# Dynamic token auth for custom LLM providers: tests hit localhost token endpoints over http
+llmProviderTokenAuth:
+  destinationGuard: "relaxed"
+
 # LLM providers client configuration
 llmProviderClient:
   # Default: 60s
@@ -537,6 +665,18 @@ llmProviderClient:
   # Default: https://openrouter.ai/api/v1
   # Description: OpenRouter API URL
   openRouterUrl: https://openrouter.ai/api/v1
+  # Configuration for Vertex AI client
+  vertexAIClient:
+    # Default: https://www.googleapis.com/auth/cloud-platform
+    # Description: Vertex AI SCOPE API URL
+    scope: https://www.googleapis.com/auth/cloud-platform
+    # Description: API endpoint per multi-region location, keyed by lower-case location. Single-region locations are
+    # not listed and keep the endpoint the SDK derives from the location itself. Required: these endpoints exist only
+    # here, the application defines no fallback for them. Values may be a bare host or an https:// URL.
+    multiRegionApiEndpoints:
+      global: https://aiplatform.googleapis.com
+      eu: https://aiplatform.eu.rep.googleapis.com
+      us: https://aiplatform.us.rep.googleapis.com
 
 # Configuration for cache manager
 cacheManager:
@@ -760,7 +900,9 @@ serviceToggles:
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: "true"
   # Default: false
-  # Description: Whether or not the Ollie AI assistant integration is enabled.
+  # Description: Whether or not the Ollie AI assistant integration is enabled. Also gates the Agent Insights
+  #   freeform SQL path and the clickhouse-readonly-freeform-sql health check. Tests flip this on when exercising
+  #   the read-only ClickHouse client.
   ollieEnabled: "false"
   # Default: false
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
@@ -899,145 +1041,7 @@ datasetVersioning:
     maxAttempts: 3
     minBackoff: 100ms
     maxBackoff: 500ms
-
-# Experiment Project Migration configuration
-# Assigns project_id to orphan experiments (V1 → V2 workspace migration).
-# Runs as a recurring job, processing workspaces in batches.
-experimentProjectMigration:
-  # Master switch — disabled by default, enable for staged rollout
-  enabled: false
-  # Number of workspaces to process per job run (smallest first)
-  workspacesPerRun: 20
-  # Number of experiments to update per ClickHouse INSERT batch
-  experimentBatchSize: 1000
-  # Interval between recurring job runs
-  interval: 5s
-  # Delay before first run after app startup
-  startupDelay: 5s
-  # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
-  # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
-  lockTimeout: 5s
-  # Max time to wait for the distributed lock when another replica holds it. Kept brief so a held
-  # lock doesn't block this fire — the next scheduled tick will try again.
-  lockWaitTime: 100ms
-  # Per-cycle timeout — short for tests so hangs fail fast
-  jobTimeout: 30s
-  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
-  schedulerThreadCap: 2
-  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
-  schedulerQueuedTaskCap: 50
-  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
-  # idle window and don't churn on every tick.
-  schedulerThreadTtl: 10s
-
-# Dataset Project Migration configuration
-# Assigns project_id to orphan datasets (V1 → V2 workspace migration).
-# Runs as a recurring job, processing workspaces in batches.
-datasetProjectMigration:
-  # Master switch — disabled in tests by default
-  enabled: false
-  # Number of workspaces to process per job run (smallest first)
-  workspacesPerRun: 20
-  # Number of datasets to update per MySQL UPDATE batch
-  datasetBatchSize: 1000
-  # Interval between recurring job runs
-  interval: 5s
-  # Delay before first run after app startup — gives tests time to seed preconditions
-  # (workspaces, datasets, experiments, traces) before the first cycle fires
-  startupDelay: 5s
-  # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
-  # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
-  lockTimeout: 5s
-  # Max time to wait for the distributed lock when another replica holds it
-  lockWaitTime: 100ms
-  # Per-cycle timeout — short for tests so hangs fail fast
-  jobTimeout: 30s
-  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
-  schedulerThreadCap: 2
-  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
-  schedulerQueuedTaskCap: 50
-  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
-  # idle window and don't churn on every tick.
-  schedulerThreadTtl: 10s
-
-# Optimization Project Migration configuration (D3)
-# Assigns project_id to orphan optimizations in ClickHouse via experiments-primary + dataset
-# fallback inference. Disabled by default in tests — each test opts in via CustomConfig.
-optimizationProjectMigration:
-  enabled: false
-  workspacesPerRun: 20
-  optimizationBatchSize: 1000
-  interval: 5s
-  startupDelay: 5s
-  lockTimeout: 5s
-  lockWaitTime: 100ms
-  jobTimeout: 30s
-  schedulerThreadCap: 2
-  schedulerQueuedTaskCap: 50
-  schedulerThreadTtl: 10s
-
-# Prompt Project Migration configuration (D4)
-# Assigns project_id to orphan prompts (V1 → V2 workspace migration). Runs as a recurring job.
-promptProjectMigration:
-  # Master switch — disabled in tests by default; tests opt in via CustomConfig overrides.
-  enabled: false
-  workspacesPerRun: 20
-  promptBatchSize: 1000
-  interval: 5s
-  # Non-zero so the first scheduled fire lands after the JobTest's initial seed + prime.
-  # ServiceTest disables the job entirely and drives the cycle directly via runMigrationCycle().
-  startupDelay: 5s
-  lockTimeout: 5s
-  lockWaitTime: 100ms
-  jobTimeout: 30s
-  schedulerThreadCap: 2
-  schedulerQueuedTaskCap: 50
-  schedulerThreadTtl: 10s
-
-automationRuleProjectMigration:
-  # Master switch — disabled by default, enable for staged rollout
-  enabled: false
-  # Number of workspaces to process per job run (smallest first)
-  workspacesPerRun: 20
-  # Max multi-project rules split per workspace per cycle — caps work to avoid long transactions
-  maxRulesPerCycle: 100
-  # Interval between recurring job runs
-  interval: 5s
-  # Delay before first run after app startup
-  startupDelay: 5s
-  # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
-  # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
-  lockTimeout: 5s
-  # Max time to wait for the distributed lock when another replica holds it. Kept brief so a held
-  # lock doesn't block this fire — the next scheduled tick will try again.
-  lockWaitTime: 100ms
-  # Per-cycle timeout — short for tests so hangs fail fast
-  jobTimeout: 30s
-  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
-  # Max threads in the pool — the job runs sequentially per replica; minimum 2 required by reactor.
-  schedulerThreadCap: 2
-  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
-  schedulerQueuedTaskCap: 50
-  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
-  # idle window and don't churn on every tick.
-  schedulerThreadTtl: 10s
-
-# Alert Project Migration configuration
-# Assigns project_id to orphan alerts and splits multi-project alerts (V1 → V2 workspace migration).
-alertProjectMigration:
-  enabled: false
-  workspacesPerRun: 20
-  alertBatchSize: 100
-  interval: 5s
-  startupDelay: 5s
-  lockTimeout: 5s
-  lockWaitTime: 100ms
-  jobTimeout: 30s
-  schedulerThreadCap: 2
-  schedulerQueuedTaskCap: 50
-  schedulerThreadTtl: 10s
+  lockLease: 60s
 
 partitionMetrics:
   enabled: false
@@ -1045,12 +1049,6 @@ partitionMetrics:
   interval: 5m
   # Tables scanned for lightweight-deleted (masked) rows. Comma-separated env override.
   lwdTables: traces,spans
-
-# Shared configuration for V1 → V2 entity project migration jobs
-# Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
-migration:
-  # Comma-separated workspace IDs to exclude (e.g. internal Comet workspaces)
-  excludedWorkspaceIds:
 
 # Job timeout configuration
 jobTimeout:
@@ -1118,6 +1116,9 @@ webhook:
   # Default: 1s
   # Description: HTTP connection timeout for webhook calls
   connectionTimeout: 1s
+  # Default: relaxed
+  # Description: Outbound destination policy for webhook URLs; tests target local mock servers
+  destinationGuard: "relaxed"
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: 10
@@ -1158,11 +1159,30 @@ optimizationStalledReaper:
   jobInterval: 5m
   initializedTimeout: 15m
   runningTimeout: 26h
+  runningHardTimeout: 48h
   lookbackMargin: 7d
   lockDuration: 4m
   batchSize: 100
+  candidateScanFactor: 10
 
 # Environment CRUD configuration
 environment:
   # Low ceiling for tests so cap-related scenarios don't need to insert many environments.
   maxPerWorkspace: 5
+
+annotationQueueRouting:
+  # Default: false
+  # Description: When false, score events are never published and nothing is routed automatically.
+  #   Off here too, matching production: no test reads this block. The routing tests build their own
+  #   config, so leaving it on only made the listener run an automation lookup for every feedback score
+  #   written by every other integration test in the suite.
+  enabled: false
+  # Default: annotation-queue-routing
+  # Description: Redis stream name for queued annotation queue routing work
+  streamName: 'annotation-queue-routing'
+  # Default: 100000
+  # Description: Maximum stream length before old entries are trimmed
+  streamMaxLen: 100000
+  # Default: 1000
+  # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+  streamTrimLimit: 1000

@@ -11,6 +11,7 @@ interface NumericCellProps {
   autoFocus?: boolean;
   grow?: boolean;
   className?: string;
+  testId?: string;
 }
 
 export const NumericCell: React.FC<NumericCellProps> = ({
@@ -21,6 +22,7 @@ export const NumericCell: React.FC<NumericCellProps> = ({
   autoFocus = false,
   grow = false,
   className,
+  testId,
 }) => {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -32,6 +34,7 @@ export const NumericCell: React.FC<NumericCellProps> = ({
       type="number"
       step="any"
       data-filter-cell
+      data-testid={testId}
       variant="unstyled"
       dimension="none"
       value={value}

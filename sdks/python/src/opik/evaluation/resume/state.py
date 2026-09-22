@@ -28,6 +28,7 @@ import logging
 from typing import Any, Dict, Optional, Union
 
 from ...api_objects.experiment import experiment as experiment_module
+from ..types import ErrorTolerance
 
 
 LOGGER = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class ResumableState:
     dataset_version_name: str
     nb_samples: Optional[int]
     requires_local_checkpoint: bool
+    error_tolerance: ErrorTolerance
 
 
 @dataclasses.dataclass(frozen=True)
@@ -83,6 +85,7 @@ def embed_resumable_state(
             "dataset_version_name": state.dataset_version_name,
             "nb_samples": state.nb_samples,
             "requires_local_checkpoint": state.requires_local_checkpoint,
+            "error_tolerance": int(state.error_tolerance),
         }
     )
     return new_config
@@ -161,6 +164,7 @@ def read_resume_state(
         requires_local_checkpoint=bool(
             raw_state.get("requires_local_checkpoint", False)
         ),
+        error_tolerance=_coerce_error_tolerance(raw_state.get("error_tolerance")),
     )
 
 
@@ -194,6 +198,28 @@ def _read_raw_resume_state(
         return None
 
     return decoded if isinstance(decoded, dict) else None
+
+
+def _coerce_error_tolerance(value: Any) -> ErrorTolerance:
+    """Decode the persisted tolerance, falling back to the default.
+
+    Blobs written before this field existed omit it, and a value this SDK does
+    not recognise (an experiment created by a newer version) is not something to
+    fail a resume over — both resume at the default.
+    """
+    try:
+        return ErrorTolerance(value)
+    except (ValueError, TypeError):
+        if value is not None:
+            # Only the type and a bounded excerpt: the blob is external input and
+            # could carry an arbitrarily large value.
+            LOGGER.warning(
+                "Unrecognised error_tolerance in resume state (%s: %.40s); resuming at %s.",
+                type(value).__name__,
+                value,
+                ErrorTolerance.METRIC_ERRORS.name,
+            )
+        return ErrorTolerance.METRIC_ERRORS
 
 
 def _coerce_positive_int(value: Any, *, fallback: int) -> int:

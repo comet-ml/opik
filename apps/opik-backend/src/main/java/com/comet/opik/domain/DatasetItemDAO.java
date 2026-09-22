@@ -10,6 +10,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ErrorUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,6 +40,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -1036,11 +1038,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ;
             """;
 
+    private static final String DATASET_ITEMS_TABLE = "dataset_items";
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @Override
     @WithSpan
@@ -1050,8 +1055,46 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Mono.empty();
         }
 
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(datasetId, items);
+        }
+
         return asyncTemplate.nonTransaction(connection -> mapAndInsert(
                 datasetId, items, connection, INSERT_DATASET_ITEM));
+    }
+
+    /**
+     * Same rows as {@link #INSERT_DATASET_ITEM}, streamed as JSONEachRow instead of bound as ~9 named
+     * parameters per row plus a shared workspace id.
+     *
+     * <p>Only {@code save} moves onto this path. {@code mapAndInsert} is also rendered with
+     * {@code BULK_UPDATE} by the bulk-update flow, which reads the pre-existing row to merge tags and
+     * so is not a plain row append.
+     *
+     * <p>{@code created_at} and {@code last_updated_at} stay absent from the row. The R2DBC template
+     * writes {@code now64(9)} for {@code created_at} and omits {@code last_updated_at}; both columns are
+     * declared {@code DEFAULT now64(9)}, so omitting them here produces the same server-stamped value --
+     * and {@code last_updated_at} is the ReplacingMergeTree version, so a client-supplied one would
+     * change which duplicate wins.
+     */
+    private Mono<Long> insertJsonEachRow(UUID datasetId, List<DatasetItem> items) {
+        return makeMonoContextAware((userName, workspaceId) -> {
+            // Started inside the lambda, i.e. on subscription, as mapAndInsert does. Opening it during
+            // assembly would leak the span if the publisher is never subscribed, and would capture
+            // whatever Context.current() happened to be at assembly time as the parent.
+            //
+            // mapAndInsert opens and closes this segment on the R2DBC path, so without it here a v2 save
+            // disappears from the dataset-item instrumentation stream instead of showing up as a fast
+            // insert.
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "insert_dataset_items");
+
+            return jsonBulkInsert.insert(
+                    DATASET_ITEMS_TABLE,
+                    getLogComment("save_dataset_items", workspaceId, userName, items.size()),
+                    items,
+                    item -> DatasetItemJsonRowMapper.toJsonRow(item, datasetId, userName, workspaceId))
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
     private Mono<Long> mapAndInsert(
@@ -1392,8 +1435,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             }
 
                             var hasDynamicKeys = datasetItemSearchCriteria.sortingFields() != null
-                                    && sortingQueryBuilder.hasDynamicKeys(datasetItemSearchCriteria.sortingFields(),
-                                            itemFieldMapping);
+                                    && sortingQueryBuilder.hasDynamicKeys(datasetItemSearchCriteria.sortingFields());
 
                             var selectStatement = connection.createStatement(finalTemplate.render())
                                     .bind("datasetId", datasetItemSearchCriteria.datasetId())
@@ -1411,7 +1453,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             // Bind dynamic sorting keys if present
                             if (hasDynamicKeys) {
                                 selectStatement = sortingQueryBuilder.bindDynamicKeys(selectStatement,
-                                        datasetItemSearchCriteria.sortingFields(), itemFieldMapping);
+                                        datasetItemSearchCriteria.sortingFields());
                             }
 
                             bindSearchCriteria(datasetItemSearchCriteria, selectStatement);
@@ -1423,7 +1465,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                     .doFinally(signalType -> endSegment(segmentContent))
                                     .flatMap(DatasetItemResultMapper::mapItem)
                                     .collectList()
-                                    .onErrorResume(e -> handleSqlError(e, List.of()))
+                                    .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e, List.of()))
                                     .flatMap(
                                             items -> Mono
                                                     .just(new DatasetItemPage(items, page, items.size(), total, columns,
@@ -1459,7 +1501,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return Flux.from(statement.execute())
                     .flatMap(DatasetItemResultMapper::mapCount)
                     .reduce(0L, Long::sum)
-                    .onErrorResume(e -> handleSqlError(e, 0L))
+                    .onErrorResume(e -> ErrorUtils.handleMalformedJsonPath(e, 0L))
                     .doFinally(signalType -> endSegment(segment));
         }));
     }
@@ -1477,14 +1519,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     .flatMap(result -> DatasetItemResultMapper.mapColumns(result, "data"));
         }))
                 .doFinally(signalType -> endSegment(segment));
-    }
-
-    private <T> Mono<T> handleSqlError(Throwable e, T defaultValue) {
-        // A user-supplied malformed JSON path is rejected by ClickHouse; treat it as an empty result.
-        if (ErrorUtils.isMalformedJsonPath(e)) {
-            return Mono.just(defaultValue);
-        }
-        return Mono.error(e);
     }
 
     @WithSpan

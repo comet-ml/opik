@@ -1,5 +1,5 @@
 ---
-headline: Debugging Agents with Ollie | Opik Documentation
+headline: Debugging Agents with Ollie
 og:description: Use Ollie and Opik Connect to investigate failing traces, identify
   root causes in your code, and verify fixes with test suites — all from the Opik
   dashboard
@@ -97,6 +97,19 @@ debugging scenarios:
 - *"Show me the dataset for the last experiment"*
 - *"What's the average latency for traces in this project over the past week?"*
 - *"Which prompts are used by the most experiments?"*
+
+<Tip>
+  **Recommended if you build with an AI coding assistant.** Ollie runs this loop from the Opik
+  dashboard. To run the same loop from your editor — where the code actually is — one command,
+  `opik configure`, installs both the [MCP server](/mcp-server) and the Opik skills. Your assistant
+  can then search your traces, find the failing one, change the code, and re-run your suite to
+  confirm the fix.
+
+  An example prompt:
+
+  *"Find the traces from the last day where the agent ignored the provided context, work out what
+  they have in common, fix it, and verify with my test suite."*
+</Tip>
 
 ## Next steps
 

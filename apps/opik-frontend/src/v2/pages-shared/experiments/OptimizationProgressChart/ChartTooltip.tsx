@@ -44,7 +44,6 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
     (d) => d.candidateId === hoveredTrial.candidateId,
   );
   const status = chartPoint?.status ?? "passed";
-  const stepIndex = chartPoint?.stepIndex ?? 0;
   const isBest = hoveredTrial.candidateId === bestCandidateId;
 
   return (
@@ -70,7 +69,6 @@ const ChartTooltip: React.FC<ChartTooltipProps> = ({
         <TrialCard
           candidate={candidate}
           status={status}
-          stepIndex={stepIndex}
           isTestSuite={isTestSuite}
           isBest={isBest}
         />

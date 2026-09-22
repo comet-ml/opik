@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -12,6 +13,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class SentinelTranslationTest {
@@ -70,6 +72,31 @@ class SentinelTranslationTest {
 
             assertThat(actual).isEqualTo(expected);
         }
+
+        static Stream<Arguments> emptyUuidToNullableUuid() {
+            var realUUID = UUID.randomUUID();
+            return Stream.of(
+                    arguments("  ", null),
+                    // The form the driver surfaces for a NUL-padded FixedString(36): parsing it directly would throw.
+                    arguments(CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE, null),
+                    arguments(null, null),
+                    arguments(realUUID.toString(), realUUID));
+        }
+
+        @ParameterizedTest(name = "emptyUuidToNullableUuid([{0}]) -> {1}")
+        @MethodSource
+        void emptyUuidToNullableUuid(String input, UUID expected) {
+            var actual = SentinelTranslation.emptyUuidToNullableUuid(input);
+
+            assertThat(actual).isEqualTo(expected);
+        }
+
+        @ParameterizedTest(name = "emptyUuidToNullableUuid rejects [{0}]")
+        @ValueSource(strings = {"not-a-uuid", "0198c1e0-1234-7000-8000"})
+        void emptyUuidToNullableUuidRejectsMalformedValue(String input) {
+            assertThatThrownBy(() -> SentinelTranslation.emptyUuidToNullableUuid(input))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
     }
 
     @Nested
@@ -116,6 +143,21 @@ class SentinelTranslationTest {
         @ParameterizedTest(name = "nullToEmptyUuid({0}) -> [{1}]")
         @MethodSource
         void nullToEmptyUuid(String input, String expected) {
+            var actual = SentinelTranslation.nullToEmptyUuid(input);
+
+            assertThat(actual).isEqualTo(expected);
+        }
+
+        static Stream<Arguments> nullToEmptyUuidFromUuid() {
+            var realUUID = UUID.randomUUID();
+            return Stream.of(
+                    arguments(null, ""),
+                    arguments(realUUID, realUUID.toString()));
+        }
+
+        @ParameterizedTest(name = "nullToEmptyUuid(UUID {0}) -> [{1}]")
+        @MethodSource
+        void nullToEmptyUuidFromUuid(UUID input, String expected) {
             var actual = SentinelTranslation.nullToEmptyUuid(input);
 
             assertThat(actual).isEqualTo(expected);

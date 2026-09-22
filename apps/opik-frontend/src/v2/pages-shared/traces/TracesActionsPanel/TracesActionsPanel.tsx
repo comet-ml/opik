@@ -209,6 +209,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
               resetKeyRef.current = resetKeyRef.current + 1;
             }}
             disabled={disabled}
+            data-testid="traces-bulk-delete-button"
           >
             <Trash />
           </Button>

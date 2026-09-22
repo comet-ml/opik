@@ -187,6 +187,11 @@
     --banner-gradient-start: #060a28;
     --banner-gradient-end: #604fff;
 
+    /* MCP announcement banner gradient (OPIK-8260) — same values in both
+       themes: an accent bar with white text reads the same on either ground. */
+    --mcp-banner-gradient-start: #f59e0b;
+    --mcp-banner-gradient-end: #f46e41;
+
     /* Scrollbar colors */
     --scrollbar-thumb: #babac0;
     --scrollbar-thumb-hover: #7d7d7d;
@@ -205,6 +210,7 @@
     --color-lime: #a3e635;
     --color-turquoise: #06b6d4;
     --color-blue: #3b82f6;
+    --color-purple-dark: #491b7e;
     --color-primary: #6366f1;
     --color-indigo: #6366f1;
     --color-violet: #8b5cf6;
@@ -249,6 +255,8 @@
     --tag-blue-text: #19426b;
     --tag-lavender-bg: #e5e5fe;
     --tag-lavender-text: #3b3b8e;
+    --tag-purple-dark-bg: #e4d7f7;
+    --tag-purple-dark-text: #3d1669;
 
     --click-blue: #262ab5;
 
@@ -484,6 +492,10 @@
     --banner-gradient-start: #0f172a;
     --banner-gradient-end: hsl(var(--primary));
 
+    /* MCP announcement banner gradient - Dark Mode (OPIK-8260) */
+    --mcp-banner-gradient-start: #f59e0b;
+    --mcp-banner-gradient-end: #f46e41;
+
     /* Scrollbar colors - Dark Mode */
     --scrollbar-thumb: #242424;
     --scrollbar-thumb-hover: #2e2e2e;
@@ -517,6 +529,8 @@
     --tag-blue-text: #6eabe7;
     --tag-lavender-bg: #2a2a3d;
     --tag-lavender-text: #a8a8e0;
+    --tag-purple-dark-bg: #2a2233;
+    --tag-purple-dark-text: #b98ce6;
 
     /* Trace/span type colors - Dark Mode */
     --type-trace: #945fcf;

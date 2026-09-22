@@ -1,0 +1,57 @@
+# CPU-only build of the Opik Guardrails Backend.
+#
+# Unlike the default (GPU) Dockerfile, this image installs the CPU torch wheels and
+# uses a slim multi-arch Python base, so it builds and runs on both amd64 and arm64
+# without a GPU or the NVIDIA Container Toolkit. It is intended for local development
+# and CPU-only self-hosting.
+FROM python:3.10-slim-bookworm
+
+ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    TZ=UTC \
+    OPIK_GUARDRAILS_DEVICE=cpu
+
+# tini for signal handling / zombie reaping, wget for the healthcheck.
+# DL3008: Debian apt packages track a rolling security channel; pinning exact
+# versions here would rot as the base image's repos are updated.
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini \
+    wget \
+    && rm -rf /var/lib/apt/lists/* && apt-get clean
+
+WORKDIR /opt/opik-guardrails-backend
+
+COPY requirements.txt .
+# The pinned torch/transformers/hf_xet wheels need pip >= 24; float pip forward
+# from that floor (a lower bound, not a frozen version). torch is installed first
+# from the CPU wheel index; the requirements install then finds it already satisfied.
+RUN pip install --no-cache-dir -U "pip>=24.0" && \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.6.0 && \
+    pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
+
+COPY entrypoint.sh .
+RUN chmod 755 entrypoint.sh
+
+# Download the cache with the final user to ensure that files are in the right
+# place and readable by the user
+RUN mkdir /.cache/ /.local/ && chown -R 1001:1001 /opt/opik-guardrails-backend /.cache/ /.local/
+USER 1001:1001
+
+# Download models with the final user so files land readable by the user:
+#   - spaCy en_core_web_lg for PII detection
+#   - transformer bart-large-mnli for restricted topic validation
+# HF_HUB_DISABLE_XET=1 forces standard HTTP fallback; the Xet protocol
+# used by huggingface_hub[hf_xet] is blocked in most CI/Docker build environments.
+RUN python -m spacy download en_core_web_lg && \
+    HF_HUB_DISABLE_XET=1 python -c "from transformers import AutoModelForSequenceClassification, AutoTokenizer; AutoModelForSequenceClassification.from_pretrained('facebook/bart-large-mnli'); AutoTokenizer.from_pretrained('facebook/bart-large-mnli')"
+
+COPY --chown=1001:1001 opik_guardrails ./opik_guardrails
+
+ARG OPIK_VERSION
+ENV OPIK_VERSION="${OPIK_VERSION}"
+
+EXPOSE 5000
+
+ENTRYPOINT ["tini", "--"]
+CMD ["./entrypoint.sh"]

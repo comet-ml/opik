@@ -3,6 +3,8 @@ import noop from "lodash/noop";
 
 type PageBodyScrollContainerContextData = {
   scrollContainer: HTMLDivElement | null;
+  horizontalScrollContainer: HTMLElement | null;
+  registerHorizontalScrollContainer: (element: HTMLElement | null) => void;
   tableOffset: number;
   recalculateOffsets: () => void;
 };
@@ -10,6 +12,8 @@ type PageBodyScrollContainerContextData = {
 export const PageBodyScrollContainerContext =
   React.createContext<PageBodyScrollContainerContextData>({
     scrollContainer: null,
+    horizontalScrollContainer: null,
+    registerHorizontalScrollContainer: noop,
     tableOffset: 0,
     recalculateOffsets: noop,
   });

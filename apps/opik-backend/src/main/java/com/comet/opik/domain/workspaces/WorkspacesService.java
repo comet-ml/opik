@@ -1,6 +1,5 @@
 package com.comet.opik.domain.workspaces;
 
-import com.comet.opik.api.OpikVersion;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -15,23 +14,12 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLException;
 import java.time.Instant;
-import java.util.Optional;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(WorkspacesServiceImpl.class)
 public interface WorkspacesService {
-
-    /**
-     * Must only be called after a real determination — not on allowlist / forced-version overrides.
-     * {@code userName} is recorded in the audit columns (caller passes the API user from the request
-     * context).
-     */
-    int upsertVersion(String workspaceId, OpikVersion version, String userName);
-
-    /** Returns the row, or empty if not found / blank id. */
-    Optional<Workspace> findById(@NonNull String workspaceId);
 
     /**
      * Returns {@code true} only for the writer that transitioned {@code first_trace_reported_at}
@@ -42,19 +30,12 @@ public interface WorkspacesService {
 
     /**
      * Returns whether the workspace has data in the legacy {@code feedback_scores} ClickHouse
-     * table. Runs the blocking JDBI lookup on a bounded-elastic worker; defaults to {@code true}
-     * when no row exists yet, and on any error so a degraded state DB doesn't break the stats
-     * endpoint. The version determination flow probes the table once and persists the result
-     * via {@link #upsertHasLegacyScores}.
+     * table, read from the persisted {@code has_legacy_scores} column. Runs the blocking JDBI
+     * lookup on a bounded-elastic worker; defaults to {@code true} when no row exists yet, and on
+     * any error so a degraded state DB doesn't break the stats endpoint. Consumed by the trace/span
+     * stats queries to decide whether to UNION the legacy {@code feedback_scores} table.
      */
     Mono<Boolean> hasLegacyScores(String workspaceId);
-
-    /**
-     * Idempotent upsert that records the workspace's legacy-feedback-scores status explicitly.
-     * Called from the workspace version determination flow after a one-shot ClickHouse presence
-     * check on the {@code feedback_scores} table.
-     */
-    void upsertHasLegacyScores(String workspaceId, boolean hasLegacyScores, String userName);
 }
 
 @Slf4j
@@ -66,21 +47,6 @@ class WorkspacesServiceImpl implements WorkspacesService {
 
     private final @NonNull TransactionTemplate transactionTemplate;
 
-    @Override
-    public int upsertVersion(@NonNull String workspaceId, @NonNull OpikVersion version, @NonNull String userName) {
-        return transactionTemplate.inTransaction(WRITE, handle -> handle.attach(WorkspacesDAO.class)
-                .upsertVersion(workspaceId, version.getValue(), Instant.now(), userName));
-    }
-
-    @Override
-    public Optional<Workspace> findById(@NonNull String workspaceId) {
-        if (StringUtils.isBlank(workspaceId)) {
-            return Optional.empty();
-        }
-        return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(WorkspacesDAO.class).findById(workspaceId));
-    }
-
     /**
      * UPDATE-then-INSERT, single transaction. We can't use a single-statement upsert with a
      * ROW_COUNT check here because Connector/J defaults to {@code useAffectedRows=false}
@@ -88,10 +54,11 @@ class WorkspacesServiceImpl implements WorkspacesService {
      * {@code 1} — indistinguishable from a fresh insert. Splitting into two primitives keeps the
      * detection unambiguous.
      *
-     * <p>A duplicate-key on the INSERT does <b>not</b> mean another writer flipped
-     * {@code first_trace_reported_at} — it just means the row exists. It might have been inserted
-     * by an unrelated writer (version determination, migration job) that didn't touch the column.
-     * Retrying the UPDATE-if-null disambiguate: if the column is still NULL we flip it.</p>
+     * <p>A duplicate-key on the INSERT means a concurrent first-trace writer created the row
+     * between our UPDATE and INSERT (this is the only path that inserts into {@code workspaces}).
+     * Retrying the UPDATE-if-null then flips the column only if it is still NULL; since the other
+     * writer already set it, this caller returns {@code false}, so exactly one caller reports the
+     * first trace.</p>
      */
     @Override
     public boolean markFirstTraceReported(@NonNull String workspaceId, @NonNull String userName) {
@@ -128,13 +95,5 @@ class WorkspacesServiceImpl implements WorkspacesService {
                             workspaceId, throwable);
                     return Mono.just(true);
                 });
-    }
-
-    @Override
-    public void upsertHasLegacyScores(@NonNull String workspaceId, boolean hasLegacyScores,
-            @NonNull String userName) {
-        transactionTemplate.inTransaction(WRITE,
-                handle -> handle.attach(WorkspacesDAO.class)
-                        .upsertHasLegacyScores(workspaceId, hasLegacyScores, userName));
     }
 }

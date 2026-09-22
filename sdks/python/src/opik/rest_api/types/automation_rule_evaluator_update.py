@@ -7,6 +7,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .automation_rule_evaluator_update_action import AutomationRuleEvaluatorUpdateAction
+from .automation_rule_evaluator_update_trigger_scope import AutomationRuleEvaluatorUpdateTriggerScope
 from .llm_as_judge_code import LlmAsJudgeCode
 from .span_filter import SpanFilter
 from .span_llm_as_judge_code import SpanLlmAsJudgeCode
@@ -20,8 +21,13 @@ from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 
 class Base(UniversalBaseModel):
     name: str
-    sampling_rate: typing.Optional[float] = None
+    sampling_rate: typing.Optional[float] = pydantic.Field(default=None)
+    """
+    Fraction of production (SDK-logged) items this rule scores, from 0 to 1. Trace rules ignore this value for experiment, playground and optimization traces and score them in full; span and thread rules only ever evaluate SDK-logged data.
+    """
+
     enabled: typing.Optional[bool] = None
+    trigger_scope: typing.Optional[AutomationRuleEvaluatorUpdateTriggerScope] = None
     project_id: typing.Optional[str] = pydantic.Field(default=None)
     """
     Primary project ID (legacy field, maintained for backwards compatibility)

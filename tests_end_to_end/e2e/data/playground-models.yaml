@@ -49,6 +49,32 @@ providers:
         options:
           temperature: 0
           max_tokens: 128
+  # Hermetic entries against the suite's mock gateway (services/mock-token-auth/,
+  # spawned by Playwright's webServer). No external keys: `api_key`/`auth` are the
+  # mock's fixed identities. The oauth entry covers OPIK-7940 dynamic token auth.
+  mock-custom-static:
+    display_name: "Mock gateway (Custom, static key)"
+    provider_type: "custom"
+    provider_name: "mock-static"
+    base_url: "http://localhost:9878/v1"
+    api_key: "mock-static-key"
+    models:
+      - name: "mock-model-static"
+        ui_selector: "mock-model-static"
+        enabled: true
+  mock-custom-oauth:
+    display_name: "Mock gateway (Custom, OAuth2 token auth)"
+    provider_type: "custom"
+    provider_name: "mock-oauth-sanity"
+    base_url: "http://localhost:9878/v1"
+    auth:
+      token_url: "http://localhost:9878/oauth/token"
+      client_id: "opik-test"
+      client_secret: "opik-secret"
+    models:
+      - name: "mock-model-oauth"
+        ui_selector: "mock-model-oauth"
+        enabled: true
 test_config:
   test_prompt: "Explain what is an LLM in one paragraph."
   response_timeout_seconds: 60

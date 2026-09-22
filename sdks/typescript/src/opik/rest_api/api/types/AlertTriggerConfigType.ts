@@ -6,5 +6,6 @@ export const AlertTriggerConfigType = {
     ThresholdCost: "threshold:cost",
     ThresholdLatency: "threshold:latency",
     ThresholdErrors: "threshold:errors",
+    FilterGuardrailType: "filter:guardrail_type",
 } as const;
 export type AlertTriggerConfigType = (typeof AlertTriggerConfigType)[keyof typeof AlertTriggerConfigType];

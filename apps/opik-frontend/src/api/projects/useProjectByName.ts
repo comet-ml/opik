@@ -8,6 +8,7 @@ import { Project } from "@/types/projects";
 
 type UseProjectByNameParams = {
   projectName: string;
+  workspaceName?: string;
 };
 
 const getProjectByName = async (

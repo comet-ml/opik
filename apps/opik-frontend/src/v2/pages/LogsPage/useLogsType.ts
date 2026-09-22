@@ -4,6 +4,7 @@ import useLocalStorageState from "use-local-storage-state";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import { LOGS_TYPE } from "@/constants/traces";
+import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 import { LOGS_SOURCE } from "@/types/traces";
 import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
@@ -14,6 +15,11 @@ const QUERY_PARAM_OPTIONS = { updateType: "replaceIn" as const };
 
 type UseLogsTypeOptions = {
   projectId: string;
+  /**
+   * Resolved by LogsPage from the project query it already owns, and shared with the tabs. All three
+   * read one date-range key, so they must be given the same values.
+   */
+  dateRangeConfig: ProjectDateRangeConfig;
 };
 
 /**
@@ -21,10 +27,10 @@ type UseLogsTypeOptions = {
  * threadCount=undefined means stats are still loading.
  */
 const useLogsType = (options: UseLogsTypeOptions) => {
-  const { projectId } = options;
+  const { projectId, dateRangeConfig } = options;
 
   const { intervalStart, intervalEnd } =
-    useMetricDateRangeWithQueryAndStorage();
+    useMetricDateRangeWithQueryAndStorage(dateRangeConfig);
 
   const { data: threadsStats, isError: isStatsError } = useThreadsStatistic(
     {

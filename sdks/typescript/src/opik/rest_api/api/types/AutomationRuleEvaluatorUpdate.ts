@@ -43,8 +43,10 @@ export namespace AutomationRuleEvaluatorUpdate {
 
     export interface _Base {
         name: string;
+        /** Fraction of production (SDK-logged) items this rule scores, from 0 to 1. Trace rules ignore this value for experiment, playground and optimization traces and score them in full; span and thread rules only ever evaluate SDK-logged data. */
         samplingRate?: number;
         enabled?: boolean;
+        triggerScope?: OpikApi.AutomationRuleEvaluatorUpdateTriggerScope;
         /** Primary project ID (legacy field, maintained for backwards compatibility) */
         projectId?: string;
         /** Multiple project IDs (new field for multi-project support) */

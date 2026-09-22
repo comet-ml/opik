@@ -124,11 +124,11 @@ Add coverage with the language's harness — see the test section of the languag
 
 Author the Fern page following the `write-docs` skill for MDX/components, plus these integration-specific conventions:
 
-- **Check for an existing page first.** A provider often already has a docs page describing a *workaround* (OpenAI-compatibility endpoint via `track_openai`, or LiteLLM) and an entry already in `fern/versions/latest.yml`. If so, this is an **update**: lead the page with the new native integration and demote the workaround to an "Alternative" section (see how `mistral.mdx` keeps LiteLLM). Don't create a duplicate page or a second routing entry.
+- **Check for an existing page first.** A provider often already has a docs page describing a *workaround* (OpenAI-compatibility endpoint via `track_openai`, or LiteLLM) and an entry already in `navigation:` in `fern/docs.yml`. If so, this is an **update**: lead the page with the new native integration and demote the workaround to an "Alternative" section (see how `mistral.mdx` keeps LiteLLM). Don't create a duplicate page or a second routing entry.
 - **File**: `apps/opik-documentation/documentation/fern/docs-v2/integrations/<name>.mdx` for Python, `<name>-typescript.mdx` for TypeScript.
 - **Title frontmatter** distinguishes language: `Observability for <Lib> (Python) with Opik` vs `(TypeScript)`.
 - **Page shape** (follow `openai.mdx` / `langchain.mdx`): intro/tips → account setup → getting started (install, configure Opik, configure the library) → basic usage (the wrap/handler call + a screenshot) → advanced usage → cost tracking → supported methods.
-- **Routing**: add a `- page:` entry under the right language → category section (`Frameworks`, `Model Providers`, …) in `fern/versions/latest.yml`. Do not edit `docs.yml`.
+- **Routing**: add a `- page:` entry under the right language → category section (`Frameworks`, `Model Providers`, …) in `navigation:` in `fern/docs.yml`. Leave the rest of that file alone.
 - **Overview grid**: add a `<Card>` to `docs-v2/integrations/overview.mdx` under the matching section. Cards are title + href only; section icons are Font Awesome — there is no per-integration icon to create.
 - Use credential placeholders only (`<API_KEY>`), never real keys.
 

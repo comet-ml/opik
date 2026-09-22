@@ -28,6 +28,8 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AttachmentUtilsTest;
+import com.fasterxml.uuid.Generators;
+import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
@@ -119,6 +121,7 @@ class AttachmentResourceMinIOTest {
     private String baseURI;
     private String baseURIEncoded;
     private ProjectService projectService;
+    private final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     @BeforeAll
     void setUpAll(ClientSupport client, ProjectService projectService) {
@@ -252,6 +255,41 @@ class AttachmentResourceMinIOTest {
                 Arguments.of((Consumer<UUID>) traceId -> traceResourceClient
                         .deleteTraces(BatchDeleteByProject.builder().ids(Set.of(traceId)).build(), TEST_WORKSPACE,
                                 API_KEY)));
+    }
+
+    @Test
+    void deleteTraceScopedToProjectLeavesOtherProjectsAttachmentUntouched() throws IOException {
+        // Same trace id ingested into two projects (externally-supplied ids are not globally unique); each project's
+        // copy gets its own attachment. Deleting the id scoped to one project must cascade-delete only that project's
+        // attachment and leave the other project's attachment intact - no cross-project over-delete.
+        var sharedTraceId = generator.generate();
+        var trace1 = createTrace().toBuilder().id(sharedTraceId).lastUpdatedAt(null).build();
+        var trace2 = createTrace().toBuilder().id(sharedTraceId).lastUpdatedAt(null).build();
+        traceResourceClient.batchCreateTraces(List.of(trace1, trace2), API_KEY, TEST_WORKSPACE);
+
+        var projectId1 = projectService.findByNames(WORKSPACE_ID, List.of(trace1.projectName())).getFirst().id();
+        var projectId2 = projectService.findByNames(WORKSPACE_ID, List.of(trace2.projectName())).getFirst().id();
+
+        uploadFile(trace1.projectName(), EntityType.TRACE, sharedTraceId);
+        uploadFile(trace2.projectName(), EntityType.TRACE, sharedTraceId);
+
+        assertThat(attachmentResourceClient.attachmentList(projectId1, EntityType.TRACE, sharedTraceId, baseURIEncoded,
+                API_KEY, TEST_WORKSPACE, 200).total()).isEqualTo(1);
+        assertThat(attachmentResourceClient.attachmentList(projectId2, EntityType.TRACE, sharedTraceId, baseURIEncoded,
+                API_KEY, TEST_WORKSPACE, 200).total()).isEqualTo(1);
+
+        // Delete the reused id scoped to project 1 only.
+        traceResourceClient.deleteTraces(
+                BatchDeleteByProject.builder().ids(Set.of(sharedTraceId)).projectId(projectId1).build(),
+                TEST_WORKSPACE, API_KEY);
+
+        // Project 1's attachment is cascade-deleted; project 2's attachment survives.
+        Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> assertThat(
+                attachmentResourceClient.attachmentList(projectId1, EntityType.TRACE, sharedTraceId, baseURIEncoded,
+                        API_KEY, TEST_WORKSPACE, 200))
+                .isEqualTo(Attachment.AttachmentPage.empty(1)));
+        assertThat(attachmentResourceClient.attachmentList(projectId2, EntityType.TRACE, sharedTraceId, baseURIEncoded,
+                API_KEY, TEST_WORKSPACE, 200).total()).isEqualTo(1);
     }
 
     Pair<StartMultipartUploadRequest, byte[]> uploadFile(String projectName, EntityType type, UUID entityId)

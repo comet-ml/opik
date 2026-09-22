@@ -29,10 +29,12 @@ class OptimizationStalledReaperConfigTest {
                 .startupDelay(Duration.minutes(5))
                 .jobInterval(Duration.minutes(5))
                 .initializedTimeout(Duration.minutes(5))
-                .runningTimeout(Duration.hours(8))
+                .runningTimeout(Duration.hours(1))
+                .runningHardTimeout(Duration.hours(24))
                 .lookbackMargin(Duration.days(7))
                 .lockDuration(Duration.minutes(4))
-                .batchSize(100);
+                .batchSize(100)
+                .candidateScanFactor(10);
     }
 
     @Test
@@ -42,15 +44,80 @@ class OptimizationStalledReaperConfigTest {
     }
 
     @Test
-    @DisplayName("runningTimeout below the 6h worker-timeout floor fails validation")
+    @DisplayName("runningTimeout below the 5m floor fails validation")
     void runningTimeoutBelowFloorIsRejected() {
-        var config = validConfig().runningTimeout(Duration.hours(1)).build();
+        var config = validConfig().runningTimeout(Duration.minutes(1)).build();
 
         Set<ConstraintViolation<OptimizationStalledReaperConfig>> violations = validator.validate(config);
 
         assertThat(violations)
-                .as("a below-worker-timeout runningTimeout must fail fast at boot, not silently reap live runs")
+                .as("a runningTimeout below any plausible trial duration must fail fast at boot, "
+                        + "not reap slow-but-alive trials mid-flight")
                 .anyMatch(v -> v.getPropertyPath().toString().equals("runningTimeout"));
+    }
+
+    @Test
+    @DisplayName("an hours-scale runningTimeout override below the ceiling remains valid")
+    void hoursScaleRunningTimeoutIsAccepted() {
+        // Progress-based liveness (OPIK-7459) made the minutes-scale default possible, but operators may
+        // still run with the previous hours-scale values — those must keep validating, as long as they
+        // stay under the new ceiling. See the test below for the range that deliberately does not.
+        assertThat(validator.validate(validConfig().runningTimeout(Duration.hours(8)).build())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("a previously-legal runningTimeout above the default ceiling now fails validation")
+    void legacyRunningTimeoutAboveDefaultCeilingIsRejected() {
+        // BREAKING CONFIG CHANGE, pinned deliberately rather than left to be discovered on upgrade.
+        // runningTimeout was valid anywhere in [6h, 7d] before this change, so a deployment that raised
+        // only OPTIMIZATION_STALLED_REAPER_RUNNING_TIMEOUT (26h, 48h, 3d were all legal) now fails
+        // Dropwizard validation and will not boot against the 24h runningHardTimeout default. Failing
+        // loudly is the intent — above the ceiling the activity window is unreachable, since the ceiling
+        // always fires first — but the break must be explicit here and in config.yml's upgrade note
+        // rather than trivially "passing" on the one hours-scale value that stays under it.
+        //
+        // runningHardTimeout is deliberately NOT set here: the whole point is the interaction with the
+        // config.yml DEFAULT that an upgrading deployment inherits, which validConfig() already mirrors.
+        // Overriding it would make this a copy of runningHardTimeoutBelowRunningTimeoutIsRejected.
+        var config = validConfig()
+                .runningTimeout(Duration.hours(48))
+                .build();
+
+        assertThat(validator.validate(config))
+                .anyMatch(v -> v.getMessage().contains("runningHardTimeout must not be less than runningTimeout"));
+    }
+
+    @Test
+    @DisplayName("runningHardTimeout below the 6h worker-timeout floor fails validation")
+    void runningHardTimeoutBelowFloorIsRejected() {
+        var config = validConfig().runningHardTimeout(Duration.hours(1)).build();
+
+        assertThat(validator.validate(config))
+                .as("a below-worker-timeout hard ceiling would reap healthy long runs regardless of progress")
+                .anyMatch(v -> v.getPropertyPath().toString().equals("runningHardTimeout"));
+    }
+
+    @Test
+    @DisplayName("runningHardTimeout below runningTimeout fails the @AssertTrue invariant")
+    void runningHardTimeoutBelowRunningTimeoutIsRejected() {
+        var config = validConfig()
+                .runningTimeout(Duration.hours(48))
+                .runningHardTimeout(Duration.hours(24))
+                .build();
+
+        assertThat(validator.validate(config))
+                .anyMatch(v -> v.getMessage().contains("runningHardTimeout must not be less than runningTimeout"));
+    }
+
+    @Test
+    @DisplayName("candidateScanFactor below 1 fails validation")
+    void candidateScanFactorBelowOneIsRejected() {
+        var config = validConfig().candidateScanFactor(0).build();
+
+        assertThat(validator.validate(config))
+                .as("a zero factor would bound the candidate CTE to LIMIT 0, so the reaper would silently "
+                        + "stop finding anything at all")
+                .anyMatch(v -> v.getPropertyPath().toString().equals("candidateScanFactor"));
     }
 
     @Test

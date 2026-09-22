@@ -5,6 +5,8 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.FeedbackScoreNames;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
@@ -65,12 +67,6 @@ public interface FeedbackScoreDAO {
 
     Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(List<UUID> projectId);
 
-    /**
-     * Returns {@code true} iff the legacy {@code feedback_scores} ClickHouse table has at least
-     * one row for the workspace. Called once during workspace version determination so subsequent
-     * stats queries can skip the legacy table UNION when no data exists there.
-     */
-    Mono<Boolean> hasLegacyScores(String workspaceId);
 }
 
 @Singleton
@@ -252,7 +248,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND type = :type
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 <endif>
@@ -273,7 +269,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND type = :type
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    ORDER BY (workspace_id, project_id, trace_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
                 <endif>
@@ -285,7 +281,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             ;
             """;
 
+    private static final String AUTHORED_FEEDBACK_SCORES_TABLE = "authored_feedback_scores";
+    private static final String FEEDBACK_SCORES_TABLE = "feedback_scores";
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
+    private final @NonNull OpikConfiguration configuration;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @Override
     @WithSpan
@@ -300,13 +301,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         return scoreBatchOf(entityType, List.of(item), author);
     }
 
-    private String getValueOrDefault(String value) {
-        return Optional.ofNullable(value)
-                .map(String::trim)
-                .filter(StringUtils::isNotEmpty)
-                .orElse("");
-    }
-
     @Override
     @WithSpan
     public Mono<Long> scoreBatchOf(@NonNull EntityType entityType,
@@ -319,6 +313,19 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     private Mono<Long> insertFeedbackScores(@NonNull EntityType entityType,
             @NonNull List<? extends FeedbackScoreItem> scores, @Nullable String author) {
+
+        // Ahead of the branch, so both writers reject the same input. Callers reaching here through the
+        // API are bean-validated (value is @NotNull) and the online scoring paths drop valueless scores
+        // before batching. A null at this point means a new caller did neither: fail naming the score
+        // instead of the NPE the writer would raise from inside the batch, taking every other score in
+        // it down with this one.
+        scores.forEach(score -> Preconditions.checkArgument(score.value() != null,
+                "Feedback score '%s' cannot be stored without a value", score.name()));
+
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(entityType, scores, author);
+        }
+
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
             var logComment = getLogComment("bulk_insert_feedback_score", workspaceId, userName, scores.size());
@@ -337,6 +344,34 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         }));
     }
 
+    /**
+     * The {@link #BULK_INSERT_FEEDBACK_SCORE} rows streamed as JSONEachRow through the v2 client rather
+     * than bound as 8 named parameters per row — 10 for the authored table.
+     *
+     * <p>Batch size here is not capped the way the other bulk paths are: a feedback score batch is 1000
+     * items at most on its own endpoints, but {@code ExperimentItemBulkIngestionService} accumulates up
+     * to 100 scores per record over up to 1000 records into a single call, so this insert can be an
+     * order of magnitude wider than the {@code experiment_items} one it runs beside.
+     *
+     * <p>The table is chosen by {@code author != null}, exactly as {@code <if(author)>} does on the R2DBC
+     * template — {@code feedback_scores} has no {@code author}/{@code source_queue_id} columns, so those
+     * two fields are emitted only for the authored table.
+     */
+    private Mono<Long> insertJsonEachRow(EntityType entityType, List<? extends FeedbackScoreItem> scores,
+            @Nullable String author) {
+
+        // Batch-invariant, so normalized once rather than per row. Kept null when absent: it is null
+        // that selects the unauthored table below and drops the two columns with it.
+        var normalizedAuthor = author == null ? null : StringUtils.stripToEmpty(author);
+
+        return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
+                normalizedAuthor != null ? AUTHORED_FEEDBACK_SCORES_TABLE : FEEDBACK_SCORES_TABLE,
+                getLogComment("bulk_insert_feedback_score", workspaceId, userName, scores.size()),
+                scores,
+                score -> FeedbackScoreJsonRowMapper.toJsonRow(score, entityType, userName, workspaceId,
+                        normalizedAuthor)));
+    }
+
     @Override
     public Mono<Long> scoreBatchOfThreads(@NonNull List<FeedbackScoreBatchItemThread> scores, @Nullable String author) {
         return scoreBatchOf(EntityType.THREAD, scores, author);
@@ -344,6 +379,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     private void bindParameters(EntityType entityType, List<? extends FeedbackScoreItem> scores,
             Statement statement, String author) {
+
+        // Batch-invariant, so normalized once rather than per row. Kept null when absent: author being
+        // null is what selects the unauthored table and drops these two columns, so it must not be
+        // flattened to "" here.
+        var normalizedAuthor = author == null ? null : StringUtils.stripToEmpty(author);
+
         for (var i = 0; i < scores.size(); i++) {
 
             var feedbackScoreBatchItem = scores.get(i);
@@ -354,11 +395,11 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("name" + i, feedbackScoreBatchItem.name())
                     .bind("value" + i, feedbackScoreBatchItem.value().toString())
                     .bind("source" + i, feedbackScoreBatchItem.source().getValue())
-                    .bind("reason" + i, getValueOrDefault(feedbackScoreBatchItem.reason()))
-                    .bind("category_name" + i, getValueOrDefault(feedbackScoreBatchItem.categoryName()));
+                    .bind("reason" + i, StringUtils.stripToEmpty(feedbackScoreBatchItem.reason()))
+                    .bind("category_name" + i, StringUtils.stripToEmpty(feedbackScoreBatchItem.categoryName()));
 
-            if (author != null) {
-                statement.bind("author" + i, getValueOrDefault(author));
+            if (normalizedAuthor != null) {
+                statement.bind("author" + i, normalizedAuthor);
                 statement.bind("source_queue_id" + i,
                         Optional.ofNullable(feedbackScoreBatchItem.sourceQueueId()).map(UUID::toString).orElse(""));
             }
@@ -683,24 +724,4 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         });
     }
 
-    private static final String HAS_LEGACY_FEEDBACK_SCORES = """
-            SELECT 1
-            FROM feedback_scores
-            WHERE workspace_id = :workspace_id
-            LIMIT 1
-            SETTINGS log_comment = '<log_comment>'
-            """;
-
-    @Override
-    public Mono<Boolean> hasLegacyScores(@NonNull String workspaceId) {
-        return asyncTemplate.nonTransaction(connection -> {
-            var template = getSTWithLogComment(HAS_LEGACY_FEEDBACK_SCORES,
-                    "has_legacy_feedback_scores", workspaceId, "", "");
-            var statement = connection.createStatement(template.render())
-                    .bind("workspace_id", workspaceId);
-            return Flux.from(statement.execute())
-                    .flatMap(result -> Flux.from(result.map((row, metadata) -> true)))
-                    .hasElements();
-        });
-    }
 }

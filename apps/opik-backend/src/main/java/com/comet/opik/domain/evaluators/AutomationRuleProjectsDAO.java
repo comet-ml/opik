@@ -7,7 +7,6 @@ import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
-import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
@@ -17,7 +16,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
-interface AutomationRuleProjectsDAO {
+public interface AutomationRuleProjectsDAO {
 
     @SqlBatch("INSERT INTO automation_rule_projects(rule_id, project_id, workspace_id) " +
             "VALUES (:bean.ruleId, :bean.projectId, :bean.workspaceId)")
@@ -35,11 +34,6 @@ interface AutomationRuleProjectsDAO {
 
     record RuleProject(UUID ruleId, UUID projectId, String workspaceId) {
     }
-
-    @SqlQuery("SELECT project_id FROM automation_rule_projects " +
-            "WHERE rule_id = :ruleId AND workspace_id = :workspaceId")
-    Set<UUID> findProjectIdsByRuleId(@Bind("ruleId") UUID ruleId,
-            @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
             DELETE FROM automation_rule_projects

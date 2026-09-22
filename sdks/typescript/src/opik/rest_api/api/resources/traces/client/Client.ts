@@ -1295,8 +1295,10 @@ export class TracesClient {
     /**
      * Delete traces
      *
-     * @param {OpikApi.BatchDelete} request
+     * @param {OpikApi.BatchDeleteByProject} request
      * @param {TracesClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.UnprocessableEntityError}
      *
      * @example
      *     await client.traces.deleteTraces({
@@ -1304,14 +1306,14 @@ export class TracesClient {
      *     })
      */
     public deleteTraces(
-        request: OpikApi.BatchDelete,
+        request: OpikApi.BatchDeleteByProject,
         requestOptions?: TracesClient.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__deleteTraces(request, requestOptions));
     }
 
     private async __deleteTraces(
-        request: OpikApi.BatchDelete,
+        request: OpikApi.BatchDeleteByProject,
         requestOptions?: TracesClient.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
@@ -1333,7 +1335,7 @@ export class TracesClient {
             contentType: "application/json",
             queryParameters: requestOptions?.queryParams,
             requestType: "json",
-            body: serializers.BatchDelete.jsonOrThrow(request, {
+            body: serializers.BatchDeleteByProject.jsonOrThrow(request, {
                 unrecognizedObjectKeys: "strip",
                 omitUndefined: true,
             }),
@@ -1349,11 +1351,16 @@ export class TracesClient {
         }
 
         if (_response.error.reason === "status-code") {
-            throw new errors.OpikApiError({
-                statusCode: _response.error.statusCode,
-                body: _response.error.body,
-                rawResponse: _response.rawResponse,
-            });
+            switch (_response.error.statusCode) {
+                case 422:
+                    throw new OpikApi.UnprocessableEntityError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
         }
 
         return handleNonStatusCodeError(_response.error, _response.rawResponse, "POST", "/v1/private/traces/delete");
