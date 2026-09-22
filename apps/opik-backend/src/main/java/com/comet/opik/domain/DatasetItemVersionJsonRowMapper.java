@@ -26,8 +26,11 @@ import java.util.UUID;
  * {@code input_format_defaults_for_omitted_fields} is for. {@code last_updated_at} is also the
  * ReplacingMergeTree version column, so a client clock here would decide which duplicate wins.</li>
  * <li>{@code item_created_at} / {@code item_last_updated_at} have NO default and are required, so they
- * are always written, through the same {@code formatTimestamp} the binder uses — which strips the
- * trailing {@code Z}, hence the insert's {@code date_time_input_format=best_effort}.</li>
+ * are always written, as plain {@code Instant.toString()}. The binder's {@code formatTimestamp} strips
+ * the trailing {@code Z} because {@code FORMAT Values} needs it gone; this path does not, since the
+ * insert sets {@code date_time_input_format=best_effort}, which takes the ISO form with the {@code Z}.
+ * Keeping the {@code Z} is if anything the stricter input — it states UTC rather than leaning on the
+ * column's {@code 'UTC'} timezone to supply it — and it leaves this mapper depending on nothing.</li>
  * <li>{@code data_hash}, {@code description_hash}, {@code evaluators_hash},
  * {@code execution_policy_hash} and {@code column_types} are MATERIALIZED and must stay absent.</li>
  * <li>{@code metadata} is written as {@code ""} unconditionally, matching the binder — not carried from
@@ -75,9 +78,9 @@ class DatasetItemVersionJsonRowMapper {
         node.put("execution_policy", DatasetItemResultMapper.serializeExecutionPolicy(item.executionPolicy()));
 
         node.put("item_created_at",
-                DatasetItemResultMapper.formatTimestamp(item.createdAt() != null ? item.createdAt() : nowForBatch));
-        node.put("item_last_updated_at", DatasetItemResultMapper
-                .formatTimestamp(item.lastUpdatedAt() != null ? item.lastUpdatedAt() : nowForBatch));
+                (item.createdAt() != null ? item.createdAt() : nowForBatch).toString());
+        node.put("item_last_updated_at",
+                (item.lastUpdatedAt() != null ? item.lastUpdatedAt() : nowForBatch).toString());
         node.put("item_created_by", item.createdBy() != null ? item.createdBy() : userName);
         node.put("item_last_updated_by", item.lastUpdatedBy() != null ? item.lastUpdatedBy() : userName);
 

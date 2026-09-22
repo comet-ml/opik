@@ -60,7 +60,6 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
-import static com.comet.opik.domain.DatasetItemResultMapper.formatTimestamp;
 import static com.comet.opik.domain.DatasetItemResultMapper.serializeEvaluators;
 import static com.comet.opik.domain.DatasetItemResultMapper.serializeExecutionPolicy;
 import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
@@ -4006,6 +4005,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             datasetId, newVersionId, e))
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    /**
+     * Formats an Instant for ClickHouse DateTime64(9, 'UTC'). The R2DBC path renders FORMAT Values, whose
+     * parser rejects the ISO 'Z' suffix -- so it is stripped here. The JSONEachRow path has no such
+     * constraint (its insert sets date_time_input_format=best_effort) and writes Instant.toString()
+     * directly, which is why this stayed private to the binder rather than becoming shared.
+     */
+    private static String formatTimestamp(Instant timestamp) {
+        if (timestamp == null) {
+            return Instant.now().toString().replace("Z", "");
+        }
+        return timestamp.toString().replace("Z", "");
     }
 
     private static String base64Encode(String value) {
