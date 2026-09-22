@@ -1,23 +1,13 @@
 suite: clickhouse merge/reclaim settings (LWD reclaim on partitioned tables)
 
-# Partitioning traces prunes reads, but it does not by itself reclaim the rows a
-# lightweight DELETE masks: that only happens when a bloated part is merged away.
-# Two ClickHouse defaults block that on a table of this size -- the 150 GiB merge
-# ceiling, which month-sized parts outgrow permanently, and
-# `min_age_to_force_merge_seconds = 0`, which never forces a merge on a part that
-# has simply gone quiet. These settings are the minimum tuning that makes reclaim
-# fire (OPIK-6907).
+# An installation-wide baseline, deliberately NOT gated on
+# `clickhouse.tieredStorage.enabled`: LWD reclaim matters on every partitioned
+# deployment, cold tier or not. values.yaml explains the individual values.
 #
-# They are an installation-wide baseline, not an opt-in, and deliberately NOT gated
-# on `clickhouse.tieredStorage.enabled`: reclaim is how LWD mass is recovered on
-# every partitioned deployment, including OSS Docker, whether or not a cold tier
-# exists.
-#
-# SCOPE OF THIS SUITE. These assertions stop at the rendered `ClickHouseInstallation`
-# -- the manifest the chart owns. That the server then parses `conf.d/merge_tree.xml`
-# and surfaces the values in `system.merge_tree_settings` is ClickHouse's behaviour,
-# not the chart's, and `helm unittest` cannot exercise it. Verify that against a
-# running cluster (the OPIK-6907 S1 check), not here.
+# SCOPE. These assertions stop at the rendered `ClickHouseInstallation`. Whether the
+# server then surfaces the values in `system.merge_tree_settings` is ClickHouse's
+# behaviour and `helm unittest` cannot exercise it; verify that against a running
+# cluster (the OPIK-6907 S1 check), not here.
 
 templates:
   - templates/clickhouseinstallation.yaml
@@ -31,22 +21,8 @@ tests:
       - matchRegex:
           path: spec.configuration.files["conf.d/merge_tree.xml"]
           pattern: "<min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>"
-      # Per-part, not per-partition. With 1, a partition still taking writes never
-      # becomes eligible, so reclaim stalls exactly where LWD mass accumulates.
-      - matchRegex:
-          path: spec.configuration.files["conf.d/merge_tree.xml"]
-          pattern: "<min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>"
-      - matchRegex:
-          path: spec.configuration.files["conf.d/merge_tree.xml"]
-          pattern: "<number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>"
-
-  # Stated, never inherited. Two of the four already match the current ClickHouse
-  # defaults, so asserting them looks redundant -- it is not. A default is a moving
-  # target across versions (25.x changed several), and reclaim behaviour that depends
-  # on an unstated default breaks silently on upgrade. Pinning all four keeps the
-  # intent in the chart rather than in the server's release notes.
-  - it: pins the settings that currently match ClickHouse defaults
-    asserts:
+      # The last two already match current ClickHouse defaults; pinned because defaults
+      # move across versions and reclaim must not depend on an unstated one.
       - matchRegex:
           path: spec.configuration.files["conf.d/merge_tree.xml"]
           pattern: "<min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>"
