@@ -1,0 +1,49 @@
+name: Frontend Docker Build
+run-name: "Frontend Docker Build ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+on:
+  pull_request:
+    paths:
+      - "apps/opik-frontend/**"
+      - ".github/workflows/build_frontend_docker.yml"
+  push:
+    branches:
+      - 'main'
+    paths:
+      - "apps/opik-frontend/**"
+      - ".github/workflows/build_frontend_docker.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build frontend image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Build only: the source tree checks (eslint, typecheck, unit tests) all run
+      # against the working tree, so they miss anything that only breaks in a clean
+      # Docker build context -- e.g. a COPY of a directory that git dropped because
+      # it went empty. amd64 only: the Dockerfile has no arch-conditional logic, so
+      # a second arch doubles runtime without covering a distinct failure mode.
+      # Multi-arch stays on the release path in build_apps.yml.
+      - name: Build frontend image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/opik-frontend
+          file: apps/opik-frontend/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: false
+          cache-from: type=gha,scope=opik-frontend
+          cache-to: type=gha,mode=max,scope=opik-frontend
