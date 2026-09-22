@@ -17,8 +17,8 @@ import static com.comet.opik.infrastructure.db.DatabaseAnalyticsModule.READ_ONLY
  * Probes the extended free-form SQL read-only ClickHouse user via the v2 HTTP client. Custom Charts is its only
  * consumer today; the account is named for the reach it grants, not for that feature.
  *
- * <p>Gated on the workspace allowlist being non-empty: an install that never enables the feature has no such
- * account provisioned, and must not be held out of readiness for missing one.
+ * <p>Gated on {@code ollieEnabled} and a non-empty workspace allowlist — the same pair the endpoint checks. An
+ * install that never enables the feature must not be held out of readiness for an account it has no use for.
  */
 @Singleton
 public class ClickHouseReadOnlyFreeFormExtendedSqlHealthCheck extends AbstractClickHouseHealthCheck {
@@ -31,7 +31,10 @@ public class ClickHouseReadOnlyFreeFormExtendedSqlHealthCheck extends AbstractCl
             @NonNull @Named(CLICKHOUSE_HEALTH_CHECK_TIMEOUT) Duration healthCheckTimeout,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles) {
         super(freeFormExtendedSqlClient, healthCheckTimeout, "clickhouse-readonly-freeform-extended-sql");
-        this.enabled = !serviceToggles.getCustomChartsEnabledWorkspaces().isEmpty();
+        // Mirrors the endpoint's gate, and for the same reason: the account is provisioned under
+        // TOGGLE_OLLIE_ENABLED, so probing it with Ollie off would fail against a user that was never created.
+        this.enabled = serviceToggles.isOllieEnabled()
+                && !serviceToggles.getCustomChartsEnabledWorkspaces().isEmpty();
     }
 
     @Override

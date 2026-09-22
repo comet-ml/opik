@@ -51,7 +51,8 @@ import java.util.concurrent.CompletionException;
  * <li>{@code POST /projects/{projectId}} — Agent Insights. Three tables, every one bound to workspace <em>and</em>
  * project. Gated on {@code ollieEnabled}.</li>
  * <li>{@code POST /charts} — Custom Charts. Eight tables; only {@code traces} and {@code spans} keep a project
- * bound, and that bound is optional. Gated on {@code customChartsEnabledWorkspaces}.</li>
+ * bound, and that bound is optional. Gated on {@code ollieEnabled} <em>and</em>
+ * {@code customChartsEnabledWorkspaces} — it shares the former's provisioning.</li>
  * </ul>
  *
  * <p>Either gate returns {@code 501 Not Implemented} when closed, with no ClickHouse access.
@@ -97,17 +98,21 @@ public class AnalyticsQueriesResource {
 
     @POST
     @Path("/charts")
-    @Operation(operationId = "executeChartQuery", summary = "Execute Custom Charts free-form SQL", description = "Runs read-only SQL for a workspace allowlisted for Custom Charts. Omit project_id to query the whole workspace. Returns 501 when the workspace is not allowlisted.", responses = {
+    @Operation(operationId = "executeChartQuery", summary = "Execute Custom Charts free-form SQL", description = "Runs read-only SQL for a workspace allowlisted for Custom Charts. Omit project_id to query the whole workspace. Returns 501 unless Agent Insights is enabled and the workspace is allowlisted.", responses = {
             @ApiResponse(responseCode = "200", description = "Query results", content = @Content(schema = @Schema(implementation = AnalyticsQueryResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "501", description = "Custom Charts is not enabled for this workspace")})
+            @ApiResponse(responseCode = "501", description = "Agent Insights is disabled, or Custom Charts is not enabled for this workspace")})
     @RateLimited
     public Response executeChartQuery(
             @RequestBody(content = @Content(schema = @Schema(implementation = ChartQueryRequest.class))) @NotNull @Valid ChartQueryRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        if (!serviceToggles.getCustomChartsEnabledWorkspaces().contains(workspaceId)) {
+        // Both toggles, not just the allowlist: the ClickHouse account this endpoint runs as is provisioned under
+        // TOGGLE_OLLIE_ENABLED (see provision_agent_insights_readonly_user.sh), so allowlisting a workspace on an
+        // install without Ollie would route it at an account that was never created.
+        if (!serviceToggles.isOllieEnabled()
+                || !serviceToggles.getCustomChartsEnabledWorkspaces().contains(workspaceId)) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
         }
 
