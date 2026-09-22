@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Project;
+import com.comet.opik.infrastructure.FreeFormSqlConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Inject;
@@ -10,6 +11,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.Handle;
+import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.HashMap;
@@ -44,14 +46,8 @@ public class EntityNameEnricher {
             "dataset_id", "dataset_name",
             "project_id", "project_name");
 
-    /**
-     * Beyond this many distinct ids in one result, skip the lookup and label every row with its raw id. Production
-     * p99 is 2 datasets and 11 projects per workspace against a worst case of 4,120, so this guards against a
-     * pathological result set rather than limiting anyone.
-     */
-    private static final int MAX_IDS_PER_COLUMN = 5_000;
-
     private final @NonNull TransactionTemplate template;
+    private final @NonNull @Config("freeFormSql") FreeFormSqlConfig freeFormSqlConfig;
 
     /**
      * Adds the name sibling for every id column present, whether or not the lookup resolved it — an HTML template
@@ -86,9 +82,9 @@ public class EntityNameEnricher {
     }
 
     private Map<UUID, String> names(Handle handle, String idColumn, Set<UUID> ids, String workspaceId) {
-        if (ids.size() > MAX_IDS_PER_COLUMN) {
-            log.info("Skipping '{}' name lookup: {} distinct ids exceeds the {} cap", idColumn, ids.size(),
-                    MAX_IDS_PER_COLUMN);
+        int maxIds = freeFormSqlConfig.getMaxNameLookupIds();
+        if (ids.size() > maxIds) {
+            log.info("Skipping '{}' name lookup: {} distinct ids exceeds the {} cap", idColumn, ids.size(), maxIds);
             return Map.of();
         }
         return "dataset_id".equals(idColumn)

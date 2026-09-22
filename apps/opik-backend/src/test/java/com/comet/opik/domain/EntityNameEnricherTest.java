@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Dataset;
+import com.comet.opik.infrastructure.FreeFormSqlConfig;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.jdbi.v3.core.Handle;
@@ -60,7 +61,7 @@ class EntityNameEnricherTest {
         });
         when(projectDAO.findByIds(anySet(), anyString())).thenReturn(List.of());
 
-        enricher = new EntityNameEnricher(template);
+        enricher = new EntityNameEnricher(template, new FreeFormSqlConfig());
     }
 
     @Test

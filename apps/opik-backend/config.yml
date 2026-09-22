@@ -242,6 +242,14 @@ databaseAnalyticsReadOnlyFreeFormExtendedSql:
   #  Description: Socket read timeout, kept above the profile's max_execution_time (180s) so the server cap fires first
   socketTimeout: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_SOCKET_TIMEOUT:-200s}
 
+# Tuning for the free-form analytics SQL path.
+freeFormSql:
+  #  Default: 5000
+  #  Description: Cap on distinct ids resolved to names in one result. Above it, every row keeps its raw id rather
+  #   than labelling some and not others. Production p99 is 2 datasets / 11 projects per workspace, worst case
+  #   4120, so this guards a pathological result set rather than limiting anyone.
+  maxNameLookupIds: ${FREE_FORM_SQL_MAX_NAME_LOOKUP_IDS:-5000}
+
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
