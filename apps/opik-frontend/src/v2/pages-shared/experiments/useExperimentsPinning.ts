@@ -81,11 +81,12 @@ const useExperimentsPinning = ({
   const experiments = useMemo(() => {
     if (!enabled) return rows;
 
-    const loadedIds = new Set(rows.map((row) => row.id));
-    const missing = pinnedExperiments.filter((row) => !loadedIds.has(row.id));
+    const missing = pinnedExperiments.filter((row) =>
+      missingIds.includes(row.id),
+    );
 
     return missing.length ? [...missing, ...rows] : rows;
-  }, [enabled, rows, pinnedExperiments]);
+  }, [enabled, rows, missingIds, pinnedExperiments]);
 
   const rowPinning = useMemo<RowPinningState>(
     () => ({ top: pinnedIds, bottom: [] }),
