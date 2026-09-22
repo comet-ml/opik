@@ -1,32 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { ATTACHMENT_TYPE, ParsedMediaData } from "@/types/attachments";
-import { MINE_TYPE_TO_ATTACHMENT_TYPE_MAP } from "@/constants/attachments";
+import { ParsedMediaData } from "@/types/attachments";
+import { getAttachmentTypeByMimeType } from "@/constants/attachments";
 import useAttachmentsList from "@/api/attachments/useAttachmentsList";
 import { processInputData } from "@/lib/images";
 import { detectAdditionalMedia } from "@/lib/media";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
-
-const attachmentTypeFromMimeType = (mimeType: string): ATTACHMENT_TYPE => {
-  const mapped = MINE_TYPE_TO_ATTACHMENT_TYPE_MAP[mimeType];
-  if (mapped) {
-    return mapped;
-  }
-
-  // Unmapped but well-formed media types (image/avif, video/ogg, ...) still
-  // render correctly, so classify them by prefix instead of falling back to a
-  // generic file icon.
-  const [topLevelType] = mimeType.split("/");
-  switch (topLevelType) {
-    case "image":
-      return ATTACHMENT_TYPE.IMAGE;
-    case "video":
-      return ATTACHMENT_TYPE.VIDEO;
-    case "audio":
-      return ATTACHMENT_TYPE.AUDIO;
-    default:
-      return ATTACHMENT_TYPE.OTHER;
-  }
-};
 
 type UseExperimentItemMediaParams = {
   output: object | undefined;
@@ -136,7 +114,7 @@ export const useExperimentItemMedia = ({
         placeholder: `[${att.file_name}]`,
         url: att.link,
         name: att.file_name,
-        type: attachmentTypeFromMimeType(att.mime_type),
+        type: getAttachmentTypeByMimeType(att.mime_type),
         source: "attachment" as const,
       }),
     );
