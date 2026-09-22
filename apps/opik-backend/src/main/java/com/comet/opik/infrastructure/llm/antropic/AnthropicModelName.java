@@ -53,6 +53,13 @@ public enum AnthropicModelName implements StructuredOutputSupported {
      * opt-out and reopened issue #7526. Keeping the capability here lets syncs add, remove and
      * reorder constants freely. Referencing the constants rather than duplicating the string
      * literals means a sync that renames or removes one breaks compilation instead of drifting.
+     *
+     * <p><strong>One id per model is enough.</strong> A sync also adds a model's dated build as a
+     * constant of its own, and the bare name then resolves to the longer id — so listing the model
+     * under either id marks it capable, and the other spelling is neither needed nor a second place
+     * to forget. {@code ModelCapabilities.isSamplingCapable} is what makes that hold; before it,
+     * {@code CLAUDE_SONNET_4_5_20250929} had to be listed here beside {@code CLAUDE_SONNET_4_5} and
+     * #8458 broke because nobody did the same for {@code claude-opus-4-6-20260205}.
      */
     private static final Set<String> SAMPLING_CAPABLE_MODEL_IDS = Set.of(
             CLAUDE_SONNET_3_7.value,
@@ -63,7 +70,6 @@ public enum AnthropicModelName implements StructuredOutputSupported {
             CLAUDE_OPUS_4_6.value,
             CLAUDE_SONNET_4.value,
             CLAUDE_SONNET_4_5.value,
-            CLAUDE_SONNET_4_5_20250929.value,
             CLAUDE_SONNET_4_6.value);
 
     private static final Set<String> ALL_MODEL_IDS = Arrays.stream(values())

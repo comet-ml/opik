@@ -113,8 +113,30 @@ public class ModelCapabilities {
             return false;
         }
         return knownAnthropicId(canonical)
-                .map(id -> !AnthropicModelName.samplingCapableModelIds().contains(id))
+                .map(id -> !isSamplingCapable(id))
                 .orElse(true);
+    }
+
+    /**
+     * Whether any id naming this same model is marked capable, rather than only the id itself.
+     *
+     * <p>The recurring "sync provider model definitions" chore adds a model's dated build as a
+     * constant of its own, and {@link #knownAnthropicId} then resolves the bare name to that longer
+     * id because the longest match wins. Asking only about the resolved id therefore reclassifies a
+     * model nobody touched: #8458 added {@code claude-opus-4-6-20260205} and turned the capable
+     * {@code claude-opus-4-6} into one that takes no sampling params, failing the suite on a
+     * generated PR. {@link #namesModel} already decides which ids denote one model — a dated build
+     * or a named variant, never a numeric next version — so naming the model once, under any one of
+     * its ids, is enough and a sync cannot silently undo it.
+     *
+     * <p>Matched both ways round because {@code namesModel} is not symmetric: it carries a variant
+     * suffix only on its first argument, and the capable id may be either the longer or the shorter
+     * of the pair ({@code claude-haiku-4-5-20251001} is listed dated, {@code claude-sonnet-4-5}
+     * bare).
+     */
+    private boolean isSamplingCapable(String modelId) {
+        return AnthropicModelName.samplingCapableModelIds().stream()
+                .anyMatch(capable -> namesModel(modelId, capable) || namesModel(capable, modelId));
     }
 
     /**

@@ -164,6 +164,44 @@ class SamplingParamsNormalizerTest {
     }
 
     /**
+     * The model sync adds a dated build as a constant of its own, and the bare name then resolves to
+     * it because the longest match wins — so a model classified under one of its ids has to stay
+     * classified under the other. #8458 is what happens otherwise: adding
+     * {@code claude-opus-4-6-20260205} silently made the capable {@code claude-opus-4-6} take no
+     * sampling params, and the suite went red on a generated PR nobody had reviewed yet.
+     *
+     * <p>Sonnet 4.5 is the pair that exists in the enum both ways round, so it stands in for the
+     * dated build a future sync will add to some other capable model.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "claude-sonnet-4-5",
+            "claude-sonnet-4-5-20250929",
+            "custom-llm/gw/claude-sonnet-4-5",
+            "anthropic/claude-sonnet-4.5-20250929"
+    })
+    void classifiesADatedBuildAndItsBareNameAlike(String model) {
+        var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, 0.9));
+
+        assertThat(normalized.temperature()).isEqualTo(0.7);
+        assertThat(normalized.topP()).isNull();
+    }
+
+    /**
+     * Inheriting across a release date must not reach across a version: {@code claude-opus-4-7} is
+     * its own model and takes neither, however close its id sits to the capable
+     * {@code claude-opus-4-6}. Guards the widening in {@code ModelCapabilities.isSamplingCapable}.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"claude-opus-4-7", "claude-opus-4-8", "claude-fable-5-1"})
+    void doesNotInheritCapabilityAcrossAVersion(String model) {
+        var normalized = SamplingParamsNormalizer.normalizeRequest(request(model, 0.7, 0.9));
+
+        assertThat(normalized.temperature()).isNull();
+        assertThat(normalized.topP()).isNull();
+    }
+
+    /**
      * Extended thinking refuses the sampling params on any Claude, capable or not — the API answers
      * "temperature may only be set to 1 when thinking is enabled" and "top_p must be greater than or
      * equal to 0.95 or unset when thinking is enabled". The Anthropic provider's mapper gated this;
