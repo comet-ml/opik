@@ -301,17 +301,17 @@ spec:
               # prints nothing and exits 0 when the Deployment does not exist, and still
               # exits non-zero for Forbidden/timeout/API errors. That avoids matching on
               # error text, which would misread a wrapped or unrelated message.
-              probe_err=""
+              probe_out=""
               while :; do
-                if probe_err="$(kubectl get "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" -o name --ignore-not-found 2>&1)"; then
-                  if [ -z "$probe_err" ]; then
+                if probe_out="$(kubectl get "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" -o name --ignore-not-found 2>&1)"; then
+                  if [ -z "$probe_out" ]; then
                     echo "WARNING: deployment/${OPERATOR_DEPLOY} not found in ${NAMESPACE} — the operator is externally managed, relocated, or not installed by this chart. Skipping the bounce; the cluster will self-heal passively (~7 min/replica)." >&2
                     exit 0
                   fi
                   break
                 fi
                 if [ "$(remaining)" -eq 0 ]; then
-                  echo "${probe_err}" >&2
+                  echo "last probe error: ${probe_out}" >&2
                   die "could not determine whether deployment/${OPERATOR_DEPLOY} exists in ${NAMESPACE} within ${POLL_TIMEOUT}s — the API kept returning an error (check the migration ServiceAccount's get permission on this Deployment). Not reporting success: the cluster may be left unrecovered."
                 fi
                 echo "   transient error probing deployment/${OPERATOR_DEPLOY} — retrying..." >&2
