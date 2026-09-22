@@ -370,17 +370,25 @@ class BulkInsertV2ClientIntegrationTest {
                 .hasMessageContaining("cannot be stored without a value");
     }
 
-    @Test
-    @DisplayName("experiment items round-trip through JSONEachRow, with the project id preserved")
-    void experimentItemsRoundTrip() {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    @DisplayName("experiment items round-trip through JSONEachRow, with and without a project id")
+    void experimentItemsRoundTrip(boolean withProjectId) {
         var experiment = experimentResourceClient.createPartialExperiment().build();
         var experimentId = experimentResourceClient.create(experiment, API_KEY, WORKSPACE_NAME);
-        var projectName = "experiment-items-" + RandomStringUtils.secure().nextAlphanumeric(12);
-        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-        // Same shape as ExperimentsResourceTest#getExperimentItemsBatch: the trace-derived fields are
-        // nulled because no trace backs these items, and created/lastUpdatedBy are server-set. What is
-        // left is exactly the set of columns this write path is responsible for.
+        // project_id is Nullable(FixedString(36)) and the only column this mapper writes as an explicit
+        // null rather than omitting. The null case is reachable end to end: ExperimentItemService resolves
+        // a project from projectName, then from the trace, so an item with neither and a trace id that
+        // backs no trace arrives at the DAO with project_id still null.
+        var projectName = withProjectId ? "experiment-items-" + RandomStringUtils.secure().nextAlphanumeric(12) : null;
+        var projectId = withProjectId
+                ? projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME)
+                : null;
+
+        // Same shape as ExperimentsResourceTest#getExperimentItemsBatch: trace-derived fields nulled
+        // because no trace backs these items, and created/lastUpdatedBy are server-set. What is left is
+        // the set of columns this write path owns.
         var items = IntStream.range(0, 3)
                 .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
                         .experimentId(experimentId)
@@ -408,7 +416,8 @@ class BulkInsertV2ClientIntegrationTest {
                 .toList();
 
         // The shared helper rather than field by field: it compares the whole object and owns its list of
-        // ignored fields, so a column this path stops writing cannot slip through unnoticed.
+        // ignored fields, so a column this path stops writing cannot slip through unnoticed. projectId is
+        // not among the ignored fields, so both arms of the null branch are actually asserted.
         assertExperimentResults(actual, items, USER);
     }
 }
