@@ -190,7 +190,7 @@ def test_find_experiment_items_for_dataset__unusable_total_falls_back_to_walking
     assert [item.id for item in items] == [
         f"experiment-item-{index}" for index in range(250)
     ]
-    # Page 4 is the empty one that ends a walk with no page count to stop at.
+    # Page 4 is empty and ends the walk when no usable page count is available.
     assert datasets_client.requested_pages == [1, 2, 3, 4]
 
 
