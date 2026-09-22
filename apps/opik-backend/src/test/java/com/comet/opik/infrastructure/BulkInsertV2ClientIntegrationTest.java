@@ -690,6 +690,10 @@ class BulkInsertV2ClientIntegrationTest {
                             // empty -- the version is stamped only for a cost the DAO derived itself.
                             .totalEstimatedCost(cost)
                             .usage(Map.of("prompt_tokens", 11, "completion_tokens", 22))
+                            // One span with no metadata, so the absent case is actually exercised rather
+                            // than assumed: the mapper writes "" for it and the read path still folds in
+                            // provider, so the result is neither the input nor empty.
+                            .metadata(i == 1 ? null : factory.manufacturePojo(Span.class).metadata())
                             .build();
                     // Pinned rather than podam's: TTFT_17_DIGITS needs all 17 significant digits to
                     // round-trip, so it is the value that actually exercises double precision. A random
@@ -726,12 +730,23 @@ class BulkInsertV2ClientIntegrationTest {
                 .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignored)
                 .containsExactlyInAnyOrderElementsOf(spans);
 
-        // What the mapper is actually responsible for: every key the span carried survives the round trip.
-        // The provider key on top of them is the read-side enrichment above.
-        var expectedMetadata = spans.stream().collect(toMap(Span::id, Span::metadata));
+        // The complete key set, not merely "every original key survived": the weaker check would pass a
+        // mapper that invented keys. The one addition the read path may make is `provider`, folded in by
+        // getMetadataWithProvider. Null-safe on both sides, since one span carries no metadata at all.
+        var expectedMetadata = spans.stream()
+                .collect(toMap(Span::id, span -> Optional.ofNullable(span.metadata())));
         assertThat(actual).allSatisfy(span -> {
-            var original = expectedMetadata.get(span.id());
-            original.fieldNames().forEachRemaining(field -> assertThat(span.metadata().get(field))
+            var original = expectedMetadata.get(span.id()).orElse(null);
+            var originalKeys = fieldNamesOf(original);
+            var allowedKeys = new HashSet<>(originalKeys);
+            allowedKeys.add("provider");
+
+            assertThat(fieldNamesOf(span.metadata()))
+                    .as("metadata keys for span '%s'", span.id())
+                    .isSubsetOf(allowedKeys)
+                    .containsAll(originalKeys);
+
+            originalKeys.forEach(field -> assertThat(span.metadata().get(field))
                     .as("metadata field '%s'", field)
                     .isEqualTo(original.get(field)));
         });
@@ -773,5 +788,18 @@ class BulkInsertV2ClientIntegrationTest {
                     assertThat(span.endTime()).isNull();
                     assertThat(span.ttft()).isNull();
                 });
+    }
+
+    /**
+     * Field names of a {@link com.fasterxml.jackson.databind.JsonNode}, or an empty set when it is absent.
+     * Exists so the metadata assertions treat a null node and an empty object identically instead of
+     * throwing on the null.
+     */
+    private static Set<String> fieldNamesOf(com.fasterxml.jackson.databind.JsonNode node) {
+        var names = new HashSet<String>();
+        if (node != null) {
+            node.fieldNames().forEachRemaining(names::add);
+        }
+        return names;
     }
 }
