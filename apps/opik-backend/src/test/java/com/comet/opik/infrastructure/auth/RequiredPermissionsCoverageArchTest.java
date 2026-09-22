@@ -104,7 +104,7 @@ class RequiredPermissionsCoverageArchTest {
 
     /**
      * How many unannotated mutating endpoints existed when this rule landed. A fact about history, so it only
-     * ever gets decremented as the debt is paid down — see {@link #the_seeded_census_must_only_ever_shrink()}.
+     * ever gets decremented as the debt is paid down — see {@link #theSeededCensusMustOnlyEverShrink()}.
      */
     private static final int SEEDED_CENSUS_SIZE = 86;
 
@@ -113,7 +113,7 @@ class RequiredPermissionsCoverageArchTest {
      * <p>
      * This literal is the historical record and must never gain an entry: a new endpoint predates nothing, so
      * adding one here would be backdating it into a list whose whole meaning is "already existed". Removing an
-     * entry is the burn-down and is expected, and {@link #the_seeded_census_must_only_ever_shrink()} enforces
+     * entry is the burn-down and is expected, and {@link #theSeededCensusMustOnlyEverShrink()} enforces
      * that direction so the contract is a build failure rather than a comment.
      */
     private static final Set<String> SEEDED_AT_INTRODUCTION = Set.of(
@@ -298,7 +298,7 @@ class RequiredPermissionsCoverageArchTest {
      * and would read as approved while actually being unreviewed.
      */
     @Test
-    void the_two_lists_must_stay_disjoint() {
+    void theTwoListsMustStayDisjoint() {
         assertThat(PENDING_REVIEW).doesNotContainAnyElementsOf(DELIBERATELY_UNGATED);
     }
 
@@ -316,7 +316,7 @@ class RequiredPermissionsCoverageArchTest {
      * and an addition is caught because the count no longer matches.
      */
     @Test
-    void the_seeded_census_must_only_ever_shrink() {
+    void theSeededCensusMustOnlyEverShrink() {
         assertThat(SEEDED_AT_INTRODUCTION)
                 .as("the census is the frozen record of endpoints that predate the rule. If this failed because "
                         + "you annotated one, delete its line and decrement the expected size. If it failed "
