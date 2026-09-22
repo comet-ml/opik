@@ -285,16 +285,32 @@ spec:
               # (so a mid-roll or multi-replica operator is handled by Kubernetes rather
               # than by polling for exactly one Ready pod), and it never grants pod-delete.
               echo ">> restarting operator deployment/${OPERATOR_DEPLOY} so it rebuilds the StatefulSets with the cache volume"
-              # Distinguish "no operator here to bounce" from "the bounce was rejected".
-              # An absent Deployment means an externally-managed or relocated operator:
-              # nothing was attempted, passive self-heal is the whole story, and failing
-              # the release would be wrong. Any other failure (RBAC denial, admission
-              # webhook, API error) means the bounce WAS attempted and refused — that is
-              # a real misconfiguration and must not be reported as a successful migration.
-              if ! kubectl get "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" >/dev/null 2>&1; then
-                echo "WARNING: deployment/${OPERATOR_DEPLOY} not found in ${NAMESPACE} — the operator is externally managed, relocated, or not installed by this chart. Skipping the bounce; the cluster will self-heal passively (~7 min/replica)." >&2
-                exit 0
-              fi
+              # Distinguish "no operator here to bounce" from "the probe itself failed".
+              # ONLY a confirmed NotFound is tolerated: that means an externally-managed
+              # or relocated operator, nothing was attempted, and passive self-heal is the
+              # whole story. A Forbidden, a timeout or any other API error says nothing
+              # about whether the operator exists, so treating those as "absent" would
+              # skip the bounce and report success on a cluster left unrecovered. The
+              # probe is retried within the remaining budget before giving up, so a
+              # transient API blip does not fail an otherwise healthy migration.
+              probe_err=""
+              while :; do
+                if probe_err="$(kubectl get "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" -o name 2>&1)"; then
+                  break
+                fi
+                case "$probe_err" in
+                  *NotFound*|*"not found"*)
+                    echo "WARNING: deployment/${OPERATOR_DEPLOY} not found in ${NAMESPACE} — the operator is externally managed, relocated, or not installed by this chart. Skipping the bounce; the cluster will self-heal passively (~7 min/replica)." >&2
+                    exit 0
+                    ;;
+                esac
+                if [ "$(remaining)" -eq 0 ]; then
+                  echo "${probe_err}" >&2
+                  die "could not determine whether deployment/${OPERATOR_DEPLOY} exists in ${NAMESPACE} within ${POLL_TIMEOUT}s — the API returned an error that is not NotFound (check the migration ServiceAccount's get permission on this Deployment). Not reporting success: the cluster may be left unrecovered."
+                fi
+                echo "   transient error probing deployment/${OPERATOR_DEPLOY} — retrying..." >&2
+                sleep 10
+              done
               if ! restart_err="$(kubectl rollout restart "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" 2>&1)"; then
                 echo "${restart_err}" >&2
                 die "could not restart deployment/${OPERATOR_DEPLOY} in ${NAMESPACE} — the operator exists but the restart was refused (check the migration ServiceAccount's get/patch permission on this Deployment). Not reporting success: the cluster was left unrecovered."
