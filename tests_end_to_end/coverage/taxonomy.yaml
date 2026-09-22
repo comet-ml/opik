@@ -790,8 +790,8 @@ areas:
     routes: ["/projects/$projectId/alerts", "/alerts/new", "/alerts/$alertId"]
     spec_dir: alerts
     specs:
-      - alerts/alerts-crud.spec.ts
       - alerts/alert-name-suggestion.spec.ts
+      - alerts/alerts-crud.spec.ts
     capabilities:
       list-alerts:         { covered: true,  tier: t1-smoke }
       create-alert:        { covered: true,  tier: t1-smoke }
