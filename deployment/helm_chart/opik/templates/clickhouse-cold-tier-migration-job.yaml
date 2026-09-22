@@ -225,6 +225,10 @@ spec:
 
               DEADLINE=$(( $(date +%s) + POLL_TIMEOUT ))
               remaining() { r=$(( DEADLINE - $(date +%s) )); [ "$r" -gt 0 ] && echo "$r" || echo 0; }
+              # Never sleep past the deadline: activeDeadlineSeconds may exceed
+              # pollTimeoutSeconds by as little as 1s, so an unconditional `sleep 10` can
+              # let the kubelet kill the Job before the script prints its own diagnosis.
+              nap() { n="$1"; r="$(remaining)"; [ "$r" -lt "$n" ] && n="$r"; [ "$n" -gt 0 ] && sleep "$n"; return 0; }
               die() { echo "ERROR: $*" >&2; exit 1; }
 
               # Migration state of this CHI's StatefulSets:
@@ -277,7 +281,7 @@ spec:
                   none)    echo "   no ClickHouse StatefulSet yet — waiting..." ;;
                 esac
                 [ "$(remaining)" -eq 0 ] && die "no ClickHouse StatefulSet appeared within ${POLL_TIMEOUT}s"
-                sleep 10
+                nap 10
               done
 
               # Restart the operator Deployment rather than deleting its pod: it needs
@@ -293,23 +297,25 @@ spec:
               # skip the bounce and report success on a cluster left unrecovered. The
               # probe is retried within the remaining budget before giving up, so a
               # transient API blip does not fail an otherwise healthy migration.
+              # --ignore-not-found makes kubectl itself authoritative about absence: it
+              # prints nothing and exits 0 when the Deployment does not exist, and still
+              # exits non-zero for Forbidden/timeout/API errors. That avoids matching on
+              # error text, which would misread a wrapped or unrelated message.
               probe_err=""
               while :; do
-                if probe_err="$(kubectl get "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" -o name 2>&1)"; then
-                  break
-                fi
-                case "$probe_err" in
-                  *NotFound*|*"not found"*)
+                if probe_err="$(kubectl get "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" -o name --ignore-not-found 2>&1)"; then
+                  if [ -z "$probe_err" ]; then
                     echo "WARNING: deployment/${OPERATOR_DEPLOY} not found in ${NAMESPACE} — the operator is externally managed, relocated, or not installed by this chart. Skipping the bounce; the cluster will self-heal passively (~7 min/replica)." >&2
                     exit 0
-                    ;;
-                esac
+                  fi
+                  break
+                fi
                 if [ "$(remaining)" -eq 0 ]; then
                   echo "${probe_err}" >&2
-                  die "could not determine whether deployment/${OPERATOR_DEPLOY} exists in ${NAMESPACE} within ${POLL_TIMEOUT}s — the API returned an error that is not NotFound (check the migration ServiceAccount's get permission on this Deployment). Not reporting success: the cluster may be left unrecovered."
+                  die "could not determine whether deployment/${OPERATOR_DEPLOY} exists in ${NAMESPACE} within ${POLL_TIMEOUT}s — the API kept returning an error (check the migration ServiceAccount's get permission on this Deployment). Not reporting success: the cluster may be left unrecovered."
                 fi
                 echo "   transient error probing deployment/${OPERATOR_DEPLOY} — retrying..." >&2
-                sleep 10
+                nap 10
               done
               if ! restart_err="$(kubectl rollout restart "deployment/${OPERATOR_DEPLOY}" -n "$NAMESPACE" 2>&1)"; then
                 echo "${restart_err}" >&2
@@ -337,6 +343,6 @@ spec:
                     exit 0
                   fi
                 fi
-                sleep 10
+                nap 10
               done
 {{- end }}
