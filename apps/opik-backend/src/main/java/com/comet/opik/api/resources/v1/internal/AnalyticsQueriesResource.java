@@ -99,7 +99,7 @@ public class AnalyticsQueriesResource {
     }
 
     @POST
-    @Operation(operationId = "executeScopedAnalyticsQuery", summary = "Execute free-form analytics SQL", description = "Runs read-only SQL bounded to the caller's workspace. Supply project_id to restrict traces and spans to one project, or omit it to cover the whole workspace. Returns 501 unless Agent Insights is enabled and the workspace is allowlisted.", responses = {
+    @Operation(operationId = "executeScopedAnalyticsQuery", summary = "Execute free-form analytics SQL", description = "Runs read-only SQL bounded to the caller's workspace. Supply project_id to restrict traces and spans to one project, or omit it to cover the whole workspace.", responses = {
             @ApiResponse(responseCode = "200", description = "Query results", content = @Content(schema = @Schema(implementation = AnalyticsQueryResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
@@ -109,9 +109,6 @@ public class AnalyticsQueriesResource {
             @RequestBody(content = @Content(schema = @Schema(implementation = ScopedAnalyticsQueryRequest.class))) @NotNull @Valid ScopedAnalyticsQueryRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        // Both toggles, not just the allowlist: the ClickHouse account this endpoint runs as is provisioned under
-        // TOGGLE_OLLIE_ENABLED (see provision_agent_insights_readonly_user.sh), so allowlisting a workspace on an
-        // install without Ollie would route it at an account that was never created.
         if (!serviceToggles.isOllieEnabled()
                 || !serviceToggles.getCustomChartsEnabledWorkspaces().contains(workspaceId)) {
             return Response.status(Response.Status.NOT_IMPLEMENTED).build();
@@ -119,8 +116,6 @@ public class AnalyticsQueriesResource {
 
         RedactionGuard.rejectUnmaskable(requestContext.get().isRedactResponse(), "Custom Charts free-form SQL");
 
-        // Omitting the project is a scoping choice, not a privilege one: workspace_id is enforced by a restrictive
-        // row policy on every table, and a project id can only ever narrow what the policy already allows.
         String projectScope = Optional.ofNullable(request.projectId())
                 .map(Object::toString)
                 .orElse(FreeFormSqlQueryDAO.PROJECT_SCOPE_ALL);

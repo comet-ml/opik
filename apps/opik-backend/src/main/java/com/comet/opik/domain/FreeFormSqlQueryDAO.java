@@ -36,7 +36,7 @@ public interface FreeFormSqlQueryDAO {
     CompletableFuture<List<String>> explainAst(FreeFormSqlAccount account, String query);
 
     /**
-     * The {@code SQL_project_id} value meaning "every project in the workspace". The row policies match it
+     * The {@code SQL_project_id} value meaning "every project in that workspace". The row policies match it
      * explicitly, so an unset or empty setting matches no branch and returns nothing — a dropped setting fails
      * closed rather than silently widening the query to the workspace.
      */
