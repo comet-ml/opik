@@ -30,6 +30,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import io.r2dbc.spi.Row;
@@ -749,6 +750,15 @@ class BulkInsertV2ClientIntegrationTest {
             originalKeys.forEach(field -> assertThat(span.metadata().get(field))
                     .as("metadata field '%s'", field)
                     .isEqualTo(original.get(field)));
+
+            // Allowing the key without checking its value would let a wrong enrichment through. Only
+            // asserted where the input did not already carry a `provider` of its own -- there the key is
+            // the input's and the read path does not own it.
+            if (!originalKeys.contains("provider")) {
+                assertThat(span.metadata().get("provider"))
+                        .as("provider enrichment for span '%s'", span.id())
+                        .isEqualTo(TextNode.valueOf(span.provider()));
+            }
         });
 
         assertThat(actual).allSatisfy(span -> {
