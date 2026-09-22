@@ -13,7 +13,10 @@ import {
 import { keepPreviousData } from "@tanstack/react-query";
 
 import useExperimentsList from "@/api/datasets/useExperimentsList";
-import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
+import {
+  EXPERIMENTS_LIST_POLLING_INTERVAL_MS,
+  GroupedExperiment,
+} from "@/hooks/useGroupedExperimentsList";
 import { PinningConfig } from "@/shared/DataTable/DataTable";
 
 const MAX_PINNED_FETCH_SIZE = 100;
@@ -25,6 +28,7 @@ type UseExperimentsPinningParams = {
   pinnedIds: string[];
   setPinnedIds: Dispatch<SetStateAction<string[]>>;
   enabled: boolean;
+  polling?: boolean;
 };
 
 const useExperimentsPinning = ({
@@ -34,18 +38,25 @@ const useExperimentsPinning = ({
   pinnedIds,
   setPinnedIds,
   enabled,
+  polling = false,
 }: UseExperimentsPinningParams) => {
-  const { data, isPlaceholderData } = useExperimentsList(
+  const missingIds = useMemo(() => {
+    const loadedIds = new Set(rows.map((row) => row.id));
+    return pinnedIds.filter((id) => !loadedIds.has(id));
+  }, [rows, pinnedIds]);
+
+  const { data, isPlaceholderData, refetch } = useExperimentsList(
     {
       workspaceName,
       projectId,
-      experimentIds: pinnedIds,
+      experimentIds: missingIds,
       page: 1,
       size: MAX_PINNED_FETCH_SIZE,
     },
     {
-      enabled: enabled && pinnedIds.length > 0,
+      enabled: enabled && missingIds.length > 0,
       placeholderData: keepPreviousData,
+      refetchInterval: polling ? EXPERIMENTS_LIST_POLLING_INTERVAL_MS : false,
     },
   );
 
@@ -55,14 +66,17 @@ const useExperimentsPinning = ({
   );
 
   useEffect(() => {
-    if (!data || isPlaceholderData) return;
+    if (!data || isPlaceholderData || data.total > data.content.length) return;
 
-    const existingIds = new Set(pinnedExperiments.map((row) => row.id));
-    setPinnedIds((prev) => {
-      const next = prev.filter((id) => existingIds.has(id));
-      return next.length === prev.length ? prev : next;
-    });
-  }, [data, isPlaceholderData, pinnedExperiments, setPinnedIds]);
+    const deletedIds = new Set(
+      missingIds.filter(
+        (id) => !pinnedExperiments.some((experiment) => experiment.id === id),
+      ),
+    );
+    if (!deletedIds.size) return;
+
+    setPinnedIds((prev) => prev.filter((id) => !deletedIds.has(id)));
+  }, [data, isPlaceholderData, missingIds, pinnedExperiments, setPinnedIds]);
 
   const experiments = useMemo(() => {
     if (!enabled) return rows;
@@ -88,7 +102,7 @@ const useExperimentsPinning = ({
     [enabled, rowPinning, setRowPinning],
   );
 
-  return { experiments, pinningConfig };
+  return { experiments, pinningConfig, refetch };
 };
 
 export default useExperimentsPinning;

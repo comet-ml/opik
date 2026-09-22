@@ -399,13 +399,18 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     });
 
   const loadedExperiments = useMemo(() => data?.content ?? [], [data?.content]);
-  const { experiments, pinningConfig } = useExperimentsPinning({
+  const {
+    experiments,
+    pinningConfig,
+    refetch: refetchPinned,
+  } = useExperimentsPinning({
     rows: loadedExperiments,
     workspaceName,
     projectId: activeProjectId ?? undefined,
     pinnedIds,
     setPinnedIds,
     enabled: groups.length === 0,
+    polling: true,
   });
 
   const sortableBy: string[] = useMemo(
@@ -722,7 +727,10 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           <RefreshButton
             tooltip="Refresh experiments list"
             isFetching={isFetching}
-            onRefresh={() => refetch()}
+            onRefresh={() => {
+              refetch();
+              refetchPinned();
+            }}
           />
           <ColumnsButton
             columns={availableColumns}
