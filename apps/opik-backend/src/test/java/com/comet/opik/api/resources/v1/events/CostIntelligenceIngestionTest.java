@@ -942,6 +942,7 @@ class CostIntelligenceIngestionTest {
                 .maxTokens(base + 7)
                 .contextManagement("sentinel-" + n + "-context-management")
                 .speed("sentinel-" + n + "-speed")
+                .aiuNano(base + 8)
                 .trigger("sentinel-" + n + "-trigger")
                 .triggerDetail("sentinel-" + n + "-trigger-detail")
                 .turnKey("sentinel-" + n + "-turn-key")
@@ -972,6 +973,7 @@ class CostIntelligenceIngestionTest {
         assertThat(actual.maxTokens()).as("max_tokens").isEqualTo(expected.maxTokens());
         assertThat(actual.contextManagement()).as("context_management").isEqualTo(expected.contextManagement());
         assertThat(actual.speed()).as("speed").isEqualTo(expected.speed());
+        assertThat(actual.aiuNano()).as("aiu_nano").isEqualTo(expected.aiuNano());
         assertThat(actual.trigger()).as("trigger").isEqualTo(expected.trigger());
         assertThat(actual.triggerDetail()).as("trigger_detail").isEqualTo(expected.triggerDetail());
         assertThat(actual.turnKey()).as("turn_key").isEqualTo(expected.turnKey());
@@ -989,7 +991,7 @@ class CostIntelligenceIngestionTest {
                     toUnixTimestamp64Milli(start_time) AS start_ms,
                     model AS model,
                     u_input, u_cache_read, u_cache_creation, u_cache_creation_5m, u_cache_creation_1h, u_output,
-                    effort, thinking_type, max_tokens, context_management, speed,
+                    effort, thinking_type, max_tokens, context_management, speed, aiu_nano,
                     `trigger` AS trigger_kind, trigger_detail, turn_key, parent_tool_use_id,
                     link_failure_reason
                 FROM cipx_spends FINAL
@@ -1018,6 +1020,7 @@ class CostIntelligenceIngestionTest {
                             row.get("max_tokens", Long.class),
                             row.get("context_management", String.class),
                             row.get("speed", String.class),
+                            row.get("aiu_nano", Long.class),
                             row.get("trigger_kind", String.class),
                             row.get("trigger_detail", String.class),
                             row.get("turn_key", String.class),
@@ -1038,6 +1041,7 @@ class CostIntelligenceIngestionTest {
                 .repository("sentinel-" + n + "-repository")
                 .sessionId("sentinel-" + n + "-session-id")
                 .harness("sentinel-" + n + "-harness")
+                .deviceId("sentinel-" + n + "-device-id")
                 .schemaVersion(n * 100 + 1)
                 .billingMode("sentinel-" + n + "-billing-mode")
                 .plan("sentinel-" + n + "-plan")
@@ -1078,6 +1082,7 @@ class CostIntelligenceIngestionTest {
         assertThat(actual.repository()).as("repository").isEqualTo(expected.repository());
         assertThat(actual.sessionId()).as("session_id").isEqualTo(expected.sessionId());
         assertThat(actual.harness()).as("harness").isEqualTo(expected.harness());
+        assertThat(actual.deviceId()).as("device_id").isEqualTo(expected.deviceId());
         assertThat(actual.schemaVersion()).as("schema_version").isEqualTo(expected.schemaVersion());
         assertThat(actual.billingMode()).as("billing_mode").isEqualTo(expected.billingMode());
         assertThat(actual.plan()).as("plan").isEqualTo(expected.plan());
@@ -1108,7 +1113,8 @@ class CostIntelligenceIngestionTest {
                     project_id AS project_id,
                     trace_id AS trace_id,
                     toUnixTimestamp64Milli(start_time) AS start_ms,
-                    user_uuid, user_email, user_display_name, repository, session_id, harness, schema_version,
+                    user_uuid, user_email, user_display_name, repository, session_id, harness, device_id,
+                    schema_version,
                     billing_mode, plan, plan_usage_status, organization_type, seat_tier, billing_type,
                     branch, head_sha_start, head_sha_end, dirty, commits_in_trace,
                     files_added, files_deleted, lines_added, lines_deleted,
@@ -1133,6 +1139,7 @@ class CostIntelligenceIngestionTest {
                             .repository(row.get("repository", String.class))
                             .sessionId(row.get("session_id", String.class))
                             .harness(row.get("harness", String.class))
+                            .deviceId(row.get("device_id", String.class))
                             .schemaVersion(row.get("schema_version", Integer.class))
                             .billingMode(row.get("billing_mode", String.class))
                             .plan(row.get("plan", String.class))
@@ -1680,8 +1687,8 @@ class CostIntelligenceIngestionTest {
     private record SentinelSpendRow(String workspaceId, String projectId, String traceId, String spanId,
             Long startMs, String model, Long uInput, Long uCacheRead, Long uCacheCreation, Long uCacheCreation5m,
             Long uCacheCreation1h, Long uOutput, String effort, String thinkingType, Long maxTokens,
-            String contextManagement, String speed, String trigger, String triggerDetail, String turnKey,
-            String parentToolUseId, String linkFailureReason) {
+            String contextManagement, String speed, Long aiuNano, String trigger, String triggerDetail,
+            String turnKey, String parentToolUseId, String linkFailureReason) {
     }
 
     private record CipxBlockRow(Integer blockIdx, String src, String category, String tier, String lane,
@@ -1706,7 +1713,8 @@ class CostIntelligenceIngestionTest {
     @Builder
     private record SentinelIdentityRow(String workspaceId, String projectId, String traceId, Long startMs,
             String userUuid, String userEmail, String userDisplayName, String repository, String sessionId,
-            String harness, Integer schemaVersion, String billingMode, String plan, String planUsageStatus,
+            String harness, String deviceId, Integer schemaVersion, String billingMode, String plan,
+            String planUsageStatus,
             String organizationType, String seatTier, String billingType, String branch, String headShaStart,
             String headShaEnd, Boolean dirty, Long commitsInTrace, Long filesAdded, Long filesDeleted,
             Long linesAdded, Long linesDeleted, Long agentsDispatched, Long agentsLinked, Long agentsAmbiguous,
