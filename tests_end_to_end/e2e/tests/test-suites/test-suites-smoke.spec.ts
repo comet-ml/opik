@@ -37,7 +37,7 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@area:test-suites']
     // webServer spawned before globalSetup, so it still holds a key the
     // preflight found dead. Asking the helper keeps the model we request and
     // the credential the driver actually has in agreement.
-    // o4-mini, not gpt-4o-mini: the SDK's LLM-judge metric always sends
+    // gpt-5-mini, not gpt-4o-mini: the SDK's LLM-judge metric always sends
     // reasoning_effort (DEFAULT_REASONING_EFFORT in llm_judge/config.py), and
     // non-reasoning OpenAI models reject it outright —
     // `litellm.UnsupportedParamsError: openai does not support parameters:
@@ -45,7 +45,7 @@ test.describe('Test Suites — smoke', { tag: ['@t1-smoke', '@area:test-suites']
     // had never surfaced.
     const judgeModel = anthropicKeyUsable()
       ? 'anthropic/claude-haiku-4-5'
-      : 'openai/o4-mini';
+      : 'openai/gpt-5-mini';
 
     await test.step('SDK-trigger a run against the seeded suite', async () => {
       const result = await sdkClient.python.runTestSuite({
