@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasAnthropicApiKey,
+  hasOpenAiApiKey,
 } from "./shouldRunIntegrationTests";
 
 describe("shouldRunIntegrationTests", () => {
@@ -119,6 +121,73 @@ describe("shouldRunIntegrationTests", () => {
       process.env.OPIK_URL_OVERRIDE = "https://my-localhost.com/api";
 
       expect(shouldRunIntegrationTests()).toBe(false);
+    });
+  });
+});
+
+describe("provider key detection", () => {
+  let originalAnthropicKey: string | undefined;
+  let originalOpenAiKey: string | undefined;
+
+  beforeEach(() => {
+    originalAnthropicKey = process.env.ANTHROPIC_API_KEY;
+    originalOpenAiKey = process.env.OPENAI_API_KEY;
+  });
+
+  afterEach(() => {
+    if (originalAnthropicKey !== undefined) {
+      process.env.ANTHROPIC_API_KEY = originalAnthropicKey;
+    } else {
+      delete process.env.ANTHROPIC_API_KEY;
+    }
+
+    if (originalOpenAiKey !== undefined) {
+      process.env.OPENAI_API_KEY = originalOpenAiKey;
+    } else {
+      delete process.env.OPENAI_API_KEY;
+    }
+  });
+
+  describe("hasAnthropicApiKey", () => {
+    it("reports a key that is present", () => {
+      process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+
+      expect(hasAnthropicApiKey()).toBe(true);
+    });
+
+    it("reports no key when the variable is unset", () => {
+      delete process.env.ANTHROPIC_API_KEY;
+
+      expect(hasAnthropicApiKey()).toBe(false);
+    });
+
+    // A GitHub secret that does not exist expands to "" rather than being
+    // absent, so this is the shape a missing repo secret actually takes, and
+    // the reason the workflow fails the job before the suite can skip.
+    it("reports no key when set to an empty string", () => {
+      process.env.ANTHROPIC_API_KEY = "";
+
+      expect(hasAnthropicApiKey()).toBe(false);
+    });
+  });
+
+  describe("hasOpenAiApiKey", () => {
+    it("reports a key that is present", () => {
+      process.env.OPENAI_API_KEY = "sk-test";
+
+      expect(hasOpenAiApiKey()).toBe(true);
+    });
+
+    it("reports no key when the variable is unset", () => {
+      delete process.env.OPENAI_API_KEY;
+
+      expect(hasOpenAiApiKey()).toBe(false);
+    });
+
+    it("reports no key when set to an empty string", () => {
+      process.env.OPENAI_API_KEY = "";
+
+      expect(hasOpenAiApiKey()).toBe(false);
     });
   });
 });
