@@ -1,4 +1,4 @@
-export { test, expect } from './export-comparison.fixture';
+export { test, expect } from './prompt-experiments.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -166,4 +166,14 @@ export type {
   ExportComparisonRef,
   ExportComparisonFixtures,
 } from './export-comparison.fixture';
+export type {
+  OptimizationCostRef,
+  OptimizationCostFixtures,
+} from './optimization-cost.fixture';
+export { SPAN_COST, EXPECTED_TOTAL_COST } from './optimization-cost.fixture';
+export type {
+  PromptExperimentsRef,
+  PromptExperimentsFixtures,
+} from './prompt-experiments.fixture';
+export { EXPERIMENT_COUNT, PAGE_SIZE } from './prompt-experiments.fixture';
 export type { ProjectRef } from '../core/backend';

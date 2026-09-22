@@ -704,6 +704,17 @@ export interface OptimizationRef {
    */
   baselineObjectiveScore: number | null;
   bestObjectiveScore: number | null;
+  /**
+   * The run's whole one-time spend, as the "Optimization cost" column renders
+   * it — the sum of its trials' experiment costs plus the optimizer-internal
+   * traces attributed to it by tag.
+   *
+   * `number | null` rather than `?? 0`, and for the same reason as
+   * `SpanCostRef.totalEstimatedCost`: an aggregate that never ran and a run
+   * that really cost nothing are different answers, and collapsing them lets a
+   * spec assert a cost against an aggregate that was simply absent.
+   */
+  totalOptimizationCost: number | null;
 }
 
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
@@ -887,6 +898,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         numTrials: Number(o.numTrials ?? 0),
         baselineObjectiveScore: o.baselineObjectiveScore ?? null,
         bestObjectiveScore: o.bestObjectiveScore ?? null,
+        totalOptimizationCost: o.totalOptimizationCost ?? null,
       };
     } catch (err) {
       if (isNotFoundError(err)) return null;
@@ -3772,6 +3784,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * to set them.
        */
       metadata?: Record<string, unknown>;
+      /**
+       * Prompt VERSION ids this experiment was run from — what puts it on a
+       * prompt's Experiments tab, which queries by prompt rather than by
+       * project. Version ids, not prompt ids: the link table stores the commit
+       * the run used, and a prompt id here silently links nothing.
+       */
+      promptVersionIds?: string[];
     }): Promise<string> {
       await opik.api.experiments.createExperiment({
         id: args.id,
@@ -3781,6 +3800,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.type ? { type: args.type } : {}),
         ...(args.optimizationId ? { optimizationId: args.optimizationId } : {}),
         ...(args.metadata ? { metadata: args.metadata } : {}),
+        ...(args.promptVersionIds?.length
+          ? { promptVersions: args.promptVersionIds.map((id) => ({ id })) }
+          : {}),
       });
       return args.id;
     },
@@ -3796,6 +3818,35 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     getOptimization: localGetOptimization,
+
+    /**
+     * `GET /v1/private/optimizations?project_id=…` — the read behind the
+     * Optimization runs list, including each run's rolled-up cost.
+     *
+     * Separate from `getOptimization` because the list and the by-id read are
+     * two different projections over the same aggregate and are allowed to
+     * disagree: `getById` always takes the FIND path, while the list can fall
+     * through to the no-experiments projection. A spec that asserts a cost
+     * wants to pin BOTH, so both have to be readable.
+     */
+    async listOptimizations(args: { projectId: string }): Promise<OptimizationRef[]> {
+      const page = await opik.api.optimizations.findOptimizations({
+        projectId: args.projectId,
+        page: 1,
+        size: 100,
+      });
+      return (page.content ?? []).map((o) => ({
+        id: String(o.id),
+        name: o.name ?? '',
+        status: String(o.status) as OptimizationStatus,
+        objectiveName: o.objectiveName ?? null,
+        datasetName: o.datasetName ?? null,
+        numTrials: Number(o.numTrials ?? 0),
+        baselineObjectiveScore: o.baselineObjectiveScore ?? null,
+        bestObjectiveScore: o.bestObjectiveScore ?? null,
+        totalOptimizationCost: o.totalOptimizationCost ?? null,
+      }));
+    },
 
     async pollOptimizationStatus(
       optimizationId: string,

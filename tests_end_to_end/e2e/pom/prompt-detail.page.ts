@@ -36,6 +36,135 @@ export class PromptDetailPage {
     });
   }
 
+  /**
+   * Open the prompt's Experiments tab directly, at a chosen page size.
+   *
+   * `size` is a real query param (`useTablePageSize` prefers a valid `?size=`
+   * over the stored value and over the deployment default), so a pagination
+   * spec can pin the page size without touching localStorage or driving the
+   * rows-per-page menu — and without inheriting whatever size the last spec in
+   * this worker happened to leave behind.
+   */
+  async gotoExperimentsTab(
+    projectId: string,
+    promptId: string,
+    opts: { size?: number } = {},
+  ): Promise<void> {
+    return test.step(`open prompt ${promptId} Experiments tab`, async () => {
+      const env = loadEnvConfig();
+      const query = new URLSearchParams({ tab: 'experiments' });
+      if (opts.size !== undefined) query.set('size', String(opts.size));
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/prompts/${promptId}?${query}`,
+      );
+    });
+  }
+
+  /** Wait until the Experiments tab has rendered `expected` rows. */
+  async waitForExperimentRows(expected: number, timeoutMs = 30_000): Promise<void> {
+    return test.step(`wait for ${expected} experiment row(s)`, async () => {
+      await expect(this.experimentRows()).toHaveCount(expected, { timeout: timeoutMs });
+    });
+  }
+
+  /**
+   * Every experiment row currently rendered, in DOM order.
+   *
+   * `data-row-id` is the experiment id here (`getExperimentRowId` returns the
+   * bare id while no grouping is active), so this is both the ORDER the tab
+   * presents and the identity of each row — which is what a pinning assertion
+   * needs: "first" and "exactly once" are claims about this list.
+   */
+  experimentRows(): Locator {
+    return this.page.locator('tbody tr[data-row-id]');
+  }
+
+  /** One experiment's row, by id. Never `.first()` — callers assert the count. */
+  experimentRow(experimentId: string): Locator {
+    return this.page.locator(`tbody tr[data-row-id="${experimentId}"]`);
+  }
+
+  async experimentRowIds(): Promise<string[]> {
+    return test.step('read the rendered experiment row ids', async () => {
+      return this.experimentRows().evaluateAll((rows) =>
+        rows
+          .map((row) => row.getAttribute('data-row-id'))
+          .filter((id): id is string => Boolean(id)),
+      );
+    });
+  }
+
+  /**
+   * Pin or unpin an experiment from its row.
+   *
+   * The pin button is `hidden group-hover/row:inline-flex` while unpinned — it
+   * is not in the layout at all until the row is hovered — so the hover is a
+   * precondition, not a flake workaround. Once pinned it renders
+   * unconditionally, which is what makes the confirmations below reliable.
+   *
+   * The two directions confirm differently, because they do not leave the page
+   * in the same shape. Pinning keeps the row and flips its control to "Unpin".
+   * UNPINNING a row that was on this page only BECAUSE it was pinned takes the
+   * row away with it — so the row itself may vanish, and asserting a flipped
+   * control on it would fail on a correct app. What holds either way is that
+   * no "Unpin" control remains for this experiment on this page.
+   */
+  async setExperimentPinned(experimentId: string, pinned: boolean): Promise<void> {
+    return test.step(`${pinned ? 'pin' : 'unpin'} experiment ${experimentId}`, async () => {
+      const row = this.experimentRow(experimentId);
+      await expect(row, 'exactly one row for the experiment being pinned').toHaveCount(1);
+      await row.hover();
+      await row.getByRole('button', { name: pinned ? 'Pin to the top' : 'Unpin' }).click();
+      await expect(
+        row.getByRole('button', { name: 'Unpin' }),
+        pinned
+          ? 'the row now offers Unpin, so the pin registered'
+          : 'no Unpin control remains, so the unpin registered',
+      ).toHaveCount(pinned ? 1 : 0);
+    });
+  }
+
+  /**
+   * Page the experiments table forward or back.
+   *
+   * The pager buttons are icon-only with no accessible name, so the rendered
+   * lucide icon is the only handle — and the first/last buttons render
+   * `chevron-first`/`chevron-last`, which these class names do not match. A
+   * `data-testid` would be better, but these specs run against a deployed
+   * Opik, so one added alongside them would not exist in the version under
+   * test.
+   */
+  async goToPage(direction: 'next' | 'previous'): Promise<void> {
+    return test.step(`go to the ${direction} page`, async () => {
+      const icon = direction === 'next' ? 'lucide-chevron-right' : 'lucide-chevron-left';
+      await this.page.locator(`button:has(svg.${icon})`).click();
+    });
+  }
+
+  /**
+   * The experiment ids a localStorage pinning key currently holds.
+   *
+   * Read directly because the key is the whole point of the per-prompt half of
+   * this behaviour: pins on this tab are stored under the PROMPT id, and pins
+   * on the project Experiments page under the PROJECT id. A wrong key still
+   * looks correct on the surface that wrote it, and only shows up as a
+   * stranger's row on top of the other one.
+   *
+   * Returns `null` when the key is absent, which is a different fact from an
+   * empty array: never written and written-then-emptied are both legitimate,
+   * and a caller asserting "no longer pinned" should accept either explicitly
+   * rather than have this collapse them.
+   */
+  async pinnedIdsInStorage(key: string): Promise<string[] | null> {
+    return test.step(`read localStorage["${key}"]`, async () => {
+      return this.page.evaluate((storageKey) => {
+        const raw = window.localStorage.getItem(storageKey);
+        if (raw === null) return null;
+        return JSON.parse(raw) as string[];
+      }, key);
+    });
+  }
+
   promptNameHeading(): Locator {
     return this.page.getByRole('heading', { level: 1 });
   }

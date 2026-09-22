@@ -425,7 +425,7 @@ areas:
       old-version-preserved:   { covered: true,  tier: t1-smoke }
       version-history:         { covered: true,  tier: t1-smoke, note: "smoke covers select-a-version on a 2-version prompt; prompt-version-pagination adds the 31-version case — the timeline pages, the labels come from version_number, a version deep-linked onto page 2 renders its own template, and the Compare-against menu lists every version rather than only the page that had loaded" }
       compare-versions:        { covered: false, note: "prompt-version-pagination asserts the Compare-against menu's contents label by label, but never selects an entry — nothing yet opens the compare sheet or asserts a rendered diff, so a broken comparison would not fail any test. The menu assertion counts under version-history instead." }
-      experiments-tab:         { covered: false, note: "prompt detail -> Experiments tab" }
+      experiments-tab:         { covered: true,  tier: t2-cuj, note: "prompt detail -> Experiments tab: listing, paging, and pinning — an off-page pin is fetched by id and prepended exactly once, and pins stay keyed per prompt rather than leaking to the project Experiments page" }
       delete-prompt:           { covered: true,  tier: t2-cuj }
 
     visual:
@@ -517,7 +517,7 @@ areas:
       launch-hier-reflective:   { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       run-completes-healthy:    { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       studio-logs-download:     { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
-      list-optimization-runs:   { covered: false }
+      list-optimization-runs:   { covered: true,  tier: t2-cuj, note: "the runs list and its Optimization cost column: a run's total follows a mutable tag, never double-charges a trace already inside an experiment item, and a project with no runs renders its empty state. The week-floor drop-out is NOT covered — a backdated UUIDv7 is refused at ingestion on any env running UuidV7TimestampValidator in reject mode" }
       trials-table:             { covered: false }
       trial-detail:             { covered: true,  tier: t2-cuj }
       best-trial-prompt:        { covered: false }
