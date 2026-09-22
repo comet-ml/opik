@@ -317,7 +317,6 @@ const DataTable = <TData, TValue>({
         key={row.id}
         data-state={row.getIsSelected() && "selected"}
         data-row-active={row.id === activeRowId}
-        data-row-pinned={row.getIsPinned() || undefined}
         data-row-id={row.id}
         className={cn(
           {

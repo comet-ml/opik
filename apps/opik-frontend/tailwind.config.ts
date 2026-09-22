@@ -109,7 +109,6 @@ module.exports = {
         "thread-active": "var(--thread-active)",
         "selection-bar": "hsl(var(--selection-bar))",
         "row-selected": "hsl(var(--row-selected))",
-        "row-pinned": "hsl(var(--row-pinned))",
 
         /* Info box colors */
         "info-box-bg": "hsl(var(--info-box-bg))",

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 const PinCell = <TData,>(context: CellContext<TData, unknown>) => {
   const isPinned = Boolean(context.row.getIsPinned());
-  const label = isPinned ? "Unpin" : "Pin to top";
+  const label = isPinned ? "Unpin" : "Pin to the top";
 
   return (
     <CellWrapper
