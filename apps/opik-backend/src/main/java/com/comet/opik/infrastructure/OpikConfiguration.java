@@ -34,6 +34,9 @@ public class OpikConfiguration extends JobConfiguration {
     private DatabaseAnalyticsReadOnlyFreeFormSqlConfig databaseAnalyticsReadOnlyFreeFormExtendedSql = new DatabaseAnalyticsReadOnlyFreeFormSqlConfig();
 
     @Valid @NotNull @JsonProperty
+    private BulkInsertConfig bulkInsert = BulkInsertConfig.builder().build();
+
+    @Valid @NotNull @JsonProperty
     private CustomChartsConfig customCharts = new CustomChartsConfig();
 
     @Valid @NotNull @JsonProperty
@@ -99,6 +102,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private AgentInsightsReportConfig agentInsightsReport = new AgentInsightsReportConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AnnotationQueueRoutingConfig annotationQueueRouting = new AnnotationQueueRoutingConfig();
 
     @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();

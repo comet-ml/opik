@@ -177,6 +177,23 @@ public class ExperimentResourceClient {
         return items;
     }
 
+    /**
+     * A single item by id. Unlike the stream endpoints above, this returns the item as it was written
+     * rather than joined with its trace, which is what makes it comparable against the submitted object.
+     */
+    public ExperimentItem getExperimentItem(UUID id, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(ExperimentItem.class);
+        }
+    }
+
     public List<ExperimentItem> getExperimentItems(String experimentName, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("items")

@@ -118,8 +118,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * reachable; {@code SpansDistributedWrapMutationTest} and {@code SpansUnwrappedMutationTest} prove the mutation paths
  * on both sides of the flag. What this suite adds is the cutover's half — that the gapless wrap's multi-target
  * {@code RENAME} produces the topology that flag expects, and that {@code --unwrap-only} reverses it with post-wrap
- * writes intact. The runbook nonetheless defers the wrap: no {@code ClickHouseSpansTopologyHealthCheck} shipped, so a
- * flag/topology mismatch has no symptom until a span delete fails.
+ * writes intact. The runbook defers the wrap all the same, but no longer for want of a probe: OPIK-8376 shipped
+ * {@code ClickHouseSpansTopologyHealthCheck}, which fails readiness on a mismatch in either direction (see
+ * {@code ClickHouseSpansTopologyHealthCheckTest} and {@code ClickHouseSpansTopologyReadinessTest}). That probe is
+ * what covers the window, because a mismatch is NOT fail-loud at the point of use: spans have no standalone delete,
+ * so the cascade runs in the asynchronous {@code TraceDeletedListener} and the trace delete has already returned 204
+ * by the time the span delete fails. The user is told it succeeded and the spans are still live.
  *
  * <p>Run it with: {@code mvn -o test -Dtest=SpansLocalV2CutoverTest} from {@code apps/opik-backend}.
  */
@@ -794,8 +798,11 @@ class SpansLocalV2CutoverTest {
      *
      * <p>This is the spans-only cause of a version tie — traces had only the "one key written twice at one version"
      * cause — and the {@code version-ties} block detects both with one detector, because both sides group by the
-     * DESTINATION key. A tie on the source with none on the destination (which collapsed them) is the signature, and
-     * {@code verify.sh} reports it as INCONCLUSIVE: not a mismatch, and explicitly not a pass.
+     * DESTINATION key. A tie on the source with none on the destination (which collapsed them) is the signature, which
+     * {@code verify.sh} prints as {@code version_ties=src:N/dst:0} on the differing window. Which VERDICT that lands
+     * in depends on how the arbitrary picks fall: coinciding, the window reaches {@code confirm-keys = 0} and is
+     * reported INCONCLUSIVE; differing — the common case here, the two rows having different content — the key counts
+     * as genuinely differing and the window is a MISMATCH carrying those same counts. Neither is a silent pass.
      *
      * <p>Note what is deliberately NOT asserted: which row wins. That is the whole point — it is arbitrary, and a test
      * that pinned it would be asserting an implementation detail this procedure explicitly refuses to rely on.
@@ -825,8 +832,8 @@ class SpansLocalV2CutoverTest {
 
         assertThat(versionTies("spans_local_v2", Shape.NEW, workspaceId))
                 .as("""
-                        the destination reports none — it collapsed them, which is exactly why the verdict is \
-                        INCONCLUSIVE rather than a mismatch: the tie is on the side that still holds both""")
+                        the destination reports none — it collapsed them, which is the src:N/dst:0 signature \
+                        verify.sh surfaces: the tie is on the side that still holds both""")
                 .isZero();
     }
 
@@ -927,6 +934,64 @@ class SpansLocalV2CutoverTest {
         assertThat(genuinelyDifferingKeys(weekLo, weekHi, workspaceId))
                 .as("while a differing row that WINS it is a real fidelity failure, reported as exactly one key")
                 .isEqualTo(1L);
+    }
+
+    /**
+     * The state {@code verify.sh} prints {@code MISMATCH ... version_ties=src:N/dst:0} for, and the reason it asks the
+     * tie detector on that branch and not only where {@code confirm-keys} returned 0: one window can hold BOTH a
+     * version tie and a genuinely differing key at once.
+     *
+     * <p>Getting the two to coexist deterministically needs two separate keys, because a tie on its own cannot be
+     * pinned to either verdict — whether its two arbitrary winners coincide decides that, and asserting a coin toss is
+     * what {@link #sameSpanUnderTwoParentsAtOneVersionIsAVersionTie()} deliberately refuses to do. So the tie supplies
+     * the {@code src:N/dst:0} signature and an unrelated key supplies the difference, which is the realistic shape
+     * anyway: a window is thousands of spans wide and a tie in it says nothing about the rest.
+     *
+     * <p>What this pins is that the two counts are independent readings of the same window, so the tie can neither
+     * clear the difference nor be hidden by it. A driver that asked for ties only on the {@code confirm-keys = 0}
+     * branch would print none here — leaving the operator a bare MISMATCH for a window whose tie is real, which is
+     * the diagnosis the runbook's triage tells them to read.
+     */
+    @Test
+    void aWindowCanHoldAVersionTieAndAGenuinelyDifferingKeyAtOnce() {
+        var workspaceId = UUID.randomUUID().toString();
+        var projectId = ID_GENERATOR.generateId();
+
+        var seeded = mintIdsInWeek(0, 4);
+        seedSpans(seeded, workspaceId, projectId);
+
+        // The tie: one span id under two parents at ONE last_updated_at, with differing content.
+        var at = weekInstant(0, 5);
+        var tied = SeededSpan.builder()
+                .id(ID_GENERATOR.generateId(at))
+                .traceId(ID_GENERATOR.generateId(at))
+                .createdAt(at)
+                .build();
+        insertRowsWithParent(List.of(tied), workspaceId, projectId, "one", _ -> at,
+                ID_GENERATOR.generateId().toString());
+        insertRowsWithParent(List.of(tied), workspaceId, projectId, "two", _ -> at,
+                ID_GENERATOR.generateId().toString());
+
+        backfillWeek(0);
+
+        // The difference, on an unrelated key: a WINNING version on the destination, so the live rows disagree.
+        var diverged = seeded.getFirst();
+        insertSuccessorSpanAt(diverged, workspaceId, projectId, "diverged-content",
+                diverged.createdAt().plusSeconds(60), "spans_local_v2");
+
+        var weekLo = ClickHouseDateTimeFormat.formatMicros(weekInstant(0, 0));
+        var weekHi = ClickHouseDateTimeFormat.formatMicros(weekInstant(1, 0));
+
+        assertThat(genuinelyDifferingKeys(weekLo, weekHi, workspaceId))
+                .as("""
+                        the window is a MISMATCH, not a confirm-keys = 0 window: at least the diverged key differs,                         and the tied key adds itself or not depending on how its two arbitrary winners fall                        """)
+                .isGreaterThanOrEqualTo(1L);
+        assertThat(versionTies("spans", Shape.OLD, workspaceId))
+                .as("and the SAME window reports the tie, which is what the MISMATCH must be annotated with")
+                .isEqualTo(1L);
+        assertThat(versionTies("spans_local_v2", Shape.NEW, workspaceId))
+                .as("src:N/dst:0 — the destination collapsed the tied rows, so only the source still holds both")
+                .isZero();
     }
 
     // --- usage: Int32 -> Int64 forward, and the narrowing back ---------------------------------------------------
@@ -3092,7 +3157,7 @@ class SpansLocalV2CutoverTest {
      * parent was ever patched.
      *
      * <p>Where the two winners can still disagree is a version TIE, which {@link #versionTies} detects and which
-     * {@code verify.sh} reports as INCONCLUSIVE rather than deciding.
+     * {@code verify.sh} surfaces as {@code version_ties} counts on the differing window rather than deciding.
      */
     private Fingerprint fingerprint(String table, Shape shape, String workspaceId) {
         var hash = rowHash(shape == Shape.OLD ? OLD_HASH_OVERRIDES : NEW_HASH_OVERRIDES);

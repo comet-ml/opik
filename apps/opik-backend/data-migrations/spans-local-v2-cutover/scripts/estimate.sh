@@ -164,8 +164,11 @@ CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" --log_comm
         && [[ "$(awk -v v="$ROWS_PER_SEC" 'BEGIN { print (v >= 1e-6 && v <= 1e12) ? 1 : 0 }')" == "1" ]]; } \
     || { echo "ERROR: --rows-per-sec must be a number between 1e-6 and 1e12 (it divides, so zero and infinity are both out)." >&2; exit 2; }
 
+# --format TabSeparated is explicit, not redundant: clickhouse-client takes a default format from the user's own client
+# config, and a pretty/bordered default would put headers and box-drawing into every scalar read below. Those are parsed
+# as scalars — counts, timestamps and names — so the failure would not be an error, it would be a wrong verdict.
 ch() {
-    clickhouse-client "${CH_ARGS[@]}" --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$1"
 }
 
 # Physical rows to copy (count() honors the deleted-row mask, so masked rows are excluded — as the backfill excludes
