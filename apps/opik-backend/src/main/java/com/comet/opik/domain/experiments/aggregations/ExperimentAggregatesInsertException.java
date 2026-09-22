@@ -19,9 +19,9 @@ package com.comet.opik.domain.experiments.aggregations;
  * first delivery. Wrapping here restores that, and says why, rather than leaving it to a wrapper that
  * happened to be there.
  */
-class ExperimentAggregatesInsertException extends RuntimeException {
+public class ExperimentAggregatesInsertException extends RuntimeException {
 
-    ExperimentAggregatesInsertException(Throwable cause) {
+    public ExperimentAggregatesInsertException(Throwable cause) {
         super("Failed to insert experiment item aggregates", cause);
     }
 }
