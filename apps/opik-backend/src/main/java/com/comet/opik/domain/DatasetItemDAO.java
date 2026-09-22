@@ -1078,16 +1078,23 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
      * change which duplicate wins.
      */
     private Mono<Long> insertJsonEachRow(UUID datasetId, List<DatasetItem> items) {
-        // mapAndInsert opens and closes this segment, so without it a v2 save disappears from the
-        // dataset-item instrumentation stream instead of showing up as a fast insert.
-        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "insert_dataset_items");
+        return makeMonoContextAware((userName, workspaceId) -> {
+            // Started inside the lambda, i.e. on subscription, as mapAndInsert does. Opening it during
+            // assembly would leak the span if the publisher is never subscribed, and would capture
+            // whatever Context.current() happened to be at assembly time as the parent.
+            //
+            // mapAndInsert opens and closes this segment on the R2DBC path, so without it here a v2 save
+            // disappears from the dataset-item instrumentation stream instead of showing up as a fast
+            // insert.
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "insert_dataset_items");
 
-        return makeMonoContextAware((userName, workspaceId) -> jsonBulkInsert.insert(
-                DATASET_ITEMS_TABLE,
-                getLogComment("save_dataset_items", workspaceId, userName, items.size()),
-                items,
-                item -> DatasetItemJsonRowMapper.toJsonRow(item, datasetId, userName, workspaceId)))
-                .doFinally(signalType -> endSegment(segment));
+            return jsonBulkInsert.insert(
+                    DATASET_ITEMS_TABLE,
+                    getLogComment("save_dataset_items", workspaceId, userName, items.size()),
+                    items,
+                    item -> DatasetItemJsonRowMapper.toJsonRow(item, datasetId, userName, workspaceId))
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
     private Mono<Long> mapAndInsert(

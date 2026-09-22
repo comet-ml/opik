@@ -51,6 +51,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.IntStream;
@@ -60,6 +62,7 @@ import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspa
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.datasets.DatasetItemAssertions.assertDatasetItems;
 import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.assertExperimentResults;
+import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -438,7 +441,13 @@ class BulkInsertV2ClientIntegrationTest {
         // Array(String) and data exercises Map(String, String).
         var items = IntStream.range(0, 4)
                 .mapToObj(i -> {
-                    var item = DatasetResourceClient.buildDatasetItem(factory);
+                    var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                            // Explicit rather than podam's: tags is the Array(String) column this path
+                            // owns, and item 3 is left tag-less to cover putStringArray's empty branch.
+                            .tags(i == 3
+                                    ? null
+                                    : Set.of("tag-" + i, "shared-" + RandomStringUtils.secure().nextAlphanumeric(6)))
+                            .build();
                     return i % 2 == 0
                             ? item.toBuilder()
                                     .source(DatasetItemSource.SPAN)
@@ -469,5 +478,20 @@ class BulkInsertV2ClientIntegrationTest {
         // The shared helper rather than field by field: it compares whole objects and owns its list of
         // ignored fields, so a column this path stops writing cannot slip through unnoticed.
         assertDatasetItems(actual, items);
+
+        // tags is in IGNORED_FIELDS_DATA_ITEM, so the comparison above does not see it -- and tags is the
+        // Array(String) column this path is responsible for, the one case the shared helper cannot cover.
+        // Compared as sets, since the column does not promise order.
+        // null and empty are the same cell here: tags is a non-nullable Array(String), so an absent
+        // collection is written as [] by putStringArray and reads back as empty rather than null.
+        var actualTags = actual.stream()
+                .collect(toMap(item -> item.id(), item -> new HashSet<>(Optional.ofNullable(item.tags())
+                        .orElseGet(Set::of))));
+        var expectedTags = items.stream()
+                .collect(toMap(item -> item.id(), item -> new HashSet<>(Optional.ofNullable(item.tags())
+                        .orElseGet(Set::of))));
+        assertThat(actualTags).isEqualTo(expectedTags);
+        // Not vacuous: three of the four carry tags, so a mapper that dropped them would fail here.
+        assertThat(actualTags.values().stream().filter(t -> !t.isEmpty())).hasSize(3);
     }
 }
