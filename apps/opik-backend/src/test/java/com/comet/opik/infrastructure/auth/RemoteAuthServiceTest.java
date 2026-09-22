@@ -38,6 +38,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -627,7 +628,7 @@ class RemoteAuthServiceTest {
     }
 
     @Test
-    void testListEligibleWorkspaces__filtersDefaultAndInternalWorkspacesAndMapsToWorkspaceInfo()
+    void listEligibleWorkspaces__filtersDefaultAndInternalWorkspacesAndMapsToWorkspaceInfo()
             throws JsonProcessingException {
         var sessionTokenValue = "session-" + UUID.randomUUID();
         var production = podamFactory.manufacturePojo(WorkspaceInfo.class).toBuilder().isDefault(false).build();
@@ -722,8 +723,9 @@ class RemoteAuthServiceTest {
     }
 
     @ParameterizedTest
+    @NullAndEmptySource
     @ValueSource(strings = {DEFAULT_WORKSPACE_NAME, "__internal__", "__a__", "  "})
-    void testAuthorizeWorkspace__whenNotEligible__thenForbidden(String workspaceName) {
+    void authorizeWorkspace__whenNotEligible__thenForbidden(String workspaceName) {
         var sessionTokenValue = "session-" + UUID.randomUUID();
 
         assertThatThrownBy(() -> remoteAuthService.authorizeWorkspace(

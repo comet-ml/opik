@@ -293,10 +293,11 @@ class RemoteAuthService implements AuthService {
     }
 
     @Override
-    public UserWorkspace authorizeWorkspace(Cookie sessionToken, @NonNull String workspaceName) {
+    public UserWorkspace authorizeWorkspace(Cookie sessionToken, String workspaceName) {
         requireSession(sessionToken);
         // Mirrors the filtering applied when listing: hiding a workspace from the consent screen is cosmetic unless a
-        // hand-crafted consent submission naming it is rejected too.
+        // hand-crafted consent submission naming it is rejected too. The name comes straight from the consent form and
+        // may be absent, so it is not @NonNull: a missing name is just another ineligible one and must yield the same 403.
         if (!isEligibleWorkspace(workspaceName)) {
             throw new ClientErrorException(NOT_ALLOWED_TO_ACCESS_WORKSPACE, Response.Status.FORBIDDEN);
         }
