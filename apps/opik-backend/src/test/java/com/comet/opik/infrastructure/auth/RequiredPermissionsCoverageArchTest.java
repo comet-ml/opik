@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.annotation.Annotation;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -102,11 +103,20 @@ class RequiredPermissionsCoverageArchTest {
             "AuthenticationResource.checkAccess");
 
     /**
-     * Endpoints that predate the rule and still need a permission chosen, as {@code SimpleClassName.methodName}.
-     * Seeded from {@code main}; only ever meant to shrink, never to grow. This is debt, not approval — see the
-     * class javadoc, including why the {@code // read-shaped} entries are not quick wins.
+     * How many unannotated mutating endpoints existed when this rule landed. A fact about history, so it only
+     * ever gets decremented as the debt is paid down — see {@link #the_seeded_census_must_only_ever_shrink()}.
      */
-    private static final Set<String> PENDING_REVIEW = Set.of(
+    private static final int SEEDED_CENSUS_SIZE = 86;
+
+    /**
+     * The debt exactly as it stood when the rule was introduced — the census, frozen.
+     * <p>
+     * This literal is the historical record and must never gain an entry: a new endpoint predates nothing, so
+     * adding one here would be backdating it into a list whose whole meaning is "already existed". Removing an
+     * entry is the burn-down and is expected, and {@link #the_seeded_census_must_only_ever_shrink()} enforces
+     * that direction so the contract is a build failure rather than a comment.
+     */
+    private static final Set<String> SEEDED_AT_INTRODUCTION = Set.of(
             "AgentConfigsResource.createAgentConfig",
             "AgentConfigsResource.createBlueprintFromMask",
             "AgentConfigsResource.createOrUpdateEnvs",
@@ -117,6 +127,7 @@ class RequiredPermissionsCoverageArchTest {
             "AgentInsightsResource.reportIssues",
             "AgentInsightsResource.updateIssue",
             "AssertionResultsResource.storeAssertionsBatch",
+            "AuthenticationResource.checkAccess", // now waived, see DELIBERATELY_UNGATED
             "AttachmentResource.completeMultiPartUpload",
             "AttachmentResource.deleteAttachments",
             "AttachmentResource.startMultiPartUpload",
@@ -193,6 +204,15 @@ class RequiredPermissionsCoverageArchTest {
             "WorkspacesResource.getMetric", // read-shaped
             "WorkspacesResource.metricsSummary");
 
+    /**
+     * The debt still outstanding: the seeded census minus everything since annotated or waived. Derived rather
+     * than hand-maintained, so closing an endpoint is a one-line deletion from
+     * {@link #SEEDED_AT_INTRODUCTION} and there is no second list to forget to update.
+     */
+    private static final Set<String> PENDING_REVIEW = SEEDED_AT_INTRODUCTION.stream()
+            .filter(entry -> !DELIBERATELY_UNGATED.contains(entry))
+            .collect(Collectors.toUnmodifiableSet());
+
     @ArchTest
     static final ArchRule mutating_private_endpoints_must_declare_required_permissions = methods()
             .that(new DescribedMutatingEndpoint())
@@ -206,18 +226,29 @@ class RequiredPermissionsCoverageArchTest {
                     """);
 
     private static ArchCondition<JavaMethod> declareRequiredPermissionsOrBeListed() {
-        return new ArchCondition<>("declare @RequiredPermissions, or be pending review, or be deliberately ungated") {
+        return new ArchCondition<>("declare a non-empty @RequiredPermissions, or be listed") {
             @Override
             public void check(JavaMethod method, ConditionEvents events) {
                 String identifier = identifier(method);
-                if (method.isAnnotatedWith(RequiredPermissions.class)
-                        || PENDING_REVIEW.contains(identifier)
-                        || DELIBERATELY_UNGATED.contains(identifier)) {
+                if (PENDING_REVIEW.contains(identifier) || DELIBERATELY_UNGATED.contains(identifier)) {
                     return;
                 }
-                events.add(SimpleConditionEvent.violated(method,
-                        "%s is a mutating v1/private endpoint with no @RequiredPermissions"
-                                .formatted(identifier(method))));
+                if (!method.isAnnotatedWith(RequiredPermissions.class)) {
+                    events.add(SimpleConditionEvent.violated(method,
+                            "%s is a mutating v1/private endpoint with no @RequiredPermissions"
+                                    .formatted(identifier)));
+                    return;
+                }
+                // An empty value array is not a weaker annotation, it is the absent case wearing a
+                // declaration: the resolver yields an empty list and NON_EMPTY drops the field, so the
+                // request reaches the auth service identical to one from an unannotated endpoint. Checking
+                // only for the annotation's presence would let a one-character edit defeat this rule while
+                // leaving the endpoint looking gated at the call site.
+                if (method.getAnnotationOfType(RequiredPermissions.class).value().length == 0) {
+                    events.add(SimpleConditionEvent.violated(method,
+                            "%s declares @RequiredPermissions with no permissions, which is gated on workspace membership alone — same as omitting it"
+                                    .formatted(identifier)));
+                }
             }
         };
     }
@@ -244,7 +275,7 @@ class RequiredPermissionsCoverageArchTest {
 
                 @Override
                 public void finish(ConditionEvents events) {
-                    reportStale(events, "PENDING_REVIEW", PENDING_REVIEW);
+                    reportStale(events, "SEEDED_AT_INTRODUCTION", PENDING_REVIEW);
                     reportStale(events, "DELIBERATELY_UNGATED", DELIBERATELY_UNGATED);
                 }
 
@@ -269,6 +300,29 @@ class RequiredPermissionsCoverageArchTest {
     @Test
     void the_two_lists_must_stay_disjoint() {
         assertThat(PENDING_REVIEW).doesNotContainAnyElementsOf(DELIBERATELY_UNGATED);
+    }
+
+    /**
+     * The shrink-only contract, enforced rather than documented.
+     * <p>
+     * Without this, a developer whose new endpoint fails the coverage rule can append one line to the census
+     * and go green — with 86 entries sitting right there modelling exactly that move. A subset assertion does
+     * not catch it, because {@link #PENDING_REVIEW} is derived from the census and is therefore a subset of it
+     * by construction, whatever the census contains.
+     * <p>
+     * So the invariant is pinned to the census's size instead. 86 is a fact about history — how many
+     * unannotated mutating endpoints existed when the rule landed — and it can only ever be paid down. The
+     * number is deliberately awkward: closing an endpoint means deleting its line <i>and</i> decrementing this,
+     * and an addition is caught because the count no longer matches.
+     */
+    @Test
+    void the_seeded_census_must_only_ever_shrink() {
+        assertThat(SEEDED_AT_INTRODUCTION)
+                .as("the census is the frozen record of endpoints that predate the rule. If this failed because "
+                        + "you annotated one, delete its line and decrement the expected size. If it failed "
+                        + "because you added one, a new endpoint predates nothing — annotate it instead, or "
+                        + "waive it in DELIBERATELY_UNGATED with a reason")
+                .hasSizeLessThanOrEqualTo(SEEDED_CENSUS_SIZE);
     }
 
     private static String identifier(JavaMethod method) {
