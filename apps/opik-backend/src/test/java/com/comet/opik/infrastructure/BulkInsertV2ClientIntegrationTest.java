@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -18,7 +19,9 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
@@ -51,13 +54,16 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.AuthTestUtils.mockTargetWorkspace;
@@ -68,6 +74,7 @@ import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.withinPercentage;
 
 /**
  * Covers the {@code bulkInsert.v2ClientEnabled} write path — feedback scores streamed to ClickHouse as
@@ -145,6 +152,7 @@ class BulkInsertV2ClientIntegrationTest {
     private ProjectResourceClient projectResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private DatasetResourceClient datasetResourceClient;
+    private SpanResourceClient spanResourceClient;
 
     @BeforeAll
     void beforeAll(ClientSupport clientSupport, FeedbackScoreDAO feedbackScoreDAO, Injector injector) {
@@ -159,6 +167,7 @@ class BulkInsertV2ClientIntegrationTest {
         projectResourceClient = new ProjectResourceClient(clientSupport, baseUrl, factory);
         experimentResourceClient = new ExperimentResourceClient(clientSupport, baseUrl, factory);
         datasetResourceClient = new DatasetResourceClient(clientSupport, baseUrl);
+        spanResourceClient = new SpanResourceClient(clientSupport, baseUrl);
     }
 
     private <T> T queryOne(String sql, Function<Row, T> mapper) {
@@ -610,9 +619,24 @@ class BulkInsertV2ClientIntegrationTest {
                 .map(trace -> traceResourceClient.getById(trace.id(), WORKSPACE_NAME, API_KEY))
                 .toList();
 
+        // tags is excluded and compared as a set below: Array(String) keeps the order it was written in,
+        // and the source here is a Set, whose iteration order is not defined. Comparing the lists
+        // positionally passes or fails on that ordering rather than on anything the mapper controls.
+        var ignoredTraceFields = Stream
+                .concat(Arrays.stream(TraceAssertions.IGNORED_FIELDS_TRACES), Stream.of("tags"))
+                .toArray(String[]::new);
+
         assertThat(actual)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(TraceAssertions.IGNORED_FIELDS_TRACES)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignoredTraceFields)
                 .containsExactlyInAnyOrderElementsOf(traces);
+
+        // null and empty are the same cell: tags is a non-nullable Array(String), so an absent collection
+        // is written as [] and reads back as empty rather than null.
+        var actualTraceTags = actual.stream().collect(toMap(Trace::id,
+                trace -> new HashSet<>(Optional.ofNullable(trace.tags()).orElseGet(Set::of))));
+        var expectedTraceTags = traces.stream().collect(toMap(Trace::id,
+                trace -> new HashSet<>(Optional.ofNullable(trace.tags()).orElseGet(Set::of))));
+        assertThat(actualTraceTags).isEqualTo(expectedTraceTags);
 
         // Asserted separately because the two are what the Nullable branch is about, and a mapper that
         // wrote the sentinel instead would still satisfy the comparison above on every other field.
@@ -624,9 +648,102 @@ class BulkInsertV2ClientIntegrationTest {
                     assertThat(trace.ttft()).isNull();
                 });
 
-        // tags is not in IGNORED_FIELDS_TRACES, so the comparison above covers it -- including the
-        // tag-less trace, where Array(String) must read back as null or empty rather than failing.
-        assertThat(actual.stream().filter(trace -> trace.tags() != null && !trace.tags().isEmpty()))
-                .hasSize(3);
+        // Not vacuous: three of the four carry tags, so a mapper that dropped them would fail above.
+        assertThat(actualTraceTags.values().stream().filter(tags -> !tags.isEmpty())).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("spans round-trip their usage map and cost, and an absent end_time and ttft stay null")
+    void spansRoundTrip() {
+        var projectName = "v2-spans-" + RandomStringUtils.secure().nextAlphanumeric(12);
+        var trace = newTraceBuilder().projectName(projectName).build();
+        traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+
+        var cost = new BigDecimal("0.000000123456");
+        var spans = IntStream.range(0, 4)
+                .mapToObj(i -> {
+                    var span = factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .parentSpanId(null)
+                            .feedbackScores(null)
+                            .comments(null)
+                            .errorInfo(null)
+                            // Supplied rather than computed, so total_estimated_cost_version must stay
+                            // empty -- the version is stamped only for a cost the DAO derived itself.
+                            .totalEstimatedCost(cost)
+                            .usage(Map.of("prompt_tokens", 11, "completion_tokens", 22))
+                            .build();
+                    return i % 2 == 0 ? span.toBuilder().endTime(null).ttft(null).build() : span;
+                })
+                .toList();
+
+        spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+
+        var actual = spans.stream()
+                .map(span -> spanResourceClient.getById(span.id(), WORKSPACE_NAME, API_KEY))
+                .toList();
+
+        // metadata is excluded on top of the shared list and asserted below instead: SpanDAO's READ path
+        // runs getMetadataWithProvider, which folds the span's provider into the metadata it returns. That
+        // enrichment is independent of the write path, so comparing metadata verbatim would fail on the
+        // R2DBC path too.
+        // tags joins metadata in the exclusions for the ordering reason given in tracesRoundTrip.
+        // ttft is excluded and compared with a tolerance below. This path writes it as a JSON number and
+        // ClickHouse parses that text, which can land 1 ULP off the double the R2DBC driver transmits in
+        // binary. Verified rather than assumed: SpanJsonRowMapperTest shows the mapper's own text is
+        // exact, and this same test passes byte-for-byte with bulkInsert.v2ClientEnabled=false.
+        var ignored = Stream
+                .concat(Arrays.stream(SpanAssertions.IGNORED_FIELDS), Stream.of("metadata", "tags", "ttft"))
+                .toArray(String[]::new);
+
+        assertThat(actual)
+                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(ignored)
+                .containsExactlyInAnyOrderElementsOf(spans);
+
+        // What the mapper is actually responsible for: every key the span carried survives the round trip.
+        // The provider key on top of them is the read-side enrichment above.
+        var expectedMetadata = spans.stream().collect(toMap(Span::id, Span::metadata));
+        assertThat(actual).allSatisfy(span -> {
+            var original = expectedMetadata.get(span.id());
+            original.fieldNames().forEachRemaining(field -> assertThat(span.metadata().get(field))
+                    .as("metadata field '%s'", field)
+                    .isEqualTo(original.get(field)));
+        });
+
+        assertThat(actual).allSatisfy(span -> {
+            // totalEstimatedCost and totalEstimatedCostVersion are both in IGNORED_FIELDS, so the
+            // comparison above never sees them -- and they are the two columns this path owns that no
+            // other slice has. Decimal128(12) written via toPlainString: compared by value, since the
+            // column's scale is not the BigDecimal's.
+            assertThat(span.totalEstimatedCost()).isEqualByComparingTo(cost);
+            // Map(String, Int64), the other span-only column shape.
+            assertThat(span.usage()).containsEntry("prompt_tokens", 11).containsEntry("completion_tokens", 22);
+        });
+
+        var actualSpanTags = actual.stream().collect(toMap(Span::id,
+                span -> new HashSet<>(Optional.ofNullable(span.tags()).orElseGet(Set::of))));
+        var expectedSpanTags = spans.stream().collect(toMap(Span::id,
+                span -> new HashSet<>(Optional.ofNullable(span.tags()).orElseGet(Set::of))));
+        assertThat(actualSpanTags).isEqualTo(expectedSpanTags);
+
+        // The 1-ULP note above: equal to within a relative 1e-12, which is far tighter than any
+        // meaningful ttft difference and far looser than one bit of Float64.
+        var expectedTtft = spans.stream().filter(span -> span.ttft() != null)
+                .collect(toMap(Span::id, Span::ttft));
+        assertThat(expectedTtft).isNotEmpty();
+        assertThat(actual).filteredOn(span -> expectedTtft.containsKey(span.id()))
+                .allSatisfy(span -> assertThat(span.ttft())
+                        .isCloseTo(expectedTtft.get(span.id()), withinPercentage(1e-12)));
+
+        // spanColumnsNonNullable is false here, so an absent end_time/ttft must read back as null rather
+        // than as the epoch or 0.0. The sentinel branch is covered by SpanJsonRowMapperTest.
+        assertThat(actual).filteredOn(span -> spans.stream()
+                .anyMatch(expected -> expected.id().equals(span.id()) && expected.endTime() == null))
+                .isNotEmpty()
+                .allSatisfy(span -> {
+                    assertThat(span.endTime()).isNull();
+                    assertThat(span.ttft()).isNull();
+                });
     }
 }
