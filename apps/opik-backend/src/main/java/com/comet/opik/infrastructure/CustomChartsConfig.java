@@ -39,7 +39,7 @@ public class CustomChartsConfig {
      * booting. Null and blank both mean "no workspace allowlisted".
      */
     @JsonProperty
-    private String enabledWorkspaces = "";
+    private String enabledWorkspaces;
 
     /**
      * Derived: the parsed, stripped, blank-free set of allowlisted workspace ids. Parsed on first use and kept,
