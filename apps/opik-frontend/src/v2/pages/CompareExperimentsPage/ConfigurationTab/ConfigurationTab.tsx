@@ -172,7 +172,13 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   }, [flattenExperimentMetadataMap, experimentsIds]);
 
   const filteredRows = useMemo(() => {
-    const allRows = promptVersionRow ? [promptVersionRow, ...rows] : rows;
+    // A metadata key can legitimately be called "Prompt version"; keep the
+    // real one rather than rendering two indistinguishable rows.
+    const showPromptVersionRow =
+      promptVersionRow &&
+      !rows.some((row) => row.name === PROMPT_VERSION_ROW_NAME);
+
+    const allRows = showPromptVersionRow ? [promptVersionRow, ...rows] : rows;
 
     return allRows.filter((row) => {
       if (isCompare && onlyDiff && !row.different) {

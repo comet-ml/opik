@@ -154,7 +154,29 @@ describe("experiments utilities", () => {
             ],
           }),
         ),
-      ).toBe("My Prompt (v1), Guardrail (v4)");
+      ).toBe("Guardrail (v4), My Prompt (v1)");
+    });
+
+    // The compare view diffs these strings, so two experiments on the same
+    // prompt versions must read as identical no matter what order the backend
+    // returned them in — otherwise they show up as a spurious difference.
+    it("orders labels independently of the backend's ordering", () => {
+      const first = promptVersion();
+      const second = promptVersion({
+        id: "pv2",
+        prompt_name: "Guardrail",
+        version_number: "v4",
+      });
+
+      expect(
+        formatExperimentPromptVersions(
+          experiment({ prompt_versions: [first, second] }),
+        ),
+      ).toBe(
+        formatExperimentPromptVersions(
+          experiment({ prompt_versions: [second, first] }),
+        ),
+      );
     });
 
     it("returns undefined when the experiment has no linked prompt", () => {
