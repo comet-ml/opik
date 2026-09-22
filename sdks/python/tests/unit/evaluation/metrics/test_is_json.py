@@ -41,6 +41,10 @@ from opik.evaluation.metrics.heuristics import is_json
         r'"with \"escaped\" quotes"',
         r'"line1\nline2"',
         '"   "',
+        # Overflowing numbers are still grammatically valid JSON numbers: they
+        # parse to inf here and to Infinity under JSON.parse, so both SDKs agree.
+        "1e400",
+        "-1e400",
     ],
 )
 def test_is_json__valid_json_inputs__returns_score_one(valid_json_str: str) -> None:
@@ -87,6 +91,14 @@ def test_is_json__valid_json_inputs__returns_score_one(valid_json_str: str) -> N
         '{ 123: "value" }',
         # Unsupported JavaScript literals
         "undefined",
+        # Non-standard float literals accepted by Python's json as an extension
+        "NaN",
+        "Infinity",
+        "-Infinity",
+        '{"score": NaN}',
+        "[1, Infinity]",
+        '{"a": [1, -Infinity]}',
+        "  NaN  ",
         # Malformed single tokens
         "{",
         "}",
@@ -122,6 +134,8 @@ def test_is_json__malformed_or_empty_strings__returns_score_zero(
         {},
         [1, 2, 3],
         [],
+        b'{"key": "value"}',
+        bytearray(b"[1, 2, 3]"),
         (1, 2, 3),
         {1, 2, 3},
         object(),

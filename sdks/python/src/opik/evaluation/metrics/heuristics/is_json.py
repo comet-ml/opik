@@ -4,12 +4,27 @@ from typing import Any, Optional
 from .. import base_metric, score_result
 
 
+def _reject_non_standard_constant(constant: str) -> None:
+    raise ValueError(f"{constant} is not valid JSON per RFC 8259")
+
+
+# Passing any keyword argument to json.loads() makes it bypass its cached decoder
+# and build a new one per call; this metric runs once per dataset row, so the
+# decoder is created once here instead.
+_DECODER = json.JSONDecoder(parse_constant=_reject_non_standard_constant)
+
+
 class IsJson(base_metric.BaseMetric):
     """
     A metric that checks if a given output string is valid JSON.
 
     This metric returns a score of 1.0 if the output string can be parsed as JSON,
     and 0.0 otherwise.
+
+    Parsing is strict. The NaN, Infinity and -Infinity literals that Python's json
+    module accepts as an extension are not part of the JSON grammar, so they are
+    scored 0.0, matching JSON.parse and the Opik TypeScript SDK. Only str inputs
+    can score 1.0; bytes and every other type are scored 0.0.
 
     Args:
         name: The name of the metric. Defaults to "is_json_metric".
@@ -48,7 +63,7 @@ class IsJson(base_metric.BaseMetric):
                 is valid JSON, 0.0 otherwise.
         """
         try:
-            json.loads(output)
+            _DECODER.decode(output)
             return score_result.ScoreResult(value=1.0, name=self.name)
         except Exception:
             return score_result.ScoreResult(value=0.0, name=self.name)
