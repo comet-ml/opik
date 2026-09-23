@@ -1295,3 +1295,35 @@ def test_sentiment__unrelated_analyzer_failure_is_not_swallowed(monkeypatch):
 
     with pytest.raises(RuntimeError, match="corrupt"):
         sentiment.Sentiment(track=False)
+
+
+def test_vader_lexicon__interrupted_download_can_be_retried(monkeypatch):
+    # The attempt is remembered so an offline process does not retry forever, but an
+    # interruption is not an answer about the corpus. Recording it before the download
+    # meant a Ctrl-C during the fetch left the flag set and every later construction
+    # reported the corpus missing without ever trying again.
+    from opik.evaluation.metrics.heuristics import _vader_lexicon
+
+    calls = []
+
+    class InterruptedNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            calls.append(name)
+            if len(calls) == 1:
+                raise KeyboardInterrupt
+            return None
+
+    monkeypatch.setattr(_vader_lexicon, "nltk", InterruptedNLTK)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
+
+    with pytest.raises(KeyboardInterrupt):
+        _vader_lexicon._download_lexicon_once()
+
+    assert _vader_lexicon._download_attempted is False, (
+        "an interrupted download is not a completed attempt"
+    )
+
+    _vader_lexicon._download_lexicon_once()
+    assert calls == ["vader_lexicon", "vader_lexicon"]
+    assert _vader_lexicon._download_attempted is True

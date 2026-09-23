@@ -34,13 +34,16 @@ def _download_lexicon_once() -> None:
     with _download_lock:
         if _download_attempted or nltk is None:
             return
-        _download_attempted = True
         try:
             nltk.download("vader_lexicon", quiet=True)
         except Exception:
             # Whether the fetch failed or was never possible, what matters to the caller
             # is that the corpus is still missing, which it checks next.
             pass
+        # Recorded after the attempt, not before: a KeyboardInterrupt or SystemExit
+        # during the download propagates without reaching this line, so the process
+        # can still try again rather than reporting the corpus missing forever.
+        _download_attempted = True
 
 
 def build_analyzer(factory: Callable[[], Any], *, error_message: str) -> Any:
