@@ -583,7 +583,9 @@ def test_find_experiment_items_for_dataset__malformed_page_shapes_are_named(
 
 
 @pytest.mark.parametrize("field", ["feedback_scores", "assertion_results"])
-def test_find_experiment_items_for_dataset__non_list_score_fields_do_not_parse(field):
+def test_find_experiment_items_for_dataset__non_list_feedback_or_assertion_fields_do_not_parse(
+    field,
+):
     # The dangerous shape: `list()` over a dict yields its keys and over a string its
     # characters, so a malformed `assertion_results` would otherwise become a list of
     # plausible-looking nonsense instead of an error -- and a migration documented as
@@ -600,3 +602,73 @@ def test_find_experiment_items_for_dataset__non_list_score_fields_do_not_parse(f
 
     with pytest.raises(exceptions.OpikException, match=f"`{field}` is a dict"):
         _read_body(body)
+
+
+@pytest.mark.parametrize("falsy", ['""', "0", "false"])
+@pytest.mark.parametrize(
+    "field", ["content", "experiment_items", "feedback_scores", "assertion_results"]
+)
+def test_find_experiment_items_for_dataset__falsy_non_list_fields_still_raise(
+    field, falsy
+):
+    # `x or []` would default on these too, so a field the backend sent as `""`, `0` or
+    # `false` would read as an empty list and the read would return a short result
+    # instead of failing. Only an absent key and an explicit `null` are empty.
+    compare = {"id": "e-1", "trace_id": "t-1", "dataset_item_id": "d-1"}
+    if field in ("feedback_scores", "assertion_results"):
+        body = (
+            '{"content": [{"id": "d-1", "experiment_items":'
+            f' [{json.dumps(compare)[:-1]}, "{field}": {falsy}}}]}}], "total": 1}}'
+        )
+    elif field == "experiment_items":
+        body = (
+            f'{{"content": [{{"id": "d-1", "experiment_items": {falsy}}}], "total": 1}}'
+        )
+    else:
+        body = f'{{"content": {falsy}, "total": 1}}'
+
+    with pytest.raises(exceptions.OpikException, match=f"`{field}` is a"):
+        _read_body(body)
+
+
+@pytest.mark.parametrize(
+    "field", ["content", "experiment_items", "feedback_scores", "assertion_results"]
+)
+def test_find_experiment_items_for_dataset__null_list_fields_read_as_empty(field):
+    # The other half of the same rule: an explicit `null` is the empty list, which is
+    # what the backend actually sends for a row with no scores or assertions.
+    compare = {
+        "id": "e-1",
+        "trace_id": "t-1",
+        "dataset_item_id": "d-1",
+        "feedback_scores": None,
+        "assertion_results": None,
+    }
+    if field == "content":
+        body = json.dumps({"content": None, "total": 0})
+    elif field == "experiment_items":
+        body = json.dumps(
+            {"content": [{"id": "d-1", "experiment_items": None}], "total": 1}
+        )
+    else:
+        body = json.dumps(
+            {"content": [{"id": "d-1", "experiment_items": [compare]}], "total": 1}
+        )
+
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=_BodyHttpxClient(body))
+    )
+    items = rest_operations.find_experiment_items_for_dataset(
+        rest_client=rest_client,
+        dataset_id="some-dataset-id",
+        experiment_ids=["some-experiment-id"],
+        max_results=10,
+        truncate=False,
+    )
+
+    if field in ("content", "experiment_items"):
+        assert items == []
+    else:
+        assert len(items) == 1
+        assert items[0].feedback_scores == []
+        assert items[0].assertion_results == []

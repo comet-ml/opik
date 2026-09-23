@@ -28,6 +28,19 @@ def require_json_type(value: Any, expected: Type[T], what: str) -> T:
     return value
 
 
+def optional_json_list(value: Any, what: str) -> List[Any]:
+    """``value`` as a list, an absent or null field reading as an empty one.
+
+    Spelled out rather than ``value or []``, which defaults on every falsy value: ``""``,
+    ``0`` and ``False`` are not lists, and a field carrying one of them means the
+    response is malformed, not that the list is empty. Only an absent key and an
+    explicit ``null`` are the empty list.
+    """
+    if value is None:
+        return []
+    return require_json_type(value, list, what)
+
+
 @dataclasses.dataclass
 class ExperimentItemReferences:
     dataset_item_id: str
@@ -68,8 +81,8 @@ class ExperimentItemContent:
                 "reason": score.get("reason"),
                 "value": score.get("value"),
             }
-            for score in require_json_type(
-                value.get("feedback_scores") or [], list, "`feedback_scores`"
+            for score in optional_json_list(
+                value.get("feedback_scores"), "`feedback_scores`"
             )
         ]
 
@@ -85,8 +98,8 @@ class ExperimentItemContent:
             evaluation_task_output=value.get("output"),
             feedback_scores=feedback_scores,
             assertion_results=list(
-                require_json_type(
-                    value.get("assertion_results") or [], list, "`assertion_results`"
+                optional_json_list(
+                    value.get("assertion_results"), "`assertion_results`"
                 )
             ),
         )

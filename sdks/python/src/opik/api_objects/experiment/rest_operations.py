@@ -224,17 +224,15 @@ def _collect_page(
 ) -> None:
     """Append one page's experiment items, stopping at ``max_results``."""
     headroom = max_results - len(collected_items)
-    content = experiment_item.require_json_type(
-        page.get("content") or [], list, "`content`"
-    )
+    content = experiment_item.optional_json_list(page.get("content"), "`content`")
     if headroom <= 0 or not content:
         return
 
     page_items = []
     for dataset_item in content:
         experiment_item.require_json_type(dataset_item, dict, "a `content` entry")
-        for experiment_item_compare in experiment_item.require_json_type(
-            dataset_item.get("experiment_items") or [], list, "`experiment_items`"
+        for experiment_item_compare in experiment_item.optional_json_list(
+            dataset_item.get("experiment_items"), "`experiment_items`"
         ):
             dataset_item_data = dataset_item.get("data")
             if dataset_item_data is not None:
