@@ -9,7 +9,7 @@ import useAgentInsightsIssuesList from "@/api/signals/useAgentInsightsIssuesList
 import useTracesList from "@/api/traces/useTracesList";
 import { AGENT_INSIGHTS_ISSUE_STATUS } from "@/types/signals";
 import { COLUMN_TYPE } from "@/types/shared";
-import { AUTO_FIRST_RUN_WINDOW_MS } from "@/v2/pages/SignalsPage/helpers";
+import { AUTO_FIRST_RUN_WINDOW_MS } from "@/constants/diagnostics";
 
 type DiagnosticsReadyBadgeProps = {
   projectId: string;

@@ -46,7 +46,7 @@ import useColumnsOverflow from "@/v2/pages/SignalsPage/useColumnsOverflow";
 import {
   AUTO_FIRST_RUN_WINDOW_MS,
   AUTO_RUN_MAX_DURATION_MS,
-} from "@/v2/pages/SignalsPage/helpers";
+} from "@/constants/diagnostics";
 
 const RUN_POLL_INTERVAL_MS = 8000;
 const ELIGIBILITY_POLL_INTERVAL_MS = 30_000;

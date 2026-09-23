@@ -8,7 +8,7 @@ import OutOfCreditsButton from "@/v2/pages/SignalsPage/OutOfCreditsButton";
 import sampleIssuesLightUrl from "/images/diagnostics-sample-issues-light.svg";
 import sampleIssuesDarkUrl from "/images/diagnostics-sample-issues-dark.svg";
 
-import { AUTO_FIRST_RUN_MIN_TRACES as TRACE_THRESHOLD } from "@/v2/pages/SignalsPage/helpers";
+import { AUTO_FIRST_RUN_MIN_TRACES as TRACE_THRESHOLD } from "@/constants/diagnostics";
 
 const DIAGNOSTICS_DOCS_URL = buildDocsUrl("/tracing/diagnostics");
 

@@ -5,7 +5,7 @@ import { useActiveProjectId } from "@/store/AppStore";
 import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
 import useDiagnosticsRunState from "@/hooks/useDiagnosticsRunState";
 import useDiagnosticsSeen from "@/hooks/useDiagnosticsSeen";
-import { AUTO_RUN_MAX_DURATION_MS } from "@/v2/pages/SignalsPage/helpers";
+import { AUTO_RUN_MAX_DURATION_MS } from "@/constants/diagnostics";
 import DiagnosticsReadyBadge from "@/v2/layout/SideBar/MenuItem/DiagnosticsReadyBadge";
 
 type DiagnosticsNavBadgeProps = {
@@ -32,7 +32,6 @@ const DiagnosticsNavBadge: React.FC<DiagnosticsNavBadgeProps> = ({
   const hasUnseen =
     !isRunning && scanMs > 0 && (!lastSeen || scanMs > Date.parse(lastSeen));
 
-  // Only the free automatic run gets the Ready badge, every other report the plain dot
   const isAutoFirstRunResult =
     autoRunAt > 0 &&
     scanMs >= autoRunAt &&
@@ -42,8 +41,8 @@ const DiagnosticsNavBadge: React.FC<DiagnosticsNavBadgeProps> = ({
   const showSpinner = isRunning && !collapsed;
   if (!showSpinner && !hasUnseen) return null;
 
-  // The free run's report gets a labelled badge, which only fits the expanded sidebar; on the collapsed rail it
-  // pulses instead. Every other report gets the plain dot.
+  // Only the free automatic run's report gets the Ready badge, which fits the expanded sidebar only; on the
+  // collapsed rail it pulses instead. Every other report gets the plain dot.
   if (!showSpinner && isAutoFirstRunResult && !collapsed) {
     return (
       <span className="ml-auto flex shrink-0 items-center justify-center pl-1">
