@@ -4711,6 +4711,53 @@ class SpansResourceTest {
         }
 
         @Test
+        @DisplayName("Batch create span without source defaults to null (unknown in storage)")
+        void batchCreateSpanWithoutSourceDefaultsToNull() {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .source(null)
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(span), API_KEY, TEST_WORKSPACE);
+
+            var actual = spanResourceClient.getById(span.id(), TEST_WORKSPACE, API_KEY);
+            assertThat(actual.source()).isNull();
+        }
+
+        @Test
+        @DisplayName("Update without source keeps the source the span was created with")
+        void updateWithoutSourceKeepsExistingSource() {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .source(Source.EXPERIMENT)
+                    .build();
+            var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // The partial-insert merge keeps the old value only while it is not 'unknown', which is
+            // what an absent source binds as — so a no-source update must not downgrade it.
+            spanResourceClient.updateSpan(id, podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .source(null)
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var actual = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(actual.source()).isEqualTo(Source.EXPERIMENT);
+        }
+
+        @Test
         @DisplayName("Create span with invalid source returns 400")
         void createSpanWithInvalidSourceReturns400() {
             var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
