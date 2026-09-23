@@ -2,6 +2,7 @@ export { test, expect } from './prompt-experiments.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
+  FailingProviderSeed,
   ProviderKeysFixture,
   ProviderKeyFixtures,
 } from './provider-key.fixture';

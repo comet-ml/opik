@@ -757,6 +757,7 @@ areas:
       - online-evaluation/online-evaluation-experiment-scope-hidden-filters.spec.ts
       - online-evaluation/online-evaluation-json-looking-judge-prompts.spec.ts
       - online-evaluation/online-evaluation-judge-prompt-round-trip.spec.ts
+      - online-evaluation/online-evaluation-llm-judge-provider-failure.spec.ts
       - online-evaluation/online-evaluation-non-object-sections.spec.ts
       - online-evaluation/online-evaluation-oversized-payload.spec.ts
       - online-evaluation/online-evaluation-provider-error-classification.spec.ts
@@ -768,7 +769,7 @@ areas:
       - online-evaluation/online-evaluation-thread-scope-batch-close.spec.ts
     capabilities:
       create-llm-judge-rule:   { covered: true,  tier: t1-smoke }
-      llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe; t2 also covers provider-failure classification (OPIK-8262) — a permanent status costs exactly one upstream call, a transient one the whole retry budget, and neither writes a score" }
+      llm-judge-scores:        { covered: true,  tier: t1-smoke, note: "bimodal safe/unsafe; t2 also covers provider-failure classification (OPIK-8262) — a permanent status costs exactly one upstream call, a transient one the whole retry budget, and neither writes a score; t2 also pins the no-score half on EVERY deployment (online-evaluation-llm-judge-provider-failure.spec.ts), where a refused judge leaves the trace carrying its control rule's score and nothing else — the classification spec needs the host-run mock gateway and so can only make that claim on oss" }
       create-python-rule:      { covered: true,  tier: t1-smoke }
       python-rule-scores:      { covered: true,  tier: t1-smoke, note: "deterministic 3x1.0 / 2x0.0; t2 also covers sub-path mappings over non-object sections and the 400-class classification of a metric that exits 0 without a result line; t3 covers a span-scope rule still scoring the spans logged AFTER a 21M-character span, which is the OPIK-8164 wedge — the oversized span's own score is deliberately not asserted, since whether it is scored depends on the deployment's Jackson stream-read limits; t2 also covers the THREAD-scope metric contract, where the runner hands the metric the whole conversation positionally instead of a mapped argument map (online-evaluation-thread-scope-batch-close.spec.ts); t2 also covers per-score USABILITY (online-evaluation-python-score-usability.spec.ts), which is a different question from every clause above — those all ask whether the evaluator ran, this asks which of a run's scores survived: four rules judge one trace, so a ScoreResult(value=None) and a scoring_failed=True 0.0 each answer 400 once and store nothing, a mixed list keeps its usable score while naming each dropped one by its own cause on the rule log, and a deliberate 0.0 still lands — the flagged and the deliberate zero being the same number on the same trace is what separates over-dropping from under-dropping" }
       scores-in-trace-panel:   { covered: true,  tier: t1-smoke, note: "t1 reads an LLM-judge score's value back off the panel; t2 also pins the row set by EXHAUSTION on a trace whose rules dropped scores server-side (online-evaluation-python-score-usability.spec.ts) — exactly two rows for two stored scores, addressed by data-row-id, with no row for any of the four dropped names, so a panel that rendered a score the backend refused fails here" }
@@ -826,7 +827,7 @@ areas:
       edit-rule:               { covered: true,  tier: t2-cuj, note: "plain-string prompt: edit-dialog hydration + no-op re-save, byte-for-byte; content_array prompt: API-only read-then-write re-save, no dialog gesture; model custom_parameters: rule seeded over REST, saved unchanged through the edit dialog, PATCH body and persisted blob both asserted to carry the thinking block and an unrelated free-form key; editing a field through the dialog is not covered" }
       enable-disable-rule:     { covered: true,  tier: t2-cuj, note: "edit-dialog switch; control rule proves scoring stopped, then resumed" }
       delete-rule:             { covered: true,  tier: t2-cuj, note: "row kebab delete; control rule proves scoring stopped" }
-      # Flipped by two specs that open the /$workspaceName/automation-logs PAGE
+      # Flipped by three specs that open the /$workspaceName/automation-logs PAGE
       # itself (AutomationLogsPage) and assert the rendered rows — not, as the
       # API-only specs do, the GET /automations/evaluators/{id}/logs stream
       # behind it. That distinction is why this key stayed false while
@@ -841,10 +842,28 @@ areas:
       #     needs the backend to reach the host-run mock gateway, so it skips on
       #     any deployment other than oss (mockAuthSkipReason) — the same gate as
       #     configuration's ai-provider-add / ai-provider-token-refetch.
+      #   - llm-judge-provider-failure.spec.ts: the only one that pins the
+      #     rendered stream by EXHAUSTION — every row read back and compared
+      #     line-for-line against the same rule's GET
+      #     /automations/evaluators/{id}/logs, so a dropped line or a foreign
+      #     rule's line fails where a filtered row-count cannot see either. It
+      #     also adds the trace_id MARKER column, newest-first ORDER, and
+      #     expanding one ERROR row to reveal the multi-line body the collapsed
+      #     cell hides. Its provider is a 404 route on the backend's own
+      #     connector, so like the thread-judge spec it runs on EVERY deployment.
       #
-      # So the flag itself is not oss-only: the thread-judge spec holds it up
-      # everywhere, and the classification spec deepens it on oss.
-      automation-logs:         { covered: true,  tier: t2-cuj, note: "rule_id-scoped log stream renders: one ERROR row per failed thread and no others (thread-judge-provider-failure, every deployment); and Evaluating / Sending / ERROR rows for one seeded trace id on a failed LLM-judge rule (provider-error-classification, oss only — it needs the host-run mock gateway). Both are deliberately silent on refresh, expand-all and marker columns" }
+      # Note that online-evaluation-python-metric-errors.spec.ts asserts the same
+      # API stream and deliberately does NOT claim this key: an API read says
+      # nothing about what renders. That distinction is why this key stayed false
+      # for as long as it did.
+      #
+      # So the flag itself is not oss-only: the thread-judge and
+      # llm-judge-provider-failure specs hold it up everywhere, and the
+      # classification spec deepens it on oss.
+      #
+      # Still uncovered: the refresh control, the expand-ALL toggle (one row at a
+      # time is covered), and column resizing.
+      automation-logs:         { covered: true,  tier: t2-cuj, note: "rule_id-scoped log stream renders, failing-judge rules only: one ERROR row per failed thread and no others (thread-judge-provider-failure, every deployment); Evaluating / Sending / ERROR rows for one seeded trace id (provider-error-classification, oss only — it needs the host-run mock gateway); and the whole stream pinned by exhaustion against the rule-logs API, plus the trace_id marker column, newest-first order and a single ERROR row expanded to reveal the provider status (llm-judge-provider-failure, every deployment). Refresh, expand-all and column resize are not exercised" }
 
     visual:
       online-evaluation-empty: { covered: true,  state: empty,   spec: "empty-states.spec.ts E11" }
