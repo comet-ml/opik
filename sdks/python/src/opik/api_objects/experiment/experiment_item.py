@@ -55,15 +55,22 @@ def optional_json_list(
 def _require_leaf_type(value: Any, expected: Any, what: str) -> None:
     """Check one leaf field of a Compare entry, when it is present and not null.
 
-    Applied to every field this read copies into a declared-type SDK dict, and to no
-    others -- that is the whole set, since the remaining fields on the Compare models
-    are not read here at all. Passing a value of the wrong type through is not inert:
+    Applied to the record's own ``id`` / ``trace_id`` / ``dataset_item_id``, and to the
+    score and assertion leaves. Passing a value of the wrong type through is not inert:
     ``passed`` is mapped onto a status with ``"passed" if passed else "failed"``, where
     the string ``"false"`` is truthy and records a failed assertion as passed; an
     assertion's ``value`` becomes the ``Required[str]`` ``name`` of an ingested
     assertion; and a score ``value`` is declared ``float`` and aggregated over.
     Re-deriving the *rest* of the schema per node is the cost this read exists to
     avoid, and this stops short of it.
+
+    ``input`` and ``output`` are deliberately **not** checked, and this is not an
+    oversight: ``JsonListStringCompare`` is ``Union[Dict, List[Dict], str]``, so the
+    API permits a string or a list where ``dataset_item_data`` and
+    ``evaluation_task_output`` are annotated ``Optional[Dict[str, Any]]``. The
+    annotation is narrower than the wire contract -- a discrepancy that predates this
+    read -- so enforcing ``dict`` here would reject responses the backend is entitled
+    to send.
 
     Absence stays permissive -- an omitted or ``null`` field is what the backend sends
     for a missing score, reason or verdict, and rejecting it would fail reads that work
@@ -129,9 +136,20 @@ class ExperimentItemContent:
             _require_leaf_type(
                 score.get("value"), (int, float), "a `feedback_scores` entry's `value`"
             )
-            for key in ("name", "category_name", "reason"):
+            for key in ("category_name", "reason"):
                 _require_leaf_type(
                     score.get(key), str, f"a `feedback_scores` entry's `{key}`"
+                )
+            # `name` is the one leaf where absence is malformed rather than empty: it
+            # is required and `@NotBlank` on the backend, required on the Compare
+            # model, and `Required[str]` on `FeedbackScoreDict`.
+            name = score.get("name")
+            _require_leaf_type(name, str, "a `feedback_scores` entry's `name`")
+            if name is None or not name.strip():
+                raise exceptions.OpikException(
+                    "The experiment Compare response is malformed: a "
+                    "`feedback_scores` entry's `name` is missing or blank, and a "
+                    "score name is required."
                 )
             feedback_scores.append(
                 {
@@ -154,6 +172,11 @@ class ExperimentItemContent:
                     result.get(key), str, f"an `assertion_results` entry's `{key}`"
                 )
             assertion_results.append(result)
+
+        # Indexing above already fails a page that omits these; this adds the type,
+        # since all three are `str` on the record they build.
+        for key in ("id", "trace_id", "dataset_item_id"):
+            _require_leaf_type(value[key], str, f"an experiment item's `{key}`")
 
         return cls(
             # Indexed, not `.get`: a page missing these is a broken response, and a

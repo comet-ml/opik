@@ -851,3 +851,68 @@ def test_find_experiment_items_for_dataset__absent_leaf_fields_still_parse():
     assert items[0].feedback_scores == [
         {"category_name": None, "name": "accuracy", "reason": None, "value": 1.0}
     ]
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        (None, "`name` is missing or blank"),
+        ("", "`name` is missing or blank"),
+        ("   ", "`name` is missing or blank"),
+        (3, "`feedback_scores` entry's `name` is a"),
+    ],
+)
+def test_find_experiment_items_for_dataset__blank_score_name_does_not_parse(
+    name, expected
+):
+    # `name` is the one leaf where absence is malformed rather than empty: the backend
+    # declares it `@NotBlank`, the Compare model requires it, and `FeedbackScoreDict`
+    # types it `Required[str]`.
+    entry: Dict[str, Any] = {"value": 1.0}
+    if name is not None:
+        entry["name"] = name
+
+    with pytest.raises(exceptions.OpikException, match=expected):
+        _read_one_item("feedback_scores", entry)
+
+
+@pytest.mark.parametrize("key", ["id", "trace_id", "dataset_item_id"])
+def test_find_experiment_items_for_dataset__non_string_record_ids_do_not_parse(key):
+    # All three are `str` on `ExperimentItemContent`; indexing already fails when they
+    # are absent, so this covers the present-but-wrong-type case.
+    compare = {"id": "e-1", "trace_id": "t-1", "dataset_item_id": "d-1", key: 7}
+    body = json.dumps(
+        {"content": [{"id": "d-1", "experiment_items": [compare]}], "total": 1}
+    )
+
+    with pytest.raises(exceptions.OpikException, match=f"experiment item's `{key}` is"):
+        _read_body(body)
+
+
+@pytest.mark.parametrize("payload", ["plain text", [{"a": 1}], {"a": 1}])
+def test_find_experiment_items_for_dataset__string_or_list_output_still_parses(payload):
+    # `JsonListStringCompare` is `Union[Dict, List[Dict], str]`, so the API may send
+    # any of these for `input`/`output`. Rejecting the non-dict shapes would fail
+    # responses the backend is entitled to send.
+    compare = {
+        "id": "e-1",
+        "trace_id": "t-1",
+        "dataset_item_id": "d-1",
+        "output": payload,
+    }
+    body = json.dumps(
+        {"content": [{"id": "d-1", "experiment_items": [compare]}], "total": 1}
+    )
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=_BodyHttpxClient(body))
+    )
+
+    items = rest_operations.find_experiment_items_for_dataset(
+        rest_client=rest_client,
+        dataset_id="some-dataset-id",
+        experiment_ids=["some-experiment-id"],
+        max_results=10,
+        truncate=False,
+    )
+
+    assert items[0].evaluation_task_output == payload
