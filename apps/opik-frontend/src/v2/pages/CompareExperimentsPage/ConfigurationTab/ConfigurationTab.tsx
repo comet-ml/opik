@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { GitCommitVertical } from "lucide-react";
 import { BooleanParam, StringParam, useQueryParam } from "use-query-params";
 import { ColumnPinningState } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
@@ -25,10 +26,7 @@ import SearchInput from "@/shared/SearchInput/SearchInput";
 import NavigationTag from "@/shared/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
-import {
-  formatExperimentPromptVersions,
-  formatPromptVersionLabel,
-} from "@/lib/experiments";
+import { formatExperimentPromptVersions } from "@/lib/experiments";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
@@ -221,15 +219,27 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
             className="w-[200px] shrink-0"
             dimension="xs"
           ></SearchInput>
-          {promptVersions.map((pv) => (
-            <NavigationTag
-              key={pv.id}
-              id={pv.prompt_id}
-              name={formatPromptVersionLabel(pv)}
-              resource={RESOURCE_TYPE.prompt}
-              search={{ activeVersionId: pv.id }}
-            />
-          ))}
+          {promptVersions.map((pv) => {
+            const version = pv.version_number ?? pv.commit;
+
+            return (
+              <NavigationTag
+                key={pv.id}
+                id={pv.prompt_id}
+                name={pv.prompt_name}
+                resource={RESOURCE_TYPE.prompt}
+                search={{ activeVersionId: pv.id }}
+                suffix={
+                  version ? (
+                    <span className="flex items-center gap-0 pt-px text-xs text-muted-slate">
+                      <GitCommitVertical className="size-[10px]" />
+                      {version}
+                    </span>
+                  ) : undefined
+                }
+              />
+            );
+          })}
         </div>
         <div className="flex items-center gap-2">
           <CompareExperimentsActionsPanel />
