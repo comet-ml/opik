@@ -59,6 +59,20 @@ test.describe('Trace bulk tagging — CUJ', { tag: ['@t2-cuj', '@area:traces'] }
 
     const logs = new LogsPage(page);
 
+    // Every trace-scoped PATCH the page issues, recorded from before the first
+    // click. The read-back below says the right five traces ended up with the
+    // right tags; it cannot say the dialog got there in one batch. A dialog
+    // that fell back to one `PATCH /traces/{id}` per selected row would leave
+    // exactly the same rows behind and satisfy every assertion in this spec —
+    // and `PATCH /traces/batch` is precisely what has no other e2e caller.
+    const tracePatches: Array<{ pathname: string; body: unknown }> = [];
+    page.on('request', (request) => {
+      if (request.method() !== 'PATCH') return;
+      const { pathname } = new URL(request.url());
+      if (!pathname.includes('/v1/private/traces')) return;
+      tracePatches.push({ pathname, body: request.postDataJSON() });
+    });
+
     await test.step('Open Logs and tick three of the five rows', async () => {
       await logs.goto(project.id);
       await logs.waitForReady();
@@ -72,6 +86,28 @@ test.describe('Trace bulk tagging — CUJ', { tag: ['@t2-cuj', '@area:traces'] }
 
     await test.step('Add a shared tag through the Manage shared tags dialog', async () => {
       await logs.addSharedTagToSelection(sharedTag, selected.length);
+    });
+
+    await test.step('The dialog sent one batch PATCH naming exactly the selected ids', async () => {
+      expect(
+        tracePatches.map((p) => p.pathname),
+        'exactly one trace PATCH, and it is the batch endpoint',
+      ).toEqual([expect.stringMatching(/\/v1\/private\/traces\/batch$/)]);
+
+      const body = tracePatches[0].body as {
+        ids?: string[];
+        update?: { tags_to_add?: string[]; tags_to_remove?: string[] };
+      };
+      expect([...(body.ids ?? [])].sort(), 'the ids the batch was asked to touch').toEqual(
+        selected.map((i) => all[i].id).sort(),
+      );
+      // Add-and-remove, not a whole-list replace: the merge semantics the
+      // read-back asserts are decided here, by which key the payload carries.
+      expect(body.update?.tags_to_add ?? [], 'the batch adds the shared tag').toEqual([sharedTag]);
+      expect(
+        body.update?.tags_to_remove ?? [],
+        'the batch removes nothing, so each trace keeps its own tag',
+      ).toEqual([]);
     });
 
     await test.step('Each selected trace carries the new tag AND the one it already had', async () => {
