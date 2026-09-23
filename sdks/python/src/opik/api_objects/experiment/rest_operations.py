@@ -110,9 +110,12 @@ def find_experiment_items_for_dataset(
         if last_page is not None and next_page > last_page:
             break
 
-        # A dataset item almost always carries one experiment item, so this is
-        # the page count the rest of the read needs; a sparser page only costs
-        # another wave rather than a wrong result.
+        # Pages are dataset-item rows, `max_results` counts experiment items, and a
+        # row carries one item per experiment id -- so this is the page count only
+        # for the common single-id read. Either way it costs requests, not
+        # correctness: a denser page overshoots and the extra pages are trimmed to
+        # `max_results`, a sparser one undershoots and takes another wave. The exact
+        # count needs the items-per-row ratio, which is not known until pages arrive.
         wave_size = math.ceil((max_results - len(collected_items)) / page_size)
         if last_page is not None:
             wave_size = min(wave_size, last_page - next_page + 1)
