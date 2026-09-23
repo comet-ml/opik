@@ -2,11 +2,14 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentInsightsJob;
 import com.comet.opik.infrastructure.AgentInsightsReportConfig;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -14,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -73,14 +75,22 @@ public class PlatformAgentInsightsReportClient implements AgentInsightsReportCli
 
     private String readPaymentRequiredReason(Response response) {
         try {
-            var body = response.readEntity(new GenericType<Map<String, Object>>() {
-            });
-            return AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED.equals(body.get("error_code"))
+            // A 402 with no body reads as null, and counts as a plain credits rejection.
+            var body = response.readEntity(PaymentRequiredBody.class);
+            return body != null && AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED.equals(body.errorCode())
                     ? AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED
                     : AgentInsightsJob.FailureReason.OUT_OF_CREDITS;
-        } catch (Exception e) {
+        } catch (ProcessingException | IllegalStateException e) {
+            // An unreadable body is still a credits rejection: reading it as free_pool_exhausted instead would
+            // cancel the whole rollout over a malformed response.
             log.warn("Could not read the error code off an Agent Insights 402", e);
             return AgentInsightsJob.FailureReason.OUT_OF_CREDITS;
         }
+    }
+
+    // The platform's 402 body. Only the error code decides anything here.
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    record PaymentRequiredBody(String error, String errorCode) {
     }
 }

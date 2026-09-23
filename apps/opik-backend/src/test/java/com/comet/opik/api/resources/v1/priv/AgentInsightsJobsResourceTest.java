@@ -51,6 +51,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -419,7 +420,7 @@ class AgentInsightsJobsResourceTest {
                 TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).hasSize(1));
         var trigger = TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).findFirst().orElseThrow();
         assertThat(trigger.workspaceId()).isEqualTo(WORKSPACE_ID);
-        assertThat(trigger.periodStart()).isBefore(trigger.periodEnd());
+        assertThat(Duration.between(trigger.periodStart(), trigger.periodEnd())).isEqualTo(Duration.ofHours(24));
         assertThat(trigger.triggerSource()).isEqualTo("manual");
     }
 

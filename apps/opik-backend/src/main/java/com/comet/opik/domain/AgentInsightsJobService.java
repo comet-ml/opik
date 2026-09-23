@@ -30,7 +30,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @Slf4j
 public class AgentInsightsJobService {
 
-    private static final Duration TRIGGER_WINDOW = Duration.ofDays(7);
+    private static final Duration TRIGGER_WINDOW = Duration.ofHours(24);
 
     private final @NonNull TransactionTemplate transactionTemplate;
     private final @NonNull IdGenerator idGenerator;
@@ -51,7 +51,8 @@ public class AgentInsightsJobService {
             // Insert-only; the unique key (workspace_id, project_id) makes this race-safe — a
             // concurrent create surfaces as a constraint violation, mapped to 409.
             return EntityConstraintHandler.handle(() -> {
-                dao.create(idGenerator.generateId(), workspaceId, projectId, userName);
+                dao.create(idGenerator.generateId(), workspaceId, projectId,
+                        AgentInsightsJob.Status.DISABLED.getValue(), userName);
                 return dao.findByProject(workspaceId, projectId).orElseThrow();
             }).withError(() -> new EntityAlreadyExistsException(new ErrorMessage(409,
                     "Agent insights job already exists for project: " + projectId)));
@@ -155,7 +156,8 @@ public class AgentInsightsJobService {
                     ReportFailureDAO.AGENT_INSIGHTS_TYPE, projectId, code, detail, RequestContext.SYSTEM_USER);
             if (AgentInsightsJob.FailureReason.OUT_OF_CREDITS.equals(code)
                     && handle.attach(AgentInsightsJobDAO.class)
-                            .disableIfEnabled(workspaceId, projectId, RequestContext.SYSTEM_USER) > 0) {
+                            .updateStatusIfCurrent(workspaceId, projectId, AgentInsightsJob.Status.ENABLED.getValue(),
+                                    AgentInsightsJob.Status.DISABLED.getValue(), RequestContext.SYSTEM_USER) > 0) {
                 log.info("Disabled the Agent Insights schedule for project '{}' in workspace '{}': out of credits",
                         projectId, workspaceId);
             }
@@ -191,7 +193,7 @@ public class AgentInsightsJobService {
                     continue;
                 }
                 enrolled += dao.enrolInAutoFirstRun(idGenerator.generateId(), projectId,
-                        RequestContext.SYSTEM_USER) > 0
+                        AgentInsightsJob.Status.DISABLED.getValue(), RequestContext.SYSTEM_USER) > 0
                                 ? 1
                                 : 0;
             }
@@ -233,6 +235,7 @@ public class AgentInsightsJobService {
     // with projects already filters out jobs whose project was deleted.
     public List<EnabledJob> findAllEnabled() {
         return transactionTemplate.inTransaction(READ_ONLY,
-                handle -> handle.attach(AgentInsightsJobDAO.class).findAllEnabled());
+                handle -> handle.attach(AgentInsightsJobDAO.class)
+                        .findAllByStatus(AgentInsightsJob.Status.ENABLED.getValue()));
     }
 }

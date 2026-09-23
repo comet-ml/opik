@@ -23,11 +23,12 @@ interface AgentInsightsJobDAO {
     @SqlUpdate("""
             INSERT INTO agent_insights_jobs
                 (id, workspace_id, project_id, status, created_by, last_updated_by)
-            VALUES (:id, :workspaceId, :projectId, 'disabled', :userName, :userName)
+            VALUES (:id, :workspaceId, :projectId, :status, :userName, :userName)
             """)
     void create(@Bind("id") UUID id,
             @Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
+            @Bind("status") String status,
             @Bind("userName") String userName);
 
     @SqlUpdate("""
@@ -40,11 +41,13 @@ interface AgentInsightsJobDAO {
             @Bind("userName") String userName);
 
     @SqlUpdate("""
-            UPDATE agent_insights_jobs SET status = 'disabled', last_updated_by = :userName
-            WHERE workspace_id = :workspaceId AND project_id = :projectId AND status = 'enabled'
+            UPDATE agent_insights_jobs SET status = :newStatus, last_updated_by = :userName
+            WHERE workspace_id = :workspaceId AND project_id = :projectId AND status = :currentStatus
             """)
-    int disableIfEnabled(@Bind("workspaceId") String workspaceId,
+    int updateStatusIfCurrent(@Bind("workspaceId") String workspaceId,
             @Bind("projectId") UUID projectId,
+            @Bind("currentStatus") String currentStatus,
+            @Bind("newStatus") String newStatus,
             @Bind("userName") String userName);
 
     // The job's "current failure" is the latest report_failures row for this project that landed after the
@@ -98,10 +101,10 @@ interface AgentInsightsJobDAO {
             SELECT j.id, j.workspace_id, j.project_id
             FROM agent_insights_jobs j
             INNER JOIN projects p ON p.id = j.project_id AND p.workspace_id = j.workspace_id
-            WHERE j.status = 'enabled'
+            WHERE j.status = :status
             """)
     @RegisterConstructorMapper(EnabledJob.class)
-    List<EnabledJob> findAllEnabled();
+    List<EnabledJob> findAllByStatus(@Bind("status") String status);
 
     // Cross-workspace — used only by the auto-first-run sweep (system context). Projects enrolled in the
     // rollout that have not had a run enqueued yet. INNER JOIN projects so a deleted project drops out, as
@@ -129,12 +132,13 @@ interface AgentInsightsJobDAO {
     @SqlUpdate("""
             INSERT INTO agent_insights_jobs
                 (id, workspace_id, project_id, status, auto_first_run_enrolled, created_by, last_updated_by)
-            SELECT :id, p.workspace_id, p.id, 'disabled', TRUE, :userName, :userName
+            SELECT :id, p.workspace_id, p.id, :status, TRUE, :userName, :userName
             FROM projects p WHERE p.id = :projectId
             ON DUPLICATE KEY UPDATE auto_first_run_enrolled = TRUE, last_updated_by = :userName
             """)
     int enrolInAutoFirstRun(@Bind("id") UUID id,
             @Bind("projectId") UUID projectId,
+            @Bind("status") String status,
             @Bind("userName") String userName);
 
     @SqlUpdate("""

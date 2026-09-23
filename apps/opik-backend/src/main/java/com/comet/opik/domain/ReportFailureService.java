@@ -56,7 +56,10 @@ class ReportFailureServiceImpl implements ReportFailureService {
                     failure.projectId(), failure.reason(), failure.detail(), userName);
             if (AgentInsightsJob.FailureReason.OUT_OF_CREDITS.equals(failure.reason())
                     && handle.attach(AgentInsightsJobDAO.class)
-                            .disableIfEnabled(workspaceId, failure.projectId(), RequestContext.SYSTEM_USER) > 0) {
+                            .updateStatusIfCurrent(workspaceId, failure.projectId(),
+                                    AgentInsightsJob.Status.ENABLED.getValue(),
+                                    AgentInsightsJob.Status.DISABLED.getValue(),
+                                    RequestContext.SYSTEM_USER) > 0) {
                 log.info("Disabled the Agent Insights schedule for project '{}' in workspace '{}': out of credits",
                         failure.projectId(), workspaceId);
             }

@@ -2292,7 +2292,7 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_PROJECTS_WITH_TRACES_IN_RANGE = """
             SELECT DISTINCT project_id
             FROM traces
-            WHERE (workspace_id, project_id) IN (<workspace_project_pairs>)
+            WHERE (workspace_id, project_id) IN arrayZip(:workspace_ids, :project_ids)
             AND created_at >= parseDateTime64BestEffort(:from_time, 9)
             AND created_at \\< parseDateTime64BestEffort(:to_time, 9)
             SETTINGS log_comment = '<log_comment>'
@@ -2302,7 +2302,7 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_PROJECTS_WITH_MIN_TRACES_IN_RANGE = """
             SELECT project_id
             FROM traces
-            WHERE (workspace_id, project_id) IN (<workspace_project_pairs>)
+            WHERE (workspace_id, project_id) IN arrayZip(:workspace_ids, :project_ids)
             AND created_at >= parseDateTime64BestEffort(:from_time, 9)
             AND created_at \\< parseDateTime64BestEffort(:to_time, 9)
             GROUP BY project_id
@@ -4856,9 +4856,13 @@ class TraceDAOImpl implements TraceDAO {
         var template = getSTWithLogComment(SELECT_PROJECTS_WITH_TRACES_IN_RANGE, "projects_with_traces_in_range",
                 "", "", workspaceProjectPairs.size());
         // Exact (workspace_id, project_id) tuple match in one query for the whole sweep.
-        template.add("workspace_project_pairs", toPairsLiteral(workspaceProjectPairs));
+        var workspaceIds = workspaceProjectPairs.stream().map(Pair::getLeft).toArray(String[]::new);
+        var projectIds = workspaceProjectPairs.stream().map(pair -> pair.getRight().toString())
+                .toArray(String[]::new);
 
         var statement = connection.createStatement(template.render())
+                .bind("workspace_ids", workspaceIds)
+                .bind("project_ids", projectIds)
                 .bind("from_time", from.toString())
                 .bind("to_time", to.toString());
 
@@ -4875,9 +4879,13 @@ class TraceDAOImpl implements TraceDAO {
 
         var template = getSTWithLogComment(SELECT_PROJECTS_WITH_MIN_TRACES_IN_RANGE,
                 "projects_with_min_traces_in_range", "", "", workspaceProjectPairs.size());
-        template.add("workspace_project_pairs", toPairsLiteral(workspaceProjectPairs));
+        var workspaceIds = workspaceProjectPairs.stream().map(Pair::getLeft).toArray(String[]::new);
+        var projectIds = workspaceProjectPairs.stream().map(pair -> pair.getRight().toString())
+                .toArray(String[]::new);
 
         var statement = connection.createStatement(template.render())
+                .bind("workspace_ids", workspaceIds)
+                .bind("project_ids", projectIds)
                 .bind("from_time", from.toString())
                 .bind("to_time", to.toString())
                 .bind("min_traces", minTraces);
@@ -4885,15 +4893,6 @@ class TraceDAOImpl implements TraceDAO {
         return Mono.from(statement.execute())
                 .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
                 .collect(Collectors.toSet());
-    }
-
-    // Renders the (workspace_id, project_id) tuples as a ClickHouse IN list, e.g. ('ws','proj'),('ws2','proj2').
-    // Single quotes are escaped (doubled) so a value can't reshape the literal; project_id is a UUID.
-    private static String toPairsLiteral(Collection<Pair<String, UUID>> pairs) {
-        return pairs.stream()
-                .map(pair -> "('%s','%s')".formatted(
-                        pair.getLeft().replace("'", "''"), pair.getRight().toString().replace("'", "''")))
-                .collect(Collectors.joining(","));
     }
 
     @Override

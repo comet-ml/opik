@@ -79,8 +79,9 @@ class PlatformAgentInsightsReportClientTest {
     @Test
     @DisplayName("A 402 for Comet's free budget is named as such, so the rollout is cancelled rather than the customer blamed")
     void triggerAgentInsights__paymentRequiredForFreeBudget__namesFreePoolExhausted() {
-        stubTriggerResponse(402, "application/json",
-                "{\"error\": \"Free diagnostics budget unavailable\", \"error_code\": \"free_pool_exhausted\"}");
+        stubTriggerResponse(402, "application/json", JsonUtils.writeValueAsString(
+                new PlatformAgentInsightsReportClient.PaymentRequiredBody("Free diagnostics budget unavailable",
+                        AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED)));
 
         assertThatExceptionOfType(AgentInsightsTriggerException.class)
                 .isThrownBy(this::trigger)

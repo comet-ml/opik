@@ -13,7 +13,7 @@ type UseTriggerAgentInsightsJobMutationParams = {
   projectId: string;
 };
 
-// "Run diagnostic" triggers an immediate report run (last 7 days) for the project.
+// "Run diagnostic" triggers an immediate report run (last 24h) for the project.
 // The trigger endpoint 404s when no job exists yet, so we lazily create the job
 // (created disabled) then retry the trigger. Both calls are fire-and-forget on
 // the backend.
@@ -45,7 +45,7 @@ const useTriggerAgentInsightsJobMutation = () => {
       toast({
         title: "Diagnostic started",
         description:
-          "We're analysing the last 7 days of traces. New issues will appear here once the run completes.",
+          "We're analysing the last 24h of traces. New issues will appear here once the run completes.",
       });
     },
     onError: (error: AxiosError) => handleMutationError(toast, error),
