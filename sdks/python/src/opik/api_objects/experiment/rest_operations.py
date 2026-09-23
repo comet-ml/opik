@@ -140,6 +140,28 @@ def find_experiment_items_for_dataset(
     return collected_items
 
 
+def http_client(rest_client: rest_api.OpikApi) -> Any:
+    """The generated client's shared HTTP helper.
+
+    It applies the base URL, the auth and workspace headers, the configured timeout
+    and the retry policy -- every generated endpoint reaches it through this same
+    private attribute. Named here once so a Fern regeneration that moves it fails with
+    this message instead of an AttributeError inside a page fetch, and so the one place
+    that has to change is this function.
+    """
+    httpx_client = getattr(
+        getattr(rest_client, "_client_wrapper", None), "httpx_client", None
+    )
+    if httpx_client is None:
+        raise exceptions.OpikException(
+            "The Opik REST client does not expose its HTTP client at "
+            "`_client_wrapper.httpx_client`. The generated client's layout has "
+            "changed and `opik.api_objects.experiment.rest_operations.http_client` "
+            "needs updating to match it."
+        )
+    return httpx_client
+
+
 def _fetch_page_json(
     rest_client: rest_api.OpikApi,
     dataset_id: str,
@@ -156,7 +178,7 @@ def _fetch_page_json(
     walking every node to re-derive type hints. The response shape is the same either
     way, so the read stays a dict walk, as the dataset read already is.
     """
-    response = rest_client._client_wrapper.httpx_client.request(
+    response = http_client(rest_client).request(
         f"v1/private/datasets/{jsonable_encoder(dataset_id)}/items/experiments/items",
         method="GET",
         params={

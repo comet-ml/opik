@@ -9,6 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from opik import exceptions
 from opik.api_objects import constants
 from opik.rest_api.core.api_error import ApiError
 from opik.api_objects.experiment import (
@@ -458,3 +459,29 @@ def test_public_read_signatures__page_size_and_num_threads_are_keyword_only():
             assert parameters[name].kind is inspect.Parameter.KEYWORD_ONLY, (
                 f"{callable_.__qualname__}.{name} must be keyword-only"
             )
+
+
+def test_http_client__is_the_object_the_generated_endpoints_use():
+    httpx_client = object()
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=httpx_client)
+    )
+
+    assert rest_operations.http_client(rest_client) is httpx_client
+
+
+@pytest.mark.parametrize(
+    "rest_client",
+    [
+        types.SimpleNamespace(),
+        types.SimpleNamespace(_client_wrapper=types.SimpleNamespace()),
+        types.SimpleNamespace(_client_wrapper=None),
+    ],
+)
+def test_http_client__says_what_moved_when_the_generated_layout_changes(rest_client):
+    # A regenerated client that relocates this attribute should fail here, naming the
+    # one function to update, rather than as an AttributeError inside a page fetch.
+    with pytest.raises(
+        exceptions.OpikException, match="generated client's layout has changed"
+    ):
+        rest_operations.http_client(rest_client)

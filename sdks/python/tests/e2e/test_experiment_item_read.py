@@ -18,7 +18,10 @@ import pytest
 import opik
 from opik import synchronization
 from opik.api_objects.dataset import dataset as dataset_module
-from opik.api_objects.experiment import experiment as experiment_module
+from opik.api_objects.experiment import (
+    experiment as experiment_module,
+    rest_operations,
+)
 
 from ..testlib import generate_project_name
 
@@ -92,6 +95,10 @@ class _RecordedRequests:
     client: the read parses the endpoint's JSON itself and never calls
     `find_dataset_items_with_experiment_items`, so patching that seam would watch a
     method nothing invokes and record nothing at all.
+
+    The client is reached through `rest_operations.http_client`, the same accessor the
+    read itself uses, so the test records whatever the production path sends rather
+    than a second guess at where that client lives.
     """
 
     #: Only the Compare page endpoint. Its `/stats` and `/output/columns` siblings
@@ -99,7 +106,7 @@ class _RecordedRequests:
     _COMPARE_PATH = "/items/experiments/items"
 
     def __init__(self, opik_client: opik.Opik, monkeypatch: pytest.MonkeyPatch) -> None:
-        http_client = opik_client._rest_client._client_wrapper.httpx_client
+        http_client = rest_operations.http_client(opik_client._rest_client)
         original = http_client.request
         self._lock = threading.Lock()
         self.calls: List[Tuple[int, int]] = []
