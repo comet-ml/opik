@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-import threading
 from typing import Any, Optional
 
 from opik.evaluation.metrics.base_metric import BaseMetric
+from opik.evaluation.metrics.heuristics import _vader_lexicon
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.exceptions import MetricComputationError
 
 try:  # pragma: no cover - optional dependency
-    import nltk
     from nltk.sentiment import SentimentIntensityAnalyzer
 except ImportError:  # pragma: no cover - optional dependency
-    nltk = None  # type: ignore
     SentimentIntensityAnalyzer = None  # type: ignore
 
 
@@ -23,55 +21,12 @@ _LEXICON_ERROR = (
     "or provide a custom analyzer."
 )
 
-_download_lock = threading.Lock()
-_download_attempted = False
-
-
-def _download_lexicon_once() -> None:
-    """Fetch the ``vader_lexicon`` corpus, at most once per process.
-
-    Every metric instance builds its own analyzer, so without this guard a
-    process that cannot reach the download server (offline, or behind a proxy)
-    would pay for a failed fetch on each construction. The outcome is the same
-    either way -- the corpus is there or it is not -- so a single attempt is
-    enough, and the caller reports what it finds.
-    """
-    global _download_attempted
-
-    with _download_lock:
-        if _download_attempted or nltk is None:
-            return
-        _download_attempted = True
-        try:
-            nltk.download("vader_lexicon", quiet=True)
-        except Exception:
-            # Whether the fetch failed or was never possible, what matters to the
-            # caller is that the corpus is still missing, which it checks next.
-            pass
-
 
 def _build_analyzer() -> Any:
-    """Return a ``SentimentIntensityAnalyzer``, fetching its lexicon if needed.
-
-    ``SentimentIntensityAnalyzer()`` reads the ``vader_lexicon`` corpus at
-    construction time and raises a bare :class:`LookupError` when it is absent,
-    which is what a fresh ``pip install nltk`` gives. Download it once, as the
-    METEOR metric does for WordNet, and fall back to an :class:`ImportError`
-    naming the manual command when that is not possible (for example offline).
-    Only the missing corpus is translated; anything else NLTK raises is a real
-    failure and belongs to the caller unchanged.
-    """
-    try:
-        return SentimentIntensityAnalyzer()
-    except LookupError:
-        pass
-
-    _download_lexicon_once()
-
-    try:
-        return SentimentIntensityAnalyzer()
-    except LookupError as error:
-        raise ImportError(_LEXICON_ERROR) from error
+    """Return a ``SentimentIntensityAnalyzer``, fetching its lexicon if needed."""
+    return _vader_lexicon.build_analyzer(
+        SentimentIntensityAnalyzer, error_message=_LEXICON_ERROR
+    )
 
 
 class VADERSentiment(BaseMetric):

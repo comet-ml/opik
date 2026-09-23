@@ -604,7 +604,7 @@ def test_vader_sentiment__missing_lexicon_downloads_it(monkeypatch):
     # SentimentIntensityAnalyzer reads the vader_lexicon corpus at construction
     # and raises a bare LookupError when it is absent, which is what a fresh
     # `pip install nltk` gives. The corpus is fetched once instead.
-    from opik.evaluation.metrics.heuristics import vader_sentiment
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, vader_sentiment
 
     attempts = {"analyzer": 0, "download": []}
 
@@ -623,8 +623,8 @@ def test_vader_sentiment__missing_lexicon_downloads_it(monkeypatch):
             attempts["download"].append(name)
 
     monkeypatch.setattr(vader_sentiment, "SentimentIntensityAnalyzer", StubAnalyzer)
-    monkeypatch.setattr(vader_sentiment, "nltk", StubNLTK)
-    monkeypatch.setattr(vader_sentiment, "_download_attempted", False)
+    monkeypatch.setattr(_vader_lexicon, "nltk", StubNLTK)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
 
     metric = vader_sentiment.VADERSentiment(track=False)
 
@@ -638,7 +638,7 @@ def test_vader_sentiment__lexicon_unavailable_raises_actionable_import_error(
 ):
     # When the corpus cannot be fetched (for example offline), the bare
     # LookupError is replaced by an ImportError naming the manual command.
-    from opik.evaluation.metrics.heuristics import vader_sentiment
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, vader_sentiment
 
     class AlwaysMissingAnalyzer:
         def __init__(self) -> None:
@@ -652,8 +652,8 @@ def test_vader_sentiment__lexicon_unavailable_raises_actionable_import_error(
     monkeypatch.setattr(
         vader_sentiment, "SentimentIntensityAnalyzer", AlwaysMissingAnalyzer
     )
-    monkeypatch.setattr(vader_sentiment, "nltk", OfflineNLTK)
-    monkeypatch.setattr(vader_sentiment, "_download_attempted", False)
+    monkeypatch.setattr(_vader_lexicon, "nltk", OfflineNLTK)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
 
     with pytest.raises(ImportError, match="nltk.downloader vader_lexicon"):
         vader_sentiment.VADERSentiment(track=False)
@@ -663,7 +663,7 @@ def test_vader_sentiment__lexicon_is_fetched_at_most_once(monkeypatch):
     # Every metric instance builds its own analyzer. When the corpus cannot be
     # fetched, a process that builds several of them should not pay for a failed
     # download each time -- the answer would be the same on every attempt.
-    from opik.evaluation.metrics.heuristics import vader_sentiment
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, vader_sentiment
 
     downloads = []
 
@@ -680,8 +680,8 @@ def test_vader_sentiment__lexicon_is_fetched_at_most_once(monkeypatch):
     monkeypatch.setattr(
         vader_sentiment, "SentimentIntensityAnalyzer", AlwaysMissingAnalyzer
     )
-    monkeypatch.setattr(vader_sentiment, "nltk", OfflineNLTK)
-    monkeypatch.setattr(vader_sentiment, "_download_attempted", False)
+    monkeypatch.setattr(_vader_lexicon, "nltk", OfflineNLTK)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
 
     for _ in range(3):
         with pytest.raises(ImportError):
@@ -694,7 +694,7 @@ def test_vader_sentiment__unrelated_analyzer_failure_is_not_swallowed(monkeypatc
     # Only a missing corpus becomes the "install vader_lexicon" ImportError.
     # Anything else NLTK raises is a real failure and has to surface as itself,
     # otherwise an unrelated breakage is reported as a missing download.
-    from opik.evaluation.metrics.heuristics import vader_sentiment
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, vader_sentiment
 
     class BrokenAnalyzer:
         def __init__(self) -> None:
@@ -711,8 +711,8 @@ def test_vader_sentiment__unrelated_analyzer_failure_is_not_swallowed(monkeypatc
             pass
 
     monkeypatch.setattr(vader_sentiment, "SentimentIntensityAnalyzer", BrokenAnalyzer)
-    monkeypatch.setattr(vader_sentiment, "nltk", StubNLTK)
-    monkeypatch.setattr(vader_sentiment, "_download_attempted", False)
+    monkeypatch.setattr(_vader_lexicon, "nltk", StubNLTK)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
 
     with pytest.raises(RuntimeError, match="corrupt"):
         vader_sentiment.VADERSentiment(track=False)
@@ -1126,3 +1126,66 @@ def test_rouge_score_using_custom_tokenizer(
         f"For candidate='{candidate}' vs reference='{reference}', "
         f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
     )
+
+
+def test_sentiment__missing_lexicon_is_fetched_once_and_reported_clearly(monkeypatch):
+    # Sentiment builds the same VADER analyzer as VADERSentiment and had the same two
+    # problems: it called nltk.download on every construction, and when the download
+    # itself failed the caller saw whatever that raised -- an OSError naming the
+    # network, with nothing about the corpus -- instead of the actionable message the
+    # class already uses for a missing `nltk`.
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, sentiment
+
+    downloads = []
+
+    class OfflineNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            downloads.append(name)
+            raise OSError("network unreachable")
+
+    class AlwaysMissingAnalyzer:
+        def __init__(self) -> None:
+            raise LookupError("Resource vader_lexicon not found.")
+
+    class StubVader:
+        SentimentIntensityAnalyzer = AlwaysMissingAnalyzer
+
+    monkeypatch.setattr(_vader_lexicon, "nltk", OfflineNLTK)
+    monkeypatch.setattr(sentiment, "vader", StubVader)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
+
+    for _ in range(3):
+        with pytest.raises(ImportError, match="nltk.downloader vader_lexicon"):
+            sentiment.Sentiment(track=False)
+
+    assert downloads == ["vader_lexicon"]
+
+
+def test_sentiment__unrelated_analyzer_failure_is_not_swallowed(monkeypatch):
+    # As with VADERSentiment: only a missing corpus becomes the install message.
+    from opik.evaluation.metrics.heuristics import _vader_lexicon, sentiment
+
+    attempts: list = []
+
+    class BrokenAnalyzer:
+        def __init__(self) -> None:
+            if not attempts:
+                attempts.append("first")
+                raise LookupError("Resource vader_lexicon not found.")
+            raise RuntimeError("vader_lexicon is corrupt")
+
+    class StubVader:
+        SentimentIntensityAnalyzer = BrokenAnalyzer
+
+    class StubNLTK:
+        @staticmethod
+        def download(name: str, quiet: bool = False) -> None:
+            pass
+
+    monkeypatch.setattr(_vader_lexicon, "nltk", StubNLTK)
+    monkeypatch.setattr(sentiment, "vader", StubVader)
+    monkeypatch.setattr(_vader_lexicon, "_download_attempted", False)
+
+    with pytest.raises(RuntimeError, match="corrupt"):
+        sentiment.Sentiment(track=False)
