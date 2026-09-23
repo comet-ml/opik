@@ -324,6 +324,25 @@ export class LogsPage {
     });
   }
 
+  /**
+   * Open a trace by clicking its row, the way a user reaches one.
+   *
+   * Distinct from {@link openTraceById}, which navigates to the trace's URL and
+   * so reloads the page: a spec about what the panel remembers between openings
+   * needs the in-app path, because a reload resets everything for free and
+   * would make the assertion pass without the panel doing anything.
+   */
+  async openTraceByRow(traceId: string): Promise<TracePanelPage> {
+    return test.step(`Open trace ${traceId} from its row`, async () => {
+      const row = this.traceRow(traceId);
+      await expect(row, 'exactly one row for this trace').toHaveCount(1);
+      await row.click();
+      const panel = new TracePanelPage(this.page, traceId);
+      await panel.waitForFullyLoaded();
+      return panel;
+    });
+  }
+
   async openFirstTrace(): Promise<TracePanelPage> {
     return test.step('Open first trace in table', async () => {
       const row = this.traceRows.first();
