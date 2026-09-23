@@ -1008,3 +1008,42 @@ def test_rouge_score_using_custom_tokenizer(
         f"For candidate='{candidate}' vs reference='{reference}', "
         f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
     )
+
+
+def test_tone_empty_lexicons_disable_the_defaults():
+    text = "This is terrible and useless."
+
+    default = Tone(track=False).score(output=text)
+    emptied = Tone(track=False, negative_lexicon=[]).score(output=text)
+
+    assert default.metadata["sentiment_score"] < 0
+    assert emptied.metadata["sentiment_score"] == 0
+    assert emptied.value == 1.0
+
+
+def test_tone_empty_positive_lexicon_disables_the_defaults():
+    text = "I am happy to help."
+
+    assert Tone(track=False).score(output=text).metadata["sentiment_score"] > 0
+    emptied = Tone(track=False, positive_lexicon=[]).score(output=text)
+    assert emptied.metadata["sentiment_score"] == 0
+
+
+def test_tone_empty_forbidden_phrases_disable_the_defaults():
+    text = "Shut up, this is not my problem."
+
+    assert Tone(track=False).score(output=text).metadata["forbidden_hit"] is True
+    emptied = Tone(track=False, forbidden_phrases=[]).score(output=text)
+    assert emptied.metadata["forbidden_hit"] is False
+
+
+def test_tone_none_lexicons_keep_the_defaults():
+    text = "This is terrible and useless."
+    explicit_none = Tone(
+        track=False,
+        positive_lexicon=None,
+        negative_lexicon=None,
+        forbidden_phrases=None,
+    ).score(output=text)
+
+    assert explicit_none == Tone(track=False).score(output=text)
