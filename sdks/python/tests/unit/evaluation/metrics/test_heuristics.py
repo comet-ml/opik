@@ -265,17 +265,19 @@ def test_sentence_bleu_score(candidate, reference, expected_min, expected_max):
 
 
 @pytest.mark.parametrize(
-    "candidate,reference",
+    "candidate,reference,expected_message",
     [
-        ("", "The quick brown fox"),
-        ("The quick brown fox", ""),
+        ("", "The quick brown fox", "Candidate is empty (single-sentence BLEU)."),
+        ("The quick brown fox", "", "Reference is empty (single-sentence BLEU)."),
     ],
 )
-def test_sentence_bleu_score_empty_inputs(candidate, reference):
+def test_sentence_bleu_score_empty_inputs(candidate, reference, expected_message):
+    # Which side was empty is the useful part of the diagnostic, so pin the
+    # whole message: a substring check would pass on either one.
     metric = SentenceBLEU(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(candidate, reference)
-    assert "empty" in str(exc_info.value).lower()
+    assert str(exc_info.value) == expected_message
 
 
 def test_sentence_bleu__empty_reference_list__raises_metric_error():
@@ -370,12 +372,13 @@ def test_corpus_bleu_score(outputs, references, expected_min, expected_max):
 
 
 @pytest.mark.parametrize(
-    "outputs,references",
+    "outputs,references,expected_message",
     [
         # Candidate is empty
         (
             ["", "Some text here"],
             [["non-empty reference"], ["this is fine"]],
+            "Candidate is empty (corpus BLEU).",
         ),
         # Reference is empty
         (
@@ -384,14 +387,19 @@ def test_corpus_bleu_score(outputs, references, expected_min, expected_max):
                 ["The quick brown fox jumps over the lazy dog"],
                 [""],
             ],
+            # A list holding an empty string, not an empty list of references,
+            # so this is the per-reference check rather than the missing one.
+            "Encountered empty reference (corpus BLEU).",
         ),
     ],
 )
-def test_corpus_bleu_score_empty_inputs(outputs, references):
+def test_corpus_bleu_score_empty_inputs(outputs, references, expected_message):
+    # Same reasoning as the single-sentence case: the message names the side
+    # that was empty, and that is what the test is here to protect.
     metric = CorpusBLEU(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(output=outputs, reference=references)
-    assert "empty" in str(exc_info.value).lower()
+    assert str(exc_info.value) == expected_message
 
 
 @pytest.mark.parametrize(
