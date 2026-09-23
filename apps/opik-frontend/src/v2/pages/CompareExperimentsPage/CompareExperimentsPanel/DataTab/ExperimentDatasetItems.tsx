@@ -11,6 +11,8 @@ import React, { useMemo } from "react";
 import { DatasetItem } from "@/types/datasets";
 import { pick } from "lodash";
 import { useProcessedInputData } from "@/hooks/useProcessedInputData";
+import { mapAndCombineMessages } from "@/shared/PrettyLLMMessage/llmMessages";
+import ExperimentMessagesViewer from "@/v2/pages-shared/experiments/ExperimentMessagesViewer/ExperimentMessagesViewer";
 
 interface ExperimentDatasetItemsProps {
   data: DatasetItem["data"] | undefined;
@@ -33,7 +35,23 @@ const ExperimentDatasetItems = ({
 
   const showMedia = media?.length > 0;
 
+  // Dataset columns hold arbitrary values, so only the ones that actually carry
+  // a recognised LLM message format get the role-by-role treatment.
+  const hasMessages = useMemo(
+    () => mapAndCombineMessages(selectedData, undefined).messages.length > 0,
+    [selectedData],
+  );
+
   if (!showMedia) {
+    if (data && hasMessages) {
+      return (
+        <ExperimentMessagesViewer
+          input={selectedData}
+          preserveKey="compare-experiment-input-messages"
+        />
+      );
+    }
+
     return data ? (
       <SyntaxHighlighter
         data={selectedData}

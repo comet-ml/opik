@@ -5,8 +5,12 @@ import { FlaskConical, ListTree } from "lucide-react";
 
 import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
 import AttachmentsList from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
-import { MediaProvider } from "@/shared/PrettyLLMMessage/llmMessages";
+import {
+  MediaProvider,
+  mapAndCombineMessages,
+} from "@/shared/PrettyLLMMessage/llmMessages";
 import { useExperimentItemMedia } from "@/hooks/useExperimentItemMedia";
+import ExperimentMessagesViewer from "@/v2/pages-shared/experiments/ExperimentMessagesViewer/ExperimentMessagesViewer";
 import ExperimentFeedbackScoresViewer from "@/v2/pages-shared/ExperimentFeedbackScoresViewer/ExperimentFeedbackScoresViewer";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import NoData from "@/shared/NoData/NoData";
@@ -59,6 +63,16 @@ const CompareExperimentsViewer: React.FunctionComponent<
     [experimentItem.comments],
   );
 
+  // The trace-style renderer only applies when the payload is a recognised LLM
+  // message format; anything else keeps the JSON/YAML/pretty viewer. Detection
+  // runs on the media-resolved output so it matches what actually gets rendered.
+  const hasMessages = useMemo(
+    () =>
+      mapAndCombineMessages(experimentItem.input, transformedOutput).messages
+        .length > 0,
+    [experimentItem.input, transformedOutput],
+  );
+
   const onExpandClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (isFunction(openTrace) && experimentItem.trace_id) {
@@ -83,7 +97,13 @@ const CompareExperimentsViewer: React.FunctionComponent<
       return null;
     }
 
-    const highlighter = (
+    const body = hasMessages ? (
+      <ExperimentMessagesViewer
+        input={experimentItem.input}
+        output={transformedOutput}
+        preserveKey={`compare-experiment-messages-${sectionIdx}`}
+      />
+    ) : (
       <SyntaxHighlighter
         data={transformedOutput as object}
         prettifyConfig={{ fieldType: "output" }}
@@ -92,14 +112,14 @@ const CompareExperimentsViewer: React.FunctionComponent<
     );
 
     if (!media.length) {
-      return highlighter;
+      return body;
     }
 
     return (
       <MediaProvider media={media}>
         <div className="flex flex-col gap-2">
           <AttachmentsList media={media} />
-          {highlighter}
+          {body}
         </div>
       </MediaProvider>
     );

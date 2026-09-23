@@ -40,6 +40,10 @@ export interface LogQueueParams extends RunStreamingReturn {
   model: PROVIDER_MODEL_TYPE | "";
   provider: COMPOSED_PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
+  // The prompt as authored, with {{variables}} intact. providerMessages is this
+  // template rendered against one dataset item, so it describes a single run
+  // rather than the experiment (OPIK-7965).
+  templateMessages?: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
   promptLibraryMetadata?: PromptLibraryMetadata;
   experimentName?: string;
@@ -268,7 +272,7 @@ const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
 
   const experimentMetadata: Record<string, unknown> = {
     model: experimentModel,
-    messages: JSON.stringify(run.providerMessages),
+    messages: JSON.stringify(run.templateMessages ?? run.providerMessages),
     model_config: getLoggedParameters(run),
   };
 
