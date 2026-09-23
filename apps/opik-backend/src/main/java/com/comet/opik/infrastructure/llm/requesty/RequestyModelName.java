@@ -11,7 +11,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * This information is taken from <a href="https://app.requesty.ai/model-library">Requesty model library</a>.
+ * This information is taken from <a href="https://www.requesty.ai/models">Requesty model list</a>.
  * Requesty is an OpenAI-compatible LLM router that exposes models using the same bare
  * {@code vendor/model} naming convention as OpenRouter. Because that namespace is already
  * claimed by {@code OpenRouterModelName}, every Requesty model in Opik carries the
