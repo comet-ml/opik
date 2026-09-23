@@ -82,14 +82,18 @@ def _read(total: int, **kwargs: Any) -> Dict[str, Any]:
     }
 
 
-def test_find_experiment_items_for_dataset__default_page_size_is_the_constant():
+def test_find_experiment_items_for_dataset__default_page_size_is_2000():
+    # Spelled out rather than read from the constant: deriving both sides from
+    # EXPERIMENT_ITEMS_READ_PAGE_SIZE would keep the assertion self-consistent
+    # for any value it was changed to.
+    expected_page_size = 2000
+    assert constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE == expected_page_size
+
     total = 2500
     result = _read(total=total, max_results=total)
 
-    pages = math.ceil(total / constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE)
-    assert (
-        result["requested_sizes"] == [constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE] * pages
-    )
+    pages = math.ceil(total / expected_page_size)
+    assert result["requested_sizes"] == [expected_page_size] * pages
     assert len(result["items"]) == total
 
 
