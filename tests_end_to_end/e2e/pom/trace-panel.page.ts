@@ -189,6 +189,31 @@ export class TracePanelPage {
     return this.root.getByRole('img', { name: fileName, exact: true });
   }
 
+  /**
+   * The intrinsic size the browser decoded for an image attachment's thumbnail,
+   * as `{ width, height }` — both `0` while the image is still loading, and both
+   * `0` forever if the bytes behind its URL are not a decodable image.
+   *
+   * Scrolls the thumbnail into view first: it is `loading="lazy"`, so the
+   * browser does not begin the fetch until it enters the viewport, and the
+   * dimensions of an image whose request never started say nothing about the
+   * stored object. Idempotent, so a caller can poll this while the decode
+   * settles.
+   *
+   * Answers the pair rather than asserting on it, so the assertion stays in the
+   * spec that cares what the size has to be.
+   */
+  async decodedImageSize(fileName: string): Promise<{ width: number; height: number }> {
+    return test.step(`read the decoded size of ${fileName}`, async () => {
+      const img = this.attachmentImage(fileName);
+      await img.scrollIntoViewIfNeeded();
+      return img.evaluate((el) => ({
+        width: (el as HTMLImageElement).naturalWidth,
+        height: (el as HTMLImageElement).naturalHeight,
+      }));
+    });
+  }
+
   /** Opens the Attachments section if it is collapsed. Idempotent. */
   async openAttachments(): Promise<void> {
     return test.step('Open the Attachments section', async () => {

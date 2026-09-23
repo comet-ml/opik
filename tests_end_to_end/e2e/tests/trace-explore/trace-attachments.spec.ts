@@ -187,31 +187,32 @@ test.describe('Trace attachments', { tag: ['@t2-cuj', '@area:traces'] }, () => {
       });
 
       await test.step('The rendered image is one the browser could decode', async () => {
-        const img = panel.attachmentImage(image!.fileName);
-        await expect(img, `one <img> for ${image!.fileName}`).toHaveCount(1);
-        // The thumbnail is `loading="lazy"`, so it only fetches once it is in
-        // the viewport — without this the poll below would be reading an image
-        // the browser never started.
-        await img.scrollIntoViewIfNeeded();
+        await expect(
+          panel.attachmentImage(image!.fileName),
+          `one <img> for ${image!.fileName}`,
+        ).toHaveCount(1);
 
-        // naturalWidth/naturalHeight are 0 until an image has decoded, and stay
-        // 0 forever if it cannot — which is exactly what the browser is left
-        // with when the object behind the presigned URL is truncated or is not
-        // the PNG that was uploaded. `toBeVisible` would not notice: a broken
-        // <img> still occupies its box.
+        // A decoded image reports a non-zero intrinsic size; one the browser
+        // could not decode reports 0×0 and stays there, which is what it is
+        // left with when the object behind the presigned URL is truncated,
+        // corrupted, or not an image at all. `toBeVisible` would not notice — a
+        // broken <img> still occupies its box.
+        //
+        // Polled because the decode is asynchronous, and on the smaller of the
+        // two dimensions because that is the same claim as both being non-zero
+        // while still failing with a number worth reading.
         await expect
-          .poll(async () => img.evaluate((el) => (el as HTMLImageElement).naturalWidth), {
-            message: `decoded width of ${image!.fileName}`,
-            timeout: 30_000,
-          })
+          .poll(
+            async () => {
+              const { width, height } = await panel.decodedImageSize(image!.fileName);
+              return Math.min(width, height);
+            },
+            {
+              message: `smaller decoded dimension of ${image!.fileName}`,
+              timeout: 30_000,
+            },
+          )
           .toBeGreaterThan(0);
-
-        // Read straight out, not polled: the width above only became non-zero
-        // once the decode finished, and a decoded image has both dimensions.
-        expect(
-          await img.evaluate((el) => (el as HTMLImageElement).naturalHeight),
-          `decoded height of ${image!.fileName}`,
-        ).toBeGreaterThan(0);
       });
     },
   );
