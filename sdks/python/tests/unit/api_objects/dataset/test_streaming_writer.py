@@ -953,3 +953,58 @@ def test_encode_flexible__set_of_mixed_types__ordered_by_type_then_repr():
 def test_encode_flexible__tuple__keeps_the_order_it_was_given():
     """A tuple is ordered by the caller, unlike a set, so canonicalising it would lose data."""
     assert streaming_upload.encode_flexible(("z", "a", "m")) == ["z", "a", "m"]
+
+
+def test_flush__body_never_exceeds_the_cap():
+    """`max_payload_bytes` caps the request body, envelope included.
+
+    Only the items were counted against it, so every emitted body ran over by
+    `len(prefix) + len(suffix)` -- which grows with the dataset and project names,
+    the parts of the envelope a caller controls.
+    """
+    bodies, flush_callback = _collect()
+    cap = 400
+    writer = _writer(
+        flush_callback,
+        envelope={
+            "dataset_name": "a-fairly-long-dataset-name-as-users-often-have",
+            "project_name": "some-project-name",
+            "batch_group_id": "b" * 36,
+        },
+        max_payload_bytes=cap,
+    )
+
+    for i in range(12):
+        writer.add({"id": f"item-{i:03d}", "data": {"text": "x" * 20}})
+    writer.flush()
+
+    assert bodies, "the items should have produced at least one request"
+    assert all(len(body) <= cap for body, _ in bodies), [
+        len(body) for body, _ in bodies
+    ]
+    assert sum(count for _, count in bodies) == 12, "no item may be dropped"
+
+
+def test_flush__envelope_alone_over_the_cap__still_sends_every_item():
+    """A cap below the envelope cannot be honoured, so send one item per request.
+
+    The point is that nothing is dropped and nothing loops: an item that cannot fit
+    under the cap on its own still goes out, which is the existing oversized-item
+    contract applied to a degenerate cap.
+    """
+    bodies, flush_callback = _collect()
+    writer = _writer(
+        flush_callback,
+        envelope={
+            "dataset_name": "a-fairly-long-dataset-name-as-users-often-have",
+            "project_name": "some-project-name",
+            "batch_group_id": "b" * 36,
+        },
+        max_payload_bytes=10,
+    )
+
+    for i in range(3):
+        writer.add({"id": f"item-{i}"})
+    writer.flush()
+
+    assert [count for _, count in bodies] == [1, 1, 1]
