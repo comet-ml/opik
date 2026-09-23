@@ -8,7 +8,7 @@ set -euo pipefail
 #   - Extended free-form SQL (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_ENABLED, also requires TOGGLE_OLLIE_ENABLED) -
 #     the same three tables plus experiments, experiment_items, dataset_items, feedback_scores and trace_threads.
 #     traces/spans keep a project bound but an optional one; everything else is workspace-bound only,
-#     authored_feedback_scores included. Provisioning it enables nothing: no backend code uses it yet.
+#     authored_feedback_scores included.
 #
 # Opt-in: only runs when TOGGLE_OLLIE_ENABLED=true; otherwise it's a no-op so default installs are untouched.
 # This is the single local copy of the DDL, shared by docker-compose (backend container, between run_db_migrations.sh
@@ -63,9 +63,6 @@ statements+=(
 )
 
 # Extended account: its own policies on all eight tables it reads.
-#
-# The profile is attached with ALTER USER rather than the CREATE SETTINGS PROFILE ... TO above: that statement is
-# IF NOT EXISTS, so on a ClickHouse where the profile already exists it would leave this user with no profile at all.
 #
 # traces and spans keep a project bound, but an optional one: '*' means every project in the workspace, so the
 # caller picks the scope per request. The sentinel is '*' rather than '' because the profile defaults the setting

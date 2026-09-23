@@ -16,7 +16,6 @@ ORIGINAL_COMMAND="$0 $@"
 # then provisions the restricted read-only ClickHouse user/profile/policies and the JVM connects with the feature on.
 # Exported here so this single variable controls both the provisioning gate and the JAR-mode backend (config.yml).
 export TOGGLE_OLLIE_ENABLED="${TOGGLE_OLLIE_ENABLED:-false}"
-# Also set ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_ENABLED=true to provision the extended free-form SQL user.
 export ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_ENABLED="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_ENABLED:-false}"
 
 # Configuration
