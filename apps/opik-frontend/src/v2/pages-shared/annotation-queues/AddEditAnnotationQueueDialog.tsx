@@ -29,6 +29,7 @@ import FeedbackScoreConditions, {
 } from "@/v2/pages-shared/feedback-score-conditions/FeedbackScoreConditions";
 import {
   ALL_OPERATOR_VALUES,
+  OPERATOR_VALUES,
   AUTOMATION_MAX_CONDITIONS_PER_GROUP,
   AUTOMATION_MAX_GROUPS,
 } from "@/v2/pages-shared/feedback-score-conditions/constants";
@@ -269,7 +270,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   ) as string | undefined;
 
   const isEdit = Boolean(defaultQueue);
-  const title = isEdit ? "Edit annotation queue" : "New annotation queue";
+  const title = isEdit ? "Edit annotation queue" : "Create annotation queue";
   const submitText = isEdit ? "Update queue" : "Create queue";
 
   const getQueue = useCallback(() => {
@@ -612,9 +613,9 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         isThreadScope ? ScoreSource.THREADS : ScoreSource.TRACES
                       }
                       projectId={projectId}
-                      // Automation compares one entity's score, so equality is meaningful here in a
-                      // way it is not for an alert's windowed aggregate.
-                      operators={[...ALL_OPERATOR_VALUES]}
+                      // The design offers > and < only. The schema still accepts "=", which the API
+                      // supports, so a condition saved through the API keeps validating.
+                      operators={[...OPERATOR_VALUES]}
                       // One AND-ed list only: the API accepts OR-ed groups, but the UI does not offer
                       // them for now.
                       singleGroup
