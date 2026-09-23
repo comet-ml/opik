@@ -884,22 +884,47 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     apiUrl: env.apiBaseUrl,
   });
 
+  /**
+   * One wire optimization as an `OptimizationRef`.
+   *
+   * Shared by the by-id read and the list read on purpose. They are two
+   * different SQL projections over the same aggregate, and `optimization-total-
+   * cost.spec.ts` asserts both against one expectation precisely because they
+   * are allowed to disagree — which is only meaningful if the two sides were
+   * normalised identically. Two copies of this mapping are two places for a
+   * `?? null` to drift into a `?? 0` and quietly turn "the aggregate never ran"
+   * into "the run cost nothing".
+   */
+  const toOptimizationRef = (o: {
+    // Optional to match `OptimizationPublic`, which both reads answer with and
+    // which marks even `id` optional. `String(undefined)` is what the two
+    // inlined copies of this already did; nothing changes but the duplication.
+    id?: unknown;
+    name?: string | null;
+    status?: unknown;
+    objectiveName?: string | null;
+    datasetName?: string | null;
+    numTrials?: number | null;
+    baselineObjectiveScore?: number | null;
+    bestObjectiveScore?: number | null;
+    totalOptimizationCost?: number | null;
+  }): OptimizationRef => ({
+    id: String(o.id),
+    name: o.name ?? '',
+    status: String(o.status) as OptimizationStatus,
+    objectiveName: o.objectiveName ?? null,
+    datasetName: o.datasetName ?? null,
+    numTrials: Number(o.numTrials ?? 0),
+    baselineObjectiveScore: o.baselineObjectiveScore ?? null,
+    bestObjectiveScore: o.bestObjectiveScore ?? null,
+    totalOptimizationCost: o.totalOptimizationCost ?? null,
+  });
+
   // Hoisted so the poll helpers (free functions) can call it without depending
   // on the not-yet-constructed return object.
   const localGetOptimization = async (id: string): Promise<OptimizationRef | null> => {
     try {
-      const o = await opik.api.optimizations.getOptimizationById(id);
-      return {
-        id: String(o.id),
-        name: o.name ?? '',
-        status: String(o.status) as OptimizationStatus,
-        objectiveName: o.objectiveName ?? null,
-        datasetName: o.datasetName ?? null,
-        numTrials: Number(o.numTrials ?? 0),
-        baselineObjectiveScore: o.baselineObjectiveScore ?? null,
-        bestObjectiveScore: o.bestObjectiveScore ?? null,
-        totalOptimizationCost: o.totalOptimizationCost ?? null,
-      };
+      return toOptimizationRef(await opik.api.optimizations.getOptimizationById(id));
     } catch (err) {
       if (isNotFoundError(err)) return null;
       throw err;
@@ -3835,17 +3860,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         page: 1,
         size: 100,
       });
-      return (page.content ?? []).map((o) => ({
-        id: String(o.id),
-        name: o.name ?? '',
-        status: String(o.status) as OptimizationStatus,
-        objectiveName: o.objectiveName ?? null,
-        datasetName: o.datasetName ?? null,
-        numTrials: Number(o.numTrials ?? 0),
-        baselineObjectiveScore: o.baselineObjectiveScore ?? null,
-        bestObjectiveScore: o.bestObjectiveScore ?? null,
-        totalOptimizationCost: o.totalOptimizationCost ?? null,
-      }));
+      return (page.content ?? []).map(toOptimizationRef);
     },
 
     async pollOptimizationStatus(

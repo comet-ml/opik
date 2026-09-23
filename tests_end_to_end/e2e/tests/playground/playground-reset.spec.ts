@@ -16,9 +16,18 @@ import { PlaygroundPage } from '@e2e/pom/playground.page';
  * `resetPlayground` is a comment in `prompt-playground-traces.spec.ts`
  * explaining how that spec routes around it.
  *
- * Deterministic by construction — no model is ever selected and no run is ever
- * started, so there is no LLM call, no provider key and no wall-clock
- * dependence anywhere in here.
+ * A provider has to exist before any of this is reachable. With none configured
+ * the Playground mounts behind the "Add provider configuration" modal, which
+ * sets `aria-hidden` on everything under it — so the page's own `h1` drops out
+ * of the accessibility tree and `waitForReady` times out on a perfectly healthy
+ * app. Every other spec in this directory establishes a provider first
+ * (`playground-model-parameters` skips itself when it cannot), and this one
+ * seeds the same unreachable custom provider as `playground-dataset-run-failure`
+ * next door.
+ *
+ * Deterministic by construction — the seeded provider refuses every connection
+ * and no model is ever selected and no run is ever started, so there is no LLM
+ * call, no real provider key and no wall-clock dependence anywhere in here.
  */
 
 /** What an untouched default prompt card contains: one message, with no body. */
@@ -30,8 +39,12 @@ test.describe('Playground — reset', { tag: ['@t2-cuj', '@area:playground'] }, 
   test(
     'reset leaves exactly one empty prompt, and stays that way',
     { tag: ['@cap:playground.compose-run-prompt'] },
-    async ({ page, project }) => {
+    async ({ page, project, providerKeys, testNamespace }) => {
       const playground = new PlaygroundPage(page, project.id);
+
+      await test.step('Give the workspace a provider so the Playground mounts', async () => {
+        await providerKeys.createUnreachable({ providerName: `${testNamespace}-unreachable` });
+      });
 
       await test.step('Open the Playground', async () => {
         await playground.goto();
@@ -81,9 +94,13 @@ test.describe('Playground — reset', { tag: ['@t2-cuj', '@area:playground'] }, 
   test(
     'reset from dataset mode clears the source and returns an editable prompt',
     { tag: ['@cap:playground.compose-run-prompt'] },
-    async ({ page, project, dataset }) => {
+    async ({ page, project, dataset, providerKeys, testNamespace }) => {
       const playground = new PlaygroundPage(page, project.id);
       const typed = 'Answer using {{input}}.';
+
+      await test.step('Give the workspace a provider so the Playground mounts', async () => {
+        await providerKeys.createUnreachable({ providerName: `${testNamespace}-unreachable` });
+      });
 
       await test.step('Load a dataset into the Playground', async () => {
         await playground.goto();

@@ -130,7 +130,11 @@ test.describe('Prompt — Experiments tab pinning', { tag: ['@t2-cuj', '@area:pr
 
       await test.step('The project Experiments page is unaffected', async () => {
         const experiments = new ExperimentsPage(page);
-        await experiments.goto(promptExperiments.projectId);
+        // Sized past the seed count on purpose: the row-count assertion below
+        // is about what the project page lists, and reading it at whatever
+        // `UI_DEFAULT_PAGE_SIZE` this deployment carries would make it an
+        // assertion about pagination instead.
+        await experiments.goto(promptExperiments.projectId, { size: EXPERIMENT_COUNT + 1 });
         await experiments.waitForReady();
         await expect(
           experiments.rowById(target),
