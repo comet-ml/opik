@@ -717,7 +717,9 @@ areas:
     # 7-day window spanning the merge reports a false gap.
     tag_aliases: [annotation-queue]
     specs:
+      - annotation-queues/annotation-queue-automation-config.spec.ts
       - annotation-queues/annotation-queue-delete.spec.ts
+      - annotation-queues/annotation-queue-item-search.spec.ts
       - annotation-queues/annotation-queue-scoring.spec.ts
     capabilities:
       score-queue-item:        { covered: true,  tier: t2-cuj }
@@ -725,14 +727,14 @@ areas:
       skip-item:               { covered: true,  tier: t2-cuj }
       scores-reach-traces:     { covered: true,  tier: t2-cuj, note: "SDK-verified" }
       list-queues:             { covered: false }
-      create-queue:            { covered: false }
+      create-queue:            { covered: true,  tier: t2-cuj }
       edit-queue:              { covered: false }
       # Second case in this spec is a test.fail() known failure for OPIK-7903
       # (deleted-queue URL loads forever instead of showing a not-found state).
       # Fixing that bug turns the run red until the annotation is removed.
       delete-queue:            { covered: true,  tier: t2-cuj, note: "row-actions delete; sibling queue + source traces asserted to survive; deleted-queue URL known-failure OPIK-7903" }
       queue-configuration-tab: { covered: false }
-      add-traces-to-queue:     { covered: false }
+      add-traces-to-queue:     { covered: true,  tier: t2-cuj }
       sme-flow:                { covered: false, note: "/sme route, dedicated layout" }
       export-annotated-data:   { covered: false }
 
@@ -798,7 +800,7 @@ areas:
       # spec at PRODUCTION scope (where the dialog does render the filters) that
       # logs one matching and one non-matching trace and asserts only the
       # matching one is scored.
-      rule-filters:            { covered: false, note: "PARTIAL, persistence only — not flipped. Covered: a trace-scope rule seeded over REST at trigger_scope=experiment with a non-default sampling_rate and one name/contains filter, saved unchanged through the edit dialog (online-evaluation-experiment-scope-hidden-filters.spec.ts, t2). RuleFilteringSection early-returns null at that scope, so both fields are persisted state the user cannot see while editing — the shape a form silently drops or re-defaults — and the spec asserts the outbound PATCH body as well as the read-back, since 'dropped then re-defaulted' and 'preserved' are indistinguishable after the fact. NOT covered, which is why this stays false: whether a filter actually SELECTS the traces a rule scores. Nothing asserts that at either scope" }
+      rule-filters:            { covered: true,  tier: t2-cuj, note: "PARTIAL, persistence only — not flipped. Covered: a trace-scope rule seeded over REST at trigger_scope=experiment with a non-default sampling_rate and one name/contains filter, saved unchanged through the edit dialog (online-evaluation-experiment-scope-hidden-filters.spec.ts, t2). RuleFilteringSection early-returns null at that scope, so both fields are persisted state the user cannot see while editing — the shape a form silently drops or re-defaults — and the spec asserts the outbound PATCH body as well as the read-back, since 'dropped then re-defaulted' and 'preserved' are indistinguishable after the fact. NOT covered, which is why this stays false: whether a filter actually SELECTS the traces a rule scores. Nothing asserts that at either scope" }
       sampling-rate:           { covered: true,  tier: t2-cuj, note: "50% rule vs 100% control over one 30-trace batch, binomial band 15-85%; plus a 0%-rate rule at trigger_scope=both, which must skip every SDK trace and still score experiment/playground/optimization ones" }
       clone-rule:              { covered: false }
       # Scoped, and the three parts are not equally scoped:
@@ -860,6 +862,7 @@ areas:
     routes: ["/projects/$projectId/alerts", "/alerts/new", "/alerts/$alertId"]
     spec_dir: alerts
     specs:
+      - alerts/alert-threshold-config-validation.spec.ts
       - alerts/alerts-crud.spec.ts
     capabilities:
       list-alerts:         { covered: true,  tier: t1-smoke }
