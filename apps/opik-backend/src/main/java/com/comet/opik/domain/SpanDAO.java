@@ -1972,7 +1972,7 @@ public class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Long> batchInsert(@NonNull List<Span> spans) {
+    public Mono<Long> batchInsert(List<Span> spans) {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(spans), "Spans list must not be empty");
 

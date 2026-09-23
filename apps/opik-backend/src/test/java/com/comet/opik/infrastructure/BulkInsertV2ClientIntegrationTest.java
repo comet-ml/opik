@@ -25,6 +25,8 @@ import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.FeedbackScoreDAO;
+import com.comet.opik.domain.SpanDAO;
+import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -42,6 +44,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -160,6 +163,8 @@ class BulkInsertV2ClientIntegrationTest {
     private ExperimentResourceClient experimentResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private SpanResourceClient spanResourceClient;
+    private TraceDAO traceDAO;
+    private SpanDAO spanDAO;
 
     @BeforeAll
     void beforeAll(ClientSupport clientSupport, FeedbackScoreDAO feedbackScoreDAO, Injector injector) {
@@ -167,6 +172,8 @@ class BulkInsertV2ClientIntegrationTest {
         // The shared template rather than a connection factory of our own, so the suite does not open and
         // close a connection per assertion.
         this.clickHouseTemplate = injector.getInstance(TransactionTemplateAsync.class);
+        this.traceDAO = injector.getInstance(TraceDAO.class);
+        this.spanDAO = injector.getInstance(SpanDAO.class);
         var baseUrl = TestUtils.getBaseUrl(clientSupport);
         ClientSupportUtils.config(clientSupport);
         mockTargetWorkspace(wireMock.server(), API_KEY, WORKSPACE_NAME, WORKSPACE_ID, USER);
@@ -811,5 +818,23 @@ class BulkInsertV2ClientIntegrationTest {
             node.fieldNames().forEachRemaining(names::add);
         }
         return names;
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @DisplayName("an empty or absent batch is rejected before either write path is chosen")
+    void emptyOrAbsentBatchIsRejected(List<Trace> traces) {
+        // Rejected eagerly, not on subscription: the guard sits ahead of the v2/R2DBC branch, so it must
+        // throw when the Mono is assembled rather than deferring a failure into the reactive chain.
+        // Covered here rather than in the mapper tests because the guard is the DAO's, and it is the one
+        // place both write paths share.
+        assertThatThrownBy(() -> traceDAO.batchInsert(traces))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("traces must not be empty");
+
+        List<Span> spans = traces == null ? null : List.of();
+        assertThatThrownBy(() -> spanDAO.batchInsert(spans))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Spans list must not be empty");
     }
 }
