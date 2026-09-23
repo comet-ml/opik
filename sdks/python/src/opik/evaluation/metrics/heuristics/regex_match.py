@@ -63,6 +63,12 @@ class RegexMatch(base_metric.BaseMetric):
                 "RegexMatch metric requires a non-None 'output' argument, got None"
             )
 
+        if not isinstance(output, str):
+            raise MetricComputationError(
+                f"RegexMatch metric requires a string 'output' argument, "
+                f"got {type(output).__name__}"
+            )
+
         if self._regex_pattern.search(output):
             return score_result.ScoreResult(value=1.0, name=self.name)
 

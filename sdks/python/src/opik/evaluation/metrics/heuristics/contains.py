@@ -1,5 +1,6 @@
 from typing import Any, Optional
 
+from opik.exceptions import MetricComputationError
 from .. import base_metric, score_result
 
 
@@ -91,6 +92,12 @@ class Contains(base_metric.BaseMetric):
         if ref == "":
             raise ValueError(
                 "Invalid reference string provided. Reference must be a non-empty string."
+            )
+
+        if not isinstance(output, str):
+            raise MetricComputationError(
+                f"Contains metric requires a string 'output' argument, "
+                f"got {type(output).__name__}"
             )
 
         value = output if self._case_sensitive else output.lower()

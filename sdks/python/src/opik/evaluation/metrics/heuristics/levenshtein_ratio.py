@@ -66,6 +66,13 @@ class LevenshteinRatio(base_metric.BaseMetric):
                 f"got output={output!r}, reference={reference!r}"
             )
 
+        if not isinstance(output, str) or not isinstance(reference, str):
+            raise MetricComputationError(
+                f"LevenshteinRatio metric requires string 'output' and 'reference' arguments, "
+                f"got output of type {type(output).__name__}, "
+                f"reference of type {type(reference).__name__}"
+            )
+
         import rapidfuzz.distance.Indel
 
         value = output if self._case_sensitive else output.lower()

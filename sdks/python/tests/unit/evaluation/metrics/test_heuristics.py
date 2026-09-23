@@ -1008,3 +1008,49 @@ def test_rouge_score_using_custom_tokenizer(
         f"For candidate='{candidate}' vs reference='{reference}', "
         f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
     )
+
+
+@pytest.mark.parametrize(
+    "bad_output",
+    [None, 5, 3.5, True, {"answer": "yes"}, ["a", "b"]],
+)
+def test_contains__non_string_output__raises_metric_error(bad_output):
+    # Contains validated `reference` but never `output`, so a non-string
+    # reached `.lower()` / `in` and surfaced as AttributeError or TypeError.
+    metric = Contains(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output, reference="a")
+
+
+@pytest.mark.parametrize("bad_output", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_levenshtein_ratio__non_string_output__raises_metric_error(bad_output):
+    # The None case was already reported as MetricComputationError; every other
+    # non-string fell through to AttributeError.
+    metric = levenshtein_ratio.LevenshteinRatio(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output, reference="abc")
+
+
+@pytest.mark.parametrize("bad_output", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_regex_match__non_string_output__raises_metric_error(bad_output):
+    metric = regex_match.RegexMatch(regex=r"\d+", track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output)
+
+
+def test_string_metrics__valid_strings__still_score():
+    # The new guards must not touch the normal path.
+    assert (
+        Contains(track=False).score(output="hello world", reference="world").value
+        == 1.0
+    )
+    assert (
+        levenshtein_ratio.LevenshteinRatio(track=False)
+        .score(output="abc", reference="abc")
+        .value
+        == 1.0
+    )
+    assert (
+        regex_match.RegexMatch(regex=r"\d+", track=False).score(output="abc 123").value
+        == 1.0
+    )
