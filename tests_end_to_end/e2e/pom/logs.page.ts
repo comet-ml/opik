@@ -265,6 +265,48 @@ export class LogsPage {
     });
   }
 
+  /**
+   * Open Logs with the Traces tab active for the given project.
+   *
+   * Explicit rather than relying on `goto()`: `useLogsType` picks the default
+   * tab from the project's own thread count, so a project that happens to carry
+   * a thread opens on Threads — and anything opened from this page (the "Add
+   * automation" options among them) is scoped to whichever tab is active.
+   */
+  async gotoTraces(projectId: string): Promise<void> {
+    return test.step(`Open Logs (Traces) for project ${projectId}`, async () => {
+      this.projectId = projectId;
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${projectId}/logs?logsType=traces`,
+      );
+    });
+  }
+
+  /** The Threads/Traces/Spans tab toggle for "Traces". */
+  get tracesTab(): Locator {
+    return this.page.getByRole('radio', { name: 'Traces' });
+  }
+
+  get addAutomationButton(): Locator {
+    return this.page.getByRole('button', { name: 'Add automation' });
+  }
+
+  /**
+   * Choose one of the "Add automation" options. The caller owns whatever the
+   * option opens — a sheet for the two dialog-backed ones, a navigation for
+   * Alerts.
+   *
+   * The menu items carry a title and a description in one row, so the name is
+   * matched as a prefix rather than exactly.
+   */
+  async openAddAutomation(option: 'Alerts' | 'Online evaluation' | 'Annotation queue'): Promise<void> {
+    return test.step(`Open "Add automation" → ${option}`, async () => {
+      await this.addAutomationButton.click();
+      await this.page.getByRole('menuitem').filter({ hasText: option }).click();
+    });
+  }
+
   /** Open Logs with the Threads tab active for the given project. */
   async gotoThreads(projectId: string): Promise<void> {
     return test.step(`Open Logs (Threads) for project ${projectId}`, async () => {

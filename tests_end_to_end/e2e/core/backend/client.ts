@@ -618,6 +618,52 @@ export interface AnnotationQueueDetail {
   reviewers: AnnotationQueueReviewerRef[];
 }
 
+/** One threshold on a named feedback score, inside an automation condition group. */
+export interface QueueScoreConditionRef {
+  scoreName: string;
+  /**
+   * The wire operator, narrowed to what `ScoreConditionOperator` deserializes.
+   * Anything else is refused by the backend as it reads the payload, so a spec
+   * that sent one would fail on a Jackson message rather than on the claim it
+   * was making — and the read side below has to widen back out of `string`
+   * anyway, so the union is what both ends agree on.
+   */
+  operator: '<' | '>' | '=';
+  value: number;
+}
+
+/**
+ * A queue's automation block as the API returns it.
+ *
+ * `groups` is the disjunction of conjunctions flattened to arrays, so a spec can
+ * compare the whole structure with `toEqual` rather than reaching into it — a
+ * lookup of "my group" would pass just as well against a payload that also
+ * carried groups nobody configured.
+ *
+ * `maxItemsInQueue` is `null` only when the key is genuinely absent from the
+ * response; it is never defaulted to a number, because the value a defaulting
+ * read would invent is exactly the one a round-trip assertion expects.
+ */
+export interface QueueAutomationRef {
+  enabled: boolean;
+  maxItemsInQueue: number | null;
+  groups: QueueScoreConditionRef[][];
+}
+
+/** The write shape of an annotation queue, including its automation block. */
+export interface AnnotationQueueWrite {
+  id: string;
+  projectId: string;
+  name: string;
+  scope: 'trace' | 'thread';
+  feedbackDefinitionNames?: string[];
+  automation?: {
+    enabled: boolean;
+    maxItemsInQueue?: number;
+    groups?: QueueScoreConditionRef[][];
+  };
+}
+
 /**
  * One row of `GET /v1/private/traces/threads` — the aggregate the Threads view
  * renders per conversation. Every field a wrong `traces` prefilter would corrupt
@@ -3839,6 +3885,146 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * Create an annotation queue, optionally with an automation block, and
+     * report the status rather than throwing on it.
+     *
+     * Not `sdkClient.python.createAnnotationQueue`: the bridge's route seeds
+     * traces and feedback definitions into a queue and has no `automation`
+     * argument, and the automation block is the whole subject here. The id is
+     * caller-supplied because creation answers 201 with no body.
+     */
+    async createAnnotationQueue(queue: AnnotationQueueWrite): Promise<RawApiResult> {
+      const { status, message } = await rawFetch('POST', '/v1/private/annotation-queues', {
+        body: {
+          id: queue.id,
+          project_id: queue.projectId,
+          name: queue.name,
+          scope: queue.scope,
+          ...(queue.feedbackDefinitionNames
+            ? { feedback_definition_names: queue.feedbackDefinitionNames }
+            : {}),
+          ...(queue.automation
+            ? {
+                automation: {
+                  enabled: queue.automation.enabled,
+                  ...(queue.automation.maxItemsInQueue === undefined
+                    ? {}
+                    : { max_items_in_queue: queue.automation.maxItemsInQueue }),
+                  ...(queue.automation.groups
+                    ? {
+                        conditions: {
+                          groups: queue.automation.groups.map((conditions) => ({
+                            conditions: conditions.map((condition) => ({
+                              score_name: condition.scoreName,
+                              operator: condition.operator,
+                              value: condition.value,
+                            })),
+                          })),
+                        },
+                      }
+                    : {}),
+                },
+              }
+            : {}),
+        },
+      });
+      return { status, message };
+    },
+
+    /**
+     * The automation block of one queue, or null when the queue carries none.
+     *
+     * Read through `rawFetch` because `automation` is new in this release and
+     * the pinned SDK's queue type does not declare it — a read through the typed
+     * client would drop the field and present a queue that stored nothing
+     * exactly like one that stored everything.
+     */
+    async getAnnotationQueueAutomation(id: string): Promise<QueueAutomationRef | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/annotation-queues/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `getAnnotationQueueAutomation('${id}'): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const automation = (
+        json as {
+          automation?: {
+            enabled?: boolean;
+            max_items_in_queue?: number;
+            conditions?: { groups?: Array<{ conditions?: Array<Record<string, unknown>> }> };
+          };
+        }
+      ).automation;
+      if (automation == null) return null;
+      if (typeof automation.enabled !== 'boolean') {
+        throw new Error(
+          `getAnnotationQueueAutomation('${id}'): automation carried no boolean 'enabled'.`,
+        );
+      }
+      return {
+        enabled: automation.enabled,
+        maxItemsInQueue:
+          typeof automation.max_items_in_queue === 'number' ? automation.max_items_in_queue : null,
+        groups: (automation.conditions?.groups ?? []).map((group) =>
+          (group.conditions ?? []).map((condition) => {
+            // Checked rather than cast: an operator the enum does not define
+            // means the server answered something no caller can act on, and a
+            // blind cast would present it to `toEqual` as a plain mismatch
+            // instead of naming what came back.
+            const operator = String(condition.operator ?? '');
+            if (operator !== '<' && operator !== '>' && operator !== '=') {
+              throw new Error(
+                `getAnnotationQueueAutomation('${id}'): unknown score condition operator '${operator}'.`,
+              );
+            }
+            return {
+              scoreName: String(condition.score_name ?? ''),
+              operator,
+              value: Number(condition.value),
+            };
+          }),
+        ),
+      };
+    },
+
+    /**
+     * The id of a project's queue with exactly this name — how a spec that
+     * created a queue through the UI finds the id the sheet never showed it.
+     *
+     * The listing is filtered by project only and matched here, rather than
+     * through the endpoint's own `name` parameter. That parameter is a
+     * contains-match, so it cannot express "exactly this name" anyway, and it
+     * has been seen answering 5xx on this listing — neither is worth depending
+     * on for a lookup that a project-scoped page of 100 answers directly.
+     */
+    async findAnnotationQueueIdByName(projectId: string, name: string): Promise<string | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        '/v1/private/annotation-queues',
+        { query: new URLSearchParams({ project_id: projectId, page: '1', size: '100' }) },
+      );
+      if (status !== 200) {
+        throw new Error(
+          `findAnnotationQueueIdByName('${name}'): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const content = (json as { content?: Array<{ id?: string; name?: string }> }).content ?? [];
+      // Exact: a namespaced sibling ("…-queue-2") contains this name but is a
+      // different queue, and returning it would point every later assertion at
+      // the wrong row.
+      const matches = content.filter((queue) => queue.name === name);
+      if (matches.length > 1) {
+        throw new Error(
+          `findAnnotationQueueIdByName('${name}'): ${matches.length} queues share this name in project ${projectId}.`,
+        );
+      }
+      return matches.length === 1 ? String(matches[0].id) : null;
     },
 
     /**

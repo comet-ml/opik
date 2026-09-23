@@ -680,9 +680,27 @@ areas:
       score-with-reason:       { covered: true,  tier: t2-cuj }
       skip-item:               { covered: true,  tier: t2-cuj }
       scores-reach-traces:     { covered: true,  tier: t2-cuj, note: "SDK-verified" }
-      list-queues:             { covered: false }
-      create-queue:            { covered: false }
-      edit-queue:              { covered: false }
+      # PARTIAL, and the note says which part. What is asserted is that the list
+      # renders a row per queue in the project and that the Automation column
+      # discriminates — an automated and a plain queue side by side, so a cell
+      # that printed one value unconditionally fails. Search, filters, sorting,
+      # paging and the workspace-wide list are all still unexercised.
+      list-queues:             { covered: true,  tier: t2-cuj, note: "project-scoped list renders a row per queue; the Automation column asserted On and Off against two queues seeded that way (annotation-queue-automation-off.spec.ts). Search, filters, sort, paging and the workspace-wide list are not covered" }
+      # The UI half. annotation-queue-automation-config.spec.ts pins the stored
+      # shape over REST and says in its own docstring that there was no UI to
+      # drive at the commit it was written against; there is one now, and
+      # annotation-queue-automation-form.spec.ts drives it.
+      #
+      # Scoped to the automation-ON path. Creating a queue with automation left
+      # OFF is a known failure (annotation-queue-automation-off.spec.ts,
+      # test.fail) and is NOT counted here — a known failure is not coverage.
+      create-queue:            { covered: true,  tier: t2-cuj, note: "Logs -> Add automation -> Annotation queue: scope prefill, automation prefill and one condition serialised, compared whole against the stored automation block, plus the list's Automation cell. Automation-OFF create is a known failure and is not covered" }
+      # Same spec's second test: a stored automation read back INTO the builder,
+      # a second OR-ed group added through it, and both groups asserted on the
+      # API and on the re-rendered form (pinned by exhaustion, so a stray blank
+      # group fails). Editing a queue that has NO automation is a known failure
+      # and is not counted here.
+      edit-queue:              { covered: true,  tier: t2-cuj, note: "edit-dialog rehydration of a stored automation (score, operator, threshold), a second OR group added and saved, asserted on the API and on the reopened builder by exhaustion. Renaming, scope, feedback definitions and the automation-OFF edit are not covered" }
       # Second case in this spec is a test.fail() known failure for OPIK-7903
       # (deleted-queue URL loads forever instead of showing a not-found state).
       # Fixing that bug turns the run red until the annotation is removed.
