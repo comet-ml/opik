@@ -50,6 +50,7 @@ export {
   type AnnotationQueueDetail,
   type AnnotationQueueReviewerRef,
   type AnnotationQueueWrite,
+  type NonEmpty,
   type QueueAutomationRef,
   type QueueScoreConditionRef,
   type ThreadRowRef,

@@ -650,6 +650,9 @@ export interface QueueAutomationRef {
   groups: QueueScoreConditionRef[][];
 }
 
+/** A list the backend refuses to accept empty. */
+export type NonEmpty<T> = [T, ...T[]];
+
 /** The write shape of an annotation queue, including its automation block. */
 export interface AnnotationQueueWrite {
   id: string;
@@ -657,10 +660,21 @@ export interface AnnotationQueueWrite {
   name: string;
   scope: 'trace' | 'thread';
   feedbackDefinitionNames?: string[];
+  /**
+   * Omit the whole block for a queue with no automation — that, not
+   * `{ enabled: false }`, is what an unautomated create looks like on the wire.
+   *
+   * `groups` is required and non-empty because every thinner shape is refused,
+   * and refused *late*, by the service rather than by the type: creating with
+   * `automation` present but no `conditions` answers 400 "requires conditions"
+   * for `enabled` true AND false alike, and `groups: []` answers 422 "groups
+   * must not be empty". Expressing that here turns a run-time 4xx a spec has to
+   * decode into a `tsc` error naming the missing field.
+   */
   automation?: {
     enabled: boolean;
     maxItemsInQueue?: number;
-    groups?: QueueScoreConditionRef[][];
+    groups: NonEmpty<NonEmpty<QueueScoreConditionRef>>;
   };
 }
 
@@ -3913,19 +3927,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
                   ...(queue.automation.maxItemsInQueue === undefined
                     ? {}
                     : { max_items_in_queue: queue.automation.maxItemsInQueue }),
-                  ...(queue.automation.groups
-                    ? {
-                        conditions: {
-                          groups: queue.automation.groups.map((conditions) => ({
-                            conditions: conditions.map((condition) => ({
-                              score_name: condition.scoreName,
-                              operator: condition.operator,
-                              value: condition.value,
-                            })),
-                          })),
-                        },
-                      }
-                    : {}),
+                  conditions: {
+                    groups: queue.automation.groups.map((conditions) => ({
+                      conditions: conditions.map((condition) => ({
+                        score_name: condition.scoreName,
+                        operator: condition.operator,
+                        value: condition.value,
+                      })),
+                    })),
+                  },
                 },
               }
             : {}),

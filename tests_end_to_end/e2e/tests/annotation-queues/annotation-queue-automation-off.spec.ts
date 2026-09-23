@@ -23,11 +23,22 @@ import {
  *   422 {"errors":["automation.conditions.groups[0].conditions[0].scoreName
  *        must not be blank"]}
  *
- * and the sheet stays open having written nothing. `AnnotationQueueAutomation`
- * documents the shape the form should send: *"Nullable so flipping the toggle
- * off is a one-field request: {"enabled": false} keeps the stored conditions"*.
- * So the fix is to omit `conditions` — not to send an empty `groups` array,
- * which the backend refuses too (`groups must not be empty`).
+ * and the sheet stays open having written nothing.
+ *
+ * The remedy is to omit the whole `automation` object while the toggle is off,
+ * not merely its `conditions`. Probed against a local stack at this head, the
+ * create endpoint answers:
+ *
+ *   no `automation` key at all                        201
+ *   {"enabled": false} (conditions omitted)           400 "requires conditions"
+ *   {"enabled": true}  (conditions omitted)           400 "requires conditions"
+ *   {"enabled": true,  "conditions": {"groups": []}}  422 "groups must not be empty"
+ *   {"enabled": false, "conditions": {<a filled row>}} 201
+ *
+ * So `AnnotationQueueAutomation`'s *"Nullable so flipping the toggle off is a
+ * one-field request"* describes the update path only; on create the service
+ * demands conditions whenever an `automation` block is present at all, whatever
+ * `enabled` says. Sending `{"enabled": false}` alone trades the 422 for a 400.
  *
  * The defect only bites while a group still holds an UNTOUCHED placeholder,
  * which is why toggling automation off on a queue whose conditions are filled
