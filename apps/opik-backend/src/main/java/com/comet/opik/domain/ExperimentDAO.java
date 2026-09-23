@@ -2519,7 +2519,11 @@ public class ExperimentDAO {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             var targetProjectIdsMono = getTargetProjectIdsForExperiments(TargetProjectsCriteria.from(criteria));
-            var branchCountsMono = getAggregationBranchCounts(AggregationBranchCountsCriteria.empty());
+            // Scoped by project so a single non-aggregated experiment elsewhere in the workspace doesn't keep
+            // the raw branch for every grouping request; project is the only scope the grouping criteria has.
+            var branchCountsMono = getAggregationBranchCounts(AggregationBranchCountsCriteria.builder()
+                    .projectId(criteria.projectId())
+                    .build());
 
             return Mono.zip(targetProjectIdsMono, branchCountsMono)
                     .flatMapMany(preQueryResults -> {
