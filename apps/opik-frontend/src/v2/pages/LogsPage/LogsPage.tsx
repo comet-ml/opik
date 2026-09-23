@@ -9,7 +9,6 @@ import { Construction } from "lucide-react";
 import { useState } from "react";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import SetGuardrailDialog from "@/v2/pages-shared/traces/GuardrailConfig/SetGuardrailDialog";
-import AddAutomationDropdown from "@/v2/pages-shared/traces/AddAutomationDropdown/AddAutomationDropdown";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useLogsType from "@/v2/pages/LogsPage/useLogsType";
 import {
@@ -51,8 +50,8 @@ const LogsPageContent: React.FunctionComponent<LogsPageContentProps> = ({
           direction="horizontal"
         >
           <h1 className="comet-body-accented truncate break-words">Logs</h1>
-          <div className="flex shrink-0 items-center gap-2">
-            {isGuardrailsEnabled && (
+          {isGuardrailsEnabled && (
+            <div className="flex shrink-0 items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -61,14 +60,8 @@ const LogsPageContent: React.FunctionComponent<LogsPageContentProps> = ({
                 <Construction className="mr-1.5 size-3.5" />
                 Set a guardrail
               </Button>
-            )}
-            {!needsDefaultResolution && (
-              <AddAutomationDropdown
-                projectId={projectId}
-                logsType={logsType}
-              />
-            )}
-          </div>
+            </div>
+          )}
         </PageBodyStickyContainer>
         {needsDefaultResolution ? (
           <Loader />

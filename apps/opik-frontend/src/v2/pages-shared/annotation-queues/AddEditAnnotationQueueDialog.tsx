@@ -48,6 +48,10 @@ import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
+// Starting ceiling for a new automation: a badly scoped condition should fill a review queue with 100
+// items to look at, not with every trace in the project.
+const DEFAULT_AUTOMATION_MAX_ITEMS = 100;
+
 const QUEUE_DOCS_LINK = buildDocsUrl("/evaluation/advanced/annotation_queues");
 
 // The design's labels sit 2px in from the field edge with 2px beneath, making a 22px label box.
@@ -85,6 +89,9 @@ const formSchema = z
       .max(60)
       .default(DEFAULT_LOCK_TIMEOUT_SECONDS / 60),
     automation_enabled: z.boolean().default(false),
+    // A string like the thresholds: "" is a legitimate value (no ceiling) that z.coerce.number would
+    // turn into 0, and a number field's raw text is what validation needs to see.
+    automation_max_items: z.string().default(""),
     // Held in the shared condition shape (name/operator/threshold) so the builder can be reused as-is,
     // then mapped to the API's score_name/operator/value on submit. Only validated when the toggle is on:
     // conditions left half-filled while automation is off must not block saving the queue.
@@ -116,6 +123,18 @@ const formSchema = z
   .superRefine((data, ctx) => {
     if (!data.automation_enabled) {
       return;
+    }
+
+    if (data.automation_max_items !== "") {
+      const max = Number(data.automation_max_items);
+      if (!Number.isInteger(max) || max < 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "Enter a whole number of 1 or more, or leave empty for no limit",
+          path: ["automation_max_items"],
+        });
+      }
     }
 
     const groups = data.automation_groups;
@@ -168,7 +187,6 @@ type AddEditAnnotationQueueDialogProps = {
   scope?: ANNOTATION_QUEUE_SCOPE;
   queue?: AnnotationQueue;
   /** Start with automation switched on — used when the form is opened from the 'Add automation' menu. */
-  expandAutomation?: boolean;
 };
 
 const AddEditAnnotationQueueDialog: React.FunctionComponent<
@@ -180,7 +198,6 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   scope,
   onQueueCreated,
   queue: defaultQueue,
-  expandAutomation,
 }) => {
   const {
     permissions: { canCreateAnnotationQueues, canEditAnnotationQueues },
@@ -201,12 +218,14 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       lock_timeout_minutes:
         (defaultQueue?.lock_timeout_seconds ?? DEFAULT_LOCK_TIMEOUT_SECONDS) /
         60,
-      // Off by default, except when the form was opened from the 'Add automation' menu, where
-      // configuring automation is the whole point of the visit.
-      automation_enabled:
-        defaultQueue?.automation?.enabled ?? Boolean(expandAutomation),
+      automation_enabled: defaultQueue?.automation?.enabled ?? false,
       // conditions is nullable on the backend: a toggle-off request keeps them server-side but a
       // queue can still arrive with automation and no conditions.
+      // A new automation starts capped so a badly scoped condition cannot flood a review queue; an
+      // existing queue keeps whatever it has, including no ceiling, which must not change on edit.
+      automation_max_items: defaultQueue
+        ? String(defaultQueue.automation?.max_items_in_queue ?? "")
+        : String(DEFAULT_AUTOMATION_MAX_ITEMS),
       automation_groups: defaultQueue?.automation?.conditions?.groups?.map(
         (group) => ({
           conditions: group.conditions.map((condition) => ({
@@ -245,6 +264,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       lock_timeout_minutes,
       automation_enabled,
       automation_groups,
+      automation_max_items,
       ...rest
     } = formData;
 
@@ -255,6 +275,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       lock_timeout_seconds: lock_timeout_minutes * 60,
       automation: {
         enabled: automation_enabled,
+        max_items_in_queue:
+          automation_max_items === "" ? null : Number(automation_max_items),
         conditions: {
           groups: automation_groups.map((group) => ({
             conditions: group.conditions.map((condition) => ({
@@ -588,6 +610,30 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         {automationGroupsError}
                       </p>
                     )}
+                    <FormField
+                      control={form.control}
+                      name="automation_max_items"
+                      render={({ field }) => (
+                        <FormItem className="mt-3 gap-1">
+                          <FormLabel className={LABEL_CLASS}>
+                            Max items in queue{" "}
+                            <ExplainerIcon
+                              className="inline"
+                              description="Automation stops adding items once the queue holds this many. Leave empty for no limit."
+                            />
+                          </FormLabel>
+                          <FormControl>
+                            <StepperField
+                              {...field}
+                              min={1}
+                              placeholder="No limit"
+                              className="w-40"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
                 )}
               </div>

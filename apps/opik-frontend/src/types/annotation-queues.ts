@@ -39,6 +39,8 @@ export interface AnnotationQueueAutomation {
   conditions: {
     groups: AnnotationQueueConditionGroup[];
   };
+  /** Automation stops adding once the queue holds this many items; null or absent means no ceiling. */
+  max_items_in_queue?: number | null;
 }
 
 export interface AnnotationQueue {
