@@ -124,23 +124,71 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
+# Cap on how many wrapped causes are reported before the frames.
+MAX_CAUSE_CHAIN = 5
+# Cap on how many are visited to find them, so a wide exception group cannot make
+# the walk itself the expensive part.
+MAX_CAUSE_VISITS = 100
 
 
 def user_facing_stacktrace(skip_frames: int = 1) -> str:
-    """Format the current exception with the runner's own frames dropped.
+    """Format the current exception, cause first, with this code's own frames dropped.
 
     Walks frames rather than slicing a fixed number of leading lines, so the
     exception line survives however short the traceback is. A failure raised while
     binding the call arguments has no user frame at all, and how many lines pad the
-    traceback depends on how the runner was packaged, so a fixed slice could remove
-    the message itself and report a cause of "".
+    traceback depends on how this is packaged, so a fixed slice could remove the
+    message itself and report a cause of "". Returns the exception and any wrapped
+    causes ahead of the frames, since the caller keeps only the first 500 characters.
     """
     exc_type, exc, tb = sys.exc_info()
     for _ in range(skip_frames):
         if tb is None:
             break
         tb = tb.tb_next
-    return "".join(traceback.format_exception(exc_type, exc, tb)).strip()
+    # Lead with the causes. The caller truncates this message to its first 500
+    # characters and format_exception puts the exception last, so a failure raised a
+    # few frames deep would have its cause cut off -- the same empty-cause outcome
+    # this helper exists to prevent. Frames follow, and are what gets lost instead.
+    # format_exception_only rather than slicing the formatted list: for a
+    # SyntaxError the first entry is the offending location, not a header, so
+    # dropping it by position would discard the very line the user needs. The
+    # __cause__/__context__ chain is walked so a wrapped error still names its root,
+    # and bounded so a long chain cannot push the frames out on its own.
+    causes = []
+    seen = set()
+    queue = [exc]
+    # Bounded on the way in, not just on the way out: a group can carry arbitrarily
+    # many members, and formatting them all before discarding most is work done on
+    # behalf of whatever the metric raised.
+    while queue and len(causes) < MAX_CAUSE_VISITS:
+        current = queue.pop(0)
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        causes.append("".join(traceback.format_exception_only(type(current), current)).rstrip())
+        # A group renders as "(N sub-exceptions)" on its own, which names nothing
+        # actionable, so its members are reported alongside it.
+        for member in getattr(current, "exceptions", ()) or ():
+            queue.append(member)
+        # `raise X from None` sets __suppress_context__, and reporting the context
+        # anyway would expose what the author explicitly hid. Compared against None
+        # rather than tested for truth: an exception may define __bool__/__len__ as
+        # falsy, and an explicit cause must not be dropped because of it.
+        if current.__cause__ is not None:
+            queue.append(current.__cause__)
+        elif not current.__suppress_context__:
+            queue.append(current.__context__)
+    # Truncated from the middle: the first entry is what was raised and the last is
+    # the root, and dropping the tail would lose the root -- the one this exists to
+    # surface -- on any chain deeper than the budget.
+    if len(causes) > MAX_CAUSE_CHAIN:
+        # Two of the budget go to the marker and the root, so the head keeps the rest.
+        kept = MAX_CAUSE_CHAIN - 2
+        causes = causes[:kept] + [f"... {len(causes) - kept - 1} more", causes[-1]]
+    cause = "\ncaused by: ".join(causes)
+    frames = "".join(traceback.format_tb(tb)).rstrip()
+    return f"{cause}\n{frames}" if frames else cause
 
 code = argv[1]
 data = json.loads(argv[2])

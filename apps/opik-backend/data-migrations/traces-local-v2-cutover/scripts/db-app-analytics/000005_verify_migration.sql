@@ -25,6 +25,10 @@
 -- UTC bounds. Unpinned they would shift with the server timezone on both sides at once -- self-consistent, so no
 -- mismatch appears, while the first and last windows silently stop covering what the backfill actually copied.
 --
+-- The row fingerprint is repeated in every block below, and again in 000006_verify_reconciliation.sql, so that each
+-- block stays a statement that can be read and run on its own. KEEP THEM IN STEP BY HAND: two tools hashing the same
+-- rows differently would disagree about which rows match, and nothing would say so. Change one arm, change all of them.
+--
 -- ../verify.sh is the single driver: it reads this file and runs the blocks below, never this file by hand. Which block,
 -- and when:
 --   * `compare`       once per created_at week (optionally sampled), parsing the single verdict row;

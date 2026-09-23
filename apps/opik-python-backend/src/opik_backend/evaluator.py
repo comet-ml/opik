@@ -1,13 +1,17 @@
 import os
 from typing import Any, Dict
-from opik_backend.payload_types import PayloadType
-from opik_backend.process_worker import required_score_params
 
 from flask import request, abort, jsonify, Blueprint, current_app
 from werkzeug.exceptions import HTTPException
 
 from opik_backend.executor import CodeExecutorBase
 from opik_backend.http_utils import build_error_response
+from opik_backend.payload_types import PayloadType
+from opik_backend.process_worker import required_score_params
+from opik_backend.score_validation import has_usable_score
+
+# Built-ins the scorer injects rather than resolving from a trace/span path.
+RESERVED_BUILT_INS = frozenset({"spans"})
 
 # Environment variable to control execution strategy
 EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "process")
@@ -51,6 +55,12 @@ def execute_evaluator_python():
     code: str = payload.get("code")
     if code is None:
         abort(400, "Field 'code' is missing in the request")
+    if not isinstance(code, str):
+        # Checked here rather than left to the executor: the two strategies disagree
+        # on a non-string. ProcessExecutor reaches exec() and comes back 400, while
+        # DockerExecutor sizes the payload before its try block and raises
+        # AttributeError, which surfaces as a 500 the Java caller then retries.
+        abort(400, "Field 'code' must be a string")
 
     data: Dict[Any, Any] = payload.get("data")
     if data is None:
@@ -68,9 +78,14 @@ def execute_evaluator_python():
     # and requires the opposite -- score(**data) must raise, so the item is reported
     # as an explained 0.0 rather than a silent score (OPIK_7172). Same shape, two
     # contracts, and only the caller separates them.
+    #
+    # `spans` is excluded because it is not path-resolved: the scorer injects it only
+    # when the rule declares it, so its absence always means the rule never asked for
+    # it -- a configuration error that should keep failing by name, not be filled.
     if isinstance(data, dict) and payload_type != PayloadType.TRACE_THREAD.value:
         for name in required_score_params(code):
-            data.setdefault(name, None)
+            if name not in RESERVED_BUILT_INS:
+                data.setdefault(name, None)
 
     # Get the executor from app context and run the code
     response = get_executor().run_scoring(code, data, payload_type)
@@ -82,5 +97,13 @@ def execute_evaluator_python():
     if len(scores) == 0:
         current_app.logger.info("Missing ScoreResult in code '%s'", code)
         abort(400, "The provided 'code' field didn't return any 'opik.evaluation.metrics.ScoreResult'")
+
+    # A mixed list is passed through on purpose: the usable scores still reach the backend, which drops
+    # the rest and names them on the rule's log stream. Only a wholly unusable response is rejected,
+    # which is the same class of user error as returning no ScoreResult at all, just above.
+    if not has_usable_score(scores):
+        current_app.logger.info("No usable ScoreResult in code '%s'", code)
+        abort(400, "The provided 'code' field didn't return any usable "
+                   "'opik.evaluation.metrics.ScoreResult'")
 
     return jsonify({"scores": scores})

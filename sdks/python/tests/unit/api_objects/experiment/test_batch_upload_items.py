@@ -138,8 +138,11 @@ class TestBulkUploadItemsBatching:
         experiment, mock_rest_client = _create_experiment()
         items_count = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE * 2 + 500
 
+        # Sequential: this asserts the batch list in order, which only the
+        # single-threaded path guarantees. Concurrency is covered separately.
         experiment.batch_upload_items(
-            [_record(dataset_item_id=f"item-{i}") for i in range(items_count)]
+            [_record(dataset_item_id=f"item-{i}") for i in range(items_count)],
+            num_threads=1,
         )
 
         batch_sizes = _sent_batch_sizes(mock_rest_client)
@@ -169,7 +172,8 @@ class TestBulkUploadItemsBatching:
                     ),
                 )
                 for i in range(10)
-            ]
+            ],
+            num_threads=1,
         )
 
         batch_sizes = _sent_batch_sizes(mock_rest_client)
@@ -417,6 +421,32 @@ class TestBulkUploadItemsConcurrency:
         # 3 records fit in a single batch, so one worker is enough.
         assert captured_max_workers == [1]
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 1
+
+    def test_batch_upload_items__num_threads_not_given__fans_out_to_the_default(
+        self,
+    ) -> None:
+        """The default is the tuned worker count, not a sequential upload."""
+        experiment, mock_rest_client = _create_experiment()
+        captured_max_workers: List[int] = []
+        real_executor = concurrent_futures.ThreadPoolExecutor
+
+        def spy(*args: Any, **kwargs: Any) -> Any:
+            captured_max_workers.append(kwargs["max_workers"])
+            return real_executor(*args, **kwargs)
+
+        # More batches than workers, so the cap under test is the default
+        # rather than the batch count.
+        items_count = constants.EXPERIMENT_ITEMS_BULK_MAX_BATCH_SIZE * (
+            constants.EXPERIMENT_ITEMS_BULK_NUM_THREADS + 2
+        )
+        records = [_record(dataset_item_id=f"item-{i}") for i in range(items_count)]
+
+        with patch.object(
+            experiment_module.futures, "ThreadPoolExecutor", side_effect=spy
+        ):
+            experiment.batch_upload_items(records)
+
+        assert captured_max_workers == [constants.EXPERIMENT_ITEMS_BULK_NUM_THREADS]
 
     def test_batch_upload_items__num_threads_below_one__raises_validation_error(
         self,
@@ -743,7 +773,12 @@ class TestBulkUploadItemsRateLimitRetry:
     def test_batch_upload_items__batch_fails__remaining_batches_are_not_sent(
         self, mock_sleep: Mock
     ) -> None:
-        """Fail-fast, matching Dataset.insert: the caller retries the whole call."""
+        """Fail-fast, matching Dataset.insert: the caller retries the whole call.
+
+        Sequential, because "remaining" is only well defined in order. The
+        parallel path drops whatever has not started instead, which
+        ``batch_stuck_when_another_fails`` covers.
+        """
         experiment, mock_rest_client = _create_experiment()
         mock_rest_client.experiments.experiment_items_bulk.side_effect = [
             None,
@@ -754,7 +789,8 @@ class TestBulkUploadItemsRateLimitRetry:
 
         with pytest.raises(ApiError):
             experiment.batch_upload_items(
-                [_record(dataset_item_id=f"item-{i}") for i in range(items_count)]
+                [_record(dataset_item_id=f"item-{i}") for i in range(items_count)],
+                num_threads=1,
             )
 
         assert mock_rest_client.experiments.experiment_items_bulk.call_count == 2

@@ -1,0 +1,24 @@
+<clickhouse>
+    <!-- Distributed async-insert forwarding queue (OPIK-8255). An INSERT into a Distributed
+         table that does not land on a local replica is serialised to a file on disk, and a
+         single background sender per node ships those files one per network round trip unless
+         batching is on — each round trip paying the receiving node's async-insert flush, which
+         caps forwarding throughput. split_batch_on_failure retries a failed batch file-by-file
+         rather than wedging the queue behind one bad file.
+
+         Inert in this stack: a single node with prefer_localhost_replica at its default of 1
+         writes in-process, so no queue file is produced. Set anyway to keep the local stack
+         identical to Kubernetes, the same reason additional_config.xml pins
+         internal_replication on a single-replica cluster. Note this does not depend on there
+         being no Distributed table — enabling the wrap locally creates one, and these apply.
+
+         Must be a profile (users.d) setting, not a server (config.d) one: ClickHouse reads
+         <profiles> only from users.d. clickhouse-init copies clickhouse_config into config.d,
+         so this file also needs its own mount in docker-compose.yaml to reach users.d. -->
+    <profiles>
+        <default>
+            <distributed_background_insert_batch>1</distributed_background_insert_batch>
+            <distributed_background_insert_split_batch_on_failure>1</distributed_background_insert_split_batch_on_failure>
+        </default>
+    </profiles>
+</clickhouse>
