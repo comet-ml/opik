@@ -890,7 +890,9 @@ def test_find_experiment_items_for_dataset__non_string_record_ids_do_not_parse(k
 
 
 @pytest.mark.parametrize("payload", ["plain text", [{"a": 1}], {"a": 1}])
-def test_find_experiment_items_for_dataset__string_or_list_output_still_parses(payload):
+def test_find_experiment_items_for_dataset__every_output_shape_the_api_sends_parses(
+    payload,
+):
     # `JsonListStringCompare` is `Union[Dict, List[Dict], str]`, so the API may send
     # any of these for `input`/`output`. Rejecting the non-dict shapes would fail
     # responses the backend is entitled to send.
