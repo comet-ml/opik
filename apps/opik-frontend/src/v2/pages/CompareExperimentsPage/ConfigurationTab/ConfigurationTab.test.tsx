@@ -30,6 +30,10 @@ vi.mock(
   }),
 );
 
+vi.mock("@/shared/NavigationTag", () => ({
+  default: ({ name }: { name: string }) => <span>{name}</span>,
+}));
+
 vi.mock(
   "@/v2/pages/CompareExperimentsPage/CompareExperimentsActionsPanel",
   () => ({
@@ -112,9 +116,7 @@ describe("ConfigurationTab prompt version row", () => {
     expect(rowNames()).not.toContain("Prompt version");
   });
 
-  // Outside compare mode the page header already shows the prompt and its
-  // version, so the tab does not repeat it.
-  it("omits the row outside compare mode", () => {
+  it("omits the row outside compare mode, where prompts render as tags", () => {
     renderTab([experiment("e1", { prompt_versions: [promptVersion()] })]);
 
     expect(rowNames()).not.toContain("Prompt version");
