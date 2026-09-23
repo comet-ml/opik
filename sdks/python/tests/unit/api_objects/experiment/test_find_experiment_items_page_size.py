@@ -485,3 +485,25 @@ def test_http_client__says_what_moved_when_the_generated_layout_changes(rest_cli
         exceptions.OpikException, match="generated client's layout has changed"
     ):
         rest_operations.http_client(rest_client)
+
+
+def test_get_items__reaches_the_http_client_through_the_accessor():
+    """The read's own path, not the accessor in isolation.
+
+    `_fetch_page_json` spelling out `_client_wrapper.httpx_client` inline would pass
+    every other test in this module -- both spellings find the same object on a client
+    that has it -- and diverge only where the generated layout moved, which is the one
+    case the accessor exists for. So that is where this pins it: through the public
+    read, on a client missing the attribute.
+    """
+    rest_client = Mock()
+    del rest_client._client_wrapper  # Mock would otherwise autocreate it
+    rest_client.datasets.get_dataset_by_identifier.return_value = types.SimpleNamespace(
+        id="some-dataset-id"
+    )
+    experiment = _experiment(experiments_client_module.ExperimentsClient(rest_client))
+
+    with pytest.raises(
+        exceptions.OpikException, match="generated client's layout has changed"
+    ):
+        experiment.get_items(max_results=10)
