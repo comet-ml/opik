@@ -204,6 +204,72 @@ export class OptimizationStudioPage {
     });
   }
 
+  /**
+   * Open the project's Optimization runs list — the page the run rows and
+   * their cost columns render on.
+   */
+  async gotoList(): Promise<void> {
+    return test.step('Open the Optimization runs list', async () => {
+      const env = loadEnvConfig();
+      await this.page.goto(
+        `${env.baseUrl}/${env.workspace}/projects/${this.projectId}/optimizations`,
+      );
+    });
+  }
+
+  /**
+   * One run's row in the runs list, addressed by its id.
+   *
+   * `DataTable` stamps `data-row-id="<optimizationId>"`, which survives a
+   * rename, a re-sort and a column reorder alike — unlike matching the Name
+   * cell, which would also have to survive one run's name being a prefix of
+   * another's.
+   */
+  runRow(optimizationId: string): Locator {
+    return this.runsTable().locator(`tbody tr[data-row-id="${optimizationId}"]`);
+  }
+
+  /**
+   * The "Optimization cost" cell of a run's row, as rendered.
+   *
+   * Addressed by COLUMN, not by position: the column's id is `opt_cost` (kept
+   * from before the header was renamed, so saved column layouts survive), and
+   * `DataTable` stamps every body cell `data-cell-id="<rowId>_<columnId>"`.
+   * A positional selector would read a different column the moment a user
+   * reorders them, which this table's Columns picker allows and persists.
+   */
+  optimizationCostCell(optimizationId: string): Locator {
+    return this.runRow(optimizationId).locator('td[data-cell-id$="_opt_cost"]');
+  }
+
+  /**
+   * Wait until the runs list has rendered exactly one row for a given run.
+   *
+   * `toHaveCount(1)` rather than `.first()`: an ambiguous match must fail
+   * loudly instead of silently reading some other run's numbers.
+   */
+  async waitForRunRow(optimizationId: string, timeoutMs = 30_000): Promise<void> {
+    return test.step(`wait for run ${optimizationId} to be listed`, async () => {
+      await expect(
+        this.runRow(optimizationId),
+        'exactly one row for the seeded run',
+      ).toHaveCount(1, { timeout: timeoutMs });
+    });
+  }
+
+  /**
+   * The Optimization runs empty state.
+   *
+   * Two components render it — `OptimizationsEmptyState` when the workspace
+   * may use the Studio, `PageEmptyState` when it may not — and both render the
+   * same string as an `h2`, so the heading role matches whichever the
+   * deployment shows. Matched as a heading rather than as text because the
+   * illustration's `alt` carries the same words.
+   */
+  emptyStateHeading(): Locator {
+    return this.page.getByRole('heading', { name: 'No optimization runs yet' });
+  }
+
   async gotoDetail(optimizationId: string): Promise<void> {
     return test.step('Open the optimization detail page', async () => {
       const env = loadEnvConfig();
@@ -368,6 +434,15 @@ export class OptimizationStudioPage {
   }
 
   private trialsTable(): Locator {
+    return this.page.locator('main table');
+  }
+
+  /**
+   * The runs list's table. Same anchor as `trialsTable` — the runs list has
+   * one table in `main` — but named separately because they are different
+   * surfaces and a future page change is free to move one without the other.
+   */
+  private runsTable(): Locator {
     return this.page.locator('main table');
   }
 }

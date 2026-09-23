@@ -1,3 +1,4 @@
+import math
 import re
 
 import pytest
@@ -409,6 +410,40 @@ def test_kl_divergence_avg_direction():
     metric = KLDivergence(direction="avg", smoothing=1e-6, track=False)
     result = metric.score(output="cat cat", reference="cat dog")
     assert result.value >= 0.0
+
+
+@pytest.mark.parametrize(
+    "direction,output,reference,missing_token",
+    [
+        ("pq", "cat dog", "cat", "dog"),
+        ("qp", "cat", "cat dog", "dog"),
+        ("avg", "cat dog", "cat bird", "dog"),
+    ],
+)
+def test_kl_divergence__zero_smoothing_and_missing_token__raises_metric_error(
+    direction, output, reference, missing_token
+):
+    metric = KLDivergence(direction=direction, smoothing=0.0, track=False)
+
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score(output=output, reference=reference)
+
+    assert (
+        str(exc_info.value)
+        == f"Token '{missing_token}' is absent from the other text, so the KL "
+        "divergence is infinite with smoothing=0.0. Pass a positive smoothing "
+        "value (KL divergence metric)."
+    )
+
+
+def test_kl_divergence__zero_smoothing_and_shared_support__computes_exact_value():
+    metric = KLDivergence(direction="pq", smoothing=0.0, track=False)
+
+    result = metric.score(output="cat cat dog", reference="cat dog dog")
+
+    # p = {cat: 2/3, dog: 1/3}, q = {cat: 1/3, dog: 2/3}
+    expected = (2 / 3) * math.log(2) + (1 / 3) * math.log(0.5)
+    assert result.value == pytest.approx(expected)
 
 
 def test_meteor_metric_with_custom_fn():
@@ -973,3 +1008,42 @@ def test_rouge_score_using_custom_tokenizer(
         f"For candidate='{candidate}' vs reference='{reference}', "
         f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
     )
+
+
+def test_tone_empty_lexicons_disable_the_defaults():
+    text = "This is terrible and useless."
+
+    default = Tone(track=False).score(output=text)
+    emptied = Tone(track=False, negative_lexicon=[]).score(output=text)
+
+    assert default.metadata["sentiment_score"] < 0
+    assert emptied.metadata["sentiment_score"] == 0
+    assert emptied.value == 1.0
+
+
+def test_tone_empty_positive_lexicon_disables_the_defaults():
+    text = "I am happy to help."
+
+    assert Tone(track=False).score(output=text).metadata["sentiment_score"] > 0
+    emptied = Tone(track=False, positive_lexicon=[]).score(output=text)
+    assert emptied.metadata["sentiment_score"] == 0
+
+
+def test_tone_empty_forbidden_phrases_disable_the_defaults():
+    text = "Shut up, this is not my problem."
+
+    assert Tone(track=False).score(output=text).metadata["forbidden_hit"] is True
+    emptied = Tone(track=False, forbidden_phrases=[]).score(output=text)
+    assert emptied.metadata["forbidden_hit"] is False
+
+
+def test_tone_none_lexicons_keep_the_defaults():
+    text = "This is terrible and useless."
+    explicit_none = Tone(
+        track=False,
+        positive_lexicon=None,
+        negative_lexicon=None,
+        forbidden_phrases=None,
+    ).score(output=text)
+
+    assert explicit_none == Tone(track=False).score(output=text)

@@ -12,6 +12,7 @@ import tenacity
 
 import opik.config as config
 from opik import exceptions
+from opik.api_objects import streaming_upload
 from opik.api_objects.dataset import converters, streaming_writer
 from opik.api_objects.dataset.dataset import Dataset
 from opik.rest_api.core.jsonable_encoder import jsonable_encoder
@@ -227,6 +228,23 @@ def test_insert__value_not_json_serializable__raises_explicitly():
         dataset.insert([{"input": NotSerializable()}])
 
 
+def test_insert__deduplication__set_member_with_a_raising_repr__raises_explicitly():
+    capture = UploadCapture()
+    dataset = make_dataset(Dataset, Mock(), capture)
+
+    class BadRepr:
+        def __repr__(self) -> str:
+            raise RuntimeError("repr exploded")
+
+    from opik.api_objects.dataset import streaming_writer
+
+    # Mixed types force the repr-keyed ordering, so the repr failure must surface as
+    # the serialization error rather than escape the dedup pass.
+    with pytest.raises(streaming_writer.ItemNotSerializableError):
+        dataset.insert([{"input": {1, BadRepr()}}], deduplication=True)
+    assert capture.request_count == 0
+
+
 # --------------------------------------------------------------------------- #
 # compatibility: a Dataset built from a rest client alone still uploads
 # --------------------------------------------------------------------------- #
@@ -324,13 +342,13 @@ def test_insert__streaming__uses_the_dataset_upload_compression_level(monkeypatc
     monkeypatch.setenv("OPIK_DATASET_UPLOAD_COMPRESSION_LEVEL", "2")
 
     levels = []
-    original = streaming_writer.BoundedSendPool
+    original = streaming_upload.BoundedSendPool
 
     def spy(*args, **kwargs):
         levels.append(kwargs["gzip_level"])
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(streaming_writer, "BoundedSendPool", spy)
+    monkeypatch.setattr(streaming_upload, "BoundedSendPool", spy)
     capture = UploadCapture()
     dataset = make_dataset(Dataset, Mock(), capture)
 

@@ -57,8 +57,10 @@ export interface AlertFixtures {
   seedAlerts: (seeds: AlertSeed[]) => Promise<AlertRef[]>;
 
   /**
-   * Cleans up alerts a test creates through the UI, which have no id until the
-   * form submits and the row renders.
+   * Cleans up alerts a test creates for itself rather than through
+   * `seedAlerts` — a UI-created one, which has no id until the form submits and
+   * the row renders, or an API-level write whose payload `seedAlerts` cannot
+   * express.
    *
    * Discovers them at teardown by the names the test says it will use, so
    * there is no registration call for a mid-test failure to skip. Names are

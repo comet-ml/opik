@@ -48,11 +48,13 @@ on:
   pull_request:
     paths:
     - 'sdks/python/**'
+    - '.github/workflows/lib-*.yml'
   push:
     branches: 
       - 'main'
     paths:
       - 'sdks/python/**'
+      - '.github/workflows/lib-*.yml'
 
 
 concurrency:

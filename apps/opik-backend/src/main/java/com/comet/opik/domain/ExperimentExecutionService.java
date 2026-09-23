@@ -161,6 +161,7 @@ public class ExperimentExecutionService {
 
                     var experiment = Experiment.builder()
                             .id(experimentId)
+                            .name(prompt.experimentName())
                             .datasetName(request.datasetName())
                             .datasetVersionId(request.datasetVersionId())
                             .projectName(projectName)

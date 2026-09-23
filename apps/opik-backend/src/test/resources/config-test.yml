@@ -109,6 +109,13 @@ databaseAnalyticsDataModel:
   #   end_time/duration/ttft columns; span writes bind null for absent end_time/ttft. Set true once replaced with
   #   sentinel-defaulted non-nullable columns so writes bind the sentinels (end_time->epoch, ttft->NaN) instead. Gates
   #   reads too. Flip in lockstep with the Slice 3 cutover EXCHANGE, independently of the trace flag.
+  #   Also gates partition-scoped span cascade deletes, as the trace flag does for traces: that same EXCHANGE puts the
+  #   weekly-partitioned successor behind the name span mutations target, so true additionally means the trace-delete
+  #   cascade may scope itself with IN PARTITION instead of being registered against every part of the table.
+  #   IN PARTITION against an unpartitioned table is a hard error (code 248), not a lost optimisation, so setting this
+  #   true ahead of the EXCHANGE breaks deletes. Off falls back to the unbounded delete: correct, merely slower. The
+  #   spans retention sweeps are not scoped either way: retention and a cut-over `spans` must not both be live until
+  #   a sweep has been measured there - see SpanDAO.DELETE_FOR_RETENTION.
   spanColumnsNonNullable: false
   #  Default: false
   #  Description: Leave false at deploy time. Turn true once the trace backfill starts so trace deletes also
@@ -134,6 +141,9 @@ databaseAnalyticsDataModel:
   #   `traces`. Post-wrap, changes to `traces` split by kind: row mutations (DELETE) + MATERIALIZE COLUMN/ADD INDEX/
   #   MODIFY TTL target `traces_local` only (the Distributed `traces` rejects them); ADD/DROP/MODIFY COLUMN must target
   #   both `traces_local` and `traces`, else reads can't see the column (code 47).
+  #   This value is asserted against the live topology by the `clickhouse-traces-topology` readiness check below: set it
+  #   wrong in either direction and the backend fails readiness at startup with a message naming the flag and the
+  #   observed engine, rather than serving traffic whose trace deletes are guaranteed to fail.
   tracesDistributedWrapEnabled: false
   #  Default: false
   #  Description: Spans sibling of tracesDistributedWrapEnabled. The Slice 3 cutover wraps `spans` as a Distributed
@@ -143,9 +153,18 @@ databaseAnalyticsDataModel:
   #   Distributed `spans`. Post-wrap, changes to `spans` split by kind exactly as for traces: row mutations (DELETE) +
   #   MATERIALIZE COLUMN/ADD INDEX/MODIFY TTL target `spans_local` only (the Distributed `spans` rejects them);
   #   ADD/DROP/MODIFY COLUMN must target both `spans_local` and `spans`, else reads can't see the column (code 47).
-  #   Independent of the trace flag, and NOT covered by the `clickhouse-traces-topology` readiness check, which
-  #   asserts the trace flag only.
+  #   Independent of the trace flag, and asserted against the live database by its own `clickhouse-spans-topology`
+  #   readiness check below (the `clickhouse-traces-topology` one asserts the trace flag only): set it wrong in either
+  #   direction and the backend fails readiness at startup with a message naming the flag and the observed engine,
+  #   rather than serving traffic whose span deletes are guaranteed to fail.
   spansDistributedWrapEnabled: false
+
+bulkInsert:
+  # false: the R2DBC bulk path (one named parameter per column per row). true: rows streamed as
+  # JSONEachRow through the ClickHouse Java client v2, with no parameter binding. Both write identical
+  # cells, so this is safe to flip either way on a running install. Default false so an upgrade does not
+  # silently change the write path.
+  v2ClientEnabled: false
 
 # Description: UUIDv7 ingestion validation. Rejects writes whose `id` embeds a timestamp outside the
 #   window, protecting data quality.
@@ -233,6 +252,11 @@ health:
       initialState: false
       schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
     - name: clickhouse-traces-topology
+      critical: true
+      type: ready
+      initialState: false
+      schedule: { initialDelay: 0ms, checkInterval: 100ms, downtimeInterval: 100ms, failureAttempts: 1, successAttempts: 1 }
+    - name: clickhouse-spans-topology
       critical: true
       type: ready
       initialState: false
@@ -1072,6 +1096,9 @@ webhook:
   # Default: 1s
   # Description: HTTP connection timeout for webhook calls
   connectionTimeout: 1s
+  # Default: relaxed
+  # Description: Outbound destination policy for webhook URLs; tests target local mock servers
+  destinationGuard: "relaxed"
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: 10
@@ -1122,3 +1149,20 @@ optimizationStalledReaper:
 environment:
   # Low ceiling for tests so cap-related scenarios don't need to insert many environments.
   maxPerWorkspace: 5
+
+annotationQueueRouting:
+  # Default: false
+  # Description: When false, score events are never published and nothing is routed automatically.
+  #   Off here too, matching production: no test reads this block. The routing tests build their own
+  #   config, so leaving it on only made the listener run an automation lookup for every feedback score
+  #   written by every other integration test in the suite.
+  enabled: false
+  # Default: annotation-queue-routing
+  # Description: Redis stream name for queued annotation queue routing work
+  streamName: 'annotation-queue-routing'
+  # Default: 100000
+  # Description: Maximum stream length before old entries are trimmed
+  streamMaxLen: 100000
+  # Default: 1000
+  # Description: Number of entries trimmed at a time when the stream exceeds streamMaxLen
+  streamTrimLimit: 1000
