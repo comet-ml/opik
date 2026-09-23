@@ -116,7 +116,7 @@ services:
     entrypoint: [ "/bin/sh", "-c" ]
     command: [ "mkdir -p /data && exec minio server --console-address ':9090' /data" ]
     healthcheck:
-      test: [ "CMD", "mc", "ready", "local" ]
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:9000/minio/health/live" ]
       interval: 1s
       timeout: 10s
       retries: 30
@@ -180,8 +180,6 @@ services:
       LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD: ${LLM_PROVIDER_TOKEN_AUTH_DESTINATION_GUARD:-"relaxed"}
       ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}
       ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}
-      ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_readonly_freeform_extended_sql_user}
-      ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS: ${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}
       # Traces cutover knobs (data-migrations/traces-local-v2-cutover). Default off / unset; the operator sets these
       # for the backfill-to-cutover window.
       ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED: ${ANALYTICS_DB_DATA_MODEL_TRACE_DELETION_EVENTS_CAPTURE_ENABLED:-false}

@@ -952,10 +952,6 @@ start_backend() {
     if [ "${TOGGLE_OLLIE_ENABLED}" = "true" ]; then
         export ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}"
         export ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}"
-        # The provisioning script creates both accounts, so export both sets: relying on the config.yml defaults
-        # works only while nobody overrides the pair above, and then the two silently diverge.
-        export ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_readonly_freeform_extended_sql_user}"
-        export ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}"
         bash "$BACKEND_DIR/provision_agent_insights_readonly_user.sh"
         log_debug "  TOGGLE_OLLIE_ENABLED=true (read-only CH user: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER})"
     fi

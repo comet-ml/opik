@@ -1,13 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Provision the read-only free-form SQL ClickHouse users, settings profiles, grants and row policies.
-#
-# Two users, both created together, deliberately separate accounts:
-#   - Agent Insights - traces/spans/authored_feedback_scores, all bound to workspace AND project.
-#   - Extended free-form SQL for Custom Charts - the same three tables plus
-#     experiments, experiment_items, dataset_items, feedback_scores and trace_threads. traces/spans keep a project
-#     bound but an optional one; everything else is workspace-bound only, authored_feedback_scores included.
+# Provision the Agent Insights read-only free-form SQL ClickHouse user, settings profile, grants and row policies.
 #
 # Opt-in: only runs when TOGGLE_OLLIE_ENABLED=true; otherwise it's a no-op so default installs are untouched.
 # This is the single local copy of the DDL, shared by docker-compose (backend container, between run_db_migrations.sh
@@ -38,51 +32,19 @@ ch_admin_pass="${ANALYTICS_DB_PASS:-opik}"
 ch_db="${ANALYTICS_DB_DATABASE_NAME:-opik}"
 ro_user="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}"
 ro_pass="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}"
-ro_ext_user="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_readonly_freeform_extended_sql_user}"
-ro_ext_pass="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}"
 ch_url="http://${ch_host}:${ch_port}/?user=${ch_admin_user}&password=${ch_admin_pass}"
 
-echo "Provisioning read-only ClickHouse users '${ro_user}' and '${ro_ext_user}' on ${ch_host}:${ch_port}/${ch_db}..."
+echo "Provisioning Agent Insights read-only ClickHouse user '${ro_user}' on ${ch_host}:${ch_port}/${ch_db}..."
 
 statements=(
     "CREATE USER IF NOT EXISTS ${ro_user} IDENTIFIED BY '${ro_pass}'"
-    "CREATE USER IF NOT EXISTS ${ro_ext_user} IDENTIFIED BY '${ro_ext_pass}'"
-    "CREATE SETTINGS PROFILE IF NOT EXISTS comet_llm_readonly_freeform_sql_profile SETTINGS readonly = 1, max_execution_time = 180, max_memory_usage = 8589934592, max_result_rows = 100000, result_overflow_mode = 'throw', max_rows_to_read = 100000000, read_overflow_mode = 'throw', max_concurrent_queries_for_user = 5, use_skip_indexes_if_final = 1, SQL_workspace_id = '' CHANGEABLE_IN_READONLY, SQL_project_id = '' CHANGEABLE_IN_READONLY TO ${ro_user}, ${ro_ext_user}"
-)
-
-# Agent Insights: three tables, every one bound to workspace AND project. The extended account reads the
-# same three, so they are granted once to both.
-statements+=(
-    "GRANT SELECT ON ${ch_db}.spans TO ${ro_user}, ${ro_ext_user}"
-    "GRANT SELECT ON ${ch_db}.traces TO ${ro_user}, ${ro_ext_user}"
-    "GRANT SELECT ON ${ch_db}.authored_feedback_scores TO ${ro_user}, ${ro_ext_user}"
+    "CREATE SETTINGS PROFILE IF NOT EXISTS comet_llm_readonly_freeform_sql_profile SETTINGS readonly = 1, max_execution_time = 180, max_memory_usage = 8589934592, max_result_rows = 100000, result_overflow_mode = 'throw', max_rows_to_read = 100000000, read_overflow_mode = 'throw', max_concurrent_queries_for_user = 5, SQL_workspace_id = '' CHANGEABLE_IN_READONLY, SQL_project_id = '' CHANGEABLE_IN_READONLY TO ${ro_user}"
+    "GRANT SELECT ON ${ch_db}.spans TO ${ro_user}"
+    "GRANT SELECT ON ${ch_db}.traces TO ${ro_user}"
+    "GRANT SELECT ON ${ch_db}.authored_feedback_scores TO ${ro_user}"
     "CREATE ROW POLICY IF NOT EXISTS spans_workspace_project_isolation ON ${ch_db}.spans FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id') AS RESTRICTIVE TO ${ro_user}"
     "CREATE ROW POLICY IF NOT EXISTS traces_workspace_project_isolation ON ${ch_db}.traces FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id') AS RESTRICTIVE TO ${ro_user}"
     "CREATE ROW POLICY IF NOT EXISTS authored_feedback_scores_workspace_project_isolation ON ${ch_db}.authored_feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND project_id = getSetting('SQL_project_id') AS RESTRICTIVE TO ${ro_user}"
-)
-
-# Extended account: five tables beyond the three granted above, and its own policies on all eight.
-#
-# traces and spans keep a project bound, but an optional one: '*' means every project in the workspace, so the
-# caller picks the scope per request. The sentinel is '*' rather than '' because the profile defaults the setting
-# to '': an empty value matches neither branch and returns nothing, so a dropped setting fails closed instead of
-# widening to the whole workspace.
-#
-# Everything else (including authored_feedback_scores) is workspace-only.
-statements+=(
-    "GRANT SELECT ON ${ch_db}.feedback_scores TO ${ro_ext_user}"
-    "GRANT SELECT ON ${ch_db}.experiments TO ${ro_ext_user}"
-    "GRANT SELECT ON ${ch_db}.experiment_items TO ${ro_ext_user}"
-    "GRANT SELECT ON ${ch_db}.dataset_items TO ${ro_ext_user}"
-    "GRANT SELECT ON ${ch_db}.trace_threads TO ${ro_ext_user}"
-    "CREATE ROW POLICY IF NOT EXISTS spans_workspace_with_optional_project_isolation ON ${ch_db}.spans FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_ext_user}"
-    "CREATE ROW POLICY IF NOT EXISTS traces_workspace_with_optional_project_isolation ON ${ch_db}.traces FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_ext_user}"
-    "CREATE ROW POLICY IF NOT EXISTS authored_feedback_scores_workspace_isolation ON ${ch_db}.authored_feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
-    "CREATE ROW POLICY IF NOT EXISTS feedback_scores_workspace_isolation ON ${ch_db}.feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
-    "CREATE ROW POLICY IF NOT EXISTS experiments_workspace_isolation ON ${ch_db}.experiments FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
-    "CREATE ROW POLICY IF NOT EXISTS experiment_items_workspace_isolation ON ${ch_db}.experiment_items FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
-    "CREATE ROW POLICY IF NOT EXISTS dataset_items_workspace_isolation ON ${ch_db}.dataset_items FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
-    "CREATE ROW POLICY IF NOT EXISTS trace_threads_workspace_isolation ON ${ch_db}.trace_threads FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
 )
 
 for stmt in "${statements[@]}"; do
@@ -95,4 +57,4 @@ for stmt in "${statements[@]}"; do
     fi
 done
 
-echo "Read-only ClickHouse user(s) provisioned."
+echo "Agent Insights read-only ClickHouse user provisioned."

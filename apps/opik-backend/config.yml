@@ -253,7 +253,7 @@ customCharts:
   #  Default: empty (feature off everywhere)
   #  Description: Comma-separated workspace ids allowed to use Custom Charts. Membership also routes the
   #   workspace's free-form SQL to the wider ClickHouse account. Requires serviceToggles.ollieEnabled, which
-  #   gates the endpoint and provisions the account.
+  #   gates the endpoint, and the account to be provisioned first (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_ENABLED).
   enabledWorkspaces: ${TOGGLE_CUSTOM_CHARTS_WORKSPACES:-""}
   #  Default: 5000
   #  Description: Cap on distinct ids resolved to names in one result. Above it every row keeps its raw id rather

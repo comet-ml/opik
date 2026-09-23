@@ -32,8 +32,8 @@ public class ClickHouseReadOnlyFreeFormExtendedSqlHealthCheck extends AbstractCl
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceToggles,
             @NonNull @Config("customCharts") CustomChartsConfig customCharts) {
         super(freeFormExtendedSqlClient, healthCheckTimeout, "clickhouse-readonly-freeform-extended-sql");
-        // Mirrors the endpoint's gate, and for the same reason: the account is provisioned under
-        // TOGGLE_OLLIE_ENABLED, so probing it with Ollie off would fail against a user that was never created.
+        // Mirrors the endpoint's gate: the account is provisioned separately and only where the feature is
+        // meant to run, so probing it anywhere else would fail against a user that was never created.
         this.enabled = serviceToggles.isOllieEnabled()
                 && !customCharts.getEnabledWorkspaces().isEmpty();
     }
