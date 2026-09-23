@@ -2371,3 +2371,81 @@ def test_track__environment_parameter__nested_spans_inherit_environment(fake_bac
 
     assert len(fake_backend.trace_trees) == 1
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_track__generator_closed__underlying_generator_cleanup_runs(fake_backend):
+    # `close()` must actually close the wrapped generator, not just end the span:
+    # the `finally` inside the user's generator is what releases their resources.
+    cleaned_up = []
+
+    @tracker.track
+    def f(x):
+        try:
+            yield "yielded-1"
+            yield " yielded-2"
+        finally:
+            cleaned_up.append("closed")
+
+    generator = f("generator-input")
+    next(iter(generator))
+    generator.close()
+
+    assert cleaned_up == ["closed"]
+
+    tracker.flush_tracker()
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(_expected_generator_trace("yielded-1"), fake_backend.trace_trees[0])
+
+
+@pytest.mark.asyncio
+async def test_track__async_generator_aclosed__underlying_generator_cleanup_runs(
+    fake_backend,
+):
+    # The async half of the same contract, driven through `aclose()` rather than
+    # relying on garbage collection.
+    cleaned_up = []
+
+    @tracker.track
+    async def f(x):
+        try:
+            yield "yielded-1"
+            yield " yielded-2"
+        finally:
+            cleaned_up.append("closed")
+
+    generator = f("generator-input")
+    await generator.__anext__()
+    await generator.aclose()
+
+    assert cleaned_up == ["closed"]
+
+    tracker.flush_tracker()
+    assert len(fake_backend.trace_trees) == 1
+    assert_equal(_expected_generator_trace("yielded-1"), fake_backend.trace_trees[0])
+
+
+def test_track__generator_cleanup_raises_on_close__error_recorded_on_span(fake_backend):
+    # A generator whose `finally` fails during close must not be reported as a span
+    # that succeeded. Ending on close would otherwise record the partial output with
+    # no error at all, and the cleanup failure would be the only thing lost.
+    @tracker.track
+    def f(x):
+        try:
+            yield "yielded-1"
+            yield " yielded-2"
+        finally:
+            raise ValueError("cleanup failed")
+
+    generator = f("generator-input")
+    next(iter(generator))
+
+    with pytest.raises(ValueError, match="cleanup failed"):
+        generator.close()
+
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace = fake_backend.trace_trees[0]
+    assert trace.error_info["exception_type"] == "ValueError"
+    assert trace.error_info["message"] == "cleanup failed"
+    assert trace.spans[0].error_info["exception_type"] == "ValueError"

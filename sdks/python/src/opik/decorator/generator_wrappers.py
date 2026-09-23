@@ -163,12 +163,16 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         """Close the underlying generator and end the span.
 
         Mirrors `generator.close()`, so `contextlib.closing` and an explicit close
-        both end the span of a generator that was not consumed to the end.
+        both end the span of a generator that was not consumed to the end. A failure
+        during cleanup is recorded on the span rather than lost behind a span that
+        claims to have succeeded.
         """
         try:
             self._generator.close()
-        finally:
-            self._finalize_if_unfinished()
+        except Exception as exception:
+            self._handle_generator_exception_before_raising(exception)
+            raise
+        self._finalize_if_unfinished()
 
     def __del__(self) -> None:
         # A generator dropped without being exhausted has its `close()` called by the
@@ -219,11 +223,17 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
             raise
 
     async def aclose(self) -> None:
-        """Close the underlying async generator and end the span."""
+        """Close the underlying async generator and end the span.
+
+        As with the sync wrapper, a failure during cleanup is recorded on the span
+        instead of being replaced by a successful one.
+        """
         try:
             await self._generator.aclose()
-        finally:
-            self._finalize_if_unfinished()
+        except Exception as exception:
+            self._handle_generator_exception_before_raising(exception)
+            raise
+        self._finalize_if_unfinished()
 
     def __del__(self) -> None:
         # Only the span is ended here. Closing the async generator itself needs a
