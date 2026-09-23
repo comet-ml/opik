@@ -28,6 +28,42 @@ class ExperimentItemContent:
     )
 
     @classmethod
+    def from_compare_dict(
+        cls,
+        value: Dict[str, Any],
+        dataset_item_data: Optional[Dict[str, Any]] = None,
+    ) -> "ExperimentItemContent":
+        """Build from the endpoint's own JSON, skipping the generated REST models.
+
+        Parsing a page into those models re-derives type hints per node, which costs
+        more than the request itself on a large experiment; the dataset read hands back
+        plain dicts for the same reason.
+        """
+        feedback_scores: List[FeedbackScoreDict] = [
+            {
+                "category_name": score.get("category_name"),
+                "name": score.get("name"),
+                "reason": score.get("reason"),
+                "value": score.get("value"),
+            }
+            for score in value.get("feedback_scores") or []
+        ]
+
+        return cls(
+            # Indexed, not `.get`: a page missing these is a broken response, and a
+            # record built around None would only fail further away.
+            id=value["id"],
+            trace_id=value["trace_id"],
+            dataset_item_id=value["dataset_item_id"],
+            dataset_item_data=dataset_item_data
+            if dataset_item_data
+            else value.get("input"),
+            evaluation_task_output=value.get("output"),
+            feedback_scores=feedback_scores,
+            assertion_results=list(value.get("assertion_results") or []),
+        )
+
+    @classmethod
     def from_rest_experiment_item_compare(
         cls,
         value: experiment_item_compare.ExperimentItemCompare,

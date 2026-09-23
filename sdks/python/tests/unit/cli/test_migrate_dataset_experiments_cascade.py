@@ -22,6 +22,7 @@ Scope this module covers (ticket AC for OPIK-6416):
 from __future__ import annotations
 
 from typing import Any, Dict, Iterator, List, Optional
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import datetime as dt
@@ -275,27 +276,40 @@ def _cascade_rest_client(
             if not matching_exp_id:
                 continue
             for it in exp_items:
-                # Build the experiment_item mock with the typed fields +
-                # the test's ``extras`` (e.g. assertion_results) merged in.
-                exp_item = MagicMock()
-                exp_item.id = it.id
-                exp_item.experiment_id = matching_exp_id
-                exp_item.trace_id = it.trace_id
-                exp_item.dataset_item_id = it.dataset_item_id
-                exp_item.assertion_results = None
-                exp_item.feedback_scores = None
-                exp_item.input = None
-                exp_item.output = None
+                # The read parses the endpoint's JSON itself, so a page is plain
+                # dicts here, exactly as it is on the wire.
+                exp_item: Dict[str, Any] = {
+                    "id": it.id,
+                    "experiment_id": matching_exp_id,
+                    "trace_id": it.trace_id,
+                    "dataset_item_id": it.dataset_item_id,
+                    "assertion_results": None,
+                    "feedback_scores": None,
+                    "input": None,
+                    "output": None,
+                }
                 # Allow extras to override defaults.
-                for key, value in getattr(it, "extras", {}).items():
-                    setattr(exp_item, key, value)
-                ds_item = MagicMock(experiment_items=[exp_item])
-                dataset_items.append(ds_item)
-        return MagicMock(content=dataset_items, total=len(dataset_items))
+                exp_item.update(getattr(it, "extras", {}))
+                dataset_items.append(
+                    {"id": None, "data": None, "experiment_items": [exp_item]}
+                )
+        return {"content": dataset_items, "total": len(dataset_items)}
 
-    rest_client.datasets.find_dataset_items_with_experiment_items.side_effect = (
-        _find_dataset_items_with_exp_items
-    )
+    def _httpx_request(path: str, *, method: str, params: Dict[str, Any]) -> Any:
+        payload = _find_dataset_items_with_exp_items(
+            id=path,
+            page=params["page"],
+            size=params["size"],
+            experiment_ids=params["experiment_ids"],
+            truncate=params.get("truncate", False),
+            filters=params.get("filters"),
+        )
+        body = json.dumps(payload)
+        return SimpleNamespace(
+            status_code=200, content=body.encode("utf-8"), text=body, headers={}
+        )
+
+    rest_client._client_wrapper.httpx_client.request.side_effect = _httpx_request
     # MagicMock auto-attributes starting with 'assert' are blocked because
     # the mock treats them as assertions. Explicitly pre-attach the
     # ``assertion_results`` sub-mock so the cascade can call into it.
@@ -1424,6 +1438,16 @@ class TestCascadeExperiments:
         ar_fail.value = "threshold-check"
         ar_fail.passed = False
         ar_fail.reason = "below 0.8"
+        ar_pass = {
+            "value": ar_pass.value,
+            "passed": ar_pass.passed,
+            "reason": ar_pass.reason,
+        }
+        ar_fail = {
+            "value": ar_fail.value,
+            "passed": ar_fail.passed,
+            "reason": ar_fail.reason,
+        }
 
         item = _ExperimentItem(
             id="src-item-1",

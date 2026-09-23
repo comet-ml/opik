@@ -1,12 +1,14 @@
 import json
 import math
 from concurrent import futures
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from . import experiment_item
 from .. import constants, rest_stream_parser
-from ... import exceptions, rest_api
-from ...rest_api.types import dataset_item_page_compare, experiment_public
+from ... import exceptions, json_helpers, rest_api
+from ...rest_api.core.api_error import ApiError
+from ...rest_api.core.jsonable_encoder import jsonable_encoder
+from ...rest_api.types import experiment_public
 
 
 def get_experiment_data_by_name(
@@ -66,16 +68,15 @@ def find_experiment_items_for_dataset(
 ) -> List[experiment_item.ExperimentItemContent]:
     experiment_ids_json = json.dumps(experiment_ids)
 
-    def fetch_page(
-        page_number: int,
-    ) -> dataset_item_page_compare.DatasetItemPageCompare:
-        return rest_client.datasets.find_dataset_items_with_experiment_items(
-            id=dataset_id,
-            page=page_number,
-            size=page_size,
-            experiment_ids=experiment_ids_json,
+    def fetch_page(page_number: int) -> Dict[str, Any]:
+        return _fetch_page_json(
+            rest_client=rest_client,
+            dataset_id=dataset_id,
+            page_number=page_number,
+            page_size=page_size,
+            experiment_ids_json=experiment_ids_json,
             truncate=truncate,
-            filters=filter_expression,
+            filter_expression=filter_expression,
         )
 
     collected_items: List[experiment_item.ExperimentItemContent] = []
@@ -85,12 +86,12 @@ def find_experiment_items_for_dataset(
     first_page = fetch_page(1)
     _collect_page(first_page, collected_items, max_results)
 
-    if not first_page.content:
+    if not first_page.get("content"):
         return collected_items
 
     # A `total` the backend omits or sends malformed leaves the page count
     # unknown, and the read falls back to walking until an empty page.
-    total = first_page.total
+    total = first_page.get("total")
     last_page = (
         max(1, math.ceil(total / page_size))
         if isinstance(total, int) and not isinstance(total, bool) and total >= 0
@@ -125,33 +126,68 @@ def find_experiment_items_for_dataset(
         for page in pages:
             # Pages are consumed in order, so an empty one ends the read exactly
             # where a sequential walk would have stopped.
-            if not page.content:
+            if not page.get("content"):
                 return collected_items
             _collect_page(page, collected_items, max_results)
 
     return collected_items
 
 
+def _fetch_page_json(
+    rest_client: rest_api.OpikApi,
+    dataset_id: str,
+    page_number: int,
+    page_size: int,
+    experiment_ids_json: str,
+    truncate: bool,
+    filter_expression: Optional[str],
+) -> Dict[str, Any]:
+    """One page of the Compare view as plain JSON.
+
+    Deliberately not the generated client: parsing a page into the REST models costs
+    more than fetching it -- on a 100,000-item read it was ~85% of the client time,
+    walking every node to re-derive type hints. The response shape is the same either
+    way, so the read stays a dict walk, as the dataset read already is.
+    """
+    response = rest_client._client_wrapper.httpx_client.request(
+        f"v1/private/datasets/{jsonable_encoder(dataset_id)}/items/experiments/items",
+        method="GET",
+        params={
+            "page": page_number,
+            "size": page_size,
+            "experiment_ids": experiment_ids_json,
+            "filters": filter_expression,
+            "truncate": truncate,
+        },
+    )
+    if not 200 <= response.status_code < 300:
+        raise ApiError(
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            body=response.text,
+        )
+    return json_helpers.loads(response.content)
+
+
 def _collect_page(
-    page: dataset_item_page_compare.DatasetItemPageCompare,
+    page: Dict[str, Any],
     collected_items: List[experiment_item.ExperimentItemContent],
     max_results: int,
 ) -> None:
     """Append one page's experiment items, stopping at ``max_results``."""
     headroom = max_results - len(collected_items)
-    if headroom <= 0 or not page.content:
+    content = page.get("content") or []
+    if headroom <= 0 or not content:
         return
 
     page_items = []
-    for dataset_item in page.content:
-        if dataset_item.experiment_items is None:
-            continue
-        for experiment_item_compare in dataset_item.experiment_items:
-            dataset_item_data = dataset_item.data
+    for dataset_item in content:
+        for experiment_item_compare in dataset_item.get("experiment_items") or []:
+            dataset_item_data = dataset_item.get("data")
             if dataset_item_data is not None:
-                dataset_item_data.update({"id": dataset_item.id})
+                dataset_item_data.update({"id": dataset_item.get("id")})
             page_items.append(
-                experiment_item.ExperimentItemContent.from_rest_experiment_item_compare(
+                experiment_item.ExperimentItemContent.from_compare_dict(
                     value=experiment_item_compare,
                     dataset_item_data=dataset_item_data,
                 )

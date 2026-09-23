@@ -1,9 +1,10 @@
 """Tests for the page size and concurrency of the experiment Compare-view read."""
 
+import json
 import math
 import threading
 import types
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from unittest.mock import Mock
 
 import pytest
@@ -16,8 +17,12 @@ from opik.api_objects.experiment import (
 )
 
 
-class _RecordingDatasetsClient:
-    """Serves ``total`` dataset items, one experiment item each, in pages."""
+class _RecordingHttpxClient:
+    """Serves ``total`` dataset items, one experiment item each, as JSON pages.
+
+    The read parses the endpoint's JSON itself rather than going through the
+    generated REST models, so the seam under test is the HTTP call.
+    """
 
     def __init__(self, total: int) -> None:
         self._total = total
@@ -26,16 +31,8 @@ class _RecordingDatasetsClient:
         self.requested_sizes: List[int] = []
         self.requested_pages: List[int] = []
 
-    def find_dataset_items_with_experiment_items(
-        self,
-        *,
-        id: str,
-        page: int,
-        size: int,
-        experiment_ids: str,
-        truncate: bool,
-        filters: Optional[str],
-    ) -> Any:
+    def request(self, path: str, *, method: str, params: Dict[str, Any]) -> Any:
+        page, size = params["page"], params["size"]
         with self._lock:
             self.requested_sizes.append(size)
             self.requested_pages.append(page)
@@ -44,29 +41,34 @@ class _RecordingDatasetsClient:
             _dataset_item(index)
             for index in range(start, min(start + size, self._total))
         ]
-        return types.SimpleNamespace(content=content, total=self.reported_total)
+        body = json.dumps({"content": content, "total": self.reported_total})
+        return types.SimpleNamespace(
+            status_code=200, content=body.encode("utf-8"), text=body, headers={}
+        )
 
 
-def _dataset_item(index: int) -> Any:
-    compare = types.SimpleNamespace(
-        id=f"experiment-item-{index}",
-        trace_id=f"trace-{index}",
-        dataset_item_id=f"dataset-item-{index}",
-        input=None,
-        output=None,
-        feedback_scores=None,
-        assertion_results=None,
-    )
-    return types.SimpleNamespace(
-        id=f"dataset-item-{index}",
-        data={"index": index},
-        experiment_items=[compare],
-    )
+def _dataset_item(index: int) -> Dict[str, Any]:
+    compare = {
+        "id": f"experiment-item-{index}",
+        "trace_id": f"trace-{index}",
+        "dataset_item_id": f"dataset-item-{index}",
+        "input": None,
+        "output": None,
+        "feedback_scores": None,
+        "assertion_results": None,
+    }
+    return {
+        "id": f"dataset-item-{index}",
+        "data": {"index": index},
+        "experiment_items": [compare],
+    }
 
 
 def _read(total: int, **kwargs: Any) -> Dict[str, Any]:
-    datasets_client = _RecordingDatasetsClient(total)
-    rest_client = types.SimpleNamespace(datasets=datasets_client)
+    datasets_client = _RecordingHttpxClient(total)
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=datasets_client)
+    )
 
     items = rest_operations.find_experiment_items_for_dataset(
         rest_client=rest_client,
@@ -140,7 +142,7 @@ def test_find_experiment_items_for_dataset__stops_at_the_last_page():
     assert len(result["items"]) == 150
 
 
-class _BarrierDatasetsClient(_RecordingDatasetsClient):
+class _BarrierHttpxClient(_RecordingHttpxClient):
     """Blocks every page until ``parties`` of them are in flight at once."""
 
     def __init__(self, total: int, parties: int) -> None:
@@ -148,21 +150,23 @@ class _BarrierDatasetsClient(_RecordingDatasetsClient):
         self._barrier = threading.Barrier(parties, timeout=10)
         self.barrier_broke = False
 
-    def find_dataset_items_with_experiment_items(self, **kwargs: Any) -> Any:
-        page = super().find_dataset_items_with_experiment_items(**kwargs)
-        if kwargs["page"] > 1:
+    def request(self, path: str, *, method: str, params: Dict[str, Any]) -> Any:
+        response = super().request(path, method=method, params=params)
+        if params["page"] > 1:
             try:
                 self._barrier.wait()
             except threading.BrokenBarrierError:
                 self.barrier_broke = True
-        return page
+        return response
 
 
 def test_find_experiment_items_for_dataset__pages_after_the_first_overlap():
     # A sequential implementation cannot reach the barrier's party count, so it
     # times out and this fails rather than silently passing.
-    datasets_client = _BarrierDatasetsClient(total=500, parties=4)
-    rest_client = types.SimpleNamespace(datasets=datasets_client)
+    datasets_client = _BarrierHttpxClient(total=500, parties=4)
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=datasets_client)
+    )
 
     items = rest_operations.find_experiment_items_for_dataset(
         rest_client=rest_client,
@@ -182,9 +186,11 @@ def test_find_experiment_items_for_dataset__pages_after_the_first_overlap():
 
 @pytest.mark.parametrize("total", [None, "many", -1])
 def test_find_experiment_items_for_dataset__unusable_total_falls_back_to_walking(total):
-    datasets_client = _RecordingDatasetsClient(250)
+    datasets_client = _RecordingHttpxClient(250)
     datasets_client.reported_total = total
-    rest_client = types.SimpleNamespace(datasets=datasets_client)
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=datasets_client)
+    )
 
     items = rest_operations.find_experiment_items_for_dataset(
         rest_client=rest_client,
