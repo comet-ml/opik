@@ -30,8 +30,26 @@ vi.mock(
   }),
 );
 
+// Stands in for the real tag but records the props the tab passes, so the
+// link target and active-version query stay asserted rather than erased.
 vi.mock("@/shared/NavigationTag", () => ({
-  default: ({ name }: { name: string }) => <span>{name}</span>,
+  default: ({
+    id,
+    name,
+    search,
+  }: {
+    id: string;
+    name: string;
+    search?: Record<string, unknown>;
+  }) => (
+    <span
+      data-testid="prompt-tag"
+      data-id={id}
+      data-active-version={String(search?.activeVersionId ?? "")}
+    >
+      {name}
+    </span>
+  ),
 }));
 
 vi.mock(
@@ -182,5 +200,60 @@ describe("ConfigurationTab prompt version row", () => {
     ]);
 
     expect(rowNames()).toContain("Prompt version");
+  });
+});
+
+// These tags are how a single experiment links back to the Prompt Library
+// (OPIK_6838), so the link target and the version it opens are part of the
+// contract, not incidental rendering.
+describe("ConfigurationTab prompt tags", () => {
+  beforeEach(() => {
+    Object.keys(queryParams).forEach((key) => delete queryParams[key]);
+  });
+
+  const tags = () => screen.queryAllByTestId("prompt-tag");
+
+  it("renders one tag per linked prompt, labelled with name and version", () => {
+    renderTab([
+      experiment("e1", {
+        prompt_versions: [
+          promptVersion(),
+          promptVersion({
+            id: "pv2",
+            prompt_id: "p2",
+            prompt_name: "Guardrail",
+            version_number: "v4",
+          }),
+        ],
+      }),
+    ]);
+
+    expect(tags().map((t) => t.textContent)).toEqual([
+      "My Prompt (v1)",
+      "Guardrail (v4)",
+    ]);
+  });
+
+  it("links each tag to its prompt and opens that specific version", () => {
+    renderTab([experiment("e1", { prompt_versions: [promptVersion()] })]);
+
+    const [tag] = tags();
+    expect(tag).toHaveAttribute("data-id", "p1");
+    expect(tag).toHaveAttribute("data-active-version", "pv1");
+  });
+
+  it("renders no tags in compare mode, where the row carries the versions", () => {
+    renderTab([
+      experiment("e1", { prompt_versions: [promptVersion()] }),
+      experiment("e2", { prompt_versions: [promptVersion({ id: "pv2" })] }),
+    ]);
+
+    expect(tags()).toHaveLength(0);
+  });
+
+  it("renders no tags when the experiment has no linked prompt", () => {
+    renderTab([experiment("e1")]);
+
+    expect(tags()).toHaveLength(0);
   });
 });
