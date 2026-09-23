@@ -1,4 +1,4 @@
-export { test, expect } from './bulk-tag-traces.fixture';
+export { test, expect } from './boundary-threads.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
@@ -132,6 +132,11 @@ export type {
   DurationThreadsRef,
   TimedThreadsFixtures,
 } from './timed-threads.fixture';
+export type {
+  BoundaryThreadRef,
+  BoundaryThreadsRef,
+  BoundaryThreadsFixtures,
+} from './boundary-threads.fixture';
 export type {
   PagedSpansRef,
   FarFuturePagedSpanRef,
