@@ -12,6 +12,7 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceThreadField;
@@ -49,6 +50,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -85,6 +87,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -2565,6 +2568,57 @@ class FindTraceThreadsResourceTest {
 
             var expectedStats = buildExpectedThreadStats(thread1Traces, List.of(), null);
             TraceAssertions.assertStats(stats.stats(), expectedStats);
+        }
+    }
+
+    @Nested
+    @DisplayName("Find Trace Threads After Trace Update:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class FindTraceThreadsAfterTraceUpdate {
+
+        @Test
+        @DisplayName("when trace update sets a new thread id, then the thread is listed within a time range")
+        void whenTraceUpdateSetsThreadId__thenThreadIsFoundWithTimeFilter() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var originalThreadId = UUID.randomUUID().toString();
+            var updatedThreadId = UUID.randomUUID().toString();
+
+            var baseTime = Instant.now();
+            var trace = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(originalThreadId)
+                    .id(idGenerator.generateId(baseTime))
+                    .build();
+
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            traceResourceClient.updateTrace(trace.id(), TraceUpdate.builder()
+                    .projectName(projectName)
+                    .threadId(updatedThreadId)
+                    .build(), apiKey, workspaceName);
+
+            var projectId = projectResourceClient.getByName(projectName, apiKey, workspaceName).id();
+
+            // The thread registration runs asynchronously off the trace update event
+            Awaitility.await()
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var queryParams = Map.of(
+                                "from_time", baseTime.minus(Duration.ofMinutes(10)).toString(),
+                                "to_time", baseTime.plus(Duration.ofMinutes(10)).toString());
+
+                        var actualPage = traceResourceClient.getTraceThreads(projectId, null, apiKey, workspaceName,
+                                List.of(), List.of(), queryParams);
+
+                        assertThat(actualPage.content()).extracting(TraceThread::id).contains(updatedThreadId);
+                    });
         }
     }
 
