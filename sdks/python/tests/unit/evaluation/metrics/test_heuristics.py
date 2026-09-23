@@ -284,7 +284,16 @@ def test_sentence_bleu__empty_reference_list__raises_metric_error():
     metric = SentenceBLEU(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(output="The quick brown fox", reference=[])
-    assert "empty" in str(exc_info.value).lower()
+    assert str(exc_info.value) == "Reference is empty (single-sentence BLEU)."
+
+
+@pytest.mark.parametrize("metric_cls", [SentenceBLEU, CorpusBLEU])
+@pytest.mark.parametrize("n_grams", [None, "3", 2.5, 3.0, True, False])
+def test_bleu__non_integer_n_grams__raises_value_error(metric_cls, n_grams):
+    # `n_grams < 1` raised TypeError for None and str, and `bool` is a subclass
+    # of int, so `True` silently meant 1.
+    with pytest.raises(ValueError, match="n_grams must be an integer"):
+        metric_cls(n_grams=n_grams, track=False)
 
 
 @pytest.mark.parametrize("metric_cls", [SentenceBLEU, CorpusBLEU])
@@ -386,20 +395,22 @@ def test_corpus_bleu_score_empty_inputs(outputs, references):
 
 
 @pytest.mark.parametrize(
-    "outputs,references",
+    "outputs,references,expected_message",
     [
         # No candidates at all: passed the length check, then `max()` on an
         # empty sequence raised `ValueError: max() iterable argument is empty`.
-        ([], []),
+        ([], [], "Candidate list is empty (corpus BLEU)."),
         # A candidate with an empty list of references raised `KeyError`.
-        (["The quick brown fox"], [[]]),
+        (["The quick brown fox"], [[]], "Reference is empty (corpus BLEU)."),
     ],
 )
-def test_corpus_bleu__empty_sequences__raise_metric_error(outputs, references):
+def test_corpus_bleu__empty_sequences__raise_metric_error(
+    outputs, references, expected_message
+):
     metric = CorpusBLEU(track=False)
     with pytest.raises(MetricComputationError) as exc_info:
         metric.score(output=outputs, reference=references)
-    assert "empty" in str(exc_info.value).lower()
+    assert str(exc_info.value) == expected_message
 
 
 def test_js_divergence_identical_text():
