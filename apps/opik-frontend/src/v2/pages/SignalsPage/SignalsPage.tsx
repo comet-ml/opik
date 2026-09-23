@@ -43,14 +43,16 @@ import OutOfCreditsButton from "@/v2/pages/SignalsPage/OutOfCreditsButton";
 import DiagnosticsSettingsDialog from "@/v2/pages/SignalsPage/DiagnosticsSettingsDialog";
 import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 import useColumnsOverflow from "@/v2/pages/SignalsPage/useColumnsOverflow";
-import { AUTO_RUN_MAX_DURATION_MS } from "@/v2/pages/SignalsPage/helpers";
+import {
+  AUTO_FIRST_RUN_WINDOW_MS,
+  AUTO_RUN_MAX_DURATION_MS,
+} from "@/v2/pages/SignalsPage/helpers";
 
 const RUN_POLL_INTERVAL_MS = 8000;
 const ELIGIBILITY_POLL_INTERVAL_MS = 30_000;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const STALE_AFTER_MS = 3 * DAY_MS;
-const ELIGIBILITY_WINDOW_MS = 7 * DAY_MS;
 
 const LAYOUT = {
   scrolling: {
@@ -192,7 +194,7 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
   // stale cutoff so the query key doesn't churn each render. Filters on created_at
   // to match the window the backend counts over.
   const eligibilityCutoff = new Date(
-    Math.ceil(Date.now() / HOUR_MS) * HOUR_MS - ELIGIBILITY_WINDOW_MS,
+    Math.ceil(Date.now() / HOUR_MS) * HOUR_MS - AUTO_FIRST_RUN_WINDOW_MS,
   ).toISOString();
   const awaitsAutoFirstRun = Boolean(
     job?.auto_first_run_enrolled && !job?.auto_first_run_at,

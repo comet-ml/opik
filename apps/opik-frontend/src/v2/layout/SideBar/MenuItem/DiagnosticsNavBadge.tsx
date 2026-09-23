@@ -6,6 +6,7 @@ import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
 import useDiagnosticsRunState from "@/hooks/useDiagnosticsRunState";
 import useDiagnosticsSeen from "@/hooks/useDiagnosticsSeen";
 import { AUTO_RUN_MAX_DURATION_MS } from "@/v2/pages/SignalsPage/helpers";
+import DiagnosticsReadyBadge from "@/v2/layout/SideBar/MenuItem/DiagnosticsReadyBadge";
 
 type DiagnosticsNavBadgeProps = {
   collapsed: boolean;
@@ -31,7 +32,7 @@ const DiagnosticsNavBadge: React.FC<DiagnosticsNavBadgeProps> = ({
   const hasUnseen =
     !isRunning && scanMs > 0 && (!lastSeen || scanMs > Date.parse(lastSeen));
 
-  // Only the free automatic run pulses, every other report gets the plain dot
+  // Only the free automatic run gets the Ready badge, every other report the plain dot
   const isAutoFirstRunResult =
     autoRunAt > 0 &&
     scanMs >= autoRunAt &&
@@ -41,15 +42,23 @@ const DiagnosticsNavBadge: React.FC<DiagnosticsNavBadgeProps> = ({
   const showSpinner = isRunning && !collapsed;
   if (!showSpinner && !hasUnseen) return null;
 
+  // The free run's report gets a labelled badge, which only fits the expanded sidebar; on the collapsed rail it
+  // pulses instead. Every other report gets the plain dot.
+  if (!showSpinner && isAutoFirstRunResult && !collapsed) {
+    return (
+      <span className="ml-auto flex shrink-0 items-center justify-center pl-1">
+        <DiagnosticsReadyBadge projectId={projectId} autoRunAt={autoRunAt} />
+      </span>
+    );
+  }
+
   const indicator = showSpinner ? (
     <Loader2 className="size-3 animate-spin text-primary" />
   ) : (
     <span
       className={cn(
         "size-1.5 rounded-full bg-primary",
-        hasUnseen &&
-          isAutoFirstRunResult &&
-          "text-primary motion-safe:animate-beacon-pulse",
+        isAutoFirstRunResult && "text-primary motion-safe:animate-beacon-pulse",
       )}
     />
   );
