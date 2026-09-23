@@ -170,8 +170,10 @@ export class ProjectDashboardsPage {
    * Count first, then visibility. `toBeVisible()` on a name matching two
    * controls raises a strict-mode violation instead of this assertion's message,
    * so the ambiguity would surface as a Playwright internal rather than as "the
-   * name is ambiguous" — and a second, merely transient match would fail here
-   * outright rather than being quietly waited out.
+   * name is ambiguous". `toHaveCount` is a web-first assertion and retries, so
+   * this does not reject a second match that is merely transient — it waits for
+   * the name to settle on one control and reports the ambiguity in these terms
+   * only if it never does.
    */
   async expectSelectedView(viewName: string): Promise<void> {
     await test.step(`The view picker shows "${viewName}"`, async () => {
