@@ -85,11 +85,11 @@ class ChrF(BaseMetric):
                     " `pip install nltk` or provide `chrf_fn`."
                 )
 
-            def _compute(candidate: Sequence[str], references: Sequence[str]) -> float:
+            def _score_against_one(candidate: str, reference: str) -> float:
                 try:
                     return float(
                         nltk_chrf_score.sentence_chrf(
-                            references,
+                            reference,
                             candidate,
                             max_len=self._char_order,
                             beta=self._beta,
@@ -98,7 +98,19 @@ class ChrF(BaseMetric):
                     )
                 except TypeError:
                     # Older NLTK versions expose the helper with fewer keyword arguments.
-                    return float(nltk_chrf_score.sentence_chrf(references, candidate))
+                    return float(nltk_chrf_score.sentence_chrf(reference, candidate))
+
+            def _compute(candidate: str, references: Sequence[str]) -> float:
+                # `sentence_chrf` scores against a single reference, and anything
+                # that is not a string it treats as a token list to be joined. A
+                # list of alternative references therefore arrived as one long
+                # pseudo-reference, which no candidate can match well. Scoring
+                # each one separately and keeping the best is what a candidate
+                # being acceptable if it matches any reference means, and matches
+                # how the sibling BLEU and GLEU metrics treat their references.
+                return max(
+                    _score_against_one(candidate, reference) for reference in references
+                )
 
             self._chrf_fn = _compute
 

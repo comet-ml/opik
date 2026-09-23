@@ -560,6 +560,64 @@ def test_chrf_metric__char_order_and_ignore_whitespace_vary__change_score():
     assert order_1 != order_6
 
 
+def test_chrf_metric__multiple_references__scores_against_the_best_one():
+    # A list of references is a list of alternatives, so a candidate matching any
+    # one of them is a perfect match. NLTK's sentence_chrf scores against a single
+    # reference and joins anything non-string into one, so the whole list arrived
+    # as one long pseudo-reference and an exact match scored ~0.32 instead of 1.0.
+    pytest.importorskip("nltk")
+
+    candidate = "the cat sat on the mat"
+    exact = candidate
+    unrelated = "a completely unrelated sentence about trains"
+
+    metric = ChrF(track=False)
+
+    assert metric.score(output=candidate, reference=exact).value == pytest.approx(1.0)
+    assert metric.score(
+        output=candidate, reference=[exact, unrelated]
+    ).value == pytest.approx(1.0)
+    # The best reference wins wherever it sits in the list.
+    assert metric.score(
+        output=candidate, reference=[unrelated, exact]
+    ).value == pytest.approx(1.0)
+
+
+def test_chrf_metric__multiple_references__never_below_the_best_single_one():
+    # The weaker guarantee that holds for any reference set: adding alternatives
+    # cannot make the score worse than the best reference on its own.
+    pytest.importorskip("nltk")
+
+    candidate = "the quick brown fox jumps"
+    references = ["the quick brown fox", "a slow green turtle crawls"]
+
+    metric = ChrF(track=False)
+    singles = [
+        metric.score(output=candidate, reference=reference).value
+        for reference in references
+    ]
+    combined = metric.score(output=candidate, reference=references).value
+
+    assert combined == pytest.approx(max(singles))
+
+
+def test_chrf_metric__custom_fn_still_receives_every_reference():
+    # Only the default NLTK adapter folds the list down; a custom scorer is handed
+    # the full set and decides for itself.
+    seen = {}
+
+    def chrf_fn(candidate, references):
+        seen["candidate"] = candidate
+        seen["references"] = list(references)
+        return 0.5
+
+    metric = ChrF(chrf_fn=chrf_fn, track=False)
+    result = metric.score(output="hello", reference=["hello there", "hi"])
+
+    assert result.value == pytest.approx(0.5)
+    assert seen == {"candidate": "hello", "references": ["hello there", "hi"]}
+
+
 def test_spearman_ranking_metric():
     metric = SpearmanRanking(track=False)
     result = metric.score(output=["b", "a", "c"], reference=["a", "b", "c"])
