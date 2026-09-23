@@ -4751,9 +4751,19 @@ class ExperimentsResourceTest {
             var trace3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(project.name()).build();
 
+            // Same workspace and project, but no experiment item points at it: its comments must not reach
+            // the experiment.
+            var unrelatedTrace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+
             var traces = List.of(trace1, trace2, trace3);
 
-            traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.batchCreateTraces(
+                    Stream.concat(traces.stream(), Stream.of(unrelatedTrace)).toList(), API_KEY, TEST_WORKSPACE);
+
+            IntStream.range(0, 3)
+                    .forEach(i -> traceResourceClient.generateAndCreateComment(
+                            unrelatedTrace.id(), API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED));
 
             // Creating 5 scores peach each of the three traces above
             var scoreForTrace1 = makeTraceScores(trace1);

@@ -570,6 +570,7 @@ public class ExperimentDAO {
                         <if(has_target_projects)>
                         AND project_id IN :target_project_ids
                         <endif>
+                        AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                         ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY id
                     )
