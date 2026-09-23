@@ -22,6 +22,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
@@ -37,6 +38,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
@@ -361,6 +363,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String DATASET_ITEM_VERSIONS = "dataset_item_versions";
     private static final String CLICKHOUSE = "Clickhouse";
+
+    /**
+     * Cache group for the compare-view target projects, whose answer does not depend on {@code page} /
+     * {@code size}. One read of a large experiment is dozens of requests that differ only by page, so without
+     * this each of them re-runs the same query. TTL is a few seconds — see {@code cacheManager.caches} in
+     * config.yml.
+     */
+    private static final String TARGET_PROJECTS_CACHE = "experiment_compare_target_projects";
 
     private static final List<FilterQueryBuilder.FilterStrategyParam> FILTER_STRATEGY_PARAMS = List.of(
             new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.DATASET_ITEM, "dataset_item_filters"),
@@ -2968,7 +2978,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .build();
 
             // Run pre-queries in parallel: target project IDs and aggregated experiment IDs
-            var targetProjectIdsMono = getTargetProjectIds(workspaceId, criteria.datasetId(), criteria.experimentIds());
+            var targetProjectIdsMono = getTargetProjectIdsCached(workspaceId, targetProjectsScopeKey(criteria),
+                    criteria.datasetId(), criteria.experimentIds());
             var branchCountsMono = getAggregationBranchCounts(aggregationCriteria);
 
             return Mono.zip(targetProjectIdsMono, branchCountsMono)
@@ -3087,6 +3098,35 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         });
                     });
         });
+    }
+
+    /**
+     * Key for {@link #TARGET_PROJECTS_CACHE}, covering every input that can change the target projects: the
+     * dataset and the experiment set, order-independent.
+     * <p>
+     * The workspace id is <b>not</b> part of this key on purpose: the caching method prepends its own
+     * {@code $workspaceId}, so that a caller cannot end up sharing an entry across tenants by forgetting to
+     * include it here.
+     */
+    private static String targetProjectsScopeKey(DatasetItemSearchCriteria criteria) {
+        String experimentIds = Optional.ofNullable(criteria.experimentIds())
+                .orElseGet(Set::of)
+                .stream()
+                .map(UUID::toString)
+                .sorted()
+                .collect(Collectors.joining(","));
+
+        return DigestUtils.sha256Hex(String.join("|", criteria.datasetId().toString(), experimentIds));
+    }
+
+    /**
+     * Must not be private: Guice method interception (which implements {@link Cacheable}) cannot intercept
+     * private methods, so a private modifier silently disables the cache.
+     */
+    @Cacheable(name = TARGET_PROJECTS_CACHE, key = "'target_projects-' + $workspaceId + '-' + $scopeKey", returnType = UUID.class, wrapperType = List.class)
+    public Mono<List<UUID>> getTargetProjectIdsCached(String workspaceId, String scopeKey, UUID datasetId,
+            Set<UUID> experimentIds) {
+        return getTargetProjectIds(workspaceId, datasetId, experimentIds);
     }
 
     /**
