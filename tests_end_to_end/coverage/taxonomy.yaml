@@ -251,6 +251,7 @@ areas:
     routes: ["/projects/$projectId/logs?type=traces", "/logs?type=spans"]
     spec_dir: trace-explore   # NOTE: dir name != product vocabulary ("Logs")
     specs:
+      - trace-explore/dataset-item-field-mappings.spec.ts
       - trace-explore/mcp-hint.spec.ts
       - trace-explore/span-cached-token-cost.spec.ts
       - trace-explore/span-cost-resolution.spec.ts
@@ -277,7 +278,7 @@ areas:
       filter-traces:          { covered: true,  tier: t2-cuj }
       mcp-hint-on-trace-error: { covered: true,  tier: t2-cuj, note: "the MCP hint on an expanded trace error: absent while the error is collapsed, shown once it is opened, kept through a collapse, and the card that explains Opik MCP and links to its docs. NOTE: written but never run green anywhere yet. The SDK bridge could not seed traces on the machine it was written on, where an existing spec (trace-delete) fails the same way, and both CI suites default to tier t1, so a t2 spec only runs on a manual dispatch." }
       configure-columns:      { covered: false }
-      add-trace-to-dataset:   { covered: false, note: "AddToDatasetDialog" }
+      add-trace-to-dataset:   { covered: true,  tier: t2-cuj, note: "AddToDatasetDialog, and the create-dataset-items-from-{traces,spans} endpoints behind it: field_mappings resolving a path, taking precedence over enrichment_options on a collision, being dropped when the path resolves to nothing, and being ignored for a TEST_SUITE dataset; plus the four validation rejections (blank name, blank path, uncompilable path, over the 100-entry cap) and that none of them writes. Driven through the dialog's Advanced mapping section for one trace — defaults, Preview, re-pointing a row through the JSON tree — and read back through the API" }
       add-trace-to-queue:     { covered: false, note: "AddToQueueDialog — cross-links annotation-queues" }
       messages-tab:           { covered: false, note: "MessagesTab — conditional on detectLLMMessages(input/output); when present it is the panel's default tab, else Details. Not covered from the traces side; the playground-written shape is covered under playground.trace-messages-tab, which does not generalise to SDK-logged traces." }
       agent-graph-tab:        { covered: false }
@@ -442,6 +443,7 @@ areas:
     specs:
       - playground/playground-dataset-run-failure.spec.ts
       - playground/playground-experiment-name.spec.ts
+      - playground/playground-failed-run-output.spec.ts
       - playground/playground-metric-selection.spec.ts
       - playground/playground-model-parameters.spec.ts
       - playground/playground-per-column-run.spec.ts
@@ -476,7 +478,7 @@ areas:
       load-prompt-version:       { covered: true,  tier: t2-cuj }
       verify-trace-from-run:     { covered: true,  tier: t2-cuj }
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
-      run-error-info:            { covered: true,  tier: t2-cuj, note: "A failed playground run is recorded as failed. Seeds an unreachable custom provider (no mock gateway, no provider key — the connection is refused before a request is written), runs against it, and asserts the logged trace carries the error block AND still renders the failure text as the run's assistant turn, since output deliberately keeps what the playground showed the user. t2 also covers the DATASET-GRID half (playground-dataset-run-failure.spec.ts, OPIK-8468): against the same unreachable provider, every one of the dataset's rows renders a 'Run failed:' tag whose tooltip carries the whole message, and NO cell renders a MarkdownPreview answer — which is the failure mode the change exists for, a dropped error falling back into the ordinary output path and reading like a reply. Two sub-checks from that change are NOT covered, and neither is claimed: stop-before-first-token, and the nested detail.detail unwrapping. Both need a provider that answers slowly or badly, not one that never answers." }
+      run-error-info:            { covered: true,  tier: t2-cuj, note: "A failed playground run is recorded as failed. Seeds an unreachable custom provider (no mock gateway, no provider key — the connection is refused before a request is written), runs against it, and asserts the logged trace carries the error block AND still renders the failure text as the run's assistant turn, since output deliberately keeps what the playground showed the user. t2 also covers the DATASET-GRID half (playground-dataset-run-failure.spec.ts, OPIK-8468): against the same unreachable provider, every one of the dataset's rows renders a 'Run failed:' tag whose tooltip carries the whole message, and NO cell renders a MarkdownPreview answer — which is the failure mode the change exists for, a dropped error falling back into the ordinary output path and reading like a reply. Two sub-checks from that change are NOT covered, and neither is claimed: stop-before-first-token, and the nested detail.detail unwrapping. Both need a provider that answers slowly or badly, not one that never answers. t2 also covers the FREE-MODE half (playground-failed-run-output.spec.ts, OPIK-8468) — the single-prompt panel PlaygroundPromptOutput, which is a different component from the grid cell and gates its body on its own `hasOutput`, so the two regress apart: the panel shows the 'Run failed: <message>' tag, renders no MarkdownPreview answer, does NOT fall back to the 'No runs yet' empty state, and carries no duration or token chip. That spec provokes the failure client-side with an undefined {{variable}}, so it needs no provider key and no reachable model. The no-chip half is scoped to that client-side throw, which lands before the proxy call and records no usage — a PROXY-level failure does still report a duration (pre-existing, untouched by OPIK-8468) — so nothing here claims failed runs are chip-free in general." }
       trace-messages-tab:        { covered: true,  tier: t2-cuj, note: "The Messages tab on a trace the playground wrote, whose completion is stored as a bare {output: string}. Asserts the tab is present at all and that its own panel renders the run as User and Assistant turns — the prior assertion only checked the prompt text was somewhere in the panel, which the Details JSON satisfies just as well, so it stayed green while the tab was missing entirely." }
       # Scoped: the Anthropic panel only, and only the two controls whose display
       # and whose request value can disagree. On claude-sonnet-4-6 the spec
