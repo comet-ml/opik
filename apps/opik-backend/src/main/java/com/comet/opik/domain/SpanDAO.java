@@ -2043,11 +2043,11 @@ public class SpanDAO {
 
                 bindNanSentinel(statement, "ttft" + i, span.ttft());
 
-                if (span.source() != null) {
-                    statement.bind("source" + i, span.source().getValue());
-                } else {
-                    statement.bindNull("source" + i, String.class);
-                }
+                // The column is non-nullable with DEFAULT 'unknown'; binding NULL makes the
+                // driver wrap it in a nullable guard, costing two swallowed exceptions per row.
+                statement.bind("source" + i, span.source() == null
+                        ? Source.UNKNOWN_VALUE
+                        : span.source().getValue());
 
                 statement.bind("environment" + i, StringUtils.defaultString(span.environment()));
 
@@ -2125,11 +2125,9 @@ public class SpanDAO {
 
             bindNanSentinel(statement, "ttft", span.ttft());
 
-            if (span.source() != null) {
-                statement.bind("source", span.source().getValue());
-            } else {
-                statement.bindNull("source", String.class);
-            }
+            statement.bind("source", span.source() == null
+                    ? Source.UNKNOWN_VALUE
+                    : span.source().getValue());
 
             statement.bind("environment", StringUtils.defaultString(span.environment()));
 
@@ -2266,11 +2264,10 @@ public class SpanDAO {
                     bindEpochSentinel(statement, "end_time", spanUpdate.endTime());
                     bindNanSentinel(statement, "ttft", spanUpdate.ttft());
 
-                    if (spanUpdate.source() != null) {
-                        statement.bind("source", spanUpdate.source().getValue());
-                    } else {
-                        statement.bindNull("source", String.class);
-                    }
+                    // 'unknown' is also what the merge above treats as "no source supplied".
+                    statement.bind("source", spanUpdate.source() == null
+                            ? Source.UNKNOWN_VALUE
+                            : spanUpdate.source().getValue());
 
                     bindUserNameAndWorkspace(statement, userName, workspaceId);
 

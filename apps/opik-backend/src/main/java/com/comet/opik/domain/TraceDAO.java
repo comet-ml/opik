@@ -3455,11 +3455,11 @@ class TraceDAOImpl implements TraceDAO {
             statement.bindNull("visibility_mode", String.class);
         }
 
-        if (trace.source() != null) {
-            statement.bind("source", trace.source().getValue());
-        } else {
-            statement.bindNull("source", String.class);
-        }
+        // The column is non-nullable with DEFAULT 'unknown'; binding NULL makes the driver
+        // wrap it in a nullable guard, costing two swallowed exceptions per row.
+        statement.bind("source", trace.source() == null
+                ? Source.UNKNOWN_VALUE
+                : trace.source().getValue());
 
         statement.bind("environment", StringUtils.defaultString(trace.environment()));
 
@@ -4185,11 +4185,10 @@ class TraceDAOImpl implements TraceDAO {
             bindEpochSentinel(statement, "end_time", traceUpdate.endTime());
             bindNanSentinel(statement, "ttft", traceUpdate.ttft());
 
-            if (traceUpdate.source() != null) {
-                statement.bind("source", traceUpdate.source().getValue());
-            } else {
-                statement.bindNull("source", String.class);
-            }
+            // 'unknown' is also what the merge treats as "no source supplied".
+            statement.bind("source", traceUpdate.source() == null
+                    ? Source.UNKNOWN_VALUE
+                    : traceUpdate.source().getValue());
 
             Segment segment = startSegment("traces", "Clickhouse", "insert_partial");
 
@@ -4537,11 +4536,9 @@ class TraceDAOImpl implements TraceDAO {
 
                 bindNanSentinel(statement, "ttft" + i, trace.ttft());
 
-                if (trace.source() != null) {
-                    statement.bind("source" + i, trace.source().getValue());
-                } else {
-                    statement.bindNull("source" + i, String.class);
-                }
+                statement.bind("source" + i, trace.source() == null
+                        ? Source.UNKNOWN_VALUE
+                        : trace.source().getValue());
 
                 statement.bind("environment" + i, StringUtils.defaultString(trace.environment()));
 
