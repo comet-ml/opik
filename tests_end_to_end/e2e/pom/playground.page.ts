@@ -37,6 +37,12 @@ const RUN_ERROR_TEXT = /\bnot defined\b|returned an empty response/i;
 const hasProducedOutput = (text: string): boolean =>
   text.trim() !== '' && !text.includes(IDLE_CELL_TEXT);
 
+/** Window key the toast recorder writes into — see `startRecordingToasts`. */
+const TOAST_RECORD_KEY = '__opikRecordedToasts';
+
+/** The title `useRunCompletionToast` gives the toast a finished run raises. */
+const RUN_COMPLETE_TEXT = /Run complete/;
+
 export interface PlaygroundVariantConfig {
   /** Optional system prompt — if set, first message is converted to role=system then a User message is appended. */
   systemPrompt?: string;
@@ -226,6 +232,91 @@ export class PlaygroundPage {
       .filter({ hasText: 'Run complete' });
   }
 
+  /**
+   * Start recording every toast the page raises, from before the first one can
+   * appear. Must be called BEFORE `goto()` — it installs an init script, which
+   * runs on every document, so the recorder is in place for any navigation.
+   *
+   * It does NOT accumulate across navigations. The init script re-runs in each
+   * fresh document and assigns a new array, so a `page.reload()` drops every
+   * toast raised before it — `recordedToasts()` then describes the current
+   * document only. None of the specs using this reload mid-run; a spec that
+   * needs history to survive one has to hold the array test-side (an exposed
+   * binding the init script appends through) instead of on `window`.
+   *
+   * `completionToast()` above reads a LIVE locator, which only works when the
+   * run is slow enough that the toast is still on screen when the assertion
+   * runs. It is not, on the runs these specs drive: Radix dismisses a toast on
+   * its own 5s default, and a run against a provider that refuses every
+   * connection finishes in about a second, so a point-in-time read races the
+   * dismissal — and worse, it cannot tell "never raised" from "raised and
+   * already gone", which is exactly the distinction a spec asserting that a
+   * STOPPED run stays silent depends on.
+   *
+   * Scoped to the notification region for the same reason `completionToast()`
+   * is: Radix also portals a visually-hidden `role="status"` announcer carrying
+   * the same text, outside the region, and recording both would double every
+   * toast.
+   */
+  async startRecordingToasts(): Promise<void> {
+    return test.step('start recording toasts', async () => {
+      await this.page.addInitScript((key: string) => {
+        const recorded: Element[] = [];
+        (window as unknown as Record<string, unknown>)[key] = recorded;
+
+        const isToast = (el: Element): boolean =>
+          el.matches('[role="status"]') && el.closest('[role="region"]') !== null;
+
+        new MutationObserver((mutations) => {
+          for (const mutation of mutations) {
+            for (const node of Array.from(mutation.addedNodes)) {
+              if (!(node instanceof Element)) continue;
+              if (isToast(node)) recorded.push(node);
+              // A toast can also arrive nested, when the region itself is the
+              // node that was inserted.
+              for (const nested of Array.from(node.querySelectorAll('[role="status"]'))) {
+                if (isToast(nested)) recorded.push(nested);
+              }
+            }
+          }
+        }).observe(document, { childList: true, subtree: true });
+      }, TOAST_RECORD_KEY);
+    });
+  }
+
+  /**
+   * The text of every toast raised since `startRecordingToasts()`, oldest
+   * first, whether or not it is still on screen.
+   *
+   * Read out of the recorded elements rather than snapshotted when they were
+   * inserted: a detached node keeps its text, and reading late also picks up
+   * any content React committed into the toast after appending it.
+   *
+   * Throws rather than returning `[]` when the recorder was never installed —
+   * an empty array is what half of these assertions are looking for, so a
+   * missing recorder would read as "no toast was raised" and pass.
+   */
+  async recordedToasts(): Promise<string[]> {
+    return test.step('read the recorded toasts', async () => {
+      return this.page.evaluate((key: string) => {
+        const recorded = (window as unknown as Record<string, unknown>)[key];
+        if (!Array.isArray(recorded)) {
+          throw new Error(
+            'no toast recorder on this page — startRecordingToasts() must run before goto()',
+          );
+        }
+        return (recorded as Element[]).map((el) => (el.textContent ?? '').trim());
+      }, TOAST_RECORD_KEY);
+    });
+  }
+
+  /** Recorded toasts that announce a finished run. */
+  async recordedRunCompletionToasts(): Promise<string[]> {
+    return test.step('read the recorded run-completion toasts', async () => {
+      return (await this.recordedToasts()).filter((text) => RUN_COMPLETE_TEXT.test(text));
+    });
+  }
+
   /** The "Creates: {name}_a  +N more" preview; absent while no name is set. */
   experimentNamePreview(): Locator {
     return this.page.getByTestId('playground-experiment-name-preview');
@@ -273,10 +364,164 @@ export class PlaygroundPage {
     });
   }
 
+  // ── reset ───────────────────────────────────────────────────────────────
+
+  /**
+   * Reset the Playground and confirm the dialog.
+   *
+   * Returns only once the dialog has gone, so a caller counting variant cards
+   * straight afterwards is reading the post-reset render rather than the one
+   * still behind the overlay.
+   */
+  async resetPlayground(): Promise<void> {
+    return test.step('reset the Playground', async () => {
+      await this.resetButton().click();
+      const dialog = this.resetDialog();
+      await dialog.waitFor({ state: 'visible' });
+      // The confirm button carries the same text as the dialog's own title, so
+      // the lookup MUST be scoped to the dialog — an unscoped one matches both.
+      await dialog.getByRole('button', { name: 'Reset playground' }).click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * The Reset control in the Playground header.
+   *
+   * Icon-only, with no accessible name: "Reset playground" is a Radix
+   * `TooltipContent`, not an `aria-label`, so `getByRole('button', { name })`
+   * finds nothing and the rendered icon is the only handle. A `data-testid` on
+   * it would be better — but these specs run against a deployed Opik, so an
+   * attribute added alongside them would not exist in the version under test.
+   * Same trade-off, and the same reason, as `modelParametersTrigger` below.
+   */
+  resetButton(): Locator {
+    return this.page.locator('button:has(svg.lucide-rotate-ccw)');
+  }
+
+  /** The reset confirmation dialog, identified by its own title. */
+  resetDialog(): Locator {
+    return this.page.getByRole('dialog').filter({ hasText: 'Reset playground' });
+  }
+
+  /**
+   * Every variant card currently mounted. After a reset there must be exactly
+   * one — the two failure modes the same-flush race produced were zero cards
+   * and two, and both leave the Playground unusable.
+   */
+  variantCards(): Locator {
+    return this.page.getByTestId('playground-variant-card');
+  }
+
+  /**
+   * The message editors of every variant card on the page.
+   *
+   * Counted rather than addressed by index so "exactly one empty message" is
+   * assertable as a single statement: a second card that also happened to be
+   * empty would otherwise pass an index-based check.
+   */
+  messageEditors(): Locator {
+    return this.variantCards().getByTestId('playground-message-row').locator('.cm-content');
+  }
+
+  /**
+   * The text content of every mounted message editor, in DOM order.
+   *
+   * Read from `textContent` of the CodeMirror content node rather than through
+   * `innerText`: an empty editor still renders its "Type your message"
+   * placeholder as a child element, which `innerText` would report as the
+   * message body and so make a reset that cleared nothing look like one that
+   * did. The placeholder node is excluded explicitly.
+   */
+  async messageBodies(): Promise<string[]> {
+    return test.step('read every message editor body', async () => {
+      return this.messageEditors().evaluateAll((editors) =>
+        editors.map((editor) => {
+          const clone = editor.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll('.cm-placeholder').forEach((node) => node.remove());
+          return (clone.textContent ?? '').trim();
+        }),
+      );
+    });
+  }
+
+  /**
+   * The "Run experiment" entry control — present only while NO dataset or test
+   * suite is loaded. Its return after a reset is what says the reset really
+   * put the Playground back into free mode, rather than merely blanking the
+   * pill while keeping the loaded source in the store.
+   */
+  runExperimentEntryControl(): Locator {
+    return this.runExperimentTriggerButton();
+  }
+
   /** Click Re-run when a suite/dataset is already loaded. */
   async clickReRun(): Promise<void> {
     return test.step('click Re-run', async () => {
       await this.runButton().click();
+    });
+  }
+
+  // ── per-column run / stop ───────────────────────────────────────────────
+  //
+  // `PlaygroundRunButton` is mounted per variant, and in experiment mode (a
+  // dataset or suite loaded) it renders inside the variant card — in free mode
+  // the same component renders under the OUTPUT column instead, which is why
+  // these are scoped to the card rather than looked up page-wide. It carries no
+  // testid and its label swaps between Run and Stop with the variant's own
+  // state; the accessible name is the only handle. A `data-testid` on it would
+  // be better, but these specs run against a deployed Opik, so an attribute
+  // added alongside them would not exist in the version under test.
+
+  /** The Run control on one variant's card. Present only while that variant is idle. */
+  variantRunButton(index: number): Locator {
+    return this.variantCard(index).getByRole('button', { name: 'Run', exact: true });
+  }
+
+  /** The Stop control on one variant's card. Present only while that variant is running. */
+  variantStopButton(index: number): Locator {
+    return this.variantCard(index).getByRole('button', { name: 'Stop', exact: true });
+  }
+
+  /**
+   * The header's "Stop all", which replaces the Run button for the duration of
+   * a run. Named exactly, so it cannot also match a variant card's "Stop".
+   */
+  stopAllButton(): Locator {
+    return this.page.getByRole('button', { name: 'Stop all', exact: true });
+  }
+
+  /**
+   * Run ONE variant, from its own card.
+   *
+   * The count is asserted rather than `.first()`-ed: a lookup that matched two
+   * buttons would run whichever the DOM happened to order first, and a spec
+   * whose whole claim is "only this column ran" would then be asserting against
+   * a column it did not choose.
+   */
+  async clickVariantRun(index: number): Promise<void> {
+    return test.step(`click Run on variant ${index}`, async () => {
+      const button = this.variantRunButton(index);
+      await expect(button).toHaveCount(1);
+      await button.click();
+    });
+  }
+
+  /** Stop ONE running variant, from its own card. */
+  async clickVariantStop(index: number, timeoutMs = 30_000): Promise<void> {
+    return test.step(`click Stop on variant ${index}`, async () => {
+      const button = this.variantStopButton(index);
+      await expect(button).toHaveCount(1, { timeout: timeoutMs });
+      await button.click();
+    });
+  }
+
+  /** Stop every running variant, from the header. */
+  async clickStopAll(timeoutMs = 30_000): Promise<void> {
+    return test.step('click Stop all', async () => {
+      const button = this.stopAllButton();
+      await expect(button).toBeVisible({ timeout: timeoutMs });
+      await button.click();
     });
   }
 
@@ -347,52 +592,44 @@ export class PlaygroundPage {
     return (await this.outputCells().allInnerTexts()).filter(hasProducedOutput).length;
   }
 
-  // ── failed-run output (OPIK-8468) ───────────────────────────────────────
+  // ── free-mode failed-run output (OPIK-8468) ─────────────────────────────
   //
   // A run that fails renders `PlaygroundOutputError` — a red "Run failed: <message>" tag —
-  // in place of the model's answer, on both output surfaces. `RUN_ERROR_TEXT` above sniffs
-  // a failure out of a cell's own text instead, because before OPIK-8468 the failure WAS
-  // the output string and there was nothing else to read. It is deliberately left in
-  // place: these specs run against deployed Opik, so `waitForRunsComplete` still has to
-  // recognise a failure on a version that predates this tag.
+  // in place of the model's answer. The members below address the FREE-MODE surface, the
+  // single-prompt `PlaygroundPromptOutput` panel; `outputErrorTags` / `outputMarkdownBlocks`
+  // further down are the dataset-grid equivalents, scoped to the results table's cells.
+  // The two components gate their bodies on separate `hasOutput` expressions and so can
+  // regress apart, which is why each surface gets its own locator rather than a shared
+  // page-wide one — a page-wide lookup would let a grid assertion pass on a panel tag.
+  //
+  // `RUN_ERROR_TEXT` above sniffs a failure out of a cell's own text instead, because
+  // before OPIK-8468 the failure WAS the output string and there was nothing else to read.
+  // It is deliberately left in place: these specs run against deployed Opik, so
+  // `waitForRunsComplete` still has to recognise a failure on a version predating this tag.
 
   /**
-   * Every "Run failed:" tag on the page — the single-prompt panels and the dataset output
-   * cells render the same component, so this spans both surfaces.
+   * The "Run failed:" tags of the single-prompt output panels. Page-scoped because the
+   * panel has no container of its own to hang a locator off — safe only in free mode,
+   * where no results table is mounted, which is the only mode these are used in.
    */
-  outputErrorTags(): Locator {
+  promptOutputErrorTags(): Locator {
     return this.page.getByTestId('playground-output-error');
   }
 
-  /** The failure tags inside the dataset/suite results table only. */
-  resultsOutputErrorTags(): Locator {
-    return this.resultsTable().getByTestId('playground-output-error');
-  }
-
   /**
-   * Rendered model answers. `MarkdownPreview` stamps `.comet-markdown` on every answer it
-   * renders, on both output surfaces — so "a failed run renders none of these" is the
-   * assertion OPIK-8468 exists for. Addressed by class rather than by testid because the
-   * component is shared far outside the Playground, where stamping one would reach well
-   * beyond this area.
+   * Rendered model answers in the single-prompt output panels. `MarkdownPreview` stamps
+   * `.comet-markdown` on both branches it can take — the parsed one and the plain-text
+   * fallback — so "a failed run renders none of these" is the assertion OPIK-8468 exists
+   * for. Addressed by class rather than by testid because the component is shared far
+   * outside the Playground, where stamping one would reach well beyond this area.
    */
-  renderedAnswers(): Locator {
+  promptOutputMarkdownBlocks(): Locator {
     return this.page.locator('.comet-markdown');
   }
 
-  /** Rendered model answers inside the results table only. */
-  resultsRenderedAnswers(): Locator {
-    return this.resultsTable().locator('.comet-markdown');
-  }
-
-  /** The "No runs yet" placeholder an output surface shows until its row has been run. */
+  /** The "No runs yet" placeholder an output surface shows until its prompt has been run. */
   noRunsYetPlaceholders(): Locator {
     return this.page.getByText(IDLE_CELL_TEXT, { exact: true });
-  }
-
-  /** The same placeholder, scoped to the results table. */
-  resultsNoRunsYetPlaceholders(): Locator {
-    return this.resultsTable().getByText(IDLE_CELL_TEXT, { exact: true });
   }
 
   /**
@@ -409,16 +646,16 @@ export class PlaygroundPage {
   }
 
   /**
-   * Wait until exactly `count` failure tags have rendered.
+   * Wait until exactly `count` failure tags have rendered in the single-prompt panels.
    *
    * `waitForRunsComplete` is the wrong signal for a spec that provokes a failure on
    * purpose — it treats an errored cell as a fault and throws. The count is exact rather
-   * than a floor so that a run which fails some rows and silently drops the rest fails
+   * than a floor so that a run which fails some variants and silently drops the rest fails
    * here, loudly, instead of passing on the first tag to appear.
    */
-  async waitForOutputErrors(count: number, timeoutMs = 60_000): Promise<void> {
+  async waitForPromptOutputErrors(count: number, timeoutMs = 60_000): Promise<void> {
     return test.step(`wait for ${count} failed-run tag(s)`, async () => {
-      await expect(this.outputErrorTags()).toHaveCount(count, { timeout: timeoutMs });
+      await expect(this.promptOutputErrorTags()).toHaveCount(count, { timeout: timeoutMs });
     });
   }
 
@@ -1146,6 +1383,53 @@ export class PlaygroundPage {
 
   private resultsTable(): Locator {
     return this.page.getByTestId('playground-results-table');
+  }
+
+  // ── dataset-grid output cells ───────────────────────────────────────────
+
+  /**
+   * The failure tag a dataset-grid output cell renders when its run failed.
+   *
+   * `playground-output-error` is the FE's own stability contract on that tag,
+   * and it is rendered INSTEAD of the cell's markdown output — the cell body
+   * short-circuits to `null` whenever an error is set — so counting these is
+   * how a spec distinguishes "the failure was rendered as a failure" from "the
+   * failure was rendered as the model's answer".
+   */
+  outputErrorTags(): Locator {
+    return this.outputCells().getByTestId('playground-output-error');
+  }
+
+  /**
+   * Markdown output blocks inside the dataset-grid output cells.
+   *
+   * `MarkdownPreview` stamps `comet-markdown` on both branches it can take —
+   * the parsed one and the plain-text fallback — so this counts any rendered
+   * answer whether or not the text happened to parse as markdown. It carries
+   * no testid, and adding one would not help: these specs run against a
+   * deployed Opik, where an attribute added alongside them would not exist in
+   * the version under test.
+   */
+  outputMarkdownBlocks(): Locator {
+    return this.outputCells().locator('.comet-markdown');
+  }
+
+  /**
+   * Hover a failure tag and read the tooltip it raises.
+   *
+   * The tag truncates its message with CSS, so the tooltip is where the whole
+   * message is meant to be legible. Radix portals the content out of the cell,
+   * so the tooltip is looked up at page scope by role rather than through the
+   * tag. `TooltipWrapper` opens on a timer after pointer-enter, so the wait is
+   * on the tooltip appearing rather than on a fixed delay.
+   */
+  async outputErrorTooltipText(index = 0): Promise<string> {
+    return test.step(`hover failure tag ${index} and read its tooltip`, async () => {
+      await this.outputErrorTags().nth(index).hover();
+      const tooltip = this.page.getByRole('tooltip');
+      await expect(tooltip.first()).toBeVisible({ timeout: 10_000 });
+      return (await tooltip.first().innerText()).trim();
+    });
   }
 
   /**

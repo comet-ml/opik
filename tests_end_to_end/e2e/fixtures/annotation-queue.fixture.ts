@@ -18,6 +18,18 @@ export interface AnnotationQueueRef {
 
 export interface AnnotationQueueFixtures {
   annotationQueue: AnnotationQueueRef;
+
+  /**
+   * Teardown for queues a test creates itself, rather than through the
+   * `annotationQueue` fixture above.
+   *
+   * Register as soon as the id exists; the registry drains after `use()`, so a
+   * queue created moments before a failing assertion is still deleted. Queues
+   * cascade with neither the project fixture nor a `test.afterEach` that an
+   * earlier throw skips, so this is the only cleanup that holds on a red run.
+   * Mirrors `registerDatasetCleanup` and `registerPromptCleanup`.
+   */
+  registerAnnotationQueueCleanup: (id: string, name: string) => void;
 }
 
 const TRACE_COUNT = 3;
@@ -69,6 +81,23 @@ export const test = baseTest.extend<AnnotationQueueFixtures>({
         await backendClient.deleteAnnotationQueue(created.id);
       } catch (err) {
         console.warn(`[annotationQueue fixture] delete warning for ${queueName}:`, err);
+      }
+    }
+  },
+
+  registerAnnotationQueueCleanup: async ({ backendClient }, use, testInfo) => {
+    const registry: Array<{ id: string; name: string }> = [];
+    await use((id, name) => {
+      registry.push({ id, name });
+    });
+    if (shouldLeaveArtifacts(testInfo)) return;
+    for (const { id, name } of registry) {
+      try {
+        await backendClient.deleteAnnotationQueue(id);
+      } catch (err) {
+        // Best-effort: one undeletable queue must not mask the failure that
+        // explains the run, nor orphan the queues registered after it.
+        console.warn(`[registerAnnotationQueueCleanup] delete warning for ${name}:`, err);
       }
     }
   },
