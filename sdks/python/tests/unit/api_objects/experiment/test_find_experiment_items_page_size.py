@@ -10,6 +10,7 @@ from unittest.mock import Mock
 import pytest
 
 from opik.api_objects import constants
+from opik.rest_api.core.api_error import ApiError
 from opik.api_objects.experiment import (
     experiment as experiment_module,
     experiments_client as experiments_client_module,
@@ -44,6 +45,24 @@ class _RecordingHttpxClient:
         body = json.dumps({"content": content, "total": self.reported_total})
         return types.SimpleNamespace(
             status_code=200, content=body.encode("utf-8"), text=body, headers={}
+        )
+
+
+class _FailingHttpxClient:
+    """Answers every page with one non-2xx response."""
+
+    def __init__(self, status_code: int, body: str) -> None:
+        self._status_code = status_code
+        self._body = body
+        self.calls = 0
+
+    def request(self, path: str, *, method: str, params: Dict[str, Any]) -> Any:
+        self.calls += 1
+        return types.SimpleNamespace(
+            status_code=self._status_code,
+            content=self._body.encode("utf-8"),
+            text=self._body,
+            headers={"content-type": "application/json", "x-request-id": "req-1"},
         )
 
 
@@ -334,3 +353,60 @@ def test_experiments_client__validates_before_touching_the_rest_client(kwargs, m
         )
 
     rest_client.datasets.get_dataset_by_identifier.assert_not_called()
+
+
+def _read_failing(status_code: int, body: str) -> _FailingHttpxClient:
+    httpx_client = _FailingHttpxClient(status_code, body)
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=httpx_client)
+    )
+    rest_operations.find_experiment_items_for_dataset(
+        rest_client=rest_client,
+        dataset_id="some-dataset-id",
+        experiment_ids=["some-experiment-id"],
+        max_results=10,
+        truncate=False,
+    )
+    return httpx_client
+
+
+def test_find_experiment_items_for_dataset__non_2xx_raises_api_error_with_the_response():
+    body = '{"code": 500, "message": "MEMORY_LIMIT_EXCEEDED"}'
+
+    with pytest.raises(ApiError) as exception_info:
+        _read_failing(500, body)
+
+    error = exception_info.value
+    assert error.status_code == 500
+    assert error.headers == {
+        "content-type": "application/json",
+        "x-request-id": "req-1",
+    }
+    # A dict, not the raw text: `ApiError.body` readers in the SDK look for the
+    # backend's `message` key, which is what the generated client gave them.
+    assert error.body == {"code": 500, "message": "MEMORY_LIMIT_EXCEEDED"}
+
+
+def test_find_experiment_items_for_dataset__non_json_error_body_stays_text():
+    with pytest.raises(ApiError) as exception_info:
+        _read_failing(502, "<html>Bad Gateway</html>")
+
+    assert exception_info.value.body == "<html>Bad Gateway</html>"
+
+
+def test_find_experiment_items_for_dataset__a_failed_first_page_stops_the_read():
+    httpx_client = _FailingHttpxClient(503, '{"message": "unavailable"}')
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=httpx_client)
+    )
+
+    with pytest.raises(ApiError):
+        rest_operations.find_experiment_items_for_dataset(
+            rest_client=rest_client,
+            dataset_id="some-dataset-id",
+            experiment_ids=["some-experiment-id"],
+            max_results=10_000,
+            truncate=False,
+        )
+
+    assert httpx_client.calls == 1
