@@ -273,6 +273,97 @@ export class PlaygroundPage {
     });
   }
 
+  // ── reset ───────────────────────────────────────────────────────────────
+
+  /**
+   * Reset the Playground and confirm the dialog.
+   *
+   * Returns only once the dialog has gone, so a caller counting variant cards
+   * straight afterwards is reading the post-reset render rather than the one
+   * still behind the overlay.
+   */
+  async resetPlayground(): Promise<void> {
+    return test.step('reset the Playground', async () => {
+      await this.resetButton().click();
+      const dialog = this.resetDialog();
+      await dialog.waitFor({ state: 'visible' });
+      // The confirm button carries the same text as the dialog's own title, so
+      // the lookup MUST be scoped to the dialog — an unscoped one matches both.
+      await dialog.getByRole('button', { name: 'Reset playground' }).click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * The Reset control in the Playground header.
+   *
+   * Icon-only, with no accessible name: "Reset playground" is a Radix
+   * `TooltipContent`, not an `aria-label`, so `getByRole('button', { name })`
+   * finds nothing and the rendered icon is the only handle. A `data-testid` on
+   * it would be better — but these specs run against a deployed Opik, so an
+   * attribute added alongside them would not exist in the version under test.
+   * Same trade-off, and the same reason, as `modelParametersTrigger` below.
+   */
+  resetButton(): Locator {
+    return this.page.locator('button:has(svg.lucide-rotate-ccw)');
+  }
+
+  /** The reset confirmation dialog, identified by its own title. */
+  resetDialog(): Locator {
+    return this.page.getByRole('dialog').filter({ hasText: 'Reset playground' });
+  }
+
+  /**
+   * Every variant card currently mounted. After a reset there must be exactly
+   * one — the two failure modes the same-flush race produced were zero cards
+   * and two, and both leave the Playground unusable.
+   */
+  variantCards(): Locator {
+    return this.page.getByTestId('playground-variant-card');
+  }
+
+  /**
+   * The message editors of every variant card on the page.
+   *
+   * Counted rather than addressed by index so "exactly one empty message" is
+   * assertable as a single statement: a second card that also happened to be
+   * empty would otherwise pass an index-based check.
+   */
+  messageEditors(): Locator {
+    return this.variantCards().getByTestId('playground-message-row').locator('.cm-content');
+  }
+
+  /**
+   * The text content of every mounted message editor, in DOM order.
+   *
+   * Read from `textContent` of the CodeMirror content node rather than through
+   * `innerText`: an empty editor still renders its "Type your message"
+   * placeholder as a child element, which `innerText` would report as the
+   * message body and so make a reset that cleared nothing look like one that
+   * did. The placeholder node is excluded explicitly.
+   */
+  async messageBodies(): Promise<string[]> {
+    return test.step('read every message editor body', async () => {
+      return this.messageEditors().evaluateAll((editors) =>
+        editors.map((editor) => {
+          const clone = editor.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll('.cm-placeholder').forEach((node) => node.remove());
+          return (clone.textContent ?? '').trim();
+        }),
+      );
+    });
+  }
+
+  /**
+   * The "Run experiment" entry control — present only while NO dataset or test
+   * suite is loaded. Its return after a reset is what says the reset really
+   * put the Playground back into free mode, rather than merely blanking the
+   * pill while keeping the loaded source in the store.
+   */
+  runExperimentEntryControl(): Locator {
+    return this.runExperimentTriggerButton();
+  }
+
   /** Click Re-run when a suite/dataset is already loaded. */
   async clickReRun(): Promise<void> {
     return test.step('click Re-run', async () => {
@@ -1071,6 +1162,53 @@ export class PlaygroundPage {
 
   private resultsTable(): Locator {
     return this.page.getByTestId('playground-results-table');
+  }
+
+  // ── dataset-grid output cells ───────────────────────────────────────────
+
+  /**
+   * The failure tag a dataset-grid output cell renders when its run failed.
+   *
+   * `playground-output-error` is the FE's own stability contract on that tag,
+   * and it is rendered INSTEAD of the cell's markdown output — the cell body
+   * short-circuits to `null` whenever an error is set — so counting these is
+   * how a spec distinguishes "the failure was rendered as a failure" from "the
+   * failure was rendered as the model's answer".
+   */
+  outputErrorTags(): Locator {
+    return this.outputCells().getByTestId('playground-output-error');
+  }
+
+  /**
+   * Markdown output blocks inside the dataset-grid output cells.
+   *
+   * `MarkdownPreview` stamps `comet-markdown` on both branches it can take —
+   * the parsed one and the plain-text fallback — so this counts any rendered
+   * answer whether or not the text happened to parse as markdown. It carries
+   * no testid, and adding one would not help: these specs run against a
+   * deployed Opik, where an attribute added alongside them would not exist in
+   * the version under test.
+   */
+  outputMarkdownBlocks(): Locator {
+    return this.outputCells().locator('.comet-markdown');
+  }
+
+  /**
+   * Hover a failure tag and read the tooltip it raises.
+   *
+   * The tag truncates its message with CSS, so the tooltip is where the whole
+   * message is meant to be legible. Radix portals the content out of the cell,
+   * so the tooltip is looked up at page scope by role rather than through the
+   * tag. `TooltipWrapper` opens on a timer after pointer-enter, so the wait is
+   * on the tooltip appearing rather than on a fixed delay.
+   */
+  async outputErrorTooltipText(index = 0): Promise<string> {
+    return test.step(`hover failure tag ${index} and read its tooltip`, async () => {
+      await this.outputErrorTags().nth(index).hover();
+      const tooltip = this.page.getByRole('tooltip');
+      await expect(tooltip.first()).toBeVisible({ timeout: 10_000 });
+      return (await tooltip.first().innerText()).trim();
+    });
   }
 
   /**
