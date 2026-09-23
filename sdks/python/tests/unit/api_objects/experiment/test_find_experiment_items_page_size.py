@@ -410,3 +410,36 @@ def test_find_experiment_items_for_dataset__a_failed_first_page_stops_the_read()
         )
 
     assert httpx_client.calls == 1
+
+
+@pytest.mark.parametrize("max_results", [0, -1])
+def test_find_experiment_items_for_dataset__non_positive_max_results_reads_nothing(
+    max_results,
+):
+    result = _read(total=500, max_results=max_results)
+
+    assert result["items"] == []
+    # Not merely an empty result: the sequential read this replaced never sent a
+    # request for a non-positive limit, and a first page read before the limit is
+    # consulted would raise where callers used to get `[]`.
+    assert result["requested_pages"] == []
+
+
+@pytest.mark.parametrize("max_results", [0, -1])
+def test_get_items__non_positive_max_results_reaches_no_compare_request(max_results):
+    """The same guard from the public entry point, through the real client."""
+
+    class _ExplodingHttpxClient:
+        def request(self, path: str, *, method: str, params: Dict[str, Any]) -> Any:
+            raise AssertionError(f"no request expected, got page {params['page']}")
+
+    rest_client = Mock()
+    rest_client._client_wrapper = types.SimpleNamespace(
+        httpx_client=_ExplodingHttpxClient()
+    )
+    rest_client.datasets.get_dataset_by_identifier.return_value = types.SimpleNamespace(
+        id="some-dataset-id"
+    )
+    experiment = _experiment(experiments_client_module.ExperimentsClient(rest_client))
+
+    assert experiment.get_items(max_results=max_results) == []

@@ -66,6 +66,13 @@ def find_experiment_items_for_dataset(
     page_size: int = constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE,
     num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
 ) -> List[experiment_item.ExperimentItemContent]:
+    # The sequential read this replaced never issued a request for a non-positive
+    # limit -- its `while len(collected) < max_results` was false on entry. Reading
+    # page 1 before the limit is consulted would turn that into one Compare request,
+    # and an `ApiError` where callers used to get `[]`.
+    if max_results <= 0:
+        return []
+
     experiment_ids_json = json.dumps(experiment_ids)
 
     def fetch_page(page_number: int) -> Dict[str, Any]:
