@@ -26,14 +26,14 @@ Setting one up is two decisions:
 Opik delivers each notification as an HTTP POST carrying the event data in the body.
 
 <Frame>
-  <img src="/img/production/alerts_configuration.png" alt="Alerts configuration in Opik" />
+  <img src="/img/production/alerts_configuration.png" alt="The Alerts list for a project in Opik" />
 </Frame>
 
 ## Creating an alert
 
 ### Prerequisites
 
-- Access to the Opik Configuration page
+- A project to scope the alert to
 - A webhook endpoint that can receive HTTP POST requests
 - (Optional) An HTTPS endpoint with valid SSL certificate for production use
 
@@ -44,8 +44,8 @@ Opik delivers each notification as an HTTP POST carrying the event data in the b
 </Frame>
 
 1. **Navigate to Alerts**
-   - Go to Configuration → Alerts tab
-   - Click "Create new alert" button
+   - Open your project and go to **Alerts**, under Production in the sidebar
+   - Click **Create alert**
 
 2. **Add triggers**
    - Click "Add trigger" and tick one or more event types
@@ -108,8 +108,8 @@ Opik provides native Slack integration that automatically formats alert messages
    - Copy the webhook URL
 
 2. **In Opik**:
-   - Go to Configuration → Alerts tab
-   - Click "Create new alert"
+   - Open your project and go to **Alerts**, under Production in the sidebar
+   - Click **Create alert**
    - Add triggers for the events you want to monitor
    - Select **Slack** as the destination type
    - Paste your Slack webhook URL in the Endpoint URL field
@@ -141,8 +141,8 @@ Opik provides native PagerDuty integration that automatically formats alert even
    - Save the integration and copy the Integration Key
 
 2. **In Opik**:
-   - Go to Configuration → Alerts tab
-   - Click "Create new alert"
+   - Open your project and go to **Alerts**, under Production in the sidebar
+   - Click **Create alert**
    - Add triggers for the events you want to monitor
    - Select **PagerDuty** as the destination type
    - Enter the PagerDuty Events API v2 endpoint: `https://events.pagerduty.com/v2/enqueue`
