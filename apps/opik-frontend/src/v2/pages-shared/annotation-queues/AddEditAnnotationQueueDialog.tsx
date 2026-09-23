@@ -598,12 +598,14 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                       // Automation compares one entity's score, so equality is meaningful here in a
                       // way it is not for an alert's windowed aggregate.
                       operators={[...ALL_OPERATOR_VALUES]}
-                      maxGroups={AUTOMATION_MAX_GROUPS}
+                      // One AND-ed list only: the API accepts OR-ed groups, but the UI does not offer
+                      // them for now.
+                      singleGroup
                       maxConditionsPerGroup={
                         AUTOMATION_MAX_CONDITIONS_PER_GROUP
                       }
                       groupIconClassName="bg-lime-400"
-                      minimumMessage="Can't remove — automation needs at least one group with at least one condition."
+                      minimumMessage="Can't remove — automation needs at least one condition."
                     />
                     {automationGroupsError && (
                       <p className="comet-body-s mt-1.5 px-0.5 text-destructive">

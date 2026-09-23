@@ -107,6 +107,12 @@ type SharedProps<T extends FieldValues> = {
    */
   maxGroups?: number;
   maxConditionsPerGroup?: number;
+  /**
+   * One AND-ed group only: no "Add OR group" footer, and while exactly one group exists its header row
+   * (label and remove button) is dropped so the list reads as plain conditions. A value that already
+   * holds several groups still shows all of them, with OR badges, so nothing saved is hidden.
+   */
+  singleGroup?: boolean;
 };
 
 const DEFAULT_MINIMUM_MESSAGE =
@@ -146,6 +152,7 @@ const FeedbackScoreConditions = <T extends FieldValues>({
   minimumMessage = DEFAULT_MINIMUM_MESSAGE,
   maxGroups,
   maxConditionsPerGroup,
+  singleGroup = false,
 }: SharedProps<T>) => {
   const groupsFieldArray = useFieldArray({
     control: form.control,
@@ -161,6 +168,7 @@ const FeedbackScoreConditions = <T extends FieldValues>({
   const canDeleteGroup = groupsFieldArray.fields.length > 1;
   const atGroupLimit =
     maxGroups !== undefined && groupsFieldArray.fields.length >= maxGroups;
+  const showGroupChrome = !singleGroup || groupsFieldArray.fields.length > 1;
 
   return (
     <div className="flex flex-col gap-2">
@@ -181,27 +189,30 @@ const FeedbackScoreConditions = <T extends FieldValues>({
             label={`Group ${groupIndex + 1}`}
             onRemove={() => groupsFieldArray.remove(groupIndex)}
             canRemove={canDeleteGroup}
+            showHeader={showGroupChrome}
           />
         </React.Fragment>
       ))}
-      <div className="flex h-8 items-center justify-center rounded-md border border-dashed border-border bg-soft-background">
-        <DisabledTooltip
-          disabled={atGroupLimit}
-          message={`At most ${maxGroups} groups.`}
-        >
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="text-foreground hover:text-primary-hover"
-            onClick={addGroup}
+      {!singleGroup && (
+        <div className="flex h-8 items-center justify-center rounded-md border border-dashed border-border bg-soft-background">
+          <DisabledTooltip
             disabled={atGroupLimit}
+            message={`At most ${maxGroups} groups.`}
           >
-            <Plus className="mr-0.5 size-3" />
-            Add OR group
-          </Button>
-        </DisabledTooltip>
-      </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              className="text-foreground hover:text-primary-hover"
+              onClick={addGroup}
+              disabled={atGroupLimit}
+            >
+              <Plus className="mr-0.5 size-3" />
+              Add OR group
+            </Button>
+          </DisabledTooltip>
+        </div>
+      )}
     </div>
   );
 };
@@ -211,6 +222,7 @@ type ConditionGroupProps<T extends FieldValues> = SharedProps<T> & {
   label: string;
   onRemove: () => void;
   canRemove: boolean;
+  showHeader?: boolean;
 };
 
 const ConditionGroup = <T extends FieldValues>({
@@ -227,6 +239,7 @@ const ConditionGroup = <T extends FieldValues>({
   label,
   onRemove,
   canRemove,
+  showHeader = true,
 }: ConditionGroupProps<T>) => {
   const conditionsFieldArray = useFieldArray({
     control: form.control,
@@ -258,35 +271,42 @@ const ConditionGroup = <T extends FieldValues>({
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-soft-background">
-      <div className="flex h-8 items-center justify-between pl-2 pr-3">
-        <div className="flex items-center gap-1.5">
-          <span
-            className={cn(
-              "flex size-4 items-center justify-center rounded text-white",
-              groupIconClassName,
-            )}
-          >
-            <LayoutGrid className="size-2.5" />
-          </span>
-          <span className="text-xs font-medium leading-4 text-muted-slate">
-            {label}
-          </span>
+      {showHeader && (
+        <div className="flex h-8 items-center justify-between pl-2 pr-3">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "flex size-4 items-center justify-center rounded text-white",
+                groupIconClassName,
+              )}
+            >
+              <LayoutGrid className="size-2.5" />
+            </span>
+            <span className="text-xs font-medium leading-4 text-muted-slate">
+              {label}
+            </span>
+          </div>
+          <DisabledTooltip disabled={!canRemove} message={minimumMessage}>
+            <Button
+              type="button"
+              variant="minimal"
+              size="icon-3xs"
+              className="size-3 [&>svg]:size-3"
+              onClick={onRemove}
+              disabled={!canRemove}
+              aria-label="Remove group"
+            >
+              <Trash />
+            </Button>
+          </DisabledTooltip>
         </div>
-        <DisabledTooltip disabled={!canRemove} message={minimumMessage}>
-          <Button
-            type="button"
-            variant="minimal"
-            size="icon-3xs"
-            className="size-3 [&>svg]:size-3"
-            onClick={onRemove}
-            disabled={!canRemove}
-            aria-label="Remove group"
-          >
-            <Trash />
-          </Button>
-        </DisabledTooltip>
-      </div>
-      <div className="flex flex-col gap-1.5 px-1.5 pb-1.5">
+      )}
+      <div
+        className={cn(
+          "flex flex-col gap-1.5 px-1.5 pb-1.5",
+          !showHeader && "pt-1.5",
+        )}
+      >
         {conditionsFieldArray.fields.map((condition, conditionIndex) => (
           <React.Fragment key={condition.id}>
             {conditionIndex > 0 && <SeparatorBadge kind="AND" />}
