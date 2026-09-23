@@ -54,6 +54,11 @@ class BaseTrackedGenerator(Generic[YieldType]):
 
         self._finally_callback = finally_callback
 
+        # A generator can stop being consumed at any point, and the span must be
+        # ended exactly once however that happens: exhaustion, an error, an
+        # explicit close, or the consumer simply dropping it.
+        self._span_finished = False
+
     def _ensure_span_and_trace_created(self) -> None:
         if self._created_span_data is not None:
             return
@@ -65,7 +70,25 @@ class BaseTrackedGenerator(Generic[YieldType]):
         self._created_trace_data = result.trace_data
         self._created_span_data = result.span_data
 
+    def _finalize_if_unfinished(self) -> None:
+        """End the span of a generator that was never consumed to the end.
+
+        A partially consumed generator never raises `StopIteration`, so nothing else
+        ends its span and the work is never reported. What it did yield is recorded,
+        since that is what actually happened.
+
+        Does nothing when the generator was never started (no span exists yet) or has
+        already been finished.
+        """
+        if self._span_finished or self._created_span_data is None:
+            return
+        self._handle_stop_iteration_before_raising()
+
     def _handle_stop_iteration_before_raising(self) -> None:
+        if self._span_finished:
+            return
+        self._span_finished = True
+
         output = _try_aggregate_items(
             self._accumulated_values,
             generations_aggregator=self._track_options.generations_aggregator,
@@ -79,6 +102,10 @@ class BaseTrackedGenerator(Generic[YieldType]):
         )
 
     def _handle_generator_exception_before_raising(self, exception: Exception) -> None:
+        if self._span_finished:
+            return
+        self._span_finished = True
+
         LOGGER.debug(
             "Exception raised from tracked generator: %s",
             str(exception),
@@ -132,6 +159,26 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
             self._handle_generator_exception_before_raising(exception)
             raise
 
+    def close(self) -> None:
+        """Close the underlying generator and end the span.
+
+        Mirrors `generator.close()`, so `contextlib.closing` and an explicit close
+        both end the span of a generator that was not consumed to the end.
+        """
+        try:
+            self._generator.close()
+        finally:
+            self._finalize_if_unfinished()
+
+    def __del__(self) -> None:
+        # A generator dropped without being exhausted has its `close()` called by the
+        # interpreter; this wrapper is a plain iterator, so it has to do the same for
+        # itself or the span started in `__next__` is never ended.
+        try:
+            self._finalize_if_unfinished()
+        except Exception:  # pragma: no cover - never let GC raise
+            pass
+
 
 class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
     def __init__(
@@ -170,6 +217,22 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         except Exception as exception:
             self._handle_generator_exception_before_raising(exception)
             raise
+
+    async def aclose(self) -> None:
+        """Close the underlying async generator and end the span."""
+        try:
+            await self._generator.aclose()
+        finally:
+            self._finalize_if_unfinished()
+
+    def __del__(self) -> None:
+        # Only the span is ended here. Closing the async generator itself needs a
+        # running loop, which the interpreter already handles through its asyncgen
+        # finalization hooks.
+        try:
+            self._finalize_if_unfinished()
+        except Exception:  # pragma: no cover - never let GC raise
+            pass
 
 
 def _try_aggregate_items(
