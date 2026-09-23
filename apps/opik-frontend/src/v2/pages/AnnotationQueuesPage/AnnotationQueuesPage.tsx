@@ -367,7 +367,8 @@ export const AnnotationQueuesPage: React.FC = () => {
         accessorKey: "annotate_queue",
         header: "",
         cell: AnnotateQueueCell,
-        size: 140,
+        // Fits "Annotator's view" plus its icon; at 140 the button overflowed the cell by 17px.
+        size: 180,
         enableResizing: false,
         enableHiding: false,
         enableSorting: false,

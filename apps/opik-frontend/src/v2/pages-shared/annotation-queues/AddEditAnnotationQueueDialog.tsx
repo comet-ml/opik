@@ -16,6 +16,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/ui/form";
+import { Checkbox } from "@/ui/checkbox";
 import { Input } from "@/ui/input";
 import { Textarea } from "@/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
@@ -48,9 +49,8 @@ import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
-// Starting ceiling for a new automation: a badly scoped condition should fill a review queue with 100
-// items to look at, not with every trace in the project.
-const DEFAULT_AUTOMATION_MAX_ITEMS = 100;
+// The value the cap field shows before anyone types: the design's 1,000. The cap itself is opt-in.
+const DEFAULT_AUTOMATION_MAX_ITEMS = 1000;
 
 const QUEUE_DOCS_LINK = buildDocsUrl("/evaluation/advanced/annotation_queues");
 
@@ -89,9 +89,11 @@ const formSchema = z
       .max(60)
       .default(DEFAULT_LOCK_TIMEOUT_SECONDS / 60),
     automation_enabled: z.boolean().default(false),
-    // A string like the thresholds: "" is a legitimate value (no ceiling) that z.coerce.number would
-    // turn into 0, and a number field's raw text is what validation needs to see.
-    automation_max_items: z.string().default(""),
+    automation_cap_enabled: z.boolean().default(false),
+    // A string like the thresholds: a number field's raw text is what validation needs to see.
+    automation_max_items: z
+      .string()
+      .default(String(DEFAULT_AUTOMATION_MAX_ITEMS)),
     // Held in the shared condition shape (name/operator/threshold) so the builder can be reused as-is,
     // then mapped to the API's score_name/operator/value on submit. Only validated when the toggle is on:
     // conditions left half-filled while automation is off must not block saving the queue.
@@ -125,13 +127,16 @@ const formSchema = z
       return;
     }
 
-    if (data.automation_max_items !== "") {
+    if (data.automation_cap_enabled) {
       const max = Number(data.automation_max_items);
-      if (!Number.isInteger(max) || max < 1) {
+      if (
+        data.automation_max_items === "" ||
+        !Number.isInteger(max) ||
+        max < 1
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message:
-            "Enter a whole number of 1 or more, or leave empty for no limit",
+          message: "Enter a whole number of 1 or more",
           path: ["automation_max_items"],
         });
       }
@@ -221,11 +226,14 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       automation_enabled: defaultQueue?.automation?.enabled ?? false,
       // conditions is nullable on the backend: a toggle-off request keeps them server-side but a
       // queue can still arrive with automation and no conditions.
-      // A new automation starts capped so a badly scoped condition cannot flood a review queue; an
-      // existing queue keeps whatever it has, including no ceiling, which must not change on edit.
-      automation_max_items: defaultQueue
-        ? String(defaultQueue.automation?.max_items_in_queue ?? "")
-        : String(DEFAULT_AUTOMATION_MAX_ITEMS),
+      // The cap is opt-in, per the design. An existing queue reflects what it has: checked with its
+      // value, or unchecked with the default shown greyed out.
+      automation_cap_enabled:
+        defaultQueue?.automation?.max_items_in_queue != null,
+      automation_max_items: String(
+        defaultQueue?.automation?.max_items_in_queue ??
+          DEFAULT_AUTOMATION_MAX_ITEMS,
+      ),
       automation_groups: defaultQueue?.automation?.conditions?.groups?.map(
         (group) => ({
           conditions: group.conditions.map((condition) => ({
@@ -245,6 +253,12 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   const isSubmitting = isCreatePending || isUpdatePending;
 
   const automationEnabled = form.watch("automation_enabled");
+  const capEnabled = form.watch("automation_cap_enabled");
+  const capError = get(
+    form.formState.errors,
+    ["automation_max_items", "message"],
+    undefined,
+  ) as string | undefined;
   // Automation matches on the scores of whatever the queue collects, so the score options and the copy
   // follow the scope: thread scores are a different set of names from trace scores.
   const isThreadScope = form.watch("scope") === ANNOTATION_QUEUE_SCOPE.THREAD;
@@ -264,6 +278,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       lock_timeout_minutes,
       automation_enabled,
       automation_groups,
+      automation_cap_enabled,
       automation_max_items,
       ...rest
     } = formData;
@@ -275,8 +290,9 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       lock_timeout_seconds: lock_timeout_minutes * 60,
       automation: {
         enabled: automation_enabled,
-        max_items_in_queue:
-          automation_max_items === "" ? null : Number(automation_max_items),
+        max_items_in_queue: automation_cap_enabled
+          ? Number(automation_max_items)
+          : null,
         conditions: {
           groups: automation_groups.map((group) => ({
             conditions: group.conditions.map((condition) => ({
@@ -347,7 +363,8 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
         className="flex w-full max-w-none flex-col gap-0 p-0 sm:max-w-[800px]"
         // A select or nested dialog opened from inside the form must not be treated as an outside
         // click, or configuring a field would close the whole form.
-        blockOverlayClose={isNestedDialogOpen}
+        // A form with edits closes only through X or Cancel, never by a stray click on the overlay.
+        blockOverlayClose={isNestedDialogOpen || form.formState.isDirty}
         header={
           <SheetTopBar variant="form" title={title}>
             <Button
@@ -554,7 +571,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                 >
                   <div className="flex items-center gap-2">
                     <span className="flex h-5 items-center justify-center rounded-[4px] bg-lime-400 px-1">
-                      <AutomationZapIcon className="text-foreground" />
+                      <AutomationZapIcon className="text-black" />
                     </span>
                     <span className="comet-body-s-accented">Automation</span>
                   </div>
@@ -601,6 +618,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                       // One AND-ed list only: the API accepts OR-ed groups, but the UI does not offer
                       // them for now.
                       singleGroup
+                      addConditionLabel="Add score"
                       maxConditionsPerGroup={
                         AUTOMATION_MAX_CONDITIONS_PER_GROUP
                       }
@@ -612,30 +630,62 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                         {automationGroupsError}
                       </p>
                     )}
-                    <FormField
-                      control={form.control}
-                      name="automation_max_items"
-                      render={({ field }) => (
-                        <FormItem className="mt-3 gap-1">
-                          <FormLabel className={LABEL_CLASS}>
-                            Max items in queue{" "}
-                            <ExplainerIcon
-                              className="inline"
-                              description="Automation stops adding items once the queue holds this many. Leave empty for no limit."
-                            />
-                          </FormLabel>
-                          <FormControl>
-                            <StepperField
-                              {...field}
-                              min={1}
-                              placeholder="No limit"
-                              className="w-40"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
+                    <div className="mt-3 flex flex-col gap-1 border-t border-border pt-3">
+                      <div className="flex items-center gap-1.5">
+                        <FormField
+                          control={form.control}
+                          name="automation_cap_enabled"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center gap-1.5">
+                              <FormControl>
+                                <Checkbox
+                                  id="automation-cap-enabled"
+                                  checked={field.value}
+                                  onCheckedChange={(checked) =>
+                                    field.onChange(checked === true)
+                                  }
+                                />
+                              </FormControl>
+                              <FormLabel
+                                htmlFor="automation-cap-enabled"
+                                className="comet-body-s cursor-pointer font-normal"
+                              >
+                                Cap automatically added items at
+                              </FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="automation_max_items"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormControl>
+                                <Input
+                                  {...field}
+                                  type="number"
+                                  min={1}
+                                  step={1}
+                                  dimension="xs"
+                                  disabled={!capEnabled}
+                                  aria-label="Cap automatically added items at"
+                                  className="w-[68px] text-right"
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <p className="comet-body-xs pl-[26px] text-light-slate">
+                        Only counts items added by this automation. Adding by
+                        hand is unaffected.
+                      </p>
+                      {capError && (
+                        <p className="comet-body-xs pl-[26px] text-destructive">
+                          {capError}
+                        </p>
                       )}
-                    />
+                    </div>
                   </div>
                 )}
               </div>

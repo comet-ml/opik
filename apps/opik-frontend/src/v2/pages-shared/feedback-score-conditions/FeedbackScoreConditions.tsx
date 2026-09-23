@@ -113,6 +113,8 @@ type SharedProps<T extends FieldValues> = {
    * holds several groups still shows all of them, with OR badges, so nothing saved is hidden.
    */
   singleGroup?: boolean;
+  /** Label of the button that appends a condition to a group. */
+  addConditionLabel?: string;
 };
 
 const DEFAULT_MINIMUM_MESSAGE =
@@ -153,6 +155,7 @@ const FeedbackScoreConditions = <T extends FieldValues>({
   maxGroups,
   maxConditionsPerGroup,
   singleGroup = false,
+  addConditionLabel = "Add AND condition",
 }: SharedProps<T>) => {
   const groupsFieldArray = useFieldArray({
     control: form.control,
@@ -190,6 +193,7 @@ const FeedbackScoreConditions = <T extends FieldValues>({
             onRemove={() => groupsFieldArray.remove(groupIndex)}
             canRemove={canDeleteGroup}
             showHeader={showGroupChrome}
+            addConditionLabel={addConditionLabel}
           />
         </React.Fragment>
       ))}
@@ -240,6 +244,7 @@ const ConditionGroup = <T extends FieldValues>({
   onRemove,
   canRemove,
   showHeader = true,
+  addConditionLabel = "Add AND condition",
 }: ConditionGroupProps<T>) => {
   const conditionsFieldArray = useFieldArray({
     control: form.control,
@@ -270,7 +275,12 @@ const ConditionGroup = <T extends FieldValues>({
     conditionsFieldArray.fields.length >= maxConditionsPerGroup;
 
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-soft-background">
+    <div
+      className={cn(
+        showHeader &&
+          "overflow-hidden rounded-md border border-border bg-soft-background",
+      )}
+    >
       {showHeader && (
         <div className="flex h-8 items-center justify-between pl-2 pr-3">
           <div className="flex items-center gap-1.5">
@@ -303,8 +313,8 @@ const ConditionGroup = <T extends FieldValues>({
       )}
       <div
         className={cn(
-          "flex flex-col gap-1.5 px-1.5 pb-1.5",
-          !showHeader && "pt-1.5",
+          "flex flex-col",
+          showHeader ? "gap-1.5 px-1.5 pb-1.5" : "gap-2",
         )}
       >
         {conditionsFieldArray.fields.map((condition, conditionIndex) => (
@@ -329,17 +339,33 @@ const ConditionGroup = <T extends FieldValues>({
           disabled={atConditionLimit}
           message={`At most ${maxConditionsPerGroup} conditions per group.`}
         >
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="self-start pl-1 text-foreground hover:text-primary-hover"
-            onClick={addCondition}
-            disabled={atConditionLimit}
-          >
-            <Plus className="mr-0.5 size-3" />
-            Add AND condition
-          </Button>
+          {showHeader ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              className="self-start pl-1 text-foreground hover:text-primary-hover"
+              onClick={addCondition}
+              disabled={atConditionLimit}
+            >
+              <Plus className="mr-0.5 size-3" />
+              {addConditionLabel}
+            </Button>
+          ) : (
+            <div className="flex h-8 w-full items-center justify-center rounded-md border border-dashed border-border bg-soft-background">
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="text-foreground hover:text-primary-hover"
+                onClick={addCondition}
+                disabled={atConditionLimit}
+              >
+                <Plus className="mr-0.5 size-3" />
+                {addConditionLabel}
+              </Button>
+            </div>
+          )}
         </DisabledTooltip>
       </div>
     </div>
