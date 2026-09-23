@@ -1160,8 +1160,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if(isNaN(duration), NULL, duration) AS duration,
                     <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
                     <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
+                    <if(search)>
                     output as full_output,
                     input as full_input,
+                    <endif>
                     metadata,
                     visibility_mode
                 FROM traces
@@ -1713,8 +1715,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         ei2.id AS item_id,
                         t.input,
                         t.output,
+                        <if(search)>
                         t.full_input,
                         t.full_output,
+                        <endif>
                         t.metadata,
                         t.duration,
                         t.visibility_mode,
@@ -1848,8 +1852,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         t.metadata,
                         t.duration,
                         t.visibility_mode,
+                        <if(search)>
                         t.full_input,
                         t.full_output,
+                        <endif>
                         s.total_estimated_cost,
                         s.usage
                 ) AS tfs ON ei.id = tfs.item_id
