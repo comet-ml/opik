@@ -1767,6 +1767,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/annotation-queues/{id}/items/search:
+    post:
+      tags:
+      - Annotation Queues
+      summary: Search annotation queue items
+      description: "Returns queue membership metadata — how each item got into the\
+        \ queue — for the given item ids. A lookup rather than a listing: the caller\
+        \ renders the items table from the traces or threads API with its own sort\
+        \ and filters, so it asks for exactly the ids it is displaying. Ids that are\
+        \ not in the queue are omitted."
+      operationId: searchAnnotationQueueItems
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnotationQueueItemIds_Public"
+      responses:
+        "200":
+          description: Annotation queue items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnotationQueueItems_Public"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/assertion-results:
     put:
       tags:
@@ -9658,6 +9694,12 @@ components:
           type: string
         logo_uri:
           type: string
+        software_id:
+          type: string
+        software_version:
+          type: string
+        client_uri:
+          type: string
         redirect_uris:
           uniqueItems: true
           type: array
@@ -9693,8 +9735,12 @@ components:
             minLength: 0
             type: string
         logo_uri:
-          maxLength: 2048
-          minLength: 0
+          type: string
+        software_id:
+          type: string
+        software_version:
+          type: string
+        client_uri:
           type: string
     TokenResponse:
       type: object
@@ -11005,6 +11051,8 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation"
         reviewers:
           type: array
           readOnly: true
@@ -11034,6 +11082,16 @@ components:
           type: string
           readOnly: true
       description: List of annotation queues to create
+    AnnotationQueueAutomation:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        conditions:
+          $ref: "#/components/schemas/Conditions"
+        max_items_in_queue:
+          type: integer
+          format: int32
     AnnotationQueueReviewer:
       type: object
       properties:
@@ -11043,6 +11101,28 @@ components:
           type: integer
           format: int64
       readOnly: true
+    ConditionGroup:
+      required:
+      - conditions
+      type: object
+      properties:
+        conditions:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreCondition"
+    Conditions:
+      required:
+      - groups
+      type: object
+      properties:
+        groups:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionGroup"
     FeedbackScoreAverage:
       required:
       - name
@@ -11054,6 +11134,36 @@ components:
           type: string
         value:
           type: number
+    ScoreCondition:
+      required:
+      - operator
+      - score_name
+      - value
+      type: object
+      properties:
+        score_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        operator:
+          type: string
+          enum:
+          - '>'
+          - <
+          - =
+        value:
+          type: number
+          format: double
+    AnnotationQueueAutomation_Write:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        conditions:
+          $ref: "#/components/schemas/Conditions_Write"
+        max_items_in_queue:
+          type: integer
+          format: int32
     AnnotationQueue_Write:
       required:
       - name
@@ -11095,7 +11205,51 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation_Write"
       description: List of annotation queues to create
+    ConditionGroup_Write:
+      required:
+      - conditions
+      type: object
+      properties:
+        conditions:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreCondition_Write"
+    Conditions_Write:
+      required:
+      - groups
+      type: object
+      properties:
+        groups:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionGroup_Write"
+    ScoreCondition_Write:
+      required:
+      - operator
+      - score_name
+      - value
+      type: object
+      properties:
+        score_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        operator:
+          type: string
+          enum:
+          - '>'
+          - <
+          - =
+        value:
+          type: number
+          format: double
     AnnotationQueueBatch:
       required:
       - annotation_queues
@@ -11124,6 +11278,16 @@ components:
           items:
             $ref: "#/components/schemas/AnnotationQueue_Write"
       description: Batch of annotation queues to create
+    AnnotationQueueAutomation_Public:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        conditions:
+          $ref: "#/components/schemas/Conditions_Public"
+        max_items_in_queue:
+          type: integer
+          format: int32
     AnnotationQueuePage_Public:
       type: object
       properties:
@@ -11197,6 +11361,8 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation_Public"
         reviewers:
           type: array
           readOnly: true
@@ -11225,6 +11391,28 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    ConditionGroup_Public:
+      required:
+      - conditions
+      type: object
+      properties:
+        conditions:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreCondition_Public"
+    Conditions_Public:
+      required:
+      - groups
+      type: object
+      properties:
+        groups:
+          maxItems: 5
+          minItems: 0
+          type: array
+          items:
+            $ref: "#/components/schemas/ConditionGroup_Public"
     FeedbackScoreAverage_Public:
       required:
       - name
@@ -11237,6 +11425,26 @@ components:
         value:
           type: number
       readOnly: true
+    ScoreCondition_Public:
+      required:
+      - operator
+      - score_name
+      - value
+      type: object
+      properties:
+        score_name:
+          maxLength: 255
+          minLength: 0
+          type: string
+        operator:
+          type: string
+          enum:
+          - '>'
+          - <
+          - =
+        value:
+          type: number
+          format: double
     ItemLockInfo:
       type: object
       properties:
@@ -11267,6 +11475,37 @@ components:
         expires_at:
           type: string
           format: date-time
+    AnnotationQueueItem_Public:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+          - manual
+          - automated
+    AnnotationQueueItems_Public:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnnotationQueueItem_Public"
+    AnnotationQueueItemIds_Public:
+      required:
+      - ids
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+            format: uuid
     AnnotationQueueUpdate:
       type: object
       properties:
@@ -11294,6 +11533,8 @@ components:
           minimum: 1
           type: integer
           format: int32
+        automation:
+          $ref: "#/components/schemas/AnnotationQueueAutomation"
     AssertionResultBatch:
       required:
       - assertion_results
@@ -11611,6 +11852,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -12167,6 +12409,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -12543,6 +12786,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -13015,6 +13259,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -13124,6 +13369,7 @@ components:
           type: string
           enum:
           - evaluator
+          - annotation_queue_router
       discriminator:
         propertyName: type
         mapping:
@@ -14572,6 +14818,16 @@ components:
             $ref: "#/components/schemas/EvaluatorItem"
         execution_policy:
           $ref: "#/components/schemas/ExecutionPolicy"
+        field_mappings:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional mapping of dataset item field name to a path into\
+              \ the span, e.g. 'input.input_text'. Takes precedence over the fields\
+              \ produced by enrichment_options. Ignored for test suite datasets."
+          description: "Optional mapping of dataset item field name to a path into\
+            \ the span, e.g. 'input.input_text'. Takes precedence over the fields\
+            \ produced by enrichment_options. Ignored for test suite datasets."
     SpanEnrichmentOptions:
       type: object
       properties:
@@ -14610,6 +14866,16 @@ components:
             $ref: "#/components/schemas/EvaluatorItem"
         execution_policy:
           $ref: "#/components/schemas/ExecutionPolicy"
+        field_mappings:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Optional mapping of dataset item field name to a path into\
+              \ the trace, e.g. 'input.input_text'. Takes precedence over the fields\
+              \ produced by enrichment_options. Ignored for test suite datasets."
+          description: "Optional mapping of dataset item field name to a path into\
+            \ the trace, e.g. 'input.input_text'. Takes precedence over the fields\
+            \ produced by enrichment_options. Ignored for test suite datasets."
     TraceEnrichmentOptions:
       type: object
       properties:
@@ -16413,6 +16679,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
+        experiment_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
     Check:
       type: object
       properties:

@@ -11,6 +11,9 @@ class ClientRegistrationResponse(UniversalBaseModel):
     client_id_issued_at: typing.Optional[int] = None
     client_name: typing.Optional[str] = None
     logo_uri: typing.Optional[str] = None
+    software_id: typing.Optional[str] = None
+    software_version: typing.Optional[str] = None
+    client_uri: typing.Optional[str] = None
     redirect_uris: typing.Optional[typing.List[str]] = None
     token_endpoint_auth_method: typing.Optional[str] = None
     grant_types: typing.Optional[typing.List[str]] = None

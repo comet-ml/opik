@@ -1,0 +1,82 @@
+---
+headline: MCP tools reference
+og:description: Every tool the Opik MCP server exposes — what your assistant can read, what it can write, what it cannot do, and the skills that ship alongside.
+og:site_name: Opik Documentation
+og:title: Opik MCP tools reference
+title: MCP tools reference
+---
+
+Your assistant gets five tools and picks between them on its own. You never call
+these by hand — this page is here so you know what it can reach for.
+
+| Tool | What your assistant does with it |
+|---|---|
+| `read` | Fetch one thing by id, name, or `opik://` URI. |
+| `list` | Page through many, with filters, sorting and a time window. |
+| `write` | Create and annotate: traces, spans, scores, comments, prompt versions, test suites, experiments. |
+| `schema` | Look up the exact payload shape for a write, or the filter and sort vocabulary for a list. |
+| `read_skill` | Load one of the Opik skills on demand, when the skill pack isn't installed in the client. |
+
+## What it can read
+
+`read` fetches a single entity, and several come with their children inlined, so
+one call is usually enough:
+
+| Entity | What comes back |
+|---|---|
+| `trace` | The trace plus its span tree |
+| `span` | One span |
+| `thread` | The thread plus its messages |
+| `prompt` | The prompt plus its versions |
+| `project`, `experiment`, `test_suite` | The entity itself |
+| Diagnostics issue | The issue, its details, and example trace ids |
+
+`project`, `experiment`, `prompt` and `test_suite` can be fetched by name as well
+as by id, so your assistant doesn't need a UUID to get started. Traces, spans and
+threads can be pasted in as an Opik URL.
+
+`list` covers those plus test suite items and prompt versions. Traces, spans,
+threads and experiments also support filtering and sorting — by name, status,
+feedback score, token usage, duration or time window — which is how your
+assistant answers "the slowest failing traces from yesterday" in one call.
+
+## What it can write
+
+One tool, `write`, covers every change:
+
+| Area | Operations |
+|---|---|
+| Tracing | Create and update traces, create spans |
+| Annotation | Attach feedback scores and comments to a trace, span or thread |
+| Prompts | Save a new prompt version |
+| Evaluation | Create test suites and upsert their items; create experiments and experiment items |
+| Threads | Open and close a thread |
+| Diagnostics | Enable or trigger a scan; resolve, close or reopen an issue |
+
+<Note>
+**Nothing can be deleted.** There is no delete operation in the tool surface, on
+any entity. `write` also accepts a `dry_run` flag, which validates a payload and
+your permissions without sending anything to your workspace.
+</Note>
+
+## The skills that ship with it
+
+Running an evaluation end to end is a skill's job, not a tool's: the skills drive
+the Opik SDK, and the MCP tools record and read the results. That is why
+`uvx opik mcp configure` installs both. Your assistant picks between them the
+same way it picks tools:
+
+| Skill | When it reaches for it |
+|---|---|
+| `opik-instrument` | "add Opik tracing", "instrument my code", "trace my agent" |
+| `opik-evaluate` | Measuring or improving quality — evals, judges, metrics |
+| `opik-diagnose` | "what is broken in production", "triage my agent" |
+| `opik-explain` | "why did this trace fail", "why is my agent slow" |
+| `opik` | SDK reference lookups: span types, metadata, flushing, prompt versioning |
+
+## Looking at a payload yourself
+
+Ask your assistant **"show me the schema for trace.create"** and it will call
+`schema` and show you the JSON Schema and an example. The
+[server's README](https://github.com/comet-ml/opik-mcp#tools) lists every
+operation name.

@@ -157,7 +157,7 @@ jobs:
           OPIK_WORKSPACE: default
           WORKERS: 2
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_E2E_TESTS }}
           ALLURE_LAUNCH_NAME: "Opik v2 Post-Merge ${{ github.event.inputs.tier || 't1' }} - ${{ github.run_id }}"
           TIER: ${{ github.event.inputs.tier || 't1' }}
           # The dockerized backend reaches the host-run mock token service via the docker0 host IP

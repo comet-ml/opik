@@ -207,6 +207,7 @@ public class AlertResource {
             @ApiResponse(responseCode = "200", description = "Webhook test", content = @Content(schema = @Schema(implementation = WebhookTestResult.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable Content", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.ALERT_UPDATE)
     public Response testWebhook(
             @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert) {
 

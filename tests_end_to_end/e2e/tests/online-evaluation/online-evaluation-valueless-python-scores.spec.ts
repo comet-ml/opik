@@ -68,7 +68,15 @@ import { buildConstantScoreMetric, buildScoreResultMetric } from '@e2e/core/metr
 /** The 500-era wording: the batch failing wholesale is what this behaviour replaced. */
 const OPAQUE_FAILURE_MESSAGE = 'An unexpected error occurred';
 
-/** Emitted once per evaluator call, immediately before the HTTP request. */
+/**
+ * Emitted once per SCORER invocation, immediately before the evaluator request.
+ *
+ * Deliberately not a count of HTTP attempts: `PythonEvaluatorService.executeWithRetry`
+ * retries a 5xx below this line, so a replayed POST leaves the count at one. That
+ * is the right granularity for what this file asserts — whether a dropped score
+ * made the scorer re-run the metric — and the transport's retry budget is a
+ * different question that nothing here claims to cover.
+ */
 const EVALUATOR_CALL_LINE = 'to Python evaluator';
 
 /** Tail of the WARN that reports a dropped score, stable across both wordings. */
@@ -171,8 +179,9 @@ function expectCleanDropLog(
 
   expect(
     logs.filter((l) => l.message.includes(EVALUATOR_CALL_LINE)),
-    `rule '${ruleName}' must call the evaluator exactly once — a dropped score is not a ` +
-      `reason to re-run the metric`,
+    `rule '${ruleName}' must enter the evaluator exactly once — a dropped score is not a ` +
+      `reason for the scorer to re-run the metric. (Transport retries inside ` +
+      `executeWithRetry sit below this log line and are not counted here.)`,
   ).toHaveLength(1);
 }
 
