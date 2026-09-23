@@ -820,19 +820,23 @@ class BulkInsertV2ClientIntegrationTest {
         return names;
     }
 
+    // Rejected eagerly, not on subscription: the guard sits ahead of the v2/R2DBC branch, so it must
+    // throw when the Mono is assembled rather than deferring a failure into the reactive chain. Covered
+    // here rather than in the mapper tests because the guard is the DAO's, and it is the one place both
+    // write paths share.
     @ParameterizedTest
     @NullAndEmptySource
-    @DisplayName("an empty or absent batch is rejected before either write path is chosen")
-    void emptyOrAbsentBatchIsRejected(List<Trace> traces) {
-        // Rejected eagerly, not on subscription: the guard sits ahead of the v2/R2DBC branch, so it must
-        // throw when the Mono is assembled rather than deferring a failure into the reactive chain.
-        // Covered here rather than in the mapper tests because the guard is the DAO's, and it is the one
-        // place both write paths share.
+    @DisplayName("a trace batch that is empty or absent is rejected before either write path is chosen")
+    void emptyOrAbsentTraceBatchIsRejected(List<Trace> traces) {
         assertThatThrownBy(() -> traceDAO.batchInsert(traces))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("traces must not be empty");
+    }
 
-        List<Span> spans = traces == null ? null : List.of();
+    @ParameterizedTest
+    @NullAndEmptySource
+    @DisplayName("a span batch that is empty or absent is rejected before either write path is chosen")
+    void emptyOrAbsentSpanBatchIsRejected(List<Span> spans) {
         assertThatThrownBy(() -> spanDAO.batchInsert(spans))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Spans list must not be empty");
