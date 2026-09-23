@@ -7,7 +7,6 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemEdit;
-import com.comet.opik.api.EvaluatorItem;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.filter.DatasetItemFilter;
@@ -23,10 +22,10 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
 import com.comet.opik.utils.ErrorUtils;
-import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
@@ -61,6 +60,9 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
+import static com.comet.opik.domain.DatasetItemResultMapper.serializeEvaluators;
+import static com.comet.opik.domain.DatasetItemResultMapper.serializeExecutionPolicy;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -2736,6 +2738,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull OpikConfiguration config;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
     private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
     /**
      * v2 ClickHouse client used for {@code INSERT ... SELECT} on {@code dataset_item_versions},
@@ -3694,6 +3697,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .distinct()
                 .count();
 
+        if (config.getBulkInsert().v2ClientEnabled()) {
+            return insertItemsJsonEachRow(datasetId, newVersionId, items, workspaceId, userName)
+                    // itemCount, not the server's row count: the R2DBC path deliberately returns the
+                    // DISTINCT dataset_item_id count (OPIK-7891) because reads collapse a repeated
+                    // stable id via LIMIT 1 BY, so every version total derived from the raw row count
+                    // would be inflated. Both paths must answer the same number.
+                    .thenReturn(itemCount);
+        }
+
         return asyncTemplate.nonTransaction(connection -> {
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
 
@@ -3958,8 +3970,48 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     /**
-     * Formats an Instant for ClickHouse DateTime64(9, 'UTC').
-     * ClickHouse doesn't accept the 'Z' suffix from ISO-8601 format.
+     * Same rows as {@link #BATCH_INSERT_ITEMS}, streamed as JSONEachRow instead of bound as 17 named
+     * parameters per row plus 5 shared ones. See {@link DatasetItemVersionJsonRowMapper} for the
+     * per-column parity notes.
+     *
+     * <p>The R2DBC template carries no {@code log_comment}; one is supplied here because the helper
+     * requires it, which also makes the two paths comparable in {@code system.query_log}.
+     */
+    private Mono<Long> insertItemsJsonEachRow(UUID datasetId, UUID newVersionId, List<DatasetItem> items,
+            String workspaceId, String userName) {
+
+        // Everything here is deferred to subscription. The R2DBC path gets that from
+        // asyncTemplate.nonTransaction's lambda and DatasetItemDAO from makeMonoContextAware's; this
+        // path calls the helper directly, so without the defer both lines below would run at assembly
+        // -- leaking a segment whenever the publisher is assembled and never subscribed, parenting it
+        // to whatever Context.current() happened to be at assembly time, and reusing one Segment
+        // across a resubscription.
+        return Mono.defer(() -> {
+            // One instant for the whole batch, resolved before serialization: the helper re-runs the
+            // mapper on every attempt, so a per-row Instant.now() would give a retried row different
+            // timestamp bytes under the same id. Inside the defer so a resubscription gets its own.
+            Instant nowForBatch = Instant.now();
+            // The R2DBC path opens and closes this segment, so without it a v2 insert vanishes from the
+            // dataset-item instrumentation stream rather than showing as fast.
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "insert_delta_items");
+
+            return jsonBulkInsert.insert(
+                    DATASET_ITEM_VERSIONS,
+                    getLogComment("insert_delta_items", workspaceId, userName, items.size()),
+                    items,
+                    item -> DatasetItemVersionJsonRowMapper.toJsonRow(
+                            item, datasetId, newVersionId, workspaceId, userName, nowForBatch))
+                    .doOnError(e -> log.error("Batch insert items failed for dataset '{}', version '{}'",
+                            datasetId, newVersionId, e))
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    /**
+     * Formats an Instant for ClickHouse DateTime64(9, 'UTC'). The R2DBC path renders FORMAT Values, whose
+     * parser rejects the ISO 'Z' suffix -- so it is stripped here. The JSONEachRow path has no such
+     * constraint (its insert sets date_time_input_format=best_effort) and writes Instant.toString()
+     * directly, which is why this stayed private to the binder rather than becoming shared.
      */
     private static String formatTimestamp(Instant timestamp) {
         if (timestamp == null) {
@@ -3970,20 +4022,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static String base64Encode(String value) {
         return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static String serializeEvaluators(List<EvaluatorItem> evaluators) {
-        if (evaluators == null || evaluators.isEmpty()) {
-            return EvaluatorItem.EMPTY_LIST_JSON;
-        }
-        return JsonUtils.writeValueAsString(evaluators);
-    }
-
-    private static String serializeExecutionPolicy(ExecutionPolicy executionPolicy) {
-        if (executionPolicy == null) {
-            return "";
-        }
-        return JsonUtils.writeValueAsString(executionPolicy);
     }
 
     @Override

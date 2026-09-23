@@ -28,7 +28,7 @@ import java.util.Map;
 public class JsonRowValues {
 
     /**
-     * A column name is as wrong blank as it is null -- {@code node.put("", value)} produces a row
+     * A blank column name is as wrong as a null one -- {@code node.put("", value)} produces a row
      * ClickHouse rejects with a message naming no column, which is a long way from the call site.
      * {@code @NonNull} cannot see that, so it is checked rather than annotated.
      */
