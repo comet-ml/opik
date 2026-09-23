@@ -289,7 +289,7 @@ def test_sentence_bleu__empty_reference_list__raises_metric_error():
 
 @pytest.mark.parametrize("metric_cls", [SentenceBLEU, CorpusBLEU])
 @pytest.mark.parametrize("n_grams", [None, "3", 2.5, 3.0, True, False])
-def test_bleu__non_integer_n_grams__raises_value_error(metric_cls, n_grams):
+def test_bleu__non_integer_or_boolean_n_grams__raises_value_error(metric_cls, n_grams):
     # `n_grams < 1` raised TypeError for None and str, and `bool` is a subclass
     # of int, so `True` silently meant 1.
     with pytest.raises(ValueError, match="n_grams must be an integer"):
