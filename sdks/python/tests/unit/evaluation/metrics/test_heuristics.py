@@ -1128,6 +1128,112 @@ def test_rouge_score_using_custom_tokenizer(
     )
 
 
+def test_tone_empty_lexicons_disable_the_defaults():
+    text = "This is terrible and useless."
+
+    default = Tone(track=False).score(output=text)
+    emptied = Tone(track=False, negative_lexicon=[]).score(output=text)
+
+    assert default.metadata["sentiment_score"] < 0
+    assert emptied.metadata["sentiment_score"] == 0
+    assert emptied.value == 1.0
+
+
+def test_tone_empty_positive_lexicon_disables_the_defaults():
+    text = "I am happy to help."
+
+    assert Tone(track=False).score(output=text).metadata["sentiment_score"] > 0
+    emptied = Tone(track=False, positive_lexicon=[]).score(output=text)
+    assert emptied.metadata["sentiment_score"] == 0
+
+
+def test_tone_empty_forbidden_phrases_disable_the_defaults():
+    text = "Shut up, this is not my problem."
+
+    assert Tone(track=False).score(output=text).metadata["forbidden_hit"] is True
+    emptied = Tone(track=False, forbidden_phrases=[]).score(output=text)
+    assert emptied.metadata["forbidden_hit"] is False
+
+
+def test_tone_none_lexicons_keep_the_defaults():
+    text = "This is terrible and useless."
+    explicit_none = Tone(
+        track=False,
+        positive_lexicon=None,
+        negative_lexicon=None,
+        forbidden_phrases=None,
+    ).score(output=text)
+
+    assert explicit_none == Tone(track=False).score(output=text)
+
+
+@pytest.mark.parametrize(
+    "bad_output",
+    [None, 5, 3.5, True, {"answer": "yes"}, ["a", "b"]],
+)
+def test_contains__non_string_output__raises_metric_error(bad_output):
+    # Contains validated `reference` but never `output`, so a non-string
+    # reached `.lower()` / `in` and surfaced as AttributeError or TypeError.
+    metric = Contains(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output, reference="a")
+
+
+@pytest.mark.parametrize("bad_output", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_levenshtein_ratio__non_string_output__raises_metric_error(bad_output):
+    # The None case was already reported as MetricComputationError; every other
+    # non-string fell through to AttributeError.
+    metric = levenshtein_ratio.LevenshteinRatio(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output, reference="abc")
+
+
+@pytest.mark.parametrize("bad_reference", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_levenshtein_ratio__non_string_reference__raises_metric_error(bad_reference):
+    # The guard covers `reference` as well, and rapidfuzz would otherwise be
+    # handed a non-string.
+    metric = levenshtein_ratio.LevenshteinRatio(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output' and 'reference'"):
+        metric.score(output="abc", reference=bad_reference)
+
+
+@pytest.mark.parametrize("case_sensitive", [True, False])
+@pytest.mark.parametrize("bad_reference", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_contains__non_string_reference__raises_value_error(
+    bad_reference, case_sensitive
+):
+    # Contains validated the reference for None and "" but not for its type, so
+    # a non-string reached `.lower()` (case-insensitive) or `in` (case-sensitive).
+    metric = Contains(case_sensitive=case_sensitive, track=False)
+    with pytest.raises(ValueError, match="must be a string"):
+        metric.score(output="hello", reference=bad_reference)
+
+
+@pytest.mark.parametrize("bad_output", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_regex_match__non_string_output__raises_metric_error(bad_output):
+    metric = regex_match.RegexMatch(regex=r"\d+", track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output)
+
+
+def test_string_metrics__valid_strings__still_score():
+    # The new guards must not touch the normal path.
+    assert (
+        Contains(track=False).score(output="hello world", reference="world").value
+        == 1.0
+    )
+    assert (
+        levenshtein_ratio.LevenshteinRatio(track=False)
+        .score(output="abc", reference="abc")
+        .value
+        == 1.0
+    )
+    assert (
+        regex_match.RegexMatch(regex=r"\d+", track=False).score(output="abc 123").value
+        == 1.0
+    )
+
+
 def test_sentiment__missing_lexicon_is_fetched_once_and_reported_clearly(monkeypatch):
     # Sentiment builds the same VADER analyzer as VADERSentiment and had the same two
     # problems: it called nltk.download on every construction, and when the download

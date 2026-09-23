@@ -116,7 +116,8 @@ services:
     entrypoint: [ "/bin/sh", "-c" ]
     command: [ "mkdir -p /data && exec minio server --console-address ':9090' /data" ]
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:9000/minio/health/live" ]
+      # image ships neither wget nor curl on arm64; mc is present on both arches and needs no credentials to check liveness
+      test: [ "CMD-SHELL", "MC_HOST_local=http://localhost:9000 mc ready local" ]
       interval: 1s
       timeout: 10s
       retries: 30

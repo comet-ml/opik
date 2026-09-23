@@ -1,9 +1,11 @@
 package com.comet.opik.infrastructure.db;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.common.base.Preconditions;
 import jakarta.annotation.Nullable;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Collection;
 import java.util.Map;
@@ -26,13 +28,23 @@ import java.util.Map;
 public class JsonRowValues {
 
     /**
+     * A blank column name is as wrong as a null one -- {@code node.put("", value)} produces a row
+     * ClickHouse rejects with a message naming no column, which is a long way from the call site.
+     * {@code @NonNull} cannot see that, so it is checked rather than annotated.
+     */
+    private void checkField(String field) {
+        Preconditions.checkArgument(StringUtils.isNotBlank(field), "field must not be blank");
+    }
+
+    /**
      * Writes {@code value.toString()}, or an explicit JSON null when it is absent.
      *
      * <p>For a <b>Nullable</b> column. Do not use it for a non-nullable column with a DDL default: a
      * JSON null there is rejected unless {@code input_format_null_as_default} happens to be set, and
      * depending on that is how the two write paths drift apart.
      */
-    public void putStringOrNull(@NonNull ObjectNode node, @NonNull String field, @Nullable Object value) {
+    public void putStringOrNull(@NonNull ObjectNode node, String field, @Nullable Object value) {
+        checkField(field);
         if (value == null) {
             node.putNull(field);
         } else {
@@ -48,7 +60,8 @@ public class JsonRowValues {
      * {@code input_format_defaults_for_omitted_fields}, which {@link JsonEachRowBulkInsert} sets per
      * request.
      */
-    public void putStringOrOmit(@NonNull ObjectNode node, @NonNull String field, @Nullable Object value) {
+    public void putStringOrOmit(@NonNull ObjectNode node, String field, @Nullable Object value) {
+        checkField(field);
         if (value != null) {
             node.put(field, value.toString());
         }
@@ -59,8 +72,9 @@ public class JsonRowValues {
      * {@code Array(String)} columns these map to are non-nullable and an empty array is their natural
      * zero value.
      */
-    public void putStringArray(@NonNull ObjectNode node, @NonNull String field,
+    public void putStringArray(@NonNull ObjectNode node, String field,
             @Nullable Collection<String> values) {
+        checkField(field);
         var array = node.putArray(field);
         if (values != null) {
             values.forEach(array::add);
@@ -70,8 +84,9 @@ public class JsonRowValues {
     /**
      * Writes a {@code Map(String, String)} as a nested object, empty when {@code values} is absent.
      */
-    public void putStringMap(@NonNull ObjectNode node, @NonNull String field,
+    public void putStringMap(@NonNull ObjectNode node, String field,
             @Nullable Map<String, String> values) {
+        checkField(field);
         var object = node.putObject(field);
         if (values != null) {
             values.forEach(object::put);
