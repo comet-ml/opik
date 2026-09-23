@@ -381,6 +381,28 @@ export interface TracePayload {
 }
 
 /**
+ * Whether a trace was CLOSED, and what it says went wrong.
+ *
+ * Separate from `TracePayload` because the question is different: that shape
+ * asks what an update preserved, this one asks whether the writer ever finished
+ * the trace at all. A trace submitted without an `end_time` still lists, still
+ * opens, and still renders every field it does carry — it simply sits open in
+ * the Logs table forever, which is invisible to any assertion about content.
+ *
+ * Every field is nullable because the API's own shape is, and the difference
+ * matters in both directions: an absent `end_time` is the bug, and an absent
+ * `error_info` on a trace that threw is a different bug from a present one
+ * naming the wrong exception type. A caller must assert them away rather than
+ * default them.
+ */
+export interface TraceLifecycle {
+  id: string;
+  name: string;
+  endTime: string | null;
+  errorInfo: { exceptionType: string; message: string | null } | null;
+}
+
+/**
  * One span as `GET /v1/private/spans/{id}` answers it.
  *
  * `output` is deliberately untyped, the same reasoning as `getTraceSections`:
@@ -2798,6 +2820,30 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           metadata: t.metadata ?? null,
           // Absent and empty are different answers here — see TracePayload.
           tags: t.tags ?? null,
+        };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
+     * `GET /v1/private/traces/{id}`, reduced to the fields that say whether the
+     * writer ever closed the trace — see `TraceLifecycle`.
+     */
+    async getTraceLifecycle(traceId: string): Promise<TraceLifecycle | null> {
+      try {
+        const t = await opik.api.traces.getTraceById(traceId);
+        return {
+          id: String(t.id ?? ''),
+          name: t.name ?? '',
+          endTime: t.endTime ? new Date(t.endTime).toISOString() : null,
+          errorInfo: t.errorInfo
+            ? {
+                exceptionType: t.errorInfo.exceptionType,
+                message: t.errorInfo.message ?? null,
+              }
+            : null,
         };
       } catch (err) {
         if (isNotFoundError(err)) return null;

@@ -36,6 +36,7 @@ export {
   type KpiCardStat,
   type TraceDetail,
   type TracePayload,
+  type TraceLifecycle,
   type SpanDetail,
   type AutomationRuleRef,
   type AutomationRuleDetail,
