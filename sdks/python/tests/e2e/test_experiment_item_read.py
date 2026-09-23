@@ -11,7 +11,7 @@ in the order a sequential read produces.
 
 import datetime
 import threading
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 
@@ -86,22 +86,32 @@ def _upload_items(
 
 
 class _RecordedRequests:
-    """The `(page, size)` of every Compare request the read actually sent."""
+    """The `(page, size)` of every Compare request the read actually sent.
+
+    Recorded at the HTTP client the REST client wraps, not at the generated datasets
+    client: the read parses the endpoint's JSON itself and never calls
+    `find_dataset_items_with_experiment_items`, so patching that seam would watch a
+    method nothing invokes and record nothing at all.
+    """
+
+    #: Only the Compare page endpoint. Its `/stats` and `/output/columns` siblings
+    #: share the prefix, so match the end of the path rather than the start.
+    _COMPARE_PATH = "/items/experiments/items"
 
     def __init__(self, opik_client: opik.Opik, monkeypatch: pytest.MonkeyPatch) -> None:
-        datasets_client = opik_client._rest_client.datasets
-        original = datasets_client.find_dataset_items_with_experiment_items
+        http_client = opik_client._rest_client._client_wrapper.httpx_client
+        original = http_client.request
         self._lock = threading.Lock()
         self.calls: List[Tuple[int, int]] = []
 
-        def _recording(**kwargs: Any) -> Any:
-            with self._lock:
-                self.calls.append((kwargs["page"], kwargs["size"]))
-            return original(**kwargs)
+        def _recording(path: Optional[str] = None, **kwargs: Any) -> Any:
+            if path is not None and path.endswith(self._COMPARE_PATH):
+                params = kwargs.get("params") or {}
+                with self._lock:
+                    self.calls.append((params["page"], params["size"]))
+            return original(path, **kwargs)
 
-        monkeypatch.setattr(
-            datasets_client, "find_dataset_items_with_experiment_items", _recording
-        )
+        monkeypatch.setattr(http_client, "request", _recording)
 
     def reset(self) -> None:
         with self._lock:
