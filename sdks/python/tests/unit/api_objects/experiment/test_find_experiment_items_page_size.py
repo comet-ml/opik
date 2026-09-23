@@ -695,8 +695,14 @@ def test_find_experiment_items_for_dataset__non_dict_entries_do_not_parse(field,
 
 @pytest.mark.parametrize("field", ["feedback_scores", "assertion_results"])
 def test_find_experiment_items_for_dataset__dict_entries_still_parse(field):
-    # The guard must not reject the shape the backend actually sends.
-    entry = {"name": "accuracy", "value": 1.0, "reason": "ok", "category_name": "c"}
+    # The guard must not reject the shape the backend actually sends. The two fields
+    # do not share one: a score's `value` is the numeric score, an assertion's is the
+    # assertion text, which is why they are typed `float` and `str` respectively.
+    entry = (
+        {"name": "accuracy", "value": 1.0, "reason": "ok", "category_name": "c"}
+        if field == "feedback_scores"
+        else {"value": "no PII in the answer", "passed": True, "reason": "ok"}
+    )
     body = json.dumps(
         {
             "content": [
@@ -808,3 +814,40 @@ def test_find_experiment_items_for_dataset__bool_passed_still_parses(passed):
     items = _read_one_item("assertion_results", {"value": "v", "passed": passed})
 
     assert items[0].assertion_results[0]["passed"] is passed
+
+
+@pytest.mark.parametrize("bad", [3, True, [], {}])
+@pytest.mark.parametrize(
+    "field, key",
+    [
+        ("feedback_scores", "name"),
+        ("feedback_scores", "category_name"),
+        ("feedback_scores", "reason"),
+        ("assertion_results", "value"),
+        ("assertion_results", "reason"),
+    ],
+)
+def test_find_experiment_items_for_dataset__non_string_leaf_fields_do_not_parse(
+    field, key, bad
+):
+    # Every leaf this read copies into a declared-type SDK dict. The sharpest is an
+    # assertion's `value`: the migration uses it as the `Required[str]` `name` of the
+    # assertion it ingests, and `log_assertion_results` only tests it for truthiness,
+    # so a number would reach the backend as an assertion name.
+    entry = {"name": "n", "value": "v" if field == "assertion_results" else 1.0}
+    entry[key] = bad
+
+    with pytest.raises(
+        exceptions.OpikException, match=f"`{field}` entry's `{key}` is a"
+    ):
+        _read_one_item(field, entry)
+
+
+def test_find_experiment_items_for_dataset__absent_leaf_fields_still_parse():
+    # Absence stays permissive: an omitted reason or category is what the backend
+    # sends, and rejecting it would fail reads that work today.
+    items = _read_one_item("feedback_scores", {"name": "accuracy", "value": 1.0})
+
+    assert items[0].feedback_scores == [
+        {"category_name": None, "name": "accuracy", "reason": None, "value": 1.0}
+    ]

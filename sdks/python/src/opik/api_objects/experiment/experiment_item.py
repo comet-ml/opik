@@ -55,13 +55,19 @@ def optional_json_list(
 def _require_leaf_type(value: Any, expected: Any, what: str) -> None:
     """Check one leaf field of a Compare entry, when it is present and not null.
 
-    Deliberately only the two fields whose *Python type* a caller branches on, rather
-    than the schema at large: the migration maps ``passed`` straight onto a
-    ``"passed"``/``"failed"`` status with ``"passed" if passed else "failed"``, where the
-    string ``"false"`` is truthy and would record a failed assertion as passed, and a
-    ``value`` that is not a number is declared ``float`` on ``FeedbackScoreDict`` and
-    breaks any aggregate over it. Re-deriving the rest of the schema per node is the
-    cost this read exists to avoid, and no caller reads those fields by type.
+    Applied to every field this read copies into a declared-type SDK dict, and to no
+    others -- that is the whole set, since the remaining fields on the Compare models
+    are not read here at all. Passing a value of the wrong type through is not inert:
+    ``passed`` is mapped onto a status with ``"passed" if passed else "failed"``, where
+    the string ``"false"`` is truthy and records a failed assertion as passed; an
+    assertion's ``value`` becomes the ``Required[str]`` ``name`` of an ingested
+    assertion; and a score ``value`` is declared ``float`` and aggregated over.
+    Re-deriving the *rest* of the schema per node is the cost this read exists to
+    avoid, and this stops short of it.
+
+    Absence stays permissive -- an omitted or ``null`` field is what the backend sends
+    for a missing score, reason or verdict, and rejecting it would fail reads that work
+    today. Only a present value of the wrong type is an error.
 
     ``bool`` is excluded from the numeric check: it is a subclass of ``int``, so
     ``"value": true`` would otherwise pass as a score of 1.
@@ -123,6 +129,10 @@ class ExperimentItemContent:
             _require_leaf_type(
                 score.get("value"), (int, float), "a `feedback_scores` entry's `value`"
             )
+            for key in ("name", "category_name", "reason"):
+                _require_leaf_type(
+                    score.get(key), str, f"a `feedback_scores` entry's `{key}`"
+                )
             feedback_scores.append(
                 {
                     "category_name": score.get("category_name"),
@@ -139,6 +149,10 @@ class ExperimentItemContent:
             _require_leaf_type(
                 result.get("passed"), bool, "an `assertion_results` entry's `passed`"
             )
+            for key in ("value", "reason"):
+                _require_leaf_type(
+                    result.get(key), str, f"an `assertion_results` entry's `{key}`"
+                )
             assertion_results.append(result)
 
         return cls(
