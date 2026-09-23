@@ -42,6 +42,43 @@ def test_language_adherence_with_stub():
     assert res_mismatch.value == 0.0
 
 
+class _FakeFastTextModel:
+    """Stand-in for a loaded fastText model, including its newline restriction.
+
+    fastText's ``predict`` raises
+    ``ValueError: predict processes one line at a time (remove '\n')`` for any
+    text containing a newline, so a fake that quietly accepts one would not
+    exercise the constraint that matters here.
+    """
+
+    def __init__(self) -> None:
+        self.seen: list[str] = []
+
+    def predict(self, text: str):
+        if "\n" in text:
+            raise ValueError("predict processes one line at a time")
+        self.seen.append(text)
+        return (("__label__en",), (0.99,))
+
+
+def test_language_adherence__multiline_output__is_flattened_for_fasttext():
+    # Model output is routinely multi-line. Passing it to fastText unchanged
+    # made predict() reject it instead of detecting the language.
+    metric = LanguageAdherenceMetric(
+        expected_language="en", detector=lambda _text: ("en", 1.0), track=False
+    )
+    model = _FakeFastTextModel()
+    metric._fasttext_model = model
+    metric._detector_fn = metric._predict_with_fasttext
+
+    result = metric.score(output="Hello there.\nHow are you?\r\nThanks.")
+
+    assert result.value == 1.0
+    assert result.metadata["detected_language"] == "en"
+    # Only the whitespace is collapsed; the words reach fastText unchanged.
+    assert model.seen == ["Hello there. How are you? Thanks."]
+
+
 def test_knowledge_retention_metric():
     conversation = [
         {"role": "user", "content": "My account number is 12345 and my name is Alice."},
