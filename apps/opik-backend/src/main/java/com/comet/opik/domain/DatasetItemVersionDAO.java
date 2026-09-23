@@ -22,6 +22,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.db.ZeroRowsRetryPolicy;
@@ -37,6 +38,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
@@ -361,6 +363,22 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String DATASET_ITEM_VERSIONS = "dataset_item_versions";
     private static final String CLICKHOUSE = "Clickhouse";
+
+    /**
+     * Cache group for the compare-view target projects, whose answer does not depend on {@code page} /
+     * {@code size}. One read of a large experiment is dozens of requests that differ only by page, so without
+     * this each of them re-runs the same query. TTL is a few seconds — see {@code cacheManager.caches} in
+     * config.yml.
+     * <p>
+     * <b>This relies on an experiment belonging to one project</b>, which is the v2 contract but is not
+     * enforced in the write path: {@code POST /v1/private/experiments/items} resolves each item's project
+     * individually. Hold that invariant when changing either side. If an experiment's items are ever allowed
+     * to span projects, a set cached before the second project appears stays stale until the TTL expires, and
+     * rows in the project the set is missing come back present but blank — right {@code trace_id}, null
+     * {@code input} / {@code output} / {@code duration} — while {@code trace_count}, which does not go through
+     * this cache, already counts them.
+     */
+    private static final String TARGET_PROJECTS_CACHE = "experiment_compare_target_projects";
 
     private static final List<FilterQueryBuilder.FilterStrategyParam> FILTER_STRATEGY_PARAMS = List.of(
             new FilterQueryBuilder.FilterStrategyParam(FilterStrategy.DATASET_ITEM, "dataset_item_filters"),
@@ -2968,7 +2986,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .build();
 
             // Run pre-queries in parallel: target project IDs and aggregated experiment IDs
-            var targetProjectIdsMono = getTargetProjectIds(workspaceId, criteria.datasetId(), criteria.experimentIds());
+            var targetProjectIdsMono = getTargetProjectIdsCached(workspaceId, targetProjectsScopeKey(criteria),
+                    criteria.datasetId(), criteria.experimentIds())
+                    .defaultIfEmpty(List.of());
             var branchCountsMono = getAggregationBranchCounts(aggregationCriteria);
 
             return Mono.zip(targetProjectIdsMono, branchCountsMono)
@@ -3087,6 +3107,47 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         });
                     });
         });
+    }
+
+    /**
+     * Key for {@link #TARGET_PROJECTS_CACHE}, covering every input that can change the target projects: the
+     * dataset and the experiment set, order-independent.
+     * <p>
+     * The workspace id is <b>not</b> part of this key on purpose: the caching method prepends its own
+     * {@code $workspaceId}, so that a caller cannot end up sharing an entry across tenants by forgetting to
+     * include it here.
+     */
+    private static String targetProjectsScopeKey(DatasetItemSearchCriteria criteria) {
+        String experimentIds = Optional.ofNullable(criteria.experimentIds())
+                .orElseGet(Set::of)
+                .stream()
+                .map(UUID::toString)
+                .sorted()
+                .collect(Collectors.joining(","));
+
+        return DigestUtils.sha256Hex(String.join("|", criteria.datasetId().toString(), experimentIds));
+    }
+
+    /**
+     * Must not be private: Guice method interception (which implements {@link Cacheable}) cannot intercept
+     * private methods, so a private modifier silently disables the cache.
+     * <p>
+     * <b>An empty result is never cached.</b> An empty set is not evidence that the experiment has no items.
+     * The analytics store is replicated, so a read served by a replica that is momentarily behind returns no
+     * projects for an experiment that plainly has them, and caching that would pin one replica's transient
+     * view for the whole TTL. It is returned to the caller but not written, so the next read asks again. Do
+     * not "optimise" this into caching the empty list, and do not swap it for a shorter TTL: a shorter window
+     * narrows the exposure without removing it.
+     * <p>
+     * The mechanics: {@code CacheInterceptor} stores whatever the {@code Mono} emits, so emitting nothing
+     * stores nothing, and the caller supplies the empty list because an empty {@code Mono} would drop the
+     * {@code Mono.zip} it feeds.
+     */
+    @Cacheable(name = TARGET_PROJECTS_CACHE, key = "'target_projects-' + $workspaceId + '-' + $scopeKey", returnType = UUID.class, wrapperType = List.class)
+    public Mono<List<UUID>> getTargetProjectIdsCached(String workspaceId, String scopeKey, UUID datasetId,
+            Set<UUID> experimentIds) {
+        return getTargetProjectIds(workspaceId, datasetId, experimentIds)
+                .filter(CollectionUtils::isNotEmpty);
     }
 
     /**
