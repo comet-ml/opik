@@ -52,6 +52,37 @@ def optional_json_list(
     return entries
 
 
+def _require_leaf_type(value: Any, expected: Any, what: str) -> None:
+    """Check one leaf field of a Compare entry, when it is present and not null.
+
+    Deliberately only the two fields whose *Python type* a caller branches on, rather
+    than the schema at large: the migration maps ``passed`` straight onto a
+    ``"passed"``/``"failed"`` status with ``"passed" if passed else "failed"``, where the
+    string ``"false"`` is truthy and would record a failed assertion as passed, and a
+    ``value`` that is not a number is declared ``float`` on ``FeedbackScoreDict`` and
+    breaks any aggregate over it. Re-deriving the rest of the schema per node is the
+    cost this read exists to avoid, and no caller reads those fields by type.
+
+    ``bool`` is excluded from the numeric check: it is a subclass of ``int``, so
+    ``"value": true`` would otherwise pass as a score of 1.
+    """
+    if value is None:
+        return
+    if expected is not bool and isinstance(value, bool):
+        pass  # fall through to the failure below
+    elif isinstance(value, expected):
+        return
+    names = (
+        expected.__name__
+        if isinstance(expected, type)
+        else " or ".join(t.__name__ for t in expected)
+    )
+    raise exceptions.OpikException(
+        f"The experiment Compare response is malformed: {what} is a "
+        f"{type(value).__name__}, not {names}."
+    )
+
+
 @dataclasses.dataclass
 class ExperimentItemReferences:
     dataset_item_id: str
@@ -85,17 +116,30 @@ class ExperimentItemContent:
         plain dicts for the same reason.
         """
         require_json_type(value, dict, "an `experiment_items` entry")
-        feedback_scores: List[FeedbackScoreDict] = [
-            {
-                "category_name": score.get("category_name"),
-                "name": score.get("name"),
-                "reason": score.get("reason"),
-                "value": score.get("value"),
-            }
-            for score in optional_json_list(
-                value.get("feedback_scores"), "`feedback_scores`", entry_type=dict
+        feedback_scores: List[FeedbackScoreDict] = []
+        for score in optional_json_list(
+            value.get("feedback_scores"), "`feedback_scores`", entry_type=dict
+        ):
+            _require_leaf_type(
+                score.get("value"), (int, float), "a `feedback_scores` entry's `value`"
             )
-        ]
+            feedback_scores.append(
+                {
+                    "category_name": score.get("category_name"),
+                    "name": score.get("name"),
+                    "reason": score.get("reason"),
+                    "value": score.get("value"),
+                }
+            )
+
+        assertion_results: List[AssertionResultDict] = []
+        for result in optional_json_list(
+            value.get("assertion_results"), "`assertion_results`", entry_type=dict
+        ):
+            _require_leaf_type(
+                result.get("passed"), bool, "an `assertion_results` entry's `passed`"
+            )
+            assertion_results.append(result)
 
         return cls(
             # Indexed, not `.get`: a page missing these is a broken response, and a
@@ -108,13 +152,7 @@ class ExperimentItemContent:
             else value.get("input"),
             evaluation_task_output=value.get("output"),
             feedback_scores=feedback_scores,
-            assertion_results=list(
-                optional_json_list(
-                    value.get("assertion_results"),
-                    "`assertion_results`",
-                    entry_type=dict,
-                )
-            ),
+            assertion_results=assertion_results,
         )
 
     @classmethod

@@ -739,3 +739,72 @@ def test_find_experiment_items_for_dataset__dict_entries_still_parse(field):
         ]
     else:
         assert items[0].assertion_results == [entry]
+
+
+def _read_one_item(field: str, entry: Dict[str, Any]) -> Any:
+    body = json.dumps(
+        {
+            "content": [
+                {
+                    "id": "d-1",
+                    "experiment_items": [
+                        {
+                            "id": "e-1",
+                            "trace_id": "t-1",
+                            "dataset_item_id": "d-1",
+                            field: [entry],
+                        }
+                    ],
+                }
+            ],
+            "total": 1,
+        }
+    )
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=_BodyHttpxClient(body))
+    )
+    return rest_operations.find_experiment_items_for_dataset(
+        rest_client=rest_client,
+        dataset_id="some-dataset-id",
+        experiment_ids=["some-experiment-id"],
+        max_results=10,
+        truncate=False,
+    )
+
+
+@pytest.mark.parametrize("passed", ["false", "true", 0, 1, []])
+def test_find_experiment_items_for_dataset__non_bool_passed_does_not_parse(passed):
+    # The migration maps this field straight onto a status with
+    # `"passed" if passed else "failed"`, so the string "false" is truthy and a failed
+    # assertion would be re-emitted as passed. The generated model typed it `bool`.
+    with pytest.raises(
+        exceptions.OpikException, match="`assertion_results` entry's `passed` is a"
+    ):
+        _read_one_item("assertion_results", {"value": "v", "passed": passed})
+
+
+@pytest.mark.parametrize("value", ["3", True, [], {}])
+def test_find_experiment_items_for_dataset__non_numeric_score_value_does_not_parse(
+    value,
+):
+    # `FeedbackScoreDict` declares `value` a float and callers aggregate over it.
+    # `True` is in here deliberately: `bool` subclasses `int`, so a bare numeric check
+    # would let it through as a score of 1.
+    with pytest.raises(
+        exceptions.OpikException, match="`feedback_scores` entry's `value` is a"
+    ):
+        _read_one_item("feedback_scores", {"name": "accuracy", "value": value})
+
+
+@pytest.mark.parametrize("value", [3, 3.5, None])
+def test_find_experiment_items_for_dataset__numeric_score_values_still_parse(value):
+    items = _read_one_item("feedback_scores", {"name": "accuracy", "value": value})
+
+    assert items[0].feedback_scores[0]["value"] == value
+
+
+@pytest.mark.parametrize("passed", [True, False, None])
+def test_find_experiment_items_for_dataset__bool_passed_still_parses(passed):
+    items = _read_one_item("assertion_results", {"value": "v", "passed": passed})
+
+    assert items[0].assertion_results[0]["passed"] is passed
