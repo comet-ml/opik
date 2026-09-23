@@ -32,7 +32,7 @@ _INJECTION_PATTERNS = [
     rf"(?:{_INSTRUCTION_TARGET}|content|inputs?)",
     r"(?:forget|ignore|disregard|bypass|remove|omit) (?:everything|(all )?(that|which) (i|you) (said|told|provided))",
     r"reset (?:all )?(?:instructions|prompts|settings|conversation|history)",
-    rf"override\s+(?:{_TARGET_QUALIFIER}\s+)*(?:{_INSTRUCTION_TARGET}|system|settings?)",
+    rf"override\s+(?:{_TARGET_QUALIFIER}\s+)*(?:{_INSTRUCTION_TARGET}|system)",
     r"from now on,? you (?:must|will|should|are to)?\s*(?:ignore|disregard|bypass)",
     r"you are no longer bound by (?:the )?(?:rules|guidelines|system|policy|instructions)",
     r"you're no longer restricted by (?:the )?(?:rules|system|guidelines|policy|instructions)",
