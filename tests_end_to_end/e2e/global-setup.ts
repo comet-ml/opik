@@ -5,7 +5,7 @@ import { loadEnvConfig, type EnvConfig } from './config/env.config';
 import { makeBackendClient } from './core/backend';
 import { deleteCometUser, loginCometUserRaw } from './core/comet/client';
 import { readStalePendingUsers, clearPendingUser } from './core/comet/pending-users-registry';
-import { dropUnusableProviderKeys } from './core/llm-key-preflight';
+import { dropAnthropicKeyIfUnusable } from './core/llm-key-preflight';
 
 const E2E_DIR = __dirname;
 const RUN_ID_MARKER = path.resolve(E2E_DIR, '.e2e-run-id');
@@ -247,7 +247,7 @@ async function globalSetup() {
   // ensureModelAvailable and the judge-model ternaries do. Unsetting it here
   // makes the existing OpenAI/OpenRouter fallbacks reachable. Runs before the
   // workers fork, so they inherit the corrected environment.
-  await dropUnusableProviderKeys();
+  await dropAnthropicKeyIfUnusable();
 
   await authenticateAndPersist(env);
 

@@ -23,13 +23,25 @@
 const ANTHROPIC_PROBE_MODEL = 'claude-haiku-4-5';
 const PROBE_TIMEOUT_MS = 15_000;
 
+/** Billing/quota exhaustion, which Anthropic reports as a 400, not a 401. */
+const BALANCE_HINT = /credit balance|too low|billing|quota|insufficient|plans? *& *billing/i;
+
 /**
- * Statuses meaning "this credential cannot be used", as opposed to "the request
- * failed". 401/403 are auth; an exhausted balance arrives as 400
- * invalid_request_error, which is why 400 counts here.
+ * Decide whether a non-OK response condemns the *credential* rather than the
+ * request we just made.
+ *
+ * 401/403 can only mean the credential is bad. 400 is deliberately narrower:
+ * Anthropic returns `400 invalid_request_error` both for an exhausted balance
+ * (what this guard is for) and for a malformed request — an unknown model, a
+ * bad `max_tokens`, schema drift in the payload. Treating every 400 as a dead
+ * key would mean that retiring the probe model silently downgrades the whole
+ * suite to OpenAI, and the fallback working is exactly what would hide it. So a
+ * 400 only counts when the message also reads like a billing problem.
  */
-function isCredentialRejection(status: number): boolean {
-  return status === 401 || status === 403 || status === 400;
+function isCredentialRejection(status: number, message: string): boolean {
+  if (status === 401 || status === 403) return true;
+  if (status === 400) return BALANCE_HINT.test(message);
+  return false;
 }
 
 async function probeAnthropic(apiKey: string): Promise<{ usable: boolean; reason?: string }> {
@@ -53,18 +65,26 @@ async function probeAnthropic(apiKey: string): Promise<{ usable: boolean; reason
 
     if (res.ok) return { usable: true };
 
-    if (isCredentialRejection(res.status)) {
-      let detail = `HTTP ${res.status}`;
-      try {
-        const body = (await res.json()) as { error?: { message?: string } };
-        if (body?.error?.message) detail = body.error.message;
-      } catch {
-        // Non-JSON error body; the status alone is reason enough.
-      }
+    // Read the message first: the 400 branch needs it to tell an exhausted
+    // balance from a request this probe got wrong.
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: { message?: string } };
+      if (body?.error?.message) detail = body.error.message;
+    } catch {
+      // Non-JSON error body; the status is all we have.
+    }
+
+    if (isCredentialRejection(res.status, detail)) {
       return { usable: false, reason: detail };
     }
 
-    // 429 or 5xx: the key may well be fine, so keep it.
+    // 429, 5xx, or a 400 about the request rather than the account: the key may
+    // well be fine, so keep it and let the spec fail loudly if it is not.
+    console.warn(
+      `[llm-key-preflight] Anthropic probe returned HTTP ${res.status} (${detail}) — ` +
+        'not a credential verdict, keeping the key.',
+    );
     return { usable: true };
   } catch (err) {
     // Aborted, offline, TLS failure — no verdict on the credential itself.
@@ -76,11 +96,17 @@ async function probeAnthropic(apiKey: string): Promise<{ usable: boolean; reason
 }
 
 /**
- * Probe each configured provider key and delete the unusable ones from
- * `process.env`, so downstream presence checks route to a working provider.
- * Runs before the first spec; a no-op when no key is set.
+ * Probe ANTHROPIC_API_KEY and blank it when the credential is rejected, so
+ * downstream presence checks route to a working provider. Runs before the first
+ * spec; a no-op when no key is set.
+ *
+ * Anthropic only, deliberately: it is the one provider the suite prefers over
+ * the others, so a dead Anthropic key is the only one that can mask a working
+ * fallback. OPENAI_API_KEY and OPENROUTER_API_KEY sit at the end of the chain —
+ * a bad key there fails the spec outright rather than silently shadowing a
+ * healthy provider, which is the failure mode this guards against.
  */
-export async function dropUnusableProviderKeys(): Promise<void> {
+export async function dropAnthropicKeyIfUnusable(): Promise<void> {
   const anthropic = process.env.ANTHROPIC_API_KEY;
   if (!anthropic) return;
 
