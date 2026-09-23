@@ -2,11 +2,13 @@ import dataclasses
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
 from typing import Any, Callable, Dict, Final, List, Optional
 
+from opik.configurator import interactive_helpers
 from opik.configurator.mcp import json_config
 from opik.configurator.mcp import spec as mcp_spec
 from opik.configurator.mcp.spec import SERVER_NAME
@@ -240,6 +242,7 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             target_display_name="Claude Code", succeeded=False, detail=str(error)
         )
     if result.returncode == 0:
+        _sign_in_claude_code(claude_executable, server_spec)
         return InstallResult(
             target_display_name="Claude Code",
             succeeded=True,
@@ -258,6 +261,78 @@ def _install_claude_code(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
             f"{_first_line(result.stderr) or _first_line(result.stdout) or 'no output'}"
         ),
     )
+
+
+def _claude_supports_mcp_login(claude_executable: str) -> bool:
+    """Whether this Claude Code build has `claude mcp login`.
+
+    The command is recent, so it cannot be assumed. Asking `claude mcp login
+    --help` and reading the exit status looks like the probe and is quietly
+    wrong: on a build without the subcommand, Claude Code prints the *group's*
+    help and exits 0, which would report every version as supported. The group's
+    own listing is what distinguishes them.
+    """
+    try:
+        listing = _run_client_cli(
+            [claude_executable, "mcp", "--help"], label="claude mcp --help"
+        )
+    except _CliUnavailable:
+        return False
+
+    if listing.returncode != 0:
+        return False
+
+    # Anchored to the start of a line so the name has to be a listed command
+    # rather than a word in another command's description.
+    return (
+        re.search(
+            r"^[ \t]*login\b", f"{listing.stdout}\n{listing.stderr}", re.MULTILINE
+        )
+        is not None
+    )
+
+
+def _sign_in_claude_code(
+    claude_executable: str, server_spec: mcp_spec.McpServerSpec
+) -> None:
+    """Start the browser sign-in for a freshly registered hosted server.
+
+    The hosted server carries no credentials; the client signs in over OAuth. For
+    Codex that is already handled: `codex mcp add --url` performs the login as
+    part of the add, which is why configuring Codex ends in the browser. Claude
+    Code's `mcp add` only records the server, so it sits unauthorized afterwards
+    — and an unauthorized server contributes no tools at all rather than an
+    error, so nothing tells the user to go and finish the job.
+
+    One more call to the client's own CLI, in the same place and with the same
+    guards as the `add` above, closes that gap.
+
+    Best effort throughout: the server is registered by the time this runs, and
+    an old client, a failed login or a user who walks away all leave a working
+    registration plus the sign-in hint the closing block already prints.
+    """
+    if not isinstance(server_spec, mcp_spec.RemoteServerSpec):
+        # A local uvx server authenticates with the API key already written into
+        # the config. There is nothing to sign in to.
+        return
+
+    if not interactive_helpers.is_interactive():
+        # A run with no terminal is a coding agent or CI, and a browser there is
+        # at best ignored. Unlike the Codex path — where the login is inside
+        # `codex mcp add` and cannot be separated from it — this one is ours to
+        # not start. The closing block's sign-in hint still covers these runs.
+        return
+
+    if not _claude_supports_mcp_login(claude_executable):
+        return
+
+    try:
+        _run_client_cli(
+            [claude_executable, "mcp", "login", SERVER_NAME],
+            label="claude mcp login",
+        )
+    except _CliUnavailable:
+        return
 
 
 def _install_cursor(server_spec: mcp_spec.McpServerSpec) -> InstallResult:
@@ -437,6 +512,10 @@ def _read_block_from_json_file(
     return block if isinstance(block, dict) else None
 
 
+#: Ordered by priority, and that order is what the user sees: the consent prompt
+#: lists these, the picker offers them in this sequence, and the `--ai-client`
+#: help prints them. Claude Code and Codex lead because they are the highest-
+#: volume clients in the telemetry.
 HOST_TARGETS: List[HostTarget] = [
     HostTarget(
         key="claude-code",
@@ -446,6 +525,17 @@ HOST_TARGETS: List[HostTarget] = [
         is_detected=lambda: shutil.which("claude") is not None
         or _claude_config_path().exists(),
         install=_install_claude_code,
+    ),
+    HostTarget(
+        key="codex",
+        display_name="Codex",
+        config_path=_codex_config_path,
+        # Unused: Codex config is TOML, so reads go through `read_block` instead.
+        top_level_key="mcp_servers",
+        is_detected=lambda: shutil.which("codex") is not None
+        or _codex_config_path().exists(),
+        install=_install_codex,
+        read_block=_read_codex_block,
     ),
     HostTarget(
         key="cursor",
@@ -462,17 +552,6 @@ HOST_TARGETS: List[HostTarget] = [
         top_level_key="servers",
         is_detected=lambda: _vscode_user_config_path().parent.exists(),
         install=_install_vscode,
-    ),
-    HostTarget(
-        key="codex",
-        display_name="Codex",
-        config_path=_codex_config_path,
-        # Unused: Codex config is TOML, so reads go through `read_block` instead.
-        top_level_key="mcp_servers",
-        is_detected=lambda: shutil.which("codex") is not None
-        or _codex_config_path().exists(),
-        install=_install_codex,
-        read_block=_read_codex_block,
     ),
     HostTarget(
         key="opencode",

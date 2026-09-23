@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 def parse_model_output(content: str, name: str) -> score_result.ScoreResult:
     try:
         dict_content = parsing_helpers.extract_json_content_or_raise(content)
-        score: float = dict_content["answer_relevance_score"]
+        score: float = float(dict_content["answer_relevance_score"])
 
         if not (0.0 <= score <= 1.0):
             raise exceptions.MetricComputationError(

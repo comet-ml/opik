@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { getDefaultConfigByProvider } from "@/lib/playground";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createCompletionAnnouncer,
+  getDefaultConfigByProvider,
+  restoreMissingConfigKeys,
+} from "@/lib/playground";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMAnthropicConfigsType,
+  LLMOpenAIConfigsType,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
 } from "@/types/providers";
+import { PlaygroundPromptType } from "@/types/playground";
 
 describe("getDefaultConfigByProvider — Anthropic", () => {
   it("seeds temperature default for models that accept sampling params", () => {
@@ -26,5 +32,229 @@ describe("getDefaultConfigByProvider — Anthropic", () => {
     expect(config.temperature).toBeUndefined();
     expect(config.topP).toBeUndefined();
     expect(config.maxCompletionTokens).toBe(4000);
+  });
+});
+
+describe("restoreMissingConfigKeys", () => {
+  const prompt = (
+    provider: PROVIDER_TYPE,
+    model: PROVIDER_MODEL_TYPE,
+    configs: Record<string, unknown>,
+  ) =>
+    ({
+      name: "p",
+      id: "p1",
+      messages: [],
+      model,
+      provider: provider as COMPOSED_PROVIDER_TYPE,
+      configs,
+    }) as unknown as PlaygroundPromptType;
+
+  it("puts back a topP the old model-change reconciler dropped", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI, {
+        temperature: 0.4,
+        maxCompletionTokens: 4000,
+        frequencyPenalty: 0,
+        presencePenalty: 0,
+      }),
+    );
+
+    expect((restored.configs as LLMOpenAIConfigsType).topP).toBe(1);
+    expect((restored.configs as LLMOpenAIConfigsType).temperature).toBe(0.4);
+  });
+
+  it("puts back parameters added after the prompt was persisted", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(PROVIDER_TYPE.OPEN_ROUTER, PROVIDER_MODEL_TYPE.OPENAI_GPT_4O, {
+        temperature: 1,
+        topP: 1,
+        maxTokens: 0,
+      }),
+    );
+
+    expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
+  });
+
+  it("leaves a cleared Anthropic temperature cleared when Top P is the live half", () => {
+    // Restoring temperature here would silently override the user's Top P: with both set the
+    // request drops Top P. Which half is live stays resolveSamplingParams' call.
+    const restored = restoreMissingConfigKeys(
+      prompt(PROVIDER_TYPE.ANTHROPIC, PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6, {
+        topP: 0.9,
+        maxCompletionTokens: 4000,
+      }),
+    );
+
+    expect(
+      (restored.configs as LLMAnthropicConfigsType).temperature,
+    ).toBeUndefined();
+    expect((restored.configs as LLMAnthropicConfigsType).topP).toBe(0.9);
+  });
+
+  it("leaves a Claude on another provider unselected rather than picking temperature", () => {
+    // The exclusive rule follows the model, not the route: filling in OpenRouter's own temperature
+    // and topP defaults would turn a deliberate "send neither" back into temperature-at-default.
+    const restored = restoreMissingConfigKeys(
+      prompt(
+        PROVIDER_TYPE.OPEN_ROUTER,
+        PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6,
+        { maxTokens: 0 },
+      ),
+    );
+
+    expect(restored.configs).toMatchObject({ minP: 0, topA: 0 });
+    expect(restored.configs).not.toHaveProperty("temperature");
+    expect(restored.configs).not.toHaveProperty("topP");
+  });
+
+  it("returns the same prompt when nothing is missing", () => {
+    const complete = prompt(
+      PROVIDER_TYPE.OPEN_AI,
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      getDefaultConfigByProvider(
+        PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE,
+        PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      ) as unknown as Record<string, unknown>,
+    );
+
+    expect(restoreMissingConfigKeys(complete)).toBe(complete);
+  });
+
+  it("does not throw on a prompt persisted without a config", () => {
+    // It runs over every persisted prompt during store hydration, so a throw here costs the whole
+    // playground state, not one prompt.
+    const restored = restoreMissingConfigKeys({
+      name: "p",
+      id: "p1",
+      messages: [],
+      model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      provider: PROVIDER_TYPE.OPEN_AI as COMPOSED_PROVIDER_TYPE,
+    } as unknown as PlaygroundPromptType);
+
+    expect((restored.configs as LLMOpenAIConfigsType).topP).toBe(1);
+  });
+
+  it("treats a null value as missing", () => {
+    const restored = restoreMissingConfigKeys(
+      prompt(PROVIDER_TYPE.OPEN_AI, PROVIDER_MODEL_TYPE.GPT_4O_MINI, {
+        temperature: 0.4,
+        topP: null,
+      }),
+    );
+
+    expect((restored.configs as LLMOpenAIConfigsType).topP).toBe(1);
+  });
+
+  it("does not throw on a malformed prompt entry", () => {
+    expect(
+      restoreMissingConfigKeys(null as unknown as PlaygroundPromptType),
+    ).toBeNull();
+    expect(
+      restoreMissingConfigKeys("nonsense" as unknown as PlaygroundPromptType),
+    ).toBe("nonsense");
+  });
+
+  it("does not throw on a prompt whose stored provider is not a string", () => {
+    // parseComposedProviderType calls provider.startsWith, so a corrupted entry would throw inside
+    // the hydration map and take every sibling prompt's state with it.
+    const malformed = {
+      name: "p",
+      id: "p1",
+      messages: [],
+      model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
+      provider: { openai: true },
+      configs: {},
+    } as unknown as PlaygroundPromptType;
+
+    expect(restoreMissingConfigKeys(malformed)).toBe(malformed);
+  });
+
+  it("leaves a prompt with no provider alone", () => {
+    const noProvider = {
+      name: "p",
+      id: "p1",
+      messages: [],
+      model: "",
+      provider: "",
+      configs: {},
+    } as unknown as PlaygroundPromptType;
+
+    expect(restoreMissingConfigKeys(noProvider)).toBe(noProvider);
+  });
+});
+
+describe("createCompletionAnnouncer", () => {
+  it("waits for logging to finish when the registry lands first", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.experimentsRegistered(2);
+    expect(announce).not.toHaveBeenCalled();
+
+    announcer.loggingFinished();
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the registry when logging finishes first", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.loggingFinished();
+    expect(announce).not.toHaveBeenCalled();
+
+    announcer.experimentsRegistered(2);
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds until every expected experiment is registered", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.experimentsRegistered(1);
+    announcer.loggingFinished();
+    expect(announce).not.toHaveBeenCalled();
+
+    announcer.experimentsRegistered(2);
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces once however many times the signals repeat", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(1, announce);
+
+    announcer.experimentsRegistered(1);
+    announcer.loggingFinished();
+    announcer.experimentsRegistered(1);
+    announcer.loggingFinished();
+
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays silent when a run is interrupted before its experiments exist", () => {
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(2, announce);
+
+    announcer.loggingFinished();
+    announcer.experimentsRegistered(1);
+
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  it("stays silent for a run stopped before its experiments landed", () => {
+    // Mirrors how the single-prompt run gates itself: Stop drops the prompt from
+    // the live set, and a drain arriving afterwards must not report success.
+    const live = new Set(["prompt-1"]);
+    const announce = vi.fn();
+    const announcer = createCompletionAnnouncer(1, () => {
+      if (!live.delete("prompt-1")) return;
+      announce();
+    });
+
+    live.delete("prompt-1");
+    announcer.experimentsRegistered(1);
+    announcer.loggingFinished();
+
+    expect(announce).not.toHaveBeenCalled();
   });
 });

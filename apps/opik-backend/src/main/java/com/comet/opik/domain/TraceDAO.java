@@ -1,6 +1,5 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.BiInformationResponse.BiInformation;
 import com.comet.opik.api.ExperimentItemReference;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailType;
@@ -13,6 +12,7 @@ import com.comet.opik.api.TraceDetails;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.UsageByWorkspaceProjectUserResponse.WorkspaceProjectUserCount;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortableFields;
@@ -24,6 +24,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.stats.StatsMerger;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
+import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -77,7 +78,6 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
-import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.domain.stats.StatsMapper.mapProjectScoresStats;
@@ -128,7 +128,11 @@ public interface TraceDAO {
 
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 
-    Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
+    /**
+     * Previous-day trace counts per workspace and project. Callers drop demo projects and re-aggregate via
+     * {@link DemoDataExclusionUtils}, so the exclusion never reaches the query text.
+     */
+    Flux<WorkspaceProjectCount> countTracesPerWorkspaceProject();
 
     Mono<Set<UUID>> getProjectsWithTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs, Instant from,
             Instant to, Connection connection);
@@ -143,11 +147,10 @@ public interface TraceDAO {
 
     Mono<Map<UUID, Instant>> getStartTimesByTraceIds(Set<UUID> traceIds, String workspaceId);
 
-    Flux<BiInformation> getTraceBIInformation(Map<UUID, Instant> excludedProjectIds);
+    /** Same as {@link #countTracesPerWorkspaceProject()}, broken down by user for the BI events. */
+    Flux<WorkspaceProjectUserCount> getTraceBIInformationPerProject();
 
     Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
-
-    Mono<Long> getDailyTraces(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId,
             List<? extends Filter> filters, Instant fromTime, Instant toTime);
@@ -472,12 +475,31 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    // Query to get target project_ids from traces (executed separately to reduce table scans)
+    /**
+     * Query to get target project_ids from traces (executed separately to reduce table scans).
+     * <p>
+     * <b>The {@code <id_weeks>} slot is the week bound the trace-id-list reads carry (OPIK-8332); the others point
+     * here.</b> It is the partition key of 000114 verbatim, so ClickHouse matches it as the key's own expression. An
+     * {@code id IN} list prunes nothing by itself — {@code id_at} is derived from {@code id} through
+     * {@code UUIDv7ToDateTime}, which the planner cannot see through — so without the bound the read opens parts in
+     * every weekly partition.
+     * <p>
+     * A discrete set, not the min/max range {@link #SELECT_ALL_PROJECT_IDS_BY_TRACE_IDS_BOUNDED} uses: a range
+     * brackets the id set's extremes, so one far-future id (a UUIDv7 minted with a bad clock) widens it across
+     * centuries and re-admits every partition in between.
+     * <p>
+     * It is a strict consequence of {@code id IN :ids} and never a filter, which is what lets it be emitted with no
+     * flag for which side of the cutover is live: {@link WeeklyPartitions#weeksOf} names the week under each
+     * {@code id_at} type, so one rendered statement is correct against the legacy column and the successor alike. It
+     * returns empty for an id set it cannot derive exactly, leaving the slot absent and the query unbounded — always
+     * correct and merely slower, which is the only direction this can fail in.
+     */
     private static final String SELECT_TARGET_PROJECTS_FOR_TRACES = """
             SELECT DISTINCT project_id
             FROM traces
             WHERE workspace_id = :workspace_id
             AND id IN :ids
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -492,6 +514,10 @@ class TraceDAOImpl implements TraceDAO {
      * by UUIDv7-ordered id) so the trace-by-id LEFT JOIN cannot fan a trace that belongs to multiple
      * experiments into multiple rows — which surfaced as an IndexOutOfBoundsException 500 on GET by id
      * and non-deterministic experiment metadata (OPIK-7396).
+     *
+     * <p>The {@code traces} access carries the {@code <id_weeks>} week bound — see
+     * {@link #SELECT_TARGET_PROJECTS_FOR_TRACES} (OPIK-8332). Only that access: the other arms read other tables,
+     * whose partitioning is a separate slice.
      */
     private static final String SELECT_BY_IDS = """
             WITH target_spans AS (
@@ -772,6 +798,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE workspace_id = :workspace_id
                 <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND id IN :ids
+                <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS t
@@ -1529,31 +1556,43 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
-    private static final String TRACE_COUNT_BY_WORKSPACE_ID = """
+    /**
+     * Previous-day trace counts per workspace, at project granularity so that
+     * {@link DemoDataExclusionUtils#foldByWorkspace} can drop demo projects and re-aggregate in Java.
+     *
+     * <p><b>The demo-project exclusion must not render into this query text.</b> It used to, as an inline
+     * {@code project_id NOT IN [...]} literal holding one UUID per demo project across all workspaces. Once
+     * {@code traces} is wrapped in a {@code Distributed} table the query text is re-parsed per shard, so that
+     * literal — unbounded, one demo project per signup — grew until the query exceeded
+     * {@code max_execution_time} and the daily usage counts silently stopped being produced. Keeping the text
+     * constant is what makes growth in the demo set unable to reintroduce that; see {@link DemoDataExclusionUtils}.
+     */
+    private static final String TRACE_DAILY_COUNT_BY_WORKSPACE_PROJECT = """
             SELECT
                  workspace_id,
+                 project_id,
                  COUNT(DISTINCT id) as trace_count
              FROM traces
              WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-             <if(excluded_project_ids)> AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-             <endif>
-             GROUP BY workspace_id
+             GROUP BY workspace_id, project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
-    private static final String TRACE_DAILY_BI_INFORMATION = """
+    /**
+     * Previous-day trace counts per workspace and user for the BI events, at project granularity so that
+     * {@link DemoDataExclusionUtils#foldByWorkspaceAndUser} can drop demo projects and re-aggregate in Java. Same
+     * constraint on the query text as {@link #TRACE_DAILY_COUNT_BY_WORKSPACE_PROJECT}.
+     */
+    private static final String TRACE_DAILY_BI_INFORMATION_BY_PROJECT = """
             SELECT
                  workspace_id,
                  created_by AS user,
+                 project_id,
                  COUNT(DISTINCT id) AS trace_count
             FROM traces
             WHERE created_at BETWEEN toStartOfDay(yesterday()) AND toStartOfDay(today())
-            <if(excluded_project_ids)> AND (project_id NOT IN :excluded_project_ids
-                <if(demo_data_created_at)>OR created_at > parseDateTime64BestEffort(:demo_data_created_at, 9)<endif>)
-            <endif>
-            GROUP BY workspace_id, created_by
+            GROUP BY workspace_id, created_by, project_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2106,11 +2145,20 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /**
+     * Resolves the owning workspace of each id, for the check that referenced traces belong to the caller's
+     * workspace. Carries the {@code <id_weeks>} week bound — see {@link #SELECT_TARGET_PROJECTS_FOR_TRACES}
+     * (OPIK-8332). The one read of the family with no {@code workspace_id} predicate, since it exists to derive that
+     * value, so the id list and its weeks are all that can bound it. That the bound is a strict consequence of the
+     * id list matters more here than elsewhere: the caller reduces with {@code allMatch}, so a row this failed to
+     * return would read as "no mismatch" and pass the check rather than fail it.
+     */
     private static final String SELECT_TRACE_ID_AND_WORKSPACE = """
             SELECT
                 DISTINCT id, workspace_id
             FROM traces
             WHERE id IN :traceIds
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2292,6 +2340,7 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /** Carries the {@code <id_weeks>} week bound — see {@link #SELECT_TARGET_PROJECTS_FOR_TRACES} (OPIK-8332). */
     private static final String SELECT_PROJECT_IDS_BY_TRACE_IDS = """
             SELECT
                 id,
@@ -2299,6 +2348,7 @@ class TraceDAOImpl implements TraceDAO {
             FROM traces
             WHERE id IN :trace_ids
             AND workspace_id = :workspace_id
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             GROUP BY id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2352,6 +2402,7 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    /** Carries the {@code <id_weeks>} week bound — see {@link #SELECT_TARGET_PROJECTS_FOR_TRACES} (OPIK-8332). */
     private static final String SELECT_START_TIMES_BY_TRACE_IDS = """
             SELECT
                 id,
@@ -2359,6 +2410,7 @@ class TraceDAOImpl implements TraceDAO {
             FROM traces
             WHERE id IN :ids
             AND workspace_id = :workspace_id
+            <if(id_weeks)>AND toYYYYMMDD(toDate32(id_at) - toIntervalDay(toDayOfWeek(id_at, 1))) IN :id_weeks<endif>
             ORDER BY id, last_updated_at DESC
             LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
@@ -3735,6 +3787,17 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     /**
+     * The values for the {@code <id_weeks>} bound, or empty when the ids resolve to no exact set of weeks and the
+     * query must run unbounded. See {@link #SELECT_TARGET_PROJECTS_FOR_TRACES} for what the bound is and why.
+     * <p>
+     * An array, not the {@code List} {@link WeeklyPartitions#weeksOf} returns: the driver renders an array as a
+     * ClickHouse array and a {@code Collection} as a tuple, and the bound is an {@code IN} over a set.
+     */
+    private Optional<Long[]> idWeeks(Collection<UUID> ids) {
+        return WeeklyPartitions.weeksOf(ids).map(weeks -> weeks.toArray(Long[]::new));
+    }
+
+    /**
      * Get target project IDs from traces for the given trace IDs.
      * This is executed as a separate query to reduce traces table scans in the main query.
      */
@@ -3747,8 +3810,13 @@ class TraceDAOImpl implements TraceDAO {
                         var template = getSTWithLogComment(SELECT_TARGET_PROJECTS_FOR_TRACES,
                                 "get_target_project_ids_for_traces", workspaceId, "", ids.size());
 
+                        var idWeeks = idWeeks(ids);
+                        idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
                         var statement = connection.createStatement(template.render())
                                 .bind("ids", ids.toArray(UUID[]::new));
+
+                        idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                         return makeMonoContextAware(bindWorkspaceIdToMono(statement));
                     })
@@ -3799,12 +3867,17 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("has_target_projects", true);
                     }
 
+                    var idWeeks = idWeeks(ids);
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
                     var statement = connection.createStatement(template.render())
                             .bind("ids", ids.toArray(UUID[]::new));
 
                     if (CollectionUtils.isNotEmpty(targetProjectIds)) {
                         statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
                     }
+
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
                     Segment segment = startSegment("traces", "Clickhouse", "findByIds");
 
@@ -4388,8 +4461,13 @@ class TraceDAOImpl implements TraceDAO {
         var template = getSTWithLogComment(SELECT_TRACE_ID_AND_WORKSPACE, "get_trace_workspace", "", "",
                 traceIds.size());
 
+        var idWeeks = idWeeks(traceIds);
+        idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
         var statement = connection.createStatement(template.render())
                 .bind("traceIds", traceIds.toArray(UUID[]::new));
+
+        idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
         return Mono.from(statement.execute())
                 .flatMapMany(result -> result.map((row, rowMetadata) -> new WorkspaceAndResourceId(
@@ -4481,75 +4559,33 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Flux<WorkspaceTraceCount> countTracesPerWorkspace(@NonNull Map<UUID, Instant> excludedProjectIds) {
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(TRACE_COUNT_BY_WORKSPACE_ID, "count_traces_per_workspace", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
+    public Flux<WorkspaceProjectCount> countTracesPerWorkspaceProject() {
+        var template = getSTWithLogComment(TRACE_DAILY_COUNT_BY_WORKSPACE_PROJECT, "count_traces_per_workspace", "",
+                "", "");
 
         return asyncTemplate
-                .nonTransaction(
-                        connection -> {
-                            Statement statement = connection.createStatement(template.render());
-
-                            if (!excludedProjectIds.isEmpty()) {
-                                statement.bind("excluded_project_ids",
-                                        excludedProjectIds.keySet().toArray(UUID[]::new));
-                            }
-
-                            if (demoDataCreatedAt.isPresent()) {
-                                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-                            }
-
-                            return Mono.from(statement.execute());
-                        })
-                .flatMapMany(result -> result.map((row, rowMetadata) -> WorkspaceTraceCount.builder()
-                        .workspace(row.get("workspace_id", String.class))
-                        .traceCount(row.get("trace_count", Integer.class))
+                .nonTransaction(connection -> Mono.from(connection.createStatement(template.render()).execute()))
+                .flatMapMany(result -> result.map((row, _) -> WorkspaceProjectCount.builder()
+                        .workspaceId(row.get("workspace_id", String.class))
+                        .projectId(row.get("project_id", UUID.class))
+                        .count(row.get("trace_count", Long.class))
                         .build()));
     }
 
     @Override
     @WithSpan
-    public Flux<BiInformation> getTraceBIInformation(@NonNull Map<UUID, Instant> excludedProjectIds) {
+    public Flux<WorkspaceProjectUserCount> getTraceBIInformationPerProject() {
+        var template = getSTWithLogComment(TRACE_DAILY_BI_INFORMATION_BY_PROJECT, "get_trace_bi_information", "", "",
+                "");
 
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(TRACE_DAILY_BI_INFORMATION, "get_trace_bi_information", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
-
-        return asyncTemplate.nonTransaction(connection -> {
-            Statement statement = connection.createStatement(template.render());
-
-            if (!excludedProjectIds.isEmpty()) {
-                statement.bind("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-            }
-
-            if (demoDataCreatedAt.isPresent()) {
-                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-            }
-
-            return Mono.from(statement.execute());
-        })
-                .flatMapMany(result -> result.map((row, rowMetadata) -> BiInformation.builder()
+        return asyncTemplate
+                .nonTransaction(connection -> Mono.from(connection.createStatement(template.render()).execute()))
+                .flatMapMany(result -> result.map((row, _) -> WorkspaceProjectUserCount.builder()
                         .workspaceId(row.get("workspace_id", String.class))
+                        .projectId(row.get("project_id", UUID.class))
                         .user(row.get("user", String.class))
-                        .count(row.get("trace_count", Long.class)).build()));
+                        .count(row.get("trace_count", Long.class))
+                        .build()));
     }
 
     @Override
@@ -4742,41 +4778,6 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     @Override
-    public Mono<Long> getDailyTraces(@NonNull Map<UUID, Instant> excludedProjectIds) {
-
-        Optional<Instant> demoDataCreatedAt = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
-
-        var template = getSTWithLogComment(TRACE_COUNT_BY_WORKSPACE_ID, "get_daily_traces_count", "", "", "");
-
-        if (!excludedProjectIds.isEmpty()) {
-            template.add("excluded_project_ids", excludedProjectIds.keySet().toArray(UUID[]::new));
-        }
-
-        if (demoDataCreatedAt.isPresent()) {
-            template.add("demo_data_created_at", demoDataCreatedAt.get().toString());
-        }
-
-        return asyncTemplate
-                .nonTransaction(
-                        connection -> {
-                            Statement statement = connection.createStatement(template.render());
-
-                            if (!excludedProjectIds.isEmpty()) {
-                                statement.bind("excluded_project_ids",
-                                        excludedProjectIds.keySet().toArray(UUID[]::new));
-                            }
-
-                            if (demoDataCreatedAt.isPresent()) {
-                                statement.bind("demo_data_created_at", demoDataCreatedAt.get().toString());
-                            }
-
-                            return Mono.from(statement.execute());
-                        })
-                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("trace_count", Long.class)))
-                .reduce(0L, Long::sum);
-    }
-
-    @Override
     public Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(@NonNull List<UUID> projectIds,
             @NonNull String workspaceId, List<? extends Filter> filters, Instant fromTime, Instant toTime) {
 
@@ -4948,8 +4949,13 @@ class TraceDAOImpl implements TraceDAO {
             var template = getSTWithLogComment(SELECT_PROJECT_IDS_BY_TRACE_IDS, "get_project_ids_by_trace_ids",
                     workspaceId, userName, traceIds.size());
 
+            var idWeeks = idWeeks(traceIds);
+            idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
             var statement = connection.createStatement(template.render())
                     .bind("trace_ids", traceIds.toArray(UUID[]::new));
+
+            idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
 
             return collectTraceIdToProjectId(statement);
         }));
@@ -5022,9 +5028,16 @@ class TraceDAOImpl implements TraceDAO {
                 .flatMap(connection -> {
                     var template = getSTWithLogComment(SELECT_START_TIMES_BY_TRACE_IDS, "get_start_times_by_trace_ids",
                             workspaceId, "", traceIds.size());
+
+                    var idWeeks = idWeeks(traceIds);
+                    idWeeks.ifPresent(_ -> template.add("id_weeks", true));
+
                     var statement = connection.createStatement(template.render())
                             .bind("ids", traceIds.toArray(UUID[]::new))
                             .bind("workspace_id", workspaceId);
+
+                    idWeeks.ifPresent(weeks -> statement.bind("id_weeks", weeks));
+
                     return Flux.from(statement.execute())
                             .flatMap(result -> result.map((row, metadata) -> Map.entry(
                                     row.get("id", UUID.class), row.get("start_time", Instant.class))))
@@ -5270,7 +5283,8 @@ class TraceDAOImpl implements TraceDAO {
                 workspaceIds.size(), cutoffId, lowerBound);
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION, "retention_delete_traces", null, "",
-                workspaceIds.size());
+                "workspaces_size=%s, cutoff_id=%s, lower_bound=%s".formatted(workspaceIds.size(), cutoffId,
+                        lowerBound));
         selectTracesMutationTable(template);
 
         return Mono.from(connectionFactory.create())
@@ -5317,7 +5331,8 @@ class TraceDAOImpl implements TraceDAO {
         var entries = List.copyOf(workspaceMinIds.entrySet());
 
         var template = getSTWithLogComment(DELETE_FOR_RETENTION_BOUNDED, "retention_delete_traces_bounded", null, "",
-                workspaceMinIds.size());
+                "workspaces_size=%s, cutoff_id=%s, min_lower_bound=%s".formatted(workspaceMinIds.size(), cutoffId,
+                        lowerBound));
         selectTracesMutationTable(template);
         template.add("items", getQueryItemPlaceHolder(entries.size()));
 

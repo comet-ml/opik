@@ -13,7 +13,7 @@ env:
   GOOGLE_CLOUD_LOCATION: us-east1
   GOOGLE_CLOUD_PROJECT: opik-sdk-tests
   GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_PYTHON_SDK_TESTS }}
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
   OPIK_ANALYTICS_ENABLE: False
@@ -32,7 +32,9 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
+        # Lowest and highest supported Python only: these suites make paid
+        # LLM calls and the intermediate versions add cost without coverage.
+        python_version: ["3.10", "3.14"]
 
     steps:
       - name: Check out code

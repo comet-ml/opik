@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.OpenTelemetryResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.OpenTelemetryMapper;
@@ -129,6 +130,7 @@ class OpenTelemetryResourceTest {
     private String baseURI;
     private ClientSupport client;
     private TraceResourceClient traceResourceClient;
+    private OpenTelemetryResourceClient otelResourceClient;
     private SpanResourceClient spanResourceClient;
 
     @BeforeAll
@@ -143,6 +145,7 @@ class OpenTelemetryResourceTest {
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE);
 
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
+        this.otelResourceClient = new OpenTelemetryResourceClient(this.client, baseURI);
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
     }
 
@@ -154,6 +157,95 @@ class OpenTelemetryResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
+    }
+
+    /**
+     * How the endpoints answer a request carrying nothing to store. Neither case here is a malformed
+     * request — both are accepted — so the group is named for what they have in common rather than for an
+     * error. Its own nested class rather than more methods in {@code ApiKey}: adding cases there reorders
+     * that class's tests, and one of them then failed on state a sibling had seeded, which has nothing to do
+     * with what these assert.
+     *
+     * <p>The null request production sends is not covered here. This harness gives the resource an empty
+     * message for a bodiless POST rather than a null, so there is no request it can send that reaches the
+     * {@code @NotNull} on the endpoints — and asserting the annotations by reflection would test the
+     * implementation rather than the API.
+     */
+    @Nested
+    @DisplayName("Requests with nothing to store:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class NothingToStore {
+
+        private final String okApikey = UUID.randomUUID().toString();
+
+        @Test
+        @DisplayName("do not answer 500 when the request carries no body at all")
+        void testOtelRequestWithoutABody() {
+            // The shape production sends: a POST with a content type but no entity. It used to answer 500 —
+            // the reader produced an empty request, which reached SpanService's non-empty precondition.
+            // Answered as an empty export here.
+            //
+            // Production also reaches this endpoint with a null request, which is what raised the NPE
+            // parseAndStoreSpans' @NonNull threw. This harness never produces that null — Jersey hands the
+            // resource an empty message instead — so the guard for it is not asserted here.
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+
+            otelResourceClient.exportWithoutBody("application/x-protobuf", workspaceName, okApikey,
+                    HttpStatus.SC_OK);
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("batchesWithoutSpans")
+        @DisplayName("accept a batch that carries no spans, whichever way it is empty")
+        void testOtelRequestWithEmptyBatch(String shape, String mediaType, Entity<?> payload) {
+            // OTLP treats an export with no spans as valid. It used to reach SpanService, whose non-empty
+            // precondition surfaced it to the exporter as a 500.
+            //
+            // The three shapes matter: a batch can be empty at the request, at a ResourceSpans, or at a
+            // ScopeSpans, and only the last two distinguish the check that walks into the batch from one
+            // that just asks whether the resource-spans list is empty.
+            String workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName);
+            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
+
+            otelResourceClient.exportTraces(payload, mediaType, projectName, workspaceName, okApikey,
+                    HttpStatus.SC_OK);
+
+            // What the empty export must NOT do — create the project — is not asserted here, and it is
+            // worth saying why rather than leaving a silent gap. Reading the project store needs
+            // PROJECT_DATA_VIEW, which this class's auth mock does not grant, and reading traces by project
+            // name answers 400 when the project is absent, so neither reads cleanly as "nothing was
+            // created". The short-circuit sits before getOrCreate for that reason; it wants an assertion
+            // from a class whose auth mock can see projects.
+        }
+
+        Stream<Arguments> batchesWithoutSpans() {
+            var noScopeSpans = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder().build())
+                    .build();
+            var noSpans = ExportTraceServiceRequest.newBuilder()
+                    .addResourceSpans(ResourceSpans.newBuilder()
+                            .addScopeSpans(ScopeSpans.newBuilder().build())
+                            .build())
+                    .build();
+
+            // The protobuf encoding of an entirely empty request is zero bytes, and a zero-length entity
+            // leaves the shared test client's connection in a state that makes Jetty reject the *next*
+            // request with "400 No URI". That shape is what testOtelRequestWithoutABody covers instead, so
+            // it is left to that test rather than sent from here; json carries it as "{}".
+            return Stream.of(
+                    arguments("protobuf, resource spans with no scope spans", "application/x-protobuf",
+                            Entity.entity(noScopeSpans.toByteArray(), "application/x-protobuf")),
+                    arguments("protobuf, scope spans with no spans", "application/x-protobuf",
+                            Entity.entity(noSpans.toByteArray(), "application/x-protobuf")),
+                    arguments("json, no resource spans", MediaType.APPLICATION_JSON, Entity.json("{}")),
+                    arguments("json, resource spans with no scope spans", MediaType.APPLICATION_JSON,
+                            Entity.json("{\"resourceSpans\":[{}]}")),
+                    arguments("json, scope spans with no spans", MediaType.APPLICATION_JSON,
+                            Entity.json("{\"resourceSpans\":[{\"scopeSpans\":[{}]}]}")));
+        }
+
     }
 
     @Nested

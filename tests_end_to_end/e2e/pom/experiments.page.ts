@@ -7,10 +7,25 @@ export class ExperimentsPage {
 
   constructor(private readonly page: Page) {}
 
-  async goto(projectId: string): Promise<void> {
+  /**
+   * Open a project's Experiments page.
+   *
+   * `size` is a real query param (`useTablePageSize` prefers a valid `?size=`
+   * over the stored value and over the deployment default), so a spec that
+   * asserts over ALL of a project's experiments can pin the page it reads
+   * instead of inheriting `UI_DEFAULT_PAGE_SIZE` — which is deployment
+   * configuration, not a constant, and would silently turn a membership
+   * assertion into one about whatever fitted on page 1.
+   */
+  async goto(projectId: string, opts: { size?: number } = {}): Promise<void> {
     this.projectId = projectId;
     const env = loadEnvConfig();
-    await this.page.goto(`${env.baseUrl}/${env.workspace}/projects/${projectId}/experiments`);
+    const query = new URLSearchParams();
+    if (opts.size !== undefined) query.set('size', String(opts.size));
+    const suffix = query.size > 0 ? `?${query}` : '';
+    await this.page.goto(
+      `${env.baseUrl}/${env.workspace}/projects/${projectId}/experiments${suffix}`,
+    );
   }
 
   async waitForReady(): Promise<void> {
