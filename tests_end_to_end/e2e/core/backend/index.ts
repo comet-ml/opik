@@ -7,6 +7,8 @@ export {
   type DatasetRef as BackendDatasetRef,
   type DatasetItemRef,
   type DatasetItemWithTagsRef,
+  type TraceEnrichmentOptions,
+  type SpanEnrichmentOptions,
   type DatasetSummaryRef,
   type DatasetVersionRef,
   type RawApiResult,

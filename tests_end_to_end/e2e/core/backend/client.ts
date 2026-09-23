@@ -67,6 +67,27 @@ export interface DatasetItemWithTagsRef {
   tags: string[];
 }
 
+/**
+ * `TraceEnrichmentOptions` — which enriched fields the create-from-traces
+ * endpoint writes alongside the always-present `input`/`expected_output`.
+ *
+ * Every flag is required rather than defaulted. The backend record holds
+ * primitive booleans, so an omitted one arrives as `false`; a caller that meant
+ * to ask for metadata and forgot would get a silently smaller item, which is
+ * exactly the shape a field-mapping assertion compares against.
+ */
+export interface TraceEnrichmentOptions {
+  includeSpans: boolean;
+  includeTags: boolean;
+  includeFeedbackScores: boolean;
+  includeComments: boolean;
+  includeUsage: boolean;
+  includeMetadata: boolean;
+}
+
+/** `SpanEnrichmentOptions` — the same set minus `include_spans`, which a span has no notion of. */
+export type SpanEnrichmentOptions = Omit<TraceEnrichmentOptions, 'includeSpans'>;
+
 /** A raw REST answer, kept as status + message so a negative path can assert both. */
 export interface RawApiResult {
   status: number;
@@ -1753,6 +1774,76 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         })),
         ...(args.batchGroupId ? { batchGroupId: args.batchGroupId } : {}),
       });
+    },
+
+    /**
+     * `POST /v1/private/datasets/{id}/items/from-traces` — the write the
+     * Add-to-dataset dialog makes, with `field_mappings` exposed.
+     *
+     * Through `rawFetch` rather than the pinned SDK for both of the usual
+     * reasons at once. The pinned client predates `field_mappings`, so it
+     * cannot express the field this exists to drive; and the endpoint's
+     * validation half is a status plus a message ("unsupported field mappings:
+     * …"), not a body, so a caller asserting a rejection needs both. The happy
+     * path answers 204 with nothing in it — the item is read back through
+     * `listDatasetItemsWithData`.
+     *
+     * The status is returned rather than thrown on so the same helper serves
+     * the accept and the reject cases; callers assert `status` either way.
+     */
+    async createDatasetItemsFromTraces(args: {
+      datasetId: string;
+      traceIds: string[];
+      enrichment: TraceEnrichmentOptions;
+      /** Omitted entirely when absent — a null would not exercise the same branch. */
+      fieldMappings?: Record<string, string>;
+    }): Promise<RawApiResult> {
+      const { status, message } = await rawFetch(
+        'POST',
+        `/v1/private/datasets/${args.datasetId}/items/from-traces`,
+        {
+          body: {
+            trace_ids: args.traceIds,
+            enrichment_options: {
+              include_spans: args.enrichment.includeSpans,
+              include_tags: args.enrichment.includeTags,
+              include_feedback_scores: args.enrichment.includeFeedbackScores,
+              include_comments: args.enrichment.includeComments,
+              include_usage: args.enrichment.includeUsage,
+              include_metadata: args.enrichment.includeMetadata,
+            },
+            ...(args.fieldMappings ? { field_mappings: args.fieldMappings } : {}),
+          },
+        },
+      );
+      return { status, message, location: null };
+    },
+
+    /** The `from-spans` sibling of `createDatasetItemsFromTraces`, same contract. */
+    async createDatasetItemsFromSpans(args: {
+      datasetId: string;
+      spanIds: string[];
+      enrichment: SpanEnrichmentOptions;
+      fieldMappings?: Record<string, string>;
+    }): Promise<RawApiResult> {
+      const { status, message } = await rawFetch(
+        'POST',
+        `/v1/private/datasets/${args.datasetId}/items/from-spans`,
+        {
+          body: {
+            span_ids: args.spanIds,
+            enrichment_options: {
+              include_tags: args.enrichment.includeTags,
+              include_feedback_scores: args.enrichment.includeFeedbackScores,
+              include_comments: args.enrichment.includeComments,
+              include_usage: args.enrichment.includeUsage,
+              include_metadata: args.enrichment.includeMetadata,
+            },
+            ...(args.fieldMappings ? { field_mappings: args.fieldMappings } : {}),
+          },
+        },
+      );
+      return { status, message, location: null };
     },
 
     /**
