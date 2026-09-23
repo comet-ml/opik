@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, AsyncMock
 import pydantic
 import pytest
 
+import opik.integrations.anthropic as anthropic_integration
 from opik.evaluation.models import models_factory
 from opik.evaluation.models import base_model
 from opik.evaluation.models.anthropic import anthropic_chat_model
@@ -970,3 +971,39 @@ class TestAnthropicChatModelAsync:
         )
         result = await model.agenerate_string("hello async")
         assert result == "async result"
+
+
+class TestAnthropicChatModelTracking:
+    """enable_litellm_models_monitoring is documented as governing only
+    LiteLLMChatModel's external-callback tracking; AnthropicChatModel uses
+    track_anthropic (an in-process wrapper) and must not read that flag."""
+
+    def test_track_true_wraps_client_regardless_of_litellm_flag(self, monkeypatch):
+        _install_anthropic_stub(monkeypatch)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+        mock_track_anthropic = MagicMock(side_effect=lambda client: client)
+        monkeypatch.setattr(
+            anthropic_integration, "track_anthropic", mock_track_anthropic
+        )
+
+        anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-4-20250514", track=True
+        )
+
+        assert mock_track_anthropic.call_count == 2
+
+    def test_track_false_never_wraps_client(self, monkeypatch):
+        _install_anthropic_stub(monkeypatch)
+        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
+
+        mock_track_anthropic = MagicMock(side_effect=lambda client: client)
+        monkeypatch.setattr(
+            anthropic_integration, "track_anthropic", mock_track_anthropic
+        )
+
+        anthropic_chat_model.AnthropicChatModel(
+            model_name="anthropic/claude-sonnet-4-20250514", track=False
+        )
+
+        mock_track_anthropic.assert_not_called()
