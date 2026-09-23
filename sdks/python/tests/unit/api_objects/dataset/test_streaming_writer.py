@@ -38,6 +38,16 @@ def _collect():
     return bodies, flush_callback
 
 
+def _parse_body(body: bytes) -> dict:
+    """The request body a flush produced, as the backend would read it."""
+    return json.loads(body.decode("utf-8"))
+
+
+def _ids_in_order(bodies) -> list:
+    """Every item id across every body, in the order they were emitted."""
+    return [item["id"] for body, _ in bodies for item in _parse_body(body)["items"]]
+
+
 @pytest.fixture
 def tiny_batch_bytes(monkeypatch):
     """Shrink the batch cap so a bound test costs kilobytes instead of tens of MB.
@@ -982,7 +992,12 @@ def test_flush__body_never_exceeds_the_cap():
     assert all(len(body) <= cap for body, _ in bodies), [
         len(body) for body, _ in bodies
     ]
-    assert sum(count for _, count in bodies) == 12, "no item may be dropped"
+    # Identity, not just arithmetic: a count check alone passes when one item is
+    # dropped and another duplicated.
+    assert _ids_in_order(bodies) == [f"item-{i:03d}" for i in range(12)]
+    assert [count for _, count in bodies] == [
+        len(_parse_body(body)["items"]) for body, _ in bodies
+    ], "the reported count must match the items actually in that body"
 
 
 def test_flush__envelope_alone_over_the_cap__still_sends_every_item():
@@ -1008,3 +1023,4 @@ def test_flush__envelope_alone_over_the_cap__still_sends_every_item():
     writer.flush()
 
     assert [count for _, count in bodies] == [1, 1, 1]
+    assert _ids_in_order(bodies) == ["item-0", "item-1", "item-2"]
