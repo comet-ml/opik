@@ -270,8 +270,9 @@ def main(project, weeks, traces_per_week, spans_per_trace, bad_ids, non_v7_ids, 
     if bad_ids:
         LOGGER.info(
             "Plus %d far-future-id spans (litellm UUIDv7 ~2201). The successor's DateTime64 id_at partitions by the "
-            "honest Date32 weekly Monday, so look for them in their own ~2201 weekly partition — and expect the "
-            "backfill's OUTLIER pass to be the one that copies them.", bad_ids)
+            "honest Date32 weekly Monday, so look for them in their own ~2201 weekly partition. They are copied by "
+            "the same single statement as every other row in their created_at window — what they need is the raised "
+            "--max-partitions-per-insert-block, not a pass of their own.", bad_ids)
     if non_v7_ids:
         LOGGER.info(
             "Plus %d non-v7-id spans. UUIDv7ToDateTime returns 1970-01-01 for those, so they land in the EPOCH week — "
@@ -280,13 +281,15 @@ def main(project, weeks, traces_per_week, spans_per_trace, bad_ids, non_v7_ids, 
     if parent_poison:
         LOGGER.info(
             "Plus %d spans carrying the 40-character parent_span_id poison value. The copy maps anything that is not "
-            "exactly 36 bytes to the root sentinel; estimate.sh audit 4 should now report %d, and verify.sh should "
+            "exactly 36 bytes to the root sentinel; estimate.sh audit 2 should now report %d, and verify.sh should "
             "still PASS (the fingerprint applies the same normalization to the source side).", parent_poison,
             parent_poison)
     if split_parents:
         LOGGER.info(
-            "Plus %d span ids written twice under different parents at one last_updated_at. verify.sh should report "
-            "those windows INCONCLUSIVE with version_ties=src:N/dst:0 — NOT a mismatch, and NOT a pass.", split_parents)
+            "Plus %d span ids written twice under different parents at one last_updated_at. verify.sh should flag "
+            "those windows with version_ties=src:N/dst:0 — usually as a MISMATCH (the two sides' arbitrary picks "
+            "differ, so the key counts as genuinely differing), sometimes as INCONCLUSIVE (the picks coincided). "
+            "Either way it is the tie, not a copy fault, and re-copying does not resolve it.", split_parents)
     LOGGER.info(
         "NOTE: these spans hang off %d seeded trace_ids, but no `traces` rows were created for them. delete_traffic.py "
         "deletes traces it finds through the API, so run live_traffic.py (which creates real traces AND spans) if you "

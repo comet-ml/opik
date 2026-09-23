@@ -251,6 +251,19 @@ export const parseCompletionOutput = (run: RunStreamingReturn) => {
   );
 };
 
+export const parseCompletionError = (run: RunStreamingReturn) => {
+  if (run.opikError) {
+    return { exceptionType: "OpikError", message: run.opikError };
+  }
+  if (run.providerError) {
+    return { exceptionType: "ProviderError", message: run.providerError };
+  }
+  if (run.pythonProxyError) {
+    return { exceptionType: "PythonProxyError", message: run.pythonProxyError };
+  }
+  return null;
+};
+
 export const createCompletionAnnouncer = (
   expected: number,
   announce: () => void,

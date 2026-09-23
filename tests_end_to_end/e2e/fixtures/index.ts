@@ -2,6 +2,7 @@ export { test, expect } from './field-mapping-seed.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
+  FailingProviderSeed,
   ProviderKeysFixture,
   ProviderKeyFixtures,
 } from './provider-key.fixture';
@@ -166,6 +167,16 @@ export type {
   ExportComparisonRef,
   ExportComparisonFixtures,
 } from './export-comparison.fixture';
+export type {
+  OptimizationCostRef,
+  OptimizationCostFixtures,
+} from './optimization-cost.fixture';
+export { SPAN_COST, EXPECTED_TOTAL_COST } from './optimization-cost.fixture';
+export type {
+  PromptExperimentsRef,
+  PromptExperimentsFixtures,
+} from './prompt-experiments.fixture';
+export { EXPERIMENT_COUNT, PAGE_SIZE } from './prompt-experiments.fixture';
 export type {
   FieldMappingSeedRef,
   FieldMappingSeedFixtures,

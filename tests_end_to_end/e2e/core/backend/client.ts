@@ -639,6 +639,109 @@ export interface AnnotationQueueDetail {
   reviewers: AnnotationQueueReviewerRef[];
 }
 
+/** One threshold on a named feedback score, inside an automation condition group. */
+export interface QueueScoreConditionRef {
+  scoreName: string;
+  /**
+   * The wire operator, narrowed to what `ScoreConditionOperator` deserializes.
+   * Anything else is refused by the backend as it reads the payload, so a spec
+   * that sent one would fail on a Jackson message rather than on the claim it
+   * was making — and the read side below has to widen back out of `string`
+   * anyway, so the union is what both ends agree on.
+   */
+  operator: '<' | '>' | '=';
+  value: number;
+}
+
+/**
+ * A queue's automation block as the API returns it.
+ *
+ * `groups` is the disjunction of conjunctions flattened to arrays, so a spec can
+ * compare the whole structure with `toEqual` rather than reaching into it — a
+ * lookup of "my group" would pass just as well against a payload that also
+ * carried groups nobody configured.
+ *
+ * `maxItemsInQueue` is `null` only when the key is genuinely absent from the
+ * response; it is never defaulted to a number, because the value a defaulting
+ * read would invent is exactly the one a round-trip assertion expects.
+ */
+export interface QueueAutomationRef {
+  enabled: boolean;
+  maxItemsInQueue: number | null;
+  groups: QueueScoreConditionRef[][];
+}
+
+/** One row of `POST /v1/private/annotation-queues/{id}/items/search`. */
+export interface AnnotationQueueItemRef {
+  id: string;
+  /**
+   * How the item reached the queue — `manual` or `automated`. Nullable so an
+   * omitted `source` fails the caller's own assertion rather than being
+   * silently replaced with the value that assertion is looking for.
+   */
+  source: string | null;
+}
+
+/** One trigger config of an alert, with the value the threshold validation is about. */
+export interface AlertTriggerConfigRef {
+  /** e.g. `threshold:cost`. */
+  type: string;
+  configValue: Record<string, string>;
+}
+
+/** One trigger of an alert, with its configs. */
+export interface AlertTriggerRef {
+  /** e.g. `trace:cost`. */
+  eventType: string;
+  triggerConfigs: AlertTriggerConfigRef[];
+}
+
+/** An alert read back by id, down to the trigger configs. */
+export interface AlertDetail {
+  id: string;
+  name: string;
+  enabled: boolean;
+  triggers: AlertTriggerRef[];
+}
+
+/**
+ * The write shape of an alert carrying threshold triggers.
+ *
+ * `configValue` is a free-form string map on purpose: the payloads this exists
+ * to send are deliberately malformed (a missing key, a non-numeric window), and
+ * no typed config shape can express those.
+ *
+ * `id` is caller-supplied because `POST /v1/private/alerts` answers 201 with no
+ * body, and because `PUT /v1/private/alerts/{id}` re-mints the row's id from the
+ * body rather than from the path — an update that omits it leaves the caller's
+ * id dangling, so every write here sends it.
+ */
+export interface AlertWrite {
+  id: string;
+  name: string;
+  projectId: string;
+  webhookUrl: string;
+  enabled?: boolean;
+  triggers: Array<{
+    eventType: string;
+    triggerConfigs: Array<{ type: string; configValue: Record<string, string> }>;
+  }>;
+}
+
+/** The write shape of an annotation queue, including its automation block. */
+export interface AnnotationQueueWrite {
+  id: string;
+  projectId: string;
+  name: string;
+  scope: 'trace' | 'thread';
+  feedbackDefinitionNames?: string[];
+  automation?: {
+    enabled: boolean;
+    maxItemsInQueue?: number;
+    groups?: QueueScoreConditionRef[][];
+  };
+}
+
 /**
  * One row of `GET /v1/private/traces/threads` — the aggregate the Threads view
  * renders per conversation. Every field a wrong `traces` prefilter would corrupt
@@ -725,6 +828,17 @@ export interface OptimizationRef {
    */
   baselineObjectiveScore: number | null;
   bestObjectiveScore: number | null;
+  /**
+   * The run's whole one-time spend, as the "Optimization cost" column renders
+   * it — the sum of its trials' experiment costs plus the optimizer-internal
+   * traces attributed to it by tag.
+   *
+   * `number | null` rather than `?? 0`, and for the same reason as
+   * `SpanCostRef.totalEstimatedCost`: an aggregate that never ran and a run
+   * that really cost nothing are different answers, and collapsing them lets a
+   * spec assert a cost against an aggregate that was simply absent.
+   */
+  totalOptimizationCost: number | null;
 }
 
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
@@ -894,21 +1008,47 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     apiUrl: env.apiBaseUrl,
   });
 
+  /**
+   * One wire optimization as an `OptimizationRef`.
+   *
+   * Shared by the by-id read and the list read on purpose. They are two
+   * different SQL projections over the same aggregate, and `optimization-total-
+   * cost.spec.ts` asserts both against one expectation precisely because they
+   * are allowed to disagree — which is only meaningful if the two sides were
+   * normalised identically. Two copies of this mapping are two places for a
+   * `?? null` to drift into a `?? 0` and quietly turn "the aggregate never ran"
+   * into "the run cost nothing".
+   */
+  const toOptimizationRef = (o: {
+    // Optional to match `OptimizationPublic`, which both reads answer with and
+    // which marks even `id` optional. `String(undefined)` is what the two
+    // inlined copies of this already did; nothing changes but the duplication.
+    id?: unknown;
+    name?: string | null;
+    status?: unknown;
+    objectiveName?: string | null;
+    datasetName?: string | null;
+    numTrials?: number | null;
+    baselineObjectiveScore?: number | null;
+    bestObjectiveScore?: number | null;
+    totalOptimizationCost?: number | null;
+  }): OptimizationRef => ({
+    id: String(o.id),
+    name: o.name ?? '',
+    status: String(o.status) as OptimizationStatus,
+    objectiveName: o.objectiveName ?? null,
+    datasetName: o.datasetName ?? null,
+    numTrials: Number(o.numTrials ?? 0),
+    baselineObjectiveScore: o.baselineObjectiveScore ?? null,
+    bestObjectiveScore: o.bestObjectiveScore ?? null,
+    totalOptimizationCost: o.totalOptimizationCost ?? null,
+  });
+
   // Hoisted so the poll helpers (free functions) can call it without depending
   // on the not-yet-constructed return object.
   const localGetOptimization = async (id: string): Promise<OptimizationRef | null> => {
     try {
-      const o = await opik.api.optimizations.getOptimizationById(id);
-      return {
-        id: String(o.id),
-        name: o.name ?? '',
-        status: String(o.status) as OptimizationStatus,
-        objectiveName: o.objectiveName ?? null,
-        datasetName: o.datasetName ?? null,
-        numTrials: Number(o.numTrials ?? 0),
-        baselineObjectiveScore: o.baselineObjectiveScore ?? null,
-        bestObjectiveScore: o.bestObjectiveScore ?? null,
-      };
+      return toOptimizationRef(await opik.api.optimizations.getOptimizationById(id));
     } catch (err) {
       if (isNotFoundError(err)) return null;
       throw err;
@@ -926,7 +1066,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
    * exists for the same reason (the pinned SDK can't express the call).
    */
   const rawFetch = async (
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT',
     path: string,
     opts: { query?: URLSearchParams; body?: unknown } = {},
   ): Promise<RawApiResult & { json: unknown }> => {
@@ -1369,6 +1509,88 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     async deleteAlertsBatch(ids: string[]): Promise<void> {
       if (ids.length === 0) return;
       await opik.api.alerts.deleteAlertBatch({ ids });
+    },
+
+    /**
+     * Write an alert and report the status and message instead of throwing.
+     *
+     * `POST` creates, `PUT` updates the alert the body's `id` names. Both go
+     * through `rawFetch` rather than the pinned SDK for the same reason
+     * `datasetItemMutationStatus` does: the negative paths ARE the contract
+     * here, and the typed client raises on any non-2xx while discarding the
+     * body — but the message is what says which key of which config type was
+     * rejected, and "rejected for the wrong reason" is indistinguishable from
+     * "rejected" without it.
+     *
+     * The body is assembled in snake_case by hand rather than relying on the
+     * SDK's naming strategy, because a `config_value` here can carry the legacy
+     * `window_seconds` key, which no generated type declares.
+     */
+    async writeAlert(method: 'POST' | 'PUT', alert: AlertWrite): Promise<RawApiResult> {
+      const path = method === 'POST' ? '/v1/private/alerts' : `/v1/private/alerts/${alert.id}`;
+      const { status, message } = await rawFetch(method, path, {
+        body: {
+          id: alert.id,
+          name: alert.name,
+          enabled: alert.enabled ?? true,
+          alert_type: 'general',
+          project_id: alert.projectId,
+          webhook: { url: alert.webhookUrl },
+          triggers: alert.triggers.map((trigger) => ({
+            event_type: trigger.eventType,
+            trigger_configs: trigger.triggerConfigs.map((config) => ({
+              type: config.type,
+              config_value: config.configValue,
+            })),
+          })),
+        },
+      });
+      return { status, message };
+    },
+
+    /**
+     * One alert by id, down to its trigger configs, or null when it is gone.
+     *
+     * Read through `rawFetch` so the config map arrives exactly as the server
+     * spells it: the read-side normalisation adds a `window` key alongside a
+     * stored `window_seconds`, and the pinned SDK's `configValue` type would
+     * have to know both spellings to carry them through.
+     */
+    async getAlert(id: string): Promise<AlertDetail | null> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/alerts/${id}`);
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`getAlert('${id}'): expected 200 or 404, got ${status}: ${message}`);
+      }
+      const alert = json as {
+        id?: string;
+        name?: string;
+        enabled?: boolean;
+        triggers?: Array<{
+          event_type?: string;
+          trigger_configs?: Array<{ type?: string; config_value?: Record<string, string> }>;
+        }>;
+      };
+      // Not defaulted: an alert that reads back without an `enabled` flag is a
+      // broken response, and `?? true` would present it as the value every
+      // round-trip assertion here is looking for.
+      if (typeof alert.enabled !== 'boolean') {
+        throw new Error(
+          `getAlert('${id}'): 200 response carried no boolean 'enabled' — cannot assert on it.`,
+        );
+      }
+      return {
+        id: String(alert.id ?? ''),
+        name: String(alert.name ?? ''),
+        enabled: alert.enabled,
+        triggers: (alert.triggers ?? []).map((trigger) => ({
+          eventType: String(trigger.event_type ?? ''),
+          triggerConfigs: (trigger.trigger_configs ?? []).map((config) => ({
+            type: String(config.type ?? ''),
+            configValue: config.config_value ?? {},
+          })),
+        })),
+      };
     },
 
     async listOptimizationsWithPrefix(prefix: string): Promise<ProjectRef[]> {
@@ -3306,6 +3528,22 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * The status `GET /v1/private/automations/evaluators/{id}` answers, without
+     * throwing on it.
+     *
+     * For the by-id counterpart of the listing above: a rule family the
+     * evaluators API does not serve must come back as a clean 404, not as a 500
+     * raised from a mapper that met a row shape it cannot read.
+     */
+    async automationRuleEvaluatorStatus(id: string): Promise<RawApiResult> {
+      const { status, message } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${id}`,
+      );
+      return { status, message };
+    },
+
+    /**
      * The judge messages of one rule, as the read-back mapper produces them.
      *
      * This is the surface OPIK-8250 broke: the mapper infers the stored shape
@@ -3799,6 +4037,17 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * exercising server-side pricing at all.
        */
       usage?: Record<string, number>;
+      /** Renders the panel's Metadata section for this span. */
+      metadata?: Record<string, unknown>;
+      /**
+       * Renders the panel's Error section for this span.
+       *
+       * `sdkClient.python.createNestedTrace` can set this on a trace but not on
+       * one of its spans, and the trace panel's Error section is per-selected-
+       * node — so a spec about what the Error section does when a span is
+       * selected has to seed the span's error here.
+       */
+      errorInfo?: { exceptionType: string; message: string; traceback: string };
     }): Promise<string> {
       const now = new Date();
       await postSeedWrite('/v1/private/spans', `createSpan '${args.name}'`, {
@@ -3815,6 +4064,16 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.model === undefined ? {} : { model: args.model }),
         ...(args.provider === undefined ? {} : { provider: args.provider }),
         ...(args.usage === undefined ? {} : { usage: args.usage }),
+        ...(args.metadata === undefined ? {} : { metadata: args.metadata }),
+        ...(args.errorInfo
+          ? {
+              error_info: {
+                exception_type: args.errorInfo.exceptionType,
+                message: args.errorInfo.message,
+                traceback: args.errorInfo.traceback,
+              },
+            }
+          : {}),
       });
       return args.id;
     },
@@ -3863,6 +4122,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * to set them.
        */
       metadata?: Record<string, unknown>;
+      /**
+       * Prompt VERSION ids this experiment was run from — what puts it on a
+       * prompt's Experiments tab, which queries by prompt rather than by
+       * project. Version ids, not prompt ids: the link table stores the commit
+       * the run used, and a prompt id here silently links nothing.
+       */
+      promptVersionIds?: string[];
     }): Promise<string> {
       await opik.api.experiments.createExperiment({
         id: args.id,
@@ -3872,6 +4138,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.type ? { type: args.type } : {}),
         ...(args.optimizationId ? { optimizationId: args.optimizationId } : {}),
         ...(args.metadata ? { metadata: args.metadata } : {}),
+        ...(args.promptVersionIds?.length
+          ? { promptVersions: args.promptVersionIds.map((id) => ({ id })) }
+          : {}),
       });
       return args.id;
     },
@@ -3887,6 +4156,25 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     getOptimization: localGetOptimization,
+
+    /**
+     * `GET /v1/private/optimizations?project_id=…` — the read behind the
+     * Optimization runs list, including each run's rolled-up cost.
+     *
+     * Separate from `getOptimization` because the list and the by-id read are
+     * two different projections over the same aggregate and are allowed to
+     * disagree: `getById` always takes the FIND path, while the list can fall
+     * through to the no-experiments projection. A spec that asserts a cost
+     * wants to pin BOTH, so both have to be readable.
+     */
+    async listOptimizations(args: { projectId: string }): Promise<OptimizationRef[]> {
+      const page = await opik.api.optimizations.findOptimizations({
+        projectId: args.projectId,
+        page: 1,
+        size: 100,
+      });
+      return (page.content ?? []).map(toOptimizationRef);
+    },
 
     async pollOptimizationStatus(
       optimizationId: string,
@@ -3930,6 +4218,161 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * Create an annotation queue, optionally with an automation block, and
+     * report the status rather than throwing on it.
+     *
+     * Not `sdkClient.python.createAnnotationQueue`: the bridge's route seeds
+     * traces and feedback definitions into a queue and has no `automation`
+     * argument, and the automation block is the whole subject here. The id is
+     * caller-supplied because creation answers 201 with no body.
+     */
+    async createAnnotationQueue(queue: AnnotationQueueWrite): Promise<RawApiResult> {
+      const { status, message } = await rawFetch('POST', '/v1/private/annotation-queues', {
+        body: {
+          id: queue.id,
+          project_id: queue.projectId,
+          name: queue.name,
+          scope: queue.scope,
+          ...(queue.feedbackDefinitionNames
+            ? { feedback_definition_names: queue.feedbackDefinitionNames }
+            : {}),
+          ...(queue.automation
+            ? {
+                automation: {
+                  enabled: queue.automation.enabled,
+                  ...(queue.automation.maxItemsInQueue === undefined
+                    ? {}
+                    : { max_items_in_queue: queue.automation.maxItemsInQueue }),
+                  ...(queue.automation.groups
+                    ? {
+                        conditions: {
+                          groups: queue.automation.groups.map((conditions) => ({
+                            conditions: conditions.map((condition) => ({
+                              score_name: condition.scoreName,
+                              operator: condition.operator,
+                              value: condition.value,
+                            })),
+                          })),
+                        },
+                      }
+                    : {}),
+                },
+              }
+            : {}),
+        },
+      });
+      return { status, message };
+    },
+
+    /**
+     * The automation block of one queue, or null when the queue carries none.
+     *
+     * Read through `rawFetch` because `automation` is new in this release and
+     * the pinned SDK's queue type does not declare it — a read through the typed
+     * client would drop the field and present a queue that stored nothing
+     * exactly like one that stored everything.
+     */
+    async getAnnotationQueueAutomation(id: string): Promise<QueueAutomationRef | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/annotation-queues/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `getAnnotationQueueAutomation('${id}'): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const automation = (
+        json as {
+          automation?: {
+            enabled?: boolean;
+            max_items_in_queue?: number;
+            conditions?: { groups?: Array<{ conditions?: Array<Record<string, unknown>> }> };
+          };
+        }
+      ).automation;
+      if (automation == null) return null;
+      if (typeof automation.enabled !== 'boolean') {
+        throw new Error(
+          `getAnnotationQueueAutomation('${id}'): automation carried no boolean 'enabled'.`,
+        );
+      }
+      return {
+        enabled: automation.enabled,
+        maxItemsInQueue:
+          typeof automation.max_items_in_queue === 'number' ? automation.max_items_in_queue : null,
+        groups: (automation.conditions?.groups ?? []).map((group) =>
+          (group.conditions ?? []).map((condition) => {
+            // Checked rather than cast: an operator the enum does not define
+            // means the server answered something no caller can act on, and a
+            // blind cast would present it to `toEqual` as a plain mismatch
+            // instead of naming what came back.
+            const operator = String(condition.operator ?? '');
+            if (operator !== '<' && operator !== '>' && operator !== '=') {
+              throw new Error(
+                `getAnnotationQueueAutomation('${id}'): unknown score condition operator '${operator}'.`,
+              );
+            }
+            return {
+              scoreName: String(condition.score_name ?? ''),
+              operator,
+              value: Number(condition.value),
+            };
+          }),
+        ),
+      };
+    },
+
+    /** Add traces or threads to a queue by id — the `manual` item source. */
+    async addAnnotationQueueItems(queueId: string, ids: string[]): Promise<void> {
+      const { status, message } = await rawFetch(
+        'POST',
+        `/v1/private/annotation-queues/${queueId}/items/add`,
+        { body: { ids } },
+      );
+      if (status !== 204) {
+        throw new Error(
+          `addAnnotationQueueItems('${queueId}'): expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
+     * Queue membership for the given ids — the lookup the items table calls to
+     * render its Source column.
+     *
+     * The status rides along because the contract under test is partly about
+     * what the endpoint does with ids that are NOT in the queue (omit them and
+     * still answer 200), so a caller asserts on the code as well as the rows.
+     */
+    async searchAnnotationQueueItems(
+      queueId: string,
+      ids: string[],
+    ): Promise<RawApiResult & { items: AnnotationQueueItemRef[] }> {
+      const { status, message, json } = await rawFetch(
+        'POST',
+        `/v1/private/annotation-queues/${queueId}/items/search`,
+        { body: { ids } },
+      );
+      if (status !== 200) return { status, message, items: [] };
+
+      const content = (json as { content?: Array<{ id?: string; source?: unknown }> }).content;
+      if (!Array.isArray(content)) {
+        throw new Error(
+          `searchAnnotationQueueItems('${queueId}'): 200 response carried no 'content' array.`,
+        );
+      }
+      return {
+        status,
+        message,
+        items: content.map((item) => ({
+          id: String(item.id ?? ''),
+          source: typeof item.source === 'string' ? item.source : null,
+        })),
+      };
     },
 
     /**

@@ -126,8 +126,11 @@ CH_ARGS=()
 CH_ARGS+=(--database "$DATABASE" --receive_timeout="$RECEIVE_TIMEOUT" \
           --distributed_ddl_task_timeout="$RECEIVE_TIMEOUT" --log_comment 'spans_local_v2_cutover:finalize')
 
+# --format TabSeparated is explicit, not redundant: clickhouse-client takes a default format from the user's own client
+# config, and a pretty/bordered default would put headers and box-drawing into every scalar read below. Those are parsed
+# as scalars — counts, timestamps and names — so the failure would not be an error, it would be a wrong verdict.
 ch() {
-    clickhouse-client "${CH_ARGS[@]}" --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$1"
 }
 
 # Cluster-wide detection. finalize is the one irreversible step and production is multi-replica, so a table's presence is

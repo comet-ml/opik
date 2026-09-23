@@ -1,5 +1,4 @@
-import { expect } from '@playwright/test';
-import { test as baseTest } from './export-comparison.fixture';
+import { test as baseTest, expect } from './prompt-experiments.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 
 /**
@@ -230,4 +229,4 @@ export const test = baseTest.extend<FieldMappingSeedFixtures>({
   },
 });
 
-export { expect } from './export-comparison.fixture';
+export { expect };

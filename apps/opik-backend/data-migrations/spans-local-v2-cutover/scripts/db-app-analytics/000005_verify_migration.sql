@@ -69,7 +69,9 @@
 -- and when:
 --   * `compare`       once per created_at week (optionally sampled), parsing the single verdict row;
 --   * `confirm-keys`  on a week that reported ok=0, to separate a real difference from a superseded-version artifact;
---   * `version-ties`  when confirm-keys returned 0, since that verdict is only sound where no version is tied;
+--   * `version-ties`  on any week that reported ok=0, whichever way confirm-keys went: it DECIDES the verdict where
+--                     confirm-keys returned 0 (sound only where no version is tied) and DIAGNOSES it where confirm-keys
+--                     found genuinely differing keys, which is the branch the spans-only tie usually takes;
 --   * `drill-down`    with --drill-down, on any week that reported ok=0, whatever confirm-keys and version-ties made of it.
 --
 -- OLD_TABLE is the old-schema table (Nullable, nanosecond, parent_span_id in the sort key) and NEW_TABLE the new-schema

@@ -308,4 +308,24 @@ public class DatasetItemResultMapper {
             return DatasetItemResultMapper.mapColumnsField(columnsMap, filterFieldPrefix);
         }));
     }
+
+    /**
+     * The write-side counterparts of {@link #getEvaluators}. Shared rather than private to the DAO
+     * because both write paths need them and must not drift: the R2DBC binder and
+     * {@code DatasetItemVersionJsonRowMapper} call the same two. Keeping them here also stops the JSON
+     * mapper depending on the DAO that calls it.
+     */
+    static String serializeEvaluators(List<EvaluatorItem> evaluators) {
+        if (evaluators == null || evaluators.isEmpty()) {
+            return EvaluatorItem.EMPTY_LIST_JSON;
+        }
+        return JsonUtils.writeValueAsString(evaluators);
+    }
+
+    static String serializeExecutionPolicy(ExecutionPolicy executionPolicy) {
+        if (executionPolicy == null) {
+            return "";
+        }
+        return JsonUtils.writeValueAsString(executionPolicy);
+    }
 }

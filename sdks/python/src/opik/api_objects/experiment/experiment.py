@@ -1,6 +1,8 @@
 import collections.abc
 import functools
 import logging
+import threading
+from concurrent import futures
 from typing import (
     Dict,
     Iterable,
@@ -72,6 +74,8 @@ class _BulkUpload(NamedTuple):
     prefix: bytes
     #: None sends the body uncompressed, for a client configured with compression off.
     gzip_level: Optional[int]
+    #: Set when the upload is aborted, so no send starts another request after it.
+    stop_event: threading.Event
 
 
 def _batch_chunks(
@@ -259,12 +263,16 @@ class Experiment:
             gzip_level=(
                 opik_config.experiment_upload_compression_level if compressing else None
             ),
+            stop_event=threading.Event(),
         )
 
     def _send_prepared_body(self, upload: _BulkUpload, body: bytes) -> None:
         """Send one already-serialised request body."""
 
         def send() -> None:
+            # Checked per attempt, so the REST retry below starts no request after an abort.
+            if upload.stop_event.is_set():
+                raise futures.CancelledError("experiment items bulk upload aborted")
             response = httpx_client.send_prepared_json(
                 upload.client,
                 upload.base_url,
@@ -286,6 +294,7 @@ class Experiment:
         rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             retry_decorator.opik_rest_retry(send),
             operation_name="experiment_items_bulk",
+            stop_event=upload.stop_event,
         )
 
     def _send_batch(self, upload: _BulkUpload, body: bytes, batch: List[bytes]) -> None:
@@ -349,6 +358,7 @@ class Experiment:
             gzip_level=upload.gzip_level,
             fail_fast=True,
             thread_name_prefix="opik_experiment_items_bulk",
+            stop_event=upload.stop_event,
         )
         try:
             for batch in self._stream_rest_batches(items, project_name, sizes_MB):
@@ -402,9 +412,12 @@ class Experiment:
         If a batch fails the exception propagates and the experiment is left
         partially populated, but what "remaining" means depends on the worker
         count. With ``num_threads=1`` nothing after the failed batch is sent.
-        With the parallel default, batches already in flight are left to finish
-        and only those not yet started are dropped, so a few batches after the
-        failed one may still have landed. Rate-limit retries
+        With the parallel default, batches not yet started are dropped and those
+        already started are told to stop: one waiting out a rate limit or a retry
+        gives up without sending again, but a request already on the wire cannot
+        be interrupted, so a few batches after the failed one may still land. The
+        call waits up to a few seconds for started batches to stop, then returns
+        and logs a warning for any still running in the background. Rate-limit retries
         re-send the identical payload, so they never duplicate anything. Calling
         this method again, however, mints new ids for any trace or span left
         without one, which would duplicate whatever the first call did manage to

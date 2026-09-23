@@ -264,10 +264,25 @@ class TestThePickerIsReallyExercised:
         assert outcome.clients == 2
         assert outcome.mcp_declined is False
 
-    def test_enter_on_the_all_row__registers_every_client(self):
+    def test_enter_on_the_first_row__registers_that_client_alone(self):
+        """`All` sits under the clients, so a bare Enter is not select-all.
+
+        With nothing ticked the picker takes the highlighted row, and that is
+        now the first client. Registering every client is a row the user has to
+        move to, which is the conservative reading of an ambiguous Enter.
+        """
         from opik.cli import selector
 
         outcome, installed = self._pick([selector.ACCEPT])
+
+        assert installed == ["claude-code"]
+        assert outcome.clients == 1
+
+    def test_enter_on_the_all_row__registers_every_client(self):
+        from opik.cli import selector
+
+        # Past both clients, onto the `All` row.
+        outcome, installed = self._pick([selector.DOWN, selector.DOWN, selector.ACCEPT])
 
         assert sorted(installed) == ["claude-code", "cursor"]
         assert outcome.clients == 2
@@ -284,9 +299,10 @@ class TestThePickerIsReallyExercised:
     def test_choosing_one__registers_only_that_one(self):
         from opik.cli import selector
 
+        # Down one row from the first client, tick it: the second client.
         outcome, installed = self._pick(
             [selector.DOWN, selector.TOGGLE, selector.ACCEPT]
         )
 
-        assert installed == ["claude-code"]
-        assert outcome.registered_clients == ("claude-code",)
+        assert installed == ["cursor"]
+        assert outcome.registered_clients == ("cursor",)
