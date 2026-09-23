@@ -75,7 +75,7 @@ public interface AnnotationQueueDAO {
 
     Flux<AnnotationQueueItem> findItemsByIds(UUID queueId, UUID projectId, Set<UUID> itemIds);
 
-    Mono<Long> countItems(UUID queueId, UUID projectId);
+    Mono<Long> countAutomatedItems(UUID queueId, UUID projectId);
 
     Mono<Integer> getDistinctAnnotatorCount(UUID itemId, UUID projectId, String entityType,
             UUID queueId,
@@ -221,12 +221,15 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
      * room again. DISTINCT because the table is a ReplacingMergeTree and an unmerged part can still hold
      * more than one row per item.
      */
-    private static final String COUNT_ITEMS = """
+    // Automated items only: the ceiling bounds what automation adds, so what a person adds by hand must
+    // neither consume it nor be blocked by it.
+    private static final String COUNT_AUTOMATED_ITEMS = """
             SELECT count(DISTINCT item_id) AS count
             FROM annotation_queue_items
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
             AND queue_id = :queue_id
+            AND source = :source
             """;
 
     /**
@@ -588,12 +591,13 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
     }
 
     @Override
-    public Mono<Long> countItems(@NonNull UUID queueId, @NonNull UUID projectId) {
+    public Mono<Long> countAutomatedItems(@NonNull UUID queueId, @NonNull UUID projectId) {
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(COUNT_ITEMS)
+                    var statement = connection.createStatement(COUNT_AUTOMATED_ITEMS)
                             .bind("project_id", projectId.toString())
-                            .bind("queue_id", queueId.toString());
+                            .bind("queue_id", queueId.toString())
+                            .bind("source", AnnotationQueueItemSource.AUTOMATED.getValue());
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
                 })
