@@ -414,6 +414,7 @@ areas:
     spec_dir: prompts
     specs:
       - prompts/prompt-delete.spec.ts
+      - prompts/prompt-experiments-pinning.spec.ts
       - prompts/prompt-library-smoke.spec.ts
       - prompts/prompt-version-pagination.spec.ts
     capabilities:
@@ -425,7 +426,7 @@ areas:
       old-version-preserved:   { covered: true,  tier: t1-smoke }
       version-history:         { covered: true,  tier: t1-smoke, note: "smoke covers select-a-version on a 2-version prompt; prompt-version-pagination adds the 31-version case — the timeline pages, the labels come from version_number, a version deep-linked onto page 2 renders its own template, and the Compare-against menu lists every version rather than only the page that had loaded" }
       compare-versions:        { covered: false, note: "prompt-version-pagination asserts the Compare-against menu's contents label by label, but never selects an entry — nothing yet opens the compare sheet or asserts a rendered diff, so a broken comparison would not fail any test. The menu assertion counts under version-history instead." }
-      experiments-tab:         { covered: false, note: "prompt detail -> Experiments tab" }
+      experiments-tab:         { covered: true,  tier: t2-cuj, note: "prompt detail -> Experiments tab: listing, paging, and pinning — an off-page pin is fetched by id and prepended exactly once, and pins stay keyed per prompt rather than leaking to the project Experiments page" }
       delete-prompt:           { covered: true,  tier: t2-cuj }
 
     visual:
@@ -439,10 +440,12 @@ areas:
     routes: ["/projects/$projectId/playground"]
     spec_dir: playground
     specs:
+      - playground/playground-dataset-run-failure.spec.ts
       - playground/playground-experiment-name.spec.ts
       - playground/playground-metric-selection.spec.ts
       - playground/playground-model-parameters.spec.ts
       - playground/playground-providers.spec.ts
+      - playground/playground-reset.spec.ts
       - playground/playground-run-error.spec.ts
       - playground/playground-smoke.spec.ts
       - playground/playground-virtualized-grid.spec.ts
@@ -451,7 +454,7 @@ areas:
       - prompts/prompt-playground-traces.spec.ts
       - prompts/prompt-version-playground.spec.ts
     capabilities:
-      compose-run-prompt:        { covered: true,  tier: t1-smoke }
+      compose-run-prompt:        { covered: true,  tier: t1-smoke, note: "smoke covers composing and running a prompt. t2 also covers OPIK-8313's RESET (playground-reset.spec.ts): the control leaves exactly one empty prompt card on a fresh page, after the list has grown, twice in a row, across a reload, and out of dataset mode — where it also clears the loaded source and returns an editable editor. RECORDED GAP, not a claim: reset has no capability key of its own and is filed here as the nearest fit, so read this key as 'compose, run, and reset the composer', and do not take the reset assertions as evidence about running." }
       select-model-provider:     { covered: true,  suites: [provider-sanity] }
       run-against-dataset:       { covered: true,  tier: t1-smoke, note: "auto-creates experiment. t2 also covers the Metrics picker that configures a dataset run (playground-metric-selection.spec.ts): over three rules it opens at '1 of 3 selected', with the enabled experiment-scoped rule checked AND locked, and ticking/unticking a production-scope rule moves the count to 2 and back to 1 — the floor of 1 being what shows the user cannot hand the forced rule back. TWO RECORDED GAPS, neither a claim. (1) Which rules a dataset run is then SCORED by is NOT covered by anything, and has no capability key of its own — the nearest candidate would be a new playground.score-dataset-run. Nothing under this key asserts a score, so do not read this note as covering one. (2) The picker renders the UNION of the user's picks and the always-run rules, so the spec cannot see WHICH list holds the forced rule: a regression that also pushed it into selectedRuleIds leaves every count and checkbox identical. That carrier only becomes observable once a run writes selected_rule_ids into the experiment metadata, which needs the LLM call gap (1) describes; t2 also covers OPIK-3268 naming (playground-experiment-name.spec.ts) — one optional name typed in the output-actions strip fans out to one experiment per variant under a generated letter suffix (_a, _b), the preview and the POSTs agree on it, the field advances itself to _02 after the run, and an untouched field posts no name at all so the server still generates one" }
       save-new-prompt:           { covered: true,  tier: t1-smoke }
@@ -459,7 +462,7 @@ areas:
       load-prompt-version:       { covered: true,  tier: t2-cuj }
       verify-trace-from-run:     { covered: true,  tier: t2-cuj }
       playground-logs-sidebar:   { covered: true,  tier: t2-cuj }
-      run-error-info:            { covered: true,  tier: t2-cuj, note: "A failed playground run is recorded as failed. Seeds an unreachable custom provider (no mock gateway, no provider key — the connection is refused before a request is written), runs against it, and asserts the logged trace carries the error block AND still renders the failure text as the run's assistant turn, since output deliberately keeps what the playground showed the user." }
+      run-error-info:            { covered: true,  tier: t2-cuj, note: "A failed playground run is recorded as failed. Seeds an unreachable custom provider (no mock gateway, no provider key — the connection is refused before a request is written), runs against it, and asserts the logged trace carries the error block AND still renders the failure text as the run's assistant turn, since output deliberately keeps what the playground showed the user. t2 also covers the DATASET-GRID half (playground-dataset-run-failure.spec.ts, OPIK-8468): against the same unreachable provider, every one of the dataset's rows renders a 'Run failed:' tag whose tooltip carries the whole message, and NO cell renders a MarkdownPreview answer — which is the failure mode the change exists for, a dropped error falling back into the ordinary output path and reading like a reply. Two sub-checks from that change are NOT covered, and neither is claimed: stop-before-first-token, and the nested detail.detail unwrapping. Both need a provider that answers slowly or badly, not one that never answers." }
       trace-messages-tab:        { covered: true,  tier: t2-cuj, note: "The Messages tab on a trace the playground wrote, whose completion is stored as a bare {output: string}. Asserts the tab is present at all and that its own panel renders the run as User and Assistant turns — the prior assertion only checked the prompt text was somewhere in the panel, which the Details JSON satisfies just as well, so it stayed green while the tab was missing entirely." }
       # Scoped: the Anthropic panel only, and only the two controls whose display
       # and whose request value can disagree. On claude-sonnet-4-6 the spec
@@ -510,6 +513,7 @@ areas:
     spec_dir: optimization-studio
     specs:
       - optimization-studio/optimization-studio.spec.ts
+      - optimization-studio/optimization-total-cost.spec.ts
       - optimization-studio/optimization-trial-logs.spec.ts
     capabilities:
       new-run-form-validation:  { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
@@ -517,7 +521,7 @@ areas:
       launch-hier-reflective:   { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       run-completes-healthy:    { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
       studio-logs-download:     { covered: true, tier: t2-cuj, suites: [t1-stsaas] }
-      list-optimization-runs:   { covered: false }
+      list-optimization-runs:   { covered: true,  tier: t2-cuj, note: "the runs list and its Optimization cost column: a run's total follows a mutable tag, never double-charges a trace already inside an experiment item, and a project with no runs renders its empty state. The week-floor drop-out is NOT covered — a backdated UUIDv7 is refused at ingestion on any env running UuidV7TimestampValidator in reject mode" }
       trials-table:             { covered: false }
       trial-detail:             { covered: true,  tier: t2-cuj }
       best-trial-prompt:        { covered: false }
@@ -547,13 +551,14 @@ areas:
       - datasets/dataset-items-filter-scope.spec.ts
       - datasets/dataset-items.spec.ts
       - datasets/dataset-list-summary-columns.spec.ts
+      - datasets/dataset-list-version-count.spec.ts
       - datasets/dataset-parallel-item-read.spec.ts
       - datasets/dataset-read-version-pinning.spec.ts
       - datasets/dataset-version-concurrent-writes.spec.ts
       - datasets/dataset-version-counters.spec.ts
       - datasets/dataset-version-repeated-item-id.spec.ts
     capabilities:
-      list-datasets:          { covered: true,  tier: t1-smoke, note: "row is listed (t1); t2 asserts the Item count column against the items endpoint on a page mixing a versioned dataset (items_total) with a version-less one (legacy count scan), and follows it through an item delete; t2 also asserts the rest of the computed summary each row carries — dataset_items_count, experiment_count, optimization_count and latest_version — per row over four datasets with pairwise-distinct shapes (one empty), list vs detail vs the dataset's own items/versions endpoints, unchanged across two pages, and on screen the Item count plus the two recency columns populated on exactly the right rows" }
+      list-datasets:          { covered: true,  tier: t1-smoke, note: "row is listed (t1); t2 asserts the Item count column against the items endpoint on a page mixing a versioned dataset (items_total) with a version-less one (legacy count scan), and follows it through an item delete; t2 also asserts the rest of the computed summary each row carries — dataset_items_count, experiment_count, optimization_count and latest_version — per row over four datasets with pairwise-distinct shapes (one empty), list vs detail vs the dataset's own items/versions endpoints, unchanged across two pages, and on screen the Item count plus the two recency columns populated on exactly the right rows; t2 also drives the list's Item count across a version cut by an insert that both rewrites an existing item and adds new ones (v1 at 3 items to v2 at 5, added 2 / modified 1), which is the additive counterpart to the delete-driven v1-to-v2 move above" }
       create-dataset-ui:      { covered: true,  tier: t1-smoke }
       create-dataset-sdk:     { covered: true,  tier: t1-smoke }
       view-items:             { covered: true,  tier: t1-smoke }
