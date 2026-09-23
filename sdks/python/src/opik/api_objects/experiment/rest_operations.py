@@ -161,10 +161,17 @@ def _fetch_page_json(
         },
     )
     if not 200 <= response.status_code < 300:
+        # `body` is the parsed payload where the backend sent JSON and the raw text
+        # where it did not, which is what the generated client hands back and what
+        # readers of `ApiError.body` already expect.
+        try:
+            body: Any = json_helpers.loads(response.content)
+        except ValueError:
+            body = response.text
         raise ApiError(
             status_code=response.status_code,
             headers=dict(response.headers),
-            body=response.text,
+            body=body,
         )
     return json_helpers.loads(response.content)
 
