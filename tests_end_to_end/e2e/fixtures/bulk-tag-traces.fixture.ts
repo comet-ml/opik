@@ -1,4 +1,4 @@
-import { test as baseTest } from './export-comparison.fixture';
+import { test as baseTest, expect } from './field-mapping-seed.fixture';
 
 /** One seeded trace, plus the tag it alone carries before anything is bulk-applied. */
 export interface BulkTagTraceRef {
@@ -66,4 +66,4 @@ export const test = baseTest.extend<BulkTagTracesFixtures>({
   },
 });
 
-export { expect } from './export-comparison.fixture';
+export { expect };

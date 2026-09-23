@@ -17,6 +17,16 @@ export type SpanSeedUsage = {
   total_tokens: number;
 } & Record<string, number>;
 
+/**
+ * One dataset-item field, named by the Python type the bridge must build it as
+ * before `Dataset.insert` sees it. `value` is the JSON form the object is built
+ * FROM — never what it has to store as, which is the caller's assertion.
+ */
+export type TypedValueSpec = {
+  kind: 'float' | 'uuid' | 'enum' | 'datetime' | 'set' | 'tuple';
+  value: unknown;
+};
+
 export interface PythonSdkClient {
   createProject(args: { name: string; workspace?: string }): Promise<{ id: string; name: string }>;
   createTrace(args: {
@@ -125,6 +135,32 @@ export interface PythonSdkClient {
     }>;
     workspace?: string;
   }): Promise<{ dataset_id: string; inserted: number[] }>;
+  /**
+   * One `Dataset.insert([item])` whose content carries non-JSON-native Python
+   * types — a `uuid.UUID`, an `enum.Enum` member, a tz-aware `datetime`, a
+   * `set`, a `tuple`.
+   *
+   * `insertDatasetItems` cannot express this and never will: its items are JSON
+   * by the time the bridge reads them, so a UUID has already become a string
+   * and a set a list. That normalisation is precisely what the content-hash
+   * path performs, so sending it pre-normalised tests nothing. Here the field
+   * carries the *kind* to build and the JSON value to build it FROM, and the
+   * bridge materialises the object before `Dataset.insert` sees it.
+   *
+   * One insert per call, so posting twice compares the second digest against
+   * what the backend stored rather than against an in-process cache.
+   *
+   * `accelerated` reports whether `orjson` answered in the bridge process. It
+   * is diagnostic — the round trip must hold under either encoder — but a
+   * failure is unreadable without knowing which one produced it.
+   */
+  insertTypedDatasetItem(args: {
+    dataset_name: string;
+    project_name: string;
+    typed_content: Record<string, TypedValueSpec>;
+    deduplication?: boolean;
+    workspace?: string;
+  }): Promise<{ dataset_id: string; inserted: number; accelerated: boolean }>;
   /**
    * One `Dataset.get_items(...)`, reduced to the item ids it returned **in the
    * order it returned them** — the property a concurrent paged read has to
@@ -479,6 +515,17 @@ export function makePythonSdkClient(opts: { bridgeUrl?: string } = {}): PythonSd
       return request<{ dataset_id: string; inserted: number[] }>(
         'POST',
         '/datasets/insert-items-session',
+        args,
+        { timeoutMs: 180_000 },
+      );
+    },
+    async insertTypedDatasetItem(args) {
+      // One item, but the same cloud rate-limiting exposure as the other insert
+      // routes — and an abort here would leave the dataset half-written, which
+      // is the state this spec's dedup assertion cannot tell apart from a bug.
+      return request<{ dataset_id: string; inserted: number; accelerated: boolean }>(
+        'POST',
+        '/datasets/insert-typed-item',
         args,
         { timeoutMs: 180_000 },
       );

@@ -2,6 +2,7 @@ export { test, expect } from './bulk-tag-traces.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
+  FailingProviderSeed,
   ProviderKeysFixture,
   ProviderKeyFixtures,
 } from './provider-key.fixture';
@@ -166,5 +167,28 @@ export type {
   ExportComparisonRef,
   ExportComparisonFixtures,
 } from './export-comparison.fixture';
+export type {
+  OptimizationCostRef,
+  OptimizationCostFixtures,
+} from './optimization-cost.fixture';
+export { SPAN_COST, EXPECTED_TOTAL_COST } from './optimization-cost.fixture';
+export type {
+  PromptExperimentsRef,
+  PromptExperimentsFixtures,
+} from './prompt-experiments.fixture';
+export { EXPERIMENT_COUNT, PAGE_SIZE } from './prompt-experiments.fixture';
+export type {
+  FieldMappingSeedRef,
+  FieldMappingSeedFixtures,
+} from './field-mapping-seed.fixture';
+export {
+  FM_TRACE_INPUT,
+  FM_TRACE_OUTPUT,
+  FM_TRACE_METADATA,
+  FM_TRACE_TAGS,
+  FM_SPAN_INPUT,
+  FM_SPAN_OUTPUT,
+  FM_SPAN_MODEL,
+} from './field-mapping-seed.fixture';
 export type { BulkTagTraceRef, BulkTagTracesFixtures } from './bulk-tag-traces.fixture';
 export type { ProjectRef } from '../core/backend';

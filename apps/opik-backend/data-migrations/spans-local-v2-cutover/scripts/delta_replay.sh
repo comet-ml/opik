@@ -259,8 +259,11 @@ fi
 # Losing it is not an escalation: widening the gap window is free, because the sweep is mask-honored and idempotent, so
 # backfill_start is always a valid fallback. That is deliberately unlike cutover_start, where estimating destroys or
 # resurrects data.
+#
+# --format TabSeparated on both scalar reads in this driver: a pretty default from the user's client config would
+# wrap this anchor in box-drawing, and it is pasted verbatim into reconcile.sh --gap-start.
 DELTA_START="$(clickhouse-client "${CH_ARGS[@]}" --log_comment 'spans_local_v2_cutover:delta_replay' \
-    --query "SELECT toString(now64(6, 'UTC'))")"
+    --format TabSeparated --query "SELECT toString(now64(6, 'UTC'))")"
 echo "RECORD delta_start=$DELTA_START UTC  (the gap anchor for the POST-SWAP sweep; pass it with the marker:"
 echo "       reconcile.sh --gap-start '$DELTA_START UTC')"
 
@@ -288,7 +291,8 @@ clickhouse-client "${CH_ARGS[@]}" --time --multiquery --query "$sql"
 # It cannot reach 0 while the source is live — that is the whole reason reconciliation happens AFTER the swap, where the
 # parked table is frozen and convergence is by construction. Watch it to size the gap and to decide when the tail is as
 # tight as it will get, not as a gate.
-PENDING="$(clickhouse-client "${CH_ARGS[@]}" --log_comment 'spans_local_v2_cutover:delta_replay:pending' --query \
+PENDING="$(clickhouse-client "${CH_ARGS[@]}" --log_comment 'spans_local_v2_cutover:delta_replay:pending' \
+    --format TabSeparated --query \
     "SELECT count() FROM $DATABASE.spans
      WHERE created_at >= toDateTime64('$DELTA_START', 6, 'UTC')
         OR last_updated_at >= toDateTime64('$DELTA_START', 6, 'UTC')")"

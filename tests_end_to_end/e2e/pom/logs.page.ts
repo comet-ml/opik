@@ -2,6 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 import { ThreadPanelPage } from './thread-panel.page';
+import { AddToDatasetDialogPage } from './add-to-dataset-dialog.page';
 
 export type ExplainKind = 'error' | 'duration' | 'cost';
 
@@ -324,6 +325,25 @@ export class LogsPage {
     });
   }
 
+  /**
+   * Open a trace by clicking its row, the way a user reaches one.
+   *
+   * Distinct from {@link openTraceById}, which navigates to the trace's URL and
+   * so reloads the page: a spec about what the panel remembers between openings
+   * needs the in-app path, because a reload resets everything for free and
+   * would make the assertion pass without the panel doing anything.
+   */
+  async openTraceByRow(traceId: string): Promise<TracePanelPage> {
+    return test.step(`Open trace ${traceId} from its row`, async () => {
+      const row = this.traceRow(traceId);
+      await expect(row, 'exactly one row for this trace').toHaveCount(1);
+      await row.click();
+      const panel = new TracePanelPage(this.page, traceId);
+      await panel.waitForFullyLoaded();
+      return panel;
+    });
+  }
+
   async openFirstTrace(): Promise<TracePanelPage> {
     return test.step('Open first trace in table', async () => {
       const row = this.traceRows.first();
@@ -380,6 +400,25 @@ export class LogsPage {
   async selectTrace(traceId: string): Promise<void> {
     return test.step(`Select trace ${traceId}`, async () => {
       await this.traceRow(traceId).getByRole('checkbox', { name: 'Select row' }).click();
+    });
+  }
+
+  /**
+   * Open the "Add to" dropdown in the traces actions panel and pick "Dataset".
+   *
+   * The dropdown offers Test suite / Dataset / Annotation queue from one
+   * trigger (`AddToDropdown`), so the menu item is matched exactly — "Dataset"
+   * as a substring would also match nothing else today, but the list is the
+   * kind that grows. Callers select rows first via `selectTrace()`; the
+   * trigger is disabled until at least one is ticked.
+   */
+  async openAddToDataset(): Promise<AddToDatasetDialogPage> {
+    return test.step('Open Add to → Dataset', async () => {
+      await this.page.getByRole('button', { name: 'Add to' }).click();
+      await this.page.getByRole('menuitem', { name: 'Dataset', exact: true }).click();
+      const dialog = new AddToDatasetDialogPage(this.page);
+      await expect(dialog.root, 'the Add to dataset dialog is open').toBeVisible();
+      return dialog;
     });
   }
 

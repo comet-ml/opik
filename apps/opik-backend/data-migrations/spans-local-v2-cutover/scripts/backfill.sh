@@ -427,9 +427,11 @@ mit_require_one_assignment() {
 # the per-window path re-resolves the line and keeps its own post-condition so a mid-run edit is still caught.
 mit_require_one_assignment "$(extract backfill)" backfill || exit 2
 
-# Every query runs against the analytics database; --query keeps output scriptable (TSV, no formatting).
+# Every query runs against the analytics database. --format TabSeparated is what keeps the output scriptable: --query
+# alone does NOT, since clickhouse-client takes a default format from the user's own client config, and a pretty default
+# would put box-drawing into scalars parsed here as row counts and partition counts — a wrong verdict, not an error.
 ch() {
-    clickhouse-client "${CH_ARGS[@]}" --query "$1"
+    clickhouse-client "${CH_ARGS[@]}" --format TabSeparated --query "$1"
 }
 
 log() {
@@ -574,10 +576,10 @@ run_backfill() {
 # compares src and dst counted TOGETHER after the copy (a consistent snapshot) — never a stale pre-copy src against a
 # fresh post-copy dst.
 #
-# THE TWO PASSES ARE RECONCILED TOGETHER, not separately, and that is deliberate: they are complements, so only their
-# union is meaningful against the window's source count. A failure in either leaves the window short and the single
-# post-copy comparison catches it — and because both statements are idempotent against a ReplacingMergeTree, re-running
-# the window re-runs both harmlessly.
+# ONE STATEMENT PER WINDOW. An earlier revision copied each window with two complementary statements and reconciled
+# their union; measurement retired that (README, "What was tried and retired: a two-pass split"), so there is a single
+# INSERT and a single post-copy comparison against the window's source count. The statement is idempotent against a
+# ReplacingMergeTree, so re-running a short window is safe and cheap.
 #
 # Idempotent/resumable: a window already present on the destination is skipped.
 insert_window() {
