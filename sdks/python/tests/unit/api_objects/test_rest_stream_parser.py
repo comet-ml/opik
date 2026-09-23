@@ -163,14 +163,6 @@ def test_read_and_parse_full_stream__non_size_correlated_error__propagates(
         )
 
 
-class _Item:
-    """Minimal stand-in whose constructor rejects unknown fields, like the REST models."""
-
-    def __init__(self, id: str, name: str) -> None:
-        self.id = id
-        self.name = name
-
-
 def _paged_source(rows):
     """A backend that pages from the last id it was given, as the real one does."""
 
@@ -186,23 +178,35 @@ def _paged_source(rows):
     return read_source
 
 
-def _rows(count, *, unparseable_at=()):
-    rows = [{"id": f"{i:03d}", "name": f"n{i}"} for i in range(count)]
-    for index in unparseable_at:
-        # An extra field is what a newer backend sends to an older client.
-        rows[index] = {**rows[index], "field_from_a_newer_backend": 1}
+def _span_rows(count, *, malformed_at=()):
+    """Rows for the real `SpanPublic` model, some of which it cannot construct.
+
+    `start_time` is the one required field. These models accept unknown fields and
+    unknown enum values, so a field added by a newer backend parses fine -- what does
+    not is a required field arriving absent or with the wrong type, which is what a
+    partial row or a serialisation change looks like on the wire.
+    """
+    rows = []
+    for i in range(count):
+        row = {"id": f"{i:03d}", "start_time": "2025-01-03T11:03:17.875608Z"}
+        if i in malformed_at:
+            row["start_time"] = None
+        rows.append(row)
     return rows
 
 
 def test_read_and_parse_full_stream__unparseable_record__does_not_end_pagination():
     # The record count decides whether a page was the last one. Counting the
-    # successfully parsed items instead made a page short by one dropped record
-    # look like the end of the data, so a single unparseable record silently
-    # returned a fraction of the results (4 of 12 for the case below).
-    rows = _rows(12, unparseable_at=(3,))
+    # successfully parsed items instead made a page short by one dropped record look
+    # like the end of the data, so a single unparseable record silently returned a
+    # fraction of the results (4 of 12 for the case below).
+    rows = _span_rows(12, malformed_at=(3,))
 
     items = rest_stream_parser.read_and_parse_full_stream(
-        _paged_source(rows), _Item, max_results=None, max_endpoint_batch_size=5
+        _paged_source(rows),
+        rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=5,
     )
 
     # The unparseable record is still dropped; everything after it is not.
@@ -210,10 +214,13 @@ def test_read_and_parse_full_stream__unparseable_record__does_not_end_pagination
 
 
 def test_read_and_parse_full_stream__unparseable_record__respects_max_results():
-    rows = _rows(12, unparseable_at=(3,))
+    rows = _span_rows(12, malformed_at=(3,))
 
     items = rest_stream_parser.read_and_parse_full_stream(
-        _paged_source(rows), _Item, max_results=7, max_endpoint_batch_size=5
+        _paged_source(rows),
+        rest_api_types.SpanPublic,
+        max_results=7,
+        max_endpoint_batch_size=5,
     )
 
     assert len(items) == 7
@@ -221,21 +228,44 @@ def test_read_and_parse_full_stream__unparseable_record__respects_max_results():
 
 
 def test_read_and_parse_full_stream__whole_page_unparseable__stops_instead_of_looping():
-    # Nothing parsed means no id to page from, so asking again would re-read the
-    # same page forever. Stop rather than spin.
-    rows = _rows(12, unparseable_at=range(12))
+    # Nothing parsed means the cursor cannot advance, so asking again would re-read
+    # the same page forever. Stop rather than spin.
+    rows = _span_rows(12, malformed_at=range(12))
 
     items = rest_stream_parser.read_and_parse_full_stream(
-        _paged_source(rows), _Item, max_results=None, max_endpoint_batch_size=5
+        _paged_source(rows),
+        rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=5,
     )
 
     assert items == []
 
 
+def test_read_and_parse_full_stream__items_without_ids__stop_instead_of_duplicating():
+    # `id` is optional on these models, so a full page can parse and still leave the
+    # cursor at None. Continuing would restart from the first page and append the same
+    # items again on every pass.
+    rows = [{"start_time": "2025-01-03T11:03:17.875608Z"} for _ in range(5)]
+
+    def read_source(batch_size, last_retrieved_id):
+        body = "\n".join(json.dumps(row) for row in rows) + "\n"
+        return [body.encode("utf-8")]
+
+    items = rest_stream_parser.read_and_parse_full_stream(
+        read_source,
+        rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=5,
+    )
+
+    assert len(items) == 5, "one page of items, not the same page over and over"
+
+
 def test_read_and_parse_full_stream__blank_lines__are_not_counted_as_records():
-    # A trailing or doubled newline is not a record; counting it would make a
-    # final short page look full and cost one extra request.
-    rows = _rows(3)
+    # A trailing or doubled newline is not a record; counting it would make a final
+    # short page look full and cost one extra request.
+    rows = _span_rows(3)
 
     def read_source(batch_size, last_retrieved_id):
         assert last_retrieved_id is None, "the 3 rows fit in one page of 5"
@@ -243,7 +273,10 @@ def test_read_and_parse_full_stream__blank_lines__are_not_counted_as_records():
         return [body.encode("utf-8")]
 
     items = rest_stream_parser.read_and_parse_full_stream(
-        read_source, _Item, max_results=None, max_endpoint_batch_size=5
+        read_source,
+        rest_api_types.SpanPublic,
+        max_results=None,
+        max_endpoint_batch_size=5,
     )
 
     assert [item.id for item in items] == ["000", "001", "002"]

@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Callable, Iterable, Type, List, Optional, Tuple, TypeVar
+from typing import Any, Callable, Iterable, Type, List, Optional, Tuple, TypeVar
 
 import httpx
 
@@ -14,6 +14,10 @@ MAX_ENDPOINT_BATCH_SIZE = 2_000
 # fails with a connection/timeout error, shrinking further won't help (the
 # failure isn't size-correlated), so we re-raise instead of looping forever.
 MIN_ENDPOINT_BATCH_SIZE = 50
+
+# Distinguishes "no request made yet" from a first request that legitimately pages
+# from `None`, which is how a read of the first page starts.
+_NO_CURSOR_YET = object()
 
 # Connection/timeout errors whose likelihood scales with response size. A
 # large page drives a heavy backend read (see the migrate cascade, OPIK-7152:
@@ -45,6 +49,9 @@ def read_and_parse_full_stream(
     # held at the shrunk value for the rest of the read (a backend that
     # couldn't serve N items is unlikely to serve N again later).
     batch_size = max_endpoint_batch_size
+    # The id the previous request paged from. Paging can only continue while this
+    # advances; see the guard below.
+    previous_cursor: Any = _NO_CURSOR_YET
     while True:
         if max_results is None:
             current_batch_size = batch_size
@@ -57,6 +64,25 @@ def read_and_parse_full_stream(
             break
 
         last_retrieved_id = result[-1].id if len(result) > 0 else None  # type: ignore
+
+        # Every request pages from the id of the last item read, so the read can only
+        # continue while that id moves. It does not move when no record on the page
+        # parsed, and it does not move when the items parsed without an id -- in both
+        # cases the next request would re-read the same page, forever, appending
+        # duplicates as it went. Checked before the request so none of that is fetched.
+        if (
+            previous_cursor is not _NO_CURSOR_YET
+            and last_retrieved_id == previous_cursor
+        ):
+            LOGGER.error(
+                "Pagination cursor did not advance past %r while reading %s; "
+                "stopping with %d item(s).",
+                last_retrieved_id,
+                parsed_item_class.__name__,
+                len(result),
+            )
+            break
+
         try:
             results_stream = read_source(current_batch_size, last_retrieved_id)
             parsed_items, received_records = _read_and_parse_stream(
@@ -75,19 +101,10 @@ def read_and_parse_full_stream(
             )
             continue
 
+        # Only after a page actually came back: a size-correlated retry deliberately
+        # re-uses the same cursor, and must not look like a stalled one.
+        previous_cursor = last_retrieved_id
         result.extend(parsed_items)
-
-        if not parsed_items and received_records > 0:
-            # The page held records but none of them parsed, so there is no id to
-            # page from: requesting again would re-read the same page forever.
-            LOGGER.error(
-                "None of the %d records on this page could be parsed as %s; "
-                "stopping with %d item(s) read so far.",
-                received_records,
-                parsed_item_class.__name__,
-                len(result),
-            )
-            break
 
         # Compare against what the backend sent, not what parsed. A record the
         # client cannot parse is dropped by `_parse_stream_line`, and counting the
