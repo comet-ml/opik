@@ -59,7 +59,7 @@ const chunk = <T>(values: T[], size: number): T[][] =>
  *
  * Exactly, not at-least. A spec whose subject is "the read returns every row,
  * once, in order" cannot start against a seed that only half landed: it would
- * compare four reads of a 1,400-row experiment, find them consistent, and pass
+ * compare several reads of a short experiment, find them consistent, and pass
  * having never crossed the page boundary it exists to cross.
  */
 async function waitForExperimentRows(
@@ -94,14 +94,14 @@ async function waitForExperimentRows(
  *
  * Seeded through REST rather than the bridge's `evaluate`/`compare-seed`
  * routes, for the reason `exportComparison` gives: those run a real
- * `evaluate()` with `task_threads=1`, which would be 2,100 sequential task runs
+ * `evaluate()` with `task_threads=1`, which would be 250 sequential task runs
  * inside a single HTTP call. These rows exist to be counted, ordered and
  * de-duplicated — they carry no scores and no LLM output — so the dataset
  * items, the traces and the experiment items are written directly, in batches.
  *
  * Every dataset item carries a monotonic `idx`, which is what lets a reader be
  * checked for gaps, duplicates and reordering without the spec having to hold
- * 2,100 rows of expected content.
+ * every row's expected content.
  *
  * Teardown deletes the experiment and then the dataset — neither cascades with
  * the project — and the traces explicitly, because deleting a project does not
