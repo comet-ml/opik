@@ -104,10 +104,14 @@ class ChrF(BaseMetric):
                 # `sentence_chrf` scores against a single reference, and anything
                 # that is not a string it treats as a token list to be joined. A
                 # list of alternative references therefore arrived as one long
-                # pseudo-reference, which no candidate can match well. Scoring
-                # each one separately and keeping the best is what a candidate
-                # being acceptable if it matches any reference means, and matches
-                # how the sibling BLEU and GLEU metrics treat their references.
+                # pseudo-reference, which no candidate can match well.
+                #
+                # A reference set means the candidate is acceptable if it matches
+                # any one of them. BLEU and GLEU get that for free because their
+                # NLTK entry points take the whole collection and resolve it
+                # internally (per n-gram, against the best-matching reference).
+                # chrF's does not, so the choice has to be made here: score each
+                # reference on its own and keep the best.
                 return max(
                     _score_against_one(candidate, reference) for reference in references
                 )

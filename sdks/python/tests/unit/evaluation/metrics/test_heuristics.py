@@ -583,7 +583,7 @@ def test_chrf_metric__multiple_references__scores_against_the_best_one():
     ).value == pytest.approx(1.0)
 
 
-def test_chrf_metric__multiple_references__never_below_the_best_single_one():
+def test_chrf_metric__multiple_references__equals_the_best_single_one():
     # The weaker guarantee that holds for any reference set: adding alternatives
     # cannot make the score worse than the best reference on its own.
     pytest.importorskip("nltk")
@@ -599,6 +599,54 @@ def test_chrf_metric__multiple_references__never_below_the_best_single_one():
     combined = metric.score(output=candidate, reference=references).value
 
     assert combined == pytest.approx(max(singles))
+
+
+def test_chrf_metric__default_backend__scores_each_reference_separately(monkeypatch):
+    # Deterministic coverage of the adapter itself, with no dependency on NLTK
+    # being installed: the sibling tests use the real backend and skip without
+    # it, so this is what pins the one-call-per-reference behaviour everywhere.
+    from opik.evaluation.metrics.heuristics import chrf as chrf_module
+
+    calls = []
+    scores = {"near": 0.9, "far": 0.1}
+
+    class StubChrF:
+        @staticmethod
+        def sentence_chrf(reference, candidate, **kwargs):
+            calls.append((reference, candidate, kwargs))
+            return scores[reference]
+
+    monkeypatch.setattr(chrf_module, "nltk_chrf_score", StubChrF)
+
+    result = chrf_module.ChrF(track=False).score(output="c", reference=["far", "near"])
+
+    assert result.value == pytest.approx(0.9)
+    # One call per reference, each with a single reference rather than the list.
+    assert [reference for reference, _, _ in calls] == ["far", "near"]
+    assert all(candidate == "c" for _, candidate, _ in calls)
+
+
+def test_chrf_metric__default_backend__falls_back_to_positional_call(monkeypatch):
+    # Older NLTK releases take fewer keyword arguments. The adapter retries
+    # positionally, and that retry must still happen once per reference.
+    from opik.evaluation.metrics.heuristics import chrf as chrf_module
+
+    positional_calls = []
+
+    class LegacyChrF:
+        @staticmethod
+        def sentence_chrf(reference, candidate, **kwargs):
+            if kwargs:
+                raise TypeError("sentence_chrf() got an unexpected keyword argument")
+            positional_calls.append((reference, candidate))
+            return 0.25 if reference == "far" else 0.75
+
+    monkeypatch.setattr(chrf_module, "nltk_chrf_score", LegacyChrF)
+
+    result = chrf_module.ChrF(track=False).score(output="c", reference=["far", "near"])
+
+    assert result.value == pytest.approx(0.75)
+    assert positional_calls == [("far", "c"), ("near", "c")]
 
 
 def test_chrf_metric__custom_fn_still_receives_every_reference():
