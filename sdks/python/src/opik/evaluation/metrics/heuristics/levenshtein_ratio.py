@@ -59,6 +59,9 @@ class LevenshteinRatio(base_metric.BaseMetric):
         Returns:
             score_result.ScoreResult: A ScoreResult object with a value between 0.0 and 1.0,
                 representing the Levenshtein ratio between the output and reference strings.
+
+        Raises:
+            MetricComputationError: If `output` or `reference` is None or not a string.
         """
         if output is None or reference is None:
             raise MetricComputationError(

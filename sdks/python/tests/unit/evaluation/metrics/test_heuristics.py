@@ -1031,6 +1031,27 @@ def test_levenshtein_ratio__non_string_output__raises_metric_error(bad_output):
         metric.score(output=bad_output, reference="abc")
 
 
+@pytest.mark.parametrize("bad_reference", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_levenshtein_ratio__non_string_reference__raises_metric_error(bad_reference):
+    # The guard covers `reference` as well, and rapidfuzz would otherwise be
+    # handed a non-string.
+    metric = levenshtein_ratio.LevenshteinRatio(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output' and 'reference'"):
+        metric.score(output="abc", reference=bad_reference)
+
+
+@pytest.mark.parametrize("case_sensitive", [True, False])
+@pytest.mark.parametrize("bad_reference", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_contains__non_string_reference__raises_value_error(
+    bad_reference, case_sensitive
+):
+    # Contains validated the reference for None and "" but not for its type, so
+    # a non-string reached `.lower()` (case-insensitive) or `in` (case-sensitive).
+    metric = Contains(case_sensitive=case_sensitive, track=False)
+    with pytest.raises(ValueError, match="must be a string"):
+        metric.score(output="hello", reference=bad_reference)
+
+
 @pytest.mark.parametrize("bad_output", [5, 3.5, {"answer": "yes"}, ["a"]])
 def test_regex_match__non_string_output__raises_metric_error(bad_output):
     metric = regex_match.RegexMatch(regex=r"\d+", track=False)

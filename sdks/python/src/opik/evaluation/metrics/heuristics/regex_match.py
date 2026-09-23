@@ -57,6 +57,9 @@ class RegexMatch(base_metric.BaseMetric):
         Returns:
             score_result.ScoreResult: A ScoreResult object with a value of 1.0 if the output
                 matches the regex pattern, 0.0 otherwise.
+
+        Raises:
+            MetricComputationError: If `output` is None or not a string.
         """
         if output is None:
             raise MetricComputationError(
