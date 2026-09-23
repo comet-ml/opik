@@ -1,5 +1,6 @@
 """Tests for the page size and concurrency of the experiment Compare-view read."""
 
+import math
 import threading
 import types
 from typing import Any, Dict, List, Optional
@@ -82,10 +83,14 @@ def _read(total: int, **kwargs: Any) -> Dict[str, Any]:
 
 
 def test_find_experiment_items_for_dataset__default_page_size_is_the_constant():
-    result = _read(total=2500, max_results=2500)
+    total = 2500
+    result = _read(total=total, max_results=total)
 
-    assert result["requested_sizes"] == [constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE] * 3
-    assert len(result["items"]) == 2500
+    pages = math.ceil(total / constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE)
+    assert (
+        result["requested_sizes"] == [constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE] * pages
+    )
+    assert len(result["items"]) == total
 
 
 def test_find_experiment_items_for_dataset__page_size_override_is_used():

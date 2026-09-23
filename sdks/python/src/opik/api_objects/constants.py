@@ -52,8 +52,9 @@ DATASET_ITEMS_WRITE_MAX_THREADS = 32
 # experiment item per experiment id in the request, so a multi-experiment read
 # yields more items than this. The read is round-trip bound rather than payload
 # bound -- per-page latency is close to flat across sizes -- so the page count
-# is what this trades against per-response size.
-EXPERIMENT_ITEMS_READ_PAGE_SIZE = 1000
+# is what this trades against per-response size. Same value as the dataset read's
+# batch size, so the two reads page at one size.
+EXPERIMENT_ITEMS_READ_PAGE_SIZE = DATASET_STREAM_BATCH_SIZE
 # Ceiling on that page size, matching the dataset read's own chunk ceiling so
 # one knob does not authorise a much larger response than the other. The backend
 # endpoint declares @Min(1) and no @Max, so this bounds a single response for
