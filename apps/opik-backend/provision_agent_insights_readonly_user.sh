@@ -5,8 +5,8 @@ set -euo pipefail
 #
 # Two deliberately separate accounts, each behind its own flag:
 #   - Agent Insights (TOGGLE_OLLIE_ENABLED) - traces/spans/authored_feedback_scores, all bound to workspace AND project.
-#   - Extended free-form SQL (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_ENABLED, also requires TOGGLE_OLLIE_ENABLED) -
-#     the same three tables plus experiments, experiment_items, dataset_items, feedback_scores and trace_threads.
+#   - Extended free-form SQL (ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED, also requires
+#     TOGGLE_OLLIE_ENABLED) - the same three tables plus experiments, experiment_items, dataset_items, feedback_scores and trace_threads.
 #     traces/spans keep a project bound but an optional one; everything else is workspace-bound only,
 #     authored_feedback_scores included.
 #
@@ -41,8 +41,8 @@ ch_admin_pass="${ANALYTICS_DB_PASS:-opik}"
 ch_db="${ANALYTICS_DB_DATABASE_NAME:-opik}"
 ro_user="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}"
 ro_pass="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}"
-ro_ext_user="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_readonly_freeform_extended_sql_user}"
-ro_ext_pass="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}"
+ro_extended_user="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_readonly_freeform_extended_sql_user}"
+ro_extended_pass="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}"
 ch_url="http://${ch_host}:${ch_port}/?user=${ch_admin_user}&password=${ch_admin_pass}"
 
 echo "Provisioning Agent Insights read-only ClickHouse user '${ro_user}' on ${ch_host}:${ch_port}/${ch_db}..."
@@ -70,27 +70,27 @@ statements+=(
 # widening to the whole workspace.
 #
 # Everything else (including authored_feedback_scores) is workspace-only.
-if is_true "${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_ENABLED:-false}"; then
-    echo "Provisioning extended free-form SQL read-only ClickHouse user '${ro_ext_user}'..."
+if is_true "${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED:-false}"; then
+    echo "Provisioning extended free-form SQL read-only ClickHouse user '${ro_extended_user}'..."
     statements+=(
-        "CREATE USER IF NOT EXISTS ${ro_ext_user} IDENTIFIED BY '${ro_ext_pass}'"
-        "ALTER USER ${ro_ext_user} SETTINGS PROFILE 'comet_llm_readonly_freeform_sql_profile'"
-        "GRANT SELECT ON ${ch_db}.spans TO ${ro_ext_user}"
-        "GRANT SELECT ON ${ch_db}.traces TO ${ro_ext_user}"
-        "GRANT SELECT ON ${ch_db}.authored_feedback_scores TO ${ro_ext_user}"
-        "GRANT SELECT ON ${ch_db}.feedback_scores TO ${ro_ext_user}"
-        "GRANT SELECT ON ${ch_db}.experiments TO ${ro_ext_user}"
-        "GRANT SELECT ON ${ch_db}.experiment_items TO ${ro_ext_user}"
-        "GRANT SELECT ON ${ch_db}.dataset_items TO ${ro_ext_user}"
-        "GRANT SELECT ON ${ch_db}.trace_threads TO ${ro_ext_user}"
-        "CREATE ROW POLICY IF NOT EXISTS spans_workspace_with_optional_project_isolation ON ${ch_db}.spans FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_ext_user}"
-        "CREATE ROW POLICY IF NOT EXISTS traces_workspace_with_optional_project_isolation ON ${ch_db}.traces FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_ext_user}"
-        "CREATE ROW POLICY IF NOT EXISTS authored_feedback_scores_workspace_isolation ON ${ch_db}.authored_feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
-        "CREATE ROW POLICY IF NOT EXISTS feedback_scores_workspace_isolation ON ${ch_db}.feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
-        "CREATE ROW POLICY IF NOT EXISTS experiments_workspace_isolation ON ${ch_db}.experiments FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
-        "CREATE ROW POLICY IF NOT EXISTS experiment_items_workspace_isolation ON ${ch_db}.experiment_items FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
-        "CREATE ROW POLICY IF NOT EXISTS dataset_items_workspace_isolation ON ${ch_db}.dataset_items FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
-        "CREATE ROW POLICY IF NOT EXISTS trace_threads_workspace_isolation ON ${ch_db}.trace_threads FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_ext_user}"
+        "CREATE USER IF NOT EXISTS ${ro_extended_user} IDENTIFIED BY '${ro_extended_pass}'"
+        "ALTER USER ${ro_extended_user} SETTINGS PROFILE 'comet_llm_readonly_freeform_sql_profile'"
+        "GRANT SELECT ON ${ch_db}.spans TO ${ro_extended_user}"
+        "GRANT SELECT ON ${ch_db}.traces TO ${ro_extended_user}"
+        "GRANT SELECT ON ${ch_db}.authored_feedback_scores TO ${ro_extended_user}"
+        "GRANT SELECT ON ${ch_db}.feedback_scores TO ${ro_extended_user}"
+        "GRANT SELECT ON ${ch_db}.experiments TO ${ro_extended_user}"
+        "GRANT SELECT ON ${ch_db}.experiment_items TO ${ro_extended_user}"
+        "GRANT SELECT ON ${ch_db}.dataset_items TO ${ro_extended_user}"
+        "GRANT SELECT ON ${ch_db}.trace_threads TO ${ro_extended_user}"
+        "CREATE ROW POLICY IF NOT EXISTS spans_freeform_extended_sql_isolation ON ${ch_db}.spans FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
+        "CREATE ROW POLICY IF NOT EXISTS traces_freeform_extended_sql_isolation ON ${ch_db}.traces FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
+        "CREATE ROW POLICY IF NOT EXISTS authored_feedback_scores_freeform_extended_sql_isolation ON ${ch_db}.authored_feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
+        "CREATE ROW POLICY IF NOT EXISTS feedback_scores_freeform_extended_sql_isolation ON ${ch_db}.feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
+        "CREATE ROW POLICY IF NOT EXISTS experiments_freeform_extended_sql_isolation ON ${ch_db}.experiments FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
+        "CREATE ROW POLICY IF NOT EXISTS experiment_items_freeform_extended_sql_isolation ON ${ch_db}.experiment_items FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
+        "CREATE ROW POLICY IF NOT EXISTS dataset_items_freeform_extended_sql_isolation ON ${ch_db}.dataset_items FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
+        "CREATE ROW POLICY IF NOT EXISTS trace_threads_freeform_extended_sql_isolation ON ${ch_db}.trace_threads FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
     )
 fi
 
