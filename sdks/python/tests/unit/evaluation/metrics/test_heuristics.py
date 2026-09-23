@@ -473,13 +473,21 @@ def test_meteor_metric__default_nltk_backend__scores_plain_strings():
     # an iterable of token lists and a token list, so passing the raw strings
     # raised `TypeError: "hypothesis" expects pre-tokenized hypothesis`. Both other
     # METEOR tests inject `meteor_fn`, so the real NLTK path was never exercised.
-    # Skipped when the optional `nltk` dependency or its WordNet corpus is absent.
-    pytest.importorskip("nltk")
+    nltk = pytest.importorskip("nltk")
 
+    # Check for the corpus without letting the metric's constructor fetch it:
+    # `nltk.data.find` only looks locally, while `METEOR()` downloads on a miss,
+    # which would put a network call in a unit test. Skip only that case, so a
+    # genuine failure to construct the metric still fails the test.
     try:
-        metric = METEOR(track=False)
-    except ImportError:
-        pytest.skip("METEOR requires the NLTK WordNet corpora")
+        nltk.data.find("corpora/wordnet.zip")
+    except LookupError:
+        try:
+            nltk.data.find("corpora/wordnet")
+        except LookupError:
+            pytest.skip("METEOR needs the NLTK WordNet corpus, which is not installed")
+
+    metric = METEOR(track=False)
 
     identical = metric.score(
         output="the cat sat on the mat", reference="the cat sat on the mat"
