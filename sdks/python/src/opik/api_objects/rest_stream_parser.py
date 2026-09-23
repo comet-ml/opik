@@ -59,7 +59,7 @@ def read_and_parse_full_stream(
         last_retrieved_id = result[-1].id if len(result) > 0 else None  # type: ignore
         try:
             results_stream = read_source(current_batch_size, last_retrieved_id)
-            parsed_items = read_and_parse_stream(
+            parsed_items, received_records = _read_and_parse_stream(
                 stream=results_stream, item_class=parsed_item_class
             )
         except _SIZE_CORRELATED_ERRORS as exc:
@@ -77,7 +77,23 @@ def read_and_parse_full_stream(
 
         result.extend(parsed_items)
 
-        if current_batch_size > len(parsed_items):
+        if not parsed_items and received_records > 0:
+            # The page held records but none of them parsed, so there is no id to
+            # page from: requesting again would re-read the same page forever.
+            LOGGER.error(
+                "None of the %d records on this page could be parsed as %s; "
+                "stopping with %d item(s) read so far.",
+                received_records,
+                parsed_item_class.__name__,
+                len(result),
+            )
+            break
+
+        # Compare against what the backend sent, not what parsed. A record the
+        # client cannot parse is dropped by `_parse_stream_line`, and counting the
+        # survivors made a short page look like the last one: a single unparseable
+        # record ended the read and silently returned a fraction of the results.
+        if current_batch_size > received_records:
             break
 
     return result
@@ -88,7 +104,23 @@ def read_and_parse_stream(
     item_class: Type[T],
     nb_samples: Optional[int] = None,
 ) -> List[T]:
+    items, _ = _read_and_parse_stream(stream, item_class, nb_samples)
+    return items
+
+
+def _read_and_parse_stream(
+    stream: Iterable[bytes],
+    item_class: Type[T],
+    nb_samples: Optional[int] = None,
+) -> Tuple[List[T], int]:
+    """Parse the stream, also reporting how many records it held.
+
+    Pagination needs the record count rather than the item count: the two differ
+    whenever a record fails to parse, and only the former says whether the backend
+    had more to send.
+    """
     result: List[T] = []
+    received_records = 0
 
     # last record in chunk may be incomplete, we will use this buffer to concatenate strings
     buffer = b""
@@ -99,23 +131,27 @@ def read_and_parse_stream(
 
         # last record in chunk may be incomplete
         for line in lines[:-1]:
+            if not line.strip():
+                continue
+            received_records += 1
             item = _parse_stream_line(line=line, item_class=item_class)
             if item is not None:
                 result.append(item)
 
                 if nb_samples is not None and len(result) == nb_samples:
-                    return result
+                    return result, received_records
 
         # Keep the last potentially incomplete line in buffer
         buffer = lines[-1]
 
     # Process any remaining data in the buffer after the stream ends
-    if buffer:
+    if buffer.strip():
+        received_records += 1
         item = _parse_stream_line(line=buffer, item_class=item_class)
         if item is not None:
             result.append(item)
 
-    return result
+    return result, received_records
 
 
 def _parse_stream_line(

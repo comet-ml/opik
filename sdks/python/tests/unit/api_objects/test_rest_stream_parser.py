@@ -161,3 +161,89 @@ def test_read_and_parse_full_stream__non_size_correlated_error__propagates(
             max_results=None,
             max_endpoint_batch_size=400,
         )
+
+
+class _Item:
+    """Minimal stand-in whose constructor rejects unknown fields, like the REST models."""
+
+    def __init__(self, id: str, name: str) -> None:
+        self.id = id
+        self.name = name
+
+
+def _paged_source(rows):
+    """A backend that pages from the last id it was given, as the real one does."""
+
+    def read_source(batch_size, last_retrieved_id):
+        start = 0
+        if last_retrieved_id is not None:
+            start = (
+                next(i for i, r in enumerate(rows) if r["id"] == last_retrieved_id) + 1
+            )
+        page = rows[start : start + batch_size]
+        return [("\n".join(json.dumps(row) for row in page) + "\n").encode("utf-8")]
+
+    return read_source
+
+
+def _rows(count, *, unparseable_at=()):
+    rows = [{"id": f"{i:03d}", "name": f"n{i}"} for i in range(count)]
+    for index in unparseable_at:
+        # An extra field is what a newer backend sends to an older client.
+        rows[index] = {**rows[index], "field_from_a_newer_backend": 1}
+    return rows
+
+
+def test_read_and_parse_full_stream__unparseable_record__does_not_end_pagination():
+    # The record count decides whether a page was the last one. Counting the
+    # successfully parsed items instead made a page short by one dropped record
+    # look like the end of the data, so a single unparseable record silently
+    # returned a fraction of the results (4 of 12 for the case below).
+    rows = _rows(12, unparseable_at=(3,))
+
+    items = rest_stream_parser.read_and_parse_full_stream(
+        _paged_source(rows), _Item, max_results=None, max_endpoint_batch_size=5
+    )
+
+    # The unparseable record is still dropped; everything after it is not.
+    assert [item.id for item in items] == [f"{i:03d}" for i in range(12) if i != 3]
+
+
+def test_read_and_parse_full_stream__unparseable_record__respects_max_results():
+    rows = _rows(12, unparseable_at=(3,))
+
+    items = rest_stream_parser.read_and_parse_full_stream(
+        _paged_source(rows), _Item, max_results=7, max_endpoint_batch_size=5
+    )
+
+    assert len(items) == 7
+    assert "003" not in [item.id for item in items]
+
+
+def test_read_and_parse_full_stream__whole_page_unparseable__stops_instead_of_looping():
+    # Nothing parsed means no id to page from, so asking again would re-read the
+    # same page forever. Stop rather than spin.
+    rows = _rows(12, unparseable_at=range(12))
+
+    items = rest_stream_parser.read_and_parse_full_stream(
+        _paged_source(rows), _Item, max_results=None, max_endpoint_batch_size=5
+    )
+
+    assert items == []
+
+
+def test_read_and_parse_full_stream__blank_lines__are_not_counted_as_records():
+    # A trailing or doubled newline is not a record; counting it would make a
+    # final short page look full and cost one extra request.
+    rows = _rows(3)
+
+    def read_source(batch_size, last_retrieved_id):
+        assert last_retrieved_id is None, "the 3 rows fit in one page of 5"
+        body = "\n\n".join(json.dumps(row) for row in rows) + "\n\n"
+        return [body.encode("utf-8")]
+
+    items = rest_stream_parser.read_and_parse_full_stream(
+        read_source, _Item, max_results=None, max_endpoint_batch_size=5
+    )
+
+    assert [item.id for item in items] == ["000", "001", "002"]
