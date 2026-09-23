@@ -1005,7 +1005,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             )
             """;
 
-    // Query to get target project_ids from traces for experiment items (executed separately to reduce table scans)
+    /**
+     * Query to get target project_ids from traces for experiment items (executed separately to reduce table scans).
+     * <p>
+     * The projects have to be resolved through {@code traces}, not read off the denormalized
+     * {@code experiment_items.project_id}: that column holds the project the <i>item</i> named, and is only
+     * filled in from the item's trace when the item named none (see {@code ExperimentItemService}). An item
+     * whose {@code project_name} differs from where its trace was logged therefore contributes the wrong
+     * project. The result prunes {@code traces} / {@code spans} / {@code comments} by project, so a project
+     * missing from it silently drops that trace's data from the response rather than erroring.
+     */
     private static final String SELECT_TARGET_PROJECTS = """
             WITH experiments_scope AS (
                 SELECT id
