@@ -202,7 +202,19 @@ def _fetch_page_json(
             headers=dict(response.headers),
             body=body,
         )
-    return json_helpers.loads(response.content)
+
+    try:
+        page = json_helpers.loads(response.content)
+    except ValueError:
+        # The generated endpoint decodes the 2xx body inside the same `try` as the
+        # error one, so an undecodable success body reaches callers as an `ApiError`
+        # carrying the raw text, not as a decoder error. Keep that contract.
+        raise ApiError(
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            body=response.text,
+        )
+    return experiment_item.require_json_type(page, dict, "the page")
 
 
 def _collect_page(
@@ -212,15 +224,21 @@ def _collect_page(
 ) -> None:
     """Append one page's experiment items, stopping at ``max_results``."""
     headroom = max_results - len(collected_items)
-    content = page.get("content") or []
+    content = experiment_item.require_json_type(
+        page.get("content") or [], list, "`content`"
+    )
     if headroom <= 0 or not content:
         return
 
     page_items = []
     for dataset_item in content:
-        for experiment_item_compare in dataset_item.get("experiment_items") or []:
+        experiment_item.require_json_type(dataset_item, dict, "a `content` entry")
+        for experiment_item_compare in experiment_item.require_json_type(
+            dataset_item.get("experiment_items") or [], list, "`experiment_items`"
+        ):
             dataset_item_data = dataset_item.get("data")
             if dataset_item_data is not None:
+                experiment_item.require_json_type(dataset_item_data, dict, "`data`")
                 dataset_item_data.update({"id": dataset_item.get("id")})
             page_items.append(
                 experiment_item.ExperimentItemContent.from_compare_dict(

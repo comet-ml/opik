@@ -507,3 +507,96 @@ def test_get_items__reaches_the_http_client_through_the_accessor():
         exceptions.OpikException, match="generated client's layout has changed"
     ):
         experiment.get_items(max_results=10)
+
+
+class _BodyHttpxClient:
+    """Answers every page 200 with one fixed body, whatever it contains."""
+
+    def __init__(self, body: str) -> None:
+        self._body = body
+
+    def request(self, path: str, *, method: str, params: Dict[str, Any]) -> Any:
+        return types.SimpleNamespace(
+            status_code=200,
+            content=self._body.encode("utf-8"),
+            text=self._body,
+            headers={"content-type": "application/json"},
+        )
+
+
+def _read_body(body: str) -> None:
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=_BodyHttpxClient(body))
+    )
+    rest_operations.find_experiment_items_for_dataset(
+        rest_client=rest_client,
+        dataset_id="some-dataset-id",
+        experiment_ids=["some-experiment-id"],
+        max_results=10,
+        truncate=False,
+    )
+
+
+def test_find_experiment_items_for_dataset__undecodable_success_body_is_an_api_error():
+    # The generated endpoint decodes the 2xx body inside the same `try` as the error
+    # one, so callers see an `ApiError` carrying the raw text rather than a decoder
+    # error escaping from the middle of a read. Parsing the page ourselves must not
+    # quietly change which exception a broken gateway produces.
+    with pytest.raises(ApiError) as exception_info:
+        _read_body("<html>502 from a proxy</html>")
+
+    error = exception_info.value
+    assert error.status_code == 200
+    assert error.body == "<html>502 from a proxy</html>"
+
+
+@pytest.mark.parametrize(
+    "body, expected",
+    [
+        ('["not", "a", "page"]', "the page is a list"),
+        ('{"content": {"0": {}}, "total": 1}', "`content` is a dict"),
+        ('{"content": ["not-a-dataset-item"], "total": 1}', "entry is a str"),
+        (
+            '{"content": [{"id": "d-1", "experiment_items": "nope"}], "total": 1}',
+            "`experiment_items` is a str",
+        ),
+        (
+            '{"content": [{"id": "d-1", "data": "nope",'
+            ' "experiment_items": [{"id": "e-1", "trace_id": "t-1",'
+            ' "dataset_item_id": "d-1"}]}], "total": 1}',
+            "`data` is a str",
+        ),
+        (
+            '{"content": [{"id": "d-1", "experiment_items": ["not-an-item"]}],'
+            ' "total": 1}',
+            "`experiment_items` entry is a str",
+        ),
+    ],
+)
+def test_find_experiment_items_for_dataset__malformed_page_shapes_are_named(
+    body, expected
+):
+    # Without these guards the failures are an `AttributeError` raised somewhere in
+    # the middle of the parse, which says nothing about what the backend sent.
+    with pytest.raises(exceptions.OpikException, match=expected):
+        _read_body(body)
+
+
+@pytest.mark.parametrize("field", ["feedback_scores", "assertion_results"])
+def test_find_experiment_items_for_dataset__non_list_score_fields_do_not_parse(field):
+    # The dangerous shape: `list()` over a dict yields its keys and over a string its
+    # characters, so a malformed `assertion_results` would otherwise become a list of
+    # plausible-looking nonsense instead of an error -- and a migration documented as
+    # lossless would carry it to the destination.
+    compare = {
+        "id": "e-1",
+        "trace_id": "t-1",
+        "dataset_item_id": "d-1",
+        field: {"first": {"passed": True}},
+    }
+    body = json.dumps(
+        {"content": [{"id": "d-1", "experiment_items": [compare]}], "total": 1}
+    )
+
+    with pytest.raises(exceptions.OpikException, match=f"`{field}` is a dict"):
+        _read_body(body)

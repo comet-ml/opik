@@ -1,10 +1,31 @@
 import dataclasses
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Type, TypeVar
+from opik import exceptions
 from opik.types import FeedbackScoreDict
 from opik.rest_api.types import experiment_item_compare
 
 AssertionResultDict = Dict[str, Any]
+
+T = TypeVar("T")
+
+
+def require_json_type(value: Any, expected: Type[T], what: str) -> T:
+    """``value`` when it has the shape the Compare schema declares, else raise.
+
+    The read parses the endpoint's JSON itself, so nothing re-derives the schema the
+    generated models used to enforce. Without this, a field the backend sent with the
+    wrong shape either surfaces as an ``AttributeError`` from deep inside the parse or,
+    worse, parses silently: ``list()`` over a dict yields its keys and over a string
+    yields its characters, which would turn a malformed ``assertion_results`` into
+    plausible-looking nonsense rather than an error.
+    """
+    if not isinstance(value, expected):
+        raise exceptions.OpikException(
+            f"The experiment Compare response is malformed: {what} is a "
+            f"{type(value).__name__}, not a {expected.__name__}."
+        )
+    return value
 
 
 @dataclasses.dataclass
@@ -39,6 +60,7 @@ class ExperimentItemContent:
         more than the request itself on a large experiment; the dataset read hands back
         plain dicts for the same reason.
         """
+        require_json_type(value, dict, "an `experiment_items` entry")
         feedback_scores: List[FeedbackScoreDict] = [
             {
                 "category_name": score.get("category_name"),
@@ -46,7 +68,9 @@ class ExperimentItemContent:
                 "reason": score.get("reason"),
                 "value": score.get("value"),
             }
-            for score in value.get("feedback_scores") or []
+            for score in require_json_type(
+                value.get("feedback_scores") or [], list, "`feedback_scores`"
+            )
         ]
 
         return cls(
@@ -60,7 +84,11 @@ class ExperimentItemContent:
             else value.get("input"),
             evaluation_task_output=value.get("output"),
             feedback_scores=feedback_scores,
-            assertion_results=list(value.get("assertion_results") or []),
+            assertion_results=list(
+                require_json_type(
+                    value.get("assertion_results") or [], list, "`assertion_results`"
+                )
+            ),
         )
 
     @classmethod
