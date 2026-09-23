@@ -672,3 +672,70 @@ def test_find_experiment_items_for_dataset__null_list_fields_read_as_empty(field
         assert len(items) == 1
         assert items[0].feedback_scores == []
         assert items[0].assertion_results == []
+
+
+@pytest.mark.parametrize("entry", ["null", '"oops"', "3"])
+@pytest.mark.parametrize("field", ["feedback_scores", "assertion_results"])
+def test_find_experiment_items_for_dataset__non_dict_entries_do_not_parse(field, entry):
+    # A list of the right shape can still hold entries of the wrong one, and the two
+    # fields failed differently: `feedback_scores` raised `AttributeError` from the
+    # `.get()` in the comprehension, while `assertion_results` was copied straight
+    # through and handed the caller `[None]`. The generated models rejected both.
+    compare = (
+        '{"id": "e-1", "trace_id": "t-1", "dataset_item_id": "d-1",'
+        f' "{field}": [{entry}]}}'
+    )
+    body = (
+        f'{{"content": [{{"id": "d-1", "experiment_items": [{compare}]}}], "total": 1}}'
+    )
+
+    with pytest.raises(exceptions.OpikException, match=f"an entry of `{field}` is a"):
+        _read_body(body)
+
+
+@pytest.mark.parametrize("field", ["feedback_scores", "assertion_results"])
+def test_find_experiment_items_for_dataset__dict_entries_still_parse(field):
+    # The guard must not reject the shape the backend actually sends.
+    entry = {"name": "accuracy", "value": 1.0, "reason": "ok", "category_name": "c"}
+    body = json.dumps(
+        {
+            "content": [
+                {
+                    "id": "d-1",
+                    "experiment_items": [
+                        {
+                            "id": "e-1",
+                            "trace_id": "t-1",
+                            "dataset_item_id": "d-1",
+                            field: [entry],
+                        }
+                    ],
+                }
+            ],
+            "total": 1,
+        }
+    )
+    rest_client = types.SimpleNamespace(
+        _client_wrapper=types.SimpleNamespace(httpx_client=_BodyHttpxClient(body))
+    )
+
+    items = rest_operations.find_experiment_items_for_dataset(
+        rest_client=rest_client,
+        dataset_id="some-dataset-id",
+        experiment_ids=["some-experiment-id"],
+        max_results=10,
+        truncate=False,
+    )
+
+    assert len(items) == 1
+    if field == "feedback_scores":
+        assert items[0].feedback_scores == [
+            {
+                "category_name": "c",
+                "name": "accuracy",
+                "reason": "ok",
+                "value": 1.0,
+            }
+        ]
+    else:
+        assert items[0].assertion_results == [entry]

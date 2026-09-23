@@ -28,17 +28,28 @@ def require_json_type(value: Any, expected: Type[T], what: str) -> T:
     return value
 
 
-def optional_json_list(value: Any, what: str) -> List[Any]:
+def optional_json_list(
+    value: Any, what: str, entry_type: Optional[type] = None
+) -> List[Any]:
     """``value`` as a list, an absent or null field reading as an empty one.
 
     Spelled out rather than ``value or []``, which defaults on every falsy value: ``""``,
     ``0`` and ``False`` are not lists, and a field carrying one of them means the
     response is malformed, not that the list is empty. Only an absent key and an
     explicit ``null`` are the empty list.
+
+    ``entry_type`` checks the entries too. A list of the right shape can still hold
+    entries of the wrong one -- ``[null]`` is the shape to expect, since the backend
+    omits a score rather than nulling it -- and the generated models rejected those as
+    firmly as they rejected the outer list.
     """
     if value is None:
         return []
-    return require_json_type(value, list, what)
+    entries = require_json_type(value, list, what)
+    if entry_type is not None:
+        for entry in entries:
+            require_json_type(entry, entry_type, f"an entry of {what}")
+    return entries
 
 
 @dataclasses.dataclass
@@ -82,7 +93,7 @@ class ExperimentItemContent:
                 "value": score.get("value"),
             }
             for score in optional_json_list(
-                value.get("feedback_scores"), "`feedback_scores`"
+                value.get("feedback_scores"), "`feedback_scores`", entry_type=dict
             )
         ]
 
@@ -99,7 +110,9 @@ class ExperimentItemContent:
             feedback_scores=feedback_scores,
             assertion_results=list(
                 optional_json_list(
-                    value.get("assertion_results"), "`assertion_results`"
+                    value.get("assertion_results"),
+                    "`assertion_results`",
+                    entry_type=dict,
                 )
             ),
         )
