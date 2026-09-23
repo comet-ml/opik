@@ -4747,11 +4747,12 @@ class SpansResourceTest {
 
             // The partial-insert merge keeps the old value only while it is not 'unknown', which is
             // what an absent source binds as — so a no-source update must not downgrade it.
-            spanResourceClient.updateSpan(id, podamFactory.manufacturePojo(SpanUpdate.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .source(null)
-                    .build(), API_KEY, TEST_WORKSPACE);
+            var spanUpdate = SpanUpdate.builder()
+                    .projectName(span.projectName())
+                    .traceId(span.traceId())
+                    .parentSpanId(span.parentSpanId())
+                    .build();
+            spanResourceClient.updateSpan(id, spanUpdate, API_KEY, TEST_WORKSPACE);
 
             var actual = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
             assertThat(actual.source()).isEqualTo(Source.EXPERIMENT);
