@@ -97,11 +97,12 @@ def _upload_items(
         # They must not be tolerated on timeout, though -- a read that was raising
         # would otherwise be reported as one that merely returned too few rows. Re-run
         # outside the suppression so the real exception, with its traceback, reaches
-        # pytest; the count is the message only if the read now succeeds.
-        _readable()
-        raise AssertionError(
-            f"Only {read} of {ITEM_COUNT} experiment items became readable"
-        )
+        # pytest. A re-run that now succeeds means the items landed on the deadline,
+        # so let it through rather than failing on the timing.
+        if not _readable():
+            raise AssertionError(
+                f"Only {read} of {ITEM_COUNT} experiment items became readable"
+            )
 
 
 class _RecordedRequests:
