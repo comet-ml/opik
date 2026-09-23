@@ -7,6 +7,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Covers {@link JsonRowValues#putDouble}, which decides how every {@code Float64} column on the
@@ -78,8 +79,7 @@ class JsonRowValuesTest {
     void blankFieldIsRejected() {
         var node = JsonUtils.createObjectNode();
 
-        org.assertj.core.api.Assertions
-                .assertThatThrownBy(() -> JsonRowValues.putDouble(node, "  ", 1.0))
+        assertThatThrownBy(() -> JsonRowValues.putDouble(node, "  ", 1.0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

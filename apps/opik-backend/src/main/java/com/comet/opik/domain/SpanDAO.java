@@ -1974,7 +1974,7 @@ public class SpanDAO {
     @WithSpan
     public Mono<Long> batchInsert(@NonNull List<Span> spans) {
 
-        Preconditions.checkArgument(!spans.isEmpty(), "Spans list must not be empty");
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(spans), "Spans list must not be empty");
 
         if (configuration.getBulkInsert().v2ClientEnabled()) {
             return insertJsonEachRow(spans);
@@ -1991,12 +1991,9 @@ public class SpanDAO {
      * named parameters per row. See {@link SpanJsonRowMapper} for the per-column parity notes.
      */
     private Mono<Long> insertJsonEachRow(List<Span> spans) {
-        return makeMonoContextAware((userName, workspaceId) -> Mono.defer(() -> {
-            // Inside the defer so a resubscription gets its own rather than replaying the first
-            // subscription's clock, and one per batch rather than per row because the helper re-runs the
-            // mapper on every insert attempt.
-            // Rendered once here rather than per row: the value is the same for every row in
-            // the batch, and the mapper would otherwise reformat a batch-invariant instant.
+        return makeMonoContextAware((userName, workspaceId) -> {
+            // One value for the whole batch, rendered once rather than per row. makeMonoContextAware is
+            // deferContextual, so this already runs on subscription and again on a resubscription.
             String nowForBatch = Instant.now().toString();
 
             return jsonBulkInsert.insert(
@@ -2019,7 +2016,7 @@ public class SpanDAO {
                                 costVersion, spanColumnsNonNullable(),
                                 configuration.getResponseFormatting().getTruncationSize());
                     });
-        }));
+        });
     }
 
     private Publisher<? extends Result> insert(List<Span> spans, Connection connection) {

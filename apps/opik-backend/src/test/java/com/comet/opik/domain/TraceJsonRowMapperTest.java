@@ -2,12 +2,15 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Trace;
 import com.comet.opik.podam.PodamFactoryUtils;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -19,16 +22,20 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class TraceJsonRowMapperTest {
 
-    private static final PodamFactory FACTORY = PodamFactoryUtils.newPodamFactory();
-    private static final String USER = "a-user";
-    private static final String WORKSPACE_ID = UUID.randomUUID().toString();
+    // Instance, not static: PodamFactory is not fully thread-safe, and instance-per-class is the
+    // convention across the service's tests.
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
+
+    private final String user = RandomStringUtils.secure().nextAlphanumeric(20);
+    private final String workspaceId = UUID.randomUUID().toString();
 
     /** Pre-rendered by the DAO once per batch, so the mapper takes it already formatted. */
-    private static final Instant NOW_FOR_BATCH_INSTANT = Instant.parse("2026-09-22T08:09:10.111222333Z");
-    private static final String NOW_FOR_BATCH = NOW_FOR_BATCH_INSTANT.toString();
+    private final Instant nowForBatchInstant = Instant.now().minusSeconds(
+            ThreadLocalRandom.current().nextInt(1, 10_000));
+    private final String nowForBatch = nowForBatchInstant.toString();
 
     private Trace traceWith(Instant endTime, Double ttft) {
-        return FACTORY.manufacturePojo(Trace.class).toBuilder()
+        return factory.manufacturePojo(Trace.class).toBuilder()
                 .endTime(endTime)
                 .ttft(ttft)
                 .build();
@@ -37,7 +44,7 @@ class TraceJsonRowMapperTest {
     @Test
     @DisplayName("while the columns are Nullable, an absent end_time and ttft are explicit JSON nulls")
     void nullableColumnsWriteNulls() {
-        var row = TraceJsonRowMapper.toJsonRow(traceWith(null, null), USER, WORKSPACE_ID, NOW_FOR_BATCH,
+        var row = TraceJsonRowMapper.toJsonRow(traceWith(null, null), user, workspaceId, nowForBatch,
                 false, 10001);
 
         assertThat(row.get("end_time").isNull()).isTrue();
@@ -47,7 +54,7 @@ class TraceJsonRowMapperTest {
     @Test
     @DisplayName("once the columns are non-nullable, the same absences become the epoch and NaN sentinels")
     void nonNullableColumnsWriteSentinels() {
-        var row = TraceJsonRowMapper.toJsonRow(traceWith(null, null), USER, WORKSPACE_ID, NOW_FOR_BATCH,
+        var row = TraceJsonRowMapper.toJsonRow(traceWith(null, null), user, workspaceId, nowForBatch,
                 true, 10001);
 
         // The instant, not its spelling: date_time_input_format=best_effort accepts either form, so
@@ -67,8 +74,8 @@ class TraceJsonRowMapperTest {
     void presentValuesAreUnaffectedByTheToggle() {
         var trace = traceWith(Instant.parse("2026-09-22T10:11:12.123456789Z"), 12.5);
 
-        var nullable = TraceJsonRowMapper.toJsonRow(trace, USER, WORKSPACE_ID, NOW_FOR_BATCH, false, 10001);
-        var nonNullable = TraceJsonRowMapper.toJsonRow(trace, USER, WORKSPACE_ID, NOW_FOR_BATCH, true, 10001);
+        var nullable = TraceJsonRowMapper.toJsonRow(trace, user, workspaceId, nowForBatch, false, 10001);
+        var nonNullable = TraceJsonRowMapper.toJsonRow(trace, user, workspaceId, nowForBatch, true, 10001);
 
         assertThat(Instant.parse(nullable.get("end_time").asText()))
                 .isEqualTo(Instant.parse("2026-09-22T10:11:12.123456789Z"));
@@ -82,9 +89,9 @@ class TraceJsonRowMapperTest {
     void nonPositiveTruncationSizeOmitsTheColumn() {
         var trace = traceWith(null, null);
 
-        assertThat(TraceJsonRowMapper.toJsonRow(trace, USER, WORKSPACE_ID, NOW_FOR_BATCH, false, 0)
+        assertThat(TraceJsonRowMapper.toJsonRow(trace, user, workspaceId, nowForBatch, false, 0)
                 .has("truncation_threshold")).isFalse();
-        assertThat(TraceJsonRowMapper.toJsonRow(trace, USER, WORKSPACE_ID, NOW_FOR_BATCH, false, 10001)
+        assertThat(TraceJsonRowMapper.toJsonRow(trace, user, workspaceId, nowForBatch, false, 10001)
                 .get("truncation_threshold").asInt()).isEqualTo(10001);
     }
 
@@ -93,12 +100,12 @@ class TraceJsonRowMapperTest {
     void timestampsAreWrittenAsGiven() {
         var startTime = Instant.parse("2026-09-22T10:11:12.123456789Z");
         var lastUpdatedAt = Instant.parse("2026-09-22T10:11:13.987654Z");
-        var trace = FACTORY.manufacturePojo(Trace.class).toBuilder()
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .startTime(startTime)
                 .lastUpdatedAt(lastUpdatedAt)
                 .build();
 
-        var row = TraceJsonRowMapper.toJsonRow(trace, USER, WORKSPACE_ID, NOW_FOR_BATCH, false, 10001);
+        var row = TraceJsonRowMapper.toJsonRow(trace, user, workspaceId, nowForBatch, false, 10001);
 
         // Parsed rather than string-compared: date_time_input_format=best_effort accepts either
         // spelling, so the instant is the contract and the text is not.
@@ -109,13 +116,32 @@ class TraceJsonRowMapperTest {
     @Test
     @DisplayName("an absent last_updated_at falls back to the batch instant, not to a fresh clock")
     void absentLastUpdatedAtUsesTheBatchInstant() {
-        var trace = FACTORY.manufacturePojo(Trace.class).toBuilder().lastUpdatedAt(null).build();
+        var trace = factory.manufacturePojo(Trace.class).toBuilder().lastUpdatedAt(null).build();
 
-        var row = TraceJsonRowMapper.toJsonRow(trace, USER, WORKSPACE_ID, NOW_FOR_BATCH, false, 10001);
+        var row = TraceJsonRowMapper.toJsonRow(trace, user, workspaceId, nowForBatch, false, 10001);
 
         // The batch value exactly. A per-row Instant.now() would be close but never equal, which is the
         // regression this pins: the helper re-runs the mapper on every insert attempt, and
         // last_updated_at is the ReplacingMergeTree version column.
-        assertThat(Instant.parse(row.get("last_updated_at").asText())).isEqualTo(NOW_FOR_BATCH_INSTANT);
+        assertThat(Instant.parse(row.get("last_updated_at").asText())).isEqualTo(nowForBatchInstant);
+    }
+
+    @Test
+    @DisplayName("writes exactly the columns BATCH_INSERT lists, no more and no fewer")
+    void writesExactlyTheExpectedColumns() {
+        // The whole-object assertion for a row mapper: comparing every value would restate the mapper,
+        // but the column SET is what breaks silently -- a dropped column reads back as a default and a
+        // stray one is rejected by ClickHouse at insert time, and neither shows up in a per-field check.
+        var row = TraceJsonRowMapper.toJsonRow(factory.manufacturePojo(Trace.class), user, workspaceId,
+                nowForBatch, false, 10_001);
+
+        var columns = new HashSet<String>();
+        row.fieldNames().forEachRemaining(columns::add);
+
+        assertThat(columns).containsExactlyInAnyOrder(
+                "id", "project_id", "workspace_id", "name", "start_time", "end_time", "input", "output",
+                "metadata", "tags", "last_updated_at", "error_info", "created_by", "last_updated_by",
+                "thread_id", "visibility_mode", "truncation_threshold", "input_slim", "output_slim",
+                "ttft", "source", "environment");
     }
 }
