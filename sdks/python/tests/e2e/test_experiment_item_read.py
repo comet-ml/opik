@@ -77,15 +77,26 @@ def _upload_items(
         project_name=PROJECT_NAME,
     )
 
-    def _readable() -> bool:
-        return (
-            len(experiment.get_items(max_results=ITEM_COUNT * 2, page_size=PAGE_SIZE))
-            >= ITEM_COUNT
-        )
+    read = 0
 
-    assert synchronization.until(_readable, max_try_seconds=60, allow_errors=True), (
-        "Experiment items did not become readable in time"
-    )
+    def _readable() -> bool:
+        nonlocal read
+        read = len(
+            experiment.get_items(max_results=ITEM_COUNT * 2, page_size=PAGE_SIZE)
+        )
+        return read >= ITEM_COUNT
+
+    if not synchronization.until(_readable, max_try_seconds=60, allow_errors=True):
+        # Errors are tolerated *while* polling, as everywhere else in this suite: the
+        # upload is eventually consistent, so an early read can legitimately fail.
+        # They must not be tolerated on timeout, though -- a read that was raising
+        # would otherwise be reported as one that merely returned too few rows. Re-run
+        # outside the suppression so the real exception, with its traceback, reaches
+        # pytest; the count is the message only if the read now succeeds.
+        _readable()
+        raise AssertionError(
+            f"Only {read} of {ITEM_COUNT} experiment items became readable"
+        )
 
 
 class _RecordedRequests:
