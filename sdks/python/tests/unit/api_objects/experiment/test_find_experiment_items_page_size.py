@@ -443,3 +443,18 @@ def test_get_items__non_positive_max_results_reaches_no_compare_request(max_resu
     experiment = _experiment(experiments_client_module.ExperimentsClient(rest_client))
 
     assert experiment.get_items(max_results=max_results) == []
+
+
+def test_public_read_signatures__page_size_and_num_threads_are_keyword_only():
+    """Positional order is a contract; these two were never meant to be part of it."""
+    import inspect
+
+    for callable_ in (
+        experiment_module.Experiment.get_items,
+        experiments_client_module.ExperimentsClient.find_experiment_items_for_dataset,
+    ):
+        parameters = inspect.signature(callable_).parameters
+        for name in ("page_size", "num_threads"):
+            assert parameters[name].kind is inspect.Parameter.KEYWORD_ONLY, (
+                f"{callable_.__qualname__}.{name} must be keyword-only"
+            )

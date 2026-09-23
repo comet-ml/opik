@@ -20,6 +20,7 @@ class ExperimentsClient:
         max_results: int = 1000,
         filter_string: Optional[str] = None,
         project_name: Optional[str] = None,
+        *,
         page_size: int = constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE,
         num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
     ) -> List[experiment_item.ExperimentItemContent]:

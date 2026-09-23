@@ -681,6 +681,7 @@ class Experiment:
         self,
         max_results: Optional[int] = 10000,
         truncate: bool = False,
+        *,
         page_size: int = constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE,
         num_threads: int = constants.DATASET_ITEMS_READ_NUM_THREADS,
     ) -> List[experiment_item.ExperimentItemContent]:
