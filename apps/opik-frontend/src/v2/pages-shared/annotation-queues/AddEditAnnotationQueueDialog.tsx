@@ -143,9 +143,10 @@ const formSchema = z
             path: [...base, "name"],
           });
         }
+        // isFinite, not isNaN: "1e999" parses to Infinity, which the backend rejects after submit.
         if (
           condition.threshold === "" ||
-          Number.isNaN(Number(condition.threshold))
+          !Number.isFinite(Number(condition.threshold))
         ) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -204,7 +205,9 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
       // configuring automation is the whole point of the visit.
       automation_enabled:
         defaultQueue?.automation?.enabled ?? Boolean(expandAutomation),
-      automation_groups: defaultQueue?.automation?.conditions.groups.map(
+      // conditions is nullable on the backend: a toggle-off request keeps them server-side but a
+      // queue can still arrive with automation and no conditions.
+      automation_groups: defaultQueue?.automation?.conditions?.groups?.map(
         (group) => ({
           conditions: group.conditions.map((condition) => ({
             name: condition.score_name,

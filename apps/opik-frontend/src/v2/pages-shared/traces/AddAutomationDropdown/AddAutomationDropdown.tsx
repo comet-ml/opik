@@ -67,7 +67,7 @@ const AUTOMATION_OPTIONS: AutomationOption[] = [
     iconClassName: "bg-pink-500",
     description: (subject) =>
       `Get notified about ${subject} that need attention`,
-    isAvailable: () => true,
+    isAvailable: ({ permissions }) => permissions.canUpdateAlerts,
   },
   {
     target: "online_evaluation",
