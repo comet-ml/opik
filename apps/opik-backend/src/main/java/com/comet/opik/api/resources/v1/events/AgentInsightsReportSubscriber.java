@@ -110,8 +110,13 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
                 ? triggerFailure.getReason()
                 : AgentInsightsJob.FailureReason.DID_NOT_START;
         if (AgentInsightsJob.FailureReason.FREE_POOL_EXHAUSTED.equals(reason)) {
-            cancelAutoFirstRunRollout(message);
-            return;
+            if (AgentInsightsMetrics.AUTO_FIRST_RUN.equals(message.triggerSource())) {
+                cancelAutoFirstRunRollout(message);
+                return;
+            }
+            // Only the free run draws on Comet's budget. Anything else reporting it is misclassified, and cancelling
+            // the whole rollout over it would leave nothing to re-enable it: record it as the customer's credits.
+            reason = AgentInsightsJob.FailureReason.OUT_OF_CREDITS;
         }
         try {
             jobService.markRunFailed(message.workspaceId(), message.projectId(), reason, throwable.getMessage());
@@ -121,7 +126,8 @@ public class AgentInsightsReportSubscriber extends BaseRedisSubscriber<AgentInsi
         }
     }
 
-    // Comet's free-run budget is spent: cancel the rollout for everyone still owed a run
+    // Comet's free-run budget is spent: cancel the rollout for everyone still owed a run. Nothing re-enables it:
+    // resuming means re-enrolling the projects through the internal enrolment endpoint.
     private void cancelAutoFirstRunRollout(AgentInsightsReportMessage message) {
         try {
             int cancelled = jobService.cancelAutoFirstRunRollout(message.workspaceId(), message.projectId());

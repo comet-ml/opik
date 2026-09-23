@@ -43,14 +43,13 @@ import OutOfCreditsButton from "@/v2/pages/SignalsPage/OutOfCreditsButton";
 import DiagnosticsSettingsDialog from "@/v2/pages/SignalsPage/DiagnosticsSettingsDialog";
 import SignalsPageSkeleton from "@/v2/pages/SignalsPage/SignalsPageSkeleton";
 import useColumnsOverflow from "@/v2/pages/SignalsPage/useColumnsOverflow";
+import { AUTO_RUN_MAX_DURATION_MS } from "@/v2/pages/SignalsPage/helpers";
 
 const RUN_POLL_INTERVAL_MS = 8000;
 const ELIGIBILITY_POLL_INTERVAL_MS = 30_000;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const STALE_AFTER_MS = 3 * DAY_MS;
-// A run with no result and no failure past this is treated as lost rather than running
-const RUN_LOST_AFTER_MS = 40 * 60 * 1000;
 const ELIGIBILITY_WINDOW_MS = 7 * DAY_MS;
 
 const LAYOUT = {
@@ -147,7 +146,7 @@ const SignalsPage: React.FC<{ showResolved?: boolean }> = ({
     autoRunAt > 0 &&
     (job?.last_scan_at ? Date.parse(job.last_scan_at) : 0) < autoRunAt &&
     (job?.last_failed_at ? Date.parse(job.last_failed_at) : 0) < autoRunAt &&
-    Date.now() - autoRunAt < RUN_LOST_AFTER_MS;
+    Date.now() - autoRunAt < AUTO_RUN_MAX_DURATION_MS;
   const showRunning = isRunning || isAutoRunInFlight;
 
   // Derive failure from the job (BE sets it, clears on next success) so the banner

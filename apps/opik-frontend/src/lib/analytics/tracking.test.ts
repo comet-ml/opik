@@ -27,12 +27,10 @@ describe("trackEvent", () => {
     );
   });
 
-  it("omits the workspace rather than sending an empty one", () => {
+  it("sends no workspace value, rather than an empty one, when none is active", () => {
+    // The store defaults to "". The key is still present, as undefined, and drops out when serialized.
     trackEvent(OpikEvent.DIAGNOSTICS_RUN_CLICKED, { project_id: "p1" });
 
-    expect(track).toHaveBeenCalledWith(
-      "opik_diagnostics_run_clicked",
-      expect.not.objectContaining({ workspace: expect.anything() }),
-    );
+    expect(track.mock.calls[0][1].workspace).toBeUndefined();
   });
 });

@@ -2306,7 +2306,7 @@ class TraceDAOImpl implements TraceDAO {
             AND created_at >= parseDateTime64BestEffort(:from_time, 9)
             AND created_at \\< parseDateTime64BestEffort(:to_time, 9)
             GROUP BY project_id
-            HAVING count() >= :min_traces
+            HAVING uniq(id) >= :min_traces
             SETTINGS log_comment = '<log_comment>'
             ;
             """;

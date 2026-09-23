@@ -5,11 +5,7 @@ import { useActiveProjectId } from "@/store/AppStore";
 import useAgentInsightsJob from "@/api/signals/useAgentInsightsJob";
 import useDiagnosticsRunState from "@/hooks/useDiagnosticsRunState";
 import useDiagnosticsSeen from "@/hooks/useDiagnosticsSeen";
-
-// How long after the automatic run is enqueued its report can still land.
-// A later manual run will usually fall outside the window and get the
-// plain dot instead of the pulse.
-const AUTO_RUN_RESULT_WINDOW_MS = 40 * 60 * 1000;
+import { AUTO_RUN_MAX_DURATION_MS } from "@/v2/pages/SignalsPage/helpers";
 
 type DiagnosticsNavBadgeProps = {
   collapsed: boolean;
@@ -39,7 +35,8 @@ const DiagnosticsNavBadge: React.FC<DiagnosticsNavBadgeProps> = ({
   const isAutoFirstRunResult =
     autoRunAt > 0 &&
     scanMs >= autoRunAt &&
-    scanMs - autoRunAt < AUTO_RUN_RESULT_WINDOW_MS;
+    // A later manual run usually lands outside the window and gets the plain dot instead of the pulse.
+    scanMs - autoRunAt < AUTO_RUN_MAX_DURATION_MS;
 
   const showSpinner = isRunning && !collapsed;
   if (!showSpinner && !hasUnseen) return null;

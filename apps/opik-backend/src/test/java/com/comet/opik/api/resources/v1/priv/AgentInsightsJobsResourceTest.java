@@ -584,6 +584,31 @@ class AgentInsightsJobsResourceTest {
     }
 
     @Test
+    @DisplayName("Auto-first-run sweep applies the threshold to each (workspace, project) pair on its own")
+    void autoFirstRunSweep__severalWorkspaces__runsOnlyProjectsOverThreshold() {
+        // Same array-zip binding as the daily sweep: one enrolled project over the threshold, and one under it
+        // in another workspace, counted in a single query.
+        String overName = "project-" + UUID.randomUUID();
+        var over = projectResourceClient.createProject(overName, API_KEY, WORKSPACE_NAME);
+        String underName = "project-" + UUID.randomUUID();
+        var under = projectResourceClient.createProject(underName, API_KEY_2, WORKSPACE_NAME_2);
+        jobsClient.enrolInAutoFirstRun(true, List.of(over, under)).close();
+
+        traceResourceClient.batchCreateTraces(IntStream.range(0, AgentInsightsAutoFirstRunJob.MIN_TRACES)
+                .mapToObj(__ -> podamFactory.manufacturePojo(Trace.class).toBuilder().projectName(overName).build())
+                .toList(), API_KEY, WORKSPACE_NAME);
+        traceResourceClient.batchCreateTraces(IntStream.range(0, 10)
+                .mapToObj(__ -> podamFactory.manufacturePojo(Trace.class).toBuilder().projectName(underName).build())
+                .toList(), API_KEY_2, WORKSPACE_NAME_2);
+
+        autoFirstRunJob.runSweep(Instant.now(), 10).block();
+
+        await().atMost(10, SECONDS).untilAsserted(() -> assertThat(
+                TRIGGERS.stream().filter(t -> t.projectId().equals(over)).toList()).hasSize(1));
+        assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(under)).toList()).isEmpty();
+    }
+
+    @Test
     @DisplayName("Auto-first-run sweep ignores a project that is not enrolled")
     void autoFirstRunSweep__ignoresProjectNotEnrolled() {
         String projectName = "project-" + UUID.randomUUID();
@@ -743,5 +768,33 @@ class AgentInsightsJobsResourceTest {
                 TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).toList()).hasSize(1));
         var trigger = TRIGGERS.stream().filter(t -> t.projectId().equals(projectId)).findFirst().orElseThrow();
         assertThat(trigger.triggerSource()).isEqualTo("scheduled");
+    }
+
+    @Test
+    @DisplayName("Daily sweep matches each (workspace, project) pair on its own, across workspaces")
+    void cronSweep__severalWorkspaces__triggersOnlyJobsWithTraces() {
+        // The pairs are bound as two parallel arrays zipped back into tuples, so a misalignment would drop the
+        // project that should run: one enabled job with traces, and one without, in another workspace.
+        String withTracesName = "project-" + UUID.randomUUID();
+        var withTraces = projectResourceClient.createProject(withTracesName, API_KEY, WORKSPACE_NAME);
+        jobsClient.create(withTraces, API_KEY, WORKSPACE_NAME).close();
+        jobsClient.update(withTraces, AgentInsightsJob.Status.ENABLED, API_KEY, WORKSPACE_NAME).close();
+        traceResourceClient.createTrace(
+                podamFactory.manufacturePojo(Trace.class).toBuilder().projectName(withTracesName).build(),
+                API_KEY, WORKSPACE_NAME);
+
+        var withoutTraces = projectResourceClient.createProject("project-" + UUID.randomUUID(), API_KEY_2,
+                WORKSPACE_NAME_2);
+        jobsClient.create(withoutTraces, API_KEY_2, WORKSPACE_NAME_2).close();
+        jobsClient.update(withoutTraces, AgentInsightsJob.Status.ENABLED, API_KEY_2, WORKSPACE_NAME_2).close();
+
+        Instant now = Instant.now();
+        reportJob.runSweep(now.minusSeconds(3600), now.plusSeconds(3600)).block();
+
+        await().atMost(10, SECONDS).untilAsserted(() -> assertThat(
+                TRIGGERS.stream().filter(t -> t.projectId().equals(withTraces)).toList()).hasSize(1));
+        assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(withTraces)).findFirst().orElseThrow()
+                .workspaceId()).isEqualTo(WORKSPACE_ID);
+        assertThat(TRIGGERS.stream().filter(t -> t.projectId().equals(withoutTraces)).toList()).isEmpty();
     }
 }
