@@ -31,6 +31,7 @@ import useTreeDetailsStore, {
   TreeNodeConfig,
 } from "@/v2/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
 import AddToDropdown from "@/v2/pages-shared/traces/AddToDropdown/AddToDropdown";
+import CopyEntityActions from "@/v2/pages-shared/traces/CopyEntityActions/CopyEntityActions";
 import {
   DetailsActionSection,
   DetailsActionSectionToggle,
@@ -285,17 +286,23 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-muted/50 px-4">
-      <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
-        Inspect:
-      </span>
       {isLoading || !dataToView ? (
         <Skeleton className="h-4 w-32" />
       ) : (
         <>
           <BaseTraceDataTypeIcon type={inspectType} />
-          <span className="comet-body-xs-accented truncate">
-            {dataToView?.name}
-          </span>
+          <TooltipWrapper
+            content={`${isSpan ? "Span" : "Trace"} ID: ${dataToView.id}`}
+          >
+            <span className="comet-body-xs-accented truncate">
+              {dataToView.name || (isSpan ? "Span" : "Trace")}
+            </span>
+          </TooltipWrapper>
+          <CopyEntityActions
+            entityId={dataToView.id}
+            entityLabel={isSpan ? "span" : "trace"}
+            withLink={false}
+          />
         </>
       )}
 

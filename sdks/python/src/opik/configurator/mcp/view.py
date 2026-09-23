@@ -22,8 +22,6 @@ import logging
 import pathlib
 from typing import Iterator, List, Optional
 
-from opik.configurator import interactive_helpers
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -57,11 +55,26 @@ class TargetResult:
         return self.summary or self.detail
 
 
+#: The picker row for "none of these is my client". Returned in place of host
+#: keys, so the installer answers it with the manual-setup instructions rather
+#: than treating it as a silent decline. Not a host key and cannot collide with
+#: one: `mcp_targets.HOST_KEYS` are plain names like `claude-code`.
+MANUAL_SETUP = "__manual__"
+
+#: Label for that row, shared so the rich picker and the numbered menu agree.
+MANUAL_SETUP_LABEL = "My AI client is not listed"
+
+
 #: How the sign-in step is phrased, once, so both views agree.
+#:
+#: Written to hold whether or not the sign-in already happened: Codex signs in
+#: inside `codex mcp add`, and Claude Code is signed in right after it, so for
+#: those two the browser has usually opened by the time this prints. Promising a
+#: prompt that already came and went is what this wording avoids.
 SIGN_IN_HINT = (
-    "Depending on your assistant, you will either be prompted with a sign-in "
-    "link the first time it uses Opik, or need to authorize the opik-mcp "
-    "server yourself from its MCP settings."
+    "Signing in to Opik happens in your browser. Your assistant may have opened "
+    "it during setup; otherwise it will prompt you the first time it uses Opik, "
+    "or wait for you to authorize the opik-mcp server from its MCP settings."
 )
 
 
@@ -189,28 +202,57 @@ class LoggingInstallView(InstallView):
         return numbered_menu(title, candidates)
 
 
+def _single_candidate_menu(candidate: HostChoice) -> List[str]:
+    """One detected client: a yes/no that also has the manual door in it.
+
+    Still answers to Y, N and a bare Enter, because that is what this prompt has
+    always accepted and what anything piping input into it sends. The numbers
+    are the addition. Without them "my AI client is not listed" existed only
+    once two clients were detected, so the user this most concerns — one client
+    found, and it is not theirs — was the one who could not reach it.
+    """
+    prompt = "\n".join(
+        [
+            f"Detected {candidate.label}. Install the Opik MCP server for it?",
+            "  1 - Yes",
+            f"  2 - {MANUAL_SETUP_LABEL}",
+            "  3 - Skip",
+            "\nY/n, or a number\n> ",
+        ]
+    )
+
+    while True:
+        answer = input(prompt).strip().upper()
+        if answer in ("Y", "YES", "1", ""):
+            return [candidate.key]
+        if answer in ("N", "NO", "3"):
+            return []
+        if answer == "2":
+            return [MANUAL_SETUP]
+        LOGGER.error("Wrong choice. Please try again.\n")
+
+
 def numbered_menu(title: str, candidates: List[HostChoice]) -> Optional[List[str]]:
     """The portable fallback: type a number.
 
     A module-level function rather than a base-class method so the rich view can
     fall back to it without inheriting a logging view it otherwise overrides
-    entirely. A single candidate is a yes/no rather than a one-item menu.
+    entirely. A single candidate keeps its own shape; see
+    :func:`_single_candidate_menu`.
     """
     if len(candidates) == 1:
-        confirmed = interactive_helpers.ask_user_for_approval(
-            f"Detected {candidates[0].label}. Install the Opik MCP server "
-            f"for it? (Y/n) "
-        )
-        return [candidates[0].key] if confirmed else []
+        return _single_candidate_menu(candidates[0])
 
     host_count = len(candidates)
     all_choice = host_count + 1
-    skip_choice = host_count + 2
+    manual_choice = host_count + 2
+    skip_choice = host_count + 3
 
     lines = [title]
     for index, candidate in enumerate(candidates, start=1):
         lines.append(f"  {index} - {candidate.label}")
     lines.append(f"  {all_choice} - All of the above")
+    lines.append(f"  {manual_choice} - {MANUAL_SETUP_LABEL}")
     lines.append(f"  {skip_choice} - Skip")
     lines.append("\nEnter a number, or several separated by commas (e.g. 1,2)\n> ")
     prompt = "\n".join(lines)
@@ -226,6 +268,8 @@ def numbered_menu(title: str, candidates: List[HostChoice]) -> Optional[List[str
 
         if skip_choice in numbers:
             return []
+        if manual_choice in numbers:
+            return [MANUAL_SETUP]
         if all_choice in numbers:
             return [candidate.key for candidate in candidates]
         if all(1 <= number <= host_count for number in numbers):

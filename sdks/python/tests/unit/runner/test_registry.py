@@ -134,3 +134,23 @@ class TestExtractParams:
         params = extract_params(fn)
         assert params[0].type == "string"
         assert params[0].presence == "required"
+
+    def test_extract_params__var_keyword__skipped(self):
+        def fn(query: str, **params) -> None:
+            pass
+
+        params = extract_params(fn)
+        assert [p.name for p in params] == ["query"]
+
+    def test_extract_params__var_positional__skipped(self):
+        def fn(query: str, *rest) -> None:
+            pass
+
+        params = extract_params(fn)
+        assert [p.name for p in params] == ["query"]
+
+    def test_extract_params__only_variadic__no_params(self):
+        def fn(*args, **kwargs) -> None:
+            pass
+
+        assert extract_params(fn) == []

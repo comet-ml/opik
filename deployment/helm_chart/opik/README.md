@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 2.2.61](https://img.shields.io/badge/Version-2.2.61-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.61](https://img.shields.io/badge/AppVersion-2.2.61-informational?style=flat-square)
+![Version: 2.2.77](https://img.shields.io/badge/Version-2.2.77-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.2.77](https://img.shields.io/badge/AppVersion-2.2.77-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -108,7 +108,7 @@ Call opik api on http://localhost:5173/api
 | chartMigration.nodeSelector | object | `{}` |  |
 | chartMigration.serviceAccountName | string | `""` |  |
 | chartMigration.tolerations | list | `[]` |  |
-| clickhouse.additionalProfiles | list | `[{"name":"default","settings":{"distributed_background_insert_batch":1,"distributed_background_insert_split_batch_on_failure":1}}]` | Extra ClickHouse settings profiles. Wins over the operator's own defaults; carries the Distributed insert-queue baseline on `default`. A values file declaring its own list must repeat that entry — Helm replaces lists rather than merging them. |
+| clickhouse.additionalProfiles | list | `[{"name":"default","settings":{"distributed_background_insert_batch":1,"distributed_background_insert_split_batch_on_failure":1,"prefer_localhost_replica":0}}]` | Extra ClickHouse settings profiles. Wins over the operator's own defaults; carries the Distributed insert-queue baseline on `default`. A values file declaring its own list must repeat that entry — Helm replaces lists rather than merging them. |
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
 | clickhouse.adminUser.username | string | `"opik"` |  |
@@ -221,7 +221,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.templates.replicaServiceTemplate | string | `"clickhouse-replica-svc-template"` |  |
 | clickhouse.templates.serviceTemplate | string | `"clickhouse-cluster-svc-template"` |  |
 | clickhouse.templates.volumeClaimTemplate | string | `"storage-vc-template"` |  |
-| clickhouse.tieredStorage | object | `{"cold":{"cache":{"maxSize":"214748364800","path":"/var/cache/clickhouse_s3","storage":"200Gi","storageClassName":"","volumeName":"s3-cache-vc-template"},"s3":{"endpoint":"","maxGetRps":1000,"maxPutRps":500,"prefix":"clickhouse-cold/","readOnly":false,"region":"","useEnvironmentCredentials":true}},"enabled":false,"hot":{"keepFreeSpaceBytes":"10737418240"}}` | Tiered storage (hot local disk -> cold S3 with a read-through cache). Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold disks) and provisions a per-node EBS cache volume for the S3 cache. This is pure server-side infrastructure: it stays inert until a migration attaches the `tiered_replicated` policy to a table, so `enabled: false` (default) is a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros ({shard}/{replica}) cannot be used because the S3 disk is read at server start, before macros bind. |
+| clickhouse.tieredStorage | object | `{"cold":{"cache":{"maxSize":"214748364800","path":"/var/cache/clickhouse_s3","storage":"200Gi","storageClassName":"","volumeName":"s3-cache-vc-template"},"s3":{"endpoint":"","maxGetRps":1000,"maxPutRps":500,"prefix":"clickhouse-cold/","readOnly":false,"region":"","useEnvironmentCredentials":true}},"coldTierMigration":{"activeDeadlineSeconds":1320,"enabled":true,"image":"alpine/kubectl:1.35.0","nodeSelector":{},"pollTimeoutSeconds":1200,"serviceAccountName":"","tolerations":[]},"enabled":false,"hot":{"keepFreeSpaceBytes":"10737418240"}}` | Tiered storage (hot local disk -> cold S3 with a read-through cache). Renders conf.d/storage.xml (the `tiered_replicated` policy + hot/cold_s3/cold disks) and provisions a per-node EBS cache volume for the S3 cache. This is pure server-side infrastructure: it stays inert until a migration attaches the `tiered_replicated` policy to a table, so `enabled: false` (default) is a no-op. The S3 <endpoint> is rendered by Helm — ClickHouse macros ({shard}/{replica}) cannot be used because the S3 disk is read at server start, before macros bind. |
 | clickhouse.zookeeper.host | string | `"opik-zookeeper"` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
 | component.backend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
@@ -496,6 +496,7 @@ Call opik api on http://localhost:5173/api
 | databaseAnalyticsDataModel.deletionEventsInsertBatchSize | int | `1000` |  |
 | databaseAnalyticsDataModel.spanColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.spanDeletionEventsCaptureEnabled | bool | `false` |  |
+| databaseAnalyticsDataModel.spansDistributedWrapEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.traceColumnsNonNullable | bool | `false` |  |
 | databaseAnalyticsDataModel.traceDeletionEventsCaptureEnabled | bool | `false` |  |
 | databaseAnalyticsDataModel.tracesDistributedWrapEnabled | bool | `false` |  |

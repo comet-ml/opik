@@ -14,6 +14,7 @@ export interface AnnotationQueuePublic {
     feedbackDefinitionNames?: string[];
     annotatorsPerItem?: number;
     lockTimeoutSeconds?: number;
+    automation?: OpikApi.AnnotationQueueAutomationPublic;
     reviewers?: OpikApi.AnnotationQueueReviewerPublic[];
     feedbackScores?: OpikApi.FeedbackScoreAveragePublic[];
     itemsCount?: number;

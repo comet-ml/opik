@@ -31,7 +31,7 @@ from opik.message_processing.batching import sequence_splitter
 from opik import httpx_client, id_helpers, semantic_version
 import opik.exceptions as exceptions
 import opik.config as config
-from .. import constants
+from .. import constants, streaming_upload
 from . import (
     dataset_item,
     identifiers,
@@ -734,8 +734,14 @@ class Dataset(DatasetExportOperations):
         """Yield items, dropping ones whose content hash has already been seen.
 
         The hash state spans the whole pass, so a duplicate is caught however far apart
-        the two copies are. Hashes always use the standard library, so item identity does
-        not depend on which serialiser writes the request body.
+        the two copies are.
+
+        A digest is only ever compared with another this client computed: the ones a
+        sync reads back are recomputed here from the items themselves, never carried
+        from the backend. That is what makes identity stable, not the encoder -- orjson
+        and the standard library digest the same content differently, so a digest that
+        travelled would stop matching the moment the two ends disagreed about which
+        encoder they had. Keep it that way, or pin the encoder before sending one.
         """
         for item in items:
             if deduplication:
@@ -799,28 +805,23 @@ class Dataset(DatasetExportOperations):
     def _upload_transport(self) -> Tuple[httpx.Client, str]:
         """The HTTP client and base URL used to send prepared request bodies.
 
-        A `Dataset` always has a REST client, and the transport underneath it is the very
-        `OpikHttpxClient` the owning client holds -- the same object, carrying the same
-        auth, workspace headers and compression setting -- so a `Dataset` built from a REST
-        client alone resolves a transport like any other, as the read side already does in
-        `parallel_items_reader`. The constructor arguments win where they were supplied.
+        A `Dataset` always has a REST client, and the traversal down to its transport is
+        shared with the experiment upload -- see `httpx_client.upload_transport`, and
+        `parallel_items_reader` for the read side. The constructor arguments win where
+        they were supplied.
         """
-        httpx_client_ = self._rest_httpx_client
-        base_url = self._url_override
+        return httpx_client.upload_transport(
+            self._rest_client,
+            client=self._rest_httpx_client,
+            base_url=self._url_override,
+        )
 
-        if httpx_client_ is None:
-            httpx_client_ = self._rest_client._client_wrapper.httpx_client.httpx_client
-        if base_url is None:
-            base_url = self._rest_client._client_wrapper.get_base_url()
+    def _send_prepared_body(self, body: bytes, _payload: Any = None) -> None:
+        """Send one already-serialised request body.
 
-        if httpx_client_ is None or base_url is None:
-            raise exceptions.OpikException(
-                "The dataset's REST client exposes no HTTP transport to upload through"
-            )
-        return httpx_client_, base_url
-
-    def _send_prepared_body(self, body: bytes) -> None:
-        """Send one already-serialised request body."""
+        The pool hands a send whatever `submit` carried alongside the body; a dataset
+        batch carries nothing, because a rejected one is never re-split.
+        """
         httpx_client_, base_url = self._upload_transport()
 
         def send() -> None:
@@ -846,9 +847,15 @@ class Dataset(DatasetExportOperations):
             retry_decorator.opik_rest_retry(send)
         )
 
-    def _open_send_pool(self, num_threads: int) -> streaming_writer.BoundedSendPool:
+    def _open_send_pool(
+        self, num_threads: int, gzip_level: Optional[int]
+    ) -> streaming_upload.BoundedSendPool:
         """Upload sink for one insert. Split out so the worker count is observable."""
-        return streaming_writer.build_send_pool(self._send_prepared_body, num_threads)
+        return streaming_upload.BoundedSendPool(
+            send=self._send_prepared_body,
+            num_threads=num_threads,
+            gzip_level=gzip_level,
+        )
 
     @property
     def _parallel_insert_supported(self) -> bool:
@@ -909,7 +916,7 @@ class Dataset(DatasetExportOperations):
     def __internal_api__insert_items_as_dataclasses__(
         self,
         items: Iterable[dataset_item.DatasetItem],
-        num_threads: int = 1,
+        num_threads: int = constants.DATASET_ITEMS_WRITE_NUM_THREADS,
         deduplication: bool = True,
     ) -> None:
         # Validated here rather than in each public entry point: every insert
@@ -923,6 +930,9 @@ class Dataset(DatasetExportOperations):
             raise ValueError("num_threads must be a positive integer")
         if num_threads < 1:
             raise ValueError("num_threads must be a positive integer")
+        # Clamped, not rejected, to match the read path: the count is a request for
+        # parallelism, and it also sizes the upload's byte budget.
+        num_threads = min(num_threads, constants.DATASET_ITEMS_WRITE_MAX_THREADS)
 
         # Gated here rather than in `insert` so every caller of this funnel is
         # covered: older backends race on concurrent batches that share a
@@ -956,17 +966,19 @@ class Dataset(DatasetExportOperations):
                 upload_client, default=opik_config.enable_json_request_compression
             )
 
-            pool = self._open_send_pool(num_threads)
-            writer = streaming_writer.build_batch_writer(
-                dataset_name=self._name,
-                project_name=self._project_name,
-                batch_group_id=batch_group_id,
-                flush_callback=pool.submit,
+            pool = self._open_send_pool(
+                num_threads,
                 gzip_level=(
                     opik_config.dataset_upload_compression_level
                     if compressing
                     else None
                 ),
+            )
+            writer = streaming_writer.build_batch_writer(
+                dataset_name=self._name,
+                project_name=self._project_name,
+                batch_group_id=batch_group_id,
+                flush_callback=pool.submit,
             )
 
             try:
@@ -979,7 +991,16 @@ class Dataset(DatasetExportOperations):
                 # explains why the upload stopped here.
                 try:
                     pool.close()
-                except Exception:
+                except KeyboardInterrupt:
+                    # The user, not a failed body: CPython delivers it to this thread,
+                    # which is sitting in `close` joining workers, so swallowing it would
+                    # drop the signal mid-join.
+                    raise
+                except (Exception, SystemExit):
+                    # `SystemExit` named explicitly because it is not an `Exception`. Out
+                    # of a send it is still just a body that failed, and a failed body
+                    # must not replace the producer's error -- that error is why the
+                    # upload stopped.
                     LOGGER.debug(
                         "A dataset upload batch also failed while closing the pool",
                         exc_info=True,
@@ -997,7 +1018,7 @@ class Dataset(DatasetExportOperations):
     def insert(
         self,
         items: Iterable[Dict[str, Any]],
-        num_threads: int = 4,
+        num_threads: int = constants.DATASET_ITEMS_WRITE_NUM_THREADS,
         deduplication: bool = True,
     ) -> None:
         """
@@ -1022,10 +1043,19 @@ class Dataset(DatasetExportOperations):
                 on large datasets. The next insert that does deduplicate has to
                 re-read the dataset's items to account for what was skipped.
             num_threads: Number of worker threads used to upload the item
-                batches. Must be a positive integer, defaults to ``4``; pass
-                ``1`` to upload sequentially. All batches land in a single
-                dataset version. If a batch fails the call raises, and the
-                batches that already succeeded stay persisted. Older Opik
+                batches. Must be a positive integer, defaults to ``8``; pass
+                ``1`` to upload sequentially, or a higher number to push a
+                large upload harder, up to ``32`` -- beyond that it is clamped
+                rather than rejected, as on the read path. It also sizes how
+                much the upload holds: request bodies are queued uncompressed,
+                up to ``2 * num_threads`` of them at ``MAX_BATCH_SIZE_MB``
+                each -- about 80 MB at the default ``8``, and about 320 MB at
+                ``32``. Raise it for throughput, lower it where memory is
+                tight. All batches land in a single dataset version. If a batch
+                fails the call raises, and the batches that already succeeded
+                stay persisted; above ``1`` the bodies already queued are
+                drained and awaited first, so they land too and the exception
+                surfaces after them. Older Opik
                 backends do not support parallel upload and fall back to a
                 sequential one.
 
