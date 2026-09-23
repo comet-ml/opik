@@ -39,14 +39,24 @@ class ExperimentsClient:
                 or metadata. Defaults to True.
             max_results: Maximum number of results to return. Defaults to 1000.
             project_name: Optional project name to associate with the query. If not provided, the default project will be used.
-            page_size: Number of dataset items requested per page. Trades request
+            page_size: Number of dataset items requested per page. Must be a
+                positive integer not exceeding
+                ``constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE``. Trades request
                 count against per-request size; the read is round-trip bound, so
                 lowering it is slower.
             num_threads: Number of pages fetched concurrently after the first
-                one. Pass ``1`` to read sequentially.
+                one. Must be a positive integer not exceeding
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``. Pass ``1`` to read
+                sequentially.
 
         Returns:
             A list of experiment item content objects that match the criteria.
+
+        Raises:
+            ValueError: If ``page_size`` is not a positive integer or exceeds
+                ``constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE``, or if
+                ``num_threads`` is not a positive integer or exceeds
+                ``constants.DATASET_ITEMS_READ_MAX_THREADS``.
         """
         validation_helpers.validate_bounded_positive_int(
             page_size, "page_size", constants.EXPERIMENT_ITEMS_READ_MAX_PAGE_SIZE
