@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "js-yaml": "^5.4.1",
-    "opik": "^2.2.29"
+    "opik": "^2.2.74"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

@@ -592,6 +592,73 @@ export class PlaygroundPage {
     return (await this.outputCells().allInnerTexts()).filter(hasProducedOutput).length;
   }
 
+  // ── free-mode failed-run output (OPIK-8468) ─────────────────────────────
+  //
+  // A run that fails renders `PlaygroundOutputError` — a red "Run failed: <message>" tag —
+  // in place of the model's answer. The members below address the FREE-MODE surface, the
+  // single-prompt `PlaygroundPromptOutput` panel; `outputErrorTags` / `outputMarkdownBlocks`
+  // further down are the dataset-grid equivalents, scoped to the results table's cells.
+  // The two components gate their bodies on separate `hasOutput` expressions and so can
+  // regress apart, which is why each surface gets its own locator rather than a shared
+  // page-wide one — a page-wide lookup would let a grid assertion pass on a panel tag.
+  //
+  // `RUN_ERROR_TEXT` above sniffs a failure out of a cell's own text instead, because
+  // before OPIK-8468 the failure WAS the output string and there was nothing else to read.
+  // It is deliberately left in place: these specs run against deployed Opik, so
+  // `waitForRunsComplete` still has to recognise a failure on a version predating this tag.
+
+  /**
+   * The "Run failed:" tags of the single-prompt output panels. Page-scoped because the
+   * panel has no container of its own to hang a locator off — safe only in free mode,
+   * where no results table is mounted, which is the only mode these are used in.
+   */
+  promptOutputErrorTags(): Locator {
+    return this.page.getByTestId('playground-output-error');
+  }
+
+  /**
+   * Rendered model answers in the single-prompt output panels. `MarkdownPreview` stamps
+   * `.comet-markdown` on both branches it can take — the parsed one and the plain-text
+   * fallback — so "a failed run renders none of these" is the assertion OPIK-8468 exists
+   * for. Addressed by class rather than by testid because the component is shared far
+   * outside the Playground, where stamping one would reach well beyond this area.
+   */
+  promptOutputMarkdownBlocks(): Locator {
+    return this.page.locator('.comet-markdown');
+  }
+
+  /** The "No runs yet" placeholder an output surface shows until its prompt has been run. */
+  noRunsYetPlaceholders(): Locator {
+    return this.page.getByText(IDLE_CELL_TEXT, { exact: true });
+  }
+
+  /**
+   * The duration and token chips of the single-prompt output header. Each is its own span
+   * whose whole text is the chip, so both are matched anchored — a substring match would
+   * also fire on a model name that happened to end in "s".
+   */
+  durationChips(): Locator {
+    return this.page.getByText(/^\d+\.\d+s$/);
+  }
+
+  tokenChips(): Locator {
+    return this.page.getByText(/^\d+ tokens$/);
+  }
+
+  /**
+   * Wait until exactly `count` failure tags have rendered in the single-prompt panels.
+   *
+   * `waitForRunsComplete` is the wrong signal for a spec that provokes a failure on
+   * purpose — it treats an errored cell as a fault and throws. The count is exact rather
+   * than a floor so that a run which fails some variants and silently drops the rest fails
+   * here, loudly, instead of passing on the first tag to appear.
+   */
+  async waitForPromptOutputErrors(count: number, timeoutMs = 60_000): Promise<void> {
+    return test.step(`wait for ${count} failed-run tag(s)`, async () => {
+      await expect(this.promptOutputErrorTags()).toHaveCount(count, { timeout: timeoutMs });
+    });
+  }
+
   /**
    * Read the "<N>% pass rate" badge from the Prompt A column header.
    * Returns null if no run has completed yet.

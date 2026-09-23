@@ -2,6 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 import { loadEnvConfig } from '../config/env.config';
 import { TracePanelPage } from './trace-panel.page';
 import { ThreadPanelPage } from './thread-panel.page';
+import { AddToDatasetDialogPage } from './add-to-dataset-dialog.page';
 
 export type ExplainKind = 'error' | 'duration' | 'cost';
 
@@ -403,6 +404,25 @@ export class LogsPage {
   }
 
   /**
+   * Open the "Add to" dropdown in the traces actions panel and pick "Dataset".
+   *
+   * The dropdown offers Test suite / Dataset / Annotation queue from one
+   * trigger (`AddToDropdown`), so the menu item is matched exactly — "Dataset"
+   * as a substring would also match nothing else today, but the list is the
+   * kind that grows. Callers select rows first via `selectTrace()`; the
+   * trigger is disabled until at least one is ticked.
+   */
+  async openAddToDataset(): Promise<AddToDatasetDialogPage> {
+    return test.step('Open Add to → Dataset', async () => {
+      await this.page.getByRole('button', { name: 'Add to' }).click();
+      await this.page.getByRole('menuitem', { name: 'Dataset', exact: true }).click();
+      const dialog = new AddToDatasetDialogPage(this.page);
+      await expect(dialog.root, 'the Add to dataset dialog is open').toBeVisible();
+      return dialog;
+    });
+  }
+
+  /**
    * The bulk-delete (trash) button in the traces actions panel. It renders as an
    * icon-only button with no accessible name — the "Delete" label lives in a
    * hover tooltip portal — so the testid is the only stable handle.
@@ -428,6 +448,81 @@ export class LogsPage {
       await dialog.getByRole('button', { name: 'Delete traces' }).click();
       await dialog.waitFor({ state: 'hidden' });
     });
+  }
+
+  /**
+   * The "Selected: N" label in the selection action bar, which only renders
+   * while at least one row is ticked.
+   *
+   * Matched on text because the bar exposes no testid and no role of its own —
+   * it is a plain `<span>` inside a sticky container. The count is part of the
+   * match rather than something read back out of it, so asserting visibility
+   * asserts the number too: a selection that reached four rows renders
+   * "Selected: 4" and this locator finds nothing.
+   */
+  selectionCount(count: number): Locator {
+    return this.page.getByText(`Selected: ${count}`, { exact: true });
+  }
+
+  /**
+   * The "Manage tags" button in the traces actions panel, which opens the
+   * shared-tags dialog for the current selection.
+   */
+  get manageTagsButton(): Locator {
+    return this.page.getByRole('button', { name: 'Manage tags' });
+  }
+
+  /** The "Manage shared tags" dialog. */
+  get manageTagsDialog(): Locator {
+    return this.page.getByRole('dialog').filter({ hasText: 'Manage shared tags' });
+  }
+
+  /**
+   * Add one tag to every selected trace through the Manage shared tags dialog.
+   *
+   * `itemCount` is not a convenience: the confirm button is labelled
+   * "Update tags for N items", so passing the number the caller believes it
+   * selected makes the click itself an assertion that the dialog agrees. A
+   * dialog that had picked up a different row set would render a different
+   * label and this method would fail rather than quietly tag the wrong traces.
+   *
+   * The tag input is a bare `<input type="text">` that only mounts after the
+   * "Add tag" chip is clicked, and it has neither a testid nor a label — the
+   * textbox role inside the dialog is the most stable handle available. Enter
+   * commits it: the dialog's own Enter handler is guarded on `!isAdding`, so
+   * while the input is open it is the input that consumes the key.
+   */
+  async addSharedTagToSelection(tag: string, itemCount: number): Promise<void> {
+    return test.step(`Add shared tag "${tag}" to ${itemCount} selected traces`, async () => {
+      await this.manageTagsButton.click();
+      const dialog = this.manageTagsDialog;
+      await dialog.waitFor({ state: 'visible' });
+      await dialog.getByTestId('add-tag-button').click();
+      const input = dialog.getByRole('textbox');
+      await input.waitFor({ state: 'visible' });
+      await input.fill(tag);
+      await input.press('Enter');
+      const confirm = dialog.getByRole('button', {
+        name: `Update tags for ${itemCount} ${itemCount === 1 ? 'item' : 'items'}`,
+        exact: true,
+      });
+      await expect(confirm).toBeEnabled();
+      await confirm.click();
+      await dialog.waitFor({ state: 'hidden' });
+    });
+  }
+
+  /**
+   * The Duration cell of a trace row.
+   *
+   * Worth addressing directly because it is the one column that renders the
+   * difference between a finished trace and one that was never closed: the FE's
+   * `formatDuration` answers "NA" for a null duration, which is what a trace
+   * submitted without an `end_time` shows while otherwise looking entirely
+   * ordinary in the table.
+   */
+  durationCell(traceId: string): Locator {
+    return this.page.locator(`[data-cell-id="${traceId}_duration"]`);
   }
 
   /** The Errors/Duration/Estimated cost cell for a trace row, keyed by Ollie explain kind. */
