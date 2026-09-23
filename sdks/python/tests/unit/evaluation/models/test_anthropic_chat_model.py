@@ -991,11 +991,16 @@ class TestAnthropicChatModelTracking:
     LiteLLMChatModel's external-callback tracking; AnthropicChatModel uses
     track_anthropic (an in-process wrapper) and must not read that flag."""
 
-    def test_track_true_wraps_client_regardless_of_litellm_flag(self, monkeypatch):
+    @pytest.mark.parametrize("litellm_monitoring_flag", ["false", "true"])
+    def test_track_true_wraps_client_regardless_of_litellm_flag(
+        self, monkeypatch, litellm_monitoring_flag
+    ):
         _install_anthropic_stub(monkeypatch)
         mock_track_anthropic = _install_track_anthropic_stub(monkeypatch)
 
-        monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+        monkeypatch.setenv(
+            "OPIK_ENABLE_LITELLM_MODELS_MONITORING", litellm_monitoring_flag
+        )
 
         anthropic_chat_model.AnthropicChatModel(
             model_name="anthropic/claude-sonnet-4-20250514", track=True
