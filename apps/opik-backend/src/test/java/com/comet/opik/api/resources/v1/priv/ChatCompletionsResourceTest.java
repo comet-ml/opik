@@ -61,6 +61,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiConsumer;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
@@ -256,9 +257,11 @@ class ChatCompletionsResourceTest {
                     .containsIgnoringCase(expected);
             BiConsumer<String, String> expectedContainsActualEval = (actual, expected) -> assertThat(expected)
                     .containsIgnoringCase(actual);
-            // Requesty answers with the upstream model id (gpt-4o-mini-2024-07-18), without the requesty/openai/ prefix
-            BiConsumer<String, String> actualContainsBareModelEval = (actual, expected) -> assertThat(actual)
-                    .containsIgnoringCase(expected.substring(expected.lastIndexOf('/') + 1));
+            // Requesty answers with the upstream model id (gpt-4o-mini-2024-07-18): the prefixes must be gone and the
+            // id must be the bare model or a dated snapshot of it
+            BiConsumer<String, String> actualIsBareModelEval = (actual, expected) -> assertThat(actual)
+                    .matches(Pattern.quote(expected.substring(expected.lastIndexOf('/') + 1))
+                            + "(-\\d{4}-\\d{2}-\\d{2})?");
 
             return Stream.of(
                     arguments(OpenaiModelName.GPT_4O_MINI.toString(), LlmProvider.OPEN_AI,
@@ -271,7 +274,7 @@ class ChatCompletionsResourceTest {
                             LlmProvider.OPEN_ROUTER, System.getenv("OPENROUTER_API_KEY"),
                             expectedContainsActualEval),
                     arguments(RequestyModelName.OPENAI_GPT_4O_MINI.toString(), LlmProvider.REQUESTY,
-                            System.getenv("REQUESTY_API_KEY"), actualContainsBareModelEval));
+                            System.getenv("REQUESTY_API_KEY"), actualIsBareModelEval));
         }
 
         @Test
