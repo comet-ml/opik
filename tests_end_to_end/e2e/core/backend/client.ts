@@ -29,6 +29,21 @@ export interface DashboardRef {
   description: string;
 }
 
+/**
+ * A dashboard read out of the `insights-views` collection — the project-scoped
+ * one, as opposed to the workspace-scoped `DashboardRef` above.
+ *
+ * `projectId` and `scope` are carried rather than dropped because they are the
+ * subject: a scoping assertion that only compared ids could not tell a view the
+ * backend attached to the right project from one it attached to none.
+ */
+export interface InsightsViewRef {
+  id: string;
+  name: string;
+  projectId: string | null;
+  scope: string | null;
+}
+
 export interface DatasetRef {
   id: string;
   name: string;
@@ -51,6 +66,27 @@ export interface DatasetItemWithTagsRef {
   data: Record<string, unknown>;
   tags: string[];
 }
+
+/**
+ * `TraceEnrichmentOptions` — which enriched fields the create-from-traces
+ * endpoint writes alongside the always-present `input`/`expected_output`.
+ *
+ * Every flag is required rather than defaulted. The backend record holds
+ * primitive booleans, so an omitted one arrives as `false`; a caller that meant
+ * to ask for metadata and forgot would get a silently smaller item, which is
+ * exactly the shape a field-mapping assertion compares against.
+ */
+export interface TraceEnrichmentOptions {
+  includeSpans: boolean;
+  includeTags: boolean;
+  includeFeedbackScores: boolean;
+  includeComments: boolean;
+  includeUsage: boolean;
+  includeMetadata: boolean;
+}
+
+/** `SpanEnrichmentOptions` — the same set minus `include_spans`, which a span has no notion of. */
+export type SpanEnrichmentOptions = Omit<TraceEnrichmentOptions, 'includeSpans'>;
 
 /** A raw REST answer, kept as status + message so a negative path can assert both. */
 export interface RawApiResult {
@@ -142,6 +178,30 @@ export interface ExperimentRefDetail {
   datasetId: string | null;
 }
 
+export interface ExecutePromptSeed {
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+  /**
+   * The per-variant experiment name (OPIK-3268). Omitted rather than sent as
+   * null when absent, so a caller testing the auto-name fallback exercises the
+   * same payload shape the Playground sends.
+   */
+  experimentName?: string;
+}
+
+/**
+ * The `202` body of `/v1/private/experiments/execute`, plus the raw status so a
+ * caller can assert a rejection without the call throwing first — the blank-name
+ * `422` is part of this endpoint's contract, not a transport failure.
+ */
+export interface ExecuteExperimentsResult {
+  status: number;
+  message: string;
+  /** Ordered by `promptIndex`, so `[i]` is the experiment for `prompts[i]`. */
+  experiments: Array<{ experimentId: string; promptIndex: number }>;
+  totalItems: number | null;
+}
+
 export interface TestSuiteRef {
   id: string;
   name: string;
@@ -190,6 +250,21 @@ export interface SpanCostRef {
   model: string | null;
   provider: string | null;
   totalEstimatedCost: number | null;
+  /**
+   * The `usage` map as the backend stored it, so a cost assertion can first
+   * prove the priced quantity really reached the server under the key the
+   * calculator reads.
+   *
+   * Load-bearing for the cache-rate vectors: a seed whose
+   * `original_usage.prompt_tokens_details.cached_tokens` key was dropped in
+   * transit prices exactly like one that reported no cached tokens, so
+   * "cached tokens bought no discount" and "no cached tokens were logged" are
+   * the same observation until this is read back.
+   *
+   * Null, not `{}`, when the span carries no usage at all — an absent map and an
+   * empty one are different answers.
+   */
+  usage: Record<string, number> | null;
 }
 
 /** A span reduced to the fields a cascade assertion needs: who it is, and whose it is. */
@@ -198,6 +273,75 @@ export interface SpanRef {
   name: string;
   traceId: string;
   parentSpanId: string | null;
+}
+
+/** One span of a `POST /v1/private/spans/batch` write. */
+export interface SpanBatchSeed {
+  /** Caller-minted so the seed knows the exact id set it wrote. Must be a UUIDv7. */
+  id: string;
+  traceId: string;
+  name: string;
+  /**
+   * Defaults to `sdk`, which is what a seed almost always wants: the Logs page
+   * filters every span read on `source = sdk`, and `SpanDAO` binds NULL when
+   * the write omits it — so a span seeded without one is written, queryable by
+   * id, and invisible in the view a UI spec is about to assert on.
+   */
+  source?: 'sdk' | 'experiment' | 'playground' | 'optimization';
+  type?: 'general' | 'llm' | 'tool';
+  startTime?: Date;
+  endTime?: Date;
+  model?: string;
+  provider?: string;
+  /** Written through verbatim; deliberately no `total_cost` (see `createSpan`). */
+  usage?: Record<string, number>;
+  /** Set to make the span count toward the error rate. */
+  errorInfo?: { exceptionType: string; message: string; traceback: string };
+}
+
+/**
+ * One trace of a `POST /v1/private/traces/batch` write.
+ *
+ * `input`/`output` are the JSON sections the compare grid renders per
+ * experiment, and the ones the server truncates for display — so a seed that
+ * wants an untruncated value asserted has to put it here (or on the dataset
+ * item) rather than relying on the trace name.
+ */
+export interface TraceBatchSeed {
+  /** Caller-minted so the seed knows the exact id set it wrote. Must be a UUIDv7. */
+  id: string;
+  name: string;
+  input?: TraceJsonSection;
+  output?: TraceJsonSection;
+  startTime?: Date;
+  endTime?: Date;
+}
+
+/**
+ * One page of the spans listing, kept as ids plus the envelope.
+ *
+ * `total` and `size` are part of the answer, not decoration: a paging spec that
+ * only collected ids could not tell "the last page was short" from "the reader
+ * stopped early", and the table renders `total` to the user as
+ * "Showing 1-25 of 130".
+ */
+export interface SpanIdPage {
+  ids: string[];
+  page: number;
+  size: number;
+  total: number;
+}
+
+/** One KPI card as `POST /v1/private/projects/{id}/kpi-cards` answers it. */
+export interface KpiCardStat {
+  type: 'count' | 'errors' | 'avg_duration' | 'total_cost';
+  /**
+   * Nullable because the API's own shape is. A caller comparing numbers must
+   * assert the value is there rather than default it — `?? 0` would turn "the
+   * card returned nothing" into a passing zero.
+   */
+  currentValue: number | null;
+  previousValue: number | null;
 }
 
 export interface TraceDetail {
@@ -234,6 +378,28 @@ export interface TracePayload {
   output: unknown;
   metadata: unknown;
   tags: string[] | null;
+}
+
+/**
+ * Whether a trace was CLOSED, and what it says went wrong.
+ *
+ * Separate from `TracePayload` because the question is different: that shape
+ * asks what an update preserved, this one asks whether the writer ever finished
+ * the trace at all. A trace submitted without an `end_time` still lists, still
+ * opens, and still renders every field it does carry — it simply sits open in
+ * the Logs table forever, which is invisible to any assertion about content.
+ *
+ * Every field is nullable because the API's own shape is, and the difference
+ * matters in both directions: an absent `end_time` is the bug, and an absent
+ * `error_info` on a trace that threw is a different bug from a present one
+ * naming the wrong exception type. A caller must assert them away rather than
+ * default them.
+ */
+export interface TraceLifecycle {
+  id: string;
+  name: string;
+  endTime: string | null;
+  errorInfo: { exceptionType: string; message: string | null } | null;
 }
 
 /**
@@ -294,6 +460,19 @@ export interface AutomationRuleDetail {
    * this is read back rather than assumed from the create payload.
    */
   type: string;
+  /**
+   * The rule's filters, exactly as the GET answers them — not narrowed to
+   * `BackendFilter`.
+   *
+   * A mapped type here would quietly normalise the read: the server strips the
+   * frontend's transient `id` and adds `key: ""` where the field was absent, and
+   * a spec asserting that an unedited save preserved a filter has to be able to
+   * see both of those as themselves rather than as an object that happens to
+   * mapped-compare equal. `null` means the field came back absent, which is a
+   * different answer from `[]` — an unfiltered rule and a rule whose filters
+   * were cleared are exactly what such a spec is telling apart.
+   */
+  filters: Array<Record<string, unknown>> | null;
 }
 
 /** Fields every user-defined-metric-python rule carries, whatever it scores. */
@@ -306,6 +485,15 @@ interface PythonRuleCommon {
   metric: string;
   triggerScope?: 'production' | 'experiment' | 'both';
   enabled?: boolean;
+  /**
+   * Rule filters, in the same wire shape the REST layer uses everywhere else.
+   *
+   * Seedable here because the edit dialog cannot always set them: for
+   * `trigger_scope=experiment` the whole filtering-and-sampling section is not
+   * rendered at all, so a spec about what an unedited save does to a filtered
+   * experiment rule has no UI path to create one.
+   */
+  filters?: BackendFilter[];
 }
 
 /**
@@ -473,6 +661,109 @@ export interface AnnotationQueueDetail {
   reviewers: AnnotationQueueReviewerRef[];
 }
 
+/** One threshold on a named feedback score, inside an automation condition group. */
+export interface QueueScoreConditionRef {
+  scoreName: string;
+  /**
+   * The wire operator, narrowed to what `ScoreConditionOperator` deserializes.
+   * Anything else is refused by the backend as it reads the payload, so a spec
+   * that sent one would fail on a Jackson message rather than on the claim it
+   * was making — and the read side below has to widen back out of `string`
+   * anyway, so the union is what both ends agree on.
+   */
+  operator: '<' | '>' | '=';
+  value: number;
+}
+
+/**
+ * A queue's automation block as the API returns it.
+ *
+ * `groups` is the disjunction of conjunctions flattened to arrays, so a spec can
+ * compare the whole structure with `toEqual` rather than reaching into it — a
+ * lookup of "my group" would pass just as well against a payload that also
+ * carried groups nobody configured.
+ *
+ * `maxItemsInQueue` is `null` only when the key is genuinely absent from the
+ * response; it is never defaulted to a number, because the value a defaulting
+ * read would invent is exactly the one a round-trip assertion expects.
+ */
+export interface QueueAutomationRef {
+  enabled: boolean;
+  maxItemsInQueue: number | null;
+  groups: QueueScoreConditionRef[][];
+}
+
+/** One row of `POST /v1/private/annotation-queues/{id}/items/search`. */
+export interface AnnotationQueueItemRef {
+  id: string;
+  /**
+   * How the item reached the queue — `manual` or `automated`. Nullable so an
+   * omitted `source` fails the caller's own assertion rather than being
+   * silently replaced with the value that assertion is looking for.
+   */
+  source: string | null;
+}
+
+/** One trigger config of an alert, with the value the threshold validation is about. */
+export interface AlertTriggerConfigRef {
+  /** e.g. `threshold:cost`. */
+  type: string;
+  configValue: Record<string, string>;
+}
+
+/** One trigger of an alert, with its configs. */
+export interface AlertTriggerRef {
+  /** e.g. `trace:cost`. */
+  eventType: string;
+  triggerConfigs: AlertTriggerConfigRef[];
+}
+
+/** An alert read back by id, down to the trigger configs. */
+export interface AlertDetail {
+  id: string;
+  name: string;
+  enabled: boolean;
+  triggers: AlertTriggerRef[];
+}
+
+/**
+ * The write shape of an alert carrying threshold triggers.
+ *
+ * `configValue` is a free-form string map on purpose: the payloads this exists
+ * to send are deliberately malformed (a missing key, a non-numeric window), and
+ * no typed config shape can express those.
+ *
+ * `id` is caller-supplied because `POST /v1/private/alerts` answers 201 with no
+ * body, and because `PUT /v1/private/alerts/{id}` re-mints the row's id from the
+ * body rather than from the path — an update that omits it leaves the caller's
+ * id dangling, so every write here sends it.
+ */
+export interface AlertWrite {
+  id: string;
+  name: string;
+  projectId: string;
+  webhookUrl: string;
+  enabled?: boolean;
+  triggers: Array<{
+    eventType: string;
+    triggerConfigs: Array<{ type: string; configValue: Record<string, string> }>;
+  }>;
+}
+
+/** The write shape of an annotation queue, including its automation block. */
+export interface AnnotationQueueWrite {
+  id: string;
+  projectId: string;
+  name: string;
+  scope: 'trace' | 'thread';
+  feedbackDefinitionNames?: string[];
+  automation?: {
+    enabled: boolean;
+    maxItemsInQueue?: number;
+    groups?: QueueScoreConditionRef[][];
+  };
+}
+
 /**
  * One row of `GET /v1/private/traces/threads` — the aggregate the Threads view
  * renders per conversation. Every field a wrong `traces` prefilter would corrupt
@@ -559,6 +850,17 @@ export interface OptimizationRef {
    */
   baselineObjectiveScore: number | null;
   bestObjectiveScore: number | null;
+  /**
+   * The run's whole one-time spend, as the "Optimization cost" column renders
+   * it — the sum of its trials' experiment costs plus the optimizer-internal
+   * traces attributed to it by tag.
+   *
+   * `number | null` rather than `?? 0`, and for the same reason as
+   * `SpanCostRef.totalEstimatedCost`: an aggregate that never ran and a run
+   * that really cost nothing are different answers, and collapsing them lets a
+   * spec assert a cost against an aggregate that was simply absent.
+   */
+  totalOptimizationCost: number | null;
 }
 
 /** Backend discriminator for Dataset vs Test Suite (shared DB table). */
@@ -728,21 +1030,47 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     apiUrl: env.apiBaseUrl,
   });
 
+  /**
+   * One wire optimization as an `OptimizationRef`.
+   *
+   * Shared by the by-id read and the list read on purpose. They are two
+   * different SQL projections over the same aggregate, and `optimization-total-
+   * cost.spec.ts` asserts both against one expectation precisely because they
+   * are allowed to disagree — which is only meaningful if the two sides were
+   * normalised identically. Two copies of this mapping are two places for a
+   * `?? null` to drift into a `?? 0` and quietly turn "the aggregate never ran"
+   * into "the run cost nothing".
+   */
+  const toOptimizationRef = (o: {
+    // Optional to match `OptimizationPublic`, which both reads answer with and
+    // which marks even `id` optional. `String(undefined)` is what the two
+    // inlined copies of this already did; nothing changes but the duplication.
+    id?: unknown;
+    name?: string | null;
+    status?: unknown;
+    objectiveName?: string | null;
+    datasetName?: string | null;
+    numTrials?: number | null;
+    baselineObjectiveScore?: number | null;
+    bestObjectiveScore?: number | null;
+    totalOptimizationCost?: number | null;
+  }): OptimizationRef => ({
+    id: String(o.id),
+    name: o.name ?? '',
+    status: String(o.status) as OptimizationStatus,
+    objectiveName: o.objectiveName ?? null,
+    datasetName: o.datasetName ?? null,
+    numTrials: Number(o.numTrials ?? 0),
+    baselineObjectiveScore: o.baselineObjectiveScore ?? null,
+    bestObjectiveScore: o.bestObjectiveScore ?? null,
+    totalOptimizationCost: o.totalOptimizationCost ?? null,
+  });
+
   // Hoisted so the poll helpers (free functions) can call it without depending
   // on the not-yet-constructed return object.
   const localGetOptimization = async (id: string): Promise<OptimizationRef | null> => {
     try {
-      const o = await opik.api.optimizations.getOptimizationById(id);
-      return {
-        id: String(o.id),
-        name: o.name ?? '',
-        status: String(o.status) as OptimizationStatus,
-        objectiveName: o.objectiveName ?? null,
-        datasetName: o.datasetName ?? null,
-        numTrials: Number(o.numTrials ?? 0),
-        baselineObjectiveScore: o.baselineObjectiveScore ?? null,
-        bestObjectiveScore: o.bestObjectiveScore ?? null,
-      };
+      return toOptimizationRef(await opik.api.optimizations.getOptimizationById(id));
     } catch (err) {
       if (isNotFoundError(err)) return null;
       throw err;
@@ -760,7 +1088,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
    * exists for the same reason (the pinned SDK can't express the call).
    */
   const rawFetch = async (
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT',
     path: string,
     opts: { query?: URLSearchParams; body?: unknown } = {},
   ): Promise<RawApiResult & { json: unknown }> => {
@@ -809,7 +1137,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
    * The backoff exists because retrying instantly is no retry at all: the three
    * attempts land inside the same burst and all fail.
    */
-  const postSeedWrite = async (path: string, describe: string, body: unknown): Promise<void> => {
+  const postSeedWrite = async (
+    path: string,
+    describe: string,
+    body: unknown,
+    // The single-entity writes answer 201; `/spans/batch` answers 204. Both are
+    // "the write landed", so the expectation is a parameter rather than a
+    // second near-identical helper.
+    expectedStatus = 201,
+  ): Promise<void> => {
     const backoffMs = [1_000, 3_000, 8_000];
     let last: RawApiResult = { status: 0, message: '<no response>', location: null };
     // Counted as requests are made, not inferred from the final status: a 502
@@ -821,7 +1157,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     for (let attempt = 0; attempt <= backoffMs.length; attempt++) {
       attempted++;
       const { status, message, location } = await rawFetch('POST', path, { body });
-      if (status === 201) return;
+      if (status === expectedStatus) return;
       last = { status, message, location };
       if (status < 500) break;
       if (attempt < backoffMs.length) {
@@ -830,7 +1166,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     }
 
     throw new Error(
-      `${describe}: expected 201, got ${last.status} after ${attempted} attempt(s): ${last.message}`,
+      `${describe}: expected ${expectedStatus}, got ${last.status} after ${attempted} attempt(s): ${last.message}`,
     );
   };
 
@@ -866,6 +1202,39 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
       );
     }
     return rate;
+  };
+
+  /**
+   * A rule's `filters` as the GET answers them, with absent kept distinct from
+   * empty. A shape that is neither absent nor an array is not "no filters" —
+   * reporting it as `null` would let a spec asserting that a save preserved a
+   * filtered rule pass against a response it could not actually read.
+   */
+  const readRuleFilters = (
+    ruleId: string,
+    filters: unknown,
+  ): Array<Record<string, unknown>> | null => {
+    if (filters === undefined || filters === null) return null;
+    if (!Array.isArray(filters)) {
+      throw new Error(
+        `getAutomationRule: ${ruleId} returned a '${typeof filters}' filters field — ` +
+          `cannot be read as a filter list.`,
+      );
+    }
+    // Same reasoning one level down. A caller reads a filter by field/operator/
+    // value, so a `null` or primitive element would either throw a bare
+    // TypeError deep inside the spec's comparison or compare unequal for a
+    // reason that has nothing to do with the behaviour under test. Failing here
+    // names the rule and the index instead.
+    filters.forEach((filter, index) => {
+      if (typeof filter !== 'object' || filter === null || Array.isArray(filter)) {
+        throw new Error(
+          `getAutomationRule: ${ruleId} returned filters[${index}] as ` +
+            `'${filter === null ? 'null' : typeof filter}' — a filter must be an object.`,
+        );
+      }
+    });
+    return filters as Array<Record<string, unknown>>;
   };
 
   // Hoisted so pollTraceForFeedbackScore (a free function) can call it without
@@ -949,6 +1318,109 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     async deleteDashboard(id: string): Promise<void> {
       try {
         await opik.api.dashboards.deleteDashboard(id);
+      } catch (err) {
+        if (!isNotFoundError(err)) throw err;
+      }
+    },
+
+    /**
+     * `POST /v1/private/insights-views` — a dashboard that belongs to one
+     * project, which is what the project Dashboards page reads and writes.
+     *
+     * A different collection from `createDashboard` above, not a parameter of
+     * it: that one posts to `/v1/private/dashboards` and the backend stamps
+     * `scope: workspace`, which is what the workspace Dashboards list shows.
+     * Passing a `projectId` there would not move it. The two scopes are exactly
+     * what a scoping spec has to be able to seed independently.
+     *
+     * `sections: []` rather than the `widgets` shape `createDashboard` uses: an
+     * insights view is rendered by the project page, and `DashboardContent`
+     * reads `config.sections`. A caller that wants the page to show something
+     * identifiable passes a section of its own.
+     *
+     * Each section is completed to the full `DashboardSection` shape and the
+     * config to the full `DashboardState` — `layout` and `lastModified` are
+     * required by both, and the backend does not supply the defaults. Omitting
+     * them stores a view the app then has to cope with: `areSectionsEqual`
+     * hands `section.layout` to `areLayoutsEqual`, which reads `prev.length`
+     * unguarded, and the unmount path in `useDashboardPersistence` only skips
+     * that comparison when `lastModified === 0` — an absent one is `undefined`,
+     * which is not `0`, so the guard does not fire and the unguarded read
+     * happens anyway. A seed should look like what the product's
+     * own create dialog writes, not like the minimum the API will accept.
+     */
+    async createInsightsView(args: {
+      name: string;
+      projectId: string;
+      sections?: Array<{
+        id: string;
+        title: string;
+        widgets: unknown[];
+        layout?: unknown[];
+      }>;
+    }): Promise<InsightsViewRef> {
+      const created = await opik.api.insightsViews.createInsightsView({
+        name: args.name,
+        projectId: args.projectId,
+        // The type the project page's own create dialog sends. The picker filters
+        // its list on it, so a view seeded without it is invisible there — which
+        // would read as the scoping under test rather than as a bad seed.
+        type: 'multi_project',
+        config: {
+          version: 1,
+          sections: (args.sections ?? []).map((s) => ({
+            ...s,
+            layout: s.layout ?? [],
+          })),
+          lastModified: Date.now(),
+        },
+      });
+      const id = created.id;
+      if (typeof id !== 'string') {
+        throw new Error(`createInsightsView(${args.name}) returned no id`);
+      }
+      return {
+        id,
+        name: args.name,
+        projectId: created.projectId ?? null,
+        scope: created.scope ?? null,
+      };
+    },
+
+    /**
+     * `GET /v1/private/insights-views` — the read the project page's view picker
+     * issues, with the same `project_id` narrowing.
+     *
+     * `projectId` is optional because its absence is itself a case worth
+     * driving: the unscoped read is what a shared link resolves against, and the
+     * difference between the two is the scoping this exists to check.
+     */
+    async listInsightsViews(args: { projectId?: string } = {}): Promise<InsightsViewRef[]> {
+      const content = await fetchAllPages(
+        (page) =>
+          opik.api.insightsViews.findInsightsViews({
+            ...(args.projectId ? { projectId: args.projectId } : {}),
+            page,
+            size: 100,
+          }),
+        100,
+      );
+      return content.map((d) => ({
+        id: String(d.id ?? ''),
+        name: d.name,
+        projectId: d.projectId ?? null,
+        scope: d.scope ?? null,
+      }));
+    },
+
+    /**
+     * Nothing cascades to an insights view: it outlives the project it names,
+     * and `global-teardown`'s prefix sweep only knows the workspace-scoped
+     * `/dashboards` collection. So a spec that seeds one must delete it.
+     */
+    async deleteInsightsView(id: string): Promise<void> {
+      try {
+        await opik.api.insightsViews.deleteInsightsView(id);
       } catch (err) {
         if (!isNotFoundError(err)) throw err;
       }
@@ -1056,9 +1528,104 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         .map((a) => ({ id: String(a.id), name: a.name as string }));
     },
 
+    // Alerts scoped to one project, for teardown that cannot lean on a name
+    // prefix: the alert form generates names itself from the selected
+    // triggers, so a UI-created alert may carry no test namespace at all.
+    // Same workspace-wide page as listAlertsWithPrefix — findAlerts has no
+    // server-side project filter either — but `project_id` is on the payload,
+    // so the filter is exact rather than a string guess.
+    async listAlertsInProject(projectId: string): Promise<ProjectRef[]> {
+      const content = await fetchAllPages((page) => opik.api.alerts.findAlerts({ size: 500, page }), 500);
+      return content
+        .filter((a) => a.projectId === projectId)
+        .map((a) => ({ id: String(a.id), name: String(a.name ?? '') }));
+    },
+
     async deleteAlertsBatch(ids: string[]): Promise<void> {
       if (ids.length === 0) return;
       await opik.api.alerts.deleteAlertBatch({ ids });
+    },
+
+    /**
+     * Write an alert and report the status and message instead of throwing.
+     *
+     * `POST` creates, `PUT` updates the alert the body's `id` names. Both go
+     * through `rawFetch` rather than the pinned SDK for the same reason
+     * `datasetItemMutationStatus` does: the negative paths ARE the contract
+     * here, and the typed client raises on any non-2xx while discarding the
+     * body — but the message is what says which key of which config type was
+     * rejected, and "rejected for the wrong reason" is indistinguishable from
+     * "rejected" without it.
+     *
+     * The body is assembled in snake_case by hand rather than relying on the
+     * SDK's naming strategy, because a `config_value` here can carry the legacy
+     * `window_seconds` key, which no generated type declares.
+     */
+    async writeAlert(method: 'POST' | 'PUT', alert: AlertWrite): Promise<RawApiResult> {
+      const path = method === 'POST' ? '/v1/private/alerts' : `/v1/private/alerts/${alert.id}`;
+      const { status, message } = await rawFetch(method, path, {
+        body: {
+          id: alert.id,
+          name: alert.name,
+          enabled: alert.enabled ?? true,
+          alert_type: 'general',
+          project_id: alert.projectId,
+          webhook: { url: alert.webhookUrl },
+          triggers: alert.triggers.map((trigger) => ({
+            event_type: trigger.eventType,
+            trigger_configs: trigger.triggerConfigs.map((config) => ({
+              type: config.type,
+              config_value: config.configValue,
+            })),
+          })),
+        },
+      });
+      return { status, message };
+    },
+
+    /**
+     * One alert by id, down to its trigger configs, or null when it is gone.
+     *
+     * Read through `rawFetch` so the config map arrives exactly as the server
+     * spells it: the read-side normalisation adds a `window` key alongside a
+     * stored `window_seconds`, and the pinned SDK's `configValue` type would
+     * have to know both spellings to carry them through.
+     */
+    async getAlert(id: string): Promise<AlertDetail | null> {
+      const { status, message, json } = await rawFetch('GET', `/v1/private/alerts/${id}`);
+      if (status === 404) return null;
+      if (status !== 200) {
+        throw new Error(`getAlert('${id}'): expected 200 or 404, got ${status}: ${message}`);
+      }
+      const alert = json as {
+        id?: string;
+        name?: string;
+        enabled?: boolean;
+        triggers?: Array<{
+          event_type?: string;
+          trigger_configs?: Array<{ type?: string; config_value?: Record<string, string> }>;
+        }>;
+      };
+      // Not defaulted: an alert that reads back without an `enabled` flag is a
+      // broken response, and `?? true` would present it as the value every
+      // round-trip assertion here is looking for.
+      if (typeof alert.enabled !== 'boolean') {
+        throw new Error(
+          `getAlert('${id}'): 200 response carried no boolean 'enabled' — cannot assert on it.`,
+        );
+      }
+      return {
+        id: String(alert.id ?? ''),
+        name: String(alert.name ?? ''),
+        enabled: alert.enabled,
+        triggers: (alert.triggers ?? []).map((trigger) => ({
+          eventType: String(trigger.event_type ?? ''),
+          triggerConfigs: (trigger.trigger_configs ?? []).map((config) => ({
+            type: String(config.type ?? ''),
+            configValue: config.config_value ?? {},
+          })),
+        })),
+      };
     },
 
     async listOptimizationsWithPrefix(prefix: string): Promise<ProjectRef[]> {
@@ -1245,6 +1812,76 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `POST /v1/private/datasets/{id}/items/from-traces` — the write the
+     * Add-to-dataset dialog makes, with `field_mappings` exposed.
+     *
+     * Through `rawFetch` rather than the pinned SDK for both of the usual
+     * reasons at once. The pinned client predates `field_mappings`, so it
+     * cannot express the field this exists to drive; and the endpoint's
+     * validation half is a status plus a message ("unsupported field mappings:
+     * …"), not a body, so a caller asserting a rejection needs both. The happy
+     * path answers 204 with nothing in it — the item is read back through
+     * `listDatasetItemsWithData`.
+     *
+     * The status is returned rather than thrown on so the same helper serves
+     * the accept and the reject cases; callers assert `status` either way.
+     */
+    async createDatasetItemsFromTraces(args: {
+      datasetId: string;
+      traceIds: string[];
+      enrichment: TraceEnrichmentOptions;
+      /** Omitted entirely when absent — a null would not exercise the same branch. */
+      fieldMappings?: Record<string, string>;
+    }): Promise<RawApiResult> {
+      const { status, message } = await rawFetch(
+        'POST',
+        `/v1/private/datasets/${args.datasetId}/items/from-traces`,
+        {
+          body: {
+            trace_ids: args.traceIds,
+            enrichment_options: {
+              include_spans: args.enrichment.includeSpans,
+              include_tags: args.enrichment.includeTags,
+              include_feedback_scores: args.enrichment.includeFeedbackScores,
+              include_comments: args.enrichment.includeComments,
+              include_usage: args.enrichment.includeUsage,
+              include_metadata: args.enrichment.includeMetadata,
+            },
+            ...(args.fieldMappings ? { field_mappings: args.fieldMappings } : {}),
+          },
+        },
+      );
+      return { status, message, location: null };
+    },
+
+    /** The `from-spans` sibling of `createDatasetItemsFromTraces`, same contract. */
+    async createDatasetItemsFromSpans(args: {
+      datasetId: string;
+      spanIds: string[];
+      enrichment: SpanEnrichmentOptions;
+      fieldMappings?: Record<string, string>;
+    }): Promise<RawApiResult> {
+      const { status, message } = await rawFetch(
+        'POST',
+        `/v1/private/datasets/${args.datasetId}/items/from-spans`,
+        {
+          body: {
+            span_ids: args.spanIds,
+            enrichment_options: {
+              include_tags: args.enrichment.includeTags,
+              include_feedback_scores: args.enrichment.includeFeedbackScores,
+              include_comments: args.enrichment.includeComments,
+              include_usage: args.enrichment.includeUsage,
+              include_metadata: args.enrichment.includeMetadata,
+            },
+            ...(args.fieldMappings ? { field_mappings: args.fieldMappings } : {}),
+          },
+        },
+      );
+      return { status, message, location: null };
+    },
+
+    /**
      * One page of `GET /v1/private/projects/{projectId}/datasets` with the
      * computed summary each row carries — the exact read the Datasets list
      * issues (`DatasetListPage.tsx` → `useProjectDatasetsList`).
@@ -1369,6 +2006,33 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         const content = result.content ?? [];
         ids.push(...content.map((item) => String(item.id)));
         if (content.length < pageSize) return ids;
+      }
+    },
+
+    /**
+     * The same read as `listDatasetItemIds`, keeping each item's payload. The
+     * sibling exists because `truncate: true` is what makes an id-only read of
+     * a few thousand items cheap, and a caller comparing what was *stored*
+     * against what was *sent* needs the payloads it drops. `getDatasetItems`
+     * cannot stand in: it takes the endpoint's default page and so silently
+     * answers for the first page alone.
+     */
+    async listDatasetItemsWithData(datasetId: string): Promise<DatasetItemRef[]> {
+      const pageSize = 1000;
+      const items: DatasetItemRef[] = [];
+      for (let page = 1; ; page++) {
+        const result = await opik.api.datasets.getDatasetItems(datasetId, {
+          page,
+          size: pageSize,
+        });
+        const content = result.content ?? [];
+        items.push(
+          ...content.map((item) => ({
+            id: String(item.id),
+            data: (item.data ?? {}) as Record<string, unknown>,
+          })),
+        );
+        if (content.length < pageSize) return items;
       }
     },
 
@@ -1510,6 +2174,56 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
       });
       return (page.content ?? []).map((item) => String(item.id));
+    },
+
+    /**
+     * One page of the same read, with the envelope kept — the exact request the
+     * comparison grid issues, and the one the browser export reissues over the
+     * whole result set.
+     *
+     * `total` is part of the answer rather than a convenience: a seed that has
+     * only half landed still returns a well-formed page, so a fixture that
+     * waited on `ids.length` alone would open the browser against a partially
+     * ingested comparison and assert on a row count that was never the seed's.
+     * `filters`/`search`/`sorting` travel verbatim, so a caller can confirm a
+     * scoped result set server-side before asking the UI to export it, and
+     * `rows` carries each item's `data` so a caller can see what `truncate`
+     * did to it — the difference between the grid's read and the export's.
+     */
+    async compareItemsPage(args: {
+      datasetId: string;
+      experimentIds: string[];
+      page?: number;
+      size?: number;
+      search?: string;
+      filters?: BackendFilter[];
+      sorting?: BackendSort[];
+      truncate?: boolean;
+    }): Promise<{ total: number; ids: string[]; rows: DatasetItemRef[] }> {
+      const page = await opik.api.datasets.findDatasetItemsWithExperimentItems(args.datasetId, {
+        experimentIds: JSON.stringify(args.experimentIds),
+        page: args.page ?? 1,
+        size: args.size ?? 100,
+        truncate: args.truncate ?? true,
+        ...(args.search ? { search: args.search } : {}),
+        ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+        ...(args.sorting?.length ? { sorting: JSON.stringify(args.sorting) } : {}),
+      });
+      if (typeof page.total !== 'number') {
+        throw new Error(
+          `compareItemsPage: dataset ${args.datasetId} answered without a total — ` +
+            'cannot tell a fully ingested comparison from a partial one.',
+        );
+      }
+      const content = page.content ?? [];
+      return {
+        total: page.total,
+        ids: content.map((item) => String(item.id)),
+        rows: content.map((item) => ({
+          id: String(item.id),
+          data: (item.data ?? {}) as Record<string, unknown>,
+        })),
+      };
     },
 
     /**
@@ -1803,6 +2517,59 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `POST /v1/private/projects/{id}/kpi-cards` — the four numbers the Logs
+     * page renders above its table, for the current period and the equal-length
+     * period immediately before it.
+     *
+     * Raw fetch because the pinned SDK has no binding for it, and because the
+     * status is part of what a caller asserts: an unservable entity type is a
+     * 400, not a wrong number.
+     *
+     * `filters` is sent verbatim when given. The Logs page always sends a
+     * `source = sdk` filter; a caller seeding into a fresh project through the
+     * SDK/REST writes gets the same answer either way, and says so rather than
+     * copying the front end's payload for its own sake.
+     */
+    async projectKpiCards(args: {
+      projectId: string;
+      entityType: 'traces' | 'spans' | 'threads';
+      intervalStart: Date;
+      intervalEnd?: Date;
+      filters?: unknown[];
+    }): Promise<RawApiResult & { stats: KpiCardStat[] }> {
+      const { status, message, json } = await rawFetch(
+        'POST',
+        `/v1/private/projects/${args.projectId}/kpi-cards`,
+        {
+          body: {
+            entity_type: args.entityType,
+            interval_start: args.intervalStart.toISOString(),
+            ...(args.intervalEnd ? { interval_end: args.intervalEnd.toISOString() } : {}),
+            ...(args.filters?.length ? { filters: JSON.stringify(args.filters) } : {}),
+          },
+        },
+      );
+      const body = json as {
+        stats?: Array<{
+          type?: string;
+          current_value?: number | null;
+          previous_value?: number | null;
+        }>;
+      } | null;
+      return {
+        status,
+        message,
+        stats: (body?.stats ?? []).map((stat) => ({
+          type: stat.type as KpiCardStat['type'],
+          // `?? null`, never `?? 0`: the response declares these always-present
+          // but nullable, and a zeroed absent card would read as a real value.
+          currentValue: stat.current_value ?? null,
+          previousValue: stat.previous_value ?? null,
+        })),
+      };
+    },
+
+    /**
      * By id, unlike findExperimentByName — `findExperiments({ name })` is not
      * scoped to a project, so a same-named experiment elsewhere would answer
      * for this one.
@@ -1841,6 +2608,26 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         }));
     },
 
+    /**
+     * Every experiment recorded against one dataset, scoped by the server.
+     *
+     * The narrowing is the point. `listExperimentsWithPrefix('')` turns the
+     * server-side name filter off and then filters client-side, so it can only
+     * ever see the first 500 rows the workspace happens to return — fine for a
+     * real prefix, but a closed-set assertion built on it ("this dataset holds
+     * exactly these two experiments") silently becomes a truncation test on a
+     * shared environment that already holds more. A dataset seeded by a fixture
+     * holds a handful, so scoping the query keeps the set genuinely closed.
+     */
+    async listExperimentsForDataset(datasetId: string): Promise<ExperimentRefDetail[]> {
+      const page = await opik.api.experiments.findExperiments({ datasetId, size: 500 });
+      return (page.content ?? []).map((e) => ({
+        id: String(e.id),
+        name: e.name as string,
+        datasetId: e.datasetId ? String(e.datasetId) : null,
+      }));
+    },
+
     async deleteExperiment(id: string): Promise<void> {
       try {
         await opik.api.experiments.deleteExperimentsById({ ids: [id] });
@@ -1848,6 +2635,105 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * One experiment by id, as the server stored it.
+     *
+     * `findExperimentByName` cannot answer "what name did this experiment end
+     * up with", which is the question a naming test asks: it looks the row up
+     * BY the name, so an experiment that was stored under a different name than
+     * the one requested simply reads as absent, and the failure says "not
+     * found" instead of naming the two strings that disagree.
+     */
+    async getExperiment(id: string): Promise<ExperimentRefDetail> {
+      const experiment = await opik.api.experiments.getExperimentById(id);
+      const name = experiment.name;
+      // Asserted, not defaulted: the generated client types `name` as optional,
+      // and a `?? ''` here would turn "the server dropped the name" — the exact
+      // regression this exists to catch — into a comparison against an empty
+      // string that reads like an ordinary mismatch.
+      if (typeof name !== 'string') {
+        throw new Error(`getExperiment: experiment ${id} carried no name`);
+      }
+      return {
+        id: String(experiment.id),
+        name,
+        datasetId: experiment.datasetId ? String(experiment.datasetId) : null,
+      };
+    },
+
+    /**
+     * `POST /v1/private/experiments/execute` — the write path a test-suite run
+     * takes, and the one that carries a per-variant `experiment_name`
+     * (OPIK-3268). The pinned SDK has no binding for it, so this goes through
+     * `rawFetch` like the other contract-level calls above.
+     *
+     * Returns rather than throws on a non-2xx: the endpoint's rejection of a
+     * blank name is behaviour under test.
+     */
+    async executeExperiments(args: {
+      datasetName: string;
+      datasetId: string;
+      projectName: string;
+      prompts: ExecutePromptSeed[];
+    }): Promise<ExecuteExperimentsResult> {
+      const { status, message, json } = await rawFetch('POST', '/v1/private/experiments/execute', {
+        body: {
+          dataset_name: args.datasetName,
+          dataset_id: args.datasetId,
+          project_name: args.projectName,
+          prompts: args.prompts.map((prompt) => ({
+            model: prompt.model,
+            messages: prompt.messages,
+            ...(prompt.experimentName === undefined
+              ? {}
+              : { experiment_name: prompt.experimentName }),
+          })),
+        },
+      });
+
+      const body = json as {
+        experiments?: Array<{ experiment_id?: string; prompt_index?: number }>;
+        total_items?: number;
+        errors?: string[];
+      } | null;
+
+      // The validation failures answer `{"errors": [...]}` rather than the
+      // `message` field `rawFetch` prefers, so fold them in — otherwise a
+      // caller asserting on the rejection text gets the raw JSON blob.
+      const errors = body?.errors;
+      const detail = Array.isArray(errors) && errors.length > 0 ? errors.join('; ') : message;
+
+      return {
+        status,
+        message: detail,
+        experiments: (body?.experiments ?? [])
+          .map((entry) => {
+            // Validated rather than coerced. `String(undefined)` is the string
+            // `"undefined"` and `Number(undefined)` is `NaN`, and both survive
+            // as far as the caller: the first registers a teardown id that
+            // deletes nothing, the second sorts arbitrarily and silently
+            // scrambles the prompt-to-experiment mapping this whole call
+            // exists to establish. Fail where the bad field is.
+            if (typeof entry.experiment_id !== 'string' || entry.experiment_id === '') {
+              throw new Error(
+                `executeExperiments: response entry carried no experiment_id: ${JSON.stringify(entry)}`,
+              );
+            }
+            if (!Number.isInteger(entry.prompt_index)) {
+              throw new Error(
+                `executeExperiments: response entry carried a non-integer prompt_index: ${JSON.stringify(entry)}`,
+              );
+            }
+            return {
+              experimentId: entry.experiment_id,
+              promptIndex: entry.prompt_index as number,
+            };
+          })
+          .sort((a, b) => a.promptIndex - b.promptIndex),
+        totalItems: typeof body?.total_items === 'number' ? body.total_items : null,
+      };
     },
 
     async findTestSuiteByName(name: string, projectName?: string): Promise<TestSuiteRef | null> {
@@ -1955,6 +2841,30 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * `GET /v1/private/traces/{id}`, reduced to the fields that say whether the
+     * writer ever closed the trace — see `TraceLifecycle`.
+     */
+    async getTraceLifecycle(traceId: string): Promise<TraceLifecycle | null> {
+      try {
+        const t = await opik.api.traces.getTraceById(traceId);
+        return {
+          id: String(t.id ?? ''),
+          name: t.name ?? '',
+          endTime: t.endTime ? new Date(t.endTime).toISOString() : null,
+          errorInfo: t.errorInfo
+            ? {
+                exceptionType: t.errorInfo.exceptionType,
+                message: t.errorInfo.message ?? null,
+              }
+            : null,
+        };
+      } catch (err) {
+        if (isNotFoundError(err)) return null;
+        throw err;
+      }
+    },
+
+    /**
      * Every span on a trace, reduced to the fields a price resolution decides.
      *
      * Scoped by `projectId` as well as `traceId` because the spans listing is
@@ -1979,6 +2889,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         model: s.model ?? null,
         provider: s.provider ?? null,
         totalEstimatedCost: s.totalEstimatedCost ?? null,
+        usage: s.usage ?? null,
       }));
     },
 
@@ -2013,6 +2924,160 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         traceId: String(s.traceId ?? ''),
         parentSpanId: s.parentSpanId ? String(s.parentSpanId) : null,
       }));
+    },
+
+    /**
+     * `POST /v1/private/spans/batch` — many spans in one request.
+     *
+     * The only way to seed a span population large enough to page. Writing them
+     * one at a time through `createSpan` is both slow and the fastest route to
+     * the workspace ingestion rate limit, which surfaces as a seed that half
+     * landed — the worst possible input to a spec whose subject is "every span
+     * comes back exactly once".
+     *
+     * Each span's `source` defaults to `sdk`, which is what the Logs page
+     * filters every span read on. The write does not default it — `SpanDAO`
+     * binds NULL for an absent one — so a batch seeded without it lands, is
+     * readable by id, and never appears in the table.
+     */
+    async createSpansBatch(args: {
+      projectName: string;
+      spans: SpanBatchSeed[];
+    }): Promise<void> {
+      // The endpoint's own cap. Chunking here would hide from the caller that
+      // the seed is no longer one atomic write, which a paging spec cares about.
+      if (args.spans.length < 1 || args.spans.length > 1000) {
+        throw new Error(
+          `createSpansBatch: the endpoint accepts 1..1000 spans, got ${args.spans.length}`,
+        );
+      }
+      const now = new Date();
+      await postSeedWrite(
+        '/v1/private/spans/batch',
+        `createSpansBatch of ${args.spans.length} into '${args.projectName}'`,
+        {
+          spans: args.spans.map((span) => ({
+            id: span.id,
+            trace_id: span.traceId,
+            project_name: args.projectName,
+            name: span.name,
+            source: span.source ?? 'sdk',
+            type: span.type ?? 'general',
+            start_time: (span.startTime ?? now).toISOString(),
+            end_time: (span.endTime ?? now).toISOString(),
+            ...(span.model === undefined ? {} : { model: span.model }),
+            ...(span.provider === undefined ? {} : { provider: span.provider }),
+            ...(span.usage === undefined ? {} : { usage: span.usage }),
+            ...(span.errorInfo === undefined
+              ? {}
+              : {
+                  error_info: {
+                    exception_type: span.errorInfo.exceptionType,
+                    message: span.errorInfo.message,
+                    traceback: span.errorInfo.traceback,
+                  },
+                }),
+          })),
+        },
+        204,
+      );
+    },
+
+    /**
+     * One page of `GET /v1/private/spans`, as the Logs table asks for it.
+     *
+     * Deliberately NOT `fetchAllPages`: the paging itself is what a caller of
+     * this is testing, so the page boundary has to stay visible. `truncate`
+     * keeps the payload slim — these callers only ever read ids.
+     */
+    async listSpanIdsPage(args: {
+      projectId: string;
+      page: number;
+      size: number;
+    }): Promise<SpanIdPage> {
+      // Both retries: `withReadRetry` for an ingress 5xx blip, and
+      // `withRateLimitRetry` because paging a population is a burst of reads
+      // against a per-workspace limit.
+      const answer = await withRateLimitRetry(() =>
+        withReadRetry(() =>
+          opik.api.spans.getSpansByProject({
+            projectId: args.projectId,
+            page: args.page,
+            size: args.size,
+            truncate: true,
+          }),
+        ),
+      );
+      return {
+        ids: (answer.content ?? []).map((s) => String(s.id ?? '')),
+        page: answer.page ?? args.page,
+        size: answer.size ?? 0,
+        total: answer.total ?? 0,
+      };
+    },
+
+    /**
+     * `POST /v1/private/spans/search` — the cursor-paged read, which is a
+     * different query from the offset-paged listing above and not a wrapper
+     * around it.
+     *
+     * Written by hand rather than through `rawFetch` because the endpoint
+     * answers `application/octet-stream`: one JSON object per line, streamed.
+     * `rawFetch` would `JSON.parse` the whole body, fail, and hand back the raw
+     * text as a "message" — which reads like an error response rather than a
+     * successful stream.
+     *
+     * A line that carries no `id` is treated as the stream's error object and
+     * thrown. The streamer really does emit one mid-stream on failure, and
+     * silently skipping it would turn a truncated answer into a short page —
+     * exactly the symptom a paging spec is supposed to catch.
+     */
+    async searchSpanIds(args: {
+      projectId: string;
+      limit: number;
+      lastRetrievedId?: string;
+    }): Promise<string[]> {
+      const headers: Record<string, string> = {
+        Accept: 'application/octet-stream',
+        'Content-Type': 'application/json',
+        'Comet-Workspace': env.workspace,
+      };
+      const key = apiKey ?? env.apiKey;
+      if (key) headers['Authorization'] = key;
+
+      // Rate-limited per workspace (`search_spans:{workspaceId}`), and draining
+      // by cursor is by definition a burst — see `withRateLimitRetry`.
+      const text = await withRateLimitRetry(async () => {
+        const res = await fetch(`${env.apiBaseUrl}/v1/private/spans/search`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            project_id: args.projectId,
+            limit: args.limit,
+            truncate: true,
+            ...(args.lastRetrievedId ? { last_retrieved_id: args.lastRetrievedId } : {}),
+          }),
+        });
+        const body = await res.text();
+        if (!res.ok) {
+          throw new Error(`POST /v1/private/spans/search -> ${res.status}: ${body.slice(0, 300)}`);
+        }
+        return body;
+      });
+
+      const ids: string[] = [];
+      for (const line of text.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const parsed = JSON.parse(trimmed) as { id?: unknown };
+        if (typeof parsed.id !== 'string') {
+          throw new Error(
+            `POST /v1/private/spans/search streamed a non-span line: ${trimmed.slice(0, 300)}`,
+          );
+        }
+        ids.push(parsed.id);
+      }
+      return ids;
     },
 
     /**
@@ -2214,6 +3279,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             sampling_rate: args.samplingRate,
             enabled: args.enabled ?? true,
             ...(args.triggerScope ? { trigger_scope: args.triggerScope } : {}),
+            // `filters` is nullable on the write model, and a rule seeded with
+            // `[]` is a different starting state from one seeded with the field
+            // absent — so the caller's distinction is passed through rather than
+            // collapsed. Keyed on `undefined`, not on length: testing `?.length`
+            // would send an explicit `[]` as an omission and make the two
+            // starting states the one thing this comment says they are not.
+            ...(args.filters !== undefined ? { filters: args.filters } : {}),
             code: isThreadScope
               ? { metric: args.metric }
               : { metric: args.metric, arguments: args.arguments },
@@ -2515,6 +3587,22 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * The status `GET /v1/private/automations/evaluators/{id}` answers, without
+     * throwing on it.
+     *
+     * For the by-id counterpart of the listing above: a rule family the
+     * evaluators API does not serve must come back as a clean 404, not as a 500
+     * raised from a mapper that met a row shape it cannot read.
+     */
+    async automationRuleEvaluatorStatus(id: string): Promise<RawApiResult> {
+      const { status, message } = await rawFetch(
+        'GET',
+        `/v1/private/automations/evaluators/${id}`,
+      );
+      return { status, message };
+    },
+
+    /**
      * The judge messages of one rule, as the read-back mapper produces them.
      *
      * This is the surface OPIK-8250 broke: the mapper infers the stored shape
@@ -2651,6 +3739,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         sampling_rate?: number;
         trigger_scope?: string;
         type?: string;
+        filters?: unknown;
       };
       // Same reasoning as `requireSamplingRate`: defaulting an absent rate or
       // scope would present as the server's default, which is exactly the value
@@ -2671,6 +3760,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         samplingRate: rule.sampling_rate,
         triggerScope: rule.trigger_scope,
         type: rule.type,
+        filters: readRuleFilters(ruleId, rule.filters),
       };
     },
 
@@ -2881,6 +3971,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * scored — and a scoring spec built on it would assert nothing.
        */
       endTime?: Date;
+      /**
+       * Set to make the trace count toward the project's error statistics. The
+       * SDK bridge can seed this too, but only for a trace whose id it mints
+       * itself — and a trace placed inside or outside a window by its id has to
+       * supply its own.
+       */
+      errorInfo?: { exceptionType: string; message: string; traceback: string };
     }): Promise<string> {
       await postSeedWrite('/v1/private/traces', `createTraceWithSource '${args.name}'`, {
         id: args.id,
@@ -2890,11 +3987,65 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.threadId ? { thread_id: args.threadId } : {}),
         start_time: (args.startTime ?? new Date()).toISOString(),
         ...(args.endTime ? { end_time: args.endTime.toISOString() } : {}),
+        ...(args.errorInfo
+          ? {
+              error_info: {
+                exception_type: args.errorInfo.exceptionType,
+                message: args.errorInfo.message,
+                traceback: args.errorInfo.traceback,
+              },
+            }
+          : {}),
         ...(args.input === undefined ? {} : { input: args.input }),
         ...(args.output === undefined ? {} : { output: args.output }),
         ...(args.metadata ? { metadata: args.metadata } : {}),
       });
       return args.id;
+    },
+
+    /**
+     * `POST /v1/private/traces/batch` — many traces in one request.
+     *
+     * The trace equivalent of `createSpansBatch`, and for the same reason: a
+     * comparison wide enough to be worth exporting is hundreds of traces, and
+     * writing them one at a time through `createTraceWithSource` is both slow
+     * and the quickest route to the workspace ingestion rate limit — which
+     * surfaces as a seed that half landed, the worst possible input to a spec
+     * whose subject is "the export covers the whole result set".
+     *
+     * `source` is fixed at `sdk`: these are experiment evaluation traces, which
+     * is what the SDK's own `evaluate()` writes, and the compare grid reads
+     * them through the experiment item rather than through a source filter.
+     */
+    async createTracesBatch(args: {
+      projectName: string;
+      traces: TraceBatchSeed[];
+    }): Promise<void> {
+      // The endpoint's own cap. Chunking here would hide from the caller that
+      // the seed is no longer one atomic write.
+      if (args.traces.length < 1 || args.traces.length > 1000) {
+        throw new Error(
+          `createTracesBatch: the endpoint accepts 1..1000 traces, got ${args.traces.length}`,
+        );
+      }
+      const now = new Date();
+      await postSeedWrite(
+        '/v1/private/traces/batch',
+        `createTracesBatch of ${args.traces.length} into '${args.projectName}'`,
+        {
+          traces: args.traces.map((trace) => ({
+            id: trace.id,
+            project_name: args.projectName,
+            name: trace.name,
+            start_time: (trace.startTime ?? now).toISOString(),
+            end_time: (trace.endTime ?? now).toISOString(),
+            source: 'sdk' as const,
+            ...(trace.input === undefined ? {} : { input: trace.input }),
+            ...(trace.output === undefined ? {} : { output: trace.output }),
+          })),
+        },
+        204,
+      );
     },
 
     /**
@@ -2945,6 +4096,17 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * exercising server-side pricing at all.
        */
       usage?: Record<string, number>;
+      /** Renders the panel's Metadata section for this span. */
+      metadata?: Record<string, unknown>;
+      /**
+       * Renders the panel's Error section for this span.
+       *
+       * `sdkClient.python.createNestedTrace` can set this on a trace but not on
+       * one of its spans, and the trace panel's Error section is per-selected-
+       * node — so a spec about what the Error section does when a span is
+       * selected has to seed the span's error here.
+       */
+      errorInfo?: { exceptionType: string; message: string; traceback: string };
     }): Promise<string> {
       const now = new Date();
       await postSeedWrite('/v1/private/spans', `createSpan '${args.name}'`, {
@@ -2961,6 +4123,16 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.model === undefined ? {} : { model: args.model }),
         ...(args.provider === undefined ? {} : { provider: args.provider }),
         ...(args.usage === undefined ? {} : { usage: args.usage }),
+        ...(args.metadata === undefined ? {} : { metadata: args.metadata }),
+        ...(args.errorInfo
+          ? {
+              error_info: {
+                exception_type: args.errorInfo.exceptionType,
+                message: args.errorInfo.message,
+                traceback: args.errorInfo.traceback,
+              },
+            }
+          : {}),
       });
       return args.id;
     },
@@ -3009,6 +4181,13 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
        * to set them.
        */
       metadata?: Record<string, unknown>;
+      /**
+       * Prompt VERSION ids this experiment was run from — what puts it on a
+       * prompt's Experiments tab, which queries by prompt rather than by
+       * project. Version ids, not prompt ids: the link table stores the commit
+       * the run used, and a prompt id here silently links nothing.
+       */
+      promptVersionIds?: string[];
     }): Promise<string> {
       await opik.api.experiments.createExperiment({
         id: args.id,
@@ -3018,6 +4197,9 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         ...(args.type ? { type: args.type } : {}),
         ...(args.optimizationId ? { optimizationId: args.optimizationId } : {}),
         ...(args.metadata ? { metadata: args.metadata } : {}),
+        ...(args.promptVersionIds?.length
+          ? { promptVersions: args.promptVersionIds.map((id) => ({ id })) }
+          : {}),
       });
       return args.id;
     },
@@ -3033,6 +4215,25 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     getOptimization: localGetOptimization,
+
+    /**
+     * `GET /v1/private/optimizations?project_id=…` — the read behind the
+     * Optimization runs list, including each run's rolled-up cost.
+     *
+     * Separate from `getOptimization` because the list and the by-id read are
+     * two different projections over the same aggregate and are allowed to
+     * disagree: `getById` always takes the FIND path, while the list can fall
+     * through to the no-experiments projection. A spec that asserts a cost
+     * wants to pin BOTH, so both have to be readable.
+     */
+    async listOptimizations(args: { projectId: string }): Promise<OptimizationRef[]> {
+      const page = await opik.api.optimizations.findOptimizations({
+        projectId: args.projectId,
+        page: 1,
+        size: 100,
+      });
+      return (page.content ?? []).map(toOptimizationRef);
+    },
 
     async pollOptimizationStatus(
       optimizationId: string,
@@ -3076,6 +4277,161 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
         if (isNotFoundError(err)) return;
         throw err;
       }
+    },
+
+    /**
+     * Create an annotation queue, optionally with an automation block, and
+     * report the status rather than throwing on it.
+     *
+     * Not `sdkClient.python.createAnnotationQueue`: the bridge's route seeds
+     * traces and feedback definitions into a queue and has no `automation`
+     * argument, and the automation block is the whole subject here. The id is
+     * caller-supplied because creation answers 201 with no body.
+     */
+    async createAnnotationQueue(queue: AnnotationQueueWrite): Promise<RawApiResult> {
+      const { status, message } = await rawFetch('POST', '/v1/private/annotation-queues', {
+        body: {
+          id: queue.id,
+          project_id: queue.projectId,
+          name: queue.name,
+          scope: queue.scope,
+          ...(queue.feedbackDefinitionNames
+            ? { feedback_definition_names: queue.feedbackDefinitionNames }
+            : {}),
+          ...(queue.automation
+            ? {
+                automation: {
+                  enabled: queue.automation.enabled,
+                  ...(queue.automation.maxItemsInQueue === undefined
+                    ? {}
+                    : { max_items_in_queue: queue.automation.maxItemsInQueue }),
+                  ...(queue.automation.groups
+                    ? {
+                        conditions: {
+                          groups: queue.automation.groups.map((conditions) => ({
+                            conditions: conditions.map((condition) => ({
+                              score_name: condition.scoreName,
+                              operator: condition.operator,
+                              value: condition.value,
+                            })),
+                          })),
+                        },
+                      }
+                    : {}),
+                },
+              }
+            : {}),
+        },
+      });
+      return { status, message };
+    },
+
+    /**
+     * The automation block of one queue, or null when the queue carries none.
+     *
+     * Read through `rawFetch` because `automation` is new in this release and
+     * the pinned SDK's queue type does not declare it — a read through the typed
+     * client would drop the field and present a queue that stored nothing
+     * exactly like one that stored everything.
+     */
+    async getAnnotationQueueAutomation(id: string): Promise<QueueAutomationRef | null> {
+      const { status, message, json } = await rawFetch(
+        'GET',
+        `/v1/private/annotation-queues/${id}`,
+      );
+      if (status !== 200) {
+        throw new Error(
+          `getAnnotationQueueAutomation('${id}'): expected 200, got ${status}: ${message}`,
+        );
+      }
+      const automation = (
+        json as {
+          automation?: {
+            enabled?: boolean;
+            max_items_in_queue?: number;
+            conditions?: { groups?: Array<{ conditions?: Array<Record<string, unknown>> }> };
+          };
+        }
+      ).automation;
+      if (automation == null) return null;
+      if (typeof automation.enabled !== 'boolean') {
+        throw new Error(
+          `getAnnotationQueueAutomation('${id}'): automation carried no boolean 'enabled'.`,
+        );
+      }
+      return {
+        enabled: automation.enabled,
+        maxItemsInQueue:
+          typeof automation.max_items_in_queue === 'number' ? automation.max_items_in_queue : null,
+        groups: (automation.conditions?.groups ?? []).map((group) =>
+          (group.conditions ?? []).map((condition) => {
+            // Checked rather than cast: an operator the enum does not define
+            // means the server answered something no caller can act on, and a
+            // blind cast would present it to `toEqual` as a plain mismatch
+            // instead of naming what came back.
+            const operator = String(condition.operator ?? '');
+            if (operator !== '<' && operator !== '>' && operator !== '=') {
+              throw new Error(
+                `getAnnotationQueueAutomation('${id}'): unknown score condition operator '${operator}'.`,
+              );
+            }
+            return {
+              scoreName: String(condition.score_name ?? ''),
+              operator,
+              value: Number(condition.value),
+            };
+          }),
+        ),
+      };
+    },
+
+    /** Add traces or threads to a queue by id — the `manual` item source. */
+    async addAnnotationQueueItems(queueId: string, ids: string[]): Promise<void> {
+      const { status, message } = await rawFetch(
+        'POST',
+        `/v1/private/annotation-queues/${queueId}/items/add`,
+        { body: { ids } },
+      );
+      if (status !== 204) {
+        throw new Error(
+          `addAnnotationQueueItems('${queueId}'): expected 204, got ${status}: ${message}`,
+        );
+      }
+    },
+
+    /**
+     * Queue membership for the given ids — the lookup the items table calls to
+     * render its Source column.
+     *
+     * The status rides along because the contract under test is partly about
+     * what the endpoint does with ids that are NOT in the queue (omit them and
+     * still answer 200), so a caller asserts on the code as well as the rows.
+     */
+    async searchAnnotationQueueItems(
+      queueId: string,
+      ids: string[],
+    ): Promise<RawApiResult & { items: AnnotationQueueItemRef[] }> {
+      const { status, message, json } = await rawFetch(
+        'POST',
+        `/v1/private/annotation-queues/${queueId}/items/search`,
+        { body: { ids } },
+      );
+      if (status !== 200) return { status, message, items: [] };
+
+      const content = (json as { content?: Array<{ id?: string; source?: unknown }> }).content;
+      if (!Array.isArray(content)) {
+        throw new Error(
+          `searchAnnotationQueueItems('${queueId}'): 200 response carried no 'content' array.`,
+        );
+      }
+      return {
+        status,
+        message,
+        items: content.map((item) => ({
+          id: String(item.id ?? ''),
+          source: typeof item.source === 'string' ? item.source : null,
+        })),
+      };
     },
 
     /**
@@ -3161,6 +4517,55 @@ async function withReadRetry<T>(read: () => Promise<T>): Promise<T> {
     } catch (err) {
       const status = statusCodeOf(err);
       if (status === null || status < 500 || attempt >= backoffMs.length) throw err;
+      await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+    }
+  }
+}
+
+/**
+ * True when a read was refused by a rate limiter rather than failing.
+ *
+ * Matched on the status where the pinned SDK exposes one and on the message
+ * otherwise, because the raw-fetch reads here report a refusal as a thrown
+ * `Error` carrying the status text.
+ *
+ * The message match requires `429` to stand alone rather than merely occur, and
+ * that is not pedantry: these messages quote ids and response bodies, and a
+ * UUID with `429` somewhere in its hex would otherwise make every real 4xx look
+ * like a rate limit. The callers stand off and retry on a true, so a
+ * misclassified error is one that gets swallowed for the whole backoff and then
+ * reported as something else. The forms that must still match are
+ * `-> 429:` (the hand-rolled stream read), `got 429 after` (`postSeedWrite`)
+ * and a trailing `status code 429` — all of them delimited.
+ */
+export function isRateLimitedError(err: unknown): boolean {
+  if (typeof err === 'object' && err !== null && 'statusCode' in err) {
+    if ((err as { statusCode: unknown }).statusCode === 429) return true;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return /(?:^|[^0-9A-Za-z])429(?:[^0-9A-Za-z]|$)/.test(message);
+}
+
+/**
+ * Run an idempotent read, standing off and retrying when it is rate-limited.
+ *
+ * Distinct from `withReadRetry`, which hides a 5xx blip. A 429 is not a blip:
+ * the spans listing is limited per workspace (`getSpans:{workspaceId}`), and a
+ * spec that pages a population necessarily issues a burst of reads — on a
+ * shared environment, alongside whatever else is running. Failing the test on
+ * that reports an infrastructure budget as a paging defect.
+ *
+ * Only 429, and only for reads. A different error is a real one and must
+ * surface immediately; a rate limit that outlasts the whole backoff still
+ * throws, because at that point it is not a burst.
+ */
+async function withRateLimitRetry<T>(read: () => Promise<T>): Promise<T> {
+  const backoffMs = [2_000, 5_000, 10_000, 20_000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await read();
+    } catch (err) {
+      if (!isRateLimitedError(err) || attempt >= backoffMs.length) throw err;
       await new Promise((r) => setTimeout(r, backoffMs[attempt]));
     }
   }

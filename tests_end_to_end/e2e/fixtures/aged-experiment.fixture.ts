@@ -1,6 +1,7 @@
 import { test as baseTest } from './optimization-run.fixture';
 import { shouldLeaveArtifacts } from '../core/artifacts';
 import { uuid7 } from '../core/backend';
+import { skipUnlessBackdatedIdsAccepted } from './uuid-window-guard';
 
 export interface AgedExperimentRef {
   /** Experiment whose traces are all older than the Logs page's rolling window. */
@@ -52,6 +53,13 @@ export const test = baseTest.extend<AgedExperimentFixtures>({
     testInfo,
   ) => {
     const datasetName = `${testNamespace}-ds`;
+
+    // The aged half of this fixture needs ids AGE_DAYS old, which ingestion
+    // refuses where id-timestamp validation runs in reject mode. Seeding valid
+    // ids is not an option: "older than the 30-day log window" is the whole
+    // subject. Probe before writing anything, so such an env skips with a reason
+    // instead of timing out on the bridge waiting for rows that never land.
+    await skipUnlessBackdatedIdsAccepted(backendClient, project.name, AGE_DAYS * 24 * 60 * 60 * 1000);
 
     const dataset = await sdkClient.python.createDataset({
       project_name: project.name,

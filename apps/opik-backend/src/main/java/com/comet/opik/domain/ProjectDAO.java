@@ -98,14 +98,16 @@ interface ProjectDAO {
             @BindMethods Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
     /**
-     * Projects with the given names, optionally restricted to {@code workspaceIds}. When left unrestricted the
-     * query spans every workspace, and neither index applies — {@code projects_workspace_id_name_uk} is keyed on
-     * {@code (workspace_id, name)}, so it needs the workspace to be known. Restricting by workspace both bounds the
-     * result and lets that index serve the lookup, which is why callers that know the workspaces they care about
-     * pass them.
+     * Projects with the given names in {@code workspaceIds}. The workspace scope is deliberately not optional:
+     * {@code projects_workspace_id_name_uk} is keyed on {@code (workspace_id, name)}, so without the workspace
+     * neither index applies and the result spans every workspace in the installation. Its only caller is the
+     * demo-project lookup behind the daily usage counts, whose whole point is to be bounded — one demo project is
+     * created per signup — so no overload offers to ask this across the installation.
      *
-     * <p>An empty {@code workspaceIds} reads as unrestricted rather than as "match nothing", so callers filtering a
-     * set they built must handle the empty case themselves.
+     * <p>An empty or null {@code workspaceIds} reads as unrestricted rather than as "match nothing": the
+     * {@code <if(workspace_ids)>} guard is what stands between it and an empty {@code IN ()}. Callers filtering a
+     * set they built must handle the empty case themselves, as
+     * {@link ProjectService#getDemoProjectIdsInWorkspaces(java.util.Set)} does.
      */
     @SqlQuery("""
             SELECT * FROM projects
@@ -116,8 +118,4 @@ interface ProjectDAO {
     @AllowUnusedBindings
     List<Project> findByGlobalNames(@NonNull @BindList("names") List<String> names,
             @Define("workspace_ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "workspace_ids") Set<String> workspaceIds);
-
-    default List<Project> findByGlobalNames(@NonNull List<String> names) {
-        return findByGlobalNames(names, null);
-    }
 }

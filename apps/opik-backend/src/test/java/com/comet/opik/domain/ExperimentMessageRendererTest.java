@@ -165,7 +165,7 @@ class ExperimentMessageRendererTest {
                             .build());
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gpt-4o", messages, null, null);
+                    "gpt-4o", messages, null, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 
@@ -194,7 +194,7 @@ class ExperimentMessageRendererTest {
                     "presencePenalty", mapper.valueToTree(0.3));
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gpt-4o", messages, configs, null);
+                    "gpt-4o", messages, configs, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 
@@ -225,7 +225,7 @@ class ExperimentMessageRendererTest {
                     "presence_penalty", mapper.valueToTree(0.3));
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gpt-4o", messages, configs, null);
+                    "gpt-4o", messages, configs, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 
@@ -249,7 +249,7 @@ class ExperimentMessageRendererTest {
                             .build());
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gpt-4o", messages, null, null);
+                    "gpt-4o", messages, null, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 
@@ -274,7 +274,7 @@ class ExperimentMessageRendererTest {
                     JsonUtils.getJsonNodeFromString("{\"thinking\": {\"level\": \"high\"}}"));
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gemini-2.5-flash-lite", messages, configs, null);
+                    "gemini-2.5-flash-lite", messages, configs, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 
@@ -294,7 +294,7 @@ class ExperimentMessageRendererTest {
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
                     "gemini-2.5-flash-lite", messages,
-                    Map.of("custom_parameters", JsonUtils.getJsonNodeFromString(json)), null);
+                    Map.of("custom_parameters", JsonUtils.getJsonNodeFromString(json)), null, null);
 
             assertThat(renderer.buildChatCompletionRequest(prompt, messages).customParameters()).isNull();
         }
@@ -312,7 +312,7 @@ class ExperimentMessageRendererTest {
                     "custom_parameters", JsonUtils.getJsonNodeFromString("[1, 2]"));
 
             var prompt = new ExperimentExecutionRequest.PromptVariant(
-                    "gemini-2.5-flash-lite", messages, configs, null);
+                    "gemini-2.5-flash-lite", messages, configs, null, null);
 
             ChatCompletionRequest request = renderer.buildChatCompletionRequest(prompt, messages);
 

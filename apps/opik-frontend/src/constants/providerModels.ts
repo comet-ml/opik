@@ -668,6 +668,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-v4-flash-0731:batch",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_0731_FREE,
+      label: "deepseek/deepseek-v4-flash-0731:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_VISION_EXP,
       label: "deepseek/deepseek-v4-flash-vision-exp",
     },
@@ -1000,6 +1004,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-3.0-flash-sante:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_VL,
+      label: "inclusionai/ling-3.0-flash-vl",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_3_0_FLASH_VL_FREE,
       label: "inclusionai/ling-3.0-flash-vl:free",
     },
@@ -1018,6 +1026,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T_FREE,
       label: "inclusionai/ring-2.6-1t:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INFERENCE_NET_SCHEMATRON_V2_SMALL,
+      label: "inference-net/schematron-v2-small",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INFERENCE_NET_SCHEMATRON_V2_TURBO,
+      label: "inference-net/schematron-v2-turbo",
     },
     {
       value: PROVIDER_MODEL_TYPE.INFLECTION_INFLECTION_3_PI,
@@ -2541,6 +2557,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.8-27b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_27B_FREE,
+      label: "qwen/qwen3.8-27b:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8_FLASH,
       label: "qwen/qwen3.8-flash",
     },
@@ -2581,8 +2601,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "relace/relace-search",
     },
     {
+      value: PROVIDER_MODEL_TYPE.SAKANA_FUGU_MAX,
+      label: "sakana/fugu-max",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.SAKANA_FUGU_ULTRA,
       label: "sakana/fugu-ultra",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.SAKANA_FUGU_ULTRA_V2,
+      label: "sakana/fugu-ultra-v2",
     },
     {
       value: PROVIDER_MODEL_TYPE.SAKANA_SAKANA_NAMAZU,
@@ -2611,6 +2639,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.STEALTH_OX_ALPHA,
       label: "stealth/ox-alpha",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.STEALTH_UNION_ALPHA,
+      label: "stealth/union-alpha",
     },
     {
       value: PROVIDER_MODEL_TYPE.STEPFUN_AI_STEP3,
@@ -2731,6 +2763,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TNGTECH_DEEPSEEK_R1T2_CHIMERA_FREE,
       label: "tngtech/deepseek-r1t2-chimera:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.UNBIASED_PARETO,
+      label: "unbiased/pareto",
     },
     {
       value: PROVIDER_MODEL_TYPE.UNDI95_REMM_SLERP_L2_13B,
@@ -2941,6 +2977,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "~anthropic/claude-sonnet-latest",
     },
     {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_FLASH_LATEST,
+      label: "~deepseek/deepseek-flash-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_PRO_LATEST,
+      label: "~deepseek/deepseek-pro-latest",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_LATEST,
       label: "~deepseek/deepseek-v4-flash-latest",
     },
@@ -2957,12 +3001,28 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "~moonshotai/kimi-latest",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_ASTRA_LATEST,
+      label: "~openai/gpt-astra-latest",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_LATEST,
       label: "~openai/gpt-latest",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_LUNA_LATEST,
+      label: "~openai/gpt-luna-latest",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_MINI_LATEST,
       label: "~openai/gpt-mini-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_SOL_LATEST,
+      label: "~openai/gpt-sol-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_TERRA_LATEST,
+      label: "~openai/gpt-terra-latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_LATEST,
@@ -3117,6 +3177,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_0_FLASH_LITE,
       label: "Gemini 2.0 Flash Lite 001",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_OMNI_1_1_FLASH,
+      label: "Gemini Omni 1.1 Flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_ROBOTICS_ER_2,
+      label: "Gemini Robotics Er 2",
     },
   ],
 

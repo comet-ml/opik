@@ -1,3 +1,4 @@
+import math
 import re
 
 import pytest
@@ -411,6 +412,40 @@ def test_kl_divergence_avg_direction():
     assert result.value >= 0.0
 
 
+@pytest.mark.parametrize(
+    "direction,output,reference,missing_token",
+    [
+        ("pq", "cat dog", "cat", "dog"),
+        ("qp", "cat", "cat dog", "dog"),
+        ("avg", "cat dog", "cat bird", "dog"),
+    ],
+)
+def test_kl_divergence__zero_smoothing_and_missing_token__raises_metric_error(
+    direction, output, reference, missing_token
+):
+    metric = KLDivergence(direction=direction, smoothing=0.0, track=False)
+
+    with pytest.raises(MetricComputationError) as exc_info:
+        metric.score(output=output, reference=reference)
+
+    assert (
+        str(exc_info.value)
+        == f"Token '{missing_token}' is absent from the other text, so the KL "
+        "divergence is infinite with smoothing=0.0. Pass a positive smoothing "
+        "value (KL divergence metric)."
+    )
+
+
+def test_kl_divergence__zero_smoothing_and_shared_support__computes_exact_value():
+    metric = KLDivergence(direction="pq", smoothing=0.0, track=False)
+
+    result = metric.score(output="cat cat dog", reference="cat dog dog")
+
+    # p = {cat: 2/3, dog: 1/3}, q = {cat: 1/3, dog: 2/3}
+    expected = (2 / 3) * math.log(2) + (1 / 3) * math.log(0.5)
+    assert result.value == pytest.approx(expected)
+
+
 def test_meteor_metric_with_custom_fn():
     captured = []
 
@@ -531,6 +566,25 @@ def test_spearman_ranking_metric():
 
     assert result.metadata["rho"] == pytest.approx(0.5)
     assert result.value == pytest.approx((0.5 + 1) / 2)
+
+
+@pytest.mark.parametrize(
+    "output,reference",
+    [
+        # Each case has equal-length, equal-set output/reference despite
+        # the repeats, so before this fix they reached the correlation
+        # formula and returned a score (0.625, 0.875, and -0.125) instead
+        # of raising.
+        (["a", "b", "a"], ["a", "a", "b"]),
+        (["a", "a", "b"], ["a", "b", "b"]),
+        # This one drove rho to -1.25, outside the documented [-1, 1] range.
+        (["a", "a", "b"], ["b", "a", "a"]),
+    ],
+)
+def test_spearman_ranking_rejects_duplicate_items(output, reference):
+    metric = SpearmanRanking(track=False)
+    with pytest.raises(MetricComputationError):
+        metric.score(output=output, reference=reference)
 
 
 def test_vader_sentiment_metric_uses_custom_analyzer():
@@ -953,4 +1007,110 @@ def test_rouge_score_using_custom_tokenizer(
     assert expected_min <= result.value <= expected_max, (
         f"For candidate='{candidate}' vs reference='{reference}', "
         f"expected rouge1 score in [{expected_min}, {expected_max}], got {result.value:.4f}"
+    )
+
+
+def test_tone_empty_lexicons_disable_the_defaults():
+    text = "This is terrible and useless."
+
+    default = Tone(track=False).score(output=text)
+    emptied = Tone(track=False, negative_lexicon=[]).score(output=text)
+
+    assert default.metadata["sentiment_score"] < 0
+    assert emptied.metadata["sentiment_score"] == 0
+    assert emptied.value == 1.0
+
+
+def test_tone_empty_positive_lexicon_disables_the_defaults():
+    text = "I am happy to help."
+
+    assert Tone(track=False).score(output=text).metadata["sentiment_score"] > 0
+    emptied = Tone(track=False, positive_lexicon=[]).score(output=text)
+    assert emptied.metadata["sentiment_score"] == 0
+
+
+def test_tone_empty_forbidden_phrases_disable_the_defaults():
+    text = "Shut up, this is not my problem."
+
+    assert Tone(track=False).score(output=text).metadata["forbidden_hit"] is True
+    emptied = Tone(track=False, forbidden_phrases=[]).score(output=text)
+    assert emptied.metadata["forbidden_hit"] is False
+
+
+def test_tone_none_lexicons_keep_the_defaults():
+    text = "This is terrible and useless."
+    explicit_none = Tone(
+        track=False,
+        positive_lexicon=None,
+        negative_lexicon=None,
+        forbidden_phrases=None,
+    ).score(output=text)
+
+    assert explicit_none == Tone(track=False).score(output=text)
+
+
+@pytest.mark.parametrize(
+    "bad_output",
+    [None, 5, 3.5, True, {"answer": "yes"}, ["a", "b"]],
+)
+def test_contains__non_string_output__raises_metric_error(bad_output):
+    # Contains validated `reference` but never `output`, so a non-string
+    # reached `.lower()` / `in` and surfaced as AttributeError or TypeError.
+    metric = Contains(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output, reference="a")
+
+
+@pytest.mark.parametrize("bad_output", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_levenshtein_ratio__non_string_output__raises_metric_error(bad_output):
+    # The None case was already reported as MetricComputationError; every other
+    # non-string fell through to AttributeError.
+    metric = levenshtein_ratio.LevenshteinRatio(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output, reference="abc")
+
+
+@pytest.mark.parametrize("bad_reference", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_levenshtein_ratio__non_string_reference__raises_metric_error(bad_reference):
+    # The guard covers `reference` as well, and rapidfuzz would otherwise be
+    # handed a non-string.
+    metric = levenshtein_ratio.LevenshteinRatio(track=False)
+    with pytest.raises(MetricComputationError, match="string 'output' and 'reference'"):
+        metric.score(output="abc", reference=bad_reference)
+
+
+@pytest.mark.parametrize("case_sensitive", [True, False])
+@pytest.mark.parametrize("bad_reference", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_contains__non_string_reference__raises_value_error(
+    bad_reference, case_sensitive
+):
+    # Contains validated the reference for None and "" but not for its type, so
+    # a non-string reached `.lower()` (case-insensitive) or `in` (case-sensitive).
+    metric = Contains(case_sensitive=case_sensitive, track=False)
+    with pytest.raises(ValueError, match="must be a string"):
+        metric.score(output="hello", reference=bad_reference)
+
+
+@pytest.mark.parametrize("bad_output", [5, 3.5, {"answer": "yes"}, ["a"]])
+def test_regex_match__non_string_output__raises_metric_error(bad_output):
+    metric = regex_match.RegexMatch(regex=r"\d+", track=False)
+    with pytest.raises(MetricComputationError, match="string 'output'"):
+        metric.score(output=bad_output)
+
+
+def test_string_metrics__valid_strings__still_score():
+    # The new guards must not touch the normal path.
+    assert (
+        Contains(track=False).score(output="hello world", reference="world").value
+        == 1.0
+    )
+    assert (
+        levenshtein_ratio.LevenshteinRatio(track=False)
+        .score(output="abc", reference="abc")
+        .value
+        == 1.0
+    )
+    assert (
+        regex_match.RegexMatch(regex=r"\d+", track=False).score(output="abc 123").value
+        == 1.0
     )

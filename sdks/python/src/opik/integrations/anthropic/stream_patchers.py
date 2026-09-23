@@ -1,7 +1,9 @@
 import anthropic
+import inspect
 import logging
 import functools
 from typing import (
+    Dict,
     Optional,
     Callable,
     Iterator,
@@ -15,6 +17,26 @@ from opik.decorator import generator_wrappers, error_info_collector
 from anthropic.lib.streaming import _messages
 
 LOGGER = logging.getLogger(__name__)
+
+_ACCUMULATE_EVENT_ACCEPTS_JSON_BUFS = (
+    "json_bufs" in inspect.signature(_messages.accumulate_event).parameters
+)
+
+
+def _accumulate_event(
+    event: Any, current_snapshot: Any, json_bufs: Dict[int, bytes]
+) -> Any:
+    # Since anthropic 1.5.0 the caller owns the buffer that partial tool input JSON
+    # is accumulated into, and passing it is mandatory.
+    if _ACCUMULATE_EVENT_ACCEPTS_JSON_BUFS:
+        return _messages.accumulate_event(
+            event=event,
+            current_snapshot=current_snapshot,
+            json_bufs=json_bufs,
+        )
+
+    return _messages.accumulate_event(event=event, current_snapshot=current_snapshot)
+
 
 original_stream_iter_method = anthropic.Stream.__iter__
 original_async_stream_aiter_method = anthropic.AsyncStream.__aiter__
@@ -79,11 +101,14 @@ def patch_sync_stream(
         ) -> Iterator[Any]:
             try:
                 accumulated_message = None
+                json_bufs: Dict[int, bytes] = {}
                 error_info: Optional[ErrorInfoDict] = None
 
                 for item in dunder_iter_func(self):
-                    accumulated_message = _messages.accumulate_event(
-                        event=item, current_snapshot=accumulated_message
+                    accumulated_message = _accumulate_event(
+                        event=item,
+                        current_snapshot=accumulated_message,
+                        json_bufs=json_bufs,
                     )
                     yield item
             except Exception as exception:
@@ -139,11 +164,14 @@ def patch_async_stream(
         ) -> AsyncIterator[Any]:
             try:
                 accumulated_message = None
+                json_bufs: Dict[int, bytes] = {}
                 error_info: Optional[ErrorInfoDict] = None
 
                 async for item in dunder_aiter_func(self):
-                    accumulated_message = _messages.accumulate_event(
-                        event=item, current_snapshot=accumulated_message
+                    accumulated_message = _accumulate_event(
+                        event=item,
+                        current_snapshot=accumulated_message,
+                        json_bufs=json_bufs,
                     )
                     yield item
             except Exception as exception:

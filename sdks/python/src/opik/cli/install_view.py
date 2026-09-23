@@ -8,17 +8,24 @@ logger-based default.
 
 import contextlib
 import pathlib
-from typing import Iterator, List, Optional
+import re
+import textwrap
+from typing import Iterator, List, Optional, Tuple
 
 import rich.console
 from rich import padding, table, text
 
 from opik.cli import selector
+from opik.configurator import consent
 from opik.configurator.mcp import view as mcp_view
 from opik.configurator.skills import install as skills_install
 from opik.configurator.skills import roots as skills_roots
 
 console = rich.console.Console()
+
+#: Key of the synthetic "All" row in the host picker. Not a host key, and cannot
+#: collide with one: `mcp_targets.HOST_KEYS` are plain names like `claude-code`.
+_ALL = "__all__"
 
 
 def _collapse_home(message: str) -> str:
@@ -32,6 +39,45 @@ def _collapse_home(message: str) -> str:
     return message.replace(home, "~") if home else message
 
 
+#: Bare URLs, stopping before the punctuation that usually follows one in prose.
+_URL = re.compile(r"https?://[^\s)\]}>,;\"']+")
+
+#: Punctuation that ends a sentence rather than an address.
+_SENTENCE_END = ".,;:!?"
+
+
+def _linkify(message: str, base: str = "") -> text.Text:
+    """Colour the URLs in a message and make them clickable.
+
+    One call covers every terminal. ``rich`` emits the OSC 8 hyperlink only where
+    the terminal advertises support, keeps the colour where it does not, and
+    drops every escape when stdout is not a terminal at all — so a pipe or a CI
+    log still gets the bare URL, unchanged and still copy-pasteable.
+
+    The style is applied over a range rather than by splitting the string, so the
+    surrounding text keeps ``base`` and the message stays one paragraph.
+    """
+    rendered = text.Text(message, style=base)
+    for match in _URL.finditer(message):
+        # Trailing sentence punctuation is not part of the address. It cannot be
+        # excluded by the pattern, because a URL is full of dots — so the match
+        # runs long and the tail is trimmed back here.
+        end = match.end()
+        while end > match.start() and message[end - 1] in _SENTENCE_END:
+            end -= 1
+        rendered.stylize(
+            f"bold cyan underline link {message[match.start() : end]}",
+            match.start(),
+            end,
+        )
+    return rendered
+
+
+def render_hint(message: str) -> None:
+    """A line pointing somewhere — typically where to get something."""
+    console.print(_linkify(message, base="dim"))
+
+
 def _join(names: List[str]) -> str:
     """ "a", "a and b", "a, b and c" — a list a person would read aloud."""
     if len(names) <= 1:
@@ -43,6 +89,129 @@ _KEY_STYLE = "cyan"
 _FIELDS_INDENT = (0, 0, 0, 4)
 
 
+def render_numbered_choices(question: str, choices: List[Tuple[str, str, str]]) -> None:
+    """A numbered question: a headline, then ``number``, ``label``, ``hint`` rows.
+
+    The caller does the reading. This only draws the question, so the answers a
+    command accepts never depend on how it looked — which is what keeps a
+    prettier prompt from breaking anything driving the CLI from a script.
+
+    A grid rather than hand-padded strings: it keeps the hint inside its own
+    column, so a narrow terminal folds the hint under itself instead of losing
+    the indent. Every cell is a ``Text``, which turns off ``rich``'s markup and
+    its number highlighting — ``1`` is a list marker here, not a value to
+    colour, and ``(default)`` is not a tuple.
+    """
+    console.print()
+    console.print(text.Text(question, style="bold"))
+
+    # The hint is the first thing to go when the terminal is small. Folding it
+    # into whatever is left turns "free to start" into five one-word lines, which
+    # is worse than not showing it: the numbers and the names are what the answer
+    # is made of, and they are what the column budget buys first.
+    label_width = max(len(label) for _, label, _ in choices)
+    show_hints = console.width >= _FIELDS_INDENT[3] + 5 + label_width + 20
+
+    grid = table.Table.grid(padding=(0, 2))
+    grid.add_column(style=_KEY_STYLE, no_wrap=True, justify="right")
+    grid.add_column(no_wrap=True)
+    if show_hints:
+        grid.add_column(overflow="fold", style="dim")
+    for number, label, hint in choices:
+        row = [text.Text(number), text.Text(label)]
+        if show_hints:
+            row.append(text.Text(hint))
+        grid.add_row(*row)
+    console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
+    console.print()
+
+
+def can_pick() -> bool:
+    """Whether this terminal can host an interactive picker.
+
+    Asked by the caller so that "no picker here" and "the user cancelled" stay
+    two different answers: the first falls back to a plain prompt, the second
+    aborts the command, and collapsing them into one ``None`` turned Ctrl-C into
+    "ask me again".
+    """
+    return selector.is_supported()
+
+
+def choose_one_numbered(
+    question: str, choices: List[Tuple[str, str, str]]
+) -> Optional[str]:
+    """Pick one row by arrow keys or by typing its number. ``None`` = cancelled.
+
+    Only call this when :func:`can_pick` is true. The plain-prompt fallback is a
+    question with an input contract, and that belongs to the command asking it
+    rather than to the renderer.
+    """
+    return selector.choose_one(
+        question,
+        [
+            selector.Choice(key=number, label=label, hint=hint)
+            for number, label, hint in choices
+        ],
+    )
+
+
+def render_mcp_intro() -> None:
+    """What the MCP step is, before either command asks about it.
+
+    Shared by ``opik configure`` and ``opik mcp configure`` so the two explain
+    themselves identically: they write into the same files, and only one of them
+    used to say so. Rendering here rather than in either command is what keeps
+    them from drifting apart again.
+
+    Does not list the detected clients: the picker directly below is that list,
+    and naming them twice pushed the question off the screen.
+    """
+    console.print()
+    console.print(
+        text.Text.assemble(
+            ("Set up Opik MCP for your AI client? ", "bold"),
+            ("(Recommended)", "green bold"),
+        )
+    )
+    console.print(
+        text.Text(
+            "Enables your AI assistant to inspect traces, scan your projects\n"
+            "for issues, debug experiments, and run Opik commands directly\n"
+            "from chat.",
+            style="dim",
+        )
+    )
+
+
+def render_skill_pack_intro() -> None:
+    """The skill pack's case, laid out exactly like :func:`render_mcp_intro`.
+
+    The two are halves of one step. They were written separately and looked it —
+    one was three ``rich`` lines and the other was the whole thing crammed into a
+    ``click`` label — so the second half read as a different program.
+    """
+    console.print()
+    console.print(
+        text.Text.assemble(
+            ("Download the Opik skill pack for your AI client? ", "bold"),
+            ("(Recommended)", "green bold"),
+        )
+    )
+    console.print(
+        text.Text(
+            textwrap.fill(consent.SKILL_PACK_PITCH, width=66),
+            style="dim",
+        )
+    )
+
+
+def render_note(message: str, hint: Optional[str] = None) -> None:
+    """A line the user should notice but does not have to act on, plus its fix."""
+    console.print(text.Text(message, style="yellow"))
+    if hint is not None:
+        console.print(text.Text(hint, style="dim"))
+
+
 class RichInstallView(mcp_view.InstallView):
     def plan(
         self,
@@ -51,6 +220,13 @@ class RichInstallView(mcp_view.InstallView):
         targets: List[mcp_view.PlannedTarget],
         needs_sign_in: bool = False,
     ) -> None:
+        # `targets` is deliberately not rendered. It used to head a "Will update"
+        # table of each client and the file it would touch, which by then was the
+        # third time the same clients were listed — after the consent prompt's
+        # "Found:" list and the picker. The results table below reports what was
+        # actually written, per client, which is the version worth reading.
+        # `LoggingInstallView` still logs the paths for the library path, which
+        # has no results table.
         self._needs_sign_in = needs_sign_in
         console.print()
         console.print(text.Text("Opik MCP server setup", style="bold"))
@@ -61,17 +237,6 @@ class RichInstallView(mcp_view.InstallView):
         grid.add_row("Deployment", deployment)
         grid.add_row("Connection", transport)
         console.print(padding.Padding(grid, _FIELDS_INDENT, expand=False))
-
-        console.print()
-        # Consent is only meaningful if the user can see what will change; these
-        # are files owned by other tools.
-        console.print(text.Text("Will update", style="bold"))
-        files = table.Table.grid(padding=(0, 2))
-        files.add_column(style=_KEY_STYLE, no_wrap=True)
-        files.add_column(overflow="fold", style="dim")
-        for target in targets:
-            files.add_row(target.display_name, target.location)
-        console.print(padding.Padding(files, _FIELDS_INDENT, expand=False))
         console.print()
 
     @contextlib.contextmanager
@@ -165,7 +330,7 @@ class RichInstallView(mcp_view.InstallView):
 
     def problem(self, message: str) -> None:
         console.print()
-        console.print(text.Text(_collapse_home(message), style="yellow"))
+        console.print(_linkify(_collapse_home(message), base="yellow"))
         console.print()
 
     def choose_hosts(
@@ -174,19 +339,62 @@ class RichInstallView(mcp_view.InstallView):
         candidates: List[mcp_view.HostChoice],
         preselected: List[str],
     ) -> Optional[List[str]]:
-        # A one-item list is not worth arrow keys; and a terminal that cannot host
-        # a picker still gets the inherited numbered menu rather than an error.
-        if len(candidates) == 1 or not selector.is_supported():
+        # A terminal that cannot host a picker still gets the inherited numbered
+        # menu rather than an error.
+        if not selector.is_supported():
             return mcp_view.numbered_menu(title, candidates)
 
-        return selector.multiselect(
+        # The clients first, then the two catch-all rows: `All`, then the manual
+        # one. That is the order the numbered-menu fallback below has always
+        # used, and it keeps the rows the user is actually choosing between at
+        # the top rather than behind a summary row.
+        #
+        # Nothing is pre-ticked — this writes into other tools' config files, so
+        # the list stays opt-in — and with an empty selection `multiselect` takes
+        # the highlighted row, so a bare Enter registers the first client rather
+        # than all of them. That is the conservative half of the trade: the
+        # clients are listed in priority order, so the row Enter lands on is the
+        # most likely one, and picking every client stays a deliberate act.
+        #
+        # One candidate skips the `All` row, having nothing to stand in for, but
+        # still gets the picker. A one-item list was not thought worth arrow keys
+        # until the manual row moved in here: skipping the picker skipped that
+        # too, so the user whose one detected client is not theirs could say no
+        # and get "Skipped" where the manual config belonged.
+        all_row = (
+            [selector.Choice(key=_ALL, label="All", synthetic=True)]
+            if len(candidates) > 1
+            else []
+        )
+        chosen = selector.multiselect(
             title=title,
             choices=[
                 selector.Choice(key=c.key, label=c.label, hint=c.hint)
                 for c in candidates
+            ]
+            + all_row
+            + [
+                selector.Choice(
+                    key=mcp_view.MANUAL_SETUP,
+                    label=mcp_view.MANUAL_SETUP_LABEL,
+                    hint="show manual setup",
+                    synthetic=True,
+                )
             ],
             preselected=preselected,
         )
+        # Escape still declines silently. This row is the other kind of no — the
+        # detection missed their client — and it is worth its place because the
+        # answer to it is a link rather than nothing.
+        if chosen is None:
+            return None
+        # `All` wins: the two are mutually exclusive by construction — select-all
+        # skips synthetic rows — but a list holding both can only have meant all.
+        if _ALL in chosen:
+            return [c.key for c in candidates]
+        if mcp_view.MANUAL_SETUP in chosen:
+            return [mcp_view.MANUAL_SETUP]
+        return [key for key in chosen if key != _ALL]
 
     def note(self, message: str) -> None:
         console.print(padding.Padding(text.Text(message, style="dim"), (0, 0, 0, 2)))

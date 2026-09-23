@@ -1,7 +1,8 @@
-export { test, expect } from './timed-threads.fixture';
+export { test, expect } from './bulk-tag-traces.fixture';
 export type {
   OauthProviderSeed,
   UnreachableProviderSeed,
+  FailingProviderSeed,
   ProviderKeysFixture,
   ProviderKeyFixtures,
 } from './provider-key.fixture';
@@ -96,7 +97,7 @@ export type {
 } from './token-usage-spans.fixture';
 export type { AutomationRulesCleanupFixtures } from './automation-rules.fixture';
 export type {
-  ProjectMetricDaySeed,
+  ProjectMetricHourSeed,
   ProjectMetricSpansRef,
   ProjectMetricSpansFixtures,
 } from './project-metric-spans.fixture';
@@ -131,4 +132,63 @@ export type {
   DurationThreadsRef,
   TimedThreadsFixtures,
 } from './timed-threads.fixture';
+export type {
+  PagedSpansRef,
+  FarFuturePagedSpanRef,
+  PagedSpansFixtures,
+} from './paged-spans.fixture';
+export type {
+  SpanKpiPeriodExpectation,
+  SpanKpiSpansRef,
+  SpanKpiSpansFixtures,
+} from './span-kpi-cards.fixture';
+export type {
+  FarFutureErrorTracesRef,
+  FarFutureErrorTracesFixtures,
+} from './far-future-error-traces.fixture';
+export type {
+  WeeklyMetricDaySeed,
+  WeeklyMetricSpansRef,
+  WeeklyMetricSpansFixtures,
+} from './weekly-metric-spans.fixture';
+export type {
+  CachedTokenSpanSeed,
+  CachedTokenSpansRef,
+  CachedTokenSpansFixtures,
+} from './cached-token-spans.fixture';
+export { CACHED_TOKENS_KEY } from './cached-token-spans.fixture';
+export type {
+  ProjectScopedDashboardRef,
+  ProjectScopedDashboardFixtures,
+} from './project-scoped-dashboard.fixture';
+export type {
+  ExportComparisonItem,
+  ExportComparisonExperiment,
+  ExportComparisonRef,
+  ExportComparisonFixtures,
+} from './export-comparison.fixture';
+export type {
+  OptimizationCostRef,
+  OptimizationCostFixtures,
+} from './optimization-cost.fixture';
+export { SPAN_COST, EXPECTED_TOTAL_COST } from './optimization-cost.fixture';
+export type {
+  PromptExperimentsRef,
+  PromptExperimentsFixtures,
+} from './prompt-experiments.fixture';
+export { EXPERIMENT_COUNT, PAGE_SIZE } from './prompt-experiments.fixture';
+export type {
+  FieldMappingSeedRef,
+  FieldMappingSeedFixtures,
+} from './field-mapping-seed.fixture';
+export {
+  FM_TRACE_INPUT,
+  FM_TRACE_OUTPUT,
+  FM_TRACE_METADATA,
+  FM_TRACE_TAGS,
+  FM_SPAN_INPUT,
+  FM_SPAN_OUTPUT,
+  FM_SPAN_MODEL,
+} from './field-mapping-seed.fixture';
+export type { BulkTagTraceRef, BulkTagTracesFixtures } from './bulk-tag-traces.fixture';
 export type { ProjectRef } from '../core/backend';

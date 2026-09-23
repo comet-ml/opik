@@ -696,6 +696,23 @@ class AutomationRuleEvaluatorsResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
+
+        @Test
+        @DisplayName("Batch delete evaluators returns 403 when permission is denied")
+        void deleteEvaluatorsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE.getValue());
+
+            var batchDelete = BatchDelete.builder().ids(Set.of(UUID.randomUUID())).build();
+
+            try (var response = evaluatorsResourceClient.delete(
+                    UUID.randomUUID(), workspaceName, apiKey, batchDelete, HttpStatus.SC_FORBIDDEN)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested
@@ -1625,7 +1642,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             "output", "abc",
                             "reference", "abc"))
                     .build();
-            var pythonEvaluatorResponse = factory.manufacturePojo(PythonEvaluatorResponse.class);
+            var pythonEvaluatorResponse = withUsableScores(factory.manufacturePojo(PythonEvaluatorResponse.class));
             wireMock.server().stubFor(
                     post(urlPathEqualTo("/pythonBackendMock/v1/private/evaluators/python"))
                             .withRequestBody(equalToJson(OBJECT_MAPPER.writeValueAsString(pythonEvaluatorRequest)))
@@ -1680,7 +1697,7 @@ class AutomationRuleEvaluatorsResourceTest {
                                     .build()))
                     .build();
 
-            var pythonEvaluatorResponse = factory.manufacturePojo(PythonEvaluatorResponse.class);
+            var pythonEvaluatorResponse = withUsableScores(factory.manufacturePojo(PythonEvaluatorResponse.class));
 
             // When
             wireMock.server().stubFor(
@@ -2161,6 +2178,21 @@ class AutomationRuleEvaluatorsResourceTest {
             AutomationRuleEvaluator<?, ?> expectedRuleEvaluator) {
         assertThat(actualRuleEvaluator.getCreatedAt()).isAfter(expectedRuleEvaluator.getCreatedAt());
         assertThat(actualRuleEvaluator.getLastUpdatedAt()).isAfter(expectedRuleEvaluator.getLastUpdatedAt());
+    }
+
+    /**
+     * Podam randomizes {@code scoring_failed}, and a score carrying that flag is dropped with a warning on
+     * the rule's log rather than stored — the SDK pairs the flag with a placeholder zero, which would
+     * otherwise be recorded as a genuine score. These log assertions are about a normal scoring run
+     * (four INFO entries, one of them "stored successfully"), so the flag is pinned off here; leaving it
+     * random would make them pass or fail on the roll.
+     */
+    private PythonEvaluatorResponse withUsableScores(PythonEvaluatorResponse response) {
+        return response.toBuilder()
+                .scores(response.scores().stream()
+                        .map(score -> score.toBuilder().scoringFailed(false).build())
+                        .toList())
+                .build();
     }
 
     private void assertTraceLogResponse(LogPage logPage, UUID id, Trace trace) {

@@ -1151,4 +1151,35 @@ class CostServiceTest {
                                 "original_usage.prompt_tokens_details.cached_tokens", 300),
                         "0.005709"));
     }
+
+    /**
+     * Registers {@code typesafe} as a canonical provider so the LiteLLM rows tagged
+     * {@code litellm_provider: "typesafe"} ({@code jev-latest}, {@code jev-preview} and the
+     * served version names such as {@code jev-1.13.0}) load instead of being dropped at startup.
+     * TypeSafe bills input tokens only (output tokens are free), and the rows use
+     * {@code mode: "evaluation"}, which falls back to the default text-generation calculator.
+     * The Opik TypeSafe integration logs the served model name returned by the API
+     * ({@code jev-1.13.0}), not the requested alias, so that name must price directly.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("provideTypeSafeProviderCases")
+    void calculateCostHandlesTypeSafeModels(String description, String model, String expectedCost) {
+        Map<String, Integer> usage = Map.of(
+                "prompt_tokens", 1000,
+                "completion_tokens", 200,
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 200);
+
+        BigDecimal cost = CostService.calculateCost(model, "typesafe", usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideTypeSafeProviderCases() {
+        // typesafe/jev-*: input 4.2e-8, output 0 -> 1000 * 4.2e-8 + 200 * 0 = 0.000042
+        return Stream.of(
+                Arguments.of("served version name as logged by the SDK", "jev-1.13.0", "0.000042"),
+                Arguments.of("requested alias", "jev-latest", "0.000042"),
+                Arguments.of("preview alias with provider prefix", "typesafe/jev-preview", "0.000042"));
+    }
 }
