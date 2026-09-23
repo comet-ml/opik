@@ -13,7 +13,45 @@ def _handle_message_start(event: Dict[str, Any], result: Dict[str, Any]) -> None
             result["output"]["message"]["role"] = role
 
 
-def _handle_content_block_delta(event: Dict[str, Any], result: Dict[str, Any]) -> None:
+def _tool_use_for_block(
+    result: Dict[str, Any],
+    tool_uses_by_index: Dict[int, Dict[str, Any]],
+    index: int,
+) -> Dict[str, Any]:
+    """Return the toolUse entry of content block `index`, creating it if needed."""
+    if index not in tool_uses_by_index:
+        content = result["output"]["message"]["content"]
+        # The first tool call stays in content[0]; each parallel call
+        # (another contentBlockIndex) gets its own content entry.
+        if "toolUse" in content[-1]:
+            content.append({})
+        tool_uses_by_index[index] = content[-1].setdefault("toolUse", {})
+    return tool_uses_by_index[index]
+
+
+def _handle_content_block_start(
+    event: Dict[str, Any],
+    result: Dict[str, Any],
+    tool_uses_by_index: Dict[int, Dict[str, Any]],
+) -> None:
+    """Extract toolUseId and name from contentBlockStart event."""
+    content_block_start = event.get("contentBlockStart")
+    if not isinstance(content_block_start, dict):
+        return
+
+    start = content_block_start.get("start")
+    if isinstance(start, dict) and isinstance(start.get("toolUse"), dict):
+        tool_use = _tool_use_for_block(
+            result, tool_uses_by_index, content_block_start.get("contentBlockIndex", 0)
+        )
+        tool_use.update(start["toolUse"])
+
+
+def _handle_content_block_delta(
+    event: Dict[str, Any],
+    result: Dict[str, Any],
+    tool_uses_by_index: Dict[int, Dict[str, Any]],
+) -> None:
     """
     Extract content from contentBlockDelta event.
 
@@ -38,10 +76,13 @@ def _handle_content_block_delta(event: Dict[str, Any], result: Dict[str, Any]) -
 
     # Handle structured output / tool use (Issue #3829)
     # Ref: https://github.com/comet-ml/opik/issues/3829
+    # The tool input arrives as JSON string fragments, one per delta.
     if "toolUse" in delta:
-        if "toolUse" not in content:
-            content["toolUse"] = {}
-        content["toolUse"].update(delta["toolUse"])
+        tool_use = _tool_use_for_block(
+            result, tool_uses_by_index, content_block_delta.get("contentBlockIndex", 0)
+        )
+        fragment = delta["toolUse"].get("input", "")
+        tool_use["input"] = tool_use.get("input", "") + fragment
         return
 
     # Log other delta types for future compatibility
@@ -131,6 +172,7 @@ def aggregate_converse_stream_chunks(items: List[Dict[str, Any]]) -> Dict[str, A
     result: Dict[str, Any] = {
         "output": {"message": {"role": "assistant", "content": [{"text": ""}]}}
     }
+    tool_uses_by_index: Dict[int, Dict[str, Any]] = {}
 
     for event in items:
         if not isinstance(event, dict):
@@ -141,8 +183,11 @@ def aggregate_converse_stream_chunks(items: List[Dict[str, Any]]) -> Dict[str, A
             if "messageStart" in event:
                 _handle_message_start(event, result)
 
+            if "contentBlockStart" in event:
+                _handle_content_block_start(event, result, tool_uses_by_index)
+
             if "contentBlockDelta" in event:
-                _handle_content_block_delta(event, result)
+                _handle_content_block_delta(event, result, tool_uses_by_index)
 
             if "messageStop" in event:
                 _handle_message_stop(event, result)
