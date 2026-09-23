@@ -176,6 +176,19 @@ export class TracePanelPage {
     return this.root.getByText(fileName, { exact: true });
   }
 
+  /**
+   * The `<img>` an `image/*` attachment's thumbnail renders, addressed by its
+   * `alt` — which `AttachmentThumbnail` sets to the file name.
+   *
+   * Only image attachments have one; every other media type renders an icon
+   * instead, so this resolves to nothing for them by design. Separate from
+   * `attachmentThumbnail` because that locator is the download anchor, which
+   * exists whether or not the bytes behind it are a decodable image.
+   */
+  attachmentImage(fileName: string): Locator {
+    return this.root.getByRole('img', { name: fileName, exact: true });
+  }
+
   /** Opens the Attachments section if it is collapsed. Idempotent. */
   async openAttachments(): Promise<void> {
     return test.step('Open the Attachments section', async () => {

@@ -2310,6 +2310,34 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
     },
 
     /**
+     * Downloads an attachment through the `link` the list read hands back —
+     * the same URL the trace panel puts in its thumbnail — and answers the
+     * bytes the object store actually served.
+     *
+     * The bytes, not a status: every other attachment read here asserts on
+     * metadata the backend holds in its own database (`file_name`,
+     * `mime_type`, `file_size`), all of which stays correct when the stored
+     * object is truncated or corrupted. Only reading the object back can tell
+     * the two apart.
+     *
+     * Deployment-neutral in the same way as `uploadAttachment`, and for the
+     * same reason: on S3 the link is a genuine presigned URL, whose signature
+     * an added `Authorization` header breaks, while on MinIO it points back at
+     * this API and needs the workspace headers.
+     */
+    async downloadAttachment(link: string): Promise<Buffer<ArrayBuffer>> {
+      const res = await fetch(link, {
+        headers: link.startsWith(env.apiBaseUrl) ? workspaceHeaders() : {},
+      });
+      if (!res.ok) {
+        throw new Error(
+          `GET attachment link -> ${res.status}: ${(await res.text()).slice(0, 300)}`,
+        );
+      }
+      return Buffer.from(await res.arrayBuffer());
+    },
+
+    /**
      * `POST /v1/private/attachment/delete`. Deleting the owning trace cascades
      * to its attachments, but a fixture that seeds attachments onto a trace it
      * does not own has to clean up its own objects.
