@@ -738,18 +738,14 @@ def _read_source_experiment_items(
 
     Routes through the high-level
     ``api_objects.experiment.rest_operations.find_experiment_items_for_dataset``
-    helper. That helper no longer calls
-    ``datasets.find_dataset_items_with_experiment_items``: it requests the same
-    Compare endpoint directly on the generated client's shared HTTP helper and
-    parses each page as plain JSON, because building the REST models cost more
-    than fetching the pages did. It reads page 1 first
-    (``constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE`` items per page), derives the
-    last page from that response's ``total``, and fetches the pages after it in
-    concurrent waves -- falling back to walking pages until an empty one when
-    ``total`` is absent or malformed. Each page's per-dataset-item
-    ``experiment_items`` list is flattened into ``ExperimentItemContent``
-    dataclasses with ``assertion_results`` already normalized to
-    ``List[AssertionResultDict]``.
+    helper, which pages the Compare view
+    (``constants.EXPERIMENT_ITEMS_READ_PAGE_SIZE`` items per page), fetching
+    pages concurrently but returning them in page order, bounded by the first
+    page's ``total`` and walking to an empty page when that is unusable. It
+    flattens each page's per-dataset-item ``experiment_items`` list and returns
+    ``ExperimentItemContent`` dataclasses with ``assertion_results`` already
+    normalized to ``List[AssertionResultDict]``. How it reaches the endpoint is
+    the helper's own business and documented there.
 
     Compare view (vs. the Public ``stream_experiment_items``) is the
     correct read shape here because only Compare surfaces
