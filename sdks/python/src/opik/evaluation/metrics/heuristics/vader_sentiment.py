@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Optional
 
 from opik.evaluation.metrics.base_metric import BaseMetric
@@ -16,6 +17,39 @@ except ImportError:  # pragma: no cover - optional dependency
     SentimentIntensityAnalyzer = None  # type: ignore
 
 
+_LEXICON_ERROR = (
+    "VADER sentiment metric requires the NLTK corpus 'vader_lexicon'. "
+    "Install manually via `python -m nltk.downloader vader_lexicon`, "
+    "or provide a custom analyzer."
+)
+
+_download_lock = threading.Lock()
+_download_attempted = False
+
+
+def _download_lexicon_once() -> None:
+    """Fetch the ``vader_lexicon`` corpus, at most once per process.
+
+    Every metric instance builds its own analyzer, so without this guard a
+    process that cannot reach the download server (offline, or behind a proxy)
+    would pay for a failed fetch on each construction. The outcome is the same
+    either way -- the corpus is there or it is not -- so a single attempt is
+    enough, and the caller reports what it finds.
+    """
+    global _download_attempted
+
+    with _download_lock:
+        if _download_attempted or nltk is None:
+            return
+        _download_attempted = True
+        try:
+            nltk.download("vader_lexicon", quiet=True)
+        except Exception:
+            # Whether the fetch failed or was never possible, what matters to the
+            # caller is that the corpus is still missing, which it checks next.
+            pass
+
+
 def _build_analyzer() -> Any:
     """Return a ``SentimentIntensityAnalyzer``, fetching its lexicon if needed.
 
@@ -24,22 +58,20 @@ def _build_analyzer() -> Any:
     which is what a fresh ``pip install nltk`` gives. Download it once, as the
     METEOR metric does for WordNet, and fall back to an :class:`ImportError`
     naming the manual command when that is not possible (for example offline).
+    Only the missing corpus is translated; anything else NLTK raises is a real
+    failure and belongs to the caller unchanged.
     """
     try:
         return SentimentIntensityAnalyzer()
     except LookupError:
         pass
 
+    _download_lexicon_once()
+
     try:
-        if nltk is not None:
-            nltk.download("vader_lexicon", quiet=True)
         return SentimentIntensityAnalyzer()
-    except Exception as error:
-        raise ImportError(
-            "VADER sentiment metric requires the NLTK corpus 'vader_lexicon'. "
-            "Install manually via `python -m nltk.downloader vader_lexicon`, "
-            "or provide a custom analyzer."
-        ) from error
+    except LookupError as error:
+        raise ImportError(_LEXICON_ERROR) from error
 
 
 class VADERSentiment(BaseMetric):
