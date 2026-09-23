@@ -10,8 +10,6 @@ import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -279,28 +277,84 @@ class DemoDataExclusionUtilsTest {
         }
     }
 
-    /** Still used by the span usage queries, which carry the exclusion in SQL. */
+    /**
+     * The usage breakdown reports its rows at the granularity the query returns them, so it drops demo projects
+     * without folding. That everything the folds do beyond filtering is absent here is the property worth pinning:
+     * folding in this path would silently collapse per-project rows the consumer reports separately.
+     */
     @Nested
-    class CalculateDemoDataCreatedAt {
+    class ExcludeDemoProjects {
 
         @Test
-        void calculateDemoDataCreatedAt__whenDemoProjectsExist__thenReturnsTheLatestCreationPlusAMinute() {
-            var latest = Instant.now().truncatedTo(ChronoUnit.MILLIS);
-            var excludedProjectIds = Map.of(
-                    ID_GENERATOR.generateId(), latest.minus(2, ChronoUnit.DAYS),
-                    ID_GENERATOR.generateId(), latest);
-            var expectedCutoff = latest.plus(1, ChronoUnit.MINUTES);
+        void excludeDemoProjects__whenAWorkspaceHasDemoAndRegularProjects__thenOnlyTheDemoRowsAreDropped() {
+            var demoProjectId = ID_GENERATOR.generateId();
+            var regularRow = WorkspaceProjectUserCount.builder()
+                    .workspaceId(WORKSPACE_ID)
+                    .projectId(ID_GENERATOR.generateId())
+                    .user(USER)
+                    .count(randomCount())
+                    .build();
+            var otherRegularRow = WorkspaceProjectUserCount.builder()
+                    .workspaceId(WORKSPACE_ID)
+                    .projectId(ID_GENERATOR.generateId())
+                    .user(OTHER_USER)
+                    .count(randomCount())
+                    .build();
+            var demoRow = WorkspaceProjectUserCount.builder()
+                    .workspaceId(WORKSPACE_ID)
+                    .projectId(demoProjectId)
+                    .user(USER)
+                    .count(randomCount())
+                    .build();
 
-            var actualCutoff = DemoDataExclusionUtils.calculateDemoDataCreatedAt(excludedProjectIds);
+            var actualRows = DemoDataExclusionUtils.excludeDemoProjects(
+                    List.of(regularRow, demoRow, otherRegularRow), Set.of(demoProjectId));
 
-            assertThat(actualCutoff).contains(expectedCutoff);
+            assertThat(actualRows).containsExactly(regularRow, otherRegularRow);
+        }
+
+        /** The distinction from {@link FoldByWorkspaceAndUser}: same user, same workspace, two rows out. */
+        @Test
+        void excludeDemoProjects__whenAUserSpansSeveralProjects__thenTheRowsStayApart() {
+            var firstRow = WorkspaceProjectUserCount.builder()
+                    .workspaceId(WORKSPACE_ID)
+                    .projectId(ID_GENERATOR.generateId())
+                    .user(USER)
+                    .count(randomCount())
+                    .build();
+            var secondRow = WorkspaceProjectUserCount.builder()
+                    .workspaceId(WORKSPACE_ID)
+                    .projectId(ID_GENERATOR.generateId())
+                    .user(USER)
+                    .count(randomCount())
+                    .build();
+
+            var actualRows = DemoDataExclusionUtils.excludeDemoProjects(List.of(firstRow, secondRow), Set.of());
+
+            assertThat(actualRows).containsExactly(firstRow, secondRow);
         }
 
         @Test
-        void calculateDemoDataCreatedAt__whenNoDemoProjects__thenReturnsEmpty() {
-            var actualCutoff = DemoDataExclusionUtils.calculateDemoDataCreatedAt(Map.of());
+        void excludeDemoProjects__whenADemoProjectHadNoActivity__thenItsIdIsIgnored() {
+            var row = WorkspaceProjectUserCount.builder()
+                    .workspaceId(WORKSPACE_ID)
+                    .projectId(ID_GENERATOR.generateId())
+                    .user(USER)
+                    .count(randomCount())
+                    .build();
 
-            assertThat(actualCutoff).isEmpty();
+            var actualRows = DemoDataExclusionUtils.excludeDemoProjects(List.of(row),
+                    Set.of(ID_GENERATOR.generateId(), ID_GENERATOR.generateId()));
+
+            assertThat(actualRows).containsExactly(row);
+        }
+
+        @Test
+        void excludeDemoProjects__whenNoRows__thenReturnsEmpty() {
+            var actualRows = DemoDataExclusionUtils.excludeDemoProjects(List.of(),
+                    Set.of(ID_GENERATOR.generateId()));
+
+            assertThat(actualRows).isEmpty();
         }
     }
 

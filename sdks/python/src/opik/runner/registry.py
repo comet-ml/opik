@@ -67,6 +67,15 @@ def extract_params(fn: Callable) -> List[Param]:
     params: List[Param] = []
     unresolved: List[str] = []
     for param_name, param in sig.parameters.items():
+        # Variadic parameters (*args / **kwargs) bind no named input and the
+        # function is invoked with keyword inputs only, so they must not be
+        # published as runner inputs (a defaultless variadic would otherwise be
+        # marked "required" and be un-fillable).
+        if param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            continue
         ann = hints.get(param_name, param.annotation)
         if ann is inspect.Parameter.empty:
             type_name = "string"

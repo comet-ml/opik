@@ -7,13 +7,9 @@ import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.tuple.Pair;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -29,12 +25,19 @@ import java.util.stream.Collectors;
  * <p>The usage queries therefore {@code GROUP BY project_id} and the exclusion is applied here, which keeps the
  * query text constant however many demo projects exist.
  *
- * <p>Aggregating after the exclusion preserves the totals a workspace- or user-grouped query returns, because an
- * id has exactly one project. {@code project_id} is part of the sorting key of both {@code traces} and
- * {@code spans}, so two rows for one id under different projects would both survive deduplication and be summed
- * twice — what stops them existing is the write path, which rejects an upsert presenting an existing id with a
- * different project rather than moving it. The folds are insertion-ordered, so the result keeps the order the
- * query returned its rows in.
+ * <p>Aggregating after the exclusion counts an entity once per project, which is what these tables mean by one
+ * entity: {@code project_id} is part of the sorting key of both {@code traces} and {@code spans}, so it is part of
+ * the identity {@code ReplacingMergeTree} deduplicates on. Two rows sharing an id under different projects are two
+ * distinct rows to the engine, not one row stored twice, and billing counts both.
+ *
+ * <p>Reaching that state takes a reused id: the single-entity write paths reject an existing id presented under
+ * another project, while {@code BULK_INSERT} binds the project the request asked for without reading the stored
+ * row. Either way the per-project usage breakdown has always reported such an id once per project, its query
+ * having always grouped by project. What the folds change is that the workspace and BI totals now agree with it,
+ * where the workspace-grouped {@code COUNT(DISTINCT id)} they replaced collapsed on {@code id} alone — a column
+ * that is not the identity — and so under-counted.
+ *
+ * <p>The folds are insertion-ordered, so the result keeps the order the query returned its rows in.
  */
 @UtilityClass
 public class DemoDataExclusionUtils {
@@ -42,24 +45,6 @@ public class DemoDataExclusionUtils {
     /** A previous-day count for one project — the granularity the usage queries return. */
     @Builder(toBuilder = true)
     public record WorkspaceProjectCount(@NonNull String workspaceId, @NonNull UUID projectId, long count) {
-    }
-
-    /**
-     * Calculates the demo data created at timestamp by finding the maximum creation time
-     * from the excluded project IDs and adding 1 minute to ensure all demo data is excluded.
-     *
-     * <p>Used only by the span usage queries, which still carry the exclusion in SQL. The cutoff assumes a demo set
-     * created once at install time; where demo projects are created continuously it is effectively "now", so the
-     * {@code OR created_at > :demo_data_created_at} branch it feeds cannot match a row in the previous-day window.
-     *
-     * @param excludedProjectIds map of project ID to creation timestamp
-     * @return Optional containing the calculated timestamp, or empty if no projects exist
-     */
-    public Optional<Instant> calculateDemoDataCreatedAt(@NonNull Map<UUID, Instant> excludedProjectIds) {
-        return excludedProjectIds.values()
-                .stream()
-                .max(Comparator.naturalOrder())
-                .map(createAt -> createAt.plus(1, ChronoUnit.MINUTES));
     }
 
     /**
@@ -98,6 +83,20 @@ public class DemoDataExclusionUtils {
                         .user(entry.getKey().getRight())
                         .count(entry.getValue())
                         .build())
+                .toList();
+    }
+
+    /**
+     * Drops demo projects without re-aggregating, for the consumer that reports the per-project rows as they are.
+     *
+     * @param rows           per-project, per-user counts, in the order the query returned them
+     * @param demoProjectIds ids of the demo projects to exclude; ids absent from {@code rows} are simply unused
+     * @return the rows that are not a demo project's, in the order they arrived
+     */
+    public List<WorkspaceProjectUserCount> excludeDemoProjects(@NonNull List<WorkspaceProjectUserCount> rows,
+            @NonNull Set<UUID> demoProjectIds) {
+        return rows.stream()
+                .filter(row -> !demoProjectIds.contains(row.projectId()))
                 .toList();
     }
 }

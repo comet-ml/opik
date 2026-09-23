@@ -1,5 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import dayjs from "dayjs";
+import React, { useCallback, useMemo, useState } from "react";
 import { Database, FlaskConical, ListChecks, X } from "lucide-react";
 
 import { Button } from "@/ui/button";
@@ -24,7 +23,7 @@ import {
   useResetDatasetFilters,
   useResetOutputMap,
   useSetDatasetType,
-  useSetExperimentNamePrefix,
+  useSetExperimentName,
   useSetScoresForDataset,
   useSetSelectedRuleIds,
 } from "@/store/PlaygroundStore";
@@ -80,7 +79,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
   const selectedRuleIds = useSelectedRuleIds();
   const setSelectedRuleIds = useSetSelectedRuleIds();
   const setDatasetType = useSetDatasetType();
-  const setExperimentNamePrefix = useSetExperimentNamePrefix();
+  const setExperimentName = useSetExperimentName();
   const setScoresForDataset = useSetScoresForDataset();
   const resetDatasetFilters = useResetDatasetFilters();
   const resetOutputMap = useResetOutputMap();
@@ -142,13 +141,11 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
           : [];
       setSelectedRuleIds(ruleIds);
 
-      if (isDifferentDataset) resetDatasetFilters();
+      if (isDifferentDataset) {
+        resetDatasetFilters();
+        setExperimentName(null);
+      }
 
-      const name = dataset?.name ?? "";
-      const date = dayjs().format("YYYY-MM-DD");
-      setExperimentNamePrefix(
-        name ? `${name.replace(/\s+/g, "-")}-${date}` : date,
-      );
       setDatasetType(type);
       if (type === DATASET_TYPE.DATASET) {
         setScoresForDataset(newPlainId, ruleIds);
@@ -166,7 +163,7 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
       resetOutputMap,
       resetDatasetFilters,
       setSelectedRuleIds,
-      setExperimentNamePrefix,
+      setExperimentName,
       setDatasetType,
       setScoresForDataset,
     ],
@@ -181,28 +178,9 @@ const RunExperimentControl: React.FC<RunExperimentControlProps> = ({
     [datasetId, setSelectedRuleIds, setScoresForDataset],
   );
 
-  // Resolve null (="all rules") to actual IDs so the backend can score non-SDK traces
-  useEffect(() => {
-    if (
-      isExperimentMode &&
-      activeType === DATASET_TYPE.DATASET &&
-      selectedRuleIds === null &&
-      rules.length > 0
-    ) {
-      setSelectedRuleIds(rules.map((r) => r.id));
-    }
-  }, [
-    isExperimentMode,
-    activeType,
-    selectedRuleIds,
-    rules,
-    setSelectedRuleIds,
-  ]);
-
   const handleRuleCreated = useCallback(
     (rule: EvaluatorsRule) => {
-      if (selectedRuleIds === null) return;
-      const next = [...selectedRuleIds, rule.id];
+      const next = [...(selectedRuleIds ?? []), rule.id];
       setSelectedRuleIds(next);
       const plainId = toPlainDatasetId(datasetId);
       if (plainId) setScoresForDataset(plainId, next);

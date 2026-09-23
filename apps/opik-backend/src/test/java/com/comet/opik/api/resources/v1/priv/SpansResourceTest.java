@@ -51,7 +51,9 @@ import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.db.TestUuidV7TimestampValidatorFactory;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.infrastructure.db.UuidV7TimestampValidator;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AttachmentPayloadUtilsTest;
@@ -66,6 +68,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.google.inject.AbstractModule;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.NotFoundException;
@@ -176,6 +179,19 @@ class SpansResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
 
+    /**
+     * A second workspace, allow-listed for the UUIDv7 bypass window by the validator bound below
+     * (OPIK-7794). No other test in this class uses it, so they all keep the default window.
+     */
+    private static final String BYPASS_API_KEY = UUID.randomUUID().toString();
+    private static final String BYPASS_WORKSPACE_ID = UUID.randomUUID().toString();
+    private static final String BYPASS_TEST_WORKSPACE = UUID.randomUUID().toString();
+    /**
+     * Offsets either side of the config-test bypass window, both outside the default window.
+     */
+    private static final int WITHIN_BYPASS_WINDOW_DAYS = 10;
+    private static final int BEYOND_BYPASS_WINDOW_DAYS = 40;
+
     private static final TimeBasedEpochGenerator generator = Generators.timeBasedEpochGenerator();
 
     private final RedisContainer redisContainer = RedisContainerUtils.newRedisContainer();
@@ -211,6 +227,15 @@ class SpansResourceTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .isMinIO(true)
                         .minioUrl(minioUrl)
+                        // The allow-list is read from the environment, which a test cannot set, so the
+                        // validator is bound with an explicit one instead.
+                        .modules(List.of(new AbstractModule() {
+                            @Override
+                            protected void configure() {
+                                bind(UuidV7TimestampValidator.class).toInstance(
+                                        TestUuidV7TimestampValidatorFactory.create(BYPASS_WORKSPACE_ID));
+                            }
+                        }))
                         .build());
     }
 
@@ -231,6 +256,7 @@ class SpansResourceTest {
         ClientSupportUtils.config(client);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
+        mockTargetWorkspace(BYPASS_API_KEY, BYPASS_TEST_WORKSPACE, BYPASS_WORKSPACE_ID);
 
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, podamFactory);
         this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
@@ -374,6 +400,78 @@ class SpansResourceTest {
                                 .parentSpanId(UUID.randomUUID()),
                         "Span parent id must be a version 7 UUID",
                         "parentSpanId not v7"));
+    }
+
+    /**
+     * Workspace-scoped bypass (OPIK-7794) end to end over HTTP, covering that the request workspace
+     * reaches the validator through auth, {@code RequestContext} and the reactive context.
+     *
+     * <p>Both endpoints are exercised because they resolve that workspace differently: the single-span
+     * path through the {@code IdGenerator} async overloads and
+     * {@code SpanService.validateSpanReferencesAsync}, the batch path by reading it once and passing it
+     * down.
+     */
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UuidV7WorkspaceBypass {
+
+        Stream<Arguments> createSpanHonoursTheWorkspaceBypassWindow() {
+            return bypassWindowCases(HttpStatus.SC_CREATED);
+        }
+
+        @MethodSource
+        @ParameterizedTest(name = "Create span out of the default window: {4}")
+        void createSpanHonoursTheWorkspaceBypassWindow(
+                int daysFromNow, String apiKey, String workspaceName, int expectedStatus, String testName) {
+            var span = outOfWindowSpan(daysFromNow);
+
+            try (var response = spanResourceClient.callCreateSpan(span, apiKey, workspaceName)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            }
+        }
+
+        Stream<Arguments> batchCreateSpansHonoursTheWorkspaceBypassWindow() {
+            return bypassWindowCases(HttpStatus.SC_NO_CONTENT);
+        }
+
+        @MethodSource
+        @ParameterizedTest(name = "Batch create span out of the default window: {4}")
+        void batchCreateSpansHonoursTheWorkspaceBypassWindow(
+                int daysFromNow, String apiKey, String workspaceName, int expectedStatus, String testName) {
+            var span = outOfWindowSpan(daysFromNow);
+
+            try (var response = spanResourceClient.callBatchCreateSpans(List.of(span), apiKey, workspaceName)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            }
+        }
+
+        /**
+         * The three cases that discriminate the bypass, shared by every endpoint since only the accepted
+         * status differs between them.
+         */
+        private Stream<Arguments> bypassWindowCases(int acceptedStatus) {
+            return Stream.of(
+                    arguments(WITHIN_BYPASS_WINDOW_DAYS, BYPASS_API_KEY, BYPASS_TEST_WORKSPACE, acceptedStatus,
+                            "allow-listed workspace, inside the bypass window"),
+                    arguments(WITHIN_BYPASS_WINDOW_DAYS, API_KEY, TEST_WORKSPACE, HttpStatus.SC_BAD_REQUEST,
+                            "other workspace, same id"),
+                    arguments(BEYOND_BYPASS_WINDOW_DAYS, BYPASS_API_KEY, BYPASS_TEST_WORKSPACE,
+                            HttpStatus.SC_BAD_REQUEST, "allow-listed workspace, beyond the bypass window"));
+        }
+
+        /**
+         * A span whose own id and whose referenced trace and parent ids are all dated {@code daysFromNow}
+         * away, so the write only succeeds when the creation check and both reference checks honour the
+         * bypass.
+         */
+        private Span outOfWindowSpan(int daysFromNow) {
+            var outOfWindow = Instant.now().plus(daysFromNow, ChronoUnit.DAYS).toEpochMilli();
+            return podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .id(generator.construct(outOfWindow))
+                    .traceId(generator.construct(outOfWindow))
+                    .parentSpanId(generator.construct(outOfWindow))
+                    .build();
+        }
     }
 
     @Nested
@@ -1506,6 +1604,13 @@ class SpansResourceTest {
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "claude-haiku-4-5", "anthropic",
                             null, null),
+                    // TypeSafe AI (Jev): served version name as logged by track_typesafe; input-only billing
+                    Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
+                            "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
+                            "jev-1.13.0", "typesafe",
+                            JsonUtils.getJsonNodeFromString(
+                                    "{\"created_from\":\"typesafe\",\"type\":\"typesafe_system_one\"}"),
+                            null),
                     Arguments.of(Map.of("completion_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class)),
                             "prompt_tokens", Math.abs(podamFactory.manufacturePojo(Integer.class))),
                             "claude-sonnet-4-5", "anthropic_vertexai",

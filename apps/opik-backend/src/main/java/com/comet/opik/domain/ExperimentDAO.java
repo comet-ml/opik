@@ -1060,7 +1060,7 @@ public class ExperimentDAO {
                     ON ef.id = ea.id AND ea.workspace_id = :workspace_id
                 WHERE 1=1
                 <if(has_target_projects)>
-                AND ea.project_id IN :target_project_ids
+                AND (ea.project_id IN :target_project_ids OR ea.project_id = :zero_uuid)
                 <endif>
             ), experiment_items_final AS (
                 SELECT

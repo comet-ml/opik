@@ -806,6 +806,12 @@ databaseAnalyticsDataModel:
   # message naming the flag and the observed engine. That is intentional — it beats serving traffic whose trace
   # deletes are guaranteed to fail — and it clears on the next probe once the two sides are back in step.
   tracesDistributedWrapEnabled: false
+  # Spans sibling: turn true in lockstep with applying the spans Distributed wrap, so span cascade/retention
+  # mutations target spans_local. Leave false while spans is still a MergeTree. Flips independently of the trace
+  # flag, and has its own `clickhouse-spans-topology` readiness probe with the same fail-fast behaviour: if this
+  # disagrees with the actual `spans` engine in either direction, the backend fails readiness at startup with a
+  # message naming the flag and the observed engine, and clears on the next probe once the two are back in step.
+  spansDistributedWrapEnabled: false
 
 # ClickHouse partition-health observability (OPIK-6904). Polls system.parts plus the
 # lightweight-delete mask and publishes opik.clickhouse.partition.* gauges; a distributed lock keeps
@@ -872,10 +878,17 @@ clickhouse:
     # the table definition is untouched; `ALTER TABLE ... MODIFY SETTING` is rejected on a
     # Distributed table (Code 48, NOT_IMPLEMENTED).
     #
+    # `prefer_localhost_replica` decides whether an insert with a local replica available bypasses
+    # the Distributed forwarding queue and writes straight into the local `_local` table. It is
+    # stated explicitly rather than inherited: the Altinity operator ships 0 and vanilla ClickHouse
+    # ships 1, so leaving it unset makes the insert path depend on nothing but which flavour an
+    # installation runs. 0 is the value production runs and was verified under load (OPIK-8255);
+    # the batching settings above are what make that path keep up.
     - name: default
       settings:
         distributed_background_insert_batch: 1
         distributed_background_insert_split_batch_on_failure: 1
+        prefer_localhost_replica: 0
   # For a FRESH High-Availability install, use the two-phase flow: install with replicasCount 1, let
   # opik-backend finish all migrations, THEN raise replicasCount and upgrade so the ClickHouse operator
   # clones the schema to the new replicas. Installing directly on >= 2 replicas prevents the analytics
@@ -907,6 +920,21 @@ clickhouse:
         <yandex>
           <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
         </yandex>
+      # Without these, partitioned tables prune reads but LWD-bloated parts never
+      # self-merge, so masked rows are never physically reclaimed.
+      conf.d/merge_tree.xml: |
+        <clickhouse>
+          <merge_tree>
+            <!-- 400 GiB; month-sized parts outgrow the 150 GiB default permanently. -->
+            <max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>
+            <!-- 7 days quiet makes a part eligible for the force-merge that reclaims LWD mass. -->
+            <min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>
+            <!-- Per-part: with 1, a partition still taking writes never becomes eligible. -->
+            <min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>
+            <!-- Throttle concurrent big merges so they cannot starve the pool. -->
+            <number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+          </merge_tree>
+        </clickhouse>
       conf.d/profiles.xml: |
         <clickhouse>
           <profiles>
@@ -1038,6 +1066,29 @@ clickhouse:
         maxSize: "214748364800" # 200 GiB
         # Falls back to clickhouse.storageClassName when empty.
         storageClassName: ""
+    # Post-upgrade job that recovers any ClickHouse StatefulSet left without the
+    # cache volume when the cold tier is enabled — by bouncing the operator so it
+    # rebuilds each StatefulSet with the volume (never deletes StatefulSets/data),
+    # so all replicas mount it and go Ready. Runs whenever the cold tier is on;
+    # set enabled=false to opt out.
+    coldTierMigration:
+      # Renders only when clickhouse.enabled and tieredStorage.enabled are also true.
+      # Hard-fails at render if altinity-clickhouse-operator sets namespaceOverride,
+      # nameOverride or fullnameOverride: the job is namespace-scoped and finds the
+      # operator by its default app.kubernetes.io/name, so it could not bounce it.
+      enabled: true
+      image: "alpine/kubectl:1.35.0"
+      # Total budget for the whole run (all replicas: operator bounce + rebuild +
+      # reschedule + wait Ready), shared across migration and readiness.
+      pollTimeoutSeconds: 1200
+      # Kubernetes hard cap on the Job: pollTimeoutSeconds plus startup/kubectl
+      # overhead. Must exceed pollTimeoutSeconds.
+      activeDeadlineSeconds: 1320
+      # SA with get/list/watch on statefulsets and pods, and get/patch on the
+      # altinity operator Deployment (falls back to the chart-created SA).
+      serviceAccountName: ""
+      nodeSelector: {}
+      tolerations: []
   adminUser:
     useSecret:
       enabled: false

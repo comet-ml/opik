@@ -43,7 +43,9 @@ class DbOAuthClientStrategy implements OAuthClientStrategy {
     @Override
     public Optional<McpOAuthClient> resolve(@NonNull String clientId) {
         return template.inTransaction(READ_ONLY,
-                handle -> handle.attach(McpOAuthClientDAO.class).findActiveById(clientId));
+                handle -> handle.attach(McpOAuthClientDAO.class).findActiveById(clientId))
+                // Rows registered before the display fields were filtered on write are filtered here instead.
+                .map(McpOAuthClientUtils::sanitizeDisplayFields);
     }
 
     @Override
