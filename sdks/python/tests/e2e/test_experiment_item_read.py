@@ -39,8 +39,13 @@ NUM_THREADS = 4
 
 def _create_dataset(
     opik_client: opik.Opik, name: str, item_count: int
-) -> Tuple[dataset_module.Dataset, Dict[int, str]]:
-    """A dataset of `item_count` items, and each item's id keyed by its index."""
+) -> Tuple[dataset_module.Dataset, Dict[int, Dict[str, Any]]]:
+    """A dataset of `item_count` items, each as the dataset read returns it.
+
+    Keyed by the item's index. The items are the read's own dictionaries -- the
+    item's data plus its `id` -- which is the shape the experiment read has to
+    reproduce in `dataset_item_data`.
+    """
     dataset = opik_client.create_dataset(name, project_name=PROJECT_NAME)
     dataset.insert({"input": {"index": index}} for index in range(item_count))
 
@@ -54,7 +59,7 @@ def _create_dataset(
     assert synchronization.until(_all_readable, max_try_seconds=60), (
         f"Only {len(items)} of {item_count} dataset items became readable"
     )
-    return dataset, {item["input"]["index"]: item["id"] for item in items}
+    return dataset, {item["input"]["index"]: item for item in items}
 
 
 def _upload_items(
@@ -142,7 +147,8 @@ def test_get_items__small_page_size_and_several_threads__reads_every_item_once_i
     experiment_name: str,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    dataset, ids_by_index = _create_dataset(opik_client, dataset_name, ITEM_COUNT)
+    dataset, items_by_index = _create_dataset(opik_client, dataset_name, ITEM_COUNT)
+    ids_by_index = {index: item["id"] for index, item in items_by_index.items()}
     experiment = opik_client.create_experiment(
         dataset_name=dataset.name, name=experiment_name, project_name=PROJECT_NAME
     )
@@ -168,6 +174,13 @@ def test_get_items__small_page_size_and_several_threads__reads_every_item_once_i
     for item in threaded:
         index = index_by_id[item.dataset_item_id]
         assert item.evaluation_task_output == {"answer": f"answer {index}"}
+        # `dataset_item_data` is the Compare row's `data` with the dataset item's own
+        # id folded in by `_collect_page`. The dataset read hands back exactly that --
+        # the item's data plus its id -- so the two reads must agree item for item,
+        # down to the id only the experiment read adds.
+        assert item.dataset_item_data == items_by_index[index]
+        assert item.dataset_item_data["input"] == {"index": index}
+        assert item.dataset_item_data["id"] == item.dataset_item_id
 
     # Same order as a sequential read of the same pages -- whatever order the
     # backend pages in, concurrency must not change it.
