@@ -182,12 +182,17 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
         });
     }
 
+    /**
+     * Only the experiment's dataset and project are read from here, so this loads the experiment's own row
+     * rather than the full read model: the latter re-aggregates every item of the experiment on each of the
+     * many bulk requests that make up one upload.
+     */
     private Mono<Optional<Experiment>> loadExistingExperiment(Experiment experiment) {
         if (experiment.id() == null) {
             return Mono.just(Optional.empty());
         }
 
-        return experimentService.getById(experiment.id())
+        return experimentService.getMetadataById(experiment.id())
                 .map(Optional::of)
                 .onErrorResume(NotFoundException.class, ex -> Mono.just(Optional.empty()));
     }
