@@ -16,6 +16,8 @@ ORIGINAL_COMMAND="$0 $@"
 # then provisions the restricted read-only ClickHouse user/profile/policies and the JVM connects with the feature on.
 # Exported here so this single variable controls both the provisioning gate and the JAR-mode backend (config.yml).
 export TOGGLE_OLLIE_ENABLED="${TOGGLE_OLLIE_ENABLED:-false}"
+# Also set ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_ENABLED=true to provision the extended free-form SQL user.
+export ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_ENABLED="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_ENABLED:-false}"
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
@@ -952,6 +954,9 @@ start_backend() {
     if [ "${TOGGLE_OLLIE_ENABLED}" = "true" ]; then
         export ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER:-comet_readonly_freeform_sql_user}"
         export ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS="${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_PASS:-opik}"
+        # Exported even when the extended account is off, so the script and the backend always agree on its name.
+        export ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER:-comet_readonly_freeform_extended_sql_user}"
+        export ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS="${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_PASS:-opik}"
         bash "$BACKEND_DIR/provision_agent_insights_readonly_user.sh"
         log_debug "  TOGGLE_OLLIE_ENABLED=true (read-only CH user: ${ANALYTICS_DB_READ_ONLY_FREEFORM_SQL_USER})"
     fi
