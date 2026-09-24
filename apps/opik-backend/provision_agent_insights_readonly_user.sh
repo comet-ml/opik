@@ -64,12 +64,14 @@ statements+=(
 
 # Extended account: its own policies on all eight tables it reads.
 #
-# traces and spans keep a project bound, but an optional one: '*' means every project in the workspace, so the
-# caller picks the scope per request. The sentinel is '*' rather than '' because the profile defaults the setting
-# to '': an empty value matches neither branch and returns nothing, so a dropped setting fails closed instead of
-# widening to the whole workspace.
+# Every table carrying project_id in its primary key keeps a project bound, but an optional one: '*' means every
+# project in the workspace, so the caller picks the scope per request. The sentinel is '*' rather than '' because
+# the profile defaults the setting to '': an empty value matches neither branch and returns nothing, so a dropped
+# setting fails closed instead of widening to the whole workspace.
 #
-# Everything else (including authored_feedback_scores) is workspace-only.
+# experiments, experiment_items and dataset_items key off the workspace instead, so they stay workspace-only:
+# an experiment or a dataset can span projects, and binding one to a project would drop the rows living
+# elsewhere and under-report silently rather than erroring.
 if is_true "${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED:-false}"; then
     echo "Provisioning extended free-form SQL read-only ClickHouse user '${ro_extended_user}'..."
     statements+=(
@@ -85,12 +87,12 @@ if is_true "${ANALYTICS_DB_READ_ONLY_FREEFORM_EXTENDED_SQL_USER_ENABLED:-false}"
         "GRANT SELECT ON ${ch_db}.trace_threads TO ${ro_extended_user}"
         "CREATE ROW POLICY IF NOT EXISTS spans_freeform_extended_sql_isolation ON ${ch_db}.spans FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
         "CREATE ROW POLICY IF NOT EXISTS traces_freeform_extended_sql_isolation ON ${ch_db}.traces FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
-        "CREATE ROW POLICY IF NOT EXISTS authored_feedback_scores_freeform_extended_sql_isolation ON ${ch_db}.authored_feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
-        "CREATE ROW POLICY IF NOT EXISTS feedback_scores_freeform_extended_sql_isolation ON ${ch_db}.feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
+        "CREATE ROW POLICY IF NOT EXISTS authored_feedback_scores_freeform_extended_sql_isolation ON ${ch_db}.authored_feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
+        "CREATE ROW POLICY IF NOT EXISTS feedback_scores_freeform_extended_sql_isolation ON ${ch_db}.feedback_scores FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
         "CREATE ROW POLICY IF NOT EXISTS experiments_freeform_extended_sql_isolation ON ${ch_db}.experiments FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
         "CREATE ROW POLICY IF NOT EXISTS experiment_items_freeform_extended_sql_isolation ON ${ch_db}.experiment_items FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
         "CREATE ROW POLICY IF NOT EXISTS dataset_items_freeform_extended_sql_isolation ON ${ch_db}.dataset_items FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
-        "CREATE ROW POLICY IF NOT EXISTS trace_threads_freeform_extended_sql_isolation ON ${ch_db}.trace_threads FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AS RESTRICTIVE TO ${ro_extended_user}"
+        "CREATE ROW POLICY IF NOT EXISTS trace_threads_freeform_extended_sql_isolation ON ${ch_db}.trace_threads FOR SELECT USING workspace_id = getSetting('SQL_workspace_id') AND (getSetting('SQL_project_id') = '*' OR project_id = getSetting('SQL_project_id')) AS RESTRICTIVE TO ${ro_extended_user}"
     )
 fi
 
