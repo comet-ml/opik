@@ -1298,10 +1298,15 @@ class SpansLocalV2CutoverTest {
     }
 
     /**
-     * A gap-window span PATCHED after the swap. {@code SpanDAO}'s merge preserves {@code created_at} when a row
-     * survives to merge onto, so the row stays inside the window and both sides keep equal row counts — only the
-     * fingerprint and {@code last_updated_at} move. The compare still reports the key, the three gating counts stay
-     * clean, and the change surfaces in the informational {@code newer} count.
+     * A gap-window span PATCHED after the swap — same {@code created_at}, later {@code last_updated_at}. The claim
+     * under test is how reconciliation buckets that row: the compare reports the key, the three gating counts stay
+     * clean, and the change surfaces only in the informational {@code newer} count.
+     *
+     * <p><b>The preserved {@code created_at} is a premise of the fixture, not an assertion about {@code SpanDAO}.</b>
+     * Like every case in this class the row is written straight to the table rather than through the DAO, so this
+     * test would not catch a DAO change that began stamping a fresh {@code created_at} on merge — it would catch
+     * that the reconciliation SQL had stopped bucketing such a row correctly. The runbook derives the DAO half from
+     * {@code SpanDAO}'s {@code PARTIAL_INSERT} rather than from here.
      *
      * <p>Together with the re-create case these are why quiescing cannot turn the compare into a PASS: only a delete
      * is quiescable, and neither of these is.
