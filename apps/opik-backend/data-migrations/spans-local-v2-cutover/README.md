@@ -804,22 +804,25 @@ problem, and OPIK-8382 owns the production execution.
    > failure within seconds of the swap, and it would say nothing about fidelity. Use the same `exchange_done` that
    > bounded step 5's sweep, so this compare covers exactly what was swept and nothing that could not have been.
    >
-   > **Two post-swap shapes make this compare mismatch on a healthy cutover, and only one of them can be quiesced
-   > away.** `000005` knows nothing of the deletion bridge and `verify.sh` has no `--swap-done` to key an exclusion on.
+   > **ANY post-swap change to a gap-window span makes this compare mismatch on a healthy cutover**, and only the
+   > first shape below can be quiesced away. `000005` knows nothing of the deletion bridge and `verify.sh` has no
+   > `--swap-done` to key an exclusion on.
    >
-   > 1. **A post-swap DELETE.** A gap-window span deleted by a user after the swap is masked on the live side and
-   >    still live in the frozen backup, so the row-count equality fails. Quiescing user deletes from the swap through
-   >    the compare removes this one.
-   > 2. **A post-swap REWRITE**, which is the same shape step 5 reports as `newer_keys`. The live row carries a later
-   >    `created_at`, which bites twice: both sides of the compare are bounded on `created_at`, so the live row falls
-   >    outside the window and reads as absent; and `created_at` is part of the row fingerprint, so the confirm-keys
-   >    re-read hashes it differently even though it found the row. Quiescing cannot undo a rewrite already made.
+   > | shape | what the live row looks like | how it reads here |
+   > |---|---|---|
+   > | **DELETE** after the swap | masked; still live in the frozen backup | absent on the live side, `src_rows` > `dst_rows` |
+   > | **RE-CREATE** (deleted, then written again) | a fresh `created_at` — the delete masked the prior row, so `SpanDAO`'s insert had nothing to merge onto | leaves the window on the live side, `src_rows` > `dst_rows` |
+   > | **PATCH** / update | `created_at` PRESERVED by the merge, payload and `last_updated_at` advanced | stays in the window, **row counts stay EQUAL**, only the checksums differ |
    >
-   > So **do not treat a PASS as obtainable here.** Expect `src_rows` above `dst_rows`, read the differing keys rather
-   > than the verdict — against `deletion_events_local` at/after `--swap-done` for shape 1, and against the live table
-   > for a `created_at` past `--swap-done` for shape 2 — and read step 5's `missing_keys`, which applies exactly the
-   > exclusion this compare lacks, rather than writing a query to tell them apart. See ["When the cutover is
-   > done"](#when-the-cutover-is-done).
+   > Both sides are bounded on `created_at` and `created_at` is part of the row fingerprint, which is why a changed
+   > `created_at` reads as absent while a preserved one reads as a payload difference. The last two shapes are what
+   > step 5 reports as `newer_keys`, and neither can be quiesced away — the change has already happened.
+   >
+   > So **do not treat a PASS as obtainable here**, and do not diagnose on row counts alone: equal counts do not mean
+   > the compare agreed. Read the differing keys rather than the verdict — against `deletion_events_local` at/after
+   > `--swap-done`, against the live table for a `created_at` past it, and for the rest against `last_updated_at`
+   > past it — and read step 5's `missing_keys`, which applies exactly the exclusion this compare lacks, rather than
+   > writing a query to tell them apart. See ["When the cutover is done"](#when-the-cutover-is-done).
    This compares the spans **created** in that range — `000005` bounds on `created_at`, which the weekly mode's
    partitioning and its superseded-version logic require — so a span created earlier and merely *updated* in the gap is
    not in it. That set is not left uncovered: it is exactly what step 5 reports as `stale_keys` and
@@ -1791,13 +1794,13 @@ cutover as complete only when all of these hold.
       fails on live traffic rather than on fidelity. The four counts already cover presence, version and payload, so
       this is the payload-level *picture* rather than a second gate; run it because a line stating the exact window is
       what an incident review will ask for.
-      **Expect this to MISMATCH on a healthy cutover; a clean PASS is not generally obtainable.** Two post-swap
-      shapes cause it and only the first can be quiesced away. *Deletes*: `000005` has no notion of the deletion
-      bridge, so a gap-window span deleted after the swap is masked on the live side and still live in the frozen
-      backup, with `src_rows` above `dst_rows`. *Rewrites*: a gap-window span written again after the swap carries a
-      later `created_at`, which both drops it out of this window on the live side (both sides are bounded on
-      `created_at`) and changes its fingerprint (`created_at` is part of it). Quiescing does not undo a rewrite that
-      has already happened, so tick this box on the evidence below rather than on a PASS.
+      **Expect this to MISMATCH on a healthy cutover; a clean PASS is not generally obtainable.** Any post-swap
+      change to a gap-window span causes it, and only a delete can be quiesced away. A *delete* leaves the key masked
+      on the live side and live in the frozen backup. A *re-create* stamps a fresh `created_at`, so the row leaves
+      this window on the live side — both sides are bounded on `created_at`. A *patch* preserves `created_at`, so the
+      row stays in the window and **the row counts stay equal** while the checksums differ. Quiescing undoes none of
+      the changes already made, so tick this box on the evidence below rather than on a PASS — and do not read equal
+      row counts as agreement.
       **Do not reach for a hand-written query to tell the two apart: step 5 already ran it.** `missing_keys` is that
       count — `000006`'s `verify-forward` takes the parked keys in the gap window, excludes the ones bridged-deleted at
       or after `--swap-done`, and reports those still absent from live. It is the same question with a wider window

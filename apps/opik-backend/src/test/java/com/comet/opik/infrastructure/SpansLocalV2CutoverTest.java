@@ -14,6 +14,9 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -33,6 +36,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1188,9 +1192,10 @@ class SpansLocalV2CutoverTest {
      * frozen backup (it was live when the backup froze), so without the {@code NOT IN} exclusion the sweep would insert
      * a fresh version and undo the delete.
      *
-     * <p>It also pins the first of the two shapes that make the post-swap compare mismatch on a healthy cutover: the
-     * key is masked on the live side and live in the backup, so the compare reports it while the gate stays clean.
-     * Quiescing user deletes removes this shape; the rewrite shape, covered separately, it cannot.
+     * <p>It also pins the delete shape of the post-swap compare mismatch, which happens on a healthy cutover: the key
+     * is masked on the live side and live in the backup, so the compare reports it while the gate stays clean. This is
+     * the only one of the three shapes that quiescing removes — the re-create and patch shapes, covered by
+     * {@code aGapWindowSpanChangedAfterTheSwapIsReportedByTheCompareButIsNotLoss}, it cannot.
      */
     @Test
     void sweepDoesNotResurrectAGapWindowSpanDeletedAfterTheSwap() {
@@ -1234,18 +1239,32 @@ class SpansLocalV2CutoverTest {
                 .isEqualTo(ReconciliationCounts.reconciled());
     }
 
+    private static Stream<Arguments> aGapWindowSpanChangedAfterTheSwapIsReportedByTheCompareButIsNotLoss() {
+        return Stream.of(
+                // A delete masks the prior row, so the insert has nothing to merge onto and stamps created_at fresh.
+                Arguments.of("re-created after the swap: created_at is stamped fresh, so it leaves the window", true,
+                        0L),
+                // SpanDAO's merge keeps the existing created_at, so the row stays in the window and counts stay equal.
+                Arguments.of("patched after the swap: created_at is preserved, so it stays in the window", false, 1L));
+    }
+
     /**
-     * A gap-window span REWRITTEN after the swap is reported by the post-swap windowed compare, and is not loss. The
-     * later {@code created_at} bites twice: the drill-down bounds BOTH sides on {@code created_at}, so the live row
-     * falls outside the window and prints as absent; and {@code created_at} is part of the row fingerprint, so the
-     * unwindowed confirm-keys re-read hashes it differently even though it found the row.
+     * Both post-swap WRITE shapes make the compare report a gap-window key while the reconciliation gate stays
+     * clean, and they differ only in whether the live row is still inside the compare window.
      *
-     * <p>This is why quiescing traffic cannot turn that compare into a PASS — a rewrite already made has moved the row
-     * out of the window for good. The write-loss gate is the three gating counts, which stay clean here; the rewrite
-     * surfaces in the informational {@code newer} count, which is where the driver already says to expect it.
+     * <p>A RE-CREATE has no surviving row to merge onto, so {@code SpanDAO}'s insert stamps a fresh
+     * {@code created_at} and the row leaves the window — the drill-down bounds BOTH sides on {@code created_at},
+     * so it prints as absent there. A PATCH merges onto the live row, and that path PRESERVES {@code created_at},
+     * so the row stays in the window and both sides keep equal row counts; only the fingerprint moves.
+     *
+     * <p>Either way the compare reports the key and the three gating counts stay clean, with the change surfacing
+     * in the informational {@code newer} count. This is why quiescing cannot turn that compare into a PASS: only
+     * the delete shape is quiescable, and neither of these is.
      */
-    @Test
-    void aGapWindowSpanRewrittenAfterTheSwapIsReportedByTheCompareButIsNotLoss() {
+    @ParameterizedTest(name = "{0}")
+    @MethodSource
+    void aGapWindowSpanChangedAfterTheSwapIsReportedByTheCompareButIsNotLoss(String description, boolean recreate,
+            long rowsLeftInsideWindow) {
         var workspaceId = UUID.randomUUID().toString();
         var projectId = ID_GENERATOR.generateId();
 
@@ -1255,7 +1274,7 @@ class SpansLocalV2CutoverTest {
         backfillWeek(0);
         deltaInsert(backfillStart);
 
-        // A gap-window write: to the old table, after the last delta read it.
+        // The gap: written to the old table after the last delta read it.
         var gapStart = nowMicros();
         var gapInstant = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(nowMicros()));
         var gapWritten = mintIdsAt(1, gapInstant);
@@ -1266,44 +1285,39 @@ class SpansLocalV2CutoverTest {
 
         reconcileForward("spans", gapStart, swapDone);
         assertThat(forwardCounts(gapStart, swapDone))
-                .as("the sweep reconciles the gap: the write-loss gate is clean")
+                .as("the sweep reconciles the gap before anything is changed on top of it")
                 .isEqualTo(ReconciliationCounts.reconciled());
 
-        // The app rewrites that span AFTER the swap — same key, a NEW created_at past --swap-done.
+        // Derived from swapDone, not from gapInstant: the row must land after the window closes however long the
+        // setup above took.
         var original = gapWritten.getFirst();
-        var afterSwap = gapInstant.plusSeconds(120);
-        var rewritten = SeededSpan.builder()
-                .id(original.id())
-                .traceId(original.traceId())
-                .createdAt(afterSwap)
-                .build();
-        insertSuccessorSpanAt(rewritten, workspaceId, projectId, "rewritten-after-swap", afterSwap);
+        var afterSwap = Instant.from(ClickHouseDateTimeFormat.MICROS.parse(swapDone)).plusSeconds(120);
+        var changed = recreate
+                ? SeededSpan.builder().id(original.id()).traceId(original.traceId()).createdAt(afterSwap).build()
+                : original;
+        insertSuccessorSpanAt(changed, workspaceId, projectId, "changed-after-swap", afterSwap);
 
         assertThat(liveCount("spans", idStrings(gapWritten), workspaceId))
                 .as("the span is present and current on the live table — nothing was lost")
                 .isEqualTo(1L);
         assertThat(rowsInsideWindow("spans", idStrings(gapWritten), workspaceId, gapStart, swapDone))
                 .as("""
-                        but it no longer falls inside the compare window on the live side, which is what makes \
-                        the drill-down print it as absent there""")
-                .isZero();
+                        a re-create leaves the window on the live side, which is what makes the drill-down print \
+                        it as absent; a patch preserves created_at and stays inside it""")
+                .isEqualTo(rowsLeftInsideWindow);
         assertThat(genuinelyDifferingKeys("spans_pre_cutover_backup", "spans", gapStart, swapDone, workspaceId))
-                .as("""
-                        yet the post-swap windowed compare counts it as differing: its live created_at now sits \
-                        outside the window, and created_at is part of the fingerprint""")
+                .as("either way the post-swap compare reports the key as differing")
                 .isEqualTo(1L);
-        var afterRewrite = forwardCounts(gapStart, swapDone);
-        assertThat(afterRewrite)
+        var afterChange = forwardCounts(gapStart, swapDone);
+        assertThat(afterChange)
                 .as("""
                         while the three write-loss counts — the actual gate — stay clean, which is the distinction \
                         an operator has to make at this point""")
                 .extracting(ReconciliationCounts::missing, ReconciliationCounts::stale,
                         ReconciliationCounts::payloadMismatch)
                 .containsExactly(0L, 0L, 0L);
-        assertThat(afterRewrite.newer())
-                .as("""
-                        and the rewrite lands in `newer`, which is informational and deliberately left alone by the \
-                        sweep: the live side is ahead of the frozen backup, which is correct, not loss""")
+        assertThat(afterChange.newer())
+                .as("and the change lands in `newer`: the live side is ahead of the frozen backup, which is correct")
                 .isEqualTo(1L);
     }
 
@@ -3062,11 +3076,12 @@ class SpansLocalV2CutoverTest {
                 .block();
     }
 
-    /** Distinct live (mask-honored) ids from {@code table} within {@code ids}. */
     /**
-     * Rows for these ids whose {@code created_at} lands INSIDE a compare window. The drill-down bounds both sides on
-     * {@code created_at}, so this is the count that goes to zero — and makes the row print as absent — when a rewrite
-     * moves it past the window's upper bound.
+     * Ids whose WINNING version has a {@code created_at} inside a compare window — the count that goes to zero, and
+     * makes the drill-down print the row as absent, when a re-create moves the winner past the window's upper bound.
+     * {@code argMax} picks the winner explicitly rather than leaning on {@code FINAL}: a {@code created_at} predicate
+     * under {@code FINAL} can exclude the part holding the winner and return a superseded row as though it were live,
+     * which is the artifact {@code 000005}'s confirm-keys block exists to absorb.
      */
     private long rowsInsideWindow(String table, Set<String> ids, String workspaceId, String windowLo,
             String windowHi) {
@@ -3074,17 +3089,21 @@ class SpansLocalV2CutoverTest {
             return 0L;
         }
         return scalar("""
-                SELECT uniqExact(id) AS c
-                FROM %s FINAL
-                WHERE workspace_id = :workspace_id
-                  AND id IN :ids
-                  AND created_at >= toDateTime64(:window_lo, 6, 'UTC')
-                  AND created_at <  toDateTime64(:window_hi, 6, 'UTC')
+                SELECT uniqExactIf(id, created_at >= toDateTime64(:window_lo, 6, 'UTC')
+                                       AND created_at < toDateTime64(:window_hi, 6, 'UTC')) AS c
+                FROM (
+                    SELECT id, argMax(created_at, last_updated_at) AS created_at
+                    FROM %s
+                    WHERE workspace_id = :workspace_id
+                      AND id IN :ids
+                    GROUP BY workspace_id, project_id, trace_id, id
+                )
                 """.formatted(table),
                 statement -> statement.bind("workspace_id", workspaceId).bind("ids", ids)
                         .bind("window_lo", windowLo).bind("window_hi", windowHi));
     }
 
+    /** Distinct live (mask-honored) ids from {@code table} within {@code ids}. */
     private long liveCount(String table, Set<String> ids, String workspaceId) {
         if (ids.isEmpty()) {
             return 0L;
