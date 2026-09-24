@@ -8,7 +8,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RStreamReactive;
@@ -24,11 +23,9 @@ import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -42,7 +39,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -877,116 +873,6 @@ class BaseRedisSubscriberUnitTest {
 
             assertThat(starts.get(1)).isEqualTo(new StreamMessageId(700L, 0));
             assertThat(starts.get(2)).isEqualTo(new StreamMessageId(700L, 0));
-        }
-    }
-
-    @Nested
-    class CollapseTests {
-
-        @BeforeEach
-        void setUp() {
-            whenCreateGroupReturnEmpty();
-            whenRemoveConsumerReturn();
-        }
-
-        /**
-         * Where OPIK-8164's sentinel and the collapse hook meet. The hook folds <em>decoded</em> messages,
-         * so it must never be handed an entry that failed to decode: an override reads the batch at its own
-         * message type, and a sentinel there is a {@code ClassCastException}. That throw would happen inside
-         * {@code flatMapIterable}, where it belongs to no single id, so the entire batch would produce no
-         * result -- never acked, never removed, never counted towards maxRetries -- and would simply be
-         * re-claimed and re-thrown forever. Which is the wedge the sentinel was introduced to prevent.
-         */
-        @Test
-        void shouldNotOfferUndecodableEntriesToCollapse() {
-            var undecodableId = new StreamMessageId(1_000L, 0);
-            var healthyId = new StreamMessageId(1_000L, 1);
-            var offered = new CopyOnWriteArrayList<StreamMessageId>();
-
-            var subscriber = trackSubscriber(TestRedisSubscriber.collapsingSubscriber(CONFIG, redissonClient,
-                    batch -> {
-                        offered.addAll(batch.keySet());
-                        return batch.entrySet().stream()
-                                .map(entry -> new BaseRedisSubscriber.MessageGroup<>(
-                                        entry.getKey(), entry.getValue(), Set.<StreamMessageId>of()))
-                                .toList();
-                    }));
-            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
-            var readCount = new AtomicInteger();
-            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
-                    .thenAnswer(invocation -> readCount.incrementAndGet() == 1
-                            ? Mono.just(Map.of(
-                                    undecodableId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD,
-                                            UndecodableStreamMessage.builder()
-                                                    .encodedBytes(20_054_016)
-                                                    .cause(new IllegalStateException("exceeds the maximum allowed"))
-                                                    .build()),
-                                    healthyId, Map.of(TestStreamConfiguration.PAYLOAD_FIELD, "healthy")))
-                            : Mono.just(Map.of()));
-            lenient().when(stream.listPending(any(StreamPendingRangeArgs.class)))
-                    .thenReturn(Mono.just(List.of()));
-            whenAckReturn();
-            whenRemoveReturn();
-
-            subscriber.start();
-
-            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertThat(subscriber.getSuccessMessageCount().get()).isEqualTo(1));
-            // The healthy entry behind it collapsed and processed as usual; the sentinel never got there.
-            assertThat(offered).containsExactly(healthyId);
-            // And it is retired by the retry path, not deleted on sight: another pod may decode it.
-            verify(stream, never()).remove(eq(new StreamMessageId[]{undecodableId}));
-        }
-
-        /**
-         * Collapsing is an optimisation, so a broken override must cost the optimisation and nothing else.
-         * Without the fallback the throw escapes into {@code flatMapIterable} and wedges the batch exactly
-         * as an undecodable entry used to.
-         */
-        @Test
-        void shouldFallBackToOneGroupPerMessageWhenCollapseThrows() {
-            assertEveryMessageProcessedAndAckedOnce(batch -> {
-                throw new IllegalStateException("collapse is broken");
-            });
-        }
-
-        /**
-         * Three messages in one batch through a broken {@code collapse}: each must reach {@code processEvent}
-         * exactly once and each id must be acked exactly once -- one group per message, none duplicated by
-         * the fallback and none left pending.
-         */
-        private void assertEveryMessageProcessedAndAckedOnce(
-                java.util.function.Function<Map<StreamMessageId, String>, List<BaseRedisSubscriber.MessageGroup<String>>> collapser) {
-            var ids = List.of(new StreamMessageId(2_000L, 0), new StreamMessageId(2_000L, 1),
-                    new StreamMessageId(2_000L, 2));
-            var processed = new CopyOnWriteArrayList<String>();
-            var subscriber = trackSubscriber(new TestRedisSubscriber(CONFIG, redissonClient, message -> {
-                processed.add(message);
-                return Mono.empty();
-            }, collapser));
-            whenAutoClaimReturnEmpty(subscriber.getConsumerId());
-            var readCount = new AtomicInteger();
-            when(stream.readGroup(eq(CONFIG.getConsumerGroupName()), anyString(), any(StreamReadGroupArgs.class)))
-                    .thenAnswer(invocation -> readCount.incrementAndGet() == 1
-                            ? Mono.just(Map.of(
-                                    ids.get(0), Map.of(TestStreamConfiguration.PAYLOAD_FIELD, "m0"),
-                                    ids.get(1), Map.of(TestStreamConfiguration.PAYLOAD_FIELD, "m1"),
-                                    ids.get(2), Map.of(TestStreamConfiguration.PAYLOAD_FIELD, "m2")))
-                            : Mono.just(Map.of()));
-            whenAckReturn();
-            whenRemoveReturn();
-
-            subscriber.start();
-
-            await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                    .untilAsserted(() -> assertThat(processed).containsExactlyInAnyOrder("m0", "m1", "m2"));
-            assertThat(subscriber.getFailedMessageCount().get()).isZero();
-
-            var acked = ArgumentCaptor.forClass(StreamMessageId[].class);
-            verify(stream, timeout(AWAIT_TIMEOUT_SECONDS * 1_000L).atLeastOnce())
-                    .ack(eq(CONFIG.getConsumerGroupName()), acked.capture());
-            assertThat(acked.getAllValues().stream().flatMap(Arrays::stream).toList())
-                    .containsExactlyInAnyOrderElementsOf(ids);
         }
     }
 

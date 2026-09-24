@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.bi;
 
 import com.comet.opik.api.resources.v1.jobs.AgentInsightsReportJob;
+import com.comet.opik.api.resources.v1.jobs.AnnotationQueueRoutingFlushJob;
 import com.comet.opik.api.resources.v1.jobs.ClickHousePartitionMetricsJob;
 import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.ExperimentDenormalizationJob;
@@ -13,6 +14,7 @@ import com.comet.opik.api.resources.v1.jobs.RetentionEstimationJob;
 import com.comet.opik.api.resources.v1.jobs.RetentionSlidingWindowJob;
 import com.comet.opik.api.resources.v1.jobs.StreamConsumerReaperJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
+import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.LlmModelRegistryConfig;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
@@ -65,6 +67,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setAgentInsightsReportJob();
                 setExperimentDenormalizationJob();
                 setProjectLastUpdatedFlushJob();
+                setAnnotationQueueRoutingFlushJob();
                 setLocalRunnerReaperJob();
                 setStreamConsumerReaperJob();
                 setOptimizationStalledReaperJob();
@@ -155,6 +158,19 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
 
         scheduleRepeatingJob(ProjectLastUpdatedFlushJob.class,
                 flushConfig.getJobInterval().toJavaDuration(), null);
+    }
+
+    private void setAnnotationQueueRoutingFlushJob() {
+        AnnotationQueueRoutingConfig routingConfig = injector.get().getInstance(OpikConfiguration.class)
+                .getAnnotationQueueRouting();
+
+        if (!routingConfig.isEnabled() || !routingConfig.isJobEnabled()) {
+            log.info("Annotation queue routing flush job is disabled, skipping job setup");
+            return;
+        }
+
+        scheduleRepeatingJob(AnnotationQueueRoutingFlushJob.class,
+                routingConfig.getJobInterval().toJavaDuration(), null);
     }
 
     private void setLocalRunnerReaperJob() {

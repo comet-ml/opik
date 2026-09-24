@@ -14,22 +14,16 @@ import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.comet.opik.infrastructure.AnnotationQueueRoutingConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.utils.HttpStatusRetryability;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.ClientErrorException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.stream.StreamMessageId;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -46,6 +40,12 @@ import java.util.stream.Collectors;
  * (a replica dying leaves the message pending for {@code autoClaim}), retried, and concurrency-bounded by
  * the consumer group. In the listener it would be none of those, and there is no backfill or manual re-run
  * to recover a lost event.
+ *
+ * <p>One message at a time, and a message is already a batch: the buffer flush hands over one
+ * (workspace, scope) group of everything scored in the buffer window, deduplicated, so a message is one
+ * automation lookup and one score read however many entities it names. Nothing here looks across messages —
+ * the stream always moves forward. Writes run as the system user, like every other background write; the
+ * item's {@code source} records that automation added it.
  *
  * <p>Redelivery is safe: the message carries no decision, so the consumer re-evaluates from current state,
  * and {@code addItems} excludes anything the queue has held before. At-least-once therefore needs no
@@ -97,82 +97,6 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
         super.start();
     }
 
-    // No isEnabled() guard here, unlike start(): every branch of super.stop() is null-guarded, so
-    // stopping something that never started is already a no-op. Guarding on config instead would make
-    // shutdown depend on a value read at a different time from the one start() read.
-    @Override
-    public void stop() {
-        log.info("Stopping annotation queue routing subscriber");
-        super.stop();
-    }
-
-    /**
-     * Folds the batch to one message per (workspace, scope, author), unioning the entity ids and the
-     * score names.
-     *
-     * <p>This is where repeated scoring on one entity stops costing repeated work. The producer publishes
-     * one message per score event and does no coalescing, because the stream is the buffer; the collapse
-     * happens here, in front of the expensive half — a merged message costs one score read, one automation
-     * lookup and one source filter however many events went into it.
-     *
-     * <p>The author is part of the key rather than something merged away: it is stamped on the queue item
-     * as {@code created_by}, so folding two reviewers' events together would attribute one of them to the
-     * other. Two authors scoring the same entity therefore still produce two evaluations, and
-     * {@code addItems} excludes what a queue already holds, so the second adds nothing.
-     *
-     * <p>Score names are unioned across the merged messages, which widens each entity's expected set to
-     * the group's. That is the same over-approximation a single message already carries — an event reports
-     * the names it wrote across its whole batch without attributing them per entity — and the freshness
-     * check treats names as best-effort, so a name that never lands costs one delayed re-read and nothing
-     * more.
-     *
-     * <p>Only decoded messages arrive here: the base class retires undecodable and malformed entries in
-     * its own pre-flight pass, so there is nothing to pass through.
-     */
-    @Override
-    protected List<MessageGroup<AnnotationQueueRoutingMessage>> collapse(
-            Map<StreamMessageId, AnnotationQueueRoutingMessage> batch) {
-
-        Map<GroupKey, List<Map.Entry<StreamMessageId, AnnotationQueueRoutingMessage>>> mergeable = new LinkedHashMap<>();
-
-        batch.entrySet().forEach(entry -> {
-            AnnotationQueueRoutingMessage message = entry.getValue();
-            mergeable.computeIfAbsent(
-                    new GroupKey(message.workspaceId(), message.scope(), message.userName()),
-                    __ -> new ArrayList<>()).add(entry);
-        });
-
-        var collapsed = mergeable.values().stream().map(this::merge).toList();
-
-        if (collapsed.size() < batch.size()) {
-            AnnotationQueueRoutingMetrics.MESSAGES_COLLAPSED.add(batch.size() - collapsed.size());
-            log.debug("Collapsed '{}' routing messages into '{}'", batch.size(), collapsed.size());
-        }
-        return collapsed;
-    }
-
-    private MessageGroup<AnnotationQueueRoutingMessage> merge(
-            List<Map.Entry<StreamMessageId, AnnotationQueueRoutingMessage>> entries) {
-
-        var primary = entries.getFirst();
-        if (entries.size() == 1) {
-            return new MessageGroup<>(primary.getKey(), primary.getValue(), Set.of());
-        }
-
-        var messages = entries.stream().map(Map.Entry::getValue).toList();
-        var merged = messages.getFirst().toBuilder()
-                .entityIds(messages.stream().flatMap(m -> m.entityIds().stream()).collect(Collectors.toSet()))
-                .scoreNames(messages.stream().flatMap(m -> m.scoreNames().stream()).collect(Collectors.toSet()))
-                .build();
-
-        return new MessageGroup<>(primary.getKey(), merged,
-                entries.stream().skip(1).map(Map.Entry::getKey).collect(Collectors.toSet()));
-    }
-
-    /** Everything a merged message must agree on: the author because it is stamped on the queue item. */
-    private record GroupKey(String workspaceId, AnnotationQueue.AnnotationScope scope, String userName) {
-    }
-
     @Override
     protected Mono<Void> processEvent(@NonNull AnnotationQueueRoutingMessage message) {
         return route(message)
@@ -193,7 +117,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
      * whole workspace.
      */
     private Mono<Long> route(AnnotationQueueRoutingMessage message) {
-        return loadScores(message)
+        return readScores(message)
                 .flatMap(scoresByEntity -> {
                     if (scoresByEntity.isEmpty()) {
                         return Mono.just(0L);
@@ -228,10 +152,6 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
      * experiment's traces are what produce its metrics. Experiment traces are reviewed through the
      * experiment comparison view, not a queue, so they are excluded here.
      *
-     * <p>Deliberately a separate read rather than a predicate folded into the score query. Filtered-out
-     * entities would otherwise be indistinguishable from entities whose scores had not landed yet, and
-     * {@code loadScores} would spend a delayed re-read on each one and then count it as unresolved.
-     *
      * <p>It runs after the automation lookup so the read only happens for a project that actually has an
      * enabled automation, which is the minority of scored traffic.
      */
@@ -247,7 +167,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
 
         return loggedBySdk
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, message.userName()))
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
                 .map(kept -> {
                     int skipped = entityIds.size() - kept.size();
                     if (skipped > 0) {
@@ -262,89 +182,18 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                 });
     }
 
-    /**
-     * Reads the entities' effective scores, with one cheap guard against reading before the write is
-     * visible.
-     *
-     * <p>Two things can make a read stale, and the message carries what is needed to spot both. Finding
-     * <em>no</em> scores for an entity the event named means the read saw less than the write produced.
-     * Finding scores but not the <em>named</em> ones means the same thing for an entity that already had
-     * other scores — the far more common shape, since a judge scoring a trace that a human already scored
-     * is the normal case, and it is the one a bare emptiness check misses entirely.
-     *
-     * <p>Either way the cause is ClickHouse replication lag on a multi-node cluster, or a score whose
-     * {@code scoreDestination} sent it to the assertion-results table, which never reaches
-     * {@code feedback_scores} at all.
-     *
-     * <p>The guard is a single delayed re-read of only the entities that looked stale. It costs nothing in
-     * the normal case, and it matters because of what the alternative loses: a stale read makes the
-     * conditions not match, and if that was the last score the trace will ever receive, nothing
-     * re-triggers. With no backfill the trace would then never be routed — silently and permanently.
-     */
-    private Mono<Map<UUID, EntityFeedbackScores>> loadScores(AnnotationQueueRoutingMessage message) {
-        return readScores(message, message.entityIds())
-                .flatMap(scores -> {
-                    Set<UUID> missing = staleEntities(message, scores);
-                    if (missing.isEmpty()) {
-                        return Mono.just(scores);
-                    }
-
-                    AnnotationQueueRoutingMetrics.STALE_READS.add(1);
-                    log.debug("Scores for '{}' of '{}' entities named by the event look stale, re-reading after '{}'",
-                            missing.size(), message.entityIds().size(), config.getStaleReadRetryDelay());
-
-                    return Mono.delay(config.getStaleReadRetryDelay().toJavaDuration())
-                            .then(readScores(message, missing))
-                            .map(retried -> {
-                                if (retried.isEmpty()) {
-                                    return scores;
-                                }
-                                var merged = new HashMap<>(scores);
-                                merged.putAll(retried);
-                                return Map.copyOf(merged);
-                            })
-                            .doOnNext(merged -> {
-                                int unresolved = staleEntities(message, merged).size();
-                                if (unresolved > 0) {
-                                    AnnotationQueueRoutingMetrics.UNRESOLVED_ENTITIES.add(unresolved);
-                                }
-                            });
-                });
-    }
-
-    private Mono<Map<UUID, EntityFeedbackScores>> readScores(AnnotationQueueRoutingMessage message,
-            Set<UUID> entityIds) {
-
+    private Mono<Map<UUID, EntityFeedbackScores>> readScores(AnnotationQueueRoutingMessage message) {
         EntityType entityType = message.scope() == AnnotationQueue.AnnotationScope.THREAD
                 ? EntityType.THREAD
                 : EntityType.TRACE;
 
-        // The scores carry the project id, which the event does not: on the batch score path it is absent
-        // because one batch may span several projects. So one read answers both questions.
-        return feedbackScoreDAO.getEffectiveScores(entityType, entityIds)
+        // The scores carry the project id, which the message does not: on the batch score path it is absent
+        // because one batch may span several projects. So one read answers both questions. Nothing here is
+        // read younger than debounceDelay, which is what keeps the read clear of ClickHouse replica lag; an
+        // entity with no scores visible is simply not routed until its next score.
+        return feedbackScoreDAO.getEffectiveScores(entityType, message.entityIds())
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, message.userName()));
-    }
-
-    /**
-     * Entities whose read cannot be trusted yet: no scores at all, or none of the names the event said it
-     * wrote. An entity the message says nothing about is judged on emptiness alone, which is all the
-     * information there is — score names are best-effort, and a missing name set must not be read as "no
-     * scores were written".
-     */
-    private Set<UUID> staleEntities(AnnotationQueueRoutingMessage message,
-            Map<UUID, EntityFeedbackScores> found) {
-
-        return message.entityIds().stream()
-                .filter(entityId -> {
-                    EntityFeedbackScores scores = found.get(entityId);
-                    if (scores == null) {
-                        return true;
-                    }
-                    Set<String> expected = message.expectedScoreNames(entityId);
-                    return !expected.isEmpty() && !scores.scores().keySet().containsAll(expected);
-                })
-                .collect(Collectors.toSet());
+                        .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER));
     }
 
     private Mono<Long> addMatches(List<AnnotationQueueAutomationService.QueueAutomation> automations,
@@ -376,7 +225,7 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                 .concatMap(entry -> annotationQueueService
                         .addItems(entry.getKey(), entry.getValue(), AnnotationQueueItemSource.AUTOMATED)
                         .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                                .put(RequestContext.USER_NAME, message.userName()))
+                                .put(RequestContext.USER_NAME, RequestContext.SYSTEM_USER))
                         // Nothing currently bounds how much a queue can accumulate, so this counter is the
                         // only way to see a badly scoped condition filling one up.
                         .doOnNext(added -> AnnotationQueueRoutingMetrics.ITEMS_ROUTED.add(added))
@@ -387,29 +236,13 @@ public class AnnotationQueueRoutingSubscriber extends BaseRedisSubscriber<Annota
                             return Mono.just(0L);
                         }))
                 .reduce(0L, Long::sum)
-                .flatMap(routed -> failures.isEmpty()
-                        ? Mono.just(routed)
-                        : Mono.error(routingFailure(failures)));
-    }
-
-    /**
-     * The failure to report, with the others attached. Reported as-is rather than wrapped, so
-     * {@code BaseRedisSubscriber} can still tell a retryable failure from one that will never succeed -- and a
-     * failure that will never succeed is not chosen as the primary while another might. The base classifies the
-     * primary alone, and {@code matchesByQueue} has no order, so reporting whichever failed first could let a
-     * permanent 404 on one queue ack the message while a transient failure on another still had work to redo.
-     * Only the HTTP-status case is told apart here; the base's own classification is not duplicated.
-     */
-    private Throwable routingFailure(ConcurrentLinkedQueue<Throwable> failures) {
-        var all = new ArrayList<>(failures);
-        Throwable primary = all.stream().filter(failure -> !permanentStatus(failure)).findFirst()
-                .orElse(all.getFirst());
-        all.stream().filter(other -> other != primary).forEach(primary::addSuppressed);
-        return primary;
-    }
-
-    private static boolean permanentStatus(Throwable failure) {
-        return failure instanceof ClientErrorException client
-                && HttpStatusRetryability.isPermanent(client.getResponse().getStatus());
+                .flatMap(routed -> {
+                    if (failures.isEmpty()) {
+                        return Mono.just(routed);
+                    }
+                    Throwable primary = failures.poll();
+                    failures.forEach(primary::addSuppressed);
+                    return Mono.error(primary);
+                });
     }
 }

@@ -6,12 +6,8 @@ import io.opentelemetry.api.metrics.Meter;
 import lombok.experimental.UtilityClass;
 
 /**
- * Instruments for annotation queue routing (OPIK-6303).
- *
- * <p>These two counters exist because the failure they describe is otherwise invisible. A score event
- * names the entities whose scores just changed, so finding no scores for one of them means the read saw
- * less than the write produced — ClickHouse replication lag, or a score routed to the assertion-results
- * table instead. Nothing else in the system would report that.
+ * Instruments for annotation queue routing (OPIK-6303). Each counter reports something no other signal in
+ * the system would: how much automation routes, what it refuses, and where it fails.
  */
 @UtilityClass
 public class AnnotationQueueRoutingMetrics {
@@ -19,18 +15,6 @@ public class AnnotationQueueRoutingMetrics {
     public static final String METER_NAME = "opik.annotation_queue_routing";
 
     private static final Meter METER = GlobalOpenTelemetry.get().getMeter(METER_NAME);
-
-    public static final LongCounter STALE_READS = METER
-            .counterBuilder("stale_reads_total")
-            .setDescription("Score reads that returned nothing for at least one entity the event named, "
-                    + "triggering a delayed re-read")
-            .build();
-
-    public static final LongCounter UNRESOLVED_ENTITIES = METER
-            .counterBuilder("unresolved_entities_total")
-            .setDescription("Entities still without scores after the re-read; either a score that never "
-                    + "lands in feedback_scores, or replication lag beyond the retry delay")
-            .build();
 
     public static final LongCounter ITEMS_ROUTED = METER
             .counterBuilder("items_routed_total")
@@ -43,15 +27,21 @@ public class AnnotationQueueRoutingMetrics {
                     + "retries it, and this counts how often that happens")
             .build();
 
+    public static final LongCounter SCORES_DEDUPLICATED = METER
+            .counterBuilder("scores_deduplicated_total")
+            .setDescription("Score writes that found their entity already waiting in the Redis buffer and "
+                    + "folded into it - the evaluations saved")
+            .build();
+
+    public static final LongCounter MESSAGES_FLUSHED = METER
+            .counterBuilder("messages_flushed_total")
+            .setDescription("Stream messages published by the buffer flush, one per (workspace, scope) batch "
+                    + "of due entities")
+            .build();
+
     public static final LongCounter NON_PRODUCTION_SKIPPED = METER
             .counterBuilder("non_production_skipped_total")
             .setDescription("Scored entities dropped before evaluation because they were not logged by an "
                     + "SDK — playground, experiment, optimization or evaluator activity")
-            .build();
-
-    public static final LongCounter MESSAGES_COLLAPSED = METER
-            .counterBuilder("messages_collapsed_total")
-            .setDescription("Stream messages folded into another before processing, because they shared a "
-                    + "workspace, scope and author - the work each one saved")
             .build();
 }
