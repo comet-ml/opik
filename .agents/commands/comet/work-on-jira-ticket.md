@@ -9,9 +9,11 @@ This workflow will:
 
 - Verify Jira MCP availability (or instruct how to install it).
 - Fetch and parse the ticket details.
+- Normalize the ticket to the WHY / WHAT / HOW format when it doesn't already follow it.
 - If not found, list your assigned **To Do** issues.
 - Check local git status in the Opik repository and propose a branch if on `main`.
 - Suggest moving the ticket to **In Progress** if it's currently in **To Do**.
+- Confirm the WHY and WHAT with the user after the plan is shared (skippable via memory).
 - Validate all operations and provide clear success/failure feedback.
 
 ---
@@ -61,6 +63,76 @@ This workflow will:
 - **Comments**: newest → oldest, `[author @ date] summary` with important snippets.
 - **HOW comment**: scan comments for the most recent one whose body matches `^#\s*HOW\b` (case-insensitive). If found, surface it as the **implementation suggestion** — clearly framed as a note from when the ticket was filed, not a plan of record. The current code state is authoritative; the HOW is one input. If no HOW comment exists, proceed without one — many tickets won't have one, and that's fine (older tickets predate the convention; some tickets have nothing worth adding beyond the WHAT).
 - **Epic/Story context**: Include parent issue information if available.
+
+---
+
+### 3b. Normalize the Ticket to WHY / WHAT / HOW
+
+Tickets filed before the convention — or filed in a hurry — often arrive as a one-line summary, a pasted Slack thread, or a description with no structure at all. Restructuring the ticket **before** planning is itself the first pass of planning: it forces the short version of *why we are doing this* and *what changes* to exist in writing, where the reviewer and QA can see it, instead of only in the plan.
+
+#### When to normalize
+
+Assess the fetched ticket:
+
+- **Description already has both `## WHY` and `## WHAT` sections** → it conforms. Skip to step 4, no edit.
+- **Description is missing one or both sections** (unstructured prose, empty, bullet dump, pasted thread) → normalize it.
+
+The HOW is never part of the description. If the ticket's description contains implementation detail under a `HOW` heading or equivalent, move it into the HOW comment as part of normalizing.
+
+#### How to normalize
+
+1. **Derive, don't invent.** Build WHY and WHAT from what the ticket already contains — summary, description, comments, parent epic, linked issues. Where the existing text is genuinely ambiguous about scope or motivation, say so rather than inventing a rationale: a WHY nobody actually holds is worse than a thin one. Ask the user when the gap blocks planning.
+2. **Draft the description** using the same structure `/comet:create-jira-ticket` produces:
+
+   ```
+   ## WHY
+
+   [Why this ticket needs to exist — the motivation and context. 2-6 sentences.]
+
+   ## WHAT
+
+   [High-level description of the changes, phrased so QA can derive test cases.]
+
+   ### Acceptance Criteria
+
+   - [ ] [Observable behavior or outcome]
+   ```
+
+   Keep the reporter's own words where they're already clear.
+3. **Never destroy the original description.** When the ticket had any description text, the normalized version is *prepended*, not substituted: WHY and WHAT go on top, and everything that was there before is retained **verbatim** underneath, under its own heading:
+
+   ```
+   ## WHY
+
+   ...
+
+   ## WHAT
+
+   ...
+
+   ### Acceptance Criteria
+
+   - [ ] ...
+
+   ---
+
+   ## Original Description
+
+   [The ticket's previous description, copied verbatim — same text, same formatting, same media, same links.]
+   ```
+
+   This is a strict rule, not a fallback. WHY and WHAT are a reading aid added on top; they are an agent's interpretation of the ticket, and the reporter's own account stays available to anyone who scrolls down. Do not summarize, reword, re-order, or trim the original block, and do not drop content on the grounds that WHY/WHAT already covers it — that judgment is exactly what the preserved copy exists to let a human re-check. Retain media (screenshots, embeds, tables, links) as-is.
+
+   If the ticket had **no** description at all, there is nothing to preserve — omit the `## Original Description` section entirely rather than emitting an empty one. On a **re-run** against a ticket that already carries an `## Original Description` block, keep that existing block as the original and regenerate only WHY / WHAT above it, so the oldest text survives repeated passes instead of each run preserving the previous run's output.
+4. **Check the title against the WHAT.** The summary is the one-line version of the WHAT. If they disagree on scope, flag the mismatch to the user and propose a corrected title — but don't silently rewrite the summary.
+5. **Write the description back** with `mcp__Jira__home___jira_update_issue`.
+6. **Post the HOW as a comment**, not in the description — the same rules `/comet:create-jira-ticket` uses: only when there's real substance (stable landmarks, an existing pattern worth mirroring, a non-obvious constraint, open questions). A missing HOW is better than a filler one. Follow the same edit-don't-pile-up rule: fetch comments, find the most recent whose body matches `^#\s*HOW\b` (case-insensitive) **and** whose `author.email` matches the authenticated user, `jira_edit_comment` if found, `jira_add_comment` otherwise.
+
+#### Guardrails
+
+- **Never normalize silently.** Show the drafted WHY / WHAT and get the user's confirmation before writing to Jira. A ticket description is shared state — the reporter, QA, and the epic owner all read it.
+- **Don't normalize someone else's ticket without saying so.** If the reporter isn't the current user, note that the rewrite will be visible to them.
+- **If the user declines**, continue to step 4 with the ticket as-is. Normalization is a convenience, not a gate on doing the work.
 
 ---
 
@@ -200,10 +272,37 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
 
 - **Ask for user approval** before proceeding with implementation:
   - Present the implementation plan clearly
-  - Ask: "Would you like me to proceed with implementing this feature/fix now?"
+  - **Then run the WHY / WHAT confirmation below** — it comes *after* the plan is on screen, not before.
   - **Wait for explicit user confirmation** before making any code changes
   - If user declines: Stop here and provide guidance for manual implementation
   - If user confirms: Proceed to implementation phase
+
+#### 9a. WHY / WHAT Confirmation
+
+Once the plan has been shared, restate the ticket's **WHY** and **WHAT** and confirm them against the plan the user just read. The point is the comparison: the plan is the concrete proposal, and this is the last cheap moment to catch that it solves a different problem than the ticket describes, or has quietly grown past the ticket's scope. Checking before the plan exists would only re-read the ticket back to the user.
+
+**Skip check (first):** if the user's memory (global `CLAUDE.md`, project memory, or a stated preference earlier in the session) says to skip this confirmation, **skip it entirely** — no prompt, no summary — and go straight to the proceed/decline decision. Users opt out by adding a line to their memory, e.g.:
+
+```
+Skip the WHY/WHAT confirmation in /comet:work-on-jira-ticket — go straight to the plan approval.
+```
+
+**Otherwise, prompt.** Display the WHY and WHAT in a compact form — a few lines each, the short version, not the full ticket description:
+
+```
+**WHY**: [1-2 sentence motivation]
+**WHAT**: [1-2 sentence description of the changes]
+```
+
+Then use `AskUserQuestion` with these options:
+
+1. **Looks right — proceed** — WHY and WHAT match the plan; continue to implementation.
+2. **Adjust the scope** — something is off. The user's free-text answer says what.
+3. **Don't ask me again** — proceed, and offer to persist the skip preference to the user's memory so the prompt doesn't appear on future runs. Persist it only if the user agrees; don't write to memory silently.
+
+`AskUserQuestion` always offers a free-text "Other" option, so the user can correct the WHY / WHAT in their own words instead of picking one of the above — treat any free-text answer as option 2.
+
+**If the user adjusts** (option 2 or free text): update the plan to match the corrected WHY / WHAT, and if the correction reveals the ticket description itself is wrong, offer to update the ticket via the step 3b flow. Re-present the revised plan before proceeding — a scope correction invalidates the approval the user hasn't given yet.
 
 ### 10. Implementation Phase (Optional)
 
@@ -223,6 +322,7 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
 - **Confirm all steps completed**:
   - ✅ Jira MCP available and working
   - ✅ Ticket fetched and analyzed successfully
+  - ✅ Ticket normalized to WHY / WHAT / HOW (if it didn't already follow the format)
   - ✅ Status updated (if applicable)
   - ✅ Feature branch created and active following Opik naming convention
   - ✅ Development environment ready
@@ -261,13 +361,15 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
 The command is successful when:
 
 1. ✅ Jira ticket is successfully fetched and analyzed
-2. ✅ Feature branch is created and active following Opik naming convention
-3. ✅ Ticket status is updated (if requested)
-4. ✅ Implementation suggestion provided based on context and Opik rules
-5. ✅ User confirmation received (proceed or decline)
-6. ✅ Implementation executed (if confirmed) or manual guidance provided (if declined)
-7. ✅ All operations complete without errors
-8. ✅ Clear next steps are provided to the user
+2. ✅ Ticket follows the WHY / WHAT / HOW format — normalized if it didn't, with the original description preserved verbatim (or the user declined)
+3. ✅ Feature branch is created and active following Opik naming convention
+4. ✅ Ticket status is updated (if requested)
+5. ✅ Implementation suggestion provided based on context and Opik rules
+6. ✅ WHY / WHAT confirmed after the plan was shared (or skipped per the user's memory)
+7. ✅ User confirmation received (proceed or decline)
+8. ✅ Implementation executed (if confirmed) or manual guidance provided (if declined)
+9. ✅ All operations complete without errors
+10. ✅ Clear next steps are provided to the user
 
 ---
 
