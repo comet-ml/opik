@@ -417,6 +417,17 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 var request = decisionScoringService.buildRequest(code.model().name(),
                         OnlineScoringEngine.renderTraceMessages(code, trace, message.promptType(), spans, null),
                         code.schema());
+                // Test-suite assertions key their scores as assertion_N; log the names the user configured.
+                var unsupported = DecisionScoringService.unsupportedScoreNames(code.schema()).stream()
+                        .map(name -> message.scoreNameMapping().getOrDefault(name, name))
+                        .toList();
+                if (!unsupported.isEmpty()) {
+                    userFacingLogger.warn("Skipped non-Boolean scores for traceId '{}': decisions models only answer"
+                            + " yes/no questions, scores '{}'", trace.id(), unsupported);
+                }
+                if (request.questions().isEmpty()) {
+                    return null;
+                }
                 int estimatedTokens = decisionScoringService.estimateTokens(request);
                 recorder.recordPreparation(spans.size(), estimatedTokens, false);
                 if (decisionScoringService.exceedsContext(request)) {
@@ -436,7 +447,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         .map(response -> {
                             try (var _ = wrapWithMdc(mdc)) {
                                 userFacingLogger.info("Received response from decision model for traceId '{}': '{}'",
-                                        trace.id(), response.answers());
+                                        trace.id(), DecisionScoringService.summarize(response));
                                 var parsed = DecisionScoringService.toFeedbackScores(response, code.schema())
                                         .withUserFacingNames(message.scoreNameMapping());
                                 OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "traceId",

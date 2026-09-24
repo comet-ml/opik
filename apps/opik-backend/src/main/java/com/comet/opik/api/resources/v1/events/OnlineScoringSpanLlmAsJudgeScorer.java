@@ -262,6 +262,14 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                 var request = decisionScoringService.buildRequest(code.model().name(),
                         OnlineScoringEngine.renderMessages(code.messages(), code.variables(), span),
                         code.schema());
+                var unsupported = DecisionScoringService.unsupportedScoreNames(code.schema());
+                if (!unsupported.isEmpty()) {
+                    userFacingLogger.warn("Skipped non-Boolean scores for spanId '{}': decisions models only answer"
+                            + " yes/no questions, scores '{}'", span.id(), unsupported);
+                }
+                if (request.questions().isEmpty()) {
+                    return null;
+                }
                 int estimatedTokens = decisionScoringService.estimateTokens(request);
                 recorder.recordPreparation(0, estimatedTokens, false);
                 if (decisionScoringService.exceedsContext(request)) {
@@ -281,7 +289,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
                         .map(response -> {
                             try (var _ = wrapWithMdc(mdc)) {
                                 userFacingLogger.info("Received response from decision model for spanId '{}': '{}'",
-                                        span.id(), response.answers());
+                                        span.id(), DecisionScoringService.summarize(response));
                                 var parsed = DecisionScoringService.toFeedbackScores(response, code.schema());
                                 OnlineScoringEngine.logResponseIssues(userFacingLogger, parsed, "spanId",
                                         span.id());

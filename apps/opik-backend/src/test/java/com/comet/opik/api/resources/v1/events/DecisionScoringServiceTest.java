@@ -13,6 +13,8 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.HashMap;
 import java.util.List;
@@ -57,23 +59,68 @@ class DecisionScoringServiceTest {
         assertThat(service.exceedsContext(overLimit)).isTrue();
     }
 
-    @Test
-    void toFeedbackScoresReportsUnreadableAnswers() {
-        var answers = new HashMap<String, DecisionsResponse.Answer>();
-        answers.put("valid", noul(0.8));
-        answers.put("no_probability", noul(null));
-        answers.put("above_one", noul(1.5));
-        answers.put("negative", noul(-0.1));
-        answers.put("nan", noul(Double.NaN));
-        var schema = List.of(score("valid", "?"), score("missing", "?"), score("no_probability", "?"),
-                score("above_one", "?"), score("negative", "?"), score("nan", "?"));
+    @ParameterizedTest(name = "probability={0}")
+    @ValueSource(doubles = {1.5, -0.1, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY})
+    void toFeedbackScoresReportsOutOfRangeProbabilityAsUnreadable(double probability) {
+        var answers = Map.of("valid", noul(0.8), "invalid", noul(probability));
+        var schema = List.of(score("valid", "?"), score("invalid", "?"));
 
         var parsed = DecisionScoringService.toFeedbackScores(
                 DecisionsResponse.builder().answers(answers).build(), schema);
 
         assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name).containsExactly("valid");
-        assertThat(parsed.unreadableScoreNames())
-                .containsExactly("missing", "no_probability", "above_one", "negative", "nan");
+        assertThat(parsed.unreadableScoreNames()).containsExactly("invalid");
+    }
+
+    @Test
+    void toFeedbackScoresReportsMissingAndNullAnswersAsUnreadable() {
+        var answers = new HashMap<String, DecisionsResponse.Answer>();
+        answers.put("no_probability", noul(null));
+
+        var parsed = DecisionScoringService.toFeedbackScores(DecisionsResponse.builder().answers(answers).build(),
+                List.of(score("missing", "?"), score("no_probability", "?")));
+
+        assertThat(parsed.scores()).isEmpty();
+        assertThat(parsed.unreadableScoreNames()).containsExactly("missing", "no_probability");
+    }
+
+    @Test
+    void repeatedScoreNameIsAskedAndStoredOnce() {
+        var schema = List.of(score("greets", "Does it greet?"), score("greets", "Is it a greeting?"));
+
+        var request = service.buildRequest("m", List.of(UserMessage.from("hi")), schema);
+        var parsed = DecisionScoringService.toFeedbackScores(
+                DecisionsResponse.builder().answers(Map.of("greets", noul(0.9))).build(), schema);
+
+        // First entry wins, as in the chat judge's parser.
+        assertThat(request.questions()).containsExactly(Map.entry("greets", DecisionsQuestion.noul("Does it greet?")));
+        assertThat(parsed.scores()).hasSize(1);
+    }
+
+    @Test
+    void nonBooleanScoresAreNeitherAskedNorStored() {
+        var schema = List.of(score("greets", "Does it greet?"),
+                score("quality", "How good is it?", LlmAsJudgeOutputSchemaType.INTEGER),
+                score("tone", "How warm is it?", LlmAsJudgeOutputSchemaType.DOUBLE));
+
+        var request = service.buildRequest("m", List.of(UserMessage.from("hi")), schema);
+        // Even if the model answered them, numeric scores must not be stored as 0/1.
+        var parsed = DecisionScoringService.toFeedbackScores(DecisionsResponse.builder()
+                .answers(Map.of("greets", noul(0.9), "quality", noul(0.9), "tone", noul(0.1)))
+                .build(), schema);
+
+        assertThat(request.questions()).containsOnlyKeys("greets");
+        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name).containsExactly("greets");
+        assertThat(DecisionScoringService.unsupportedScoreNames(schema)).containsExactly("quality", "tone");
+    }
+
+    @Test
+    void summarizeReplacesControlCharactersInScoreNames() {
+        var summary = DecisionScoringService.summarize(DecisionsResponse.builder()
+                .answers(Map.of("forged\nINFO line", noul(0.93)))
+                .build());
+
+        assertThat(summary).isEqualTo("forged?INFO line=0.93");
     }
 
     private static DecisionsResponse.Answer noul(Double probability) {
@@ -81,9 +128,13 @@ class DecisionScoringServiceTest {
     }
 
     private static LlmAsJudgeOutputSchema score(String name, String description) {
+        return score(name, description, LlmAsJudgeOutputSchemaType.BOOLEAN);
+    }
+
+    private static LlmAsJudgeOutputSchema score(String name, String description, LlmAsJudgeOutputSchemaType type) {
         return LlmAsJudgeOutputSchema.builder()
                 .name(name)
-                .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
+                .type(type)
                 .description(description)
                 .build();
     }

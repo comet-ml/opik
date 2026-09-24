@@ -976,6 +976,47 @@ class OnlineScoringLlmAsJudgeScorerTest {
         }
 
         @Test
+        void testSuiteNumericScoresAreSkippedNotStoredAsBoolean() {
+            // Test-suite assertions build their rule from the evaluator config, so rule validation never sees it.
+            var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, LlmAsJudgeCode.class);
+            code = code.toBuilder()
+                    .schema(List.of(code.schema().getFirst(), com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema
+                            .builder()
+                            .name("quality")
+                            .type(com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType.INTEGER)
+                            .description("Rate the answer from 1 to 5")
+                            .build()))
+                    .build();
+            var message = buildJevMessage(code, "question", "answer");
+            var requestCaptor = ArgumentCaptor.forClass(DecisionsRequest.class);
+            when(decisionsClient.decide(requestCaptor.capture(), any())).thenReturn(Mono.just(
+                    response(Map.of("answer_relevant", 0.9))));
+
+            scorer.score(message).block();
+
+            assertThat(requestCaptor.getValue().questions()).containsOnlyKeys("answer_relevant");
+            assertThat(captureStoredScores()).extracting(FeedbackScoreBatchItem::name)
+                    .containsExactly("answer_relevant");
+        }
+
+        @Test
+        void onlyNumericScoresSkipsWithoutCallingTheModel() {
+            var code = JsonUtils.readValue(JEV_EVALUATOR_JSON, LlmAsJudgeCode.class);
+            code = code.toBuilder()
+                    .schema(code.schema().stream()
+                            .map(score -> score.toBuilder()
+                                    .type(com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType.DOUBLE)
+                                    .build())
+                            .toList())
+                    .build();
+
+            scorer.score(buildJevMessage(code, "question", "answer")).block();
+
+            verifyNoInteractions(decisionsClient);
+            assertThat(captureStoredScores()).isEmpty();
+        }
+
+        @Test
         void promptOverContextLimitIsSkippedWithoutCallingTheModel() {
             // 4 chars per token (set in setUp): this answer alone is over the 32k-token limit.
             var message = buildJevMessage("question",

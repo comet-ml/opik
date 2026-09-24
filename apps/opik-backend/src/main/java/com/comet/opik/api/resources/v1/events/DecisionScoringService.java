@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.resources.v1.events.OnlineScoringEngine.ParsedFeedbackScores;
 import com.comet.opik.domain.evaluation.EvaluationRecorder;
 import com.comet.opik.domain.llm.LlmProviderFactory;
@@ -26,10 +27,12 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -49,6 +52,8 @@ public class DecisionScoringService {
     static final double TRUE_THRESHOLD = 0.5;
 
     private static final String REASON_TEMPLATE = "Probability: %s";
+    private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
+    private static final int MAX_SUMMARY_CHARS = 1_000;
 
     private final @NonNull OpenRouterDecisionsClient decisionsClient;
     private final @NonNull LlmProviderFactory llmProviderFactory;
@@ -56,7 +61,8 @@ public class DecisionScoringService {
 
     /**
      * Builds the request from the rendered rule messages: their text, in order, is the {@code state}.
-     * Non-text content is dropped; rules on decisions models are text-only.
+     * Non-text content is dropped; rules on decisions models are text-only. Only the
+     * {@link #answerableScores answerable scores} become questions.
      */
     public DecisionsRequest buildRequest(@NonNull String model, @NonNull List<ChatMessage> renderedMessages,
             @NonNull List<LlmAsJudgeOutputSchema> schema) {
@@ -65,7 +71,7 @@ public class DecisionScoringService {
                 .filter(StringUtils::isNotBlank)
                 .collect(Collectors.joining("\n\n"));
         var questions = new LinkedHashMap<String, DecisionsQuestion>();
-        schema.forEach(score -> questions.put(score.name(),
+        answerableScores(schema).forEach(score -> questions.put(score.name(),
                 DecisionsQuestion.noul(StringUtils.defaultIfBlank(score.description(), score.name()))));
         return DecisionsRequest.builder()
                 .model(model)
@@ -99,15 +105,40 @@ public class DecisionScoringService {
     }
 
     /**
-     * Maps the answers to one score per schema entry. An answer that is missing, null or outside
-     * {@code [0, 1]} is reported as unreadable instead of stored.
+     * Names of the scores a decisions model can't answer: yes/no questions only fit Boolean scores. Rule
+     * validation rejects these, but test-suite assertions build their rule from the evaluator config and
+     * never pass through it.
+     */
+    public static List<String> unsupportedScoreNames(@NonNull List<LlmAsJudgeOutputSchema> schema) {
+        return schema.stream()
+                .filter(score -> score.type() != LlmAsJudgeOutputSchemaType.BOOLEAN)
+                .map(LlmAsJudgeOutputSchema::name)
+                .toList();
+    }
+
+    /**
+     * One-line rendering of the answers for the rule logs ({@code name=probability}). Score names are
+     * user-defined, so control characters are replaced to keep a name from forging log lines.
+     */
+    public static String summarize(@NonNull DecisionsResponse response) {
+        var summary = Objects.requireNonNullElse(response.answers(), Map.<String, DecisionsResponse.Answer>of())
+                .entrySet().stream()
+                .map(entry -> "%s=%s".formatted(entry.getKey(),
+                        entry.getValue() == null ? null : entry.getValue().noul()))
+                .collect(Collectors.joining(", "));
+        return StringUtils.abbreviate(CONTROL_CHARS.matcher(summary).replaceAll("?"), MAX_SUMMARY_CHARS);
+    }
+
+    /**
+     * Maps the answers to one score per {@link #answerableScores answerable score}. An answer that is missing,
+     * null or outside {@code [0, 1]} is reported as unreadable instead of stored.
      */
     public static ParsedFeedbackScores toFeedbackScores(@NonNull DecisionsResponse response,
             @NonNull List<LlmAsJudgeOutputSchema> schema) {
         var answers = Objects.requireNonNullElse(response.answers(), Map.<String, DecisionsResponse.Answer>of());
         var scores = new ArrayList<FeedbackScoreBatchItem>();
         var unreadable = new ArrayList<String>();
-        schema.forEach(score -> {
+        answerableScores(schema).forEach(score -> {
             var answer = answers.get(score.name());
             var probability = answer == null ? null : answer.noul();
             if (probability == null || probability.isNaN() || probability < 0 || probability > 1) {
@@ -126,6 +157,18 @@ public class DecisionScoringService {
                 .scores(scores)
                 .unreadableScoreNames(unreadable)
                 .build();
+    }
+
+    /**
+     * The Boolean scores, first entry per name: the request map can only carry one question per name, so a
+     * repeated name would otherwise be stored once per entry. Same first-wins rule as the chat judge's parser.
+     */
+    private static List<LlmAsJudgeOutputSchema> answerableScores(List<LlmAsJudgeOutputSchema> schema) {
+        var seenNames = new HashSet<String>();
+        return schema.stream()
+                .filter(score -> score.type() == LlmAsJudgeOutputSchemaType.BOOLEAN)
+                .filter(score -> seenNames.add(score.name()))
+                .toList();
     }
 
     private static String textOf(ChatMessage message) {
