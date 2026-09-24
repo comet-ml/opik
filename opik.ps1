@@ -382,6 +382,76 @@ function Send-InstallReport {
     }
 }
 
+# MinIO's hardened image runs as a non-root user, so a minio-data volume written by an older
+# root-running image is unreadable to it. MinIO reports this as "drive may be faulty", which sends
+# people looking for disk problems, and its built-in `chown -R minio.` hint names a container-side
+# path that is useless from the host. Repair it here instead: re-own the volume and bring MinIO back.
+# The mismatch is confirmed against the uid the image itself declares, and MinIO has already exited
+# by this point, so nothing else holds the volume. Silent unless the ownership actually mismatches,
+# so unrelated MinIO crashes keep their own message.
+function Repair-MinioVolumeOwnership {
+    param([string]$Container)
+
+    if ($Container -notlike "*-minio-1") { return }
+
+    $image = docker inspect -f '{{.Config.Image}}' $Container 2>$null
+    if (-not $image) { return }
+
+    # the uid the image declares it runs as; without it there is nothing to compare against
+    $expectedUser = docker image inspect $image --format '{{.Config.User}}' 2>$null
+    if (-not $expectedUser) { return }
+    $expectedUid = ($expectedUser -split ':')[0]
+    if ($expectedUid -notmatch '^\d+$') { return }
+
+    $volume = docker inspect -f '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Name}}{{end}}{{end}}' $Container 2>$null
+    if (-not $volume) { return }
+
+    $actualUid = docker run --rm -v "${volume}:/data" alpine stat -c '%u' /data 2>$null
+    if ($actualUid -notmatch '^\d+$') { return }
+    if ($actualUid -eq $expectedUid) { return }
+
+    $expectedOwner = $expectedUser
+    if ($expectedOwner -notlike "*:*") { $expectedOwner = "${expectedUid}:${expectedUid}" }
+
+    Write-Host ''
+    Write-Host "[INFO] MinIO could not write to its data volume: the volume is owned by uid $actualUid,"
+    Write-Host "       but the MinIO image runs as $expectedOwner. This is a file-ownership mismatch, not a"
+    Write-Host "       faulty drive - MinIO's own error text ('drive may be faulty') is misleading here. It"
+    Write-Host "       usually means the volume was created by an older MinIO image that ran as root."
+    Write-Host ''
+
+    Write-Host "[INFO] Re-owning $volume to $expectedOwner (contents are preserved)..."
+    docker run --rm -v "${volume}:/data" alpine chown -R $expectedOwner /data
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host '[ERROR] Could not re-own the volume. Run this manually, then start Opik again:'
+        Write-Host ''
+        Write-Host "         docker run --rm -v ${volume}:/data alpine chown -R ${expectedOwner} /data"
+        Write-Host ''
+        return
+    }
+
+    Write-Host '[INFO] Restarting MinIO...'
+    $dockerArgs = Get-DockerComposeCommand
+    $dockerArgs += "up", "-d", "minio"
+    docker @dockerArgs | Where-Object { $_.Trim() -ne '' }
+
+    # The caller's wait loop has already moved past this container, so confirm the repair here.
+    $retries = 0
+    while ($retries -lt 30) {
+        if ((docker inspect -f '{{.State.Health.Status}}' $Container 2>$null) -eq 'healthy') {
+            Write-Host '[OK] MinIO is running and healthy; its stored data was preserved.'
+            return
+        }
+        Start-Sleep -Seconds 1
+        $retries++
+    }
+
+    Write-Host '[WARN] MinIO still is not healthy after the repair. Check its logs:'
+    Write-Host ''
+    Write-Host "         docker logs $Container"
+    Write-Host ''
+}
+
 function Start-MissingContainers {
     Test-DockerStatus
 
@@ -444,6 +514,7 @@ function Start-MissingContainers {
 
             if ($status -ne 'running') {
                 Write-Host "[ERROR] $container failed to start (status: $status)"
+                Repair-MinioVolumeOwnership -Container $container
                 $allRunning = $false
                 break
             }

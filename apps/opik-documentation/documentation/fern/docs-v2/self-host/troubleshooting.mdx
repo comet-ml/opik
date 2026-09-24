@@ -743,6 +743,64 @@ To avoid Zookeeper metadata loss issues:
 
 7. **Back Up the Liquibase Ledger**: Include ClickHouse's `default` database in backups alongside `opik`. It holds Liquibase's `DATABASECHANGELOG` table — the migration ledger, unrelated to the [self-host changelog](/self-host/changelog) page above; restoring data without it leaves the deployment unable to start new replicas. See [Lost Liquibase Changelog with an Intact Schema](#lost-liquibase-changelog-with-an-intact-schema).
 
+### MinIO Fails to Start After Upgrading: Root-Owned Data Volume
+
+#### Problem Description
+
+After upgrading Opik, the MinIO container fails to start and exits immediately. Its logs report a write failure against `/data`, annotated as a possible hardware fault:
+
+```
+Error: unable to rename (/data/.minio.sys/tmp -> /data/.minio.sys/tmp-old/...) file access denied, drive may be faulty, please investigate
+FATAL Unable to initialize backend: Unable to write to the backend
+```
+
+The drive is not faulty, and no data has been lost.
+
+#### Cause
+
+Current Opik releases run MinIO from a hardened image that starts as a non-root user (`1001:1001`). Earlier releases used an image that ran as root, so the `minio-data` volume it created is owned by root. The non-root process cannot write to it, and MinIO aborts during startup.
+
+This affects deployments that carry an existing `minio-data` volume across the upgrade. Fresh installations are unaffected, because MinIO creates the volume with the correct ownership.
+
+MinIO's own `HINT` suggests `sudo chown -R minio. <path>`, which does not apply here: it names a path inside the container and a user that does not exist on your host. Use the command below instead.
+
+#### Resolution
+
+No action is needed. When `./opik.sh` (or `opik.ps1` on Windows) hits this, it reports the cause, re-owns the volume to the uid the current image runs as, and restarts MinIO:
+
+```
+[INFO] MinIO could not write to its data volume: the volume is owned by uid 0,
+       but the MinIO image runs as 1001:1001. ...
+[INFO] Re-owning opik-opik_minio-data to 1001:1001 (contents are preserved)...
+[OK] MinIO is running and healthy; its stored data was preserved.
+```
+
+Only ownership changes; the volume's contents are untouched, so attachments stored before the upgrade remain available.
+
+If the repair itself fails — most often because the Docker daemon will not run the helper container — the command is printed so you can run it yourself:
+
+```bash
+./opik.sh --stop
+docker run --rm -v opik-opik_minio-data:/data alpine chown -R 1001:1001 /data
+./opik.sh
+```
+
+Substitute your own volume name if it differs — `docker volume ls | grep minio` will show it. The Compose project name prefixes the volume, so it is `opik-opik_minio-data` in a default installation.
+
+<Warning>
+Do not delete the volume to get past this error. Removing `minio-data` discards every attachment stored in it, and `./opik.sh --clean` goes further still — it removes **all** Opik data volumes, including ClickHouse and MySQL. The chown above resolves the problem without data loss.
+</Warning>
+
+#### Verification
+
+MinIO reports `status=running` and the stack becomes healthy:
+
+```bash
+docker ps --filter name=minio --format '{{.Names}}\t{{.Status}}'
+```
+
+Attachments stored before the upgrade remain accessible in the Opik UI.
+
 ## Getting Help
 
 If you continue to experience issues after following this guide:
