@@ -1,3 +1,4 @@
+import inspect
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from typing_extensions import override
@@ -28,8 +29,16 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         )
 
         if input is not None and track_options.ignore_arguments is not None:
-            for argument in track_options.ignore_arguments:
+            ignored = set(track_options.ignore_arguments)
+            for argument in ignored:
                 input.pop(argument, None)
+
+            # Arguments passed through **kwargs are captured as one nested dict. Build
+            # a filtered copy rather than popping, since it can be the caller's dict.
+            for key in (_var_keyword_parameter_name(func), "kwargs"):
+                nested = input.get(key) if key is not None else None
+                if isinstance(nested, dict) and ignored & nested.keys():
+                    input[key] = {k: v for k, v in nested.items() if k not in ignored}
 
         name = (
             track_options.name
@@ -84,3 +93,13 @@ _decorator = OpikTrackDecorator()
 
 
 track = _decorator.track
+
+
+def _var_keyword_parameter_name(func: Callable) -> Optional[str]:
+    try:
+        parameters = inspect.signature(func).parameters.values()
+    except (TypeError, ValueError):
+        return None
+    return next(
+        (p.name for p in parameters if p.kind is inspect.Parameter.VAR_KEYWORD), None
+    )

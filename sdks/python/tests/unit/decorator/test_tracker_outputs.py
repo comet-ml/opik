@@ -1621,6 +1621,25 @@ def test_tracker__ignore_list_was_passed__ignored_inputs_are_not_logged(fake_bac
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
+def test_tracker__ignore_list_was_passed__arguments_passed_through_kwargs_are_not_logged(
+    fake_backend,
+):
+    # Arguments that land in **kwargs are captured as one nested dict, which the
+    # ignore list used to leave untouched, so e.g. an api_key was still logged.
+    @tracker.track(ignore_arguments=["api_key"])
+    def f(prompt, **kwargs):
+        return {"some-key": "the-output-value"}
+
+    call_kwargs = {"api_key": "sk-secret", "temperature": 0}
+    f("hi", **call_kwargs)
+    tracker.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    span_input = fake_backend.trace_trees[0].spans[0].input
+    assert span_input == {"prompt": "hi", "kwargs": {"temperature": 0}}
+    assert call_kwargs == {"api_key": "sk-secret", "temperature": 0}
+
+
 def test_tracker__ignore_list_was_passed__function_does_not_have_any_arguments__input_dicts_are_empty(
     fake_backend,
 ):
