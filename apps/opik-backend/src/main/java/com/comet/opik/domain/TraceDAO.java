@@ -28,6 +28,7 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.ErrorUtils;
@@ -129,6 +130,16 @@ public interface TraceDAO {
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 
     /**
+     * Batch insert without a caller-supplied connection.
+     *
+     * <p>Exists so the write-path choice happens BEFORE a connection is allocated: the JSONEachRow path
+     * uses the v2 client's own HTTP pool and needs no R2DBC connection at all, and
+     * {@code TransactionTemplateAsync#nonTransaction} does not close what it hands out. Allocating one
+     * per batch and never using it is pure waste on a path whose point is removing per-batch overhead.
+     */
+    Mono<Long> batchInsert(List<Trace> traces);
+
+    /**
      * Previous-day trace counts per workspace and project. Callers drop demo projects and re-aggregate via
      * {@link DemoDataExclusionUtils}, so the exclusion never reaches the query text.
      */
@@ -136,6 +147,9 @@ public interface TraceDAO {
 
     Mono<Set<UUID>> getProjectsWithTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs, Instant from,
             Instant to, Connection connection);
+
+    Mono<Set<UUID>> getProjectsWithMinTracesInRange(Collection<Pair<String, UUID>> workspaceProjectPairs,
+            Instant from, Instant to, int minTraces, Connection connection);
 
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
@@ -2322,12 +2336,25 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_PROJECTS_WITH_TRACES_IN_RANGE = """
             SELECT DISTINCT project_id
             FROM traces
-            WHERE (workspace_id, project_id) IN (<workspace_project_pairs>)
+            WHERE (workspace_id, project_id) IN arrayZip(:workspace_ids, :project_ids)
             AND created_at >= parseDateTime64BestEffort(:from_time, 9)
             AND created_at \\< parseDateTime64BestEffort(:to_time, 9)
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
+
+    private static final String SELECT_PROJECTS_WITH_MIN_TRACES_IN_RANGE = """
+            SELECT project_id
+            FROM traces
+            WHERE (workspace_id, project_id) IN arrayZip(:workspace_ids, :project_ids)
+            AND created_at >= parseDateTime64BestEffort(:from_time, 9)
+            AND created_at \\< parseDateTime64BestEffort(:to_time, 9)
+            GROUP BY project_id
+            HAVING uniq(id) >= :min_traces
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String SELECT_PROJECT_ID_FROM_TRACE = """
             SELECT
                 DISTINCT project_id
@@ -3394,6 +3421,7 @@ class TraceDAOImpl implements TraceDAO {
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull WorkspacesService workspacesService;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     /**
      * Sort mapping applied under {@code traceColumnsNonNullable}: {@code nullIf} restores an absent (epoch)
@@ -4487,6 +4515,39 @@ class TraceDAOImpl implements TraceDAO {
 
     }
 
+    @Override
+    @WithSpan
+    public Mono<Long> batchInsert(List<Trace> traces) {
+
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(traces), "traces must not be empty");
+
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(traces);
+        }
+
+        return asyncTemplate.nonTransaction(connection -> batchInsert(traces, connection));
+    }
+
+    /**
+     * The {@link #BATCH_INSERT} rows streamed as JSONEachRow through the v2 client rather than bound as
+     * 20 named parameters per row. See {@link TraceJsonRowMapper} for the per-column parity notes.
+     */
+    private Mono<Long> insertJsonEachRow(List<Trace> traces) {
+        return makeMonoContextAware((userName, workspaceId) -> {
+            // One value for the whole batch, rendered once rather than per row. makeMonoContextAware is
+            // deferContextual, so this already runs on subscription and again on a resubscription.
+            String nowForBatch = Instant.now().toString();
+
+            return jsonBulkInsert.insert(
+                    TRACES_TABLE,
+                    getLogComment("batch_insert_traces", workspaceId, userName, traces.size()),
+                    traces,
+                    trace -> TraceJsonRowMapper.toJsonRow(trace, userName, workspaceId, nowForBatch,
+                            traceColumnsNonNullable(),
+                            configuration.getResponseFormatting().getTruncationSize()));
+        });
+    }
+
     private Publisher<? extends Result> insert(List<Trace> traces, Connection connection) {
 
         return makeMonoContextAware((userName, workspaceId) -> {
@@ -4900,9 +4961,13 @@ class TraceDAOImpl implements TraceDAO {
         var template = getSTWithLogComment(SELECT_PROJECTS_WITH_TRACES_IN_RANGE, "projects_with_traces_in_range",
                 "", "", workspaceProjectPairs.size());
         // Exact (workspace_id, project_id) tuple match in one query for the whole sweep.
-        template.add("workspace_project_pairs", toPairsLiteral(workspaceProjectPairs));
+        var workspaceIds = workspaceProjectPairs.stream().map(Pair::getLeft).toArray(String[]::new);
+        var projectIds = workspaceProjectPairs.stream().map(pair -> pair.getRight().toString())
+                .toArray(String[]::new);
 
         var statement = connection.createStatement(template.render())
+                .bind("workspace_ids", workspaceIds)
+                .bind("project_ids", projectIds)
                 .bind("from_time", from.toString())
                 .bind("to_time", to.toString());
 
@@ -4911,13 +4976,28 @@ class TraceDAOImpl implements TraceDAO {
                 .collect(Collectors.toSet());
     }
 
-    // Renders the (workspace_id, project_id) tuples as a ClickHouse IN list, e.g. ('ws','proj'),('ws2','proj2').
-    // Single quotes are escaped (doubled) so a value can't reshape the literal; project_id is a UUID.
-    private static String toPairsLiteral(Collection<Pair<String, UUID>> pairs) {
-        return pairs.stream()
-                .map(pair -> "('%s','%s')".formatted(
-                        pair.getLeft().replace("'", "''"), pair.getRight().toString().replace("'", "''")))
-                .collect(Collectors.joining(","));
+    @Override
+    @WithSpan
+    public Mono<Set<UUID>> getProjectsWithMinTracesInRange(
+            @NonNull Collection<Pair<String, UUID>> workspaceProjectPairs, @NonNull Instant from, @NonNull Instant to,
+            int minTraces, @NonNull Connection connection) {
+
+        var template = getSTWithLogComment(SELECT_PROJECTS_WITH_MIN_TRACES_IN_RANGE,
+                "projects_with_min_traces_in_range", "", "", workspaceProjectPairs.size());
+        var workspaceIds = workspaceProjectPairs.stream().map(Pair::getLeft).toArray(String[]::new);
+        var projectIds = workspaceProjectPairs.stream().map(pair -> pair.getRight().toString())
+                .toArray(String[]::new);
+
+        var statement = connection.createStatement(template.render())
+                .bind("workspace_ids", workspaceIds)
+                .bind("project_ids", projectIds)
+                .bind("from_time", from.toString())
+                .bind("to_time", to.toString())
+                .bind("min_traces", minTraces);
+
+        return Mono.from(statement.execute())
+                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("project_id", UUID.class)))
+                .collect(Collectors.toSet());
     }
 
     @Override

@@ -315,6 +315,15 @@ export interface TraceBatchSeed {
   output?: TraceJsonSection;
   startTime?: Date;
   endTime?: Date;
+  /**
+   * Groups this trace into a conversation, as `createTraceWithSource` does.
+   *
+   * Here because a seed that needs MANY threads needs them in few requests:
+   * `trace_threads` rows are materialised from the traces that share a
+   * `thread_id`, so seeding tens of threads one trace at a time is tens of
+   * round trips and the quickest route to the workspace ingestion rate limit.
+   */
+  threadId?: string;
 }
 
 /**
@@ -4040,6 +4049,7 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
             start_time: (trace.startTime ?? now).toISOString(),
             end_time: (trace.endTime ?? now).toISOString(),
             source: 'sdk' as const,
+            ...(trace.threadId ? { thread_id: trace.threadId } : {}),
             ...(trace.input === undefined ? {} : { input: trace.input }),
             ...(trace.output === undefined ? {} : { output: trace.output }),
           })),

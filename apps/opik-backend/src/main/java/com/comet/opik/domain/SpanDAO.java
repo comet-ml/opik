@@ -19,6 +19,7 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils.WorkspaceProjectCount;
 import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.JsonEachRowBulkInsert;
 import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -69,6 +70,7 @@ import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.infrastructure.FilterUtils.addSortNeedsWideFlag;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -1960,6 +1962,7 @@ public class SpanDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull WorkspacesService workspacesService;
+    private final @NonNull JsonEachRowBulkInsert jsonBulkInsert;
 
     @WithSpan
     public Mono<Void> insert(@NonNull Span span) {
@@ -1969,14 +1972,51 @@ public class SpanDAO {
     }
 
     @WithSpan
-    public Mono<Long> batchInsert(@NonNull List<Span> spans) {
+    public Mono<Long> batchInsert(List<Span> spans) {
 
-        Preconditions.checkArgument(!spans.isEmpty(), "Spans list must not be empty");
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(spans), "Spans list must not be empty");
+
+        if (configuration.getBulkInsert().v2ClientEnabled()) {
+            return insertJsonEachRow(spans);
+        }
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> insert(spans, connection))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
+    }
+
+    /**
+     * The {@link #BULK_INSERT} rows streamed as JSONEachRow through the v2 client rather than bound as 27
+     * named parameters per row. See {@link SpanJsonRowMapper} for the per-column parity notes.
+     */
+    private Mono<Long> insertJsonEachRow(List<Span> spans) {
+        return makeMonoContextAware((userName, workspaceId) -> {
+            // One value for the whole batch, rendered once rather than per row. makeMonoContextAware is
+            // deferContextual, so this already runs on subscription and again on a resubscription.
+            String nowForBatch = Instant.now().toString();
+
+            return jsonBulkInsert.insert(
+                    SPANS_TABLE,
+                    getLogComment("batch_insert_spans", workspaceId, userName, spans.size()),
+                    spans,
+                    span -> {
+                        // Resolved here, not in the mapper: the cost model and the version constant both
+                        // belong to this DAO, and the binder stamps the version only for a cost it
+                        // computed itself that came out positive.
+                        BigDecimal cost = span.totalEstimatedCost() != null
+                                ? span.totalEstimatedCost()
+                                : calculateCost(span);
+                        String costVersion = span.totalEstimatedCost() == null
+                                && cost.compareTo(BigDecimal.ZERO) > 0
+                                        ? ESTIMATED_COST_VERSION
+                                        : "";
+
+                        return SpanJsonRowMapper.toJsonRow(span, userName, workspaceId, nowForBatch, cost,
+                                costVersion, spanColumnsNonNullable(),
+                                configuration.getResponseFormatting().getTruncationSize());
+                    });
+        });
     }
 
     private Publisher<? extends Result> insert(List<Span> spans, Connection connection) {
