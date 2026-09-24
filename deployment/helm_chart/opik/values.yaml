@@ -920,6 +920,21 @@ clickhouse:
         <yandex>
           <max_server_memory_usage_to_ram_ratio>0.85</max_server_memory_usage_to_ram_ratio>
         </yandex>
+      # Without these, partitioned tables prune reads but LWD-bloated parts never
+      # self-merge, so masked rows are never physically reclaimed.
+      conf.d/merge_tree.xml: |
+        <clickhouse>
+          <merge_tree>
+            <!-- 400 GiB; month-sized parts outgrow the 150 GiB default permanently. -->
+            <max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>
+            <!-- 7 days quiet makes a part eligible for the force-merge that reclaims LWD mass. -->
+            <min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>
+            <!-- Per-part: with 1, a partition still taking writes never becomes eligible. -->
+            <min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>
+            <!-- Throttle concurrent big merges so they cannot starve the pool. -->
+            <number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>
+          </merge_tree>
+        </clickhouse>
       conf.d/profiles.xml: |
         <clickhouse>
           <profiles>
