@@ -26,6 +26,7 @@ import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelec
 import { ProjectDateRangeConfig } from "@/v2/pages-shared/traces/resolveProjectDateRangeConfig";
 
 import {
+  COLUMN_ANNOTATION_QUEUES_ID,
   COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
@@ -101,6 +102,8 @@ import {
 } from "@/shared/filter-chips/chips/QueryBuilderChip/operators";
 import { useTagsOptions } from "@/v2/pages-shared/TagsAutocomplete/useTagsOptions";
 import ListCell from "@/shared/DataTableCells/ListCell";
+import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
+import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { withExplain } from "@/v2/pages/LogsPage/explain/withExplain";
 import {
   buildThreadCostTarget,
@@ -247,6 +250,18 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.string,
     cell: CommentsCell as never,
   },
+  {
+    id: COLUMN_ANNOTATION_QUEUES_ID,
+    label: "Annotation queues",
+    type: COLUMN_TYPE.list,
+    accessorFn: (row) => row.annotation_queues ?? [],
+    cell: MultiResourceCell as never,
+    customMeta: {
+      nameKey: "name",
+      idKey: "id",
+      resource: RESOURCE_TYPE.annotationQueue,
+    },
+  },
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -278,6 +293,7 @@ const DEFAULT_THREADS_COLUMNS_ORDER: string[] = [
   `${COLUMN_USAGE_ID}.completion_tokens`,
   "total_estimated_cost",
   "tags",
+  COLUMN_ANNOTATION_QUEUES_ID,
   COLUMN_COMMENTS_ID,
   "created_by",
 ];
@@ -558,6 +574,26 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
 
+  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
+    SELECTED_COLUMNS_KEY_V2,
+    {
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_ID_ID, "start_time"],
+      ),
+    },
+  );
+
+  // Hidden enrichment columns are excluded from the request so the backend skips their joins
+  const excludeFields = useMemo(
+    () =>
+      selectedColumns.includes(COLUMN_ANNOTATION_QUEUES_ID)
+        ? []
+        : [COLUMN_ANNOTATION_QUEUES_ID],
+    [selectedColumns],
+  );
+
   // Enable table data loading after initial render to allow users to change the date filter
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -579,6 +615,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         fromTime: intervalStart,
         toTime: intervalEnd,
         logsSource: LOGS_SOURCE.sdk,
+        exclude: excludeFields,
       },
       {
         enabled: isTableDataEnabled,
@@ -600,6 +637,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       fromTime: intervalStart,
       toTime: intervalEnd,
       logsSource: LOGS_SOURCE.sdk,
+      exclude: excludeFields,
     },
     {
       enabled: false,
@@ -680,17 +718,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const columnsStatistic: ColumnsStatistic = useMemo(
     () => statisticData?.stats ?? [],
     [statisticData?.stats],
-  );
-
-  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY_V2,
-    {
-      defaultValue: migrateSelectedColumns(
-        SELECTED_COLUMNS_KEY,
-        DEFAULT_SELECTED_COLUMNS,
-        [COLUMN_ID_ID, "start_time"],
-      ),
-    },
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
