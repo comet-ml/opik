@@ -457,9 +457,20 @@ function Start-MissingContainers {
 
             if ($health -eq 'healthy') {
                 Write-DebugLog "[OK] $container is now running and healthy!"
-                $timings[$container] = "$([int]$waitStartedAt.Elapsed.TotalSeconds)s"
+                if (-not $timings.Contains($container)) {
+                    $timings[$container] = "$([int]$waitStartedAt.Elapsed.TotalSeconds)s"
+                }
                 break
             } elseif ($health -eq 'starting') {
+                # Before blocking, bank the elapsed time for anything already healthy. Without this
+                # a container polled after a slow one just echoes that one's wait, because the loop
+                # only reaches it once the slow container finishes.
+                foreach ($c in $containers) {
+                    if (-not $timings.Contains($c) -and
+                        (docker inspect -f '{{.State.Health.Status}}' $c 2>$null) -eq 'healthy') {
+                        $timings[$c] = "$([int]$waitStartedAt.Elapsed.TotalSeconds)s"
+                    }
+                }
                 Write-DebugLog "[INFO] $container is starting... retrying (${retries}s)"
                 Start-Sleep -Seconds $interval
                 $retries++
@@ -478,14 +489,12 @@ function Start-MissingContainers {
         }
     }
 
-    # Times are measured from when `compose up -d` returns, so they are a lower bound: without
-    # `--wait`, `depends_on: service_healthy` only gates when a dependent starts, and a service can
-    # still be starting when compose returns. In practice services whose health another service
-    # waits on are usually healthy by then and report ~0s, while the ones still coming up afterwards
-    # — the backend especially — carry the time that matters here.
+    # Each value is the elapsed time from when `compose up -d` returned to when that container was
+    # first observed healthy. It is a lower bound on true startup: without `--wait`, compose can
+    # return while a service is still starting, and the poll only catches it on the next pass.
     Write-Host '[INFO] Container startup times (since compose up returned):'
     foreach ($entry in $timings.GetEnumerator()) {
-        Write-Host ('     {0,-32} {1}' -f $entry.Key, $entry.Value)
+        Write-Host ('     {0,-26} {1}' -f $entry.Key, $entry.Value)
     }
     Write-Host "   Total wall clock: $([int]$waitStartedAt.Elapsed.TotalSeconds)s"
 

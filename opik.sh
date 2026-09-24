@@ -108,6 +108,33 @@ debugLog() {
   [[ "$DEBUG_MODE" == true ]] && echo "$@"
 }
 
+# Startup timings, index-aligned (bash 3.2 has no associative arrays).
+timing_labels=()
+timing_values=()
+
+# First write wins, so a time banked by record_healthy_containers is never overwritten by the
+# later moment the sequential loop happens to reach that container.
+record_timing() {
+  local name="$1" value="$2" i
+  for i in "${!timing_labels[@]}"; do
+    [[ "${timing_labels[$i]}" == "$name" ]] && return 0
+  done
+  timing_labels+=("$name")
+  timing_values+=("$value")
+}
+
+# Bank elapsed time for every container already healthy. Called before each sleep so a container
+# that goes healthy while the loop is blocked on an earlier one gets its own time, rather than
+# inheriting the earlier container's wait.
+record_healthy_containers() {
+  local c
+  for c in "${containers[@]}"; do
+    if [[ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null)" == "healthy" ]]; then
+      record_timing "$c" "$((SECONDS - wait_started_at))s"
+    fi
+  done
+}
+
 # Log worktree configuration (called after DEBUG_MODE is set)
 log_worktree_config() {
   debugLog "[DEBUG] Worktree Configuration:"
@@ -380,9 +407,8 @@ start_missing_containers() {
   interval=1
   all_running=true
 
-  # bash 3.2 (macOS) has no associative arrays, so timings are kept index-aligned with containers.
-  local timing_labels=()
-  local timing_values=()
+  timing_labels=()
+  timing_values=()
 
   for container in "${containers[@]}"; do
     retries=0
@@ -394,48 +420,48 @@ start_missing_containers() {
 
       if [[ "$status" != "running" ]]; then
         echo "❌ $container failed to start (status: $status)"
-        timing_labels+=("$container")
-        timing_values+=("failed to start")
+        all_running=false
+        record_timing "$container" "failed to start"
         break
       fi
 
       if [[ "$health" == "healthy" ]]; then
         debugLog "✅ $container is now running and healthy!"
-        timing_labels+=("$container")
-        timing_values+=("$((SECONDS - wait_started_at))s")
+        record_timing "$container" "$((SECONDS - wait_started_at))s"
         break
       elif [[ "$health" == "starting" ]]; then
+        # Before blocking, bank the elapsed time for anything already healthy. Without this a
+        # container polled after a slow one just echoes that one's wait, because the loop only
+        # reaches it once the slow container finishes.
+        record_healthy_containers
         debugLog "⏳ $container is starting... retrying (${retries}s)"
         sleep "$interval"
         retries=$((retries + 1))
         if [[ $retries -ge $max_retries ]]; then
           echo "⚠️  $container is still not healthy after ${max_retries}s"
           all_running=false
-          timing_labels+=("$container")
-          timing_values+=("TIMED OUT after ${max_retries}s")
+          record_timing "$container" "TIMED OUT after ${max_retries}s"
           break
         fi
       else
         echo "❌ $container health state is '$health'"
         all_running=false
-        timing_labels+=("$container")
-        timing_values+=("unhealthy: $health")
+        record_timing "$container" "unhealthy: $health"
         break
       fi
     done
   done
 
-  # Times are measured from when `compose up -d` returns, so they are a lower bound: without
-  # `--wait`, `depends_on: service_healthy` only gates when a dependent starts, and a service can
-  # still be starting when compose returns. In practice services whose health another service
-  # waits on are usually healthy by then and report ~0s, while the ones still coming up afterwards
-  # — the backend especially — carry the time that matters here.
-  # Strip the compose project prefix so the table stays readable; worktree-derived project names
-  # can be long enough to push every value out of its column.
+  # Each value is the elapsed time from when `compose up -d` returned to when that container was
+  # first observed healthy. It is a lower bound on true startup: without `--wait`, compose can
+  # return while a service is still starting, and the poll only catches it on the next pass.
+  # Width fits the longest container name (guardrails-backend-cpu-1, 24 chars). Strip the compose
+  # project prefix so worktree-derived project names don't push every value out of its column.
+
   echo "⏱  Container startup times (since compose up returned):"
   local i
   for i in "${!timing_labels[@]}"; do
-    printf '     %-20s %s\n' "${timing_labels[$i]#"${COMPOSE_PROJECT_NAME}"-}" "${timing_values[$i]}"
+    printf '     %-26s %s\n' "${timing_labels[$i]#"${COMPOSE_PROJECT_NAME}"-}" "${timing_values[$i]}"
   done
   echo "   Total wall clock: $((SECONDS - wait_started_at))s"
 
