@@ -104,27 +104,61 @@ class TestAnthropicRejectionReason:
     """
 
     @pytest.mark.parametrize(
-        "status,payload,rejected",
+        "status,payload,expected_reason",
         [
-            (200, {"content": []}, False),
+            (200, {"content": []}, None),
             # The case this preflight exists for: the e2e key was disabled.
-            (401, {"error": {"message": "API key is invalid."}}, True),
-            (403, {"error": {"message": "Forbidden"}}, True),
+            (401, {"error": {"message": "API key is invalid."}}, "API key is invalid."),
+            (403, {"error": {"message": "Forbidden"}}, "Forbidden"),
             # Anthropic reports an exhausted balance as a 400, not a 402/401.
-            (400, {"error": {"message": "Your credit balance is too low"}}, True),
+            (
+                400,
+                {"error": {"message": "Your credit balance is too low"}},
+                "Your credit balance is too low",
+            ),
             # ...but a 400 about the request must not condemn the key, or
             # retiring the probe model would move the suite onto OpenAI.
-            (400, {"error": {"message": "model: unknown model"}}, False),
-            (429, {"error": {"message": "slow down"}}, False),
-            (500, {"error": {"message": "internal"}}, False),
+            (400, {"error": {"message": "model: unknown model"}}, None),
+            (429, {"error": {"message": "slow down"}}, None),
+            (500, {"error": {"message": "internal"}}, None),
         ],
     )
-    def test_classifies_response(self, e2e_conftest, status, payload, rejected):
+    def test_classifies_response(self, e2e_conftest, status, payload, expected_reason):
+        """The reason is asserted exactly, not just for presence: it is what the
+        skip message and the preflight log line show, so a wrong or empty one
+        sends whoever debugs a red suite looking in the wrong place."""
         with mock.patch.object(
             httpx, "post", return_value=_response(status, payload)
         ):
-            reason = e2e_conftest._anthropic_rejection_reason("sk-test")
-        assert (reason is not None) is rejected
+            assert (
+                e2e_conftest._anthropic_rejection_reason("sk-test") == expected_reason
+            )
+
+    def test_falls_back_to_status_when_body_carries_no_message(self, e2e_conftest):
+        """A rejection with an unreadable body must still name the status."""
+        with mock.patch.object(httpx, "post", return_value=_response(401, {})):
+            assert e2e_conftest._anthropic_rejection_reason("sk-test") == "HTTP 401"
+
+    def test_probes_with_a_minimal_authenticated_request(self, e2e_conftest):
+        """The probe must be a real, cheap, authenticated call.
+
+        If it stopped sending the key, every credential would look healthy and
+        the preflight would never fall back; if it stopped being minimal, a
+        check that runs on every e2e session would start costing real tokens.
+        """
+        with mock.patch.object(
+            httpx, "post", return_value=_response(200, {"content": []})
+        ) as post:
+            e2e_conftest._anthropic_rejection_reason("sk-test")
+
+        args, kwargs = post.call_args
+        assert args[0] == "https://api.anthropic.com/v1/messages"
+        assert kwargs["headers"]["x-api-key"] == "sk-test"
+        assert kwargs["headers"]["anthropic-version"] == "2023-06-01"
+        assert kwargs["json"]["max_tokens"] == 1
+        assert kwargs["json"]["model"] == e2e_conftest._ANTHROPIC_PROBE_MODEL
+        # Unbounded, this would hang the whole session before any test runs.
+        assert kwargs["timeout"] == e2e_conftest._PROBE_TIMEOUT_S
 
     def test_network_failure_keeps_the_key(self, e2e_conftest):
         with mock.patch.object(
