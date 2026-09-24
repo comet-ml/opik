@@ -35,9 +35,16 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
                     prompt_placeholders=placeholders, format_arguments=kwargs_keys
                 )
 
-            for key, value in kwargs.items():
-                replacement = "" if value is None else str(value)
-                template = template.replace(f"{{{{{key}}}}}", replacement)
+            # A single pass, so a value that itself contains "{{...}}" is inserted
+            # as-is instead of being substituted by a later key.
+            def _replace(match: "re.Match[str]") -> str:
+                key = match.group(1).strip()
+                if key not in kwargs:
+                    return match.group(0)
+                value = kwargs[key]
+                return "" if value is None else str(value)
+
+            template = _MUSTACHE_PLACEHOLDER.sub(_replace, template)
 
         elif self._type == prompt_types.PromptType.JINJA2:
             template = jinja2.Template(self._template).render(**kwargs)
@@ -50,6 +57,8 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
         return self._template
 
 
+_MUSTACHE_PLACEHOLDER = re.compile(r"\{\{(.*?)\}\}")
+
+
 def _extract_mustache_placeholder_keys(prompt_template: str) -> Set[str]:
-    pattern = r"\{\{(.*?)\}\}"
-    return set(re.findall(pattern, prompt_template))
+    return {key.strip() for key in _MUSTACHE_PLACEHOLDER.findall(prompt_template)}
