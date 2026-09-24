@@ -276,6 +276,13 @@ const usePromptDatasetItemCombination = ({
         logProcessor.log({
           ...run,
           providerMessages,
+          // Only role and content describe the template; id, promptId,
+          // promptVersionId and autoImprove are Playground editor state and
+          // have no place in the stored experiment config.
+          templateMessages: prompt.messages.map(({ role, content }) => ({
+            role,
+            content,
+          })),
           promptLibraryVersions,
           promptLibraryMetadata,
           experimentName,
