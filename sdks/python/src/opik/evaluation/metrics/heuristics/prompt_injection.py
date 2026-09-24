@@ -18,11 +18,18 @@ _GAP = r"(?:[^\s.,!?;:]+\s+){0,4}?"
 # What such a directive actually targets. Requiring one of these is what stops a
 # verb from matching on its own, which is the difference between flagging
 # "ignore all previous instructions" and flagging "ignore the typo".
+#
+# Words like "context" or "controls" are ordinary technical prose too ("the
+# override method updates the context controls"), so they only count as a target
+# right after a word that points them at the model: "ignore your controls",
+# "forget all earlier context".
+_OWNER = r"(?:your|all|any|previous|prior|earlier|above|original|initial|system|safety)"
 _INSTRUCTION_TARGET = (
-    r"(?:instructions?|prompts?|guidelines?|guidance|policies|policy|rules?|measures"
+    r"(?:(?:instructions?|prompts?|guidelines?|guidance|policies|policy|rules?|measures"
     r"|restrictions?|messages?|constraints?|directives?|safeguards?|filters?|safety"
-    r"|moderation|guardrails?|limits?|limitations?|boundaries|boundary|programming"
-    r"|alignment|protocols?|controls?|context)\b"
+    r"|moderation|guardrails?)"
+    rf"|{_OWNER}\s+(?:limits?|limitations?|boundaries|boundary|programming"
+    r"|alignment|protocols?|controls?|context))\b"
 )
 
 _INJECTION_PATTERNS = [
