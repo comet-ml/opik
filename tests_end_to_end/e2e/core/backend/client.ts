@@ -2326,6 +2326,15 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
      * only reachable surface of the tika dependency and the thing the
      * attachments spec asserts on.
      *
+     * When it IS supplied it goes on BOTH requests, which is not belt-and-braces.
+     * `AttachmentService` calls `getMimeType` twice over two different payloads:
+     * on `upload-start` the answer only reaches S3's `CreateMultipartUpload`,
+     * while the type actually STORED on the attachment row comes from the
+     * `upload-complete` request (`AttachmentService.java:171`). Sending it on
+     * start alone gets it silently discarded and tika re-derives from the file
+     * name — which turns a mime-type test into a no-op that passes for the wrong
+     * reason, because a name like `photo.PNG` resolves to `image/png` anyway.
+     *
      * Deployment-neutral. On S3 `upload-start` hands back a genuine presigned
      * URL, which must be PUT to with no `Authorization` header — adding one
      * breaks the signature. On MinIO (the OSS compose stack) it hands back a URL
@@ -2390,6 +2399,8 @@ export function makeBackendClient(apiKey: string | null = null, workspaceName: s
           file_size: args.content.byteLength,
           upload_id: uploadId,
           uploaded_file_parts: [{ e_tag: eTag, part_number: 1 }],
+          // The request the stored mime type is read from — see the note above.
+          ...(args.mimeType === undefined ? {} : { mime_type: args.mimeType }),
         },
       });
       if (complete.status !== 204 && complete.status !== 200) {

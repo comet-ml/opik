@@ -176,6 +176,77 @@ export class TracePanelPage {
     return this.root.getByText(fileName, { exact: true });
   }
 
+  /**
+   * One attachment's tile.
+   *
+   * `AttachmentThumbnail` renders an `<img>` for a media type it classified as
+   * IMAGE and a lucide icon for everything else, and the two never coexist — so
+   * telling those branches apart needs a scope that is exactly one tile.
+   *
+   * Scoped by the download link that carries the file name, which is the only
+   * attribute unique to a single tile (see `attachmentThumbnail`). The `div.group`
+   * outer selector is a CSS class rather than a `data-testid` because the tile
+   * has none, and these specs run against a pre-built deployment where an
+   * attribute added alongside them would not exist. `group` is load-bearing
+   * rather than cosmetic — the hover controls key off it via `group-hover:` — and
+   * every caller asserts a count, so a structural change fails loudly instead of
+   * silently widening the scope.
+   */
+  private attachmentTile(fileName: string): Locator {
+    return this.root
+      .locator('div.group')
+      .filter({ has: this.page.locator(`a[download="${fileName}"]`) });
+  }
+
+  /**
+   * The `<img>` preview for one attachment — present only for an IMAGE type.
+   *
+   * Addressed by `alt`, which `AttachmentThumbnail` sets to the file name, so
+   * this is an identity match and not a positional one.
+   */
+  attachmentImage(fileName: string): Locator {
+    return this.root.locator(`img[alt="${fileName}"]`);
+  }
+
+  /** Every attachment preview the panel rendered as an image. */
+  get attachmentImages(): Locator {
+    return this.root.locator('div.group img');
+  }
+
+  /**
+   * The generic file icon one attachment fell back to.
+   *
+   * `lucide-file` exactly, not a prefix match: `lucide-file-text`,
+   * `lucide-file-image` and friends are separate class tokens for the PDF, TEXT,
+   * AUDIO and VIDEO branches, and a spec that accepted any of them would stop
+   * distinguishing "classified as OTHER" from "classified as something else that
+   * also is not an image".
+   */
+  attachmentGenericIcon(fileName: string): Locator {
+    return this.attachmentTile(fileName).locator('svg.lucide-file');
+  }
+
+  /**
+   * The attachment rendered a real, decoded picture.
+   *
+   * `naturalWidth` rather than visibility: a broken `<img>` is still visible, so
+   * visibility alone would pass for a tile whose source never loaded.
+   */
+  async expectAttachmentDecodes(fileName: string): Promise<void> {
+    return test.step(`${fileName} renders a decoded image`, async () => {
+      const image = this.attachmentImage(fileName);
+      await expect(image, `exactly one <img> for ${fileName}`).toHaveCount(1);
+      // Lazy-loaded: an `<img>` that never entered the viewport reports
+      // naturalWidth 0 whether or not its source is good.
+      await image.scrollIntoViewIfNeeded();
+      await expect
+        .poll(async () => image.evaluate((img) => (img as HTMLImageElement).naturalWidth), {
+          message: `naturalWidth of the ${fileName} preview`,
+        })
+        .toBeGreaterThan(0);
+    });
+  }
+
   /** Opens the Attachments section if it is collapsed. Idempotent. */
   async openAttachments(): Promise<void> {
     return test.step('Open the Attachments section', async () => {
