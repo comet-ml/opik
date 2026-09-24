@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, List, Optional
 
 import pytest
@@ -85,3 +86,16 @@ def test_aggregate_converse_stream_chunks__content_blocks__converse_layout(
     )
 
     assert result["output"]["message"]["content"] == expected_content
+
+
+def test_aggregate_converse_stream_chunks__cut_off_tool_input__logs_block_not_input(
+    caplog,
+):
+    caplog.set_level(logging.DEBUG, logger=chunks_aggregator.LOGGER.name)
+
+    chunks_aggregator.aggregate_converse_stream_chunks(
+        _call("call_1", ['{"city":"Pa'], index=2)
+    )
+
+    assert "content block 2" in caplog.text
+    assert '{"city":"Pa' not in caplog.text

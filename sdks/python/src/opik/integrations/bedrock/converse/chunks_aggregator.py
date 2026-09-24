@@ -23,14 +23,16 @@ def _block_index(block_event: Dict[str, Any], default: int) -> int:
     return int(block_event.get("contentBlockIndex", default))
 
 
-def _parse_tool_input(tool_input: str) -> Any:
+def _parse_tool_input(tool_input: str, index: int) -> Any:
     """Parse the streamed input into the JSON value non-streaming Converse returns."""
     if not tool_input:
         return {}  # Claude streams a no-argument call as input ""
     try:
         return json.loads(tool_input)
-    except ValueError:
-        return tool_input  # e.g. cut off by maxTokens: keep what was streamed
+    except ValueError as e:
+        # e.g. cut off by maxTokens: keep what was streamed
+        LOGGER.debug("Could not parse tool input of content block %s: %s", index, e)
+        return tool_input
 
 
 def _handle_content_block_start(
@@ -205,12 +207,11 @@ def aggregate_converse_stream_chunks(items: List[Dict[str, Any]]) -> Dict[str, A
     if blocks:
         # One entry per content block, in contentBlockIndex order, with the tool
         # input parsed: the layout of the non-streaming Converse response.
-        content = [blocks[index] for index in sorted(blocks)]
-        for block in content:
+        for index, block in blocks.items():
             if "toolUse" in block:
                 tool_use = block["toolUse"]
-                tool_use["input"] = _parse_tool_input(tool_use.get("input", ""))
-        result["output"]["message"]["content"] = content
+                tool_use["input"] = _parse_tool_input(tool_use.get("input", ""), index)
+        result["output"]["message"]["content"] = [blocks[i] for i in sorted(blocks)]
 
     return result
 
