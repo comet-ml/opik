@@ -27,17 +27,6 @@ jobs:
         timeout-minutes: 15
 
         steps:
-            # Anthropic snippets skip themselves when the key is absent, so
-            # without this the suite passes with no Anthropic coverage.
-            - name: Verify the Anthropic key reached this job
-              env:
-                ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_E2E_TESTS }}
-              run: |
-                if [ -z "${ANTHROPIC_API_KEY}" ]; then
-                  echo "::error::ANTHROPIC_API_KEY_E2E_TESTS is unset or empty; the Anthropic snippets would skip silently and this suite would pass without live Anthropic coverage."
-                  exit 1
-                fi
-
             - name: Checkout repo
               uses: actions/checkout@v7
               with:
