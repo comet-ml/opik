@@ -83,9 +83,15 @@ class BERTScore(base_metric.BaseMetric):
         if isinstance(reference, str):
             references = [reference]
         else:
-            references = reference
             if isinstance(reference, Sequence) and len(reference) == 0:
                 raise MetricComputationError("Reference is empty (BERTScore metric).")
+            ref_strings = [ref for ref in reference if isinstance(ref, str)]
+            if len(ref_strings) == len(reference):
+                # Several references for the single output. bert_score expects one
+                # entry per candidate and scores against the best one in a group.
+                references = [ref_strings]
+            else:
+                references = reference
 
         precision, recall, f1 = self._scorer_fn([output], references)
 
