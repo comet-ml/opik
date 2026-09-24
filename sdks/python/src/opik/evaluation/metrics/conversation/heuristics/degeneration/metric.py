@@ -31,7 +31,8 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
     The metric inspects each assistant turn, measuring repeated n-grams, overlap with
     the previous reply, low lexical diversity, and presence of known fallback
     phrases (for example, "as an AI language model..."). Each turn receives a
-    degeneration score between `0.0` and `1.0`; the overall metric reports the peak
+    degeneration score between `0.0` and `1.0` (a turn with no words, such as
+    ``"..."``, scores `1.0`); the overall metric reports the peak
     risk observed so you can quickly flag sections where the assistant got stuck or
     stopped being helpful. Detailed per-turn diagnostics are returned in the
     ``ScoreResult.metadata`` payload.
@@ -101,6 +102,21 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
         for content in assistant_turns:
             tokens = _tokenize(content)
             if not tokens:
+                # A reply with no words at all ("...", "???", whitespace) is the
+                # assistant short-circuiting the dialogue, so count it as maximal
+                # risk instead of skipping it.
+                per_turn_metadata.append(
+                    {
+                        "repetition_ratio": 0.0,
+                        "overlap_previous": 0.0,
+                        "fallback_hit": 0.0,
+                        "normalized_entropy": 0.0,
+                        "no_word_tokens": 1.0,
+                        "degeneration_score": 1.0,
+                    }
+                )
+                degeneracy_scores.append(1.0)
+                prev_tokens = tokens
                 continue
 
             entropy_norm = self._token_entropy(tokens)
@@ -128,11 +144,6 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
             )
             degeneracy_scores.append(deg_score)
             prev_tokens = tokens
-
-        if not degeneracy_scores:
-            raise MetricComputationError(
-                "Assistant messages were empty after tokenization"
-            )
 
         average_score = sum(degeneracy_scores) / len(degeneracy_scores)
         peak_score = max(degeneracy_scores)
