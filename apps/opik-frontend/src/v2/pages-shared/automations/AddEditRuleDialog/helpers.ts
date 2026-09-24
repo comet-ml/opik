@@ -10,7 +10,8 @@ import {
   RESERVED_TRACE_EVALUATOR_VARIABLES,
 } from "@/constants/llm";
 import { Filter } from "@/types/filters";
-import { ColumnData } from "@/types/shared";
+import { COLUMN_TYPE, ColumnData } from "@/types/shared";
+import { durationToMilliseconds, durationToSeconds } from "@/lib/filters";
 
 export const getUIRuleType = (ruleType: EVALUATORS_RULE_TYPE) =>
   ({
@@ -78,16 +79,26 @@ export const normalizeFilters = (
 
   return filters.map((filter) => {
     const field = normalizeFieldName(filter.field || "");
+    const type = filter.type || getFilterTypeByField(field, columns);
+    const value = filter.value || "";
+
     return {
       id: filter.id || uniqid(),
       field,
-      type: filter.type || getFilterTypeByField(field, columns),
+      type,
       operator: filter.operator || "",
       key: filter.key || "",
-      value: filter.value || "",
+      value: type === COLUMN_TYPE.duration ? durationToSeconds(value) : value,
     };
   }) as Filter[];
 };
+
+export const denormalizeFilters = (filters: Filter[]): Filter[] =>
+  filters.map((filter) =>
+    filter.type === COLUMN_TYPE.duration
+      ? { ...filter, value: durationToMilliseconds(filter.value) }
+      : filter,
+  );
 
 /**
  * The reserved-variable set a Python-metric editor must pass for {@code scope}.

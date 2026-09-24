@@ -250,9 +250,27 @@ const processTimeFilter: (filter: Filter) => Filter | Filter[] = (filter) => {
   }
 };
 
+// Duration is seconds in the UI and milliseconds on the BE
+const convertDurationValue = (
+  value: Filter["value"],
+  convert: (value: number) => number,
+) => {
+  const numericValue = Number(value);
+
+  return value === "" || !Number.isFinite(numericValue)
+    ? value
+    : convert(numericValue).toString();
+};
+
+export const durationToMilliseconds = (value: Filter["value"]) =>
+  convertDurationValue(value, secondsToMilliseconds);
+
+export const durationToSeconds = (value: Filter["value"]) =>
+  convertDurationValue(value, (milliseconds) => milliseconds / 1000);
+
 const processDurationFilter: (filter: Filter) => Filter = (filter) => ({
   ...filter,
-  value: secondsToMilliseconds(Number(filter.value)).toString(),
+  value: durationToMilliseconds(filter.value),
 });
 
 export const processFiltersArray = (filters: Filter[]) => {
