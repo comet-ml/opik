@@ -9,6 +9,7 @@ import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScore
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceSearchStreamRequest;
@@ -5111,6 +5112,58 @@ class GetTracesByProjectResourceTest {
             var returnedTrace = actualPage.content().getFirst();
             assertThat(returnedTrace.name()).isEqualTo("AAA-updated-name");
             assertThat(returnedTrace.input()).isEqualTo(updatedInput);
+        }
+
+        @Test
+        void getTracesByProject__whenSpanUpdated__thenAggregatesUseLatestSpanVersionOnly() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            var trace = Trace.builder()
+                    .id(idGenerator.generateId())
+                    .projectName(projectName)
+                    .name("trace")
+                    .startTime(Instant.now().truncatedTo(ChronoUnit.MILLIS))
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            var span = Span.builder()
+                    .id(idGenerator.generateId())
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .name("span")
+                    .type(SpanType.llm)
+                    .startTime(Instant.now().truncatedTo(ChronoUnit.MILLIS))
+                    .provider("openai")
+                    .usage(Map.of("prompt_tokens", 10))
+                    .totalEstimatedCost(new BigDecimal("1.5"))
+                    .build();
+            spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+            // The update writes a second row version; the aggregates must dedup it without FINAL
+            spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .provider("anthropic")
+                    .usage(Map.of("prompt_tokens", 20))
+                    .totalEstimatedCost(new BigDecimal("2.5"))
+                    .build(), apiKey, workspaceName);
+
+            var actualPage = traceResourceClient.getTraces(
+                    projectName, null, apiKey, workspaceName, List.of(), List.of(), 10, Map.of());
+
+            assertThat(actualPage.content()).hasSize(1);
+            var actual = actualPage.content().getFirst();
+            assertThat(actual.usage()).isEqualTo(Map.of("prompt_tokens", 20L));
+            assertThat(actual.totalEstimatedCost()).isEqualByComparingTo("2.5");
+            assertThat(actual.spanCount()).isEqualTo(1);
+            assertThat(actual.llmSpanCount()).isEqualTo(1);
+            assertThat(actual.providers()).containsExactly("anthropic");
         }
 
         @ParameterizedTest

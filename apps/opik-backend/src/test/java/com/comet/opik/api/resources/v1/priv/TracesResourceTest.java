@@ -19,6 +19,7 @@ import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.SpanUpdate;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceBatchUpdate;
 import com.comet.opik.api.TraceSearchStreamRequest;
@@ -6071,6 +6072,47 @@ class TracesResourceTest {
             var expectedThreads = getExpectedThreads(traces, projectId, threadId, spans, TraceThreadStatus.ACTIVE);
 
             TraceAssertions.assertThreads(expectedThreads, List.of(actualThread));
+        }
+
+        @Test
+        @DisplayName("when a span is updated, then the thread aggregates use the latest span version only")
+        void getTraceThread__whenSpanUpdated__thenAggregatesUseLatestSpanVersionOnly() {
+            var threadId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
+
+            var trace = createTrace().toBuilder()
+                    .threadId(threadId)
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, TEST_WORKSPACE);
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .parentSpanId(null)
+                    .provider("openai")
+                    .usage(Map.of("prompt_tokens", 10))
+                    .totalEstimatedCost(new BigDecimal("1.5"))
+                    .comments(null)
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            // The update writes a second row version; the aggregates must dedup it without FINAL
+            spanResourceClient.updateSpan(span.id(), SpanUpdate.builder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .provider("anthropic")
+                    .usage(Map.of("prompt_tokens", 20))
+                    .totalEstimatedCost(new BigDecimal("2.5"))
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var projectId = getProjectId(projectName, TEST_WORKSPACE, API_KEY);
+
+            var actualThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualThread.usage()).isEqualTo(Map.of("prompt_tokens", 20L));
+            assertThat(actualThread.totalEstimatedCost()).isEqualByComparingTo("2.5");
         }
 
         @Test
