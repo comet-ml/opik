@@ -1,0 +1,39 @@
+suite: clickhouse merge/reclaim settings (LWD reclaim on partitioned tables)
+
+# An installation-wide baseline, deliberately NOT gated on
+# `clickhouse.tieredStorage.enabled`: LWD reclaim matters on every partitioned
+# deployment, cold tier or not. values.yaml explains the individual values.
+#
+# SCOPE. These assertions stop at the rendered `ClickHouseInstallation`. Whether the
+# server then surfaces the values in `system.merge_tree_settings` is ClickHouse's
+# behaviour and `helm unittest` cannot exercise it; verify that against a running
+# cluster (the OPIK-6907 S1 check), not here.
+
+templates:
+  - templates/clickhouseinstallation.yaml
+
+tests:
+  - it: renders the merge/reclaim settings out of the box
+    asserts:
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<max_bytes_to_merge_at_max_space_in_pool>429496729600</max_bytes_to_merge_at_max_space_in_pool>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>"
+      # The last two already match current ClickHouse defaults; pinned because defaults
+      # move across versions and reclaim must not depend on an unstated one.
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<min_age_to_force_merge_on_partition_only>0</min_age_to_force_merge_on_partition_only>"
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<number_of_free_entries_in_pool_to_lower_max_size_of_merge>8</number_of_free_entries_in_pool_to_lower_max_size_of_merge>"
+
+  - it: applies on every variant, independent of the tiered-storage gate
+    set:
+      clickhouse.tieredStorage.enabled: false
+    asserts:
+      - matchRegex:
+          path: spec.configuration.files["conf.d/merge_tree.xml"]
+          pattern: "<min_age_to_force_merge_seconds>604800</min_age_to_force_merge_seconds>"

@@ -804,13 +804,22 @@ problem, and OPIK-8382 owns the production execution.
    > failure within seconds of the swap, and it would say nothing about fidelity. Use the same `exchange_done` that
    > bounded step 5's sweep, so this compare covers exactly what was swept and nothing that could not have been.
    >
-   > **The mirror case is post-swap DELETES, and the bound does nothing about it.** A gap-window span deleted by a
-   > user after the swap is masked on the live side and still live in the frozen backup, so the same row-count
-   > equality fails — on a healthy cutover. `000005` knows nothing of the deletion bridge and `verify.sh` has no
-   > `--swap-done` to key an exclusion on, so a clean PASS here needs user deletes quiesced from the swap through the
-   > compare. Otherwise expect `src_rows` well above `dst_rows` — and read step 5's `missing_keys`, which applies
-   > exactly the exclusion this compare lacks, rather than writing a query to tell the two apart. See ["When the
-   > cutover is done"](#when-the-cutover-is-done).
+   > **A post-swap change to a gap-window span will usually make this compare mismatch — but not always**, and only a
+   > delete can be quiesced away. `000005` knows nothing of the deletion bridge and `verify.sh` has no `--swap-done`
+   > to key an exclusion on. Three independent properties of the write decide what you see; reason from these rather
+   > than from a catalogue of shapes, which is not closed and has been wrong every time it has been written out.
+   >
+   > | property of the post-swap write | why it decides the outcome | how it reads here |
+   > |---|---|---|
+   > | **Did it win?** Both sides are read under `FINAL`/`argMax` on `last_updated_at`, which is **client-supplied** (`Span.View.Write`, unlike read-only `created_at`) and is not required to advance | a rewrite carrying an *older* timestamp leaves the parked row selected on both sides | **no mismatch at all** — so an equal compare is not evidence that no post-swap write happened |
+   > | **Did `created_at` survive?** The merge preserves it when a row survived to merge onto, and stamps a fresh one when a delete masked the prior row first | both sides are bounded on `created_at`, and it is part of the row fingerprint | preserved → stays in the window, row counts stay **EQUAL**, only the checksums differ. Freshly stamped → leaves the window, `src_rows` > `dst_rows` |
+   > | **Was a delete bridged at/after `--swap-done`?** | `verify-forward` drops those keys from step 5's parked set *before* any bucketing | reported in **no** count at all. A key this compare flags and the counts say nothing about is the expected shape of a bridged delete, not a gap in the gate |
+   >
+   > So **do not treat a PASS as obtainable here**, and do not diagnose on row counts alone: equal counts do not mean
+   > the compare agreed. Read the differing keys rather than the verdict — against `deletion_events_local` at/after
+   > `--swap-done`, against the live table for a `created_at` past it, and for the rest against `last_updated_at`
+   > past it — and read step 5's `missing_keys`, which applies exactly the exclusion this compare lacks, rather than
+   > writing a query to tell them apart. See ["When the cutover is done"](#when-the-cutover-is-done).
    This compares the spans **created** in that range — `000005` bounds on `created_at`, which the weekly mode's
    partitioning and its superseded-version logic require — so a span created earlier and merely *updated* in the gap is
    not in it. That set is not left uncovered: it is exactly what step 5 reports as `stale_keys` and
@@ -1782,10 +1791,14 @@ cutover as complete only when all of these hold.
       fails on live traffic rather than on fidelity. The four counts already cover presence, version and payload, so
       this is the payload-level *picture* rather than a second gate; run it because a line stating the exact window is
       what an incident review will ask for.
-      **A clean PASS here requires user DELETES to have been quiesced from the swap through this compare, and
-      otherwise it cannot pass.** `000005` has no notion of the deletion bridge, so a gap-window span deleted after the
-      swap is masked on the live side and still live in the frozen backup — a row-count difference the compare reports
-      as a mismatch on a perfectly healthy cutover, with `src_rows` well above `dst_rows`.
+      **Expect this to MISMATCH on a healthy cutover; a clean PASS is not generally obtainable**, and quiescing
+      undoes none of the changes already made. Three properties of a post-swap write decide what you see: whether it
+      **won** under `FINAL` (`last_updated_at` is client-supplied and need not advance, so an older one leaves the
+      parked row selected and the compare **equal**); whether **`created_at` survived** the merge (preserved → the row
+      stays in the window and only the checksums differ; freshly stamped after a delete → it leaves the window); and
+      whether a **delete was bridged** at/after `--swap-done` (those keys reach no count at all). So tick this box on
+      the evidence below rather than on a PASS — and read neither equal row counts nor an equal compare as proof that
+      nothing changed.
       **Do not reach for a hand-written query to tell the two apart: step 5 already ran it.** `missing_keys` is that
       count — `000006`'s `verify-forward` takes the parked keys in the gap window, excludes the ones bridged-deleted at
       or after `--swap-done`, and reports those still absent from live. It is the same question with a wider window
