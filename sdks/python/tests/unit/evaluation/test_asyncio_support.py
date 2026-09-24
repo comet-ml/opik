@@ -208,3 +208,54 @@ def test_async_http_connections_expire__external_patch_before_nested_run__nested
 
     assert _installed_init() is external
     assert external_calls == [0]
+
+
+def test_async_http_connections_expire__external_patch_removes_value__nested_wrapper_still_disables_keepalive() -> (
+    None
+):
+    original_init = _installed_init()
+
+    def external(*args: Any, **kwargs: Any) -> Any:
+        kwargs.pop("keepalive_expiry", None)
+        return original_init(*args, **kwargs)
+
+    with asyncio_support.async_http_connections_expire_immediately():
+        httpcore.AsyncHTTPConnection.__init__ = external  # type: ignore
+
+        with asyncio_support.async_http_connections_expire_immediately():
+            assert _keepalive_expiry_of_new_connection() == 0
+
+
+def test_async_http_connections_expire__nested_context_raises__outer_context_remains_patched() -> (
+    None
+):
+    original_init = _installed_init()
+
+    with asyncio_support.async_http_connections_expire_immediately():
+        with pytest.raises(RuntimeError, match="nested failure"):
+            with asyncio_support.async_http_connections_expire_immediately():
+                raise RuntimeError("nested failure")
+
+        assert _installed_init() is not original_init
+        assert asyncio_support._patch_depth == 1
+        assert _keepalive_expiry_of_new_connection() == 0
+
+    assert _installed_init() is original_init
+    assert asyncio_support._patch_depth == 0
+    assert asyncio_support._original_init is None
+    assert asyncio_support._installed_init is None
+
+
+def test_async_http_connections_expire__final_context_raises__patch_is_restored() -> (
+    None
+):
+    original_init = _installed_init()
+
+    with pytest.raises(RuntimeError, match="final failure"):
+        with asyncio_support.async_http_connections_expire_immediately():
+            raise RuntimeError("final failure")
+
+    assert _installed_init() is original_init
+    assert asyncio_support._patch_depth == 0
+    assert asyncio_support._original_init is None
+    assert asyncio_support._installed_init is None

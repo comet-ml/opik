@@ -16,7 +16,13 @@ def _keepalive_expiry_zero(original: Callable) -> Callable:
     @functools.wraps(original)
     def wrapped(*args, **kwargs):  # type: ignore
         kwargs["keepalive_expiry"] = 0
-        return original(*args, **kwargs)
+        connection = args[0] if args else None
+        result = original(*args, **kwargs)
+        if connection is not None:
+            # A wrapper installed around this initializer may change the keyword
+            # before delegating, so enforce the value on the constructed connection.
+            connection._keepalive_expiry = 0  # type: ignore[attr-defined]
+        return result
 
     return wrapped
 
