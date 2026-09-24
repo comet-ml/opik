@@ -53,6 +53,17 @@ const CompareExperimentsViewer: React.FunctionComponent<
     projectId: data?.project_id,
   });
 
+  // The input carries its own placeholders, which stay unresolved literals in
+  // the messages view unless their media is extracted too. Attachments are
+  // already requested for the trace above, so this pass only handles inline media.
+  const { media: inputMedia, transformedOutput: transformedInput } =
+    useExperimentItemMedia({ output: experimentItem.input });
+
+  const combinedMedia = useMemo(
+    () => [...inputMedia, ...media],
+    [inputMedia, media],
+  );
+
   const feedbackScores: TraceFeedbackScore[] = useMemo(
     () => sortBy(experimentItem.feedback_scores || [], "name"),
     [experimentItem.feedback_scores],
@@ -68,9 +79,9 @@ const CompareExperimentsViewer: React.FunctionComponent<
   // runs on the media-resolved output so it matches what actually gets rendered.
   const hasMessages = useMemo(
     () =>
-      mapAndCombineMessages(experimentItem.input, transformedOutput).messages
+      mapAndCombineMessages(transformedInput, transformedOutput).messages
         .length > 0,
-    [experimentItem.input, transformedOutput],
+    [transformedInput, transformedOutput],
   );
 
   const onExpandClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -99,7 +110,7 @@ const CompareExperimentsViewer: React.FunctionComponent<
 
     const body = hasMessages ? (
       <ExperimentMessagesViewer
-        input={experimentItem.input}
+        input={transformedInput}
         output={transformedOutput}
         preserveKey={`compare-experiment-messages-${sectionIdx}`}
       />
@@ -111,14 +122,16 @@ const CompareExperimentsViewer: React.FunctionComponent<
       />
     );
 
-    if (!media.length) {
+    if (!combinedMedia.length) {
       return body;
     }
 
+    // The provider resolves placeholders from either side, while the attachments
+    // list stays scoped to the output media it has always shown.
     return (
-      <MediaProvider media={media}>
+      <MediaProvider media={combinedMedia}>
         <div className="flex flex-col gap-2">
-          <AttachmentsList media={media} />
+          {media.length > 0 && <AttachmentsList media={media} />}
           {body}
         </div>
       </MediaProvider>

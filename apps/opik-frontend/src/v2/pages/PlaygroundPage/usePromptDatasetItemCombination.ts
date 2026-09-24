@@ -26,7 +26,6 @@ import cloneDeep from "lodash/cloneDeep";
 import set from "lodash/set";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
-import omit from "lodash/omit";
 import { parseCompletionOutput } from "@/lib/playground";
 import { useHydrateDatasetItemData } from "@/v2/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { useHydratePromptMetadata } from "@/v2/pages/PlaygroundPage/useHydratePromptMetadata";
@@ -277,9 +276,13 @@ const usePromptDatasetItemCombination = ({
         logProcessor.log({
           ...run,
           providerMessages,
-          templateMessages: prompt.messages.map((message) =>
-            omit(message, "id"),
-          ),
+          // Only role and content describe the template; id, promptId,
+          // promptVersionId and autoImprove are Playground editor state and
+          // have no place in the stored experiment config.
+          templateMessages: prompt.messages.map(({ role, content }) => ({
+            role,
+            content,
+          })),
           promptLibraryVersions,
           promptLibraryMetadata,
           experimentName,

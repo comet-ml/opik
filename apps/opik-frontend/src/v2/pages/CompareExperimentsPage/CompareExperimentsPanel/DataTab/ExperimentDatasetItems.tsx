@@ -11,7 +11,11 @@ import React, { useMemo } from "react";
 import { DatasetItem } from "@/types/datasets";
 import { pick } from "lodash";
 import { useProcessedInputData } from "@/hooks/useProcessedInputData";
-import { mapAndCombineMessages } from "@/shared/PrettyLLMMessage/llmMessages";
+import {
+  MediaProvider,
+  mapAndCombineMessages,
+} from "@/shared/PrettyLLMMessage/llmMessages";
+import { useExperimentItemMedia } from "@/hooks/useExperimentItemMedia";
 import ExperimentMessagesViewer from "@/v2/pages-shared/experiments/ExperimentMessagesViewer/ExperimentMessagesViewer";
 
 interface ExperimentDatasetItemsProps {
@@ -35,20 +39,33 @@ const ExperimentDatasetItems = ({
 
   const showMedia = media?.length > 0;
 
+  // Placeholders in the text resolve through MediaProvider, which needs unified
+  // media items rather than the parsed ones ImagesListWrapper renders.
+  const { media: unifiedMedia, transformedOutput: transformedData } =
+    useExperimentItemMedia({ output: selectedData });
+
   // Dataset columns hold arbitrary values, so only the ones that actually carry
   // a recognised LLM message format get the role-by-role treatment.
   const hasMessages = useMemo(
-    () => mapAndCombineMessages(selectedData, undefined).messages.length > 0,
-    [selectedData],
+    () => mapAndCombineMessages(transformedData, undefined).messages.length > 0,
+    [transformedData],
+  );
+
+  // Media must not bypass the messages check: a multimodal conversation is still
+  // a conversation, and rendering it as JSON was the gap this replaces.
+  const messagesViewer = (
+    <ExperimentMessagesViewer
+      input={transformedData}
+      preserveKey="compare-experiment-input-messages"
+    />
   );
 
   if (!showMedia) {
     if (data && hasMessages) {
-      return (
-        <ExperimentMessagesViewer
-          input={selectedData}
-          preserveKey="compare-experiment-input-messages"
-        />
+      return unifiedMedia.length ? (
+        <MediaProvider media={unifiedMedia}>{messagesViewer}</MediaProvider>
+      ) : (
+        messagesViewer
       );
     }
 
@@ -81,7 +98,9 @@ const ExperimentDatasetItems = ({
       <AccordionItem value="data">
         <AccordionTrigger>Selected data</AccordionTrigger>
         <AccordionContent>
-          {formattedData ? (
+          {hasMessages ? (
+            <MediaProvider media={unifiedMedia}>{messagesViewer}</MediaProvider>
+          ) : formattedData ? (
             <SyntaxHighlighter
               data={formattedData ?? {}}
               prettifyConfig={{ fieldType: "input" }}

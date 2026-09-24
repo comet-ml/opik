@@ -64,4 +64,20 @@ describe("experiment item message detection", () => {
   it("reports no messages for an empty item", () => {
     expect(mapAndCombineMessages({}, {}).messages).toEqual([]);
   });
+
+  it("still detects messages once Playground editor state is stripped", () => {
+    // What the Playground now stores: role and content only, with the editor's
+    // id/promptId/promptVersionId/autoImprove left out of the experiment config.
+    const templateMessages = [
+      { role: "system", content: "You are terse." },
+      { role: "user", content: "Summarise {{text}}." },
+    ];
+
+    const { messages } = mapAndCombineMessages(
+      { messages: templateMessages },
+      undefined,
+    );
+
+    expect(messages.map((m) => m.role)).toEqual(["system", "user"]);
+  });
 });
