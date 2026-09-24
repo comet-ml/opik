@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any, Dict, List
 
@@ -13,26 +14,27 @@ def _handle_message_start(event: Dict[str, Any], result: Dict[str, Any]) -> None
             result["output"]["message"]["role"] = role
 
 
-def _tool_use_for_block(
-    result: Dict[str, Any],
-    tool_uses_by_index: Dict[int, Dict[str, Any]],
-    index: int,
-) -> Dict[str, Any]:
-    """Return the toolUse entry of content block `index`, creating it if needed."""
-    if index not in tool_uses_by_index:
-        content = result["output"]["message"]["content"]
-        # The first tool call stays in content[0]; each parallel call
-        # (another contentBlockIndex) gets its own content entry.
-        if "toolUse" in content[-1]:
-            content.append({})
-        tool_uses_by_index[index] = content[-1].setdefault("toolUse", {})
-    return tool_uses_by_index[index]
+def _block_index(block_event: Dict[str, Any], default: int) -> int:
+    """
+    contentBlockIndex is required by the API; `default` only covers events
+    without it. int() makes a malformed index fail this event, not the block
+    ordering after the loop.
+    """
+    return int(block_event.get("contentBlockIndex", default))
+
+
+def _parse_tool_input(tool_input: str) -> Any:
+    """Parse the streamed input into the JSON value non-streaming Converse returns."""
+    if not tool_input:
+        return {}  # Claude streams a no-argument call as input ""
+    try:
+        return json.loads(tool_input)
+    except ValueError:
+        return tool_input  # e.g. cut off by maxTokens: keep what was streamed
 
 
 def _handle_content_block_start(
-    event: Dict[str, Any],
-    result: Dict[str, Any],
-    tool_uses_by_index: Dict[int, Dict[str, Any]],
+    event: Dict[str, Any], blocks: Dict[int, Dict[str, Any]]
 ) -> None:
     """Extract toolUseId and name from contentBlockStart event."""
     content_block_start = event.get("contentBlockStart")
@@ -41,16 +43,13 @@ def _handle_content_block_start(
 
     start = content_block_start.get("start")
     if isinstance(start, dict) and isinstance(start.get("toolUse"), dict):
-        tool_use = _tool_use_for_block(
-            result, tool_uses_by_index, content_block_start.get("contentBlockIndex", 0)
-        )
-        tool_use.update(start["toolUse"])
+        # Without an index, a start opens the next block.
+        index = _block_index(content_block_start, max(blocks, default=-1) + 1)
+        blocks.setdefault(index, {}).setdefault("toolUse", {}).update(start["toolUse"])
 
 
 def _handle_content_block_delta(
-    event: Dict[str, Any],
-    result: Dict[str, Any],
-    tool_uses_by_index: Dict[int, Dict[str, Any]],
+    event: Dict[str, Any], blocks: Dict[int, Dict[str, Any]]
 ) -> None:
     """
     Extract content from contentBlockDelta event.
@@ -67,20 +66,20 @@ def _handle_content_block_delta(
     if not isinstance(delta, dict):
         return
 
-    content = result["output"]["message"]["content"][0]
+    # Without an index, a delta belongs to the latest block.
+    index = _block_index(content_block_delta, max(blocks, default=0))
 
     # Handle regular text streaming
     if "text" in delta:
-        content["text"] += delta["text"]
+        block = blocks.setdefault(index, {})
+        block["text"] = block.get("text", "") + delta["text"]
         return
 
     # Handle structured output / tool use (Issue #3829)
     # Ref: https://github.com/comet-ml/opik/issues/3829
     # The tool input arrives as JSON string fragments, one per delta.
     if "toolUse" in delta:
-        tool_use = _tool_use_for_block(
-            result, tool_uses_by_index, content_block_delta.get("contentBlockIndex", 0)
-        )
+        tool_use = blocks.setdefault(index, {}).setdefault("toolUse", {})
         fragment = delta["toolUse"].get("input", "")
         tool_use["input"] = tool_use.get("input", "") + fragment
         return
@@ -172,7 +171,7 @@ def aggregate_converse_stream_chunks(items: List[Dict[str, Any]]) -> Dict[str, A
     result: Dict[str, Any] = {
         "output": {"message": {"role": "assistant", "content": [{"text": ""}]}}
     }
-    tool_uses_by_index: Dict[int, Dict[str, Any]] = {}
+    blocks: Dict[int, Dict[str, Any]] = {}
 
     for event in items:
         if not isinstance(event, dict):
@@ -184,10 +183,10 @@ def aggregate_converse_stream_chunks(items: List[Dict[str, Any]]) -> Dict[str, A
                 _handle_message_start(event, result)
 
             if "contentBlockStart" in event:
-                _handle_content_block_start(event, result, tool_uses_by_index)
+                _handle_content_block_start(event, blocks)
 
             if "contentBlockDelta" in event:
-                _handle_content_block_delta(event, result, tool_uses_by_index)
+                _handle_content_block_delta(event, blocks)
 
             if "messageStop" in event:
                 _handle_message_stop(event, result)
@@ -202,6 +201,16 @@ def aggregate_converse_stream_chunks(items: List[Dict[str, Any]]) -> Dict[str, A
                 event,
                 exc_info=True,
             )
+
+    if blocks:
+        # One entry per content block, in contentBlockIndex order, with the tool
+        # input parsed: the layout of the non-streaming Converse response.
+        content = [blocks[index] for index in sorted(blocks)]
+        for block in content:
+            if "toolUse" in block:
+                tool_use = block["toolUse"]
+                tool_use["input"] = _parse_tool_input(tool_use.get("input", ""))
+        result["output"]["message"]["content"] = content
 
     return result
 

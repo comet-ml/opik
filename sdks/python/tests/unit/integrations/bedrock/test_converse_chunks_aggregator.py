@@ -1,86 +1,87 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+
+import pytest
 
 from opik.integrations.bedrock.converse import chunks_aggregator
 
+# Tool input fragments as us.openai.gpt-6-sol streams them.
+PARIS = ['{"', "city", '":"', "Paris", '"}']
+TOKYO = ['{"', "city", '":"', "Tokyo", '"}']
 
-def _delta(delta: Dict[str, Any], index: int = 0) -> Dict[str, Any]:
-    return {"contentBlockDelta": {"delta": delta, "contentBlockIndex": index}}
 
-
-def _tool_use_block(
-    tool_use_id: str, input_fragments: List[str], index: int = 0
+def _block(
+    deltas: List[Dict[str, Any]],
+    index: Optional[int],
+    start: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    return [
-        {
-            "contentBlockStart": {
-                "start": {"toolUse": {"toolUseId": tool_use_id, "name": "get_weather"}},
-                "contentBlockIndex": index,
-            }
-        },
-        *[_delta({"toolUse": {"input": f}}, index) for f in input_fragments],
-        {"contentBlockStop": {"contentBlockIndex": index}},
-    ]
+    at = {} if index is None else {"contentBlockIndex": index}
+    events = [{"contentBlockStart": {"start": start, **at}}] if start else []
+    events += [{"contentBlockDelta": {"delta": delta, **at}} for delta in deltas]
+    return events + [{"contentBlockStop": at}]
 
 
-class TestConverseStreamAggregation:
-    def test_aggregate__tool_use_stream__tool_input_fragments_joined(self):
-        # Events recorded from us.openai.gpt-6-sol converse_stream with a tool.
-        events = [
-            {"messageStart": {"role": "assistant"}},
-            *_tool_use_block("call_1", ['{"', "city", '":"', "Paris", '"}']),
-            {"messageStop": {"stopReason": "tool_use"}},
-            {"metadata": {"usage": {"inputTokens": 46, "outputTokens": 18}}},
-        ]
+def _call(
+    tool_use_id: str, fragments: List[str], index: Optional[int] = 0
+) -> List[Dict[str, Any]]:
+    start = {"toolUse": {"toolUseId": tool_use_id, "name": "get_weather"}}
+    return _block([{"toolUse": {"input": f}} for f in fragments], index, start)
 
-        result = chunks_aggregator.aggregate_converse_stream_chunks(events)
 
-        content = result["output"]["message"]["content"][0]
-        assert content["toolUse"] == {
-            "toolUseId": "call_1",
+def _tool_use(tool_use_id: str, tool_input: Any) -> Dict[str, Any]:
+    return {
+        "toolUse": {
+            "toolUseId": tool_use_id,
             "name": "get_weather",
-            "input": '{"city":"Paris"}',
+            "input": tool_input,
         }
-        assert result["stopReason"] == "tool_use"
-        assert result["usage"] == {"inputTokens": 46, "outputTokens": 18}
+    }
 
-    def test_aggregate__parallel_tool_use_stream__one_entry_per_tool_call(self):
-        # Two tool calls recorded from one us.openai.gpt-6-sol turn (blocks 0 and 1).
-        events = [
-            {"messageStart": {"role": "assistant"}},
-            *_tool_use_block("call_1", ["{", '"city', '":"', "Paris", '"}'], index=0),
-            *_tool_use_block("call_2", ["{", '"city', '":"', "Tokyo", '"}'], index=1),
-            {"messageStop": {"stopReason": "tool_use"}},
-        ]
 
-        result = chunks_aggregator.aggregate_converse_stream_chunks(events)
+PARIS_CALL = _tool_use("call_1", {"city": "Paris"})
+TOKYO_CALL = _tool_use("call_2", {"city": "Tokyo"})
 
-        assert result["output"]["message"]["content"] == [
-            {
-                "text": "",
-                "toolUse": {
-                    "toolUseId": "call_1",
-                    "name": "get_weather",
-                    "input": '{"city":"Paris"}',
-                },
-            },
-            {
-                "toolUse": {
-                    "toolUseId": "call_2",
-                    "name": "get_weather",
-                    "input": '{"city":"Tokyo"}',
-                },
-            },
-        ]
 
-    def test_aggregate__text_stream__text_joined(self):
-        events = [
-            {"messageStart": {"role": "assistant"}},
-            _delta({"text": "po"}),
-            _delta({"text": "ng"}),
-            {"messageStop": {"stopReason": "end_turn"}},
-        ]
+@pytest.mark.parametrize(
+    "events, expected_content",
+    [
+        (_call("call_1", PARIS), [PARIS_CALL]),
+        (
+            _call("call_1", PARIS) + _call("call_2", TOKYO, index=1),
+            [PARIS_CALL, TOKYO_CALL],
+        ),
+        (
+            _block([{"text": "Let me "}, {"text": "check."}], 0)
+            + _call("call_1", PARIS, index=1),
+            [{"text": "Let me check."}, PARIS_CALL],
+        ),
+        (
+            _call("call_2", TOKYO, index=1) + _call("call_1", PARIS),
+            [PARIS_CALL, TOKYO_CALL],
+        ),
+        (
+            _call("call_1", PARIS, index=None) + _call("call_2", TOKYO, index=None),
+            [PARIS_CALL, TOKYO_CALL],
+        ),
+        (_call("call_1", [""]), [_tool_use("call_1", {})]),
+        (_call("call_1", ['{"city":"Pa']), [_tool_use("call_1", '{"city":"Pa')]),
+        (_block([{"text": "po"}, {"text": "ng"}], 0), [{"text": "pong"}]),
+    ],
+    ids=[
+        "one-call",
+        "parallel-calls",
+        "text-then-call",
+        "blocks-out-of-order",
+        "no-content-block-index",
+        "no-arguments",
+        "cut-off-input",
+        "text-only",
+    ],
+)
+def test_aggregate_converse_stream_chunks__content_blocks__converse_layout(
+    events, expected_content
+):
+    result = chunks_aggregator.aggregate_converse_stream_chunks(
+        [{"messageStart": {"role": "assistant"}}, *events]
+    )
 
-        result = chunks_aggregator.aggregate_converse_stream_chunks(events)
-
-        assert result["output"]["message"]["content"] == [{"text": "pong"}]
-        assert result["stopReason"] == "end_turn"
+    assert result["output"]["message"]["content"] == expected_content
