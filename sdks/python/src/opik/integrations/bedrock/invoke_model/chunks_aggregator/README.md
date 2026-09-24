@@ -25,7 +25,7 @@ chunks_aggregator/
   - Returns: `{output: {message: {role, content}}, stopReason, usage}`
 - **Llama** (Meta): Llama 3.1 8B, Llama 3.3 70B
   - Returns: `{generation, prompt_token_count, generation_token_count, stop_reason, usage}`
-- **Mistral** (Mistral AI): Pixtral Large 2502
+- **Mistral** (Mistral AI): Pixtral Large 2502; also OpenAI models (gpt-oss, GPT-5.x, GPT-6), whose chunks carry `choices[0].delta` and `finish_reason`
   - Returns: `{id, object, model, choices, usage}` (OpenAI-compatible)
 
 ## Adding a New Format
