@@ -1183,7 +1183,6 @@ class CostServiceTest {
                 Arguments.of("preview alias with provider prefix", "typesafe/jev-preview", "0.000042"));
     }
 
-
     /**
      * Covers registering {@code hyperbolic}, {@code baseten}, {@code lambda_ai}, {@code nscale} and
      * {@code oci} as canonical providers so that their token-priced entries in
@@ -1215,7 +1214,6 @@ class CostServiceTest {
                 Arguments.of("oci", "oci/xai.grok-3", "0.006"));
     }
 
-
     /**
      * Covers registering {@code replicate} and {@code watsonx} as canonical providers so that their
      * token-priced entries in {@code model_prices_and_context_window.json} are no longer silently
@@ -1240,7 +1238,6 @@ class CostServiceTest {
                 // watsonx/openai/gpt-oss-120b: input 1.59e-07, output 6.36e-07 -> 1000*1.59e-07 + 200*6.36e-07 = 0.0002862
                 Arguments.of("watsonx", "watsonx/openai/gpt-oss-120b", "0.0002862"));
     }
-
 
     /**
      * Covers registering {@code cohere} as a canonical provider so that the non-zero-cost entries in
@@ -1290,7 +1287,6 @@ class CostServiceTest {
         assertThat(cost).isEqualByComparingTo("0.0023076");
     }
 
-
     /**
      * Covers registering {@code anyscale}, {@code scaleway} and {@code ovhcloud} as canonical
      * providers so that their token-priced entries in {@code model_prices_and_context_window.json}
@@ -1319,7 +1315,6 @@ class CostServiceTest {
                 Arguments.of("ovhcloud", "ovhcloud/DeepSeek-R1-Distill-Llama-70B", "0.000804"));
     }
 
-
     /**
      * Covers registering {@code gmi}, {@code gradient_ai} and {@code libertai} as canonical providers
      * so that their token-priced entries in {@code model_prices_and_context_window.json} are no longer
@@ -1347,7 +1342,6 @@ class CostServiceTest {
                 // 1000*1.5e-07 + 200*6e-07 = 0.00027
                 Arguments.of("libertai", "libertai/hermes-3-8b-tee", "0.00027"));
     }
-
 
     /**
      * Covers registering {@code azure_ai}, {@code vercel_ai_gateway} and {@code openrouter} as
