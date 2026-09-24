@@ -324,15 +324,20 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 LIMIT 1 BY id
             ), queue_items_final AS
             (
-                SELECT aqi.queue_id, aqi.item_id, q.feedback_definitions
+                SELECT aqi.queue_id, aqi.item_id, aqi.source, q.feedback_definitions
                 FROM (
-                    SELECT DISTINCT queue_id, item_id
+                    -- Latest row per item decides its source: an item re-added by hand keeps its older
+                    -- automated row until the parts merge.
+                    SELECT queue_id, item_id, argMax(source, last_updated_at) AS source
                     FROM annotation_queue_items
                     WHERE workspace_id = :workspace_id
+                    GROUP BY queue_id, item_id
                 ) AS aqi
                 INNER JOIN queues_final AS q ON aqi.queue_id = q.id
             ), queue_items_count AS (
-                SELECT queue_id, count(1) AS items_count
+                SELECT queue_id,
+                       count(1) AS items_count,
+                       countIf(source = 'automated') AS automated_items_count
                 FROM queue_items_final
                 GROUP BY queue_id
             ), feedback_scores_deduped AS (
@@ -482,6 +487,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 q.last_updated_at,
                 q.last_updated_by,
                 qic.items_count as items_count,
+                qic.automated_items_count as automated_items_count,
                 fs.feedback_scores as feedback_scores,
                 fsra.reviewers as reviewers
             FROM queues_final AS q
@@ -769,6 +775,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                         .orElse(DEFAULT_LOCK_TIMEOUT_SECONDS))
                 .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
                 .itemsCount(row.get("items_count", Long.class))
+                .automatedItemsCount(row.get("automated_items_count", Long.class))
                 .reviewers(mapReviewers(row))
                 .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                 .createdAt(row.get("created_at", Instant.class))
