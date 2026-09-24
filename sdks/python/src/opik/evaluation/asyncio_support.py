@@ -59,8 +59,10 @@ def async_http_connections_expire_immediately() -> Iterator[None]:
         # actually installed: if something replaced the attribute while a run was
         # active, the runs still in progress would otherwise go unprotected.
         if current is not _installed_init:
-            to_wrap = _original_init if _original_init is not None else current
-            _installed_init = _keepalive_expiry_zero(to_wrap)
+            # If another library replaced the initializer during an active run,
+            # preserve that patch as the callable to restore after our last run.
+            _original_init = current
+            _installed_init = _keepalive_expiry_zero(current)
             httpcore.AsyncHTTPConnection.__init__ = _installed_init
         _patch_depth += 1
 

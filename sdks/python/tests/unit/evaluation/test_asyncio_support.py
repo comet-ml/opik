@@ -14,18 +14,14 @@ TIMEOUT = 10
 @pytest.fixture(autouse=True)
 def _clean_patch_state():
     """The patch lives on a class and on module counters, so a test that fails inside
-    a context would otherwise leave both behind for the rest of the session. The
-    counters only exist once activation is ref-counted, hence ``getattr``."""
-    assert getattr(asyncio_support, "_patch_depth", 0) == 0, (
-        "a previous test left the counter running"
-    )
+    a context would otherwise leave both behind for the rest of the session."""
+    assert asyncio_support._patch_depth == 0, "a previous test left the counter running"
     original_init = httpcore.AsyncHTTPConnection.__init__
     yield
     httpcore.AsyncHTTPConnection.__init__ = original_init
-    if hasattr(asyncio_support, "_patch_depth"):
-        asyncio_support._patch_depth = 0
-        asyncio_support._original_init = None
-        asyncio_support._installed_init = None
+    asyncio_support._patch_depth = 0
+    asyncio_support._original_init = None
+    asyncio_support._installed_init = None
 
 
 def _installed_init() -> object:
@@ -114,7 +110,9 @@ def _two_overlapping_runs(first_leaves_first: bool) -> Dict[str, Any]:
     return observations
 
 
-def test_the_run_that_leaves_first_does_not_disarm_the_other_run() -> None:
+def test_async_http_connections_expire__runs_leave_out_of_order__patch_stays_installed() -> (
+    None
+):
     original_init = _installed_init()
 
     observations = _two_overlapping_runs(first_leaves_first=True)
@@ -122,7 +120,7 @@ def test_the_run_that_leaves_first_does_not_disarm_the_other_run() -> None:
     assert observations["while_second_still_running"] is not original_init
 
 
-def test_no_patch_is_left_installed_once_every_run_finished() -> None:
+def test_async_http_connections_expire__all_runs_finish__patch_is_restored() -> None:
     original_init = _installed_init()
 
     observations = _two_overlapping_runs(first_leaves_first=True)
@@ -130,7 +128,9 @@ def test_no_patch_is_left_installed_once_every_run_finished() -> None:
     assert observations["after_both_finished"] is original_init
 
 
-def test_overlapping_runs_that_unwind_in_order_keep_working() -> None:
+def test_async_http_connections_expire__runs_leave_in_order__patch_stays_installed() -> (
+    None
+):
     original_init = _installed_init()
 
     observations = _two_overlapping_runs(first_leaves_first=False)
@@ -139,7 +139,9 @@ def test_overlapping_runs_that_unwind_in_order_keep_working() -> None:
     assert observations["after_both_finished"] is original_init
 
 
-def test_connections_expire_immediately_inside_a_run_and_not_outside() -> None:
+def test_async_http_connections_expire__inside_and_outside_run__keepalive_is_disabled_only_inside() -> (
+    None
+):
     assert _keepalive_expiry_of_new_connection() != 0
 
     with asyncio_support.async_http_connections_expire_immediately():
@@ -148,7 +150,9 @@ def test_connections_expire_immediately_inside_a_run_and_not_outside() -> None:
     assert _keepalive_expiry_of_new_connection() != 0
 
 
-def test_sequential_runs_do_not_accumulate_wrappers() -> None:
+def test_async_http_connections_expire__sequential_runs__wrappers_do_not_accumulate() -> (
+    None
+):
     original_init = _installed_init()
 
     for _ in range(3):
@@ -158,7 +162,9 @@ def test_sequential_runs_do_not_accumulate_wrappers() -> None:
     assert _installed_init() is original_init
 
 
-def test_the_patch_is_reinstalled_if_something_restores_it_mid_run() -> None:
+def test_async_http_connections_expire__patch_replaced_mid_run__nested_run_reinstalls_it() -> (
+    None
+):
     """The depth counter counts our runs only, so a run must not trust it blindly."""
     original_init = _installed_init()
 
@@ -169,7 +175,9 @@ def test_the_patch_is_reinstalled_if_something_restores_it_mid_run() -> None:
             assert _keepalive_expiry_of_new_connection() == 0
 
 
-def test_cleanup_does_not_discard_a_patch_installed_during_our_runs() -> None:
+def test_async_http_connections_expire__external_patch_replaced_mid_run__cleanup_preserves_it() -> (
+    None
+):
     """The last run out puts back only what it took."""
     original_init = _installed_init()
     external = functools.wraps(original_init)(lambda *a, **k: original_init(*a, **k))  # type: ignore
@@ -178,3 +186,25 @@ def test_cleanup_does_not_discard_a_patch_installed_during_our_runs() -> None:
         httpcore.AsyncHTTPConnection.__init__ = external
 
     assert _installed_init() is external
+
+
+def test_async_http_connections_expire__external_patch_before_nested_run__nested_wrapper_preserves_it() -> (
+    None
+):
+    original_init = _installed_init()
+    external_calls: List[Any] = []
+
+    def external(*args: Any, **kwargs: Any) -> Any:
+        external_calls.append(kwargs.get("keepalive_expiry"))
+        return original_init(*args, **kwargs)
+
+    with asyncio_support.async_http_connections_expire_immediately():
+        httpcore.AsyncHTTPConnection.__init__ = external  # type: ignore
+
+        with asyncio_support.async_http_connections_expire_immediately():
+            assert _keepalive_expiry_of_new_connection() == 0
+
+        assert _installed_init() is not external
+
+    assert _installed_init() is external
+    assert external_calls == [0]
