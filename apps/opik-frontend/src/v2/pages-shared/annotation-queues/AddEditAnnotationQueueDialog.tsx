@@ -637,7 +637,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                           control={form.control}
                           name="automation_cap_enabled"
                           render={({ field }) => (
-                            <FormItem className="flex items-center gap-1.5">
+                            <FormItem className="flex-row items-center gap-1.5">
                               <FormControl>
                                 <Checkbox
                                   id="automation-cap-enabled"
@@ -677,7 +677,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                           )}
                         />
                       </div>
-                      <p className="comet-body-xs pl-[26px] text-light-slate">
+                      <p className="comet-body-xs pl-[22px] text-light-slate">
                         Only counts items added by this automation. Adding by
                         hand is unaffected.
                       </p>
