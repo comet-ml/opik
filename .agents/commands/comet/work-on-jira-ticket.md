@@ -13,7 +13,7 @@ This workflow will:
 - If not found, list your assigned **To Do** issues.
 - Check local git status in the Opik repository and propose a branch if on `main`.
 - Suggest moving the ticket to **In Progress** if it's currently in **To Do**.
-- Confirm the WHY and WHAT with the user after the plan is shared (skippable via memory).
+- Show the WHY and WHAT alongside the plan, and confirm both in one approval.
 - Validate all operations and provide clear success/failure feedback.
 
 ---
@@ -247,40 +247,22 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
 
 ### 9. User Confirmation
 
-- **Ask for user approval** before proceeding with implementation:
-  - Present the implementation plan clearly
-  - **Then run the WHY / WHAT confirmation below** — it comes *after* the plan is on screen, not before.
-  - **Wait for explicit user confirmation** before making any code changes
-  - If user declines: Stop here and provide guidance for manual implementation
-  - If user confirms: Proceed to implementation phase
-
-#### 9a. WHY / WHAT Confirmation
-
-Once the plan has been shared, restate the ticket's **WHY** and **WHAT** and confirm them against the plan the user just read. The point is the comparison: the plan is the concrete proposal, and this is the last cheap moment to catch that it solves a different problem than the ticket describes, or has quietly grown past the ticket's scope. Checking before the plan exists would only re-read the ticket back to the user.
-
-**Skip check (first):** if the user's memory (global `CLAUDE.md`, project memory, or a stated preference earlier in the session) says to skip this confirmation, **skip it entirely** — no prompt, no summary — and go straight to the proceed/decline decision. Users opt out by adding a line to their memory, e.g.:
-
-```
-Skip the WHY/WHAT confirmation in /comet:work-on-jira-ticket — go straight to the plan approval.
-```
-
-**Otherwise, prompt.** Display the WHY and WHAT in a compact form — a few lines each, the short version, not the full ticket description:
+Present the implementation plan, and directly beneath it restate the ticket's **WHY** and **WHAT** in compact form — a couple of lines each, not the full description:
 
 ```
 **WHY**: [1-2 sentence motivation]
 **WHAT**: [1-2 sentence description of the changes]
 ```
 
-Then use `AskUserQuestion` with these options:
+They sit next to the plan so the two can be compared: this is the last cheap moment to notice that the plan solves a different problem than the ticket describes, or has quietly grown past its scope. Stating them before the plan exists would only read the ticket back to the user.
 
-1. **Looks right — proceed** — WHY and WHAT match the plan; continue to implementation.
-2. **Adjust the scope** — something is off. The user's free-text answer says what.
+Then ask for approval — a single confirmation covering both the plan and the WHY / WHAT:
 
-`AskUserQuestion` always offers a free-text "Other" option, so the user can correct the WHY / WHAT in their own words instead of picking either — treat any free-text answer as option 2.
+> "Would you like me to proceed with implementing this now?"
 
-Never write the skip preference to the user's memory, and don't offer to. Opting out is the user's own edit to their memory file; this step only reads it.
-
-**If the user adjusts** (option 2 or free text): update the plan to match the corrected WHY / WHAT, and if the correction reveals the ticket description itself is wrong, offer to update the ticket via the step 3b flow. Re-present the revised plan before proceeding — a scope correction invalidates the approval the user hasn't given yet.
+- **If the user confirms**: proceed to the implementation phase. One yes is enough; don't ask again about the WHY / WHAT separately.
+- **If the user declines or corrects the scope**: stop. If the correction changes the WHY or WHAT, revise the plan, and offer to fix the ticket via step 3b when the description itself is wrong. Re-present the revised plan and ask again — a scope correction invalidates an approval that hasn't been given yet.
+- **Wait for an explicit answer** before making any code changes.
 
 ### 10. Implementation Phase (Optional)
 
@@ -343,7 +325,7 @@ The command is successful when:
 3. ✅ Feature branch is created and active following Opik naming convention
 4. ✅ Ticket status is updated (if requested)
 5. ✅ Implementation suggestion provided based on context and Opik rules
-6. ✅ WHY / WHAT confirmed after the plan was shared (or skipped per the user's memory)
+6. ✅ WHY / WHAT shown alongside the plan and confirmed in the same approval
 7. ✅ User confirmation received (proceed or decline)
 8. ✅ Implementation executed (if confirmed) or manual guidance provided (if declined)
 9. ✅ All operations complete without errors
