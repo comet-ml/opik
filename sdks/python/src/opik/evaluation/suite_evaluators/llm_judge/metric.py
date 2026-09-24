@@ -511,6 +511,15 @@ class LLMJudge(base.BaseSuiteEvaluator):
             ... )
             >>> evaluator = LLMJudge.from_config(config, init_kwargs={"model": "gpt-4o"})
         """
+        unsupported_types = sorted(
+            {item.type for item in config.schema_ if item.type != "BOOLEAN"}
+        )
+        if unsupported_types:
+            raise ValueError(
+                "LLMJudge.from_config currently supports only BOOLEAN assertion "
+                f"types; unsupported types: {', '.join(unsupported_types)}"
+            )
+
         assertion_texts = [item.description for item in config.schema_]
 
         init_kwargs = init_kwargs or {}
